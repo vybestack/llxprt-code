@@ -401,7 +401,7 @@ export class SessionRecordingService {
   }
 
   /** Throws for disposed or poisoned recorders; commit-family rejects loudly instead of returning null. */
-  private requireCommittable(): void {
+  requireCommittable(): void {
     if (this.closing || this.lifecycle.status === 'disposed') {
       throw new Error('commit: session recording is disposed');
     }

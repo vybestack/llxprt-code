@@ -39,6 +39,7 @@ import { StringDecoder } from 'node:string_decoder';
 import type { IContent } from '../services/history/IContent.js';
 import type { JournalReadCounters } from './journalCounters.js';
 import type { SessionEventType, SessionRecordLine } from './types.js';
+import { REPLACE_RECORD_TYPES } from './replaceTransaction.js';
 
 /** Default read chunk size; overridable per cursor for tests. */
 const DEFAULT_CHUNK_BYTES = 64 * 1024;
@@ -74,6 +75,9 @@ const SESSION_EVENT_TYPES: ReadonlySet<string> = new Set<SessionEventType>([
   'session_forked',
   'session_named',
   'semantic_media_purge',
+  'replace_begin',
+  'replace_commit',
+  'replace_abort',
 ]);
 
 export interface JournalCursorOptions {
@@ -681,7 +685,11 @@ export class JournalCursor {
       walk.onContent(start, end, envelope, content);
       return;
     }
-    if (envelope.type === 'compressed' || envelope.type === 'rewind') {
+    if (
+      envelope.type === 'compressed' ||
+      envelope.type === 'rewind' ||
+      REPLACE_RECORD_TYPES.has(envelope.type)
+    ) {
       walk.addBoundary(start, length, envelope);
     }
   }

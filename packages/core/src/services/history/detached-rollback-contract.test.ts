@@ -188,7 +188,9 @@ describe('detached scalar and large-value recovery', () => {
       ]);
       expect(history.getTotalTokens()).toBe(tokens);
       await history.detachedValues.replace([rollbackRow(2)]);
-      expect((await rowsOf(history))[0].metadata?.chronology?.seq).toBe(2);
+      // The failed replacement was already durable and could not be taken back,
+      // so chronology follows the durable rows and does not reuse its marker.
+      expect((await rowsOf(history))[0].metadata?.chronology?.seq).toBe(3);
     });
   });
 });

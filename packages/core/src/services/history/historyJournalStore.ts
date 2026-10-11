@@ -46,14 +46,6 @@
  * settle point. Divergences are documented at the mirror sites below.
  */
 
-import {
-  isRecord,
-  fieldOf,
-  isSpeakerContent,
-  isValidSequence,
-  isSpeakerContentArray,
-  isDensityReplacementRecord,
-} from './historyJournalGuards.js';
 import * as fs from 'node:fs';
 import {
   openHistoryDumpSnapshot,
@@ -67,10 +59,6 @@ import {
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { cloneHistoryJournal, removeTempDir } from './cloneHistoryJournal.js';
-import {
-  parseChronologyBinding,
-  type ChronologyBinding,
-} from '../../recording/chronologyBinding.js';
 import { randomUUID } from 'crypto';
 import {
   captureHistoryMutationSnapshot,
@@ -103,6 +91,16 @@ import type {
   DensityMutationPayload,
   SyntheticInsertPayload,
 } from '../../recording/types.js';
+import {
+  arrayRowStore,
+  ReplaceTransactionFold,
+} from '../../recording/replaceTransaction.js';
+import {
+  applyFoldEvent,
+  foldEvents,
+  opToEvent,
+  parseFoldEvents,
+} from './historyJournalFold.js';
 import { DurableFoldCheckpoint } from '../../recording/durableFoldCheckpoint.js';
 import { HistoryPendingTickets } from './history-pending-tickets.js';
 import type { ResumeProjection } from './historyResumeProjection.js';
@@ -127,7 +125,23 @@ export type { HistoryServiceJournalOptions } from './historyBatchContracts.js';
  * the unit the overlay folds and the journal records — one op per envelope.
  */
 export type HistoryJournalOp =
-  | { readonly kind: 'content'; readonly content: IContent }
+  | {
+      readonly kind: 'content';
+      readonly content: IContent;
+      /** Set on a row written inside a replace transaction. */
+      readonly tx?: string;
+    }
+  | { readonly kind: 'replaceBegin'; readonly txId: string }
+  | {
+      readonly kind: 'replaceCommit';
+      readonly txId: string;
+      readonly rowCount: number;
+    }
+  | {
+      readonly kind: 'replaceAbort';
+      readonly txId: string;
+      readonly rowCount: number;
+    }
   | {
       readonly kind: 'rewind';
       readonly itemsRemoved: number;
@@ -147,378 +161,6 @@ export type HistoryJournalOp =
       readonly payload: SyntheticInsertPayload;
     }
   | { readonly kind: 'density'; readonly payload: DensityMutationPayload };
-
-/**
- * Kind-neutral fold event: ops (pending) and parsed journal envelopes
- * (durable) normalize to this shape so a single fold implementation serves
- * both layers.
- */
-type FoldEvent =
-  | {
-      readonly kind: 'chronologyBind';
-      readonly binding: ChronologyBinding;
-      readonly content?: IContent;
-    }
-  | { readonly kind: 'content'; readonly content: IContent }
-  | {
-      readonly kind: 'rewind';
-      readonly itemsRemoved: number;
-      readonly cutSeq?: number;
-    }
-  | {
-      readonly kind: 'compressed';
-      readonly summary: IContent;
-      readonly itemsCompressed: number;
-    }
-  | { readonly kind: 'compressionDetail' }
-  | {
-      readonly kind: 'syntheticInsert';
-      readonly content: IContent;
-      readonly chronologySeq: number;
-      readonly afterSeq: number;
-    }
-  | {
-      readonly kind: 'density';
-      readonly removedSeqs: readonly number[];
-      readonly replacements: ReadonlyArray<{
-        readonly replacedSeq: number;
-        readonly replacement: IContent;
-      }>;
-    }
-  | { readonly kind: 'semanticPurge'; readonly history: readonly IContent[] };
-
-/** Recording versions this store folds, mirroring the resolver. */
-const SUPPORTED_RECORDING_VERSIONS = new Set([1, 2]);
-
-function chronSeqOf(content: IContent): number | null {
-  const seq = content.metadata?.chronology?.seq;
-  return typeof seq === 'number' ? seq : null;
-}
-
-// ---------------------------------------------------------------------------
-// Mutation planning: the diff from the previous projection to the next one,
-// expressed in journal ops. Pure functions — the core stamps chronology and
-// derives membership spans before calling these.
-// ---------------------------------------------------------------------------
-
-/**
- * Plan a validated density pass as one `density_mutation` op, addressed by
- * chronology marker. Returns null when any affected row is unmarked — the
- * journal cannot address it, so the caller falls back to the wholesale
- * rewrite plan.
- */
-
-// ---------------------------------------------------------------------------
-// Op ↔ envelope ↔ fold-event mapping
-// ---------------------------------------------------------------------------
-
-function opToEvent(op: HistoryJournalOp): FoldEvent {
-  switch (op.kind) {
-    case 'content':
-      return { kind: 'content', content: op.content };
-    case 'rewind':
-      return {
-        kind: 'rewind',
-        itemsRemoved: op.itemsRemoved,
-        cutSeq: op.cutSeq,
-      };
-    case 'compressed':
-      return {
-        kind: 'compressed',
-        summary: op.summary,
-        itemsCompressed: op.itemsCompressed,
-      };
-    case 'compressionDetail':
-      return { kind: 'compressionDetail' };
-    case 'syntheticInsert':
-      return {
-        kind: 'syntheticInsert',
-        content: op.payload.content,
-        chronologySeq: op.payload.chronologySeq,
-        afterSeq: op.payload.afterSeq,
-      };
-    case 'density':
-      return {
-        kind: 'density',
-        removedSeqs: op.payload.removedSeqs,
-        replacements: op.payload.replacements,
-      };
-    default: {
-      // Exhaustiveness guard: a new op kind must map onto a fold event.
-      const exhaustive: never = op;
-      void exhaustive;
-      throw new Error('unreachable: unmapped history journal op');
-    }
-  }
-}
-
-/**
- * Map a parsed journal envelope onto a fold event; null for session
- * bookkeeping, metadata events, and any payload that fails its engine-parity
- * validation (those records are skipped, matching the resolver).
- */
-function chronologyBindingEvent(payload: unknown): FoldEvent | null {
-  const binding = parseChronologyBinding(payload);
-  const content = fieldOf(payload, 'content');
-  if (binding === null || (content !== undefined && !isSpeakerContent(content)))
-    return null;
-  return { kind: 'chronologyBind', binding, content };
-}
-
-function envelopeToEvent(type: string, payload: unknown): FoldEvent | null {
-  switch (type) {
-    case 'chronology_bind':
-      return chronologyBindingEvent(payload);
-    case 'content': {
-      const content = fieldOf(payload, 'content');
-      return isSpeakerContent(content) ? { kind: 'content', content } : null;
-    }
-    case 'rewind': {
-      const itemsRemoved = fieldOf(payload, 'itemsRemoved');
-      if (typeof itemsRemoved !== 'number' || itemsRemoved < 0) return null;
-      const cutSeq = fieldOf(payload, 'cutSeq');
-      return {
-        kind: 'rewind',
-        itemsRemoved,
-        cutSeq: cutSeq === undefined ? undefined : (cutSeq as number),
-      };
-    }
-    case 'compressed': {
-      const summary = fieldOf(payload, 'summary');
-      const itemsCompressed = fieldOf(payload, 'itemsCompressed');
-      if (!isSpeakerContent(summary) || itemsCompressed === undefined) {
-        return null;
-      }
-      return {
-        kind: 'compressed',
-        summary,
-        itemsCompressed: itemsCompressed as number,
-      };
-    }
-    case 'compression_detail':
-      return { kind: 'compressionDetail' };
-    case 'synthetic_insert': {
-      const content = fieldOf(payload, 'content');
-      const chronologySeq = fieldOf(payload, 'chronologySeq');
-      const afterSeq = fieldOf(payload, 'afterSeq');
-      if (
-        !isSpeakerContent(content) ||
-        !isValidSequence(chronologySeq) ||
-        !isValidSequence(afterSeq)
-      ) {
-        return null;
-      }
-      return {
-        kind: 'syntheticInsert',
-        content,
-        chronologySeq,
-        afterSeq,
-      };
-    }
-    case 'density_mutation': {
-      const removedSeqs = fieldOf(payload, 'removedSeqs');
-      const replacements = fieldOf(payload, 'replacements');
-      if (
-        !Array.isArray(removedSeqs) ||
-        !removedSeqs.every(isValidSequence) ||
-        !Array.isArray(replacements) ||
-        !replacements.every(isDensityReplacementRecord)
-      ) {
-        return null;
-      }
-      return {
-        kind: 'density',
-        removedSeqs,
-        replacements,
-      };
-    }
-    case 'semantic_media_purge': {
-      const history = fieldOf(payload, 'history');
-      if (!isSpeakerContentArray(history)) return null;
-      return { kind: 'semanticPurge', history };
-    }
-    default:
-      return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// The fold (mirrors JournalResolver's rules; divergences noted)
-// ---------------------------------------------------------------------------
-
-/**
- * Fold events oldest-first into the surviving content rows. Local mutable
- * state only — the result array is the caller's transient materialization.
- */
-function foldEvents(
-  events: ReadonlyArray<FoldEvent | null>,
-  initial: readonly IContent[] = [],
-): IContent[] {
-  const rows: IContent[] = [...initial];
-  for (const event of events) {
-    if (event === null) continue;
-    applyFoldEvent(rows, event);
-  }
-  return rows;
-}
-
-/** Rewind: cut at the marked seq when resolvable, else drop the tail count. */
-function rewindRows(
-  rows: IContent[],
-  itemsRemoved: number,
-  cutSeq?: number,
-): void {
-  if (cutSeq !== undefined) {
-    const cut = rows.findIndex((row) => chronSeqOf(row) === cutSeq);
-    if (cut !== -1) {
-      rows.length = cut;
-      return;
-    }
-  }
-  rows.length = Math.max(0, rows.length - itemsRemoved);
-}
-
-/** Insert an unjournalled-mutation entry after its marked anchor row. */
-function insertAfterAnchor(
-  rows: IContent[],
-  content: IContent,
-  afterSeq: number,
-): void {
-  const anchor = rows.findIndex((row) => chronSeqOf(row) === afterSeq);
-  if (anchor !== -1) {
-    rows.splice(anchor + 1, 0, content);
-  }
-}
-
-/** Resolve one row against a density pass: replacement, removal, or kept. */
-function resolveDensityRow(
-  row: IContent,
-  removed: ReadonlySet<number>,
-  replacementBySeq: ReadonlyMap<number, IContent>,
-): IContent | null {
-  const chron = chronSeqOf(row);
-  if (chron === null) return row;
-  const replacement = replacementBySeq.get(chron);
-  if (replacement !== undefined) return replacement;
-  return removed.has(chron) ? null : row;
-}
-
-/**
- * Apply a density event row-wise: replacement wins over removal, matching the
- * live density projection. Divergence from the resolver: a density mutation
- * that touches rows inside a semantic_media_purge survivor is skipped there
- * (coarse purge units) and applied row-wise here, where the purge is already
- * flattened.
- */
-function applyDensityEvent(
-  rows: IContent[],
-  event: Extract<FoldEvent, { readonly kind: 'density' }>,
-): void {
-  const removed = new Set<number>(event.removedSeqs);
-  const replacementBySeq = new Map<number, IContent>();
-  for (const entry of event.replacements) {
-    replacementBySeq.set(entry.replacedSeq, entry.replacement);
-  }
-  const surviving: IContent[] = [];
-  for (const row of rows) {
-    const resolved = resolveDensityRow(row, removed, replacementBySeq);
-    if (resolved !== null) surviving.push(resolved);
-  }
-  rows.length = 0;
-  for (const row of surviving) {
-    rows.push(row);
-  }
-}
-
-/** Apply one fold event to the transient rows. */
-function applyFoldEvent(rows: IContent[], event: FoldEvent): void {
-  if (event.kind === 'chronologyBind') {
-    if (event.binding.rowIndex >= rows.length) return;
-    const row = event.content ?? rows[event.binding.rowIndex];
-    const restored =
-      event.binding.invalidateResponses === true
-        ? invalidateResponsesStatefulChain([row])[0]
-        : row;
-    rows[event.binding.rowIndex] = {
-      ...restored,
-      metadata: { ...restored.metadata, chronology: event.binding.chronology },
-    };
-    return;
-  }
-
-  switch (event.kind) {
-    case 'content':
-      rows.push(event.content);
-      break;
-    case 'rewind':
-      rewindRows(rows, event.itemsRemoved, event.cutSeq);
-      break;
-    case 'compressed':
-      rows.length = 0;
-      rows.push(event.summary);
-      break;
-    case 'compressionDetail':
-      // Membership-pinning record; a no-op for the row fold (parity).
-      break;
-    case 'syntheticInsert':
-      insertAfterAnchor(rows, event.content, event.afterSeq);
-      break;
-    case 'density':
-      applyDensityEvent(rows, event);
-      break;
-    case 'semanticPurge':
-      rows.length = 0;
-      rows.push(...event.history);
-      break;
-    default: {
-      // Exhaustiveness guard: a new fold event must state its fold rule.
-      const exhaustive: never = event;
-      void exhaustive;
-      throw new Error('unreachable: unmapped history fold event');
-    }
-  }
-}
-
-/**
- * Parse one decoded journal line into a fold event; null for blank lines,
- * unparseable crash-torn tails, session bookkeeping, and payloads that fail
- * their engine-parity validation (all skipped, matching the resolver).
- */
-function parseFoldLine(raw: string, isFirstLine: boolean): FoldEvent | null {
-  if (raw.length === 0) return null;
-  const body = isFirstLine && raw.startsWith('\uFEFF') ? raw.slice(1) : raw;
-  if (body.trim() === '') return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(body);
-  } catch {
-    // Unparseable mid-file line or crash-torn tail: skipped (parity).
-    return null;
-  }
-  if (!isRecord(parsed)) return null;
-  const version = parsed['v'];
-  if (
-    typeof version !== 'number' ||
-    !SUPPORTED_RECORDING_VERSIONS.has(version)
-  ) {
-    throw new Error(
-      `Unsupported recording version ${String(version)} in history journal`,
-    );
-  }
-  const type = parsed['type'];
-  if (typeof type !== 'string') return null;
-  return envelopeToEvent(type, parsed['payload']);
-}
-
-/** Split a decoded journal byte range into fold events, one per line. */
-function parseFoldEvents(text: string): Array<FoldEvent | null> {
-  const lines = text.split('\n');
-  const events: Array<FoldEvent | null> = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    events.push(parseFoldLine(lines[index], index === 0));
-  }
-  return events;
-}
 
 // ---------------------------------------------------------------------------
 // The store
@@ -602,19 +244,15 @@ export class HistoryJournalStore {
       binding.pending.cancel(ordinal);
       throw error;
     }
-    if (line !== null) {
-      if (binding.lastSeq !== null && line.seq > binding.lastSeq + 1)
-        binding.externalBoundarySeq ??= line.seq - 1;
-      binding.lastSeq = line.seq;
-    }
+    if (binding.lastSeq !== null && line.seq > binding.lastSeq + 1)
+      binding.externalBoundarySeq ??= line.seq - 1;
+    binding.lastSeq = line.seq;
     binding.pending.publish(ordinal);
     // Admission publishes both membership and cardinality synchronously. Acks
     // only move that same membership from pending to durable, never count twice.
     binding.rowCount = nextLength;
     binding.durableTail = current.durableTail;
-    this.publicationOrdinals.admitted(
-      line?.seq ?? recorder.getLastEnqueuedSequence(),
-    );
+    this.publicationOrdinals.admitted(line.seq);
   }
 
   withPublicationOrdinals(action: () => Promise<void>): Promise<void> {
@@ -660,10 +298,15 @@ export class HistoryJournalStore {
    * pending overlay. Fresh array every call; nothing is retained.
    */
   materialize(): IContent[] {
-    const durable = this.foldDurable();
-    if (this.binding.pending.length === 0) return durable;
+    const tx = new ReplaceTransactionFold();
+    const durable = this.foldDurable(tx);
     for (let index = 0; index < this.binding.pending.length; index++)
-      applyFoldEvent(durable, opToEvent(this.binding.pending.read(index).op));
+      applyFoldEvent(
+        durable,
+        opToEvent(this.binding.pending.read(index).op),
+        tx,
+      );
+    tx.abandon(arrayRowStore(durable));
     return durable;
   }
 
@@ -955,7 +598,7 @@ export class HistoryJournalStore {
    * facade was constructed — and folds the entire durable file, matching
    * the JournalResolver fold of the same path (#854).
    */
-  private foldDurable(): IContent[] {
+  private foldDurable(tx: ReplaceTransactionFold): IContent[] {
     const filePath = this.binding.recorder?.getFilePath();
     if (filePath === null || filePath === undefined) return [];
     const externallySeeded =
@@ -977,7 +620,12 @@ export class HistoryJournalStore {
     const folded = limit < buffer.length ? buffer.subarray(0, limit) : buffer;
     const boundary = this.binding.resumeBoundary ?? 0;
     if (boundary === 0)
-      return foldEvents(parseFoldEvents(folded.toString('utf8')));
+      return foldEvents(
+        parseFoldEvents(folded.toString('utf8')),
+        [],
+        tx,
+        false,
+      );
     const restored = invalidateResponsesStatefulChain(
       foldEvents(
         parseFoldEvents(
@@ -990,6 +638,8 @@ export class HistoryJournalStore {
     return foldEvents(
       parseFoldEvents(folded.subarray(boundary).toString('utf8')),
       [...restored],
+      tx,
+      false,
     );
   }
 }

@@ -9,6 +9,10 @@ import {
 } from './durableRowFold.js';
 import { MutableRowDirectory, type NumericRow } from './mutableRowDirectory.js';
 import { validSeq } from './resolverProjection.js';
+import {
+  directoryRowStore,
+  ReplaceTransactionFold,
+} from './replaceTransaction.js';
 
 export function pendingContent(op: HistoryJournalOp, offset: number): IContent {
   switch (op.kind) {
@@ -38,6 +42,9 @@ function pendingOwnerCount(op: HistoryJournalOp): number {
       return op.payload.replacements.length;
     case 'rewind':
     case 'compressionDetail':
+    case 'replaceBegin':
+    case 'replaceCommit':
+    case 'replaceAbort':
       return 0;
     default: {
       const exhaustive: never = op;
@@ -83,11 +90,40 @@ function applyDensity(
   });
 }
 
+/** Fold one replace-transaction op; true when `op` was one. */
+function applyReplaceOp(
+  directory: MutableRowDirectory,
+  op: HistoryJournalOp,
+  tx: ReplaceTransactionFold,
+): boolean {
+  const store = directoryRowStore(directory);
+  switch (op.kind) {
+    case 'replaceBegin':
+      tx.begin(op.txId, store);
+      return true;
+    case 'replaceCommit':
+      tx.commit(op.txId, op.rowCount, store);
+      return true;
+    case 'replaceAbort':
+      tx.abort(op.txId, store);
+      return true;
+    case 'content':
+      if (op.tx === undefined) tx.abandon(store);
+      else tx.accept(op.tx);
+      return false;
+    default:
+      tx.abandon(store);
+      return false;
+  }
+}
+
 export function applyPending(
   directory: MutableRowDirectory,
   op: HistoryJournalOp,
   slot: number,
+  tx: ReplaceTransactionFold,
 ): void {
+  if (applyReplaceOp(directory, op, tx)) return;
   switch (op.kind) {
     case 'content':
       directory.append(pendingRow(op.content, slot));
@@ -122,7 +158,7 @@ export function applyPending(
     case 'compressionDetail':
       return;
     default: {
-      const exhaustive: never = op;
+      const exhaustive: never = op as never;
       void exhaustive;
       throw new Error('Unmapped pending operation');
     }
@@ -246,6 +282,7 @@ export async function foldPendingRows(
         pinnedJournal: snapshot.pinnedJournal,
         pinnedProjection: snapshot.pinnedProjection ?? undefined,
         checkpoint: snapshot.foldCheckpoint,
+        keepOpenTransaction: true,
         ...options,
       });
     }
@@ -253,9 +290,11 @@ export async function foldPendingRows(
     if (durable !== null)
       for (let index = 0; index < durable.length; index++)
         directory.append(durable.rowAt(index));
+    const tx = new ReplaceTransactionFold(durable?.openTransaction ?? null);
     for (let slot = 0; slot < snapshot.pendingLength; slot++) {
-      applyPending(directory, snapshot.pending.read(slot).op, slot);
+      applyPending(directory, snapshot.pending.read(slot).op, slot, tx);
     }
+    tx.abandon(directoryRowStore(directory));
     return new PendingRowFold(snapshot, directory, durable);
   } catch (error) {
     try {

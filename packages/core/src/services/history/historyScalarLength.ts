@@ -8,6 +8,7 @@ import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import { captureHistoryOrdinalDirectory } from '../../recording/synchronousHistoryCursor.js';
 import type { MutableRowDirectory } from '../../recording/mutableRowDirectory.js';
 import { applyPending } from '../../recording/pendingRowFold.js';
+import { ReplaceTransactionFold } from '../../recording/replaceTransaction.js';
 
 interface PublicationOrdinalLease {
   directory?: MutableRowDirectory;
@@ -44,6 +45,12 @@ export class HistoryPublicationOrdinals {
   ): number {
     const lease = this.lease;
     if (lease !== undefined) {
+      // The ordinal directory has no transaction state; a transaction op ends the lease.
+      if (isTransactionOp(op)) {
+        lease.enabled = false;
+        lease.directory?.close();
+        lease.directory = undefined;
+      }
       if (lease.sequence !== sequence) {
         lease.enabled = false;
         lease.directory?.close();
@@ -56,12 +63,21 @@ export class HistoryPublicationOrdinals {
       )
         lease.directory ??= captureHistoryOrdinalDirectory(capture());
       if (lease.directory !== undefined) {
-        applyPending(lease.directory, op, 0);
+        applyPending(lease.directory, op, 0, new ReplaceTransactionFold());
         return lease.directory.length;
       }
     }
     return nextHistoryLength(op, length, read);
   }
+}
+
+function isTransactionOp(op: HistoryJournalOp): boolean {
+  if (op.kind === 'content') return op.tx !== undefined;
+  return (
+    op.kind === 'replaceBegin' ||
+    op.kind === 'replaceCommit' ||
+    op.kind === 'replaceAbort'
+  );
 }
 
 interface ScalarLengthBinding {
@@ -109,6 +125,13 @@ export function nextHistoryLength(
   switch (op.kind) {
     case 'content':
       return length + 1;
+    case 'replaceBegin':
+      return length;
+    // Commit leaves exactly the transaction rows; abort removes them again.
+    case 'replaceCommit':
+      return op.rowCount;
+    case 'replaceAbort':
+      return length - op.rowCount;
     case 'compressed':
       return 1;
     case 'compressionDetail':

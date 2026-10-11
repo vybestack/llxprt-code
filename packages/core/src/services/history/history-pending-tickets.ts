@@ -15,7 +15,7 @@ function submissionValue(op: HistoryJournalOp): HistoryJournalOp {
   switch (op.kind) {
     case 'content':
       return {
-        kind: 'content',
+        ...op,
         content: sanitizeProviderContentForSerialization(op.content),
       };
     case 'compressed':
@@ -46,6 +46,9 @@ function submissionValue(op: HistoryJournalOp): HistoryJournalOp {
       };
     case 'rewind':
     case 'compressionDetail':
+    case 'replaceBegin':
+    case 'replaceCommit':
+    case 'replaceAbort':
       return op;
     default: {
       const exhaustive: never = op;
@@ -82,14 +85,47 @@ function decodeDensity(payload: unknown): HistoryJournalOp {
   };
 }
 
+function decodeReplaceOp(
+  value: Record<string, unknown>,
+): HistoryJournalOp | undefined {
+  if (typeof value.txId !== 'string') return undefined;
+  if (value.kind === 'replaceBegin')
+    return { kind: 'replaceBegin', txId: value.txId };
+  if (typeof value.rowCount !== 'number') return undefined;
+  return value.kind === 'replaceCommit'
+    ? { kind: 'replaceCommit', txId: value.txId, rowCount: value.rowCount }
+    : { kind: 'replaceAbort', txId: value.txId, rowCount: value.rowCount };
+}
+
+function decodeContentOp(
+  value: Record<string, unknown>,
+): HistoryJournalOp | undefined {
+  if (!isSpeakerContent(value.content)) return undefined;
+  if (value.tx !== undefined && typeof value.tx !== 'string') return undefined;
+  return { kind: 'content', content: value.content, tx: value.tx };
+}
+
+/** Rows and transaction markers share one decoder: all carry the `tx` shape. */
+function decodeTransactionOp(
+  value: Record<string, unknown>,
+): HistoryJournalOp | undefined {
+  return value.kind === 'content'
+    ? decodeContentOp(value)
+    : decodeReplaceOp(value);
+}
+
 function decodeOp(value: unknown): HistoryJournalOp {
   if (!isRecord(value)) throw new Error('Invalid pending ticket operation');
   const payload = value.payload;
   switch (value.kind) {
     case 'content':
-      if (isSpeakerContent(value.content))
-        return { kind: 'content', content: value.content };
+    case 'replaceBegin':
+    case 'replaceCommit':
+    case 'replaceAbort': {
+      const decoded = decodeTransactionOp(value);
+      if (decoded !== undefined) return decoded;
       break;
+    }
     case 'rewind':
       if (
         typeof value.itemsRemoved === 'number' &&

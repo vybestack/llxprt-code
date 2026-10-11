@@ -58,7 +58,10 @@ export type SessionEventType =
   | 'density_mutation'
   | 'chronology_bind'
   | 'synthetic_insert'
-  | 'compression_detail';
+  | 'compression_detail'
+  | 'replace_begin'
+  | 'replace_commit'
+  | 'replace_abort';
 
 // ---------------------------------------------------------------------------
 // Event envelope
@@ -113,10 +116,30 @@ export interface SessionStartPayload {
 }
 
 /**
- * Payload for the `content` event — wraps a single IContent entry.
+ * Payload for the `content` event — wraps a single IContent entry. `tx` marks
+ * a row written inside an open replace transaction (see
+ * {@link ReplaceTransactionFold}).
  */
 export interface ContentPayload {
   content: IContent;
+  tx?: string;
+}
+
+/** Opens a replace transaction; its rows follow as `content` events tagged with `txId`. */
+export interface ReplaceBeginPayload {
+  txId: string;
+}
+
+/** Commits a replace transaction: the `rowCount` tagged rows replace all prior history. */
+export interface ReplaceCommitPayload {
+  txId: string;
+  rowCount: number;
+}
+
+/** Abandons a replace transaction after `rowCount` rows were written; prior history stays. */
+export interface ReplaceAbortPayload {
+  txId: string;
+  rowCount: number;
 }
 
 /**
