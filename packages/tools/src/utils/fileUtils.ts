@@ -30,7 +30,7 @@ import {
 
 // Constants for text file processing
 export const DEFAULT_MAX_LINES_TEXT_FILE = 2000;
-const MAX_LINE_LENGTH_TEXT_FILE = 2000;
+export const MAX_LINE_LENGTH_TEXT_FILE = 2000;
 export const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 
 // Default values for encoding and separator format
@@ -278,6 +278,19 @@ export async function detectFileType(
   return 'text';
 }
 
+/**
+ * A text line whose returned window ended before the end of the line.
+ * Offsets and lengths count UTF-16 code units (JavaScript string indices).
+ */
+export interface ClippedLine {
+  /** 1-based line number in the file. */
+  lineNumber: number;
+  /** Full length of the line in the file. */
+  lineLength: number;
+  /** `column_offset` at which the next window of this line starts. */
+  nextColumnOffset: number;
+}
+
 export interface ProcessedFileReadResult {
   llmContent: ContentPartUnion;
   returnDisplay: string;
@@ -294,6 +307,8 @@ export interface ProcessedFileReadResult {
    * truncation without implying the requested range was incomplete.
    */
   linesShortened?: boolean;
+  /** Details of each line counted by `linesShortened`, for continuation calls. */
+  clippedLines?: ClippedLine[];
 }
 
 export function isAssetExplicitlyRequested(
@@ -605,11 +620,80 @@ async function processSvgFile(
   };
 }
 
+function isHighSurrogate(codeUnit: number): boolean {
+  return codeUnit >= 0xd800 && codeUnit <= 0xdbff;
+}
+
+/**
+ * Returns the text of at most MAX_LINE_LENGTH_TEXT_FILE characters of `line`
+ * starting at `columnOffset`, and where the next window starts when the line
+ * continues. A window never ends inside a surrogate pair, so consecutive
+ * windows concatenate back to the original text.
+ */
+function clipLineWindow(
+  line: string,
+  columnOffset: number,
+): { text: string; nextColumnOffset: number | undefined } {
+  let end = columnOffset + MAX_LINE_LENGTH_TEXT_FILE;
+  if (line.length <= end) {
+    return { text: line.substring(columnOffset), nextColumnOffset: undefined };
+  }
+  if (isHighSurrogate(line.charCodeAt(end - 1))) {
+    end -= 1;
+  }
+  return { text: line.substring(columnOffset, end), nextColumnOffset: end };
+}
+
+/** What clipping one selected line produced. */
+interface LineClipResult {
+  text: string;
+  /** True when the returned text was shortened by the line-length cap. */
+  shortened: boolean;
+  /** Set when the returned window ended before the end of the line. */
+  clipped?: ClippedLine;
+}
+
+/**
+ * The clipping every `processSingleFileContent` caller got before column
+ * windows existed: the first MAX_LINE_LENGTH_TEXT_FILE UTF-16 code units, with
+ * no continuation position and no surrogate-pair alignment.
+ */
+function clipLineLegacy(line: string): LineClipResult {
+  if (line.length <= MAX_LINE_LENGTH_TEXT_FILE) {
+    return { text: line, shortened: false };
+  }
+  return {
+    text: line.substring(0, MAX_LINE_LENGTH_TEXT_FILE) + '... [truncated]',
+    shortened: true,
+  };
+}
+
+function clipLineContinuable(
+  line: string,
+  lineNumber: number,
+  columnOffset: number,
+): LineClipResult {
+  const window = clipLineWindow(line, columnOffset);
+  if (window.nextColumnOffset === undefined) {
+    return { text: window.text, shortened: false };
+  }
+  return {
+    text: window.text + '... [truncated]',
+    shortened: true,
+    clipped: {
+      lineNumber,
+      lineLength: line.length,
+      nextColumnOffset: window.nextColumnOffset,
+    },
+  };
+}
+
 async function processTextFile(
   filePath: string,
   relativePathForDisplay: string,
   offset: number | undefined,
   limit: number | undefined,
+  columnOffset: number | undefined,
 ): Promise<ProcessedFileReadResult> {
   const content = await readFileWithEncoding(filePath);
   const lines = content.split('\n');
@@ -621,16 +705,21 @@ async function processTextFile(
   const actualStartLine = Math.min(startLine, originalLineCount);
   const selectedLines = lines.slice(actualStartLine, endLine);
 
-  const formattedLines = selectedLines.map((line) =>
-    line.length > MAX_LINE_LENGTH_TEXT_FILE
-      ? line.substring(0, MAX_LINE_LENGTH_TEXT_FILE) + '... [truncated]'
-      : line,
+  const lineResults = selectedLines.map((line, index) =>
+    columnOffset === undefined
+      ? clipLineLegacy(line)
+      : clipLineContinuable(line, actualStartLine + index + 1, columnOffset),
   );
-  const linesWereTruncatedInLength = selectedLines.some(
-    (line) => line.length > MAX_LINE_LENGTH_TEXT_FILE,
+  const formattedLines = lineResults.map((result) => result.text);
+  const clippedLines = lineResults.flatMap((result) =>
+    result.clipped === undefined ? [] : [result.clipped],
+  );
+  const linesWereTruncatedInLength = lineResults.some(
+    (result) => result.shortened,
   );
 
-  const contentRangeTruncated = startLine > 0 || endLine < originalLineCount;
+  const contentRangeTruncated =
+    startLine > 0 || endLine < originalLineCount || (columnOffset ?? 0) > 0;
   const isTruncated = contentRangeTruncated || linesWereTruncatedInLength;
   const llmContent = formattedLines.join('\n');
 
@@ -653,6 +742,7 @@ async function processTextFile(
     originalLineCount,
     linesShown: [actualStartLine + 1, endLine],
     linesShortened: linesWereTruncatedInLength,
+    clippedLines,
   };
 }
 
@@ -743,14 +833,13 @@ async function processFileByType(
   limit: number | undefined,
   imageResizePolicy: ImageResizePolicy | undefined,
   imageBudget: ImageDimensionBudget | undefined,
+  columnOffset: number | undefined,
 ): Promise<ProcessedFileReadResult> {
   switch (fileType) {
     case 'binary':
       return processBinaryFile(relativePathForDisplay);
     case 'svg':
       return processSvgFile(filePath, relativePathForDisplay, stats);
-    case 'text':
-      return processTextFile(filePath, relativePathForDisplay, offset, limit);
     case 'image':
     case 'pdf':
     case 'audio':
@@ -762,11 +851,24 @@ async function processFileByType(
         imageResizePolicy,
         imageBudget,
       );
+    case 'text':
     default:
-      return processTextFile(filePath, relativePathForDisplay, offset, limit);
+      return processTextFile(
+        filePath,
+        relativePathForDisplay,
+        offset,
+        limit,
+        columnOffset,
+      );
   }
 }
 
+/**
+ * `columnOffset` selects continuation-aware text clipping: each line is shown
+ * from that character for at most MAX_LINE_LENGTH_TEXT_FILE characters, never
+ * ends inside a surrogate pair, and clipped lines are reported in
+ * `clippedLines`. Callers that omit it keep the original clipping exactly.
+ */
 export async function processSingleFileContent(
   filePath: string,
   rootDirectory: string,
@@ -774,6 +876,7 @@ export async function processSingleFileContent(
   limit?: number,
   imageResizePolicy?: ImageResizePolicy,
   imageBudget?: ImageDimensionBudget,
+  columnOffset?: number,
 ): Promise<ProcessedFileReadResult> {
   try {
     const accessError = validateFileAccess(filePath);
@@ -800,6 +903,7 @@ export async function processSingleFileContent(
       limit,
       imageResizePolicy,
       imageBudget,
+      columnOffset,
     );
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
