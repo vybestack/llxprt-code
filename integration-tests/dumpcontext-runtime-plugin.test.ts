@@ -4,6 +4,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { Storage } from '@vybestack/llxprt-code-settings';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   HistoryService,
   type HistoryDumpSnapshot,
@@ -16,7 +17,7 @@ import {
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import { GeminiProvider } from '../plugins/google-gemini/src/gemini/GeminiProvider.js';
 import { buildGeminiDumpContents } from '../plugins/google-gemini/src/gemini/geminiDumpConversion.js';
-import { createMockCommandContext } from '../packages/cli/src/test-utils/mockCommandContext.js';
+import { createMockCommandContext } from '../packages/cli/src/__tests__/mockCommandContext.js';
 import { dumpcontextCommand } from '../packages/cli/src/ui/commands/dumpcontextCommand.js';
 import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 
@@ -59,7 +60,13 @@ async function run(
   const history = new WatchedHistory();
   const runtime = createIsolatedRuntimeContext({
     runtimeId: `dump-plugin-${count}`,
-    workspaceDir: root,
+    config: new Config({
+      sessionId: `dump-plugin-${count}`,
+      targetDir: root,
+      cwd: root,
+      model: 'gemini-2.5-pro',
+      debugMode: false,
+    }),
   });
   try {
     runtime.providerManager.registerProvider(provider);

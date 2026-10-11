@@ -27,6 +27,7 @@ import {
   readAndParseTelemetryLog,
   extractToolLogsFromTelemetry,
   extractApiRequests,
+  extractApiRequestArtifactTexts,
   findMetric,
 } from './telemetry-parsing.js';
 import {
@@ -467,6 +468,11 @@ export class TestRig {
   readAllApiRequest(): ParsedLog[] {
     const logs = this._readAndParseTelemetryLog();
     return extractApiRequests(logs);
+  }
+
+  /** Request bodies exported as verified, reassembled request artifacts. */
+  readAllApiRequestTexts(): string[] {
+    return extractApiRequestArtifactTexts(this._readAndParseTelemetryLog());
   }
 
   readLastApiRequest(): ParsedLog | null {
