@@ -1,8 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { open, stat, type FileHandle } from 'node:fs/promises';
-import type {
-  IContent,
-  JournalReadCounters,
+import {
+  REPLACE_RECORD_TYPES,
+  applyReplaceRecord,
+  contentTxId,
+  enterHistoryRecord,
+  type IContent,
+  type JournalReadCounters,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryItem } from '../../types.js';
 import { rowIdentity, rowIdentityKey } from '../../utils/rowIdentity.js';
@@ -14,7 +18,9 @@ import {
   type FramingSource,
   type OversizedLine,
   type RecordLine,
+  type SkippedHistoryLine,
 } from './projected-journal-records.js';
+import { PagerReplaceTransaction } from './projected-journal-replace.js';
 import {
   JournalPageFile,
   type DisplayJournalEntry,
@@ -167,6 +173,14 @@ export class ProjectedJournalCursor {
    * because later appends can add responses to it. Bounded by one group.
    */
   private tailGroup: { offset: number; pageStart: number } | null = null;
+  /**
+   * Offset of the `replace_begin` of a transaction that was still open at the
+   * end of the last extension, or null. Its rows are not shown; the next
+   * extension re-reads from this offset so they appear only once committed.
+   */
+  private openTransactionOffset: number | null = null;
+  /** Replace-transaction membership for the extension in progress. */
+  private replaceTx: PagerReplaceTransaction;
   /** Lowest page index invalidated by the current extension. */
   private lowWater = 0;
   /** Resident page ordinals by row key; bounded by the window. */
@@ -184,6 +198,7 @@ export class ProjectedJournalCursor {
         : this.controller.signal,
     };
     this.pages = new JournalPageFile(options.temporaryRoot);
+    this.replaceTx = new PagerReplaceTransaction(this.pages);
   }
 
   static async open(
@@ -229,7 +244,13 @@ export class ProjectedJournalCursor {
     previousEnd: number,
   ): void {
     this.options.counters?.recordDecoded();
+    if (REPLACE_RECORD_TYPES.has(record.type)) {
+      this.acceptReplaceRecord(projection, record, previousEnd);
+      return;
+    }
+    this.enterHistory(projection, record.type, record.payload, previousEnd);
     const content = record.payload.content;
+    if (record.type === 'content') this.replaceTx.countRow();
     if (record.type === 'content' && isContent(content)) {
       this.options.counters?.rowDecoded();
       try {
@@ -267,6 +288,44 @@ export class ProjectedJournalCursor {
         },
       });
     }
+  }
+
+  /**
+   * A history record that is not a row of the open replace transaction means
+   * the transaction never committed: its rows are dropped before the record
+   * applies.
+   */
+  private enterHistory(
+    projection: HistoryProjection,
+    type: string,
+    payload: Record<string, unknown>,
+    previousEnd: number,
+  ): void {
+    const tx = this.replaceTx;
+    const taggedRow = type === 'content' && contentTxId(payload) !== undefined;
+    if (tx.fold.open !== null && !taggedRow)
+      this.closeGroup(projection, previousEnd);
+    enterHistoryRecord(tx.fold, type, payload, tx);
+  }
+
+  private acceptReplaceRecord(
+    projection: HistoryProjection,
+    record: RecordLine,
+    previousEnd: number,
+  ): void {
+    const tx = this.replaceTx;
+    this.closeGroup(projection, previousEnd);
+    if (record.type === 'replace_begin') tx.mark(record.offset);
+    applyReplaceRecord(tx.fold, record.type, record.payload, tx);
+    const committedAt = tx.takeCommit();
+    if (committedAt === null) return;
+    // A commit replaces everything before the transaction: a full clear
+    // followed by the transaction's rows.
+    this.clearOffset = committedAt;
+    this.lowWater = 0;
+    this.start = 0;
+    this.end = 0;
+    this.ordinals.clear();
   }
 
   private closeGroup(projection: HistoryProjection, end: number): void {
@@ -406,6 +465,7 @@ export class ProjectedJournalCursor {
   private resumePoint(): number {
     const group = this.tailGroup;
     this.tailGroup = null;
+    if (this.openTransactionOffset !== null) return this.openTransactionOffset;
     if (!group) return this.completeBytes;
     // Only a tool group can grow when the file does; any other re-projected
     // tail row is identical to the one already served and must not be
@@ -425,6 +485,7 @@ export class ProjectedJournalCursor {
     this.framing.completeThrough = from;
     this.groupOffset = null;
     this.groupRows = 0;
+    this.replaceTx = new PagerReplaceTransaction(this.pages);
     const projection = new HistoryProjection(
       undefined,
       this.options.counters?.ownership,
@@ -440,18 +501,44 @@ export class ProjectedJournalCursor {
       for await (const record of framed) {
         if (record.kind === 'record')
           this.acceptRecord(projection, record, previousEnd);
+        else if (record.kind === 'skipped')
+          this.acceptSkipped(projection, record, previousEnd);
         else this.noteOversized(record, from);
         previousEnd = record.offset + record.length;
       }
       this.options.signal?.throwIfAborted();
       const pageStart = this.pages.length;
       this.append(projection.flush(), previousEnd);
-      this.tailGroup = this.openGroup(pageStart);
+      this.settleOpenTransaction(pageStart);
       this.completeBytes = this.framing.completeThrough;
       this.observedCompleteBytes = this.completeBytes;
     } finally {
       projection.close();
     }
+  }
+
+  /**
+   * Rows of a transaction still open at the end of input are not shown and
+   * the next extension re-reads it from its begin record.
+   */
+  private settleOpenTransaction(pageStart: number): void {
+    const tx = this.replaceTx;
+    if (tx.fold.open === null) {
+      this.openTransactionOffset = null;
+      this.tailGroup = this.openGroup(pageStart);
+      return;
+    }
+    this.pages.truncate(tx.openBase);
+    this.openTransactionOffset = tx.openOffset;
+    this.tailGroup = null;
+  }
+
+  private acceptSkipped(
+    projection: HistoryProjection,
+    record: SkippedHistoryLine,
+    previousEnd: number,
+  ): void {
+    this.enterHistory(projection, record.type, {}, previousEnd);
   }
 
   private openGroup(
@@ -466,6 +553,7 @@ export class ProjectedJournalCursor {
     this.pages.clear();
     this.ordinals.clear();
     this.tailGroup = null;
+    this.openTransactionOffset = null;
     this.clearOffset = null;
     this.completeBytes = 0;
     this.observedCompleteBytes = 0;

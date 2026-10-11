@@ -47,6 +47,15 @@ export {
   type JournalPage,
 } from './journalCursor.js';
 export {
+  ReplaceTransactionFold,
+  HISTORY_RECORD_TYPES,
+  REPLACE_RECORD_TYPES,
+  applyReplaceRecord,
+  contentTxId,
+  enterHistoryRecord,
+  type ReplaceRowStore,
+} from './replaceTransaction.js';
+export {
   SessionRecordingService,
   SESSION_FILE_ID_PREFIX_LENGTH,
 } from './SessionRecordingService.js';

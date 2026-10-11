@@ -1,6 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createReadStream } from 'node:fs';
-import { MAX_RECORD_BYTES } from '@vybestack/llxprt-code-core';
+import {
+  HISTORY_RECORD_TYPES,
+  MAX_RECORD_BYTES,
+} from '@vybestack/llxprt-code-core';
 
 /**
  * Bounded journal line framing for the scrollback pager. Lines are located
@@ -26,7 +29,19 @@ export interface OversizedLine {
   readonly length: number;
 }
 
-export type FramedLine = RecordLine | OversizedLine;
+/**
+ * A history record the pager does not project (density, purge, ...) and so
+ * never decodes. Only its type is reported, because any history record that
+ * follows an open replace transaction abandons it.
+ */
+export interface SkippedHistoryLine {
+  readonly kind: 'skipped';
+  readonly offset: number;
+  readonly length: number;
+  readonly type: string;
+}
+
+export type FramedLine = RecordLine | OversizedLine | SkippedHistoryLine;
 
 export interface FramingMetrics {
   /** Largest byte count assembled for decoding in one line. */
@@ -51,6 +66,9 @@ const DECODED_TYPES: ReadonlySet<string> = new Set([
   'content',
   'rewind',
   'compressed',
+  'replace_begin',
+  'replace_commit',
+  'replace_abort',
 ]);
 const SNIFF_BYTES = 256;
 const ENVELOPE_HEAD =
@@ -97,6 +115,7 @@ class LineFramer {
   private lineBytes = 0;
   private mode: LineMode = 'collect';
   private sniffed = false;
+  private skippedType: string | undefined;
 
   constructor(
     private offset: number,
@@ -139,6 +158,7 @@ class LineFramer {
     const type = ENVELOPE_HEAD.exec(head)?.[1];
     if (type !== undefined && !DECODED_TYPES.has(type)) {
       this.mode = 'skip';
+      this.skippedType = type;
       this.parts = [];
       this.assembled = 0;
     }
@@ -149,7 +169,11 @@ class LineFramer {
     let framed: FramedLine | undefined;
     if (mode === 'oversized')
       framed = { kind: 'oversized', offset, length: lineBytes };
-    else if (mode === 'collect')
+    else if (mode === 'skip') {
+      const type = this.skippedType;
+      if (type !== undefined && HISTORY_RECORD_TYPES.has(type))
+        framed = { kind: 'skipped', offset, length: lineBytes, type };
+    } else
       framed = parseLine(
         Buffer.concat(this.parts).toString('utf8'),
         offset,
@@ -162,6 +186,7 @@ class LineFramer {
     this.lineBytes = 0;
     this.mode = 'collect';
     this.sniffed = false;
+    this.skippedType = undefined;
     return framed;
   }
 }

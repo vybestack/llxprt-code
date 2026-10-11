@@ -37,7 +37,10 @@ export class JournalPageFile {
   private readonly data: number;
   private readonly offsets: number;
   private bytes = 0;
+  /** Physical entries written, including those hidden by dropPrefix. */
   private count = 0;
+  /** Physical index of logical entry 0. */
+  private first = 0;
   private closed = false;
   private entryReads = 0;
   private entryWrites = 0;
@@ -56,7 +59,7 @@ export class JournalPageFile {
   }
 
   get length(): number {
-    return this.count;
+    return this.count - this.first;
   }
 
   push(entry: DisplayJournalEntry): void {
@@ -82,19 +85,34 @@ export class JournalPageFile {
   /** Drops every entry at index `count` and above. */
   truncate(count: number): void {
     if (this.closed || count < 0) throw new RangeError('Invalid truncation');
-    if (count >= this.count) return;
-    if (readSync(this.offsets, this.buffer, 0, WIDTH, count * WIDTH) !== WIDTH)
+    const physical = this.first + count;
+    if (physical >= this.count) return;
+    if (
+      readSync(this.offsets, this.buffer, 0, WIDTH, physical * WIDTH) !== WIDTH
+    )
       throw new Error('Truncated journal page index');
     const bytes = this.buffer.readDoubleLE(0);
     ftruncateSync(this.data, bytes);
-    ftruncateSync(this.offsets, count * WIDTH);
+    ftruncateSync(this.offsets, physical * WIDTH);
     this.bytes = bytes;
-    this.count = count;
+    this.count = physical;
   }
 
-  get(index: number): DisplayJournalEntry {
-    if (this.closed || index < 0 || index >= this.count)
+  /**
+   * Hides the first `count` entries; later entries shift down. The hidden
+   * bytes stay in the scratch files until close, so cost is one replacement
+   * transaction's worth of disk, not memory.
+   */
+  dropPrefix(count: number): void {
+    if (this.closed || count < 0 || count > this.length)
+      throw new RangeError('Invalid prefix drop');
+    this.first += count;
+  }
+
+  get(logicalIndex: number): DisplayJournalEntry {
+    if (this.closed || logicalIndex < 0 || logicalIndex >= this.length)
       throw new RangeError('Invalid journal page index');
+    const index = this.first + logicalIndex;
     if (readSync(this.offsets, this.buffer, 0, WIDTH, index * WIDTH) !== WIDTH)
       throw new Error('Truncated journal page index');
     const bytes = Buffer.alloc(this.buffer.readDoubleLE(8));
@@ -117,6 +135,7 @@ export class JournalPageFile {
     ftruncateSync(this.offsets, 0);
     this.bytes = 0;
     this.count = 0;
+    this.first = 0;
   }
 
   close(): void {
