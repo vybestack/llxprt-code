@@ -51,7 +51,7 @@ describe('disk-backed row transform', () => {
             {
               afterPublication: () => {
                 const census = owners.snapshot();
-                expect(census.liveRows).toBeGreaterThan(0);
+                expect(census.liveRows).toBe(0);
                 expect(census.liveRows).toBeLessThanOrEqual(440);
                 expect(census.liveSerializedBytes).toBeLessThanOrEqual(
                   8 * 1024 * 1024,
