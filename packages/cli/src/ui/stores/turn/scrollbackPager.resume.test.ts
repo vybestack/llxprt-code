@@ -384,7 +384,7 @@ describe('ScrollbackPagerStore resume seeding @plan:PLAN-20260917-ISSUE854.P04 @
     );
   });
 
-  it('resume equivalence honors the clear boundary: the resumed walk equals the post-rewind replay tail', async () => {
+  it('resume equivalence applies the rewind membership: the resumed walk equals the replay', async () => {
     await fixture.addSessionStart();
     for (let seq = 1; seq <= 4; seq += 1) {
       await fixture.addUser(seq);
@@ -397,16 +397,8 @@ describe('ScrollbackPagerStore resume seeding @plan:PLAN-20260917-ISSUE854.P04 @
     await walkToFloor(store);
 
     const walked = journalRowLabels(store);
-    expect(walked.map((row) => row.seq)).toStrictEqual([6, 7, 8, 9]);
-
-    // The engine cuts at the rewind's cutSeq (3) and keeps pre-boundary
-    // rows 1-2 in model history; the pager's visibility floor drops
-    // everything older than the boundary, so the shared equivalence domain
-    // is seq >= 6 — the first fixture row recorded after the boundary.
-    const postBoundary = (await replayReference(fixture.filePath)).filter(
-      (row) => row.seq >= 6,
-    );
-    expect(walked).toStrictEqual(postBoundary);
+    expect(walked.map((row) => row.seq)).toStrictEqual([1, 2, 6, 7, 8, 9]);
+    expect(walked).toStrictEqual(await replayReference(fixture.filePath));
   });
 
   it('pageBack after resume yields only rows older than the seeded page', async () => {
@@ -482,12 +474,12 @@ describe('ScrollbackPagerStore resume seeding @plan:PLAN-20260917-ISSUE854.P04 @
     expect(seqs[seqs.length - 1]).toBe(6);
   });
 
-  it('floor offset after resume is the newest clear boundary', async () => {
+  it('floor offset after resume is the newest full clear', async () => {
     await fixture.addSessionStart();
     for (let seq = 1; seq <= 4; seq += 1) {
       await fixture.addUser(seq);
     }
-    const rewindOffset = await fixture.addRewind(5, 2, 3);
+    const rewindOffset = await fixture.addRewind(5, 4, 1);
     for (let seq = 6; seq <= 9; seq += 1) {
       await fixture.addUser(seq);
     }
@@ -496,6 +488,18 @@ describe('ScrollbackPagerStore resume seeding @plan:PLAN-20260917-ISSUE854.P04 @
     expect(summary.floorOffset).toBe(rewindOffset);
     expect(summary.atClearBoundary).toBe(true);
     expect(store.getState().atVisibilityFloor).toBe(true);
+  });
+
+  it('a suffix rewind leaves the file start as the floor', async () => {
+    await fixture.addSessionStart();
+    for (let seq = 1; seq <= 4; seq += 1) {
+      await fixture.addUser(seq);
+    }
+    await fixture.addRewind(5, 2, 3);
+
+    const { summary } = await makeResumedStore({ pageRows: 4 });
+    expect(summary.floorOffset).toBe(0);
+    expect(summary.atClearBoundary).toBe(false);
   });
 
   it('floor offset after resume on a boundary-free journal is the file start', async () => {

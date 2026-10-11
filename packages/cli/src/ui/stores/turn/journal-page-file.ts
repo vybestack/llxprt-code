@@ -20,6 +20,8 @@ export type DisplayJournalEntry =
       readonly offset: number;
       readonly length: number;
       readonly seq: number | null;
+      /** Journal rows this page accounts for; continuation pages carry 0. */
+      readonly rows: number;
       readonly item: HistoryItem;
     };
 

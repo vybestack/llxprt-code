@@ -21,8 +21,9 @@
  * serialized per store so concurrent callers page distinct records instead of
  * walking the same cursor page twice.
  *
- * The visibility floor is the newest clear boundary (a rewind record) or the
- * file start; pageBack stops there so cleared history never resurrects.
+ * A rewind is applied as membership by the cursor: a cut removes the suffix
+ * rows and leaves the surviving prefix pageable, and a cut that leaves nothing
+ * is a full clear whose offset is the floor scalar.
  * Compressed records page through as summary rows and do not stop paging.
  *
  * Residency (issue-854-design.md §3): visible rows and the pending live tail
@@ -108,8 +109,8 @@ export interface ScrollbackResumeSummary {
   /** Display rows seeded into the resident window (journal-backed only). */
   readonly seededRows: number;
   /**
-   * Backward head after seeding: the start offset of the newest clear
-   * (rewind) boundary line, or the file data start (0) when no boundary
+   * Backward head after seeding: the start offset of the newest full-clear
+   * rewind line, or the file data start (0) when no boundary
    * exists.
    */
   readonly floorOffset: number;
@@ -122,7 +123,7 @@ export interface ScrollbackResumeSummary {
   readonly headSeq: number | null;
   /** Highest seq observed while seeding; null when nothing was seeded. */
   readonly tailSeq: number | null;
-  /** True when the floor is a clear boundary rather than the file start. */
+  /** True when the floor is a full clear rather than the file start. */
   readonly atClearBoundary: boolean;
 }
 
@@ -202,10 +203,6 @@ function compressedBoundaryText(payload: unknown): string {
     : '[compressed]';
 }
 
-function isClearBoundary(entry: JournalEntry): boolean {
-  return entry.kind === 'boundary' && entry.envelope.type === 'rewind';
-}
-
 /** Every projected row consumes viewport capacity, including summaries. */
 function isDisplayEntry(entry: JournalEntry): boolean {
   return entry.kind === 'projected' || entry.envelope.type === 'compressed';
@@ -213,29 +210,21 @@ function isDisplayEntry(entry: JournalEntry): boolean {
 
 interface BackPageCollect {
   added: number;
-  hitClearBoundary: boolean;
 }
 
-/**
- * Consumes one page's entries (newest first) into `collected`, stopping at
- * the walk's clear boundary; the boundary itself and everything older than
- * it is cleared history and is dropped.
- */
+/** Consumes one page's entries (newest first) into `collected`. */
 function collectBackPage(
   entries: readonly JournalEntry[],
   collected: JournalEntry[],
 ): BackPageCollect {
   let added = 0;
   for (const entry of entries) {
-    if (isClearBoundary(entry)) {
-      return { added, hitClearBoundary: true };
-    }
     if (isDisplayEntry(entry)) {
       collected.push(entry);
       added += 1;
     }
   }
-  return { added, hitClearBoundary: false };
+  return { added };
 }
 
 /** Appends one forward page (oldest first) in walk order. */
@@ -253,35 +242,10 @@ function pushForwardPage(
   return added;
 }
 
-/** Running state of a resume floor walk: the clear boundary and the oldest display row offset seen above it. */
+/** Floor scalars the cursor tracks while projecting: the newest full clear and the oldest display row. */
 interface ResumeFloorOffsets {
   boundaryOffset: number | null;
   firstDisplayOffset: number | null;
-}
-
-/**
- * Scans one backward-read page (newest first) into `walk`, stopping at the
- * newest clear boundary; while the boundary is still unfound, the oldest
- * display row offset is tracked so later pageBack calls can recognize the
- * floor once their head rests on it.
- */
-function scanResumeFloorPage(
-  entries: readonly JournalEntry[],
-  walk: ResumeFloorOffsets,
-): void {
-  for (const entry of entries) {
-    if (isClearBoundary(entry)) {
-      walk.boundaryOffset = entry.offset;
-      return;
-    }
-    if (
-      isDisplayEntry(entry) &&
-      (walk.firstDisplayOffset === null ||
-        entry.offset < walk.firstDisplayOffset)
-    ) {
-      walk.firstDisplayOffset = entry.offset;
-    }
-  }
 }
 
 function entryToRow(entry: JournalEntry): ScrollbackRow | null {
@@ -547,14 +511,14 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
   private async runResumeFromJournal(
     gen: number,
   ): Promise<ScrollbackResumeSummary> {
-    const floor = await this.walkResumeFloor(gen);
-    if (this.isStale(gen)) {
-      throw new Error('scrollback resume aborted: store generation changed');
-    }
     const cursor = await this.ensureCursor(gen);
     if (cursor === null || this.isStale(gen)) {
       throw new Error('scrollback resume failed: journal cursor unavailable');
     }
+    const floor: ResumeFloorOffsets = {
+      boundaryOffset: cursor.clearBoundaryOffset(),
+      firstDisplayOffset: cursor.firstDisplayOffset(),
+    };
     const { collected, exhausted } = await this.collectBack(cursor, gen);
     if (this.isStale(gen)) {
       throw new Error('scrollback resume aborted: store generation changed');
@@ -578,37 +542,6 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
       tailSeq,
       atClearBoundary: floor.boundaryOffset !== null,
     };
-  }
-
-  /**
-   * Walks a probe cursor to the visibility floor without touching store
-   * state: the newest rewind (clear) boundary ends the walk and yields its
-   * line start offset; otherwise the walk runs to the file data start and
-   * yields the cursor's backward head there. The oldest display row seen
-   * above the stop point is recorded so later pageBack calls can recognize
-   * the floor once their head rests on it (a non-display header line below
-   * the oldest row would otherwise cost an extra read to detect).
-   */
-  private async walkResumeFloor(gen: number): Promise<ResumeFloorOffsets> {
-    const probe = await JournalCursor.open(this.filePath, {
-      chunkBytes: this.chunkBytes,
-      counters: this.counters,
-      signal: this.controller.signal,
-    });
-    const walk: ResumeFloorOffsets = {
-      boundaryOffset: null,
-      firstDisplayOffset: null,
-    };
-    try {
-      while (walk.boundaryOffset === null && !this.isStale(gen)) {
-        const page = await probe.pageBack(this.pageRows);
-        scanResumeFloorPage(page.entries, walk);
-        if (page.entries.length === 0) break;
-      }
-    } finally {
-      await probe.close().catch(() => undefined);
-    }
-    return walk;
   }
 
   /**
@@ -861,9 +794,7 @@ class ScrollbackPagerStoreImpl implements ScrollbackPagerStore {
       } else if (page.entries.length === 0) {
         exhausted = true;
       } else {
-        const collect = collectBackPage(page.entries, collected);
-        contentCount += collect.added;
-        exhausted = collect.hitClearBoundary;
+        contentCount += collectBackPage(page.entries, collected).added;
       }
     }
     return { collected, exhausted: exhausted || stale };

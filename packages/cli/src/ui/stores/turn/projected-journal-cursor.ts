@@ -157,6 +157,9 @@ export class ProjectedJournalCursor {
   };
   private oversizedRecords = 0;
   private oversizedThrough = 0;
+  /** Journal rows accepted into the group that is still open. */
+  private groupRows = 0;
+  private clearOffset: number | null = null;
   /** Byte offset of the newest record that opened a not-yet-closed group. */
   private groupOffset: number | null = null;
   /**
@@ -200,6 +203,7 @@ export class ProjectedJournalCursor {
   }
 
   private append(items: Iterable<HistoryItem>, end: number): void {
+    let rows = this.groupRows;
     for (const item of items) {
       this.options.signal?.throwIfAborted();
       const identity = item.rowIdentity;
@@ -212,8 +216,10 @@ export class ProjectedJournalCursor {
         offset: identity.offset,
         length: end - identity.offset,
         seq: seq ?? this.seq,
+        rows,
         item,
       });
+      rows = 0;
     }
   }
 
@@ -237,13 +243,16 @@ export class ProjectedJournalCursor {
       } finally {
         this.options.counters?.rowReleased();
       }
+      this.groupRows = content.speaker === 'tool' ? this.groupRows + 1 : 1;
       if (content.speaker !== 'tool') {
         this.groupOffset = record.offset;
         this.seq = record.seq;
       }
-    } else if (record.type === 'rewind' || record.type === 'compressed') {
-      this.append(projection.flush(), previousEnd);
-      this.groupOffset = null;
+    } else if (record.type === 'rewind') {
+      this.closeGroup(projection, previousEnd);
+      this.applyRewind(record);
+    } else if (record.type === 'compressed') {
+      this.closeGroup(projection, previousEnd);
       this.pages.push({
         kind: 'boundary',
         offset: record.offset,
@@ -258,6 +267,77 @@ export class ProjectedJournalCursor {
         },
       });
     }
+  }
+
+  private closeGroup(projection: HistoryProjection, end: number): void {
+    this.append(projection.flush(), end);
+    this.groupRows = 0;
+    this.groupOffset = null;
+  }
+
+  /**
+   * Applies a rewind's membership to the projected transcript: pages for the
+   * removed suffix are dropped, the surviving prefix stays pageable. A cut
+   * that leaves nothing is a full clear and is remembered as the floor.
+   */
+  private applyRewind(record: RecordLine): void {
+    const cut = this.rewindCut(record.payload);
+    this.pages.truncate(cut);
+    this.lowWater = Math.min(this.lowWater, cut);
+    if (cut === 0) this.clearOffset = record.offset;
+  }
+
+  /**
+   * First page index the rewind removes. cutSeq names the first removed
+   * chronology marker; without a usable one the count of removed journal rows
+   * decides, as in replay. A rewind with no readable count cannot be
+   * placed and is treated as a full clear.
+   */
+  private rewindCut(payload: Record<string, unknown>): number {
+    const count = payload.itemsRemoved;
+    if (typeof count !== 'number' || !(count >= 0)) return 0;
+    const cutSeq = payload.cutSeq;
+    if (Number.isSafeInteger(cutSeq) && (cutSeq as number) >= 0) {
+      const cut = this.firstPageFromSeq(cutSeq as number);
+      if (cut < this.pages.length) return cut;
+    }
+    return this.firstPageByCount(Math.ceil(count));
+  }
+
+  private firstPageFromSeq(cutSeq: number): number {
+    let index = this.pages.length;
+    while (index > 0 && !this.survivesCut(this.pages.get(index - 1), cutSeq))
+      index -= 1;
+    return index;
+  }
+
+  /** Compression summaries and rows before the cut marker stay. */
+  private survivesCut(entry: DisplayJournalEntry, cutSeq: number): boolean {
+    return (
+      entry.kind === 'boundary' || (entry.seq !== null && entry.seq < cutSeq)
+    );
+  }
+
+  private firstPageByCount(count: number): number {
+    let index = this.pages.length;
+    let remaining = count;
+    while (index > 0 && remaining > 0) {
+      const entry = this.pages.get(index - 1);
+      if (entry.kind === 'boundary') break;
+      remaining -= entry.rows;
+      index -= 1;
+    }
+    return index;
+  }
+
+  /** Start of the newest full clear, or null when none cut the whole transcript. */
+  clearBoundaryOffset(): number | null {
+    return this.clearOffset;
+  }
+
+  /** Offset of the oldest surviving display row, or null when none survive. */
+  firstDisplayOffset(): number | null {
+    return this.pages.length === 0 ? null : this.pages.get(0).offset;
   }
 
   /** Oversized lines are diagnosed by offset and length and never displayed. */
@@ -319,12 +399,22 @@ export class ProjectedJournalCursor {
     this.end = Math.min(this.end, Math.max(this.start, this.lowWater));
   }
 
+  private tailPage(): DisplayJournalEntry {
+    return this.pages.get(this.pages.length - 1);
+  }
+
   private resumePoint(): number {
     const group = this.tailGroup;
     this.tailGroup = null;
     if (!group) return this.completeBytes;
+    // Only a tool group can grow when the file does; any other re-projected
+    // tail row is identical to the one already served and must not be
+    // handed out again.
+    const tail = this.pages.length > group.pageStart ? this.tailPage() : null;
+    const grows = tail?.kind === 'projected' && tail.item.type === 'tool_group';
+    const served = this.pages.length;
     this.pages.truncate(group.pageStart);
-    this.lowWater = group.pageStart;
+    this.lowWater = grows ? group.pageStart : served;
     return group.offset;
   }
 
@@ -334,6 +424,7 @@ export class ProjectedJournalCursor {
   ): Promise<void> {
     this.framing.completeThrough = from;
     this.groupOffset = null;
+    this.groupRows = 0;
     const projection = new HistoryProjection(
       undefined,
       this.options.counters?.ownership,
@@ -375,6 +466,7 @@ export class ProjectedJournalCursor {
     this.pages.clear();
     this.ordinals.clear();
     this.tailGroup = null;
+    this.clearOffset = null;
     this.completeBytes = 0;
     this.observedCompleteBytes = 0;
     this.start = 0;
