@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { heapSize } from 'bun:jsc';
+import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { TokenCountFn } from './tokenUsageRequestShape.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -17,20 +17,19 @@ import {
 } from './__tests__/support/token-usage-source-fixture.js';
 
 const root = sourceRootSetup();
-async function settled(): Promise<number> {
-  for (let round = 0; round < 8; round++) {
-    await Bun.sleep(1);
-    Bun.gc(true);
-  }
-  return heapSize();
-}
-// JSC can keep a just-finished async generator alive across a few collections
-// (stack and continuation roots drain lazily). Keep collecting while any
-// observed reader is still reachable, bounded so a genuinely retained reader
-// (the reader trap holds one strongly) still reports live and fails the gate.
+const settled = settledHeap;
+// JSC can keep a just-finished async generator, and the last yielded row,
+// alive across a few collections (stack and continuation roots drain lazily).
+// Keep collecting while any observed reader or row is still reachable, bounded
+// so a genuinely retained reader or row (the traps hold them strongly) still
+// reports live and fails the gate.
 async function settledReleasingReaders(facts: Census): Promise<number> {
   let bytes = await settled();
-  for (let round = 0; round < 32 && live(facts.readers) > 0; round++) {
+  for (
+    let round = 0;
+    round < 32 && live(facts.readers) + live(facts.rows) > 0;
+    round++
+  ) {
     bytes = await settled();
   }
   return bytes;

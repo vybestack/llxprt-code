@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { heapSize } from 'bun:jsc';
+import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { projectionEndpoint } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/projection-ownership-fixture.js';
 import { observeDiskBody } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-body-observer.js';
@@ -9,13 +9,7 @@ import {
   type ObservedHistory,
 } from './streamprocessor-source-fixture.js';
 
-export async function sourceHeap(): Promise<number> {
-  for (let round = 0; round < 8; round++) {
-    await Bun.sleep(0);
-    Bun.gc(true);
-  }
-  return heapSize();
-}
+export const sourceHeap = settledHeap;
 export async function warmSourceProcessor(root: string): Promise<void> {
   const http = projectionEndpoint(true);
   const setup = await processorFixture(
