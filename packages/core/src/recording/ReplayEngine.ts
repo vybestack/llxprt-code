@@ -93,6 +93,95 @@ export async function replaySessionRows(
   }
 }
 
+export interface RowValidatedReplay {
+  /** Replay metadata with an empty `history`; rows are never retained. */
+  readonly replay: ReplayResult;
+  readonly rowCount: number;
+}
+
+/**
+ * Validates a recording without materializing it: the resolver scans the
+ * journal metadata, then each resolved row is counted and its media is
+ * admitted, verified and released before the next row is read. Media failures
+ * are reported with the same diagnostic as the eager replay.
+ */
+export async function validateReplayRows(
+  filePath: string,
+  expectedProjectHash: string,
+  options: Pick<ReplaySessionOptions, 'mediaStore'> = {},
+): Promise<RowValidatedReplay> {
+  const admissionContext = {
+    turnId: 'session-replay',
+    source: 'session-replay',
+    preserveLegacyMimeParameters: true,
+  };
+  const admission =
+    options.mediaStore === undefined
+      ? undefined
+      : new MediaAdmissionService(options.mediaStore);
+  let rowCount = 0;
+  let mediaFailure: { readonly error: unknown } | undefined;
+  const replay = await replaySessionRows(
+    filePath,
+    expectedProjectHash,
+    async (row) => {
+      rowCount += 1;
+      try {
+        await verifyRowMedia(
+          row,
+          options.mediaStore,
+          admission,
+          admissionContext,
+        );
+      } catch (error) {
+        mediaFailure = { error };
+        throw error;
+      }
+    },
+  );
+  if (mediaFailure !== undefined)
+    return {
+      replay: {
+        ok: false,
+        error: formatReplayDiagnostic(mediaFailure.error),
+        warnings: replay.warnings,
+      },
+      rowCount,
+    };
+  return { replay, rowCount };
+}
+
+async function verifyRowMedia(
+  row: IContent,
+  mediaStore: LocalMediaStore | undefined,
+  admission: MediaAdmissionService | undefined,
+  context: {
+    readonly turnId: string;
+    readonly source: string;
+    readonly preserveLegacyMimeParameters: boolean;
+  },
+): Promise<void> {
+  if (admission === undefined) {
+    await verifyHistoryMedia([row], mediaStore, 'session-replay');
+    return;
+  }
+  const admitted = await admission.admitContents([row], context);
+  try {
+    await verifyHistoryMedia(admitted, mediaStore, 'session-replay');
+  } catch (error) {
+    try {
+      await admission.releaseContents(admitted, context);
+    } catch (releaseError) {
+      throw new AggregateError(
+        [error, releaseError],
+        'Session replay media verification and owner release failed',
+      );
+    }
+    throw error;
+  }
+  await admission.releaseContents(admitted, context);
+}
+
 // This compatibility API explicitly owns an eager result. Continuation uses
 // cursor boot instead; the collector must never become a resume fallback.
 async function collectReplay(
