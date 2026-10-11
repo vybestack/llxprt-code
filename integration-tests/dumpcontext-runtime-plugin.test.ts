@@ -15,8 +15,9 @@ import {
   activateIsolatedRuntimeContext,
   resetCliProviderInfrastructure,
 } from '@vybestack/llxprt-code-providers/runtime.js';
-import { GeminiProvider } from '../plugins/google-gemini/src/gemini/GeminiProvider.js';
-import { buildGeminiDumpContents } from '../plugins/google-gemini/src/gemini/geminiDumpConversion.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { IModel } from '@vybestack/llxprt-code-providers/IModel.js';
+import type { IProvider } from '@vybestack/llxprt-code-providers/IProvider.js';
 import { createMockCommandContext } from '../packages/cli/src/__tests__/mockCommandContext.js';
 import { dumpcontextCommand } from '../packages/cli/src/ui/commands/dumpcontextCommand.js';
 import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
@@ -36,7 +37,60 @@ class WatchedHistory extends HistoryService {
     };
   }
 }
-class FailingGemini extends GeminiProvider {
+/**
+ * Minimal runtime plugin that owns its dump conversion through the
+ * contextDumpVersion 2 hook. It has no third-party SDK dependency, so the
+ * test does not need any plugin workspace installed.
+ */
+const PLUGIN_NAME = 'dump-plugin';
+const PLUGIN_MODEL = 'dump-plugin-model';
+
+function pluginDumpContent(row: IContent): unknown {
+  return {
+    role: row.speaker,
+    text: row.blocks
+      .flatMap((b) => (b.type === 'text' ? [b.text] : []))
+      .join(''),
+  };
+}
+
+async function* pluginDumpContents(
+  source: HistoryDumpSource,
+): AsyncIterable<unknown> {
+  for await (const row of source.rows()) yield pluginDumpContent(row);
+}
+
+class DumpPlugin implements IProvider {
+  readonly name = PLUGIN_NAME;
+  readonly contextDumpVersion: IProvider['contextDumpVersion'] = 2;
+
+  async buildContextDumpBody(
+    history: HistoryDumpSource,
+    model?: string,
+  ): Promise<Record<string, unknown>> {
+    const contents = pluginDumpContents(history);
+    return model ? { model, contents } : { contents };
+  }
+
+  async getModels(): Promise<IModel[]> {
+    return [];
+  }
+
+  // eslint-disable-next-line require-yield -- the dump path never sends a request
+  async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+    throw new Error('DumpPlugin does not generate completions');
+  }
+
+  getCurrentModel(): string {
+    return PLUGIN_MODEL;
+  }
+
+  getDefaultModel(): string {
+    return PLUGIN_MODEL;
+  }
+}
+
+class FailingPlugin extends DumpPlugin {
   override async buildContextDumpBody(
     history: HistoryDumpSource,
   ): Promise<Record<string, unknown>> {
@@ -46,7 +100,7 @@ class FailingGemini extends GeminiProvider {
 }
 async function run(
   count: number,
-  provider = new GeminiProvider(),
+  provider: IProvider = new DumpPlugin(),
   cancel = false,
 ): Promise<{
   result: unknown;
@@ -64,13 +118,13 @@ async function run(
       sessionId: `dump-plugin-${count}`,
       targetDir: root,
       cwd: root,
-      model: 'gemini-2.5-pro',
+      model: PLUGIN_MODEL,
       debugMode: false,
     }),
   });
   try {
     runtime.providerManager.registerProvider(provider);
-    await runtime.providerManager.setActiveProvider('gemini');
+    await runtime.providerManager.setActiveProvider(PLUGIN_NAME);
     await activateIsolatedRuntimeContext(runtime);
     for (let index = 0; index < count; index++)
       history.add({
@@ -104,11 +158,7 @@ async function run(
       ?.getCurrentModel?.();
     let expected: unknown;
     await collectJournalRowsForAssertions(history, (rows) => {
-      const contents = buildGeminiDumpContents(
-        [...rows],
-        model,
-        runtime.config,
-      );
+      const contents = rows.map(pluginDumpContent);
       expected = model ? { model, contents } : { contents };
     });
     return {
@@ -128,7 +178,7 @@ async function run(
 }
 describe('dumpcontext runtime plugin lifecycle', () => {
   for (const count of [512, 8192])
-    it(`writes the real registered Gemini plugin for ${count} journal rows`, async () => {
+    it(`writes the registered runtime plugin body for ${count} journal rows`, async () => {
       const result = await run(count);
       expect(result.result).toMatchObject({ messageType: 'info' });
       expect(result.body).toStrictEqual(result.expected);
@@ -138,7 +188,7 @@ describe('dumpcontext runtime plugin lifecycle', () => {
   it('rejects an old plugin before opening a snapshot', async () => {
     const result = await run(
       1,
-      Object.assign(new GeminiProvider(), { contextDumpVersion: 1 }),
+      Object.assign(new DumpPlugin(), { contextDumpVersion: 1 }),
     );
     expect(result.result).toMatchObject({ messageType: 'error' });
     expect(JSON.stringify(result.result)).toContain('contextDumpVersion 2');
@@ -146,14 +196,14 @@ describe('dumpcontext runtime plugin lifecycle', () => {
     expect(result.closed).toBe(0);
   });
   it('closes the pinned snapshot when receiver-dependent conversion fails', async () => {
-    const result = await run(1, new FailingGemini());
+    const result = await run(1, new FailingPlugin());
     expect(JSON.stringify(result.result)).toContain(
-      'converter failed for gemini',
+      'converter failed for dump-plugin',
     );
     expect(result.closed).toBe(1);
   });
   it('propagates command cancellation and closes the snapshot without a dump', async () => {
-    const result = await run(1, new GeminiProvider(), true);
+    const result = await run(1, new DumpPlugin(), true);
     expect(JSON.stringify(result.result)).toContain('dump cancelled');
     expect(result.closed).toBe(1);
     expect(result.body).toBeUndefined();
