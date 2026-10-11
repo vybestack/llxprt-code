@@ -72,6 +72,71 @@ beforeEach(() => {
 afterEach(() => rmSync(workspace, { recursive: true, force: true }));
 
 describe('runtime boundary production runner', () => {
+  it.each(['named', 'namespace', 'reexport'])(
+    'rejects module storage passed through an imported %s helper',
+    (style) => {
+      put(
+        'packages/demo/src/writer.ts',
+        'export function store(target: Record<string, number>): void { target.current = 1; }',
+      );
+      put(
+        'packages/demo/src/relay.ts',
+        "export { store as save } from './writer.js';",
+      );
+      const imported =
+        style === 'namespace'
+          ? "import * as writer from '../writer.js';"
+          : style === 'reexport'
+            ? "import { save as write } from '../relay.js';"
+            : "import { store as write } from '../writer.js';";
+      const call = style === 'namespace' ? 'writer.store' : 'write';
+      put(
+        'packages/demo/src/runtime/state.ts',
+        `${imported} const sessions: Record<string, number> = {}; export function run(): void { ${call}(sessions); }`,
+      );
+      const result = auditRuntimeStateBoundary(workspace, policy);
+      expect(result.compilerDiagnostics).toEqual([]);
+      expect(result.findings).toContainEqual(
+        expect.objectContaining({
+          declaration: 'sessions',
+          rule: 'module-mutation',
+        }),
+      );
+      expect(result.exitCode).toBe(1);
+    },
+  );
+
+  it('rejects module storage passed through a mutating class method', () => {
+    put(
+      'packages/demo/src/runtime/state.ts',
+      'const sessions: Record<string, number> = {}; class Writer { store(target: Record<string, number>): void { target.current = 1; } } export function run(): void { new Writer().store(sessions); }',
+    );
+    const result = auditRuntimeStateBoundary(workspace, policy);
+    expect(result.compilerDiagnostics).toEqual([]);
+    expect(result.findings).toContainEqual(
+      expect.objectContaining({
+        declaration: 'sessions',
+        rule: 'module-mutation',
+      }),
+    );
+    expect(result.exitCode).toBe(1);
+  });
+
+  it('permits imported mutation of instance-owned storage', () => {
+    put(
+      'packages/demo/src/writer.ts',
+      'export function store(target: Record<string, number>): void { target.current = 1; }',
+    );
+    put(
+      'packages/demo/src/runtime/state.ts',
+      "import { store } from '../writer.js'; export class Owner { private state: Record<string, number> = {}; run(): void { store(this.state); } }",
+    );
+    const result = auditRuntimeStateBoundary(workspace, policy);
+    expect(result.compilerDiagnostics).toEqual([]);
+    expect(result.findings).toEqual([]);
+    expect(result.exitCode).toBe(0);
+  });
+
   it('discovers production sources and excludes tests, specs, fixtures and declarations', () => {
     for (const file of [
       'a.test.ts',

@@ -12,6 +12,31 @@ import {
 const filename = 'packages/providers/src/BaseProvider.ts';
 
 describe('runtime state structure scanner', () => {
+  it.each([
+    'class Writer { store(target) { target.current = 1; } } function run() { new Writer().store(sessions); }',
+    'const writer = { store(target) { target.current = 1; } }; function run() { writer.store(sessions); }',
+    'const writer = { store: (target) => { target.current = 1; } }; function run() { writer.store(sessions); }',
+    'class Writer { store(target) { this.relay(target); } relay(target) { target.current = 1; } } function run() { new Writer().store(sessions); }',
+    'class Writer { store(target) { this.relay(target); } relay(target) { this.store(target); target.current = 1; } } function run() { new Writer().store(sessions); }',
+  ])('rejects module storage passed to a mutating method in %s', (body) => {
+    expect(
+      scanRuntimeStateStructure(filename, `const sessions = {}; ${body}`),
+    ).toContainEqual(
+      expect.objectContaining({
+        declaration: 'sessions',
+        kind: 'module-mutation',
+      }),
+    );
+  });
+
+  it.each([
+    'class Owner { state = {}; store(target) { target.current = 1; } run() { this.store(this.state); } }',
+    'class Reader { read(target) { return target.current; } } const labels = Object.freeze({ current: 1 }); function run() { return new Reader().read(labels); }',
+    'class Relay { run(target) { this.run(target); } } const labels = Object.freeze({ current: 1 }); function run() { new Relay().run(labels); }',
+  ])('permits instance mutation and read-only method calls in %s', (source) => {
+    expect(scanRuntimeStateStructure(filename, source)).toEqual([]);
+  });
+
   it('detects mutable object storage captured by a returned closure', () => {
     const source = `function make() { const state = {}; return { set(value) { state.current = value; }, get() { return state.current; } }; } const registry = make();`;
     expect(scanRuntimeStateStructure(filename, source)).toContainEqual(

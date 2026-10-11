@@ -270,7 +270,8 @@ type ValueKind = 'mutable' | 'als' | 'async-hooks';
 type LocalFunction =
   | ts.FunctionDeclaration
   | ts.FunctionExpression
-  | ts.ArrowFunction;
+  | ts.ArrowFunction
+  | ts.MethodDeclaration;
 interface BoundValue {
   readonly expression: ts.Expression;
   readonly bindings: ReadonlyMap<ts.Symbol, BoundValue>;
@@ -284,11 +285,29 @@ function localFunction(
   const value = unwrap(expression);
   if (seen.includes(value)) return undefined;
   if (ts.isArrowFunction(value) || ts.isFunctionExpression(value)) return value;
-  const declaration = checker.getSymbolAtLocation(value)?.valueDeclaration;
-  if (declaration && ts.isFunctionDeclaration(declaration)) return declaration;
+  const symbol = checker.getSymbolAtLocation(value);
+  const resolved =
+    symbol && symbol.flags & ts.SymbolFlags.Alias
+      ? checker.getAliasedSymbol(symbol)
+      : symbol;
+  const declaration =
+    resolved?.declarations?.find(
+      (candidate) =>
+        (ts.isFunctionDeclaration(candidate) ||
+          ts.isMethodDeclaration(candidate)) &&
+        !!candidate.body,
+    ) ?? resolved?.valueDeclaration;
   if (
     declaration &&
-    ts.isVariableDeclaration(declaration) &&
+    (ts.isFunctionDeclaration(declaration) ||
+      ts.isMethodDeclaration(declaration))
+  )
+    return declaration;
+  if (
+    declaration &&
+    (ts.isVariableDeclaration(declaration) ||
+      ts.isPropertyAssignment(declaration) ||
+      ts.isPropertyDeclaration(declaration)) &&
     declaration.initializer
   )
     return localFunction(declaration.initializer, checker, [...seen, value]);
@@ -596,15 +615,19 @@ function mutatesParameter(
 function mutatedArgumentStorage(
   call: ts.CallExpression,
   checker: ts.TypeChecker,
+  summaries: Map<ts.ParameterDeclaration, boolean>,
 ): readonly StorageDeclaration[] {
   const callable = localFunction(call.expression, checker);
   if (!callable) return [];
   return call.arguments.flatMap((argument, index) => {
     const parameter = callable.parameters[index];
     const origin = parameter && storageOrigin(argument, checker);
-    return origin && mutatesParameter(callable, parameter, checker)
-      ? [origin]
-      : [];
+    if (!origin) return [];
+    const mutates =
+      summaries.get(parameter) ??
+      mutatesParameter(callable, parameter, checker);
+    summaries.set(parameter, mutates);
+    return mutates ? [origin] : [];
   });
 }
 
@@ -735,11 +758,12 @@ function resolvedSource(
  * declaration matches with nonblank reasons exempt ALS; exemptions never
  * suppress other findings. Paths are compared as supplied.
  *
- * Dependencies follow checker-resolved same-file symbols, return expressions
- * and positional call arguments, with path-local cycle detection. This is not
- * whole-program proof: imported factories, re-exports/require, reassigned or
+ * Dependencies follow checker-resolved function/method symbols, return expressions
+ * and positional call arguments, with path-local cycle detection and per-scan
+ * parameter mutation summaries. Resolved imports and re-exports reach their
+ * implementation bodies. This is not whole-program proof: require, reassigned or
  * destructured aliases, higher-order call targets, construction through caller-
- * supplied parameters, computed mutator names and custom mutator methods need
+ * supplied parameters and computed mutator names need
  * separate analysis. Without a resolved program the scan is single-source;
  * passing a program whose module resolution covers the scanned files lets ALS
  * constructors be followed through imports and re-exports. Branches are unioned, not evaluated for reachability.
@@ -766,6 +790,7 @@ export function scanRuntimeStateStructure(
     : isolatedSource(filename, source);
   const findings: RuntimeStateFinding[] = [];
   const usedAllowances = new Set<ImmutableTableAllowance>();
+  const mutationSummaries = new Map<ts.ParameterDeclaration, boolean>();
   function report(
     node: ts.Node,
     kind: RuntimeStateFinding['kind'],
@@ -839,7 +864,11 @@ export function scanRuntimeStateStructure(
     )
       report(node, 'module-mutation', declarationName(declaration));
     if (ts.isCallExpression(node))
-      for (const origin of mutatedArgumentStorage(node, checker))
+      for (const origin of mutatedArgumentStorage(
+        node,
+        checker,
+        mutationSummaries,
+      ))
         if (
           isOwnedModuleStorage(origin, sourceFile) &&
           (ts.isVariableDeclaration(origin) || isStatic(origin))
