@@ -1097,6 +1097,7 @@ export abstract class HistoryServiceCore
       undefined,
       {
         publishTokens: true,
+        densityShape: true,
       },
     );
   }

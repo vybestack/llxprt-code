@@ -34,6 +34,8 @@ export interface DetachedHistoryOptions
   /** Publish batch/token observers before participant finalization, as replaceBatch does. */
   readonly publishBatch?: boolean;
   readonly publishTokens?: boolean;
+  /** The transform is a density pass: record it as `density_mutation`, not a replacement. */
+  readonly densityShape?: boolean;
 }
 export interface DetachedHistorySource {
   readonly length: number;
@@ -379,6 +381,23 @@ async function publishDetachedEffects(
   }
 }
 
+function publishCandidate(
+  publication: DetachedHistoryPublication,
+  previous: DetachedHistoryJournal,
+  next: DetachedHistoryJournal,
+  appendOnly: boolean,
+  options: DetachedHistoryOptions,
+): Promise<void> {
+  return publication.publish(
+    previous,
+    next,
+    options.signal,
+    appendOnly,
+    awaitFinalAcknowledgement(appendOnly, options),
+    options.densityShape === true,
+  );
+}
+
 function attempt(action: () => void): unknown[] {
   try {
     action();
@@ -421,13 +440,7 @@ async function commitDetachedHistory(
       );
     derived = [tokens, spans];
     await publishDetachedEffects(host, previous, next, effects, options);
-    await publication.publish(
-      previous,
-      next,
-      options.signal,
-      appendOnly,
-      awaitFinalAcknowledgement(appendOnly, options),
-    );
+    await publishCandidate(publication, previous, next, appendOnly, options);
     if (restoredState !== undefined)
       host.chronology.restore(restoredState.chronology);
     host.apply(tokens, spans);

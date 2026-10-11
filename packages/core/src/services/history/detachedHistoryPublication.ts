@@ -10,6 +10,7 @@ import type {
 import { trackMutationOwners } from './historyMutationOwnership.js';
 import { journalPublicationOwners } from './historyPublicationOwners.js';
 import type { DetachedHistoryJournal } from './detachedHistoryJournal.js';
+import { densityShapeOps } from './detachedDensityOps.js';
 
 interface TruncationCut {
   readonly itemsRemoved: number;
@@ -127,8 +128,17 @@ export class DetachedHistoryPublication {
     signal?: AbortSignal,
     appendOnly = false,
     awaitFinalCommit = true,
+    densityShape = false,
   ): Promise<void> {
     if (!appendOnly && rowsUnchanged(previous, next)) return;
+    if (densityShape && !appendOnly) {
+      const density = densityShapeOps(previous, next, this.ownership);
+      if (density !== undefined) {
+        for (const op of density) await this.admit(op, signal);
+        this.replacementDurable = true;
+        return;
+      }
+    }
     const compression = appendOnly ? undefined : compressionOps(previous, next);
     if (compression !== undefined) {
       for (const op of compression) await this.admitShape(op, signal);

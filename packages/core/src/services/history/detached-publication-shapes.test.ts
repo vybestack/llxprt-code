@@ -27,6 +27,7 @@ const PROJECT = 'publication-shapes';
 interface Outcome {
   readonly recordedTypes: string[];
   readonly rewinds: Array<Record<string, unknown>>;
+  readonly densityPayloads: Array<Record<string, unknown>>;
   readonly replayed: IContent[];
   readonly failure?: unknown;
 }
@@ -72,6 +73,7 @@ async function publishAndReplay(
   previous: readonly IContent[],
   next: readonly IContent[],
   failAfter?: number,
+  densityShape = false,
 ): Promise<Outcome> {
   const scratch: Scratch = {
     root: mkdtempSync(join(tmpdir(), 'publication-shapes-')),
@@ -106,7 +108,14 @@ async function publishAndReplay(
     const previousJournal = detached(scratch, previous);
     const nextJournal = detached(scratch, next);
     try {
-      await publication.publish(previousJournal, nextJournal);
+      await publication.publish(
+        previousJournal,
+        nextJournal,
+        undefined,
+        false,
+        true,
+        densityShape,
+      );
     } catch (error) {
       failure = error;
       // The mutation owner compensates only when something was admitted.
@@ -124,6 +133,9 @@ async function publishAndReplay(
       recordedTypes: published.map((line) => line.type),
       rewinds: published
         .filter((line) => line.type === 'rewind')
+        .map((line) => line.payload as Record<string, unknown>),
+      densityPayloads: published
+        .filter((line) => line.type === 'density_mutation')
         .map((line) => line.payload as Record<string, unknown>),
       replayed: replay.history,
       ...(failure === undefined ? {} : { failure }),
@@ -320,6 +332,63 @@ describe('DetachedHistoryPublication.publish failure', () => {
     const rows = marked(4);
     const outcome = await publishAndReplay(rows, rows.slice(0, 2), 0);
     expect((outcome.failure as Error).message).toContain(failure);
+    expect(outcome.recordedTypes).toStrictEqual([]);
+    expectReplayEquals(outcome, rows);
+  });
+});
+
+describe('DetachedHistoryPublication.publish density shape', () => {
+  const densityResult = (rows: IContent[]): IContent[] => [
+    rows[0],
+    { ...rows[2], blocks: [{ type: 'text', text: 'density summary' }] },
+    rows[3],
+    rows[4],
+  ];
+
+  it('records one density_mutation and no replace transaction for a density pass', async () => {
+    const rows = marked(5);
+    const next = densityResult(rows);
+    const outcome = await publishAndReplay(rows, next, undefined, true);
+    expect(outcome.recordedTypes).toStrictEqual(['density_mutation']);
+    expect(outcome.densityPayloads[0]).toMatchObject({
+      removedSeqs: [2],
+      replacements: [{ replacedSeq: 3 }],
+    });
+    expectReplayEquals(outcome, next);
+  });
+
+  it('records the same rows as a replace transaction when the pass is not flagged as density', async () => {
+    const rows = marked(5);
+    const outcome = await publishAndReplay(rows, densityResult(rows));
+    expect(outcome.recordedTypes[0]).toBe('replace_begin');
+  });
+
+  it('records a density pass that only removes rows', async () => {
+    const rows = marked(4);
+    const next = [rows[0], rows[3]];
+    const outcome = await publishAndReplay(rows, next, undefined, true);
+    expect(outcome.recordedTypes).toStrictEqual(['density_mutation']);
+    expectReplayEquals(outcome, next);
+  });
+
+  it('falls back to a replace transaction when a previous row has no chronology marker', async () => {
+    const rows = [...marked(3), unmarked('no chronology marker', 'ai')];
+    const outcome = await publishAndReplay(
+      rows,
+      rows.slice(1),
+      undefined,
+      true,
+    );
+    expect(outcome.recordedTypes[0]).toBe('replace_begin');
+    expectReplayEquals(outcome, rows.slice(1));
+  });
+
+  it('writes nothing and keeps the previous history when the density record fails', async () => {
+    const rows = marked(5);
+    const outcome = await publishAndReplay(rows, densityResult(rows), 0, true);
+    expect((outcome.failure as Error).message).toContain(
+      'injected journal admission failure',
+    );
     expect(outcome.recordedTypes).toStrictEqual([]);
     expectReplayEquals(outcome, rows);
   });

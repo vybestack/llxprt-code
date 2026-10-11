@@ -163,12 +163,12 @@ export function* planDiskDensityMutation(
 }
 
 type DensityOp = Extract<HistoryJournalOp, { readonly kind: 'density' }>;
-interface DensityChange {
+export interface DensityChange {
   readonly seq: number;
   readonly replacement?: IContent;
 }
 
-function* batchDensityOps(
+export function* batchDensityOps(
   operations: Iterable<DensityChange>,
   ownership?: RowOwnership,
 ): Generator<DensityOp, void, unknown> {
