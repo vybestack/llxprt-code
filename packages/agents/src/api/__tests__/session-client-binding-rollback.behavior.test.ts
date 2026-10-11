@@ -124,4 +124,11 @@ describe('Session candidate binding rollback', () => {
       await checkRollback((owner) => owner.prepareProfileClientReplacement()),
     ).toStrictEqual([1, 1]);
   }, 30000);
+  it('joins detached-client cleanup and reports both failures', async () => {
+    expect(
+      await checkRollback((owner) =>
+        owner.createDetachedAgentClient('held-detached'),
+      ),
+    ).toStrictEqual([1, 1]);
+  }, 30000);
 });

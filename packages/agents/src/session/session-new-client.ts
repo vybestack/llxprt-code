@@ -78,14 +78,14 @@ export async function prepareDetachedSessionClient(input: {
   state: AgentRuntimeState;
   tokenizer: RuntimeTokenizerFactory;
   factory: RuntimeContentGeneratorFactory<ContentGenerator>;
-  create: (state: AgentRuntimeState) => AgentClientContract;
+  create: (state: AgentRuntimeState) => Promise<AgentClientContract>;
   ledger: OwnedClientLedger;
 }): Promise<AgentClientContract> {
   await input.tokenizer.prepareTokenizer?.(
     input.state.provider,
     input.state.model,
   );
-  const client = input.create(input.state);
+  const client = await input.create(input.state);
   try {
     await client.initialize(
       buildNewContentGeneratorConfig(input.factory, input.state)

@@ -542,31 +542,16 @@ export class SessionClientOwner {
     return client;
   }
 
-  private createClient(state: typeof this.runtimeState): AgentClientContract {
+  private async createClient(
+    state: typeof this.runtimeState,
+  ): Promise<AgentClientContract> {
     const client = this.acquireClient(state);
     try {
       this.bindCreatedClient(client, state);
     } catch (error) {
-      this.releaseAbandonedClient(client);
-      throw error;
+      await this.ownedClients.disposeAfterFailure(client, error);
     }
     return client;
-  }
-
-  /**
-   * Replacement paths build their candidate inside synchronous factory
-   * callbacks, so release of a client abandoned by a failed binding cannot be
-   * awaited there; a cleanup failure is logged and never replaces the binding
-   * error that is being propagated. Initial acquisition does not use this
-   * path: see {@link SessionClientOwner.create}.
-   */
-  private releaseAbandonedClient(client: AgentClientContract): void {
-    this.ownedClients.dispose(client).catch((cleanupError: unknown) => {
-      new DebugLogger('llxprt:session:createClient').error(
-        'Failed to dispose a session client abandoned by failed binding',
-        cleanupError,
-      );
-    });
   }
 
   private bindCreatedClient(
