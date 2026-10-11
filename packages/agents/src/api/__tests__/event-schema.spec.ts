@@ -220,6 +220,11 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
     expect(parsed).toStrictEqual({ type: 'retry' });
   });
 
+  it('parses an attempt-boundary event (tag only) @issue:3840', () => {
+    const parsed = AgentEventSchema.parse({ type: 'attempt-boundary' });
+    expect(parsed).toStrictEqual({ type: 'attempt-boundary' });
+  });
+
   it('parses a citation event preserving citation text @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', () => {
     const parsed = AgentEventSchema.parse({
       type: 'citation',
@@ -573,7 +578,7 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
     'refusal',
   ]);
 
-  // The complete set of known AgentEvent discriminator tags (19 variants).
+  // The complete set of known AgentEvent discriminator tags (20 variants).
   const KNOWN_EVENT_TYPES = new Set([
     'text',
     'thinking',
@@ -587,6 +592,7 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
     'compression',
     'context-warning',
     'retry',
+    'attempt-boundary',
     'citation',
     'loop-detected',
     'idle-timeout',
@@ -618,7 +624,7 @@ describe('Event schema @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', ()
     );
   });
 
-  it('property: AgentEventSchema rejects ANY event whose discriminator tag is not one of the 19 known variants @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', () => {
+  it('property: AgentEventSchema rejects ANY event whose discriminator tag is not one of the 20 known variants @plan:PLAN-20260617-COREAPI.P04 @requirement:REQ-003', () => {
     fc.assert(
       fc.property(
         fc.string().filter((tag) => !KNOWN_EVENT_TYPES.has(tag)),

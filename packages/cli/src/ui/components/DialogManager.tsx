@@ -149,7 +149,7 @@ function useDialogData(): DialogData {
  * @plan PLAN-20260214-SESSIONBROWSER.P23
  * @requirement REQ-PR-001, REQ-PR-002
  */
-function useSessionBrowserHandler(
+export function useSessionBrowserHandler(
   config: CliUiRuntime,
   commandContext: {
     ui: {
@@ -203,9 +203,6 @@ function useSessionBrowserHandler(
         addItem({ type: 'error', text: resumeResult.error });
         return resumeResult;
       }
-      for (const warning of resumeResult.warnings) {
-        addItem({ type: 'info', text: `Warning: ${warning}` });
-      }
       const uiHistory = await resumeHistoryWindow(
         resumeResult.history,
         resolveEmojiFilterMode(config),
@@ -214,6 +211,10 @@ function useSessionBrowserHandler(
       uiHistory.forEach((item, index) => {
         commandContext.ui.addItem(item, index);
       });
+      // After the restore: clearing history would erase warnings added before it.
+      for (const warning of resumeResult.warnings) {
+        addItem({ type: 'info', text: `Warning: ${warning}` });
+      }
       closeDialog('sessionBrowser');
       return resumeResult;
     },

@@ -122,6 +122,10 @@ export function streamRetry(): ServerAgentStreamEvent {
   return { type: AgentEventType.Retry };
 }
 
+export function streamAttemptBoundary(): ServerAgentStreamEvent {
+  return { type: AgentEventType.AttemptBoundary };
+}
+
 export function streamInvalid(): ServerAgentStreamEvent {
   return { type: AgentEventType.InvalidStream };
 }
@@ -379,6 +383,12 @@ export function isRetryEvent(
   e: AgentEvent,
 ): e is Extract<AgentEvent, { type: 'retry' }> {
   return e.type === 'retry';
+}
+
+export function isAttemptBoundaryEvent(
+  e: AgentEvent,
+): e is Extract<AgentEvent, { type: 'attempt-boundary' }> {
+  return e.type === 'attempt-boundary';
 }
 
 export function isCitationEvent(

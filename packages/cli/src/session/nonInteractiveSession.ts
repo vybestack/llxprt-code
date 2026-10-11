@@ -38,6 +38,17 @@ function safeReportNonInteractiveError(config: Config, error: unknown): void {
   }
 }
 
+/**
+ * Session-resume warnings go to stderr before the run starts so stdout stays
+ * reserved for the response payload. fd-direct write, same as the sandbox
+ * handoff warning.
+ */
+function writeRecordingStartupWarnings(warnings: readonly string[]): void {
+  for (const warning of warnings) {
+    writeToStderr(`${warning}\n`);
+  }
+}
+
 export interface NonInteractiveSessionOptions {
   config: Config;
   agent: Agent;
@@ -110,6 +121,7 @@ export async function dispatchInteractiveOrNonInteractive({
       ...(sandboxHandoffWarning !== undefined ? [sandboxHandoffWarning] : []),
       ...systemWarnings,
       ...userWarnings,
+      ...recording.startupWarnings,
     ];
 
     // The single interactive Agent was created at the composition root and is
@@ -143,6 +155,8 @@ export async function dispatchInteractiveOrNonInteractive({
     // merges onto stdout alongside the payload.
     writeToStderr(sandboxHandoffWarning);
   }
+
+  writeRecordingStartupWarnings(recording.startupWarnings);
 
   await runPipedOrPromptSession({
     config,

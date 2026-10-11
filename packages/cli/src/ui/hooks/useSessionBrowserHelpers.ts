@@ -23,6 +23,7 @@ import type {
   UseSessionBrowserResult,
 } from './useSessionBrowser.js';
 import { useSessionKeypressHandler } from './useSessionBrowserKeypress.js';
+import { warnUnreadableRecordings } from '../utils/warnUnreadableRecordings.js';
 
 const PAGE_SIZE = 20;
 
@@ -447,6 +448,10 @@ function useSessionLoader(props: UseSessionBrowserProps, deps: LoaderDeps) {
         props.mediaStore,
       );
       if (currentGen !== deps.generationRef.current) return;
+      warnUnreadableRecordings(
+        'Session browser',
+        detailed.unreadableRecordings,
+      );
       const filtered = await filterContinueTargets(
         detailed.targets,
         currentGen,

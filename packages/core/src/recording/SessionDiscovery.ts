@@ -42,14 +42,20 @@ import {
   type ContinueTarget,
   type SessionSummary,
   type SessionStartPayload,
+  type UnreadableRecording,
 } from './types.js';
 import { readSessionHeader } from './ReplayEngine.js';
+import {
+  INVALID_SESSION_START_MESSAGE,
+  isSessionStartHeader,
+} from './sessionStartHeader.js';
 import type { JournalReadCounters } from './journalCounters.js';
 import {
   resumeSessionIndexOutOfRangeMessage,
   resumeSessionNotFoundMessage,
 } from './resumeNotFoundMessages.js';
 import { debugLogger } from '../utils/debugLogger.js';
+import { describeUnreadableRecording } from './unreadableRecordings.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 
 /**
@@ -82,45 +88,88 @@ export interface BoundedContinueTargets {
   targets: ContinueTarget[];
   skippedCount: number;
   recordingErrors: readonly string[];
+  unreadableRecordings: readonly UnreadableRecording[];
 }
 
+type FirstLineResult =
+  | { readonly ok: true; readonly payload: object }
+  | { readonly ok: false; readonly reason: string };
+
 /**
- * Read the first line from a file using the canonical bounded header reader.
+ * Read and parse the first line of a recording with the canonical bounded
+ * header reader, saying why when it is not a `session_start` event. The
+ * payload is returned unvalidated; {@link isSessionStartHeader} is the
+ * contract for a usable header.
  *
  * This is the single shared reader used by session discovery, resume, and the
  * session-recording janitor.  It handles UTF-8 BOM and first-line headers of
  * any size up to a documented maximum, classifying no-newline/malformed huge
  * files as unreadable without whole-file buffering.
  */
+async function readSessionStartLine(
+  filePath: string,
+  counters?: JournalReadCounters,
+): Promise<FirstLineResult> {
+  const firstLine = await readBoundedFirstLine(filePath);
+  if (firstLine === null || firstLine.trim() === '') {
+    return { ok: false, reason: 'Empty file or unreadable first line' };
+  }
+  let parsed: unknown;
+  try {
+    const projection = new MetadataJsonProjection();
+    projection.push(firstLine);
+    parsed = projection.finish();
+  } catch {
+    return {
+      ok: false,
+      reason:
+        'Missing or corrupt session_start event: first line is not valid JSON',
+    };
+  }
+  counters?.recordDecoded();
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    Reflect.get(parsed, 'type') !== 'session_start'
+  ) {
+    return {
+      ok: false,
+      reason:
+        'Missing or corrupt session_start event: first line is not a session_start event',
+    };
+  }
+  const payload: unknown = Reflect.get(parsed, 'payload');
+  if (typeof payload !== 'object' || payload === null) {
+    return { ok: false, reason: INVALID_SESSION_START_MESSAGE };
+  }
+  return { ok: true, payload };
+}
+
+/**
+ * The first line's `session_start` payload, unvalidated, or null when the
+ * first line is not a session_start event. Used by the session-recording
+ * janitor, which applies its own retention rules to the fields.
+ */
 export async function readFirstLineFromFile(
   filePath: string,
   counters?: JournalReadCounters,
 ): Promise<SessionStartPayload | null> {
-  const firstLine = await readBoundedFirstLine(filePath);
-  if (firstLine === null || firstLine.trim() === '') return null;
-  try {
-    const projection = new MetadataJsonProjection();
-    projection.push(firstLine);
-    const parsed = projection.finish();
-    counters?.recordDecoded();
-    if (
-      typeof parsed !== 'object' ||
-      parsed === null ||
-      !('type' in parsed) ||
-      parsed.type !== 'session_start'
-    )
-      return null;
-    if (
-      !('payload' in parsed) ||
-      parsed.payload === undefined ||
-      parsed.payload === null ||
-      typeof parsed.payload !== 'object'
-    )
-      return null;
-    return parsed.payload as SessionStartPayload;
-  } catch {
-    return null;
-  }
+  const result = await readSessionStartLine(filePath, counters);
+  return result.ok ? (result.payload as SessionStartPayload) : null;
+}
+
+interface SessionScan {
+  sessions: SessionSummary[];
+  unreadableRecordings: UnreadableRecording[];
+}
+
+/** Sort newest-first by modification time; ids are validated strings. */
+function sortNewestFirst(summaries: SessionSummary[]): void {
+  summaries.sort((a, b) => {
+    const mtimeDiff = b.lastModified.getTime() - a.lastModified.getTime();
+    if (mtimeDiff !== 0) return mtimeDiff;
+    return b.sessionId.localeCompare(a.sessionId);
+  });
 }
 
 /**
@@ -141,44 +190,13 @@ export class SessionDiscovery {
     chatsDir: string,
     projectHash: string,
   ): Promise<SessionSummary[]> {
-    let entries: string[];
-    try {
-      entries = await fs.readdir(chatsDir);
-    } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return [];
-      }
-      throw error;
-    }
-
-    const sessionFiles = entries.filter(
-      (f) => f.startsWith('session-') && f.endsWith('.jsonl'),
-    );
-
-    const summaries: SessionSummary[] = [];
-    for (const fileName of sessionFiles) {
-      const summary = await readSessionSummary(path.join(chatsDir, fileName));
-      // Subagent child journals are never resumable sessions: the filter runs
-      // BEFORE the sort/index so `--continue` latest resolution and every
-      // downstream picker index only main sessions (#854 P05c).
-      if (
-        summary !== null &&
-        summary.projectHash === projectHash &&
-        summary.kind !== 'subagent'
-      ) {
-        summaries.push(summary);
-      }
-    }
-
-    summaries.sort((a, b) => {
-      const mtimeDiff = b.lastModified.getTime() - a.lastModified.getTime();
-      if (mtimeDiff !== 0) return mtimeDiff;
-      return b.sessionId.localeCompare(a.sessionId);
-    });
-
-    return summaries;
+    return (await scanSessions(chatsDir, projectHash)).sessions;
   }
 
+  /**
+   * Readable continue targets. Recordings that fail the metadata scan are left
+   * out; use {@link listContinueTargetsDetailed} to learn which ones and why.
+   */
   static async listContinueTargets(
     chatsDir: string,
     projectHash: string,
@@ -191,11 +209,6 @@ export class SessionDiscovery {
       mediaStore,
       options,
     );
-    if (detailed.recordingErrors.length > 0) {
-      throw new Error(
-        `Cannot discover continue targets: ${detailed.recordingErrors.join('; ')}`,
-      );
-    }
     return detailed.targets;
   }
 
@@ -226,8 +239,9 @@ export class SessionDiscovery {
     );
     const targets: ContinueTarget[] = [];
     const checkpoints: ContinueTarget[] = [];
-    const recordingErrors: string[] = [];
-    let skippedCount = detailed.skippedCount;
+    const unreadable: UnreadableRecording[] = [
+      ...detailed.unreadableRecordings,
+    ];
     for (const summary of detailed.sessions) {
       const scan = await scanSessionMetadata(
         summary.filePath,
@@ -235,12 +249,15 @@ export class SessionDiscovery {
         options.counters ?? null,
       );
       if (!scan.ok || scan.sequenceCorrupt) {
-        const detail = scan.ok ? 'non-monotonic sequences' : scan.error;
+        const reason = scan.ok ? 'non-monotonic sequences' : scan.error;
         debugLogger.debug(
-          `Skipping unreadable session recording ${summary.filePath}: ${detail}`,
+          `Skipping unreadable session recording ${summary.filePath}: ${reason}`,
         );
-        recordingErrors.push(`${summary.filePath}: ${detail}`);
-        skippedCount += 1;
+        unreadable.push({
+          sessionId: summary.sessionId,
+          filePath: summary.filePath,
+          reason,
+        });
         continue;
       }
       const namedSummary = { ...summary, name: scan.sessionName };
@@ -258,8 +275,9 @@ export class SessionDiscovery {
     }
     return {
       targets: [...targets, ...checkpoints],
-      skippedCount,
-      recordingErrors,
+      skippedCount: unreadable.length,
+      recordingErrors: unreadable.map(describeUnreadableRecording),
+      unreadableRecordings: unreadable,
     };
   }
 
@@ -403,47 +421,21 @@ export class SessionDiscovery {
     chatsDir: string,
     projectHash: string,
     options: BoundedDiscoveryOptions = {},
-  ): Promise<{ sessions: SessionSummary[]; skippedCount: number }> {
-    let entries: string[];
-    try {
-      entries = await fs.readdir(chatsDir);
-    } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        return { sessions: [], skippedCount: 0 };
-      }
-      throw error;
-    }
-
-    const sessionFiles = entries.filter(
-      (f) => f.startsWith('session-') && f.endsWith('.jsonl'),
+  ): Promise<{
+    sessions: SessionSummary[];
+    skippedCount: number;
+    unreadableRecordings: UnreadableRecording[];
+  }> {
+    const { sessions, unreadableRecordings } = await scanSessions(
+      chatsDir,
+      projectHash,
+      options,
     );
-
-    const summaries: SessionSummary[] = [];
-    let skippedCount = 0;
-
-    for (const fileName of sessionFiles) {
-      const filePath = path.join(chatsDir, fileName);
-      const summary = await readSessionSummary(filePath, options.counters);
-      // Same subagent filter as listSessions, applied BEFORE the sort so
-      // continue targets and the checkpoints folded through them can never
-      // resolve to a child journal (#854 P05c). Children are healthy files,
-      // not corruption, so they do not count as skipped.
-      if (summary !== null && summary.projectHash === projectHash) {
-        if (summary.kind !== 'subagent') {
-          summaries.push(summary);
-        }
-      } else if (summary === null) {
-        skippedCount++;
-      }
-    }
-
-    summaries.sort((a, b) => {
-      const mtimeDiff = b.lastModified.getTime() - a.lastModified.getTime();
-      if (mtimeDiff !== 0) return mtimeDiff;
-      return b.sessionId.localeCompare(a.sessionId);
-    });
-
-    return { sessions: summaries, skippedCount };
+    return {
+      sessions,
+      skippedCount: unreadableRecordings.length,
+      unreadableRecordings,
+    };
   }
 
   /**
@@ -531,37 +523,108 @@ export class SessionDiscovery {
   }
 }
 
+/**
+ * Scan the chats directory. Session files whose header is not a valid
+ * `session_start` are reported as unreadable (file and reason) instead of
+ * being dropped; I/O failures on the directory itself still propagate.
+ */
+async function scanSessions(
+  chatsDir: string,
+  projectHash: string,
+  options: BoundedDiscoveryOptions = {},
+): Promise<SessionScan> {
+  let entries: string[];
+  try {
+    entries = await fs.readdir(chatsDir);
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { sessions: [], unreadableRecordings: [] };
+    }
+    throw error;
+  }
+
+  const sessions: SessionSummary[] = [];
+  const unreadableRecordings: UnreadableRecording[] = [];
+  const sessionFiles = entries.filter(
+    (f) => f.startsWith('session-') && f.endsWith('.jsonl'),
+  );
+  for (const fileName of sessionFiles) {
+    const filePath = path.join(chatsDir, fileName);
+    const result = await readSessionSummary(filePath, options.counters);
+    if (!result.ok) {
+      unreadableRecordings.push(result.unreadable);
+      continue;
+    }
+    // Subagent child journals are never resumable sessions: the filter runs
+    // BEFORE the sort/index so `--continue` latest resolution and every
+    // downstream picker index only main sessions (#854 P05c). Children are
+    // healthy files, not corruption, so they are not reported as unreadable.
+    if (
+      result.summary.projectHash === projectHash &&
+      result.summary.kind !== 'subagent'
+    ) {
+      sessions.push(result.summary);
+    }
+  }
+  sortNewestFirst(sessions);
+  return { sessions, unreadableRecordings };
+}
+
 async function readSessionSummary(
   filePath: string,
   counters?: JournalReadCounters,
-): Promise<SessionSummary | null> {
+): Promise<
+  | { ok: true; summary: SessionSummary }
+  | { ok: false; unreadable: UnreadableRecording }
+> {
   let stat: Awaited<ReturnType<typeof fs.stat>>;
   try {
     stat = await fs.stat(filePath);
-  } catch {
-    return null;
+  } catch (error: unknown) {
+    return {
+      ok: false,
+      unreadable: {
+        filePath,
+        reason: `Cannot stat recording: ${error instanceof Error ? error.message : String(error)}`,
+      },
+    };
   }
 
-  const header = await readFirstLineFromFile(filePath, counters);
-  if (header === null) {
-    return null;
+  const first = await readSessionStartLine(filePath, counters);
+  if (!first.ok) {
+    return { ok: false, unreadable: { filePath, reason: first.reason } };
+  }
+  const header = first.payload;
+  if (!isSessionStartHeader(header)) {
+    const sessionId: unknown = Reflect.get(header, 'sessionId');
+    return {
+      ok: false,
+      unreadable: {
+        filePath,
+        reason: INVALID_SESSION_START_MESSAGE,
+        ...(typeof sessionId === 'string' && sessionId !== ''
+          ? { sessionId }
+          : {}),
+      },
+    };
   }
 
   return {
-    sessionId: header.sessionId,
-    filePath,
-    projectHash: header.projectHash,
-    startTime: header.startTime,
-    lastModified: stat.mtime,
-    fileSize: stat.size,
-    provider: header.provider,
-    model: header.model,
-    // Legacy headers predate the lineage marker and read as `main`.
-    kind: header.kind === 'subagent' ? 'subagent' : 'main',
-    ...(typeof header.cwd === 'string' ? { cwd: header.cwd } : {}),
-    ...(typeof header.startTime === 'string'
-      ? { createdAt: header.startTime }
-      : {}),
+    ok: true,
+    summary: {
+      sessionId: header.sessionId,
+      filePath,
+      projectHash: header.projectHash,
+      startTime: header.startTime,
+      lastModified: stat.mtime,
+      fileSize: stat.size,
+      provider: header.provider,
+      model: header.model,
+      // Legacy headers predate the lineage marker and read as `main`.
+      kind: header.kind === 'subagent' ? 'subagent' : 'main',
+      ...(typeof header.cwd === 'string' ? { cwd: header.cwd } : {}),
+      createdAt: header.startTime,
+    },
   };
 }
 

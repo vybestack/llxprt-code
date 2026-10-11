@@ -16,6 +16,7 @@ import {
   createMinimalConfig,
   createMinimalSettings,
   createFakeAgent,
+  emptyRecording,
   dispatchTrace,
   renderCalls,
   mockWriteToStderr,
@@ -184,22 +185,23 @@ function installStderrSpy() {
 let stderrWriteSpy: ReturnType<typeof installStderrSpy>;
 
 /** Runs dispatch with the fixed recording/stdin arguments these cases share. */
-function runDispatch(config: unknown, settings: unknown) {
+function runDispatch(
+  config: unknown,
+  settings: unknown,
+  recordingStartupWarnings: string[] = [],
+) {
   return dispatchInteractiveOrNonInteractive({
     config: config as never,
     agent: createFakeAgent() as never,
     settings: settings as never,
     workspaceRoot: '/tmp/test',
-    recording: {
-      recordingIntegration: undefined,
-      resumedBoot: undefined,
-      recordingService: undefined,
-      resumedLockHandle: null,
-    } as never,
+    recording: emptyRecording(recordingStartupWarnings),
     hasPipedInput: false,
     readStdinData: async () => '',
   });
 }
+
+const RESUME_WARNING = 'Skipped 1 unreadable session recording(s):\n  /x: bad';
 
 /** The startupWarnings array the TUI root was rendered with. */
 function renderedStartupWarnings(): unknown[] | undefined {
@@ -250,6 +252,18 @@ function registerSandboxWarningFirst(): void {
       );
 
       expect(renderedStartupWarnings()?.[0]).toBe(TEST_SSH_AGENT_EMPTY_WARNING);
+    });
+
+    it('interactive: appends the session-resume warnings to the startup warnings rendered by the TUI', async () => {
+      delete process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY;
+
+      await runDispatch(
+        createMinimalConfig({ interactive: true }),
+        createMinimalSettings({ hideWindowTitle: true }),
+        [RESUME_WARNING],
+      );
+
+      expect(renderedStartupWarnings()).toStrictEqual([RESUME_WARNING]);
     });
 
     it('interactive: startup warnings are unchanged when the env flag is unset', async () => {
@@ -311,6 +325,28 @@ function registerSandboxWarningRest(): void {
       // The warning was the only event on the timeline when it was written:
       // runNonInteractive had not run yet, and it did run afterwards.
       expect(order).toStrictEqual(['warning']);
+      expect(dispatchTrace).toContain('runNonInteractive');
+    });
+
+    it('non-interactive: writes each session-resume warning to stderr before the session runs and nothing to stdout', async () => {
+      delete process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY;
+      const stdoutWrite = vi.spyOn(process.stdout, 'write');
+      const order: string[] = [];
+      stderrWriteSpy.mockImplementation((chunk: unknown) => {
+        order.push(...dispatchTrace, String(chunk));
+        return true;
+      });
+
+      await expect(
+        runDispatch(
+          createMinimalConfig({ interactive: false, question: 'prompt' }),
+          createMinimalSettings(),
+          [RESUME_WARNING, 'second'],
+        ),
+      ).rejects.toThrow('process.exit');
+
+      expect(order).toStrictEqual([`${RESUME_WARNING}\n`, 'second\n']);
+      expect(stdoutWrite).not.toHaveBeenCalled();
       expect(dispatchTrace).toContain('runNonInteractive');
     });
 

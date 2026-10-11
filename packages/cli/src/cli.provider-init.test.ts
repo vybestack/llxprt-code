@@ -277,6 +277,7 @@ async function makeRecordedResume(): Promise<ResumeResult> {
     recording: resumedRecording,
     lockHandle,
     warnings: [],
+    skippedRecordings: [],
   };
   resumed = result;
   return result;

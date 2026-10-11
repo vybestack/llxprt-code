@@ -29,11 +29,14 @@ import {
   SessionLockManager,
   SessionTransitionService,
   resumeSession,
+  describeUnreadableRecording,
+  matchUnreadableRecordings,
   RecordingIntegration,
   withRecordingFailureReport,
   type ResumeResult,
   type JournalReadCounters,
   type ContinueTarget,
+  type UnreadableRecording,
   type IContent,
   type SessionRecordingService,
   type SessionPersistenceService,
@@ -163,7 +166,7 @@ async function resumeCheckpointTarget(
   );
   if (!fork.ok) return fork;
   const committed = await commitResumeBoot(
-    { ...fork, warnings: [] },
+    { ...fork, warnings: [], skippedRecordings: [] },
     context,
     true,
   );
@@ -301,12 +304,13 @@ export async function performResume(
 ): Promise<PerformResumeResult> {
   const { chatsDir, projectHash, currentSessionId } = context;
 
-  const targets = await SessionDiscovery.listContinueTargets(
-    chatsDir,
-    projectHash,
-    context.mediaStore,
-    { counters: context.counters },
-  );
+  const { targets, unreadableRecordings } =
+    await SessionDiscovery.listContinueTargetsDetailed(
+      chatsDir,
+      projectHash,
+      context.mediaStore,
+      { counters: context.counters },
+    );
   const target = await resolveTarget(
     sessionRef,
     targets,
@@ -316,16 +320,53 @@ export async function performResume(
   if (!target) {
     return {
       ok: false,
-      error: 'No resumable sessions found (all locked, empty, or current).',
+      error: withSkippedRecordings(
+        'No resumable sessions found (all locked, empty, or current).',
+        unreadableRecordings,
+      ),
     };
   }
   if (target instanceof Error) {
-    return { ok: false, error: target.message };
+    const named = matchUnreadableRecordings(
+      sessionRef,
+      target.message,
+      unreadableRecordings,
+    );
+    return {
+      ok: false,
+      error:
+        named.length === 0
+          ? target.message
+          : `${target.message} (unreadable recording skipped: ${named.map(describeUnreadableRecording).join('; ')})`,
+    };
   }
 
-  return target.kind === 'checkpoint'
-    ? resumeCheckpointTarget(target, context)
-    : resumeLivingSession(target, context);
+  const resumed =
+    target.kind === 'checkpoint'
+      ? await resumeCheckpointTarget(target, context)
+      : await resumeLivingSession(target, context);
+  return resumed.ok
+    ? {
+        ...resumed,
+        warnings: [
+          ...resumed.warnings,
+          ...unreadableRecordings.map(
+            (recording) =>
+              `Skipped unreadable session recording ${describeUnreadableRecording(recording)}`,
+          ),
+        ],
+      }
+    : resumed;
+}
+
+/** Append the skipped recordings (file and reason) to a failure message. */
+function withSkippedRecordings(
+  message: string,
+  unreadableRecordings: readonly UnreadableRecording[],
+): string {
+  return unreadableRecordings.length === 0
+    ? message
+    : `${message} Skipped unreadable recordings: ${unreadableRecordings.map(describeUnreadableRecording).join('; ')}`;
 }
 
 async function resolveTarget(

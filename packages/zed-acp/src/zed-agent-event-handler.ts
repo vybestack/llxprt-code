@@ -55,6 +55,12 @@ export async function handleZedAgentEvent(
     case 'text':
       batcher.append(event.text, false);
       return null;
+    case 'attempt-boundary':
+      // Continuation attempts of one prompt share the message and thought
+      // streams; the batcher keeps the later attempt off the earlier attempt's
+      // last line on whichever stream its next output uses (issue #3840).
+      batcher.markAttemptBoundary();
+      return null;
     case 'thinking':
       return handleThinking(event, batcher);
     case 'tool-call':
@@ -158,6 +164,7 @@ async function handleToolResultEvent(
     handlers.sendUpdate,
     handlers.resolveToolKind(event.result.name),
   );
+  batcher.endModelCall();
   return null;
 }
 

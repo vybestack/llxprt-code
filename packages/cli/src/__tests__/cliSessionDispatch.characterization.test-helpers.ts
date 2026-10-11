@@ -169,6 +169,17 @@ export function createMinimalSettings(options?: {
 // returning an empty output object ({} — no systemMessage/additionalContext).
 // Without it the runner throws before reaching runNonInteractive and the
 // dispatch-branch traces would never record the runner.
+/** The resolved-recording argument dispatch receives when nothing was resumed. */
+export function emptyRecording(startupWarnings: string[] = []): never {
+  return {
+    recordingIntegration: undefined,
+    resumedBoot: undefined,
+    recordingService: undefined,
+    startupWarnings,
+    resumedLockHandle: null,
+  } as never;
+}
+
 export function createFakeAgent(): unknown {
   return {
     getMessageBus: () => ({}) as never,

@@ -78,7 +78,9 @@ interface CommandContextInputs {
   };
 }
 
-function convertMessageToHistoryItem(message: Message): HistoryItemWithoutId {
+export function convertMessageToHistoryItem(
+  message: Message,
+): HistoryItemWithoutId {
   switch (message.type) {
     case MessageType.ABOUT:
       return {

@@ -89,6 +89,14 @@ export {
   type SessionResolutionError,
 } from './SessionDiscovery.js';
 export {
+  INVALID_SESSION_START_MESSAGE,
+  isSessionStartHeader,
+} from './sessionStartHeader.js';
+export {
+  describeUnreadableRecording,
+  matchUnreadableRecordings,
+} from './unreadableRecordings.js';
+export {
   resumeSession,
   ResumeCursorBoot,
   CONTINUE_LATEST,
@@ -107,11 +115,13 @@ export {
 export {
   listSessions,
   deleteSession,
+  deleteSessionWithDiagnostics,
   deleteSessionById,
   SESSION_NOT_FOUND_PREFIX,
   type ListSessionsResult,
   type DeleteSessionResult,
   type DeleteSessionError,
+  type DeleteSessionOutcome,
 } from './sessionManagement.js';
 export { CheckpointService, CheckpointLockError } from './CheckpointService.js';
 export {

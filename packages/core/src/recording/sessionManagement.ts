@@ -23,7 +23,7 @@
  * no table formatting, no console output, no terminal colors.
  */
 
-import { type SessionSummary } from './types.js';
+import { type SessionSummary, type UnreadableRecording } from './types.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import {
   SessionLockManager,
@@ -70,6 +70,54 @@ export async function listSessions(
 }
 
 /**
+ * A deletion result together with the recordings discovery skipped as
+ * unreadable while looking for the session. Callers surface the skipped
+ * recordings the same way listing does.
+ */
+export interface DeleteSessionOutcome {
+  result: DeleteSessionResult | DeleteSessionError;
+  unreadableRecordings: UnreadableRecording[];
+}
+
+/**
+ * Delete a session identified by ref (session ID, prefix, or 1-based index),
+ * reporting the unreadable recordings discovery skipped. Reference resolution
+ * considers only readable sessions.
+ */
+export async function deleteSessionWithDiagnostics(
+  ref: string,
+  chatsDir: string,
+  projectHash: string,
+): Promise<DeleteSessionOutcome> {
+  const { sessions, unreadableRecordings } =
+    await SessionDiscovery.listSessionsDetailed(chatsDir, projectHash);
+
+  if (sessions.length === 0) {
+    return {
+      result: { ok: false, error: RESUME_NO_SESSIONS_FOUND },
+      unreadableRecordings,
+    };
+  }
+
+  const resolved = SessionDiscovery.resolveSessionRef(ref, sessions);
+  if ('error' in resolved) {
+    return {
+      result: { ok: false, error: resolved.error },
+      unreadableRecordings,
+    };
+  }
+
+  return {
+    result: await deleteResolvedSession(
+      resolved.session,
+      chatsDir,
+      projectHash,
+    ),
+    unreadableRecordings,
+  };
+}
+
+/**
  * Delete a session identified by ref (session ID, prefix, or 1-based index).
  * Refuses to delete a session that is actively locked by another process.
  *
@@ -80,18 +128,8 @@ export async function deleteSession(
   chatsDir: string,
   projectHash: string,
 ): Promise<DeleteSessionResult | DeleteSessionError> {
-  const sessions = await SessionDiscovery.listSessions(chatsDir, projectHash);
-
-  if (sessions.length === 0) {
-    return { ok: false, error: RESUME_NO_SESSIONS_FOUND };
-  }
-
-  const resolved = SessionDiscovery.resolveSessionRef(ref, sessions);
-  if ('error' in resolved) {
-    return { ok: false, error: resolved.error };
-  }
-
-  return deleteResolvedSession(resolved.session, chatsDir, projectHash);
+  return (await deleteSessionWithDiagnostics(ref, chatsDir, projectHash))
+    .result;
 }
 
 export const SESSION_NOT_FOUND_PREFIX = 'Session not found:';

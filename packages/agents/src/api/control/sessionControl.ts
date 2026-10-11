@@ -59,6 +59,7 @@ import {
   captureRollbackFailure,
   cleanupSessionResources,
 } from './sessionControlRollback.js';
+import { warnSkippedRecordings } from './skippedRecordings.js';
 import type {
   AgentSessionControl,
   CheckpointInfo,
@@ -249,6 +250,7 @@ export class SessionControl implements AgentSessionControl {
       this.deps,
       target,
       this.persistenceProjectHash(),
+      logger,
     );
     await adoptSessionResume(
       this.deps,
@@ -500,11 +502,7 @@ export class SessionControl implements AgentSessionControl {
     await this.runExclusive(async () => {
       const chatsDir = this.chatsDir();
       const projectHash = this.persistenceProjectHash();
-      const targets = await SessionDiscovery.listContinueTargets(
-        chatsDir,
-        projectHash,
-        this.deps.config.getLocalMediaStore(),
-      );
+      const targets = await this.continueTargets();
       const resolved = SessionDiscovery.resolveContinueRef(ref, targets);
       if ('error' in resolved) throw new Error(resolved.error);
       if (resolved.target.kind !== 'session') {
@@ -636,12 +634,16 @@ export class SessionControl implements AgentSessionControl {
     return replay;
   }
 
-  private continueTargets(): Promise<ContinueTarget[]> {
-    return SessionDiscovery.listContinueTargets(
-      this.chatsDir(),
-      this.persistenceProjectHash(),
-      this.deps.config.getLocalMediaStore(),
-    );
+  /** Readable continue targets; skipped recordings go to the module logger. */
+  private async continueTargets(): Promise<ContinueTarget[]> {
+    const { targets, unreadableRecordings } =
+      await SessionDiscovery.listContinueTargetsDetailed(
+        this.chatsDir(),
+        this.persistenceProjectHash(),
+        this.deps.config.getLocalMediaStore(),
+      );
+    warnSkippedRecordings(logger, unreadableRecordings);
+    return targets;
   }
 
   private async resolveCheckpointTarget(
@@ -684,7 +686,7 @@ export class SessionControl implements AgentSessionControl {
     if (!result.ok) throw new Error(result.error);
     await adoptSessionResume(
       this.deps,
-      { ...result, warnings: [] },
+      { ...result, warnings: [], skippedRecordings: [] },
       {
         recording: this.recording,
         integration: this.integration,

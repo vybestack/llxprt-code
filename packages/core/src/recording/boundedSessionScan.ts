@@ -36,12 +36,12 @@
 
 import { readMetadataJsonLines } from './metadataJsonLines.js';
 import { deriveSessionName, foldCheckpointMetadata } from './ReplayEngine.js';
+import {
+  INVALID_SESSION_START_MESSAGE,
+  isSessionStartHeader,
+} from './sessionStartHeader.js';
 import type { JournalReadCounters } from './journalCounters.js';
-import type {
-  CheckpointMetadataView,
-  SessionRecordLine,
-  SessionStartPayload,
-} from './types.js';
+import type { CheckpointMetadataView, SessionRecordLine } from './types.js';
 
 /** Recording versions this scan accepts, mirroring the replay engine. */
 const SUPPORTED_RECORDING_VERSIONS = new Set([1, 2]);
@@ -191,21 +191,8 @@ function absorbBoundedSessionStart(
   state: BoundedScanState,
 ): string | null {
   if (state.lineNumber !== 1) return null;
-  const startPayload = payload as unknown as SessionStartPayload;
-  const requiredStrings = [
-    startPayload.sessionId,
-    startPayload.projectHash,
-    startPayload.provider,
-    startPayload.model,
-    startPayload.startTime,
-  ];
-  if (
-    requiredStrings.some(
-      (value) => typeof value !== 'string' || value.length === 0,
-    )
-  ) {
-    return 'Invalid session_start: missing or malformed required fields';
-  }
+  if (!isSessionStartHeader(payload)) return INVALID_SESSION_START_MESSAGE;
+  const startPayload = payload;
   if (startPayload.projectHash !== state.expectedProjectHash) {
     return `Project hash mismatch: expected ${state.expectedProjectHash} got ${startPayload.projectHash}`;
   }

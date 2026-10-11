@@ -621,9 +621,9 @@ describe('sessionManagement @plan:PLAN-20260211-SESSIONRECORDING.P22', () => {
       const { filePath } = await createTestSession(chatsDir, { sessionId });
       const lines = (await fs.readFile(filePath, 'utf-8')).trim().split('\n');
       const header = JSON.parse(lines[0]) as {
-        payload: { provider: string };
+        payload: { provider: unknown };
       };
-      header.payload.provider = '';
+      header.payload.provider = 42;
       await fs.writeFile(
         filePath,
         `${JSON.stringify(header)}\n${lines.slice(1).join('\n')}\n`,

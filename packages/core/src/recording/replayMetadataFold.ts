@@ -9,7 +9,6 @@ export { foldCheckpointMetadata } from './replayCheckpointMetadata.js';
 import {
   type ReplayResult,
   type SessionMetadata,
-  type SessionStartPayload,
   type SessionEventPayload,
   type ProviderSwitchPayload,
   type SessionForkedPayload,
@@ -17,6 +16,10 @@ import {
   type SessionRecordLine,
 } from './types.js';
 
+import {
+  INVALID_SESSION_START_MESSAGE,
+  isSessionStartHeader,
+} from './sessionStartHeader.js';
 import type { JournalReadCounters } from './journalCounters.js';
 const SUPPORTED_RECORDING_VERSIONS = new Set([1, 2]);
 
@@ -95,25 +98,14 @@ function handleSessionStart(
     acc.warnings.push(`session_start at line ${lineNumber} (expected line 1)`);
     return undefined;
   }
-  const startPayload = payload as unknown as SessionStartPayload;
-  const requiredStrings = [
-    startPayload.sessionId,
-    startPayload.projectHash,
-    startPayload.provider,
-    startPayload.model,
-    startPayload.startTime,
-  ];
-  if (
-    requiredStrings.some(
-      (value) => typeof value !== 'string' || value.length === 0,
-    )
-  ) {
+  if (!isSessionStartHeader(payload)) {
     return {
       ok: false,
-      error: 'Invalid session_start: missing or malformed required fields',
+      error: INVALID_SESSION_START_MESSAGE,
       warnings: acc.warnings,
     };
   }
+  const startPayload = payload;
   if (startPayload.projectHash !== expectedProjectHash) {
     return {
       ok: false,

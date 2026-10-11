@@ -53,6 +53,7 @@ import {
   createMinimalConfig,
   createMinimalSettings,
   createFakeAgent,
+  emptyRecording,
   dispatchTrace,
   renderCalls,
   useDispatchRenderSeams,
@@ -84,12 +85,7 @@ function registerSuite1(): void {
         agent: createFakeAgent() as never,
         settings: settings as never,
         workspaceRoot: '/tmp/test',
-        recording: {
-          recordingIntegration: undefined,
-          resumedBoot: undefined,
-          recordingService: undefined,
-          resumedLockHandle: null,
-        } as never,
+        recording: emptyRecording(),
         hasPipedInput: false,
         readStdinData: async () => '',
       });
@@ -118,12 +114,7 @@ function registerSuite1(): void {
           agent: createFakeAgent() as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
-          recording: {
-            recordingIntegration: undefined,
-            resumedBoot: undefined,
-            recordingService: undefined,
-            resumedLockHandle: null,
-          } as never,
+          recording: emptyRecording(),
           hasPipedInput: false,
           readStdinData: async () => '',
         }),
@@ -409,12 +400,7 @@ async function verifyExits1WhenPipedStdinAndPromptAreBothEmptyNoInputNonInteract
       agent: createFakeAgent() as never,
       settings: settings as never,
       workspaceRoot: '/tmp/test',
-      recording: {
-        recordingIntegration: undefined,
-        resumedBoot: undefined,
-        recordingService: undefined,
-        resumedLockHandle: null,
-      } as never,
+      recording: emptyRecording(),
       hasPipedInput: true,
       readStdinData: async () => '',
     });
@@ -464,12 +450,7 @@ function registerPipedInputTest(): void {
           agent: createFakeAgent() as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
-          recording: {
-            recordingIntegration: undefined,
-            resumedBoot: undefined,
-            recordingService: undefined,
-            resumedLockHandle: null,
-          } as never,
+          recording: emptyRecording(),
           hasPipedInput: true,
           readStdinData: async () => {
             readStdinCalls++;
@@ -525,12 +506,7 @@ function registerSuite5(): void {
           agent: createFakeAgent() as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
-          recording: {
-            recordingIntegration: undefined,
-            resumedBoot: undefined,
-            recordingService: undefined,
-            resumedLockHandle: null,
-          } as never,
+          recording: emptyRecording(),
           hasPipedInput: false,
           readStdinData: async () => {
             readStdinCalls++;

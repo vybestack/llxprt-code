@@ -43,6 +43,7 @@ import {
   type SessionRecordingServiceConfig,
   type SessionEventType,
   type SessionRecordLine,
+  type SessionStartPayload,
   type RecordingCheckpointInfo,
   type SessionForkedPayload,
   type DensityMutationPayload,
@@ -52,6 +53,12 @@ import {
   type RecordingWriterIo,
   type RecordingWriterObservation,
 } from './types.js';
+import { recordLineVersion } from './recordingVersion.js';
+import {
+  SessionHeaderBinding,
+  toPendingRecord,
+  type HeaderRebind,
+} from './sessionHeaderBinding.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
 import { validateReplayRows } from './ReplayEngine.js';
 import { CommitAckRegistry } from './CommitAckRegistry.js';
@@ -95,54 +102,12 @@ type RecordingLifecycle =
   | { readonly status: 'failure-reported' }
   | { readonly status: 'disposed' };
 
-/**
- * A record that has already been serialised. Serialising at enqueue time keeps
- * byte accounting free and means each record — including large media payloads —
- * is stringified exactly once instead of once for accounting and again for the
- * write (issue #2852). Only the serialized form is retained: the live payload
- * object graph is not pinned until drain (issue #3432).
- */
-
-function toPendingRecord(line: SessionRecordLine): PendingRecord {
-  const json = JSON.stringify(line);
-  return {
-    seq: line.seq,
-    json,
-    bytes: Buffer.byteLength(json, 'utf8') + 1,
-  };
-}
-
 /** Default write seam: journal appends go through `fs/promises.appendFile`. */
 const defaultWriterIo: RecordingWriterIo = {
   appendFile(filePath, data, encoding) {
     return fs.appendFile(filePath, data, encoding);
   },
 };
-
-function containsMediaReference(
-  value: unknown,
-  seen = new WeakSet<object>(),
-): boolean {
-  if (typeof value !== 'object' || value === null) return false;
-  if (seen.has(value)) return false;
-  seen.add(value);
-  if (
-    Reflect.get(value, 'type') === 'media' &&
-    Reflect.get(value, 'encoding') === 'reference'
-  ) {
-    return true;
-  }
-  if (Array.isArray(value)) {
-    return value.some((entry) => containsMediaReference(entry, seen));
-  }
-  return Reflect.ownKeys(value).some((key) =>
-    containsMediaReference(Reflect.get(value, key), seen),
-  );
-}
-
-function recordingVersion(payload: unknown): number {
-  return containsMediaReference(payload) ? 2 : 1;
-}
 
 /**
  * Core service for recording session events to a JSONL file.
@@ -179,6 +144,7 @@ export class SessionRecordingService {
   private chatsDirWatcher: { close(): void } | null = null;
   private sessionTitle: string | null | undefined;
   private lockHandle: LockHandle | null = null;
+  private readonly sessionHeader: SessionHeaderBinding;
 
   // Awaitable commit protocol state (PLAN-20260917-ISSUE854.P05b2).
   /** Pending commit acks, seq-ordered watermarks, drain gate, base offset. */
@@ -243,7 +209,7 @@ export class SessionRecordingService {
     this.io = config.io ?? defaultWriterIo;
     this.observeWriter = config.observeWriter;
 
-    const startPayload = {
+    const startPayload: SessionStartPayload = {
       sessionId: config.sessionId,
       projectHash: config.projectHash,
       workspaceDirs: config.workspaceDirs,
@@ -256,7 +222,26 @@ export class SessionRecordingService {
         ? {}
         : { parentSessionId: config.parentSessionId }),
     };
-    this.bufferPreContent('session_start', startPayload);
+    const line = this.bufferPreContent('session_start', startPayload);
+    this.sessionHeader = new SessionHeaderBinding(
+      line,
+      startPayload,
+      this.preContentBuffer.read(0),
+      config.resolveProviderModel,
+    );
+  }
+
+  private nextLine(
+    type: SessionEventType,
+    payload: unknown,
+  ): SessionRecordLine {
+    return {
+      v: recordLineVersion(type, payload),
+      seq: this.seq + 1,
+      ts: new Date().toISOString(),
+      type,
+      payload,
+    };
   }
 
   /**
@@ -270,13 +255,7 @@ export class SessionRecordingService {
     type: SessionEventType,
     payload: unknown,
   ): SessionRecordLine {
-    const line: SessionRecordLine = {
-      v: type === 'semantic_media_purge' ? 2 : recordingVersion(payload),
-      seq: this.seq + 1,
-      ts: new Date().toISOString(),
-      type,
-      payload,
-    };
+    const line = this.nextLine(type, payload);
     const record = toPendingRecord(line);
     this.preContentBuffer.push(record);
     this.seq = line.seq;
@@ -300,15 +279,9 @@ export class SessionRecordingService {
       return this.bufferPreContent(type, payload);
     }
 
-    const line: SessionRecordLine = {
-      v: type === 'semantic_media_purge' ? 2 : recordingVersion(payload),
-      seq: this.seq + 1,
-      ts: new Date().toISOString(),
-      type,
-      payload,
-    };
+    const line = this.nextLine(type, payload);
     const record = toPendingRecord(line);
-    this.stageRecord(record);
+    this.stageRecord(record, this.pendingHeaderRebind());
     this.reportHighWater();
     this.scheduleDrain();
     return line;
@@ -343,16 +316,14 @@ export class SessionRecordingService {
       // Line serialization, room check, and admission form one synchronous
       // segment: no interleaving enqueue can invalidate the room decision
       // between check and push.
-      const line: SessionRecordLine = {
-        v: type === 'semantic_media_purge' ? 2 : recordingVersion(payload),
-        seq: this.seq + 1,
-        ts: new Date().toISOString(),
-        type,
-        payload,
-      };
+      const line = this.nextLine(type, payload);
       const record = toPendingRecord(line);
-      if (!this.admissionBlocked(record.bytes) || this.queueCannotDrain()) {
-        return this.admitCommitRecord(line, record);
+      const rebind = this.pendingHeaderRebind();
+      if (
+        !this.admissionBlocked(record.bytes + (rebind?.growth ?? 0)) ||
+        this.queueCannotDrain()
+      ) {
+        return this.admitCommitRecord(line, record, rebind);
       }
       await this.acks.nextDrainCompletion();
       // Waking above does not imply room: the recorder may have been poisoned
@@ -425,8 +396,9 @@ export class SessionRecordingService {
   private admitCommitRecord(
     line: SessionRecordLine,
     record: PendingRecord,
+    rebind: HeaderRebind | null,
   ): Promise<CommitWatermark> {
-    this.stageRecord(record);
+    this.stageRecord(record, rebind);
     this.reportHighWater();
     const ack = this.acks.register(line.seq);
     this.scheduleDrain();
@@ -434,17 +406,29 @@ export class SessionRecordingService {
     return ack.chained;
   }
 
-  private stageRecord(record: PendingRecord): void {
+  /** The rebuilt header to write at materialization, or null once written. */
+  private pendingHeaderRebind(): HeaderRebind | null {
+    return this.materialized ? null : this.sessionHeader.plan();
+  }
+
+  private stageRecord(
+    record: PendingRecord,
+    rebind: HeaderRebind | null,
+  ): void {
     if (!this.materialized) {
       this.materialize();
       try {
-        for (const pending of this.preContentBuffer) this.queue.push(pending);
+        let first = true;
+        for (const pending of this.preContentBuffer) {
+          this.queue.push(first && rebind !== null ? rebind.record : pending);
+          first = false;
+        }
         this.queue.push(record);
       } catch (error) {
         this.queue.clear();
         throw error;
       }
-      this.queueBytes += this.preContentBytes;
+      this.queueBytes += this.preContentBytes + (rebind?.growth ?? 0);
       this.preContentBuffer.clear();
       this.preContentBytes = 0;
       this.materialized = true;
@@ -939,7 +923,11 @@ export class SessionRecordingService {
           record.seq === this.seq + 1 &&
           (!this.admissionBlocked(record.bytes) || this.queueCannotDrain())
         ) {
-          await this.admitCommitRecord(line, record);
+          await this.admitCommitRecord(
+            line,
+            record,
+            this.pendingHeaderRebind(),
+          );
           return;
         }
       }

@@ -154,13 +154,16 @@ ${switchWarning}`
 
       logRuntimeProviderStatus(runtime);
 
-      recordProviderSwitch(context, result, profileLoadResult);
+      let recordingFailureMessage = '';
+      recordProviderSwitch(context, result, profileLoadResult, (message) => {
+        recordingFailureMessage = `\n\u26A0 ${message}`;
+      });
       schedulePaymentModeCheck(context, statusBefore.providerName ?? undefined);
 
       return {
         type: 'message',
         messageType: 'info',
-        content: `Profile '${profileName}' loaded${infoMessages}${warningMessages}${switchWarningMessage}`,
+        content: `Profile '${profileName}' loaded${infoMessages}${warningMessages}${switchWarningMessage}${recordingFailureMessage}`,
       };
     } catch (error) {
       logger.error(

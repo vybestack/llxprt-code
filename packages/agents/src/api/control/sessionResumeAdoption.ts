@@ -8,7 +8,9 @@ import {
   type LockHandle,
   type SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
+import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { SessionControlDeps } from './sessionControl.js';
+import { warnSkippedRecordings } from './skippedRecordings.js';
 import {
   cleanupSessionResources,
   captureRollbackFailure,
@@ -83,6 +85,7 @@ export async function openSessionResume(
   deps: SessionControlDeps,
   target: string,
   projectHash: string,
+  logger: DebugLogger,
 ): Promise<ResumeResult> {
   const result = await resumeSession({
     continueRef: target === 'latest' ? CONTINUE_LATEST : target,
@@ -94,6 +97,7 @@ export async function openSessionResume(
     mediaStore: deps.config.getLocalMediaStore(),
     maxQueueBytes: deps.config.getSessionRecordingQueueByteLimit(),
   });
+  warnSkippedRecordings(logger, result.skippedRecordings ?? []);
   if (!result.ok) throw new Error(`Failed to resume session: ${result.error}`);
   return result;
 }
