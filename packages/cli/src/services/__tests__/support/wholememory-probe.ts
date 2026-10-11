@@ -3,7 +3,6 @@ import { writeFileSync } from 'node:fs';
 import { sampleMemoryUsage } from '../../../ui/hooks/memoryTrend/jscMemorySampler.js';
 
 declare const Bun: {
-  gc(force: boolean): void;
   generateHeapSnapshot(): { nodes: number[]; nodeClassNames: string[] };
 };
 export interface HeapCensus {
@@ -15,6 +14,35 @@ export interface HeapCensus {
   maps: number;
   sets: number;
   classes: Record<string, { count: number; bytes: number }>;
+}
+
+interface JscSweepApi {
+  gcAndSweep: () => number;
+}
+
+function isJscSweepApi(value: unknown): value is JscSweepApi {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'gcAndSweep' in value &&
+    typeof value.gcAndSweep === 'function'
+  );
+}
+
+function loadJscSweepApi(): JscSweepApi {
+  const jsc: unknown = process.getBuiltinModule('bun:jsc');
+  if (!isJscSweepApi(jsc)) throw new Error('bun:jsc gcAndSweep is unavailable');
+  return jsc;
+}
+
+const jsc = loadJscSweepApi();
+
+// A plain full collection leaves dead cells unswept, and the JSC heap size
+// still counts them until the lazy sweeper runs. That makes a baseline read
+// right after the collection depend on sweeper timing, so every collection in
+// this harness sweeps as well.
+function collectAndSweep(): void {
+  jsc.gcAndSweep();
 }
 
 export function heapCensus(snapshotPath?: string): HeapCensus {
@@ -58,16 +86,60 @@ export function heapCensus(snapshotPath?: string): HeapCensus {
 export async function settleHeap(): Promise<void> {
   for (let turn = 0; turn < 3; turn += 1) {
     await new Promise<void>((resolve) => setImmediate(resolve));
-    Bun.gc(true);
+    collectAndSweep();
   }
 }
 
-export async function settledHeapCensus(): Promise<HeapCensus> {
-  await settleHeap();
+const STABLE_WINDOW_BYTES = 64 * 1024;
+const STABLE_ROUNDS = 2;
+const MAX_SETTLE_ROUNDS = 12;
+
+/**
+ * Collect until two consecutive full collections leave both heap counters
+ * within STABLE_WINDOW_BYTES of each other. A single collection can leave
+ * garbage from the preceding census (its snapshot arrays, finished test
+ * frames) unswept on some platforms, which inflates a baseline taken
+ * immediately afterward and makes a later live payload read smaller than it is.
+ * The bounded loop only waits for release; it never subtracts from a reading.
+ */
+async function collectUntilStable(): Promise<void> {
+  let stable = 0;
+  let previous = sampleMemoryUsage();
+  for (let round = 0; round < MAX_SETTLE_ROUNDS; round += 1) {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    collectAndSweep();
+    const current = sampleMemoryUsage();
+    const settled =
+      Math.abs(current.heapUsed - previous.heapUsed) < STABLE_WINDOW_BYTES &&
+      Math.abs(current.external - previous.external) < STABLE_WINDOW_BYTES;
+    stable = settled ? stable + 1 : 0;
+    previous = current;
+    if (stable >= STABLE_ROUNDS) return;
+  }
+}
+
+// Kept out of settledHeapCensus so the discarded warm-up snapshot is not a
+// local of the frame that goes on to take the reading.
+function warmCensus(): void {
   heapCensus();
-  await new Promise<void>((resolve) => setImmediate(resolve));
-  Bun.gc(true);
+}
+
+async function censusAfterSettling(): Promise<HeapCensus> {
+  await settleHeap();
+  warmCensus();
+  await collectUntilStable();
   return heapCensus();
+}
+
+/**
+ * Measured on Bun 1.3.14: the first census after other work still reads
+ * 0.3 MiB to 1.9 MiB above the heap that the next fully settled census reports,
+ * with identical live data. Only the second reading is the converged one, so
+ * the first is taken and dropped.
+ */
+export async function settledHeapCensus(): Promise<HeapCensus> {
+  await censusAfterSettling();
+  return censusAfterSettling();
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
