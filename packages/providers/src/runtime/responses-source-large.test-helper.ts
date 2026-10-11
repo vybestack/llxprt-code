@@ -30,12 +30,27 @@ async function collect(): Promise<void> {
   }
 }
 
+/**
+ * JSC can leave a dead multi-megabyte string counted in heapUsed after a
+ * collection round and reclaim it in the next one (observed as a ~23 MB step
+ * that vanished on the following round with no live row; warming the full-size
+ * path first made it more frequent, so it is not one-time initialisation).
+ * Retention shows in every round, so the minimum over several rounds is the
+ * heap that is actually held.
+ */
+const SETTLE_ROUNDS = 3;
+
+async function settledGrowth(): Promise<number> {
+  let growth = Number.POSITIVE_INFINITY;
+  for (let round = 0; round < SETTLE_ROUNDS; round++) {
+    await collect();
+    growth = Math.min(growth, process.memoryUsage().heapUsed - baseline);
+  }
+  return growth;
+}
+
 async function sample(): Promise<number> {
-  await collect();
-  sampledHeapGrowth = Math.max(
-    sampledHeapGrowth,
-    process.memoryUsage().heapUsed - baseline,
-  );
+  sampledHeapGrowth = Math.max(sampledHeapGrowth, await settledGrowth());
   return refs.reduce(
     (count, ref) => count + Number(ref.deref() !== undefined),
     0,
@@ -105,8 +120,7 @@ const prompt = await serializeResponsesPromptEnvelope({
 const actual = hashFile(prompt.projection.promptSegments[0].source.path);
 await prompt.dispose();
 const finalLive = await sample();
-await collect();
-const retainedHeap = process.memoryUsage().heapUsed - baseline;
+const retainedHeap = await settledGrowth();
 writeFileSync(
   join(root, 'measured.json'),
   JSON.stringify({

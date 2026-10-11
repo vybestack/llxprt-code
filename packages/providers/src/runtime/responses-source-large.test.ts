@@ -135,6 +135,7 @@ describe('Responses source large-row acceptance', () => {
       const actual = await run(root, true);
       expect(actual.actual).toStrictEqual(expected);
       expect(actual.peakLive).toBeGreaterThan(2);
+      expect(actual.sampledHeapGrowth).toBeGreaterThan(2 * 1024 * 1024);
       expect(actual.finalLive).toBe(64);
     } finally {
       rmSync(root, { recursive: true, force: true });
