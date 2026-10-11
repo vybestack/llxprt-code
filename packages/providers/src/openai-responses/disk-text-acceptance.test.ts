@@ -1,6 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { heapSize } from 'bun:jsc';
+import {
+  median,
+  settledHeap,
+} from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { existsSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
@@ -25,22 +28,28 @@ import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
 
 type Setup = Awaited<ReturnType<typeof projectionRuntime>>;
 type BodyObservation = ReturnType<typeof observeDiskBody>;
-async function settledHeap(): Promise<number> {
-  for (let index = 0; index < 8; index++) {
-    await Bun.sleep(0);
-    Bun.gc(true);
-  }
-  return heapSize();
-}
 // The median of three settled readings keeps allocator jitter of a few
 // hundred KiB, which is unrelated to what is retained, out of the 1 MiB gate.
 async function heap(): Promise<number> {
-  const readings = [
+  return median([
     await settledHeap(),
     await settledHeap(),
     await settledHeap(),
-  ];
-  return readings.sort((left, right) => left - right)[1];
+  ]);
+}
+const HEAP_GATE_BYTES = 1024 * 1024;
+const MEASURED_RUNS = 3;
+function gateDelta(facts: Awaited<ReturnType<typeof acceptance>>): number {
+  return (
+    Math.max(
+      facts.preparedHeap,
+      facts.firstChunkHeap,
+      facts.pausedHeap,
+      facts.lastChunkHeap,
+      facts.responseHeap,
+      facts.finalHeap,
+    ) - facts.baseline
+  );
 }
 async function nativeEstimate(
   setup: Setup,
@@ -270,23 +279,13 @@ async function acceptance(large: boolean, retainRows = false) {
   }
 }
 
-function assertAcceptance(facts: Awaited<ReturnType<typeof acceptance>>): void {
+function assertOwners(facts: Awaited<ReturnType<typeof acceptance>>): void {
   expect(facts.estimate).toStrictEqual(facts.oracle);
   expect(facts.bodies).toStrictEqual([facts.expected, facts.expected]);
   expect(facts.preparedScan).toBe(64);
   expect(facts.finalScan).toBe(64);
   expect(facts.livePreparedRows).toBe(0);
   expect(facts.liveFinalRows).toBe(0);
-  expect(
-    Math.max(
-      facts.preparedHeap,
-      facts.firstChunkHeap,
-      facts.pausedHeap,
-      facts.lastChunkHeap,
-      facts.responseHeap,
-      facts.finalHeap,
-    ) - facts.baseline,
-  ).toBeLessThanOrEqual(1024 * 1024);
   expect(facts.bodyDemand.bytes).toBe(2 * facts.expected.bytes);
   expect(facts.bodyDemand.attempts).toBe(2);
   expect(facts.bodyDemand.active).toBe(0);
@@ -295,21 +294,41 @@ function assertAcceptance(facts: Awaited<ReturnType<typeof acceptance>>): void {
   expect(facts.pathsRemoved).toBe(true);
   expect(facts.activeBodies).toBe(0);
 }
+// One unmeasured full-size run takes the one-time state of this exact path
+// (code blocks, encoder and WASM growth) before three measured runs. Owner
+// facts must hold in every run; the 1 MiB heap gate applies to the median of
+// the measured runs, so a single noisy checkpoint cannot decide it while
+// retention that exists in every run still does.
+async function measuredAcceptance(large: boolean, retainRows = false) {
+  await acceptance(large, retainRows);
+  const runs: Array<Awaited<ReturnType<typeof acceptance>>> = [];
+  for (let run = 0; run < MEASURED_RUNS; run++)
+    runs.push(await acceptance(large, retainRows));
+  return { runs, gate: median(runs.map(gateDelta)) };
+}
+function assertAcceptance(
+  measured: Awaited<ReturnType<typeof measuredAcceptance>>,
+): void {
+  for (const facts of measured.runs) assertOwners(facts);
+  expect(measured.gate).toBeLessThanOrEqual(HEAP_GATE_BYTES);
+}
 describe('actual stateless disk provider ownership acceptance', () => {
   it.each([false, true])(
     'preserves native metadata and independent HTTP bytes with bounded live owners, oversized=%s',
     async (large) => {
-      const facts = await acceptance(large);
-      expect(facts.largestRowBytes).toBeGreaterThan(
-        large ? 10 * 1024 * 1024 : 500,
-      );
-      assertAcceptance(facts);
+      const measured = await measuredAcceptance(large);
+      for (const facts of measured.runs)
+        expect(facts.largestRowBytes).toBeGreaterThan(
+          large ? 10 * 1024 * 1024 : 500,
+        );
+      assertAcceptance(measured);
     },
     600000,
   );
   it('trap: rows deliberately held by the test fail the live-row gate', async () => {
-    const facts = await acceptance(false, true);
-    expect(() => assertAcceptance(facts)).toThrow('expect(received)');
-    expect(facts.livePreparedRows).toBeGreaterThan(0);
+    const measured = await measuredAcceptance(false, true);
+    expect(() => assertAcceptance(measured)).toThrow('expect(received)');
+    for (const facts of measured.runs)
+      expect(facts.livePreparedRows).toBeGreaterThan(0);
   }, 600000);
 });

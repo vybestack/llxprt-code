@@ -79,6 +79,11 @@
       "bun": "./src/core/retained-growth.ts",
       "import": "./dist/src/core/retained-growth.js"
     },
+    "./core/settled-heap.js": {
+      "types": "./dist/src/core/settled-heap.d.ts",
+      "bun": "./src/core/settled-heap.ts",
+      "import": "./dist/src/core/settled-heap.js"
+    },
     "./core/synchronous-history-test-observation.js": {
       "types": "./dist/src/core/synchronous-history-test-observation.d.ts",
       "bun": "./src/core/synchronous-history-test-observation.ts",
