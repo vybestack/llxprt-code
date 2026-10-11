@@ -52,16 +52,15 @@ export interface WorkspaceControlDeps {
 
 export class WorkspaceControl implements AgentWorkspaceControl {
   private closed = false;
-  private readonly checkpointWork = new Set<Promise<void>>();
+  private closing: Promise<void> | undefined;
+  private readonly acceptedWork = new Set<Promise<void>>();
   readonly checkpoints: WorkspaceCheckpointOperations = {
     getCurrentCommitHash: () =>
-      this.admitCheckpoint(() => this.deps.checkpoints.getCurrentCommitHash()),
+      this.admitWork(() => this.deps.checkpoints.getCurrentCommitHash()),
     createFileSnapshot: (message) =>
-      this.admitCheckpoint(() =>
-        this.deps.checkpoints.createFileSnapshot(message),
-      ),
+      this.admitWork(() => this.deps.checkpoints.createFileSnapshot(message)),
     restoreProjectFromSnapshot: (hash) =>
-      this.admitCheckpoint(() =>
+      this.admitWork(() =>
         this.deps.checkpoints.restoreProjectFromSnapshot(hash),
       ),
   };
@@ -74,35 +73,31 @@ export class WorkspaceControl implements AgentWorkspaceControl {
   constructor(private readonly deps: WorkspaceControlDeps) {
     this.profileDefinitions = {
       loadProfile: (name) =>
-        this.admitCheckpoint(() => deps.profileDefinitions.loadProfile(name)),
+        this.admitWork(() => deps.profileDefinitions.loadProfile(name)),
       listProfiles: () =>
-        this.admitCheckpoint(() => deps.profileDefinitions.listProfiles()),
+        this.admitWork(() => deps.profileDefinitions.listProfiles()),
       profileExists: (name) =>
-        this.admitCheckpoint(() => deps.profileDefinitions.profileExists(name)),
+        this.admitWork(() => deps.profileDefinitions.profileExists(name)),
     };
     this.profileWrites = {
       saveProfile: (name, profile) =>
-        this.admitCheckpoint(() =>
-          deps.profileWrites.saveProfile(name, profile),
-        ),
+        this.admitWork(() => deps.profileWrites.saveProfile(name, profile)),
       deleteProfile: (name) =>
-        this.admitCheckpoint(() => deps.profileWrites.deleteProfile(name)),
+        this.admitWork(() => deps.profileWrites.deleteProfile(name)),
     };
     this.subagentDefinitions = {
       loadSubagent: (name) =>
-        this.admitCheckpoint(() => deps.subagentDefinitions.loadSubagent(name)),
+        this.admitWork(() => deps.subagentDefinitions.loadSubagent(name)),
       listSubagents: () =>
-        this.admitCheckpoint(() => deps.subagentDefinitions.listSubagents()),
+        this.admitWork(() => deps.subagentDefinitions.listSubagents()),
       subagentExists: (name) =>
-        this.admitCheckpoint(() =>
-          deps.subagentDefinitions.subagentExists(name),
-        ),
+        this.admitWork(() => deps.subagentDefinitions.subagentExists(name)),
       subagentExistsOnDisk: (name) =>
-        this.admitCheckpoint(() =>
+        this.admitWork(() =>
           deps.subagentDefinitions.subagentExistsOnDisk(name),
         ),
       validateProfileReference: (name) =>
-        this.admitCheckpoint(() =>
+        this.admitWork(() =>
           deps.subagentDefinitions.validateProfileReference(name),
         ),
       isSettingsSubagent: (name) => {
@@ -116,11 +111,11 @@ export class WorkspaceControl implements AgentWorkspaceControl {
     };
     this.subagentWrites = {
       saveSubagent: (name, profile, prompt) =>
-        this.admitCheckpoint(() =>
+        this.admitWork(() =>
           deps.subagentWrites.saveSubagent(name, profile, prompt),
         ),
       deleteSubagent: (name) =>
-        this.admitCheckpoint(() => deps.subagentWrites.deleteSubagent(name)),
+        this.admitWork(() => deps.subagentWrites.deleteSubagent(name)),
     };
   }
 
@@ -128,14 +123,14 @@ export class WorkspaceControl implements AgentWorkspaceControl {
     if (this.closed) throw new Error('Workspace definition facade is closed');
   }
 
-  private admitCheckpoint<T>(operation: () => Promise<T>): Promise<T> {
+  private admitWork<T>(operation: () => Promise<T>): Promise<T> {
     if (this.closed) throw new Error('Workspace checkpoint facade is closed');
     const accepted = operation();
     const joined = accepted.then(() => undefined);
-    this.checkpointWork.add(joined);
+    this.acceptedWork.add(joined);
     void joined.then(
-      () => this.checkpointWork.delete(joined),
-      () => this.checkpointWork.delete(joined),
+      () => this.acceptedWork.delete(joined),
+      () => this.acceptedWork.delete(joined),
     );
     return accepted;
   }
@@ -144,9 +139,14 @@ export class WorkspaceControl implements AgentWorkspaceControl {
     this.closed = true;
   }
 
-  async dispose(): Promise<void> {
+  dispose(): Promise<void> {
     this.closeAdmission();
-    const results = await Promise.allSettled([...this.checkpointWork]);
+    this.closing ??= this.joinAccepted();
+    return this.closing;
+  }
+
+  private async joinAccepted(): Promise<void> {
+    const results = await Promise.allSettled([...this.acceptedWork]);
     const failures = results.flatMap((result) =>
       result.status === 'rejected' ? [result.reason] : [],
     );
@@ -197,7 +197,9 @@ export class WorkspaceControl implements AgentWorkspaceControl {
     directory: string,
     options?: WorkspaceSearchOptions,
   ): Promise<void> {
-    return this.deps.search.initializeSearch(directory, options);
+    return this.admitWork(() =>
+      this.deps.search.initializeSearch(directory, options),
+    );
   }
 
   search(
@@ -205,7 +207,9 @@ export class WorkspaceControl implements AgentWorkspaceControl {
     pattern: string,
     options?: WorkspaceSearchOptions,
   ): Promise<string[]> {
-    return this.deps.search.search(directory, pattern, options);
+    return this.admitWork(() =>
+      this.deps.search.search(directory, pattern, options),
+    );
   }
 
   containsPath(filePath: string): boolean {
@@ -217,6 +221,7 @@ export class WorkspaceControl implements AgentWorkspaceControl {
   }
 
   addDirectory(path: string): void {
+    this.assertOpen();
     this.deps.addDirectory(path);
   }
 
