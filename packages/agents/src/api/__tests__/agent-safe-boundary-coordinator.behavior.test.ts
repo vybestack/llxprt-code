@@ -19,7 +19,11 @@ function barrier(): { promise: Promise<void>; release(): void } {
 const tick = (): Promise<void> =>
   new Promise((resolve) => setImmediate(resolve));
 
+import { usePromptFixture } from './helpers/prompt-fixture.js';
+
 describe('Per-Agent foreground safe boundary (#2616 S2)', () => {
+  usePromptFixture();
+
   it.each([1, 2])(
     'holds revision-bearing commands across HTTP and tool continuation (held request %s)',
     async (heldRequest) => {

@@ -372,7 +372,11 @@ async function exerciseOwners(sameLabel: boolean): Promise<void> {
   }
 }
 
+import { usePromptFixture } from './helpers/prompt-fixture.js';
+
 describe('Public Agent tool ownership (#2616 S1/S8, #2615 E)', () => {
+  usePromptFixture();
+
   it('keeps distinct-label owners isolated through execution and disposal', async () => {
     expect(await exerciseOwners(false)).toBeUndefined();
   }, 30_000);

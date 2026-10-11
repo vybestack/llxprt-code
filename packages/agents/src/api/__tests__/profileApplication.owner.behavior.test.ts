@@ -3,20 +3,12 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import {
-  afterAll,
-  beforeAll,
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-} from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fromConfig, type Agent } from '../index.js';
-import { makeScratchDir } from './helpers/scratch-dir.js';
+import { usePromptFixture } from './helpers/prompt-fixture.js';
 import {
   buildCliStyleConfig,
   type BuiltCliConfig,
@@ -103,33 +95,21 @@ function observe(owner: Owner): object {
 describe('public profile application ownership outside ALS', () => {
   let directory: string;
   let previousHome: string | undefined;
+  let previousData: string | undefined;
   let previousFake: string | undefined;
   let owners: Owner[];
 
-  let promptRoot: string;
-  let previousPromptRoot: string | undefined;
-  beforeAll(async () => {
-    const evidence = join(
-      import.meta.dirname,
-      '../../../../../tmp/session-client-owner-consolidation',
-    );
-    promptRoot = await makeScratchDir('profile-prompts-', evidence);
-    previousPromptRoot = process.env.LLXPRT_PROMPTS_DIR;
-    process.env.LLXPRT_PROMPTS_DIR = promptRoot;
-  });
-  afterAll(async () => {
-    if (previousPromptRoot === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
-    else process.env.LLXPRT_PROMPTS_DIR = previousPromptRoot;
-    await rm(promptRoot, { recursive: true, force: true });
-  });
+  usePromptFixture();
 
   beforeEach(async () => {
     const evidence = join(tmpdir(), 'llxprt-profile-application-owner');
     await mkdir(evidence, { recursive: true });
     directory = await mkdtemp(join(evidence, 'fixture-'));
     previousHome = process.env.LLXPRT_CONFIG_HOME;
+    previousData = process.env.LLXPRT_DATA_HOME;
     previousFake = process.env.LLXPRT_FAKE_RESPONSES;
     process.env.LLXPRT_CONFIG_HOME = join(directory, 'user');
+    process.env.LLXPRT_DATA_HOME = join(directory, 'data');
     writeProviderAliasConfig('fake', {
       baseProvider: 'openai',
       modelDefaults: [
@@ -155,6 +135,8 @@ describe('public profile application ownership outside ALS', () => {
     } finally {
       if (previousHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
       else process.env.LLXPRT_CONFIG_HOME = previousHome;
+      if (previousData === undefined) delete process.env.LLXPRT_DATA_HOME;
+      else process.env.LLXPRT_DATA_HOME = previousData;
       if (previousFake === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
       else process.env.LLXPRT_FAKE_RESPONSES = previousFake;
       await rm(directory, { recursive: true, force: true });

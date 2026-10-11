@@ -12,7 +12,11 @@ import {
 } from '@vybestack/llxprt-code-settings';
 import { successful, withOwners } from './turn-revision-capture.fixture.js';
 
+import { usePromptFixture } from './helpers/prompt-fixture.js';
+
 describe('Public admitted-turn request capture (#2616 C/S2)', () => {
+  usePromptFixture();
+
   it.each(['unchanged', 'temperature'])(
     'keeps admitted request values through a steered continuation: %s',
     async (mutation) => {
@@ -69,6 +73,7 @@ describe('Public admitted-turn request capture (#2616 C/S2)', () => {
 });
 
 describe('Foreground admitted model parameter ownership on the HTTP wire', () => {
+  usePromptFixture();
   it('keeps added and cleared keys out of an admitted continuation and reads them next turn', async () => {
     await withOwners(async (a, _b, endpoint, _other, start) => {
       a.setModelParam('top_p', 0.4);
@@ -180,6 +185,7 @@ describe('Foreground admitted model parameter ownership on the HTTP wire', () =>
 });
 
 describe('Foreground admitted provider and model binding on the HTTP wire', () => {
+  usePromptFixture();
   it('keeps the admitted direct endpoint and model during profile replacement, without changing a sibling or the next admission', async () => {
     await withOwners(async (a, b, original, replacement, start) => {
       const admitted = start(a, 'Admit original direct provider');
@@ -348,6 +354,7 @@ describe('Foreground admitted provider and model binding on the HTTP wire', () =
 });
 
 describe('Public load-balanced foreground admission on the HTTP wire', () => {
+  usePromptFixture();
   it('retains member-specific and LB overrides across a steered rotation', async () => {
     await withOwners(async (a, b, firstEndpoint, secondEndpoint, start) => {
       const profiles = new ProfileManager();
