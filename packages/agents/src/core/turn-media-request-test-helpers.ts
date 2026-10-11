@@ -11,12 +11,15 @@ const provider: RuntimeProvider = {
   },
 };
 
-export function mediaRequestFixture(history: HistoryService): {
+export function mediaRequestFixture(
+  history: HistoryService,
+  contextLimit = 1_000_000,
+): {
   runtimeContext: ReturnType<typeof buildRuntimeContext>;
   compressionHandler: CompressionHandler;
   provider: RuntimeProvider;
 } {
-  const base = buildRuntimeContext(history, { contextLimit: 1_000_000 });
+  const base = buildRuntimeContext(history, { contextLimit });
   const runtimeContext = {
     ...base,
     telemetry: { ...base.telemetry, logApiRequest: () => {} },

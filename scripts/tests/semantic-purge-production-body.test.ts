@@ -6,15 +6,25 @@ import { join } from 'node:path';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import { buildCuratedHistory } from '../../packages/core/src/services/history/historyCuration.js';
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
-import { enforceTurnMediaRequestContents } from '../../packages/agents/src/core/turnMediaRequest.js';
+import { sendTurnSource } from '../../packages/agents/src/core/turnSourceRequest.js';
 import { mediaRequestFixture } from '../../packages/agents/src/core/turn-media-request-test-helpers.js';
 import { captureCuratedBody } from './provider-curated-body-helpers.js';
 const logger = new DebugLogger('test:semantic-purge-body-oracle');
+/**
+ * Far above the largest history here (8192 rows of about 2 KiB): this test
+ * pins request bytes, so every send must stay under the limit and never enter
+ * the compression ladder (the fixture's compression factory throws).
+ */
+const UNCOMPRESSED_CONTEXT_LIMIT = 100_000_000;
+import type { RuntimeGenerateChatOptions } from '../../packages/core/src/runtime/contracts/RuntimeProviderChat.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { EagerSemanticPurgeOracle } from '../../packages/core/src/services/history/__tests__/support/semantic-purge-eager-test-helpers.js';
-import { SemanticMediaPurgeSession } from '../../packages/agents/src/core/semanticMediaPurgeSession.js';
+import {
+  SemanticMediaPurgeSession,
+  type SemanticMediaPurgeAttempt,
+} from '../../packages/agents/src/core/semanticMediaPurgeSession.js';
 
 function row(index: number, bytes: number): IContent {
   const text = {
@@ -119,6 +129,46 @@ async function expectedBody(
   }
 }
 
+/**
+ * The production request rows: the turn source route (disk selection, purge
+ * override, compression enforcement) read row by row at the send seam.
+ */
+async function productionRequestRows(
+  history: HistoryService,
+  attempt: SemanticMediaPurgeAttempt,
+): Promise<IContent[]> {
+  const fixture = mediaRequestFixture(history, UNCOMPRESSED_CONTEXT_LIMIT);
+  const runtime = {
+    ...fixture.runtimeContext,
+    providerRuntime: {
+      ...fixture.runtimeContext.providerRuntime,
+      config: { getEnableHooks: () => false },
+    },
+  } as unknown as Parameters<typeof sendTurnSource>[0]['runtime'];
+  const rows: IContent[] = [];
+  await sendTurnSource({
+    runtime,
+    compression: fixture.compressionHandler,
+    history,
+    provider: fixture.provider,
+    promptId: 'semantic-turn-body',
+    userContents: [],
+    semanticMediaPurge: attempt,
+    tools: undefined,
+    signal: undefined,
+    log: () => undefined,
+    buildOptions: (contents) =>
+      ({ contents }) as unknown as RuntimeGenerateChatOptions,
+    onPrepared: () => undefined,
+    attempt: async (prepared) => {
+      for await (const row of prepared.options.requestRows.openReader())
+        rows.push(row);
+      return { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
+    },
+  });
+  return rows;
+}
+
 async function verify(
   size: number,
   explicit: boolean,
@@ -140,24 +190,16 @@ async function verify(
       const attempt = await session.begin(explicit);
       if (!attempt) throw new Error('Missing production attempt');
       try {
-        const options = {
-          ...mediaRequestFixture(history),
-          historyService: history,
-          userContents: [],
-          promptId: 'semantic-turn-body',
-          semanticMediaPurge: attempt,
-          estimateFinalizedPromptTokens: async () => 1,
-        };
         const actual = await captureCuratedBody(
           provider,
-          await enforceTurnMediaRequestContents(options),
+          await productionRequestRows(history, attempt),
           caching,
           provider === 'openai-responses',
         );
         const expected = await expectedBody(size, explicit, provider, caching);
         const retried = await captureCuratedBody(
           provider,
-          await enforceTurnMediaRequestContents(options),
+          await productionRequestRows(history, attempt),
           caching,
         );
         await saveBodies(
