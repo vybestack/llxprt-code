@@ -2,6 +2,11 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import type { IContent } from './IContent.js';
+import {
+  replaceAllOps,
+  restoreRowsOps,
+  type OpenReplaceTracker,
+} from './historyReplaceOps.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
 import { planDiskDensityMutation } from './historyDiskDensity.js';
 import type { HistoryMutationInput } from './historyBatchContracts.js';
@@ -39,8 +44,7 @@ export function* planMutation(
     return;
   }
   if (input.options.replaceAll === true) {
-    if (previous.length > 0) yield rewindAllOp(previous);
-    for (const content of input.nextHistory) yield { kind: 'content', content };
+    yield* replacementOps(previous, input.nextHistory);
     return;
   }
   yield* planHistoryMutation(previous, input.nextHistory, ownership);
@@ -65,26 +69,54 @@ export function planDensityMutation(
   return [{ kind: 'density', payload: { removedSeqs, replacements } }];
 }
 
+/**
+ * Replace the whole history: a pure clear is one rewind, an empty history
+ * takes plain appends, anything else is one atomic replace transaction.
+ */
+function* replacementOps(
+  previous: HistoryRowSource,
+  next: HistoryRowSource,
+): Generator<HistoryJournalOp, void, unknown> {
+  if (previous.length === 0) {
+    for (const content of next) yield { kind: 'content', content };
+  } else if (next.length === 0) {
+    yield rewindAllOp(previous);
+  } else {
+    yield* replaceAllOps(next);
+  }
+}
+
+/**
+ * Undo the admitted prefix of a failed mutation. An unfinished replace
+ * transaction is aborted, which leaves the previous rows; anything else is put
+ * back by one replace transaction of the previous rows.
+ */
 export async function compensateMutation(
   journal: HistoryJournalStore,
   previousHistory: HistoryMutationSnapshot,
   input: HistoryMutationInput,
+  replacements: OpenReplaceTracker,
 ): Promise<void> {
   const nextHistory = input.nextHistory;
   const awaitDurability =
     input.streamPublication !== false &&
     nextHistory instanceof HistoryDensityRows &&
     !previousHistory.hasPendingRows;
+  const abort = replacements.abortOp();
+  if (abort !== null) {
+    journal.apply(abort);
+    replacements.observe(abort);
+    if (awaitDurability) await journal.waitForDurable();
+    return;
+  }
   // Every admitted prefix contains at most the old rows plus the new rows.
   // A count-only rewind clears it even if admission stopped before a row
   // needed by a seq-addressed inverse. Replay without another projection.
-  journal.apply({
-    kind: 'rewind',
-    itemsRemoved: previousHistory.length + nextHistory.length,
-  });
-  if (awaitDurability) await journal.waitForDurable();
-  for (const content of previousHistory) {
-    journal.apply({ kind: 'content', content });
+  for (const op of restoreRowsOps(
+    previousHistory,
+    previousHistory.length + nextHistory.length,
+  )) {
+    journal.apply(op);
     if (awaitDurability) await journal.waitForDurable();
   }
 }
@@ -186,7 +218,7 @@ function preferDetachedReplay(
  *  - strict marked prefix, longer → `content` rows for the appended tail;
  *  - single-item whole replacement over a marked history →
  *    `compression_detail` + `compressed` (the compression shape);
- *  - anything else → rewind everything, then re-record `next` in full.
+ *  - anything else → replace everything with `next` (see replacementOps).
  */
 export function* planHistoryMutation(
   previous: HistoryRowSource,
@@ -194,8 +226,7 @@ export function* planHistoryMutation(
   ownership?: RowOwnership,
 ): Generator<HistoryJournalOp, void, unknown> {
   if (preferDetachedReplay(previous, next)) {
-    if (previous.length > 0) yield rewindAllOp(previous);
-    for (const content of next) yield { kind: 'content', content };
+    yield* replacementOps(previous, next);
     return;
   }
   if (next.length === previous.length && isMarkedPrefix(previous, next)) {
@@ -238,6 +269,5 @@ export function* planHistoryMutation(
     };
     return;
   }
-  if (previous.length > 0) yield rewindAllOp(previous);
-  for (const content of next) yield { kind: 'content', content };
+  yield* replacementOps(previous, next);
 }

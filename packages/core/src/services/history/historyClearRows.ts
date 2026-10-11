@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { replaceAllOps } from './historyReplaceOps.js';
 import type { HistoryJournalStore } from './historyJournalStore.js';
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
 import { mergeRemovedInteriorSpans } from './contextRange.js';
@@ -12,8 +13,9 @@ function restoreClearedRows(
 ): unknown[] {
   if (!admitted) return [];
   try {
-    for (const content of cursor.rows())
-      journal.apply({ kind: 'content', content });
+    // The journal is empty after the clear; one transaction makes a crash
+    // during the restore leave it empty rather than partly restored.
+    for (const op of replaceAllOps(cursor.rows())) journal.apply(op);
     return [];
   } catch (error) {
     return [error];

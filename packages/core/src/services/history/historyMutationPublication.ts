@@ -7,11 +7,14 @@ import type { HistoryMutationInput } from './historyBatchContracts.js';
 import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { planMutation } from './planHistoryMutation.js';
+import { OpenReplaceTracker } from './historyReplaceOps.js';
 import { trackMutationOwners } from './historyMutationOwnership.js';
 import { journalPublicationOwners } from './historyPublicationOwners.js';
 
 export class HistoryMutationPublication {
   admittedCount = 0;
+  /** The replace transaction admitted ops left open; compensation aborts it. */
+  readonly replacements = new OpenReplaceTracker();
   private releaseOwners = (): void => {};
   private releaseEnvelopeOwners = (): void => {};
 
@@ -69,6 +72,7 @@ export class HistoryMutationPublication {
   private admit(op: HistoryJournalOp): void {
     this.journal.apply(op);
     this.admittedCount++;
+    this.replacements.observe(op);
   }
 
   close(): void {

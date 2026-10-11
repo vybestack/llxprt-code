@@ -1018,7 +1018,12 @@ export abstract class HistoryServiceCore
     if (publication.admittedCount === 0) return true;
     this.invalidatePendingSyncs();
     try {
-      await compensateMutation(this.journal, previousHistory, input);
+      await compensateMutation(
+        this.journal,
+        previousHistory,
+        input,
+        publication.replacements,
+      );
       return true;
     } catch (compensationError: unknown) {
       failures.push(compensationError);

@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { open, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -122,6 +123,58 @@ async function stageSource(
   }
 }
 
+/**
+ * Replaces the destination's non-empty history with the staged rows as one
+ * replace transaction, so a failure or crash before the commit leaves the
+ * destination's previous history intact. Rows become part of the destination
+ * only when the commit record is durable.
+ */
+async function commitReplacement(
+  destination: SessionRecordingService,
+  resolver: JournalResolver,
+  isCancelled: () => boolean,
+): Promise<{ watermark: CommitWatermark; rows: number }> {
+  const txId = randomUUID();
+  let rows = 0;
+  await destination.commit('replace_begin', { txId });
+  try {
+    for await (const entry of resolver.resolve()) {
+      requireLiveSource(isCancelled);
+      await destination.commit('content', { content: entry.content, tx: txId });
+      rows++;
+    }
+    const watermark = await destination.commit('replace_commit', {
+      txId,
+      rowCount: rows,
+    });
+    return { watermark, rows };
+  } catch (cause) {
+    throw await abortReplacement(destination, txId, rows, cause);
+  }
+}
+
+/** Close an unfinished transaction; its failure is reported with the cause. */
+async function abortReplacement(
+  destination: SessionRecordingService,
+  txId: string,
+  rows: number,
+  cause: unknown,
+): Promise<unknown> {
+  try {
+    await destination.commit('replace_abort', { txId, rowCount: rows });
+    return cause;
+  } catch (abortFailure) {
+    return new AggregateError(
+      [cause, abortFailure],
+      `${cause instanceof Error ? cause.message : String(cause)}; replace abort failed: ${
+        abortFailure instanceof Error
+          ? abortFailure.message
+          : String(abortFailure)
+      }`,
+    );
+  }
+}
+
 export async function appendHistoryJournal(
   source: AttachmentSource,
   destination: SessionRecordingService,
@@ -131,7 +184,6 @@ export async function appendHistoryJournal(
 ): Promise<AttachmentCommit> {
   const directory = await createScratchDir('history-attachment-');
   let committedRows = 0;
-  let destinationRewound = false;
   try {
     const staged = join(directory, 'source.jsonl');
     await stageSource(source, staged, counters);
@@ -146,10 +198,21 @@ export async function appendHistoryJournal(
         throw new Error(
           'Destination recording changed during attachment preflight',
         );
+      if (count > 0) {
+        const replaced = await commitReplacement(
+          destination,
+          resolver,
+          isCancelled,
+        );
+        return {
+          watermark: replaced.watermark,
+          committedRows: replaced.rows,
+          destinationRewound: true,
+        };
+      }
       let watermark = await destination.commit('rewind', {
         itemsRemoved: count,
       });
-      destinationRewound = count > 0;
       for await (const entry of resolver.resolve()) {
         requireLiveSource(isCancelled);
         watermark = await destination.commit('content', {
@@ -157,12 +220,12 @@ export async function appendHistoryJournal(
         });
         committedRows++;
       }
-      return { watermark, committedRows, destinationRewound };
+      return { watermark, committedRows, destinationRewound: false };
     } finally {
       await resolver.close();
     }
   } catch (cause) {
-    throw new HistoryAttachmentError(cause, committedRows, destinationRewound);
+    throw new HistoryAttachmentError(cause, committedRows, false);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

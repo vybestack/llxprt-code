@@ -261,15 +261,14 @@ async function verifyOrdersAQueuedAddAndCommitBarrierAfterDetachmentWithoutWriti
 
 async function verifyRejectsDetachmentRatherThanDroppingAWriteRefusedByADisposedRecorder(): Promise<void> {
   await recording.dispose();
-  history.add({
-    speaker: 'human',
-    blocks: [{ type: 'text', text: 'uncommitted' }],
-  });
-  await expect(history.detachJournal(recording)).rejects.toThrow('uncommitted');
+  expect(() =>
+    history.add({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'uncommitted' }],
+    }),
+  ).toThrow('commit: session recording is disposed');
   await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
-    expect(rows.map((row) => row.blocks)).toStrictEqual([
-      [{ type: 'text', text: 'uncommitted' }],
-    ]);
+    expect(rows).toStrictEqual([]);
   });
 }
 

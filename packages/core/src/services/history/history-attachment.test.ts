@@ -191,8 +191,8 @@ async function verifyReportsCommittedDestinationEffectsAfterAWriteFailureWithout
   const attaching = history.attachJournal(destination, true);
   history.add(row('accepted later'));
   await expect(attaching).rejects.toMatchObject({
-    committedRows: 1,
-    destinationRewound: true,
+    committedRows: 0,
+    destinationRewound: false,
   });
   await history.waitForCommit();
   expect((await stat(journalFile(history))).ino).toBe(originalFile.ino);
@@ -205,7 +205,7 @@ async function verifyReportsCommittedDestinationEffectsAfterAWriteFailureWithout
   });
   const reopened = new HistoryJournalStore(destination);
   expect(reopened.materialize().map((content) => content.blocks)).toStrictEqual(
-    [row('first source').blocks],
+    [row('destination').blocks],
   );
   reopened.dispose();
 }

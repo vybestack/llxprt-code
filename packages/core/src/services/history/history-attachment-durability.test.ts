@@ -66,7 +66,9 @@ async function reportConcurrentFailure(): Promise<void> {
   const integration = new RecordingIntegration(destination);
   const first = integration.subscribeToJournal(history);
   const repeated = integration.subscribeToJournal(history);
-  const expected = { committedRows: 1, destinationRewound: true };
+  // The replacement is one transaction: a failure before its commit leaves
+  // the destination's previous history in place.
+  const expected = { committedRows: 0, destinationRewound: false };
   try {
     await expect(first).rejects.toMatchObject(expected);
     await expect(repeated).rejects.toMatchObject(expected);
@@ -75,7 +77,7 @@ async function reportConcurrentFailure(): Promise<void> {
   }
   const reopened = new HistoryJournalStore(destination);
   expect(reopened.materialize().map((content) => content.blocks)).toStrictEqual(
-    [row('accepted source').blocks],
+    [row('existing destination').blocks],
   );
   reopened.dispose();
 }
@@ -84,7 +86,7 @@ async function reportPartialReplacement(): Promise<void> {
   const integration = new RecordingIntegration(destination);
   try {
     await expect(integration.subscribeToJournal(history)).rejects.toMatchObject(
-      { committedRows: 1, destinationRewound: true },
+      { committedRows: 0, destinationRewound: false },
     );
     const file = destination.getFilePath();
     if (!file) throw new Error('Missing destination');
@@ -92,14 +94,14 @@ async function reportPartialReplacement(): Promise<void> {
     history.add(row('subsequent source'));
     await history.waitForCommit();
     await expect(integration.flushAtTurnBoundary()).rejects.toMatchObject({
-      committedRows: 1,
-      destinationRewound: true,
+      committedRows: 0,
+      destinationRewound: false,
     });
     expect(Buffer.compare(bytes, await readFile(file))).toBe(0);
     const reopened = new HistoryJournalStore(destination);
     expect(
       reopened.materialize().map((content) => content.blocks),
-    ).toStrictEqual([row('accepted source').blocks]);
+    ).toStrictEqual([row('existing destination').blocks]);
     reopened.dispose();
     await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
       expect(rows.map((content) => content.blocks)).toStrictEqual([

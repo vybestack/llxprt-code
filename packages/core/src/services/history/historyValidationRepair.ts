@@ -13,6 +13,7 @@ import {
   createSyntheticToolMessage,
 } from './historyToolPairing.js';
 import { planHistoryMutation } from './planHistoryMutation.js';
+import { OpenReplaceTracker, restoreRowsOps } from './historyReplaceOps.js';
 import { historyMutationFailure } from './historyMutationEffects.js';
 
 export class HistoryValidationRepair {
@@ -22,6 +23,7 @@ export class HistoryValidationRepair {
   private readonly index: HistoryRepairIndex;
   private addressed = true;
   private admitted = 0;
+  private readonly replacements = new OpenReplaceTracker();
 
   constructor(private readonly ownership?: RowOwnership) {
     this.previous = new HistoryDensityRows(ownership);
@@ -116,6 +118,7 @@ export class HistoryValidationRepair {
       for (const op of this.operations()) {
         journal.apply(op);
         this.admitted++;
+        this.replacements.observe(op);
       }
     } catch (error) {
       const failures: unknown[] = [];
@@ -130,12 +133,17 @@ export class HistoryValidationRepair {
 
   rollback(journal: HistoryJournalStore): void {
     if (this.admitted === 0) return;
-    journal.apply({
-      kind: 'rewind',
-      itemsRemoved: this.previous.length + this.inserted.length,
-    });
-    for (const content of this.previous)
-      journal.apply({ kind: 'content', content });
+    const abort = this.replacements.abortOp();
+    if (abort !== null) {
+      journal.apply(abort);
+      this.replacements.observe(abort);
+    } else {
+      for (const op of restoreRowsOps(
+        this.previous,
+        this.previous.length + this.inserted.length,
+      ))
+        journal.apply(op);
+    }
     this.admitted = 0;
   }
 

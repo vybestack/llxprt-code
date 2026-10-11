@@ -11,6 +11,7 @@ import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import type { HistoryJournalStore } from './historyJournalStore.js';
 import type { HistoryMediaOwner } from './historyBatchContracts.js';
 import { planHistoryMutation } from './planHistoryMutation.js';
+import type { OpenReplaceTracker } from './historyReplaceOps.js';
 import { historyMutationFailure } from './historyMutationEffects.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 
@@ -128,8 +129,16 @@ function restoreRows(
   input: RewriteInput,
   previous: HistoryMutationSnapshot,
   next: HistoryDensityRows,
+  replacements: OpenReplaceTracker,
 ): void {
   previous.restorePendingChronology();
+  // An unfinished replace transaction folds to the previous rows once aborted.
+  const abort = replacements.abortOp();
+  if (abort !== null) {
+    input.journal.apply(abort);
+    replacements.observe(abort);
+    return;
+  }
   for (const op of planHistoryMutation(next, previous, input.ownership))
     input.journal.apply(op);
 }
@@ -165,7 +174,7 @@ async function publishToolRewrite(
     const failures: unknown[] = [];
     if (publication.admittedCount > 0) {
       try {
-        restoreRows(input, previous, next);
+        restoreRows(input, previous, next, publication.replacements);
       } catch (failure) {
         failures.push(failure);
       }
