@@ -46,7 +46,7 @@ const SAMPLE_EVERY_TURNS = 5;
 const MIN_WARMUP_TURNS = 1150;
 const MAX_WARMUP_TURNS = 1250;
 /** Checkpoints sit at these distances after the converged baseline. */
-const CHECKPOINT_OFFSETS = [100, 200, 300, 400] as const;
+const CHECKPOINT_OFFSETS = [100, 200, 300, 400, 500, 600, 700, 800] as const;
 /** The release-trap lets go of its rows once this many checkpoints are taken. */
 const RELEASE_AFTER_CHECKPOINTS = 3;
 const SETTLE_ROUNDS = 6;

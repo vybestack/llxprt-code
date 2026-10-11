@@ -12,6 +12,20 @@ import {
 } from './support/journal-retained-growth-predicate.js';
 import { CI_WARMUP_HEAP_READINGS } from './support/journal-retained-growth-ci-series.js';
 
+/**
+ * Method (authorized deviation): the measured window is 8 checkpoints, 100
+ * turns apart. Every checkpoint must be under the 1 MiB allowance against the
+ * original baseline. Accumulation is gated on the LAST half only (checkpoints
+ * 4 to 8, fitted against their own start, plus the 4 to 8 endpoint growth),
+ * each under SETTLE_NOISE_BYTES. JavaScriptCore lazy compile and tier-up add
+ * bounded one-time steps at turns that vary by machine (CI saw one 220 KB step
+ * then a flat run); a single fit over a short window failed on such a step. A
+ * sustained leak of about 0.65 KB per turn or more still fails the late-window
+ * gates, and a one-time step in the first half is bounded by the allowance.
+ */
+const CHECKPOINT_COUNT = 8;
+const MEASURED_TURNS = CHECKPOINT_COUNT * 100;
+
 const checkpointSchema = z.object({
   turn: z.number(),
   heapBytes: z.number(),
@@ -21,7 +35,7 @@ const resultSchema = z.object({
   mode: z.enum(['normal', 'trap', 'release-trap']),
   warmup: z.array(z.object({ turn: z.number(), heapBytes: z.number() })),
   baseline: checkpointSchema,
-  checkpoints: z.array(checkpointSchema).length(4),
+  checkpoints: z.array(checkpointSchema).length(CHECKPOINT_COUNT),
   requests: z.number(),
   retainedRows: z.number(),
   compressions: z.number(),
@@ -77,20 +91,20 @@ function report(result: Result): string {
   const samples = [result.baseline, ...result.checkpoints]
     .map((point) => `turn ${point.turn}: [${point.readings.join(', ')}]`)
     .join('\n');
-  return `${result.mode} retained=${verdict.retainedBytes} deltas=${verdict.checkpointDeltas.join(',')} intervals=${verdict.intervalGrowth.join(',')} fitted=${Math.round(verdict.fittedRunGrowthBytes)} requests=${result.requests} compressions=${result.compressions}\nwarmup ${warmup}\n${samples}`;
+  return `${result.mode} retained=${verdict.retainedBytes} deltas=${verdict.checkpointDeltas.join(',')} intervals=${verdict.intervalGrowth.join(',')} lateFitted=${Math.round(verdict.lateFittedGrowthBytes)} lateEndpoint=${verdict.lateEndpointGrowthBytes} requests=${result.requests} compressions=${result.compressions}\nwarmup ${warmup}\n${samples}`;
 }
 
 function expectRealWorkload(result: Result): void {
   const warmedTurn = result.baseline.turn;
-  expect(result.requests).toBe(warmedTurn + 400);
+  expect(result.requests).toBe(warmedTurn + MEASURED_TURNS);
   expect(result.compressions).toBeGreaterThanOrEqual(10);
   expect(result.journalBytes).toBeGreaterThan(0);
-  expect(result.checkpoints.map((point) => point.turn)).toStrictEqual([
-    warmedTurn + 100,
-    warmedTurn + 200,
-    warmedTurn + 300,
-    warmedTurn + 400,
-  ]);
+  expect(result.checkpoints.map((point) => point.turn)).toStrictEqual(
+    Array.from(
+      { length: CHECKPOINT_COUNT },
+      (_, index) => warmedTurn + (index + 1) * 100,
+    ),
+  );
 }
 
 describe('repeated-turn retained growth over the real journal-backed send path', () => {
@@ -124,6 +138,16 @@ describe('repeated-turn retained growth over the real journal-backed send path',
     expect(result.retainedRows).toBeGreaterThan(400);
     const verdict = evaluateRetainedGrowth(result.baseline, result.checkpoints);
     expect(verdict.pass).toBe(false);
+    // Fails every gate: the allowance, the late fit and the late endpoint.
+    expect(
+      verdict.failures.some((failure) => failure.includes('exceeds allowance')),
+    ).toBe(true);
+    expect(verdict.failures.some((failure) => failure.includes('fitted'))).toBe(
+      true,
+    );
+    expect(
+      verdict.failures.some((failure) => failure.includes('heap grew')),
+    ).toBe(true);
     expect(verdict.retainedBytes).toBeGreaterThanOrEqual(
       RETAINED_ALLOWANCE_BYTES,
     );
@@ -134,7 +158,8 @@ describe('repeated-turn retained growth over the real journal-backed send path',
     process.stdout.write(`${report(result)}\n`);
     expectRealWorkload(result);
     // Retention was switched off and its rows dropped after the third
-    // checkpoint, so nothing is held when the run ends.
+    // checkpoint (RELEASE_AFTER_CHECKPOINTS in the worker), so nothing is held
+    // when the run ends.
     expect(result.retainedRows).toBe(0);
     const verdict = evaluateRetainedGrowth(result.baseline, result.checkpoints);
     // The release happens before the last checkpoint, so a final-delta-only
@@ -144,6 +169,9 @@ describe('repeated-turn retained growth over the real journal-backed send path',
       verdict.checkpointDeltas
         .slice(0, 3)
         .some((delta) => delta >= RETAINED_ALLOWANCE_BYTES),
+    ).toBe(true);
+    expect(
+      verdict.failures.some((failure) => failure.includes('exceeds allowance')),
     ).toBe(true);
     expect(verdict.pass).toBe(false);
   }, 300_000);
@@ -164,22 +192,74 @@ describe('repeated-turn retained growth over the real journal-backed send path',
     expect(verdict.failures.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('predicate rejects steady accumulation under the allowance and accepts flat noise', () => {
+  describe('late-window accumulation gate', () => {
+    const BASE = 180_000_000;
     const point = (turn: number, heapBytes: number) => ({ turn, heapBytes });
-    const flat = evaluateRetainedGrowth(point(20, 50_000_000), [
-      point(100, 50_100_000),
-      point(200, 49_900_000),
-      point(400, 50_150_000),
-    ]);
-    expect(flat.pass).toBe(true);
-    const step = SETTLE_NOISE_BYTES + 1_000;
-    const creeping = evaluateRetainedGrowth(point(20, 50_000_000), [
-      point(100, 50_000_000 + step),
-      point(200, 50_000_000 + 2 * step),
-      point(400, 50_000_000 + 3 * step),
-    ]);
-    expect(creeping.pass).toBe(false);
-    expect(creeping.retainedBytes).toBeLessThan(RETAINED_ALLOWANCE_BYTES);
+    /** Eight checkpoints 100 turns apart; deltas are relative to BASE. */
+    const evaluate = (deltas: readonly number[]) =>
+      evaluateRetainedGrowth(
+        point(1150, BASE),
+        deltas.map((delta, index) =>
+          point(1150 + (index + 1) * 100, BASE + delta),
+        ),
+      );
+    const steady = (bytesPerTurn: number) =>
+      Array.from({ length: 8 }, (_, index) => (index + 1) * 100 * bytesPerTurn);
+
+    it('accepts the CI series (one 220 KB step, then flat) with a flat tail', () => {
+      const verdict = evaluate([
+        59_970, 279_441, 294_835, 245_080, 250_000, 247_000, 252_000, 249_000,
+      ]);
+      expect(verdict.failures).toStrictEqual([]);
+      expect(verdict.pass).toBe(true);
+    });
+
+    it('rejects a steady leak of 1 KB per turn across all checkpoints', () => {
+      const verdict = evaluate(steady(1_000));
+      expect(verdict.pass).toBe(false);
+      expect(verdict.retainedBytes).toBeLessThan(RETAINED_ALLOWANCE_BYTES);
+    });
+
+    it('rejects a steady leak of 0.7 KB per turn', () => {
+      const verdict = evaluate(steady(700));
+      expect(verdict.pass).toBe(false);
+      expect(verdict.retainedBytes).toBeLessThan(RETAINED_ALLOWANCE_BYTES);
+    });
+
+    it('accepts a single 250 KB step in the first half with a flat tail', () => {
+      const verdict = evaluate([
+        0, 250_000, 250_000, 250_000, 250_000, 250_000, 250_000, 250_000,
+      ]);
+      expect(verdict.pass).toBe(true);
+    });
+
+    it('rejects a step in the second half combined with continued growth', () => {
+      const verdict = evaluate([
+        0, 0, 0, 0, 250_000, 350_000, 450_000, 550_000,
+      ]);
+      expect(verdict.pass).toBe(false);
+    });
+
+    it('accepts flat noise', () => {
+      const verdict = evaluate([
+        100_000, -100_000, 150_000, 0, 120_000, -80_000, 90_000, 30_000,
+      ]);
+      expect(verdict.pass).toBe(true);
+    });
+
+    it('rejects a first-half step that is above the allowance even when the tail is flat', () => {
+      const verdict = evaluate([
+        0,
+        RETAINED_ALLOWANCE_BYTES + 1,
+        RETAINED_ALLOWANCE_BYTES + 1,
+        RETAINED_ALLOWANCE_BYTES + 1,
+        RETAINED_ALLOWANCE_BYTES + 1,
+        RETAINED_ALLOWANCE_BYTES + 1,
+        RETAINED_ALLOWANCE_BYTES + 1,
+        RETAINED_ALLOWANCE_BYTES + 1,
+      ]);
+      expect(verdict.pass).toBe(false);
+    });
   });
 
   describe('warm-up convergence', () => {

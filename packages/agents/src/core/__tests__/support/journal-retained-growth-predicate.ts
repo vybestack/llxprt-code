@@ -55,8 +55,14 @@ export interface RetainedGrowthVerdict {
   /** Settled heap minus the warmed baseline, one entry per checkpoint. */
   readonly checkpointDeltas: readonly number[];
   readonly intervalGrowth: readonly number[];
-  /** Least-squares heap growth per turn, projected over the whole run. */
-  readonly fittedRunGrowthBytes: number;
+  /**
+   * Least-squares heap growth per turn over the late window, projected over
+   * the late window's turn span. The late window starts at the checkpoint
+   * that ends the first half of the run and is fitted against its own start.
+   */
+  readonly lateFittedGrowthBytes: number;
+  /** Late-window last checkpoint minus its first checkpoint. */
+  readonly lateEndpointGrowthBytes: number;
 }
 
 /** Least-squares slope of heap bytes against turn number. */
@@ -74,12 +80,26 @@ function leastSquaresSlope(points: readonly SettledCheckpoint[]): number {
 }
 
 /**
+ * Index of the first late-window checkpoint: the checkpoint that closes the
+ * first half of the run (checkpoint 4 of 8). The window runs to the last
+ * checkpoint and is fitted against its own start.
+ */
+function lateWindowStart(checkpointCount: number): number {
+  return Math.max(0, Math.floor(checkpointCount / 2) - 1);
+}
+
+/**
  * One predicate for the ordinary run and the deliberate-retention traps:
  * (1) the settled heap at EVERY checkpoint, minus the warmed baseline, stays
  * under the allowance, so a collection held between turns and released later
- * is still caught, and (2) heap growth does not scale with turn count: the
- * fitted growth over the whole run stays within settle noise. Neither gate
- * can be waived by a quiet or negative interval elsewhere in the run.
+ * is still caught and a one-time step anywhere is bounded by the allowance,
+ * and (2) heap growth does not accumulate with turn count: both the fitted
+ * growth and the endpoint growth over the late half of the measured window
+ * stay within settle noise. JavaScriptCore lazy compilation produces
+ * bounded one-time steps at turns that vary by machine; a linear fit over the
+ * whole window is dominated by one such step, while a sustained leak keeps
+ * growing through the late half and fails it. Neither gate can be waived by a
+ * quiet or negative interval elsewhere in the run.
  */
 export function evaluateRetainedGrowth(
   baseline: SettledCheckpoint,
@@ -96,8 +116,11 @@ export function evaluateRetainedGrowth(
   );
   const last = checkpoints[checkpoints.length - 1];
   const retainedBytes = last.heapBytes - baseline.heapBytes;
-  const fittedRunGrowthBytes =
-    leastSquaresSlope(points) * (last.turn - baseline.turn);
+  const late = checkpoints.slice(lateWindowStart(checkpoints.length));
+  const lateStart = late[0];
+  const lateFittedGrowthBytes =
+    leastSquaresSlope(late) * (last.turn - lateStart.turn);
+  const lateEndpointGrowthBytes = last.heapBytes - lateStart.heapBytes;
   const failures: string[] = [];
   checkpoints.forEach((point, index) => {
     if (checkpointDeltas[index] >= RETAINED_ALLOWANCE_BYTES)
@@ -105,9 +128,13 @@ export function evaluateRetainedGrowth(
         `retained ${checkpointDeltas[index]} bytes at turn ${point.turn} exceeds allowance ${RETAINED_ALLOWANCE_BYTES}`,
       );
   });
-  if (fittedRunGrowthBytes > SETTLE_NOISE_BYTES)
+  if (lateFittedGrowthBytes > SETTLE_NOISE_BYTES)
     failures.push(
-      `heap growth scales with turn count: fitted ${Math.round(fittedRunGrowthBytes)} bytes over the run exceeds ${SETTLE_NOISE_BYTES} bytes of settle noise`,
+      `heap growth scales with turn count: fitted ${Math.round(lateFittedGrowthBytes)} bytes over turns ${lateStart.turn} to ${last.turn} exceeds ${SETTLE_NOISE_BYTES} bytes of settle noise`,
+    );
+  if (lateEndpointGrowthBytes > SETTLE_NOISE_BYTES)
+    failures.push(
+      `heap grew ${lateEndpointGrowthBytes} bytes from turn ${lateStart.turn} to ${last.turn}, above ${SETTLE_NOISE_BYTES} bytes of settle noise`,
     );
   return {
     pass: failures.length === 0,
@@ -115,6 +142,7 @@ export function evaluateRetainedGrowth(
     retainedBytes,
     checkpointDeltas,
     intervalGrowth,
-    fittedRunGrowthBytes,
+    lateFittedGrowthBytes,
+    lateEndpointGrowthBytes,
   };
 }
