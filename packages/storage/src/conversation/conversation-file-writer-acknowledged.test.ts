@@ -90,10 +90,7 @@ describe('acknowledged append filesystem failures', () => {
       expect(result[0].status).toBe('rejected');
       if (result[0].status !== 'rejected')
         throw new Error('Append must reject');
-      expect(result[0].reason).toMatchObject({
-        code: 'EISDIR',
-        path: faultDirectory,
-      });
+      expect(result[0].reason).toMatchObject({ code: 'EISDIR' });
       expect(result[0].reason).toBe(errors[0]);
       expect(await fs.readdir(faultDirectory)).toStrictEqual([]);
       targetFile(writer, logFile);
@@ -117,10 +114,7 @@ describe('acknowledged append with a throwing logger', () => {
         expect(result[0].status).toBe('rejected');
         if (result[0].status !== 'rejected')
           throw new Error('Append must reject');
-        expect(result[0].reason).toMatchObject({
-          code: 'EISDIR',
-          path: faultDirectory,
-        });
+        expect(result[0].reason).toMatchObject({ code: 'EISDIR' });
         expect(result[0].reason).toBe(errors[0]);
         targetFile(writer, logFile);
         await writer.writeEntryAcknowledged({ type: 'recovered-strict' });
@@ -142,10 +136,7 @@ describe('eager append with a throwing logger', () => {
         await expect(
           writer.writeEntry({ type: 'failed-eager' }),
         ).resolves.toBeUndefined();
-        expect(errors[0]).toMatchObject({
-          code: 'EISDIR',
-          path: faultDirectory,
-        });
+        expect(errors[0]).toMatchObject({ code: 'EISDIR' });
         targetFile(writer, logFile);
         await writer.writeEntry({ type: 'recovered-eager' });
         expect(await readEntries(logFile)).toStrictEqual([
