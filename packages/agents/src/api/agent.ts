@@ -69,7 +69,8 @@ import type {
   ToolUpdate,
 } from './event-types.js';
 
-import type { AgentMetrics, SessionStats } from './agentMetrics.js';
+import type { SessionStats } from './agentMetrics.js';
+import type { SessionMetricOperations } from '@vybestack/llxprt-code-telemetry';
 export type { SessionStats } from './agentMetrics.js';
 
 export type Unsubscribe = () => void;
@@ -1162,7 +1163,7 @@ export interface Agent {
   readonly auth: AgentAuthControl;
   readonly ide: AgentIdeControl;
   readonly session: AgentSessionControl;
-  readonly metrics: AgentMetrics;
+  readonly metrics: SessionMetricOperations;
   readonly hooks: AgentHookControl;
   readonly policy: AgentPolicyControl;
   /** @plan:PLAN-20260622-COREAPIGAP.P08 @requirement:REQ-003 */

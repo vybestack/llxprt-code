@@ -16,7 +16,10 @@ import {
 } from '@vybestack/llxprt-code-core';
 
 import { writeFileSync } from 'node:fs';
-import { debugLogger } from '@vybestack/llxprt-code-telemetry';
+import {
+  debugLogger,
+  type SessionMetricReads,
+} from '@vybestack/llxprt-code-telemetry';
 import type {
   Agent,
   ActivationPreflight,
@@ -187,7 +190,7 @@ export async function constructAgentWithSpinner(
 /** Register a cleanup hook that writes session metrics to --session-summary. */
 function registerSessionSummaryWriter(
   argv: ParsedCliArgs,
-  metricsSource: Agent['metrics'],
+  metricsSource: SessionMetricReads,
 ): void {
   const summaryPath = argv.sessionSummary;
   if (!summaryPath) {

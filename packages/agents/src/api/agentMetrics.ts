@@ -3,29 +3,11 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type {
-  SessionMetrics,
-  SessionMetricsSnapshot,
-} from '@vybestack/llxprt-code-telemetry';
-
-export interface AgentMetrics {
-  getMetrics(): SessionMetrics;
-  getSessionSnapshot(): SessionMetricsSnapshot;
-  getLastPromptTokenCount(): number;
-  subscribe(
-    listener: (update: {
-      metrics: SessionMetrics;
-      lastPromptTokenCount: number;
-    }) => void,
-  ): () => void;
-  reset(): void;
-  setLastPromptTokenCount(count: number): void;
-  setTokenTrackingMetrics(metrics: SessionMetrics['tokenTracking']): void;
-}
+import type { SessionMetricOperations } from '@vybestack/llxprt-code-telemetry';
 
 import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 
-export function createAgentMetrics(): AgentMetrics {
+export function createAgentMetrics(): SessionMetricOperations {
   return {
     getMetrics: () => uiTelemetryService.getMetrics(),
     getSessionSnapshot: () => uiTelemetryService.getSessionSnapshot(),

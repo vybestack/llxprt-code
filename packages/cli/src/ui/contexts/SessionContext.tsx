@@ -19,8 +19,9 @@ import type {
   SessionMetrics,
   ModelMetrics,
   ToolCallStats,
+  SessionMetricReads,
+  SessionMetricSubscriptions,
 } from '@vybestack/llxprt-code-telemetry';
-import type { Agent } from '@vybestack/llxprt-code-agents';
 
 export enum ToolCallDecision {
   ACCEPT = 'accept',
@@ -342,7 +343,7 @@ const SessionStatsContext = createContext<SessionStatsContextValue | undefined>(
 );
 
 function createInitialSessionStats(
-  metrics: Agent['metrics'],
+  metrics: SessionMetricReads & SessionMetricSubscriptions,
 ): SessionStatsState {
   return {
     sessionId: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -374,7 +375,7 @@ function applyTelemetryUpdate(
 
 function useTelemetryStatsUpdates(
   setStats: React.Dispatch<React.SetStateAction<SessionStatsState>>,
-  source: Agent['metrics'],
+  source: SessionMetricReads & SessionMetricSubscriptions,
 ) {
   useEffect(() => {
     const handleUpdate = ({
@@ -403,7 +404,7 @@ function useTelemetryStatsUpdates(
 
 export const SessionStatsProvider: React.FC<{
   children: React.ReactNode;
-  metrics: Agent['metrics'];
+  metrics: SessionMetricReads & SessionMetricSubscriptions;
 }> = ({ children, metrics }) => {
   const [stats, setStats] = useState<SessionStatsState>(() =>
     createInitialSessionStats(metrics),

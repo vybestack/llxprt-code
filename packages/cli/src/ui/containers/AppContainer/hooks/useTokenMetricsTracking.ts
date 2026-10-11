@@ -1,4 +1,4 @@
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { SessionMetricUpdates } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -37,7 +37,7 @@ export interface TokenMetrics {
 
 interface UseTokenMetricsTrackingOptions {
   uiRuntime: UiRuntime;
-  metrics: Agent['metrics'];
+  metrics: SessionMetricUpdates;
   updateHistoryTokenCount: (count: number) => void;
   recordingIntegrationRef?: React.MutableRefObject<RecordingIntegration | null>;
   recordingOwner?: 'agent' | 'raw';
@@ -192,7 +192,7 @@ function useRecordingSubscription(
 
 function useTokenMetricsPoll(
   runtime: ReturnType<typeof useRuntimeApi>,
-  metricsSource: Agent['metrics'],
+  metricsSource: SessionMetricUpdates,
 ): TokenMetrics {
   const [tokenMetrics, setTokenMetrics] = useState<TokenMetrics>({
     tokensPerMinute: 0,
