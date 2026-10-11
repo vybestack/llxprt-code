@@ -30,7 +30,7 @@ export async function disposeClientAndFiles(
  * Runs cleanup for an operation that already failed and then rethrows the
  * original failure. A cleanup failure is joined to it, never substituted.
  */
-async function rethrowAfterCleanup(
+export async function rethrowAfterCleanup(
   error: unknown,
   cleanup: () => Promise<void>,
   message: string,
@@ -41,6 +41,18 @@ async function rethrowAfterCleanup(
     throw new AggregateError([error, cleanupError], message);
   }
   throw error;
+}
+
+export function rethrowAfterClientCleanup(
+  error: unknown,
+  dispose: () => Promise<void>,
+  release: () => Promise<void>,
+): Promise<never> {
+  return rethrowAfterCleanup(
+    error,
+    () => disposeClientAndFiles({ dispose }, release),
+    'Session client binding cleanup failed',
+  );
 }
 
 /**

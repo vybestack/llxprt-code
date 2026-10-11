@@ -1,5 +1,9 @@
 import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
-import { OwnedClientLedger, finishCleanup } from './session-client-cleanup.js';
+import {
+  OwnedClientLedger,
+  finishCleanup,
+  rethrowAfterClientCleanup,
+} from './session-client-cleanup.js';
 import {
   prepareNewSessionClient,
   prepareDetachedSessionClient,
@@ -91,15 +95,13 @@ export class SessionClientOwner {
     if (result.deferred > 0) await files.waitForScopeCleanup('session', scope);
   }
   private providerFileLifecycle: object | undefined;
-  private cleanupProviderFiles:
-    | ((scopeId: string) => Promise<void>)
-    | undefined;
+  private cleanupProviderFiles?: (scopeId: string) => Promise<void>;
   get providerFiles(): object | undefined {
     return this.providerFileLifecycle;
   }
-  private composeRetryOperations:
-    | ((provider: string) => ProviderRetryOperations)
-    | undefined;
+  private composeRetryOperations?: (
+    provider: string,
+  ) => ProviderRetryOperations;
   bindProviderFiles(
     lifecycle: object,
     composeRetryOperations: (provider: string) => ProviderRetryOperations,
@@ -335,19 +337,11 @@ export class SessionClientOwner {
       try {
         owner.bindCreatedClient(owner.client, owner.runtimeState);
       } catch (error) {
-        const cleanup = await Promise.allSettled([
-          owner.ownedClients.dispose(owner.client),
-          owner.network.dispose(),
-        ]);
-        const failures = cleanup.flatMap((result) =>
-          result.status === 'rejected' ? [result.reason] : [],
+        await rethrowAfterClientCleanup(
+          error,
+          () => owner.ownedClients.dispose(owner.client),
+          () => owner.network.dispose(),
         );
-        if (failures.length > 0)
-          throw new AggregateError(
-            [error, ...failures],
-            'Session client binding cleanup failed',
-          );
-        throw error;
       }
       owner.initialBindingComplete = true;
     }
@@ -680,7 +674,12 @@ export class SessionClientOwner {
       prepared.runtimeState.provider,
       prepared.runtimeState.model,
     );
-    const next = this.createClient(prepared.runtimeState);
+    const next = this.acquireClient(prepared.runtimeState);
+    try {
+      this.bindCreatedClient(next, prepared.runtimeState);
+    } catch (error) {
+      await this.ownedClients.disposeAfterFailure(next, error);
+    }
     try {
       await prepareAgentClientReplacement(
         logger,
@@ -728,18 +727,24 @@ export class SessionClientOwner {
       selectedState.model,
     );
     let candidate: AgentClientContract | undefined;
+    let candidateBound = false;
     const prepared = await prepareProfileClient(
       this.config,
       previous,
       (_config, state) => {
-        candidate = this.createClient(state);
+        candidate = this.acquireClient(state);
+        this.bindCreatedClient(candidate, state);
+        candidateBound = true;
         return candidate;
       },
       selectedState,
       this.contentGeneratorFactory,
     ).catch(async (error: unknown) => {
-      if (candidate !== undefined)
+      if (candidate !== undefined) {
+        if (!candidateBound)
+          await this.ownedClients.disposeAfterFailure(candidate, error);
         await this.ownedClients.releaseFailedReplacement(candidate, error);
+      }
       throw error;
     });
     const ledger = this.ownedClients;
