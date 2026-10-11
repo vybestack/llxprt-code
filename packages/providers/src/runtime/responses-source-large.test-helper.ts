@@ -9,6 +9,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { deserialize } from 'node:v8';
+import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { serializeResponsesPromptEnvelope } from './responses-source-serializer.js';
 
@@ -23,13 +24,6 @@ let peakLive = 0;
 let sampledHeapGrowth = 0;
 let baseline = 0;
 
-async function collect(): Promise<void> {
-  for (let index = 0; index < 8; index++) {
-    await Bun.sleep(1);
-    Bun.gc(true);
-  }
-}
-
 /**
  * JSC can leave a dead multi-megabyte string counted in heapUsed after a
  * collection round and reclaim it in the next one (observed as a ~23 MB step
@@ -43,8 +37,7 @@ const SETTLE_ROUNDS = 3;
 async function settledGrowth(): Promise<number> {
   let growth = Number.POSITIVE_INFINITY;
   for (let round = 0; round < SETTLE_ROUNDS; round++) {
-    await collect();
-    growth = Math.min(growth, process.memoryUsage().heapUsed - baseline);
+    growth = Math.min(growth, (await settledHeap()) - baseline);
   }
   return growth;
 }
@@ -100,13 +93,12 @@ async function warmup(): Promise<void> {
     },
   });
   await owner.dispose();
-  await collect();
-  await collect();
+  await settledHeap();
+  await settledHeap();
 }
 
 await warmup();
-await collect();
-baseline = process.memoryUsage().heapUsed;
+baseline = await settledHeap();
 const prompt = await serializeResponsesPromptEnvelope({
   model: 'gpt-5.6',
   contents: contents(),

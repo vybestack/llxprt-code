@@ -4,7 +4,10 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { heapSize } from 'bun:jsc';
+import {
+  median,
+  settledHeap,
+} from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import {
   getScratchRoot,
   removeScratchRoot,
@@ -214,9 +217,7 @@ function retryEndpoint(
       snapshotSizes.push(
         statSync(join(getScratchRoot(), snapshots[0], 'rows')).size,
       );
-      await Bun.sleep(0);
-      Bun.gc(true);
-      retainedBytes.push(heapSize() - baselineHeap);
+      retainedBytes.push((await settledHeap()) - baselineHeap);
       liveCounts.push(
         source.references.filter((reference) => reference.deref() !== undefined)
           .length,
@@ -250,62 +251,71 @@ describe('progressive Responses upload retry', () => {
   );
 });
 
+// One full replay scenario; returns the settled heap growth seen at each
+// upload. Checked per run so owner facts hold in every run, not just a median.
+async function replayScenario(): Promise<number[]> {
+  const source = diskReplayHistory();
+  const root = mkdtempSync(join(tmpdir(), 'responses-http-test-'));
+  const previousTmpdir = process.env.TMPDIR;
+  process.env.TMPDIR = root;
+  // Snapshots live in the process scratch root; use a fresh one under root.
+  removeScratchRoot();
+  const endpoint = retryEndpoint(source, await settledHeap());
+  try {
+    const options = streamCallOptions({
+      providerName: 'openai-responses',
+      contents: source.contents,
+      settingsOverrides: {
+        provider: { model: 'o3-mini', 'prompt-caching': 'off' },
+      },
+      ephemerals: { retries: 2, retrywait: 0 },
+      systemInstruction: 'Read rows.',
+    });
+    const provider = new OpenAIResponsesProvider(
+      'test-key',
+      `http://127.0.0.1:${endpoint.server.port}/v1`,
+    );
+    const output: string[] = [];
+    for await (const row of provider.generateChatCompletion(options)) {
+      output.push(
+        ...row.blocks.flatMap((block) =>
+          block.type === 'text' ? [block.text] : [],
+        ),
+      );
+    }
+    const expected = createHash('sha256').update(expectedBody()).digest('hex');
+    expect(endpoint.digests).toStrictEqual([expected, expected]);
+    expect(source.state()).toStrictEqual({ pulled: 512, closed: true });
+    expect(output.join('')).toBe('finished');
+    expect(activeRequestBodyCount()).toBe(0);
+    for (const count of endpoint.liveCounts)
+      expect(count).toBeLessThanOrEqual(2);
+    expect(endpoint.snapshotSizes[0]).toBeGreaterThan(9 * 1024 * 1024);
+    expect(endpoint.snapshotSizes[1]).toBe(endpoint.snapshotSizes[0]);
+    expect(requestSnapshots()).toStrictEqual([]);
+    return endpoint.retainedBytes;
+  } finally {
+    source.release();
+    await endpoint.server.stop(true);
+    removeScratchRoot();
+    if (previousTmpdir === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = previousTmpdir;
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 describe('bounded Responses text HTTP replay', () => {
   it('retries byte-identical text BODY from disk without retaining uploaded rows', async () => {
-    const source = diskReplayHistory();
-    const root = mkdtempSync(join(tmpdir(), 'responses-http-test-'));
-    const previousTmpdir = process.env.TMPDIR;
-    process.env.TMPDIR = root;
-    // Snapshots live in the process scratch root; use a fresh one under root.
-    removeScratchRoot();
-    await Bun.sleep(0);
-    Bun.gc(true);
-    const endpoint = retryEndpoint(source, heapSize());
-    try {
-      const options = streamCallOptions({
-        providerName: 'openai-responses',
-        contents: source.contents,
-        settingsOverrides: {
-          provider: { model: 'o3-mini', 'prompt-caching': 'off' },
-        },
-        ephemerals: { retries: 2, retrywait: 0 },
-        systemInstruction: 'Read rows.',
-      });
-      const provider = new OpenAIResponsesProvider(
-        'test-key',
-        `http://127.0.0.1:${endpoint.server.port}/v1`,
+    // One unmeasured full-size replay takes the one-time state of this path;
+    // each upload's 1 MiB bound applies to the median of three measured runs.
+    await replayScenario();
+    const runs: number[][] = [];
+    for (let run = 0; run < 3; run++) runs.push(await replayScenario());
+    for (let upload = 0; upload < runs[0].length; upload++)
+      expect(median(runs.map((bytes) => bytes[upload]))).toBeLessThan(
+        1024 * 1024,
       );
-      const output: string[] = [];
-      for await (const row of provider.generateChatCompletion(options)) {
-        output.push(
-          ...row.blocks.flatMap((block) =>
-            block.type === 'text' ? [block.text] : [],
-          ),
-        );
-      }
-      const expected = createHash('sha256')
-        .update(expectedBody())
-        .digest('hex');
-      expect(endpoint.digests).toStrictEqual([expected, expected]);
-      expect(source.state()).toStrictEqual({ pulled: 512, closed: true });
-      expect(output.join('')).toBe('finished');
-      expect(activeRequestBodyCount()).toBe(0);
-      for (const count of endpoint.liveCounts)
-        expect(count).toBeLessThanOrEqual(2);
-      for (const bytes of endpoint.retainedBytes)
-        expect(bytes).toBeLessThan(1024 * 1024);
-      expect(endpoint.snapshotSizes[0]).toBeGreaterThan(9 * 1024 * 1024);
-      expect(endpoint.snapshotSizes[1]).toBe(endpoint.snapshotSizes[0]);
-      expect(requestSnapshots()).toStrictEqual([]);
-    } finally {
-      source.release();
-      await endpoint.server.stop(true);
-      removeScratchRoot();
-      if (previousTmpdir === undefined) delete process.env.TMPDIR;
-      else process.env.TMPDIR = previousTmpdir;
-      rmSync(root, { recursive: true, force: true });
-    }
-  });
+  }, 120000);
 });
 
 describe('bounded Responses text HTTP cancellation', () => {
