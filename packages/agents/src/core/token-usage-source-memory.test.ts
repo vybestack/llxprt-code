@@ -35,6 +35,18 @@ async function settledReleasingReaders(facts: Census): Promise<number> {
   }
   return bytes;
 }
+// The previously yielded row can outlive the first few collections the same
+// way (the finished pull's continuation drains lazily). A sample point may
+// legitimately see only the current row, so keep collecting while more than
+// one row is reachable, bounded so rows that are genuinely retained (the rows
+// trap holds every one) still report live and fail the gate.
+async function settledReleasingRows(facts: Census): Promise<number> {
+  let bytes = await settled();
+  for (let round = 0; round < 32 && live(facts.rows) > 1; round++) {
+    bytes = await settled();
+  }
+  return bytes;
+}
 function live<T extends object>(references: Array<WeakRef<T>>): number {
   return references.filter((reference) => reference.deref() !== undefined)
     .length;
@@ -121,7 +133,7 @@ class ObservedReader implements AsyncGenerator<IContent, void, unknown> {
   private sample(
     activeTextBytes: number,
   ): Promise<IteratorResult<IContent, void>> {
-    return settled().then((bytes) => {
+    return settledReleasingRows(this.facts).then((bytes) => {
       this.facts.samples.push({
         bytes,
         activeTextBytes,
