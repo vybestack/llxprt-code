@@ -5,6 +5,17 @@
  */
 import ts from 'typescript';
 import {
+  isModuleOwned,
+  isStatic,
+  referencedSymbol,
+  bindingElements,
+  bindingKeys,
+  projectedBindingValue,
+  storageOrigin,
+  rootDeclaration,
+  type StorageDeclaration,
+} from './runtime-state-storage-provenance.js';
+import {
   containerLiteralStorage,
   frozenPrimitiveTable,
   unwrap,
@@ -45,15 +56,6 @@ function mutableStaticField(
   );
 }
 
-function isStatic(node: ts.Node): boolean {
-  return (
-    ts.canHaveModifiers(node) &&
-    !!ts
-      .getModifiers(node)
-      ?.some((modifier) => modifier.kind === ts.SyntaxKind.StaticKeyword)
-  );
-}
-
 function isReadonly(node: ts.Node): boolean {
   return (
     ts.canHaveModifiers(node) &&
@@ -61,26 +63,6 @@ function isReadonly(node: ts.Node): boolean {
       .getModifiers(node)
       ?.some((modifier) => modifier.kind === ts.SyntaxKind.ReadonlyKeyword)
   );
-}
-
-function isImmediateFunction(node: ts.Node): boolean {
-  let parent = node.parent;
-  while (parent && ts.isParenthesizedExpression(parent)) parent = parent.parent;
-  return (
-    !!parent &&
-    ts.isCallExpression(parent) &&
-    unwrap(parent.expression) === node
-  );
-}
-
-function isModuleOwned(node: ts.Node): boolean {
-  let parent = node.parent;
-  while (parent && !ts.isSourceFile(parent)) {
-    if (ts.isFunctionLike(parent) && !isImmediateFunction(parent)) return false;
-    if (ts.isPropertyDeclaration(parent) && !isStatic(parent)) return false;
-    parent = parent.parent;
-  }
-  return true;
 }
 
 /**
@@ -303,13 +285,12 @@ function localFunction(
       ts.isMethodDeclaration(declaration))
   )
     return declaration;
-  if (
-    declaration &&
-    (ts.isVariableDeclaration(declaration) ||
-      ts.isPropertyAssignment(declaration) ||
-      ts.isPropertyDeclaration(declaration)) &&
-    declaration.initializer
-  )
+  if (!declaration) return undefined;
+  const initialized =
+    ts.isVariableDeclaration(declaration) ||
+    ts.isPropertyAssignment(declaration) ||
+    ts.isPropertyDeclaration(declaration);
+  if (initialized && declaration.initializer)
     return localFunction(declaration.initializer, checker, [...seen, value]);
   return undefined;
 }
@@ -332,15 +313,6 @@ function isWithin(node: ts.Node, ancestor: ts.Node): boolean {
     current = current.parent;
   }
   return false;
-}
-
-function referencedSymbol(
-  node: ts.Node,
-  checker: ts.TypeChecker,
-): ts.Symbol | undefined {
-  return ts.isShorthandPropertyAssignment(node.parent)
-    ? checker.getShorthandAssignmentValueSymbol(node.parent)
-    : checker.getSymbolAtLocation(node);
 }
 
 function capturesMutableState(
@@ -475,102 +447,30 @@ function containsMutableConstruction(
   return valueMatches(node, checker, 'mutable');
 }
 
-type StorageDeclaration = ts.VariableDeclaration | ts.PropertyDeclaration;
+type MutationParameter = ts.ParameterDeclaration | ts.BindingElement;
 
-function aliasLike(expression: ts.Expression): boolean {
-  return (
-    ts.isIdentifier(expression) ||
-    ts.isPropertyAccessExpression(expression) ||
-    ts.isElementAccessExpression(expression)
+function parameterArguments(
+  callable: LocalFunction,
+  arguments_: readonly ts.Expression[],
+  checker: ts.TypeChecker,
+): ReadonlyArray<readonly [MutationParameter, ts.Expression]> {
+  return callable.parameters.flatMap(
+    (
+      parameter,
+      index,
+    ): ReadonlyArray<readonly [MutationParameter, ts.Expression]> => {
+      const argument = arguments_[index];
+      if (!argument) return [];
+      return ts.isIdentifier(parameter.name)
+        ? [[parameter, argument]]
+        : bindingElements(parameter.name).map(
+            (element): readonly [MutationParameter, ts.Expression] => [
+              element,
+              projectedBindingValue(argument, bindingKeys(element), checker),
+            ],
+          );
+    },
   );
-}
-
-function storageOrigin(
-  expression: ts.Expression,
-  checker: ts.TypeChecker,
-  seen: readonly ts.Node[] = [],
-): StorageDeclaration | undefined {
-  const value = unwrap(expression);
-  if (seen.includes(value)) return undefined;
-  const path = [...seen, value];
-  const declaration = checker.getSymbolAtLocation(value)?.valueDeclaration;
-  if (
-    declaration &&
-    (ts.isVariableDeclaration(declaration) ||
-      ts.isPropertyDeclaration(declaration))
-  ) {
-    if (declaration.initializer) {
-      const initializer = unwrap(declaration.initializer);
-      if (aliasLike(initializer))
-        return storageOrigin(initializer, checker, path);
-    }
-    return declaration;
-  }
-  const aliased = containerPropertyOrigin(declaration, checker, path);
-  if (aliased) return aliased;
-  if (
-    ts.isPropertyAccessExpression(value) ||
-    ts.isElementAccessExpression(value)
-  )
-    return storageOrigin(value.expression, checker, path);
-  return undefined;
-}
-
-/**
- * A property of an object literal that was initialized from other storage
- * (`{ sessions }`, `{ held: sessions }`) is the same storage, not fresh
- * container state, so writes through the property reach the original owner.
- */
-function containerPropertyOrigin(
-  declaration: ts.Declaration | undefined,
-  checker: ts.TypeChecker,
-  path: readonly ts.Node[],
-): StorageDeclaration | undefined {
-  if (declaration && ts.isShorthandPropertyAssignment(declaration)) {
-    const target =
-      checker.getShorthandAssignmentValueSymbol(declaration)?.valueDeclaration;
-    if (
-      target &&
-      (ts.isVariableDeclaration(target) || ts.isPropertyDeclaration(target))
-    ) {
-      const initializer = target.initializer && unwrap(target.initializer);
-      return initializer && aliasLike(initializer)
-        ? storageOrigin(initializer, checker, path)
-        : target;
-    }
-    return undefined;
-  }
-  if (declaration && ts.isPropertyAssignment(declaration)) {
-    const initializer = unwrap(declaration.initializer);
-    return aliasLike(initializer)
-      ? storageOrigin(initializer, checker, path)
-      : undefined;
-  }
-  return undefined;
-}
-
-function rootDeclaration(
-  expression: ts.Expression,
-  checker: ts.TypeChecker,
-  seen: readonly ts.Node[] = [],
-): ts.Declaration | undefined {
-  let value = unwrap(expression);
-  if (seen.includes(value)) return undefined;
-  while (
-    ts.isPropertyAccessExpression(value) ||
-    ts.isElementAccessExpression(value)
-  )
-    value = unwrap(value.expression);
-  if (!ts.isIdentifier(value)) return undefined;
-  const declaration = referencedSymbol(value, checker)?.valueDeclaration;
-  if (
-    declaration &&
-    ts.isVariableDeclaration(declaration) &&
-    declaration.initializer &&
-    aliasLike(unwrap(declaration.initializer))
-  )
-    return rootDeclaration(declaration.initializer, checker, [...seen, value]);
-  return declaration;
 }
 
 function rebindsOnly(node: ts.Node, target: ts.Expression): boolean {
@@ -579,7 +479,7 @@ function rebindsOnly(node: ts.Node, target: ts.Expression): boolean {
 
 function mutatesParameter(
   callable: LocalFunction,
-  parameter: ts.ParameterDeclaration,
+  parameter: MutationParameter,
   checker: ts.TypeChecker,
   seen: readonly ts.Node[] = [],
 ): boolean {
@@ -601,12 +501,13 @@ function mutatesParameter(
   };
   const passesParameterToMutator = (call: ts.CallExpression): boolean => {
     const inner = localFunction(call.expression, checker);
-    return call.arguments.some(
-      (argument, index) =>
-        !!inner &&
-        inner.parameters[index] !== undefined &&
-        rootDeclaration(argument, checker) === parameter &&
-        mutatesParameter(inner, inner.parameters[index], checker, path),
+    return (
+      !!inner &&
+      parameterArguments(inner, call.arguments, checker).some(
+        ([target, argument]) =>
+          rootDeclaration(argument, checker) === parameter &&
+          mutatesParameter(inner, target, checker, path),
+      )
     );
   };
   return visitBody(callable.body);
@@ -615,20 +516,21 @@ function mutatesParameter(
 function mutatedArgumentStorage(
   call: ts.CallExpression,
   checker: ts.TypeChecker,
-  summaries: Map<ts.ParameterDeclaration, boolean>,
+  summaries: Map<MutationParameter, boolean>,
 ): readonly StorageDeclaration[] {
   const callable = localFunction(call.expression, checker);
   if (!callable) return [];
-  return call.arguments.flatMap((argument, index) => {
-    const parameter = callable.parameters[index];
-    const origin = parameter && storageOrigin(argument, checker);
-    if (!origin) return [];
-    const mutates =
-      summaries.get(parameter) ??
-      mutatesParameter(callable, parameter, checker);
-    summaries.set(parameter, mutates);
-    return mutates ? [origin] : [];
-  });
+  return parameterArguments(callable, call.arguments, checker).flatMap(
+    ([parameter, argument]) => {
+      const origin = storageOrigin(argument, checker);
+      if (!origin) return [];
+      const mutates =
+        summaries.get(parameter) ??
+        mutatesParameter(callable, parameter, checker);
+      summaries.set(parameter, mutates);
+      return mutates ? [origin] : [];
+    },
+  );
 }
 
 function mutationDeclaration(
@@ -761,8 +663,9 @@ function resolvedSource(
  * Dependencies follow checker-resolved function/method symbols, return expressions
  * and positional call arguments, with path-local cycle detection and per-scan
  * parameter mutation summaries. Resolved imports and re-exports reach their
- * implementation bodies. This is not whole-program proof: require, reassigned or
- * destructured aliases, higher-order call targets, construction through caller-
+ * implementation bodies. Storage follows binding projections and local assignment
+ * provenance. This is not whole-program proof: require, higher-order call targets,
+ * construction through caller-
  * supplied parameters and computed mutator names need
  * separate analysis. Without a resolved program the scan is single-source;
  * passing a program whose module resolution covers the scanned files lets ALS
@@ -790,7 +693,7 @@ export function scanRuntimeStateStructure(
     : isolatedSource(filename, source);
   const findings: RuntimeStateFinding[] = [];
   const usedAllowances = new Set<ImmutableTableAllowance>();
-  const mutationSummaries = new Map<ts.ParameterDeclaration, boolean>();
+  const mutationSummaries = new Map<MutationParameter, boolean>();
   function report(
     node: ts.Node,
     kind: RuntimeStateFinding['kind'],

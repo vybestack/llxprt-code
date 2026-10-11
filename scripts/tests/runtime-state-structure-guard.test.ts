@@ -37,6 +37,55 @@ describe('runtime state structure scanner', () => {
     expect(scanRuntimeStateStructure(filename, source)).toEqual([]);
   });
 
+  it.each([
+    'function run() { const { sessions: held } = { sessions }; held.current = 1; }',
+    'function run() { const { nested: { sessions: held } } = { nested: { sessions } }; held.current = 1; }',
+    'function run() { const [held] = [sessions]; held.current = 1; }',
+    'function run() { let held = {}; held = sessions; held.current = 1; }',
+    'function run() { let held = {}; if (condition) held = sessions; held.current = 1; }',
+    'function run() { let held = sessions; if (condition) held = {}; held.current = 1; }',
+    'function run() { const { sessions: held } = { sessions }; fill(held); } function fill(target) { target.current = 1; }',
+    'function fill({ nested: { target } }) { target.current = 1; } function run() { fill({ nested: { target: sessions } }); }',
+  ])(
+    'rejects mutation through destructured or reassigned storage aliases in %s',
+    (body) => {
+      expect(
+        scanRuntimeStateStructure(filename, `const sessions = {}; ${body}`),
+      ).toContainEqual(
+        expect.objectContaining({
+          declaration: 'sessions',
+          kind: 'module-mutation',
+        }),
+      );
+    },
+  );
+
+  it('rejects mutation through a nested binding into module container storage', () => {
+    const source =
+      'const registry = { nested: { state: {} } }; function run() { const { nested: { state: held } } = registry; held.current = 1; }';
+    expect(scanRuntimeStateStructure(filename, source)).toContainEqual(
+      expect.objectContaining({
+        declaration: 'registry',
+        kind: 'module-mutation',
+      }),
+    );
+  });
+
+  it.each([
+    'const sessions = {}; function run() { const { sessions: held } = { sessions }; return held.current; }',
+    'const sessions = {}; function run() { let { sessions: held } = { sessions }; held = {}; held.current = 1; }',
+    'const sessions = {}; function run() { const held = { ...sessions }; held.current = 1; }',
+    'const sessions = {}; function run() { const [held] = [...sessions]; held.current = 1; }',
+    'function run() { const sessions = {}; const { sessions: held } = { sessions }; held.current = 1; }',
+    'function run() { let alias = source(); alias = alias.current; alias.current = 1; }',
+    'const sessions = {}; function fill(target) { target = {}; target.current = 1; } function run() { fill(sessions); }',
+  ])(
+    'permits read-only bindings, fresh copies and local rebinding in %s',
+    (source) => {
+      expect(scanRuntimeStateStructure(filename, source)).toEqual([]);
+    },
+  );
+
   it('detects mutable object storage captured by a returned closure', () => {
     const source = `function make() { const state = {}; return { set(value) { state.current = value; }, get() { return state.current; } }; } const registry = make();`;
     expect(scanRuntimeStateStructure(filename, source)).toContainEqual(
