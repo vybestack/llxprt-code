@@ -20,10 +20,12 @@ import {
 import {
   completePrefix,
   framingSource,
+  readRecordRange,
   type ProjectedJournalOptions,
 } from './projected-journal-source.js';
 
 export type { ProjectedJournalOptions } from './projected-journal-source.js';
+import { locateRewindCut, type RowKeep } from './projected-journal-rewind.js';
 import { PagerReplaceTransaction } from './projected-journal-replace.js';
 import {
   JournalPageFile,
@@ -129,8 +131,13 @@ export class ProjectedJournalCursor {
     }
   }
 
-  private append(items: Iterable<HistoryItem>, end: number): void {
-    let rows = this.groupRows;
+  private append(
+    items: Iterable<HistoryItem>,
+    end: number,
+    firstRows = this.groupRows,
+    fallbackSeq = this.seq,
+  ): void {
+    let rows = firstRows;
     for (const item of items) {
       this.options.signal?.throwIfAborted();
       const identity = item.rowIdentity;
@@ -142,7 +149,7 @@ export class ProjectedJournalCursor {
         kind: 'projected',
         offset: identity.offset,
         length: end - identity.offset,
-        seq: seq ?? this.seq,
+        seq: seq ?? fallbackSeq,
         rows,
         item,
       });
@@ -150,11 +157,11 @@ export class ProjectedJournalCursor {
     }
   }
 
-  private acceptRecord(
+  private async acceptRecord(
     projection: HistoryProjection,
     record: RecordLine,
     previousEnd: number,
-  ): void {
+  ): Promise<void> {
     this.options.counters?.recordDecoded();
     if (REPLACE_RECORD_TYPES.has(record.type)) {
       this.acceptReplaceRecord(projection, record, previousEnd);
@@ -183,7 +190,7 @@ export class ProjectedJournalCursor {
       }
     } else if (record.type === 'rewind') {
       this.closeGroup(projection, previousEnd);
-      this.applyRewind(record);
+      await this.applyRewind(record);
     } else if (record.type === 'compressed') {
       this.closeGroup(projection, previousEnd);
       this.pages.push({
@@ -249,56 +256,66 @@ export class ProjectedJournalCursor {
   /**
    * Applies a rewind's membership to the projected transcript: pages for the
    * removed suffix are dropped, the surviving prefix stays pageable. A cut
-   * that leaves nothing is a full clear and is remembered as the floor.
+   * through a group drops its pages and projects the surviving rows again;
+   * a cut that leaves nothing is a full clear and is remembered as the floor.
    */
-  private applyRewind(record: RecordLine): void {
-    const cut = this.rewindCut(record.payload);
-    this.pages.truncate(cut);
-    this.lowWater = Math.min(this.lowWater, cut);
-    if (cut === 0) this.clearOffset = record.offset;
+  private async applyRewind(record: RecordLine): Promise<void> {
+    const { index, keep } = locateRewindCut(this.pages, record.payload);
+    const group = keep ? this.pages.get(index) : null;
+    this.pages.truncate(index);
+    this.lowWater = Math.min(this.lowWater, index);
+    if (group && keep) await this.reprojectGroup(group, keep);
+    else if (index === 0) this.clearOffset = record.offset;
   }
 
-  /**
-   * First page index the rewind removes. cutSeq names the first removed
-   * chronology marker; without a usable one the count of removed journal rows
-   * decides, as in replay. A rewind with no readable count cannot be
-   * placed and is treated as a full clear.
-   */
-  private rewindCut(payload: Record<string, unknown>): number {
-    const count = payload.itemsRemoved;
-    if (typeof count !== 'number' || !(count >= 0)) return 0;
-    const cutSeq = payload.cutSeq;
-    if (Number.isSafeInteger(cutSeq) && (cutSeq as number) >= 0) {
-      const cut = this.firstPageFromSeq(cutSeq as number);
-      if (cut < this.pages.length) return cut;
+  /** Projects again the rows of a cut-through group that survive the cut. */
+  private async reprojectGroup(
+    first: DisplayJournalEntry,
+    keep: RowKeep,
+  ): Promise<void> {
+    if (first.kind !== 'projected') throw new Error('Cut group has no rows');
+    const end = first.offset + first.length;
+    const projection = this.newProjection();
+    try {
+      const { kept, seq } = await this.feedSurvivors(
+        projection,
+        first.offset,
+        end,
+        keep,
+      );
+      this.append(projection.flush(), end, kept, seq);
+    } finally {
+      projection.close();
     }
-    return this.firstPageByCount(Math.ceil(count));
   }
 
-  private firstPageFromSeq(cutSeq: number): number {
-    let index = this.pages.length;
-    while (index > 0 && !this.survivesCut(this.pages.get(index - 1), cutSeq))
-      index -= 1;
-    return index;
-  }
-
-  /** Compression summaries and rows before the cut marker stay. */
-  private survivesCut(entry: DisplayJournalEntry, cutSeq: number): boolean {
-    return (
-      entry.kind === 'boundary' || (entry.seq !== null && entry.seq < cutSeq)
-    );
-  }
-
-  private firstPageByCount(count: number): number {
-    let index = this.pages.length;
-    let remaining = count;
-    while (index > 0 && remaining > 0) {
-      const entry = this.pages.get(index - 1);
-      if (entry.kind === 'boundary') break;
-      remaining -= entry.rows;
-      index -= 1;
+  private async feedSurvivors(
+    projection: HistoryProjection,
+    from: number,
+    end: number,
+    keep: RowKeep,
+  ): Promise<{ kept: number; seq: number }> {
+    let ordinal = 0;
+    let kept = 0;
+    let seq = this.seq;
+    for await (const record of readRecordRange(
+      this.filePath,
+      this.options,
+      from,
+      end,
+    )) {
+      const content =
+        record.type === 'content' ? record.payload.content : undefined;
+      if (!isContent(content)) continue;
+      this.options.counters?.recordDecoded();
+      if (keep(content, ordinal++)) {
+        kept += 1;
+        const source = { kind: 'journal', offset: record.offset } as const;
+        this.append(projection.accept(content, source), end);
+        if (content.speaker !== 'tool') seq = record.seq;
+      }
     }
-    return index;
+    return { kept, seq };
   }
 
   /** Start of the newest full clear, or null when none cut the whole transcript. */
@@ -408,7 +425,7 @@ export class ProjectedJournalCursor {
       );
       for await (const record of framed) {
         if (record.kind === 'record')
-          this.acceptRecord(projection, record, previousEnd);
+          await this.acceptRecord(projection, record, previousEnd);
         else if (record.kind === 'skipped')
           this.acceptSkipped(projection, record, previousEnd);
         else this.noteOversized(record, from);
