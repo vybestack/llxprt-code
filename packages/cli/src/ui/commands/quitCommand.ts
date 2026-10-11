@@ -6,7 +6,6 @@
 
 import { formatDuration } from '../utils/formatters.js';
 import { CommandKind, type SlashCommand } from './types.js';
-import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 
 export const quitCommand: SlashCommand = {
   name: 'quit',
@@ -21,7 +20,28 @@ export const quitCommand: SlashCommand = {
 
     // getSessionSnapshot() returns a fresh plain object from internal
     // aggregator state on each call, so this is already a snapshot copy.
-    const finalSnapshot = uiTelemetryService.getSessionSnapshot();
+    const { metrics } = context.session.stats;
+    const totals = Object.values(metrics.models).reduce(
+      (sum, model) => ({
+        totalInputTokens: sum.totalInputTokens + model.tokens.prompt,
+        totalOutputTokens: sum.totalOutputTokens + model.tokens.candidates,
+        totalThoughtsTokens: sum.totalThoughtsTokens + model.tokens.thoughts,
+        totalToolTokens: sum.totalToolTokens + model.tokens.tool,
+        totalApiRequests: sum.totalApiRequests + model.api.totalRequests,
+      }),
+      {
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalThoughtsTokens: 0,
+        totalToolTokens: 0,
+        totalApiRequests: 0,
+      },
+    );
+    const finalSnapshot = {
+      ...totals,
+      completeTokensPerMinute: metrics.timing.completeTokensPerMinute,
+      totalToolCalls: metrics.tools.totalCalls,
+    };
     const totalTokens =
       finalSnapshot.totalInputTokens +
       finalSnapshot.totalOutputTokens +

@@ -12,8 +12,10 @@
 
 import type React from 'react';
 import { Box, Text } from 'ink';
-import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
-import { useSessionStats } from '../contexts/SessionContext.js';
+import {
+  type SessionMetrics,
+  useSessionStats,
+} from '../contexts/SessionContext.js';
 import { theme } from '../semantic-colors.js';
 import { computeCachedTokenRatio } from '../utils/computeStats.js';
 import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
@@ -66,9 +68,20 @@ const CacheStatsHeader: React.FC = () => (
   </>
 );
 
+function cacheSnapshot(metrics: SessionMetrics) {
+  const totals = Object.values(metrics.models).reduce(
+    (sum, model) => ({
+      totalCachedTokens: sum.totalCachedTokens + model.tokens.cached,
+      totalInputTokens: sum.totalInputTokens + model.tokens.prompt,
+    }),
+    { totalCachedTokens: 0, totalInputTokens: 0 },
+  );
+  return { ...metrics.cache, ...totals };
+}
+
 export const CacheStatsDisplay: React.FC = () => {
-  useSessionStats();
-  const snap = uiTelemetryService.getSessionSnapshot();
+  const { stats } = useSessionStats();
+  const snap = cacheSnapshot(stats.metrics);
   if (!snap.hasReliableCacheReads && !snap.hasReliableCacheWrites) {
     return (
       <NoStatsBox message="No cache data available. Cache statistics are available for providers that support prompt caching (e.g. Anthropic, OpenAI, Groq, Deepseek, Fireworks, OpenRouter, Qwen)." />

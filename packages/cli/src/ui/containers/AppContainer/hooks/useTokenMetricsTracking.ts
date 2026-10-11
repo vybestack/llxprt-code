@@ -1,3 +1,4 @@
+import type { Agent } from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -17,10 +18,7 @@
 
 import { useEffect, useRef, useMemo, useState } from 'react';
 import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
-import {
-  DebugLogger,
-  uiTelemetryService,
-} from '@vybestack/llxprt-code-telemetry';
+import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { useRuntimeApi } from '../../../contexts/RuntimeContext.js';
 import type { UiRuntime } from '../../../cliUiRuntime.js';
 import {
@@ -39,6 +37,7 @@ export interface TokenMetrics {
 
 interface UseTokenMetricsTrackingOptions {
   uiRuntime: UiRuntime;
+  metrics: Agent['metrics'];
   updateHistoryTokenCount: (count: number) => void;
   recordingIntegrationRef?: React.MutableRefObject<RecordingIntegration | null>;
   recordingOwner?: 'agent' | 'raw';
@@ -193,6 +192,7 @@ function useRecordingSubscription(
 
 function useTokenMetricsPoll(
   runtime: ReturnType<typeof useRuntimeApi>,
+  metricsSource: Agent['metrics'],
 ): TokenMetrics {
   const [tokenMetrics, setTokenMetrics] = useState<TokenMetrics>({
     tokensPerMinute: 0,
@@ -229,7 +229,7 @@ function useTokenMetricsPoll(
         tokensPerSecond: snapshot.tokensPerSecond,
       });
 
-      uiTelemetryService.setTokenTrackingMetrics({
+      metricsSource.setTokenTrackingMetrics({
         tokensPerMinute: snapshot.tokensPerMinute,
         throttleWaitTimeMs: snapshot.throttleWaitTimeMs,
         timeToFirstToken: snapshot.timeToFirstToken,
@@ -244,12 +244,13 @@ function useTokenMetricsPoll(
     const interval = setInterval(updateTokenMetrics, 1000);
 
     return () => clearInterval(interval);
-  }, [runtime]);
+  }, [runtime, metricsSource]);
 
   return tokenMetrics;
 }
 
 export function useTokenMetricsTracking({
+  metrics,
   uiRuntime,
   updateHistoryTokenCount,
   recordingIntegrationRef,
@@ -268,7 +269,7 @@ export function useTokenMetricsTracking({
     tokenLogger,
     recordingOwner,
   );
-  const tokenMetrics = useTokenMetricsPoll(runtime);
+  const tokenMetrics = useTokenMetricsPoll(runtime, metrics);
 
   return { tokenMetrics };
 }

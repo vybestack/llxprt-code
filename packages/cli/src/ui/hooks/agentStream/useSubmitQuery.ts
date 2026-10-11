@@ -319,6 +319,8 @@ function useProcessAgentEvent(
       const result = dispatchAgentEvent(
         event,
         {
+          setLastPromptTokenCount:
+            latestDeps.current.agent.metrics.setLastPromptTokenCount,
           addItem: latestDeps.current.addItem,
           sanitizeContent: latestDeps.current.sanitizeContent,
           flushPendingHistoryItem: latestDeps.current.flushPendingHistoryItem,

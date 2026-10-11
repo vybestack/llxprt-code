@@ -1,3 +1,4 @@
+import { createAgentMetrics } from './agentMetrics.js';
 import { AuxiliaryWork } from '../core/auxiliary-work.js';
 /**
  * @license
@@ -940,11 +941,10 @@ export class AgentImpl implements Agent {
     readonly promptId?: string;
   }): Promise<CompressionResult> {
     if (!this.isProviderReady()) throw new Error(UNCONFIGURED_AGENT_MESSAGE);
-    const promptId = opts?.promptId ?? `compress-${Date.now()}`;
     // Ensure the chat is initialized before accessing it: setHistory can run
     // before the first turn (startChat is otherwise lazy on first turn).
     return executeHookCompression(
-      promptId,
+      opts?.promptId ?? `compress-${Date.now()}`,
       () => this.restoreChatVisibility(),
       () => this.deps.resolveClient().getChat(),
       this.session,
@@ -961,6 +961,8 @@ export class AgentImpl implements Agent {
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
+  readonly metrics = createAgentMetrics();
+
   readonly getStats = (): SessionStats =>
     projectSessionStats(this.historyService);
 

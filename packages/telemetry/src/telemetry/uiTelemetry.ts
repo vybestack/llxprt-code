@@ -237,6 +237,18 @@ export class UiTelemetryService extends EventEmitter {
     }
   }
 
+  subscribe(
+    listener: (update: {
+      metrics: SessionMetrics;
+      lastPromptTokenCount: number;
+    }) => void,
+  ): () => void {
+    this.on('update', listener);
+    return () => {
+      this.off('update', listener);
+    };
+  }
+
   getMetrics(): SessionMetrics {
     return this.#metrics;
   }

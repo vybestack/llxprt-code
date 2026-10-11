@@ -302,6 +302,7 @@ async function constructForegroundAgentAndDispatch(
     policyOwner,
     oauthManager,
     providerFileLifecycle,
+    argv,
   );
   await connectIdeClientIfEnabled(agent.ide);
 

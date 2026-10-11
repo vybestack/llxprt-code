@@ -39,10 +39,7 @@ import { defaultBrowserLauncher } from '@vybestack/llxprt-code-mcp/host/hostServ
 
 import { McpRuntimeOwner } from '@vybestack/llxprt-code-agents';
 
-import {
-  uiTelemetryService,
-  debugLogger,
-} from '@vybestack/llxprt-code-telemetry';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   fromConfig,
   type Agent,
@@ -438,7 +435,7 @@ async function processQuery(
         ),
     },
     options.startTime,
-    () => uiTelemetryService.getMetrics(),
+    () => agent.metrics.getMetrics(),
   );
 }
 

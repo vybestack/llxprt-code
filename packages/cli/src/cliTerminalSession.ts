@@ -16,10 +16,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 
 import { writeFileSync } from 'node:fs';
-import {
-  uiTelemetryService,
-  debugLogger,
-} from '@vybestack/llxprt-code-telemetry';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type {
   Agent,
   ActivationPreflight,
@@ -140,6 +137,7 @@ export async function constructAgentWithSpinner(
   policyOwner?: RuntimePolicyOwner,
   oauthManager?: OAuthManager,
   providerFileLifecycle?: ProviderFileLifecycle,
+  argv?: ParsedCliArgs,
 ): Promise<Agent> {
   const mcpServers = config.getMcpServers();
   const mcpServersCount = mcpServers ? Object.keys(mcpServers).length : 0;
@@ -167,6 +165,7 @@ export async function constructAgentWithSpinner(
       oauthManager,
       providerFileLifecycle,
     });
+    if (argv) registerSessionSummaryWriter(argv, agent.metrics);
     registerDynamicToolSettings(agent.tools);
     registerShellJobShutdownNotice(() =>
       agent.tasks
@@ -186,13 +185,16 @@ export async function constructAgentWithSpinner(
 }
 
 /** Register a cleanup hook that writes session metrics to --session-summary. */
-function registerSessionSummaryWriter(argv: ParsedCliArgs): void {
+function registerSessionSummaryWriter(
+  argv: ParsedCliArgs,
+  metricsSource: Agent['metrics'],
+): void {
   const summaryPath = argv.sessionSummary;
   if (!summaryPath) {
     return;
   }
   registerCleanup(() => {
-    const metrics = uiTelemetryService.getMetrics();
+    const metrics = metricsSource.getMetrics();
     writeFileSync(
       summaryPath,
       JSON.stringify({ sessionMetrics: metrics }, null, 2),
@@ -222,7 +224,7 @@ function patchConsoleForRun(config: Config): void {
 export async function prepareTerminalSession(
   config: Config,
   settings: LoadedSettings,
-  argv: ParsedCliArgs,
+  _argv: ParsedCliArgs,
 ): Promise<void> {
   registerShellJobShutdownNotice(() => []);
   const wasRaw = process.stdin.isRaw;
@@ -233,7 +235,6 @@ export async function prepareTerminalSession(
 
   await setupTerminalAndTheme(config, settings);
 
-  registerSessionSummaryWriter(argv);
   patchConsoleForRun(config);
 }
 

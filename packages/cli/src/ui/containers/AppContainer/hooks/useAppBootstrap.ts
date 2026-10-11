@@ -270,6 +270,7 @@ function useBootstrapEvents(
   });
   const { stats: sessionStats, updateHistoryTokenCount } = useSessionStats();
   const { tokenMetrics } = useTokenMetricsTracking({
+    metrics: props.agent.metrics,
     uiRuntime,
     updateHistoryTokenCount,
     recordingIntegrationRef,
