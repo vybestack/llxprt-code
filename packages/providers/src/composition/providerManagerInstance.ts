@@ -389,6 +389,14 @@ function resolveOpenaiSettings(
   const openaiBaseUrl = resolveOpenaiBaseUrl(ephemeralBaseUrl, providerBaseUrl);
 
   const openaiProviderConfig: IProviderConfig = {
+    googleAuthDefaults: Object.freeze({
+      GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,
+      GOOGLE_CLOUD_LOCATION: process.env.GOOGLE_CLOUD_LOCATION,
+      GOOGLE_GENAI_USE_VERTEXAI: process.env.GOOGLE_GENAI_USE_VERTEXAI,
+      GOOGLE_APPLICATION_CREDENTIALS:
+        process.env.GOOGLE_APPLICATION_CREDENTIALS,
+      GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
+    }),
     enableTextToolCallParsing:
       (settingsData.enableTextToolCallParsing as boolean | undefined) ?? false,
     textToolCallModels:

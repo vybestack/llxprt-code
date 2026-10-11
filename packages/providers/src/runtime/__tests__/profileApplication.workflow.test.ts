@@ -112,7 +112,7 @@ describe('Profile cascade workflow at the owner', () => {
     }
   });
 
-  it('sets GCP project and location as ephemerals and environment variables', async () => {
+  it('sets GCP project and location as owner ephemerals without changing the environment', async () => {
     await owner().application.applySnapshot(
       standardProfile({
         GOOGLE_CLOUD_PROJECT: 'my-project',
@@ -124,7 +124,7 @@ describe('Profile cascade workflow at the owner', () => {
       GOOGLE_CLOUD_LOCATION: 'us-central1',
     })) {
       expect(owner().settingsOwner.readNamedParameter(key)).toBe(value);
-      expect(process.env[key]).toBe(value);
+      expect(process.env[key]).not.toBe(value);
     }
   });
 
@@ -204,8 +204,12 @@ describe('Profile cascade workflow at the owner', () => {
     expect(owner().settingsOwner.readNamedParameter('base-url')).toBe(
       'https://example.invalid',
     );
-    expect(process.env.GOOGLE_CLOUD_PROJECT).toBe('project');
-    expect(process.env.GOOGLE_CLOUD_LOCATION).toBe('location');
+    expect(
+      owner().settingsOwner.readNamedParameter('GOOGLE_CLOUD_PROJECT'),
+    ).toBe('project');
+    expect(
+      owner().settingsOwner.readNamedParameter('GOOGLE_CLOUD_LOCATION'),
+    ).toBe('location');
   });
 
   it('clears old ephemerals omitted from the next profile', async () => {
