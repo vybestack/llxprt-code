@@ -48,7 +48,10 @@ import {
   applyRetryTemperature,
   chunkHasVisibleOutput,
 } from './turnAbortHelpers.js';
-import { withReportedUsage } from './streamRequestHelpers.js';
+import {
+  turnSystemInstruction,
+  withReportedUsage,
+} from './streamRequestHelpers.js';
 
 import {
   AgentExecutionStoppedError,
@@ -586,9 +589,15 @@ export class TurnProcessor {
             runtimeContext,
             signal ?? new AbortController().signal,
             requestParams.config?.providerRequestContext,
+            turnSystemInstruction(requestParams, this.generationConfig),
           ),
         onPrepared: (prepared) =>
-          this._recordPreparedSend(prepared, prompt_id, toolSelection.tools),
+          this._recordPreparedSend(
+            prepared,
+            prompt_id,
+            toolSelection.tools,
+            turnSystemInstruction(requestParams, this.generationConfig),
+          ),
         attempt: (prepared, attemptIndex) => {
           // Recorded on the instance rather than threaded as a tenth parameter;
           // `_syncTokenCounts` reads it when the turn is recorded.
@@ -620,6 +629,7 @@ export class TurnProcessor {
     prepared: PreparedSourcePromptEnvelopeSend,
     promptId: string,
     tools: ToolDeclaration[] | undefined,
+    systemInstruction: ChatSessionConfig['systemInstruction'],
   ): Promise<void> {
     this.currentPromptEnvelopeEstimate = prepared.estimate;
     await this.runtimeContext.telemetry.logApiRequest({
@@ -638,7 +648,7 @@ export class TurnProcessor {
       historyService: this.historyService,
       requestRows: prepared.source,
       tools,
-      systemInstruction: this.generationConfig.systemInstruction,
+      systemInstruction,
       turnId: this.currentTurnId,
     });
   }
@@ -702,6 +712,7 @@ export class TurnProcessor {
     runtimeContext: ProviderRuntimeContext,
     timeoutSignal: AbortSignal,
     requestContext: Record<string, unknown> | undefined,
+    systemInstruction: ChatSessionConfig['systemInstruction'],
   ): GenerateChatOptions {
     return buildProviderChatOptions(
       requestContents,
@@ -711,7 +722,7 @@ export class TurnProcessor {
         signal: timeoutSignal,
       } as GenerateChatOptions['invocation'],
       requestContext,
-      this.generationConfig.systemInstruction,
+      systemInstruction,
       this.generationConfig.systemPromptAssembler,
     );
   }

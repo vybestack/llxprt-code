@@ -622,11 +622,13 @@ export class ChatSession {
    * {@link ChatSession.generationConfig.systemInstruction} and recomputes the
    * base token offset. This guarantees the rendered model name matches
    * `body.model` on the wire even after a mid-session `/model` change
-   * (issue #3136). No-op when no assembler was injected.
+   * (issue #3136). Returns the prompt resolved for this turn so the turn can
+   * transmit it even after a later turn overwrites the shared copy. No-op
+   * (returns undefined) when no assembler was injected.
    */
-  private async _resolveSystemPromptForTurn(): Promise<void> {
+  private async _resolveSystemPromptForTurn(): Promise<string | undefined> {
     if (!this.systemPromptAssembler) {
-      return;
+      return undefined;
     }
     const config = this.runtimeContext.providerRuntime.config;
     const model = config
@@ -642,6 +644,7 @@ export class ChatSession {
       model,
     );
     this.historyService.setBaseTokenOffset(tokens);
+    return systemInstruction;
   }
 
   /**
@@ -656,9 +659,15 @@ export class ChatSession {
    * second overwriting the first, and the first turn would then transmit the
    * second turn's prompt — defeating the per-turn model guarantee this exists
    * to provide.
+   *
+   * The send receives the params carrying the prompt resolved for ITS turn.
+   * Resolution is serialized but the send is not, so by the time a send builds
+   * its request a later turn may already have replaced the shared
+   * `generationConfig.systemInstruction`; the send must read its own copy.
    */
   private async _withResolvedSystemPrompt<T>(
-    send: () => Promise<T>,
+    params: SendMessageParams,
+    send: (turnParams: SendMessageParams) => Promise<T>,
   ): Promise<T> {
     // Only the RESOLUTION is serialized, never the send. Concurrent sends are
     // intended behavior (see chatSession.runtime.timeout.test.ts: "two
@@ -677,16 +686,20 @@ export class ChatSession {
       () => undefined,
       () => undefined,
     );
-    await resolved;
-    return send();
+    const systemInstruction = await resolved;
+    return send(
+      systemInstruction === undefined
+        ? params
+        : { ...params, config: { ...params.config, systemInstruction } },
+    );
   }
 
   async sendMessage(
     params: SendMessageParams,
     prompt_id: string,
   ): Promise<ModelOutput> {
-    return this._withResolvedSystemPrompt(() =>
-      this.turnProcessor.sendMessage(params, prompt_id, () =>
+    return this._withResolvedSystemPrompt(params, (turnParams) =>
+      this.turnProcessor.sendMessage(turnParams, prompt_id, () =>
         this._beginSemanticMediaPurge(params.config?.abortSignal),
       ),
     );
@@ -696,8 +709,8 @@ export class ChatSession {
     params: SendMessageParams,
     prompt_id: string,
   ): Promise<AsyncGenerator<StreamEvent>> {
-    return this._withResolvedSystemPrompt(() =>
-      this.turnProcessor.sendMessageStream(params, prompt_id, () =>
+    return this._withResolvedSystemPrompt(params, (turnParams) =>
+      this.turnProcessor.sendMessageStream(turnParams, prompt_id, () =>
         this._beginSemanticMediaPurge(params.config?.abortSignal),
       ),
     );
@@ -707,8 +720,8 @@ export class ChatSession {
     params: SendMessageParams,
     prompt_id: string,
   ): Promise<ModelOutput> {
-    return this._withResolvedSystemPrompt(() =>
-      this.directMessageProcessor.generateDirectMessage(params, prompt_id),
+    return this._withResolvedSystemPrompt(params, (turnParams) =>
+      this.directMessageProcessor.generateDirectMessage(turnParams, prompt_id),
     );
   }
 

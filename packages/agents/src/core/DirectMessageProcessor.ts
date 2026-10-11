@@ -37,6 +37,7 @@ import {
   resolveUserMemory,
   applyRequestModifications,
   extractSystemInstructionText,
+  turnSystemInstruction,
 } from './streamRequestHelpers.js';
 import { isSchemaDepthError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import {
@@ -452,6 +453,7 @@ export class DirectMessageProcessor {
       runtimeContext,
       timeoutSignal,
       params.config?.providerRequestContext,
+      turnSystemInstruction(params, this.generationConfig),
     );
     const { lastResponse, aggregatedText } = await this._consumeStreamResponse(
       streamResponse,
@@ -493,6 +495,7 @@ export class DirectMessageProcessor {
     runtimeContext: ProviderRuntimeContext,
     timeoutSignal: AbortSignal,
     requestContext: Record<string, unknown> | undefined,
+    systemInstruction: ChatSessionConfig['systemInstruction'],
   ): AsyncIterable<IContent> {
     this.logger.debug(
       () =>
@@ -527,9 +530,7 @@ export class DirectMessageProcessor {
         _retryRequestContext: requestContext,
       },
       userMemory: resolveUserMemory(runtimeContext.config),
-      systemInstruction: extractSystemInstructionText(
-        this.generationConfig.systemInstruction,
-      ),
+      systemInstruction: extractSystemInstructionText(systemInstruction),
       systemPromptAssembler: this.generationConfig.systemPromptAssembler,
     });
   }

@@ -50,6 +50,7 @@ import {
   contentForTelemetryPreservingUsage,
   resolveUserMemory,
   extractSystemInstructionText,
+  turnSystemInstruction,
   type PreparedRequest,
 } from './streamRequestHelpers.js';
 import { buildAndSendStreamRequest } from './streamprocessor-request.js';
@@ -355,7 +356,10 @@ export class StreamProcessor {
           historyService: this.historyService,
           requestRows: prepared.source,
           tools,
-          systemInstruction: this.generationConfig.systemInstruction,
+          systemInstruction: turnSystemInstruction(
+            params,
+            this.generationConfig,
+          ),
           turnId: this.turnIdByPromptId.get(promptId) ?? null,
           signal,
         }),
@@ -404,7 +408,7 @@ export class StreamProcessor {
       },
       userMemory,
       systemInstruction: extractSystemInstructionText(
-        this.generationConfig.systemInstruction,
+        turnSystemInstruction(params, this.generationConfig),
       ),
       systemPromptAssembler: this.generationConfig.systemPromptAssembler,
     };

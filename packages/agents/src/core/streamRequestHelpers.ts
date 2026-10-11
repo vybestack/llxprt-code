@@ -23,7 +23,7 @@ import type {
   IContent,
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { SendMessageParams } from './chatSession.js';
+import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import { sanitizeProviderContentForSerialization } from '@vybestack/llxprt-code-core/services/history/historyCloneUtils.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -350,6 +350,18 @@ export function resolveUserMemory(
     return config.getUserMemory();
   }
   return undefined;
+}
+
+/**
+ * The system instruction one turn transmits: the one ChatSession resolved for
+ * this turn and carried on the call, else the session's own. Reading the
+ * call's copy keeps a turn from sending a prompt a concurrent turn resolved.
+ */
+export function turnSystemInstruction(
+  params: SendMessageParams,
+  session: Pick<ChatSessionConfig, 'systemInstruction'>,
+): ChatSessionConfig['systemInstruction'] {
+  return params.config?.systemInstruction ?? session.systemInstruction;
 }
 
 const systemInstructionLogger = new DebugLogger(
