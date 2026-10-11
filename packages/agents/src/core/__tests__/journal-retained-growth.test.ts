@@ -8,7 +8,9 @@ import {
   RETAINED_ALLOWANCE_BYTES,
   SETTLE_NOISE_BYTES,
   evaluateRetainedGrowth,
+  hasConverged,
 } from './support/journal-retained-growth-predicate.js';
+import { CI_WARMUP_HEAP_READINGS } from './support/journal-retained-growth-ci-series.js';
 
 const checkpointSchema = z.object({
   turn: z.number(),
@@ -178,5 +180,56 @@ describe('repeated-turn retained growth over the real journal-backed send path',
     ]);
     expect(creeping.pass).toBe(false);
     expect(creeping.retainedBytes).toBeLessThan(RETAINED_ALLOWANCE_BYTES);
+  });
+
+  describe('warm-up convergence', () => {
+    const SAMPLE_EVERY_TURNS = 5;
+    const RULE_FLOOR_TURNS = 550;
+
+    /** First sampled turn at or after turn 550 where the rule holds. */
+    function firstConvergedTurn(readings: readonly number[]): number | null {
+      for (let count = 1; count <= readings.length; count++) {
+        const turn = count * SAMPLE_EVERY_TURNS;
+        if (turn >= RULE_FLOOR_TURNS && hasConverged(readings.slice(0, count)))
+          return turn;
+      }
+      return null;
+    }
+
+    it('converges on the CI series despite isolated dips, by turn 600', () => {
+      const turn = firstConvergedTurn(CI_WARMUP_HEAP_READINGS);
+      expect(turn).not.toBeNull();
+      expect(turn).toBeLessThanOrEqual(600);
+    });
+
+    it('does not converge while the heap keeps rising', () => {
+      const rising = Array.from(
+        { length: 150 },
+        (_, index) => 100_000_000 + index * 100_000,
+      );
+      expect(firstConvergedTurn(rising)).toBeNull();
+    });
+
+    it('does not converge on a slow climb whose neighbouring steps are each under the noise', () => {
+      // Each window median moves 0.75x the noise from the last, 1.5x over three.
+      const step = Math.floor((SETTLE_NOISE_BYTES * 0.75) / 9);
+      const climbing = Array.from(
+        { length: 150 },
+        (_, index) => 100_000_000 + index * step,
+      );
+      expect(firstConvergedTurn(climbing)).toBeNull();
+    });
+
+    it('converges on a flat series with periodic dips', () => {
+      const dipped = Array.from({ length: 150 }, (_, index) =>
+        index % 13 === 6 ? 170_000_000 - 1_500_000 : 170_000_000,
+      );
+      expect(firstConvergedTurn(dipped)).toBe(RULE_FLOOR_TURNS);
+    });
+
+    it('needs three full windows of readings', () => {
+      expect(hasConverged(Array(26).fill(170_000_000))).toBe(false);
+      expect(hasConverged(Array(27).fill(170_000_000))).toBe(true);
+    });
   });
 });
