@@ -1,3 +1,4 @@
+import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
@@ -136,6 +137,7 @@ export class SessionToolCatalogOwner {
     subagents: SubagentDefinitionReads = workspace.subagentDefinitions,
     hookOwner?: SessionHookOwner,
     telemetry?: RootTelemetry,
+    requestInteractiveAuth?: InteractiveAuthPromptOperation,
   ): Promise<void> {
     this.admission.assertOpen();
     this.workspaceStopped = () => workspace.isStopped();
@@ -163,6 +165,7 @@ export class SessionToolCatalogOwner {
             workspaceTrust: workspace.trust,
             instructions,
             createChildSettings,
+            requestInteractiveAuth,
             telemetry,
             readTaskPolicy,
             readRunPolicy,

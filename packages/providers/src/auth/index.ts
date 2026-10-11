@@ -78,7 +78,6 @@ export {
   InteractiveAuthUnavailableError,
   InteractiveAuthHostUnavailableError,
   InteractiveAuthCancelledError,
-  interactiveAuthCoordinator,
 } from './interactive-auth-coordinator.js';
 export type {
   InteractiveAuthChallenge,

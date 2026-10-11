@@ -206,6 +206,9 @@ export async function createIsolatedSessionClient(
     undefined,
     messageBus,
   );
+  client.bindInteractiveAuthRequests((prompt) =>
+    handle.oauthManager.requestInteractiveAuth(prompt),
+  );
   assembleSessionImages(
     client,
     handle.config.getTargetDir(),

@@ -12,6 +12,8 @@ const PRESERVED_PROFILE_EPHEMERALS = Object.freeze([
   'base-url',
   'GOOGLE_CLOUD_PROJECT',
   'GOOGLE_CLOUD_LOCATION',
+  'GOOGLE_GENAI_USE_VERTEXAI',
+  'GOOGLE_APPLICATION_CREDENTIALS',
   'reasoning.enabled',
   'reasoning.budgetTokens',
   'reasoning.stripFromContext',

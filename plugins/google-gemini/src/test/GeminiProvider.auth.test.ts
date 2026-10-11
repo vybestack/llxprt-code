@@ -88,7 +88,14 @@ function createProviderWithRuntimeSettings(): GeminiProvider {
   const provider = new GeminiProvider(
     undefined,
     undefined,
-    undefined,
+    {
+      googleAuthDefaults: {
+        GOOGLE_CLOUD_PROJECT: process.env.GOOGLE_CLOUD_PROJECT,
+        GOOGLE_CLOUD_LOCATION: process.env.GOOGLE_CLOUD_LOCATION,
+        GOOGLE_APPLICATION_CREDENTIALS:
+          process.env.GOOGLE_APPLICATION_CREDENTIALS,
+      },
+    },
     injectedClientFactory,
   );
   provider.setRuntimeSettingsService(
@@ -247,7 +254,7 @@ describe('GeminiProvider Authentication', () => {
     });
   });
 
-  it('falls back to env vars when settings service returns no Vertex AI config', async () => {
+  it('uses captured host defaults when settings service returns no Vertex AI config', async () => {
     process.env.GOOGLE_CLOUD_PROJECT = 'env-project';
     process.env.GOOGLE_CLOUD_LOCATION = 'us-central1';
     const provider = createProviderWithRuntimeSettings();
@@ -304,6 +311,7 @@ describe('GeminiProvider Authentication', () => {
     expect(googleGenAIConstructor).toHaveBeenCalledWith({
       apiKey: 'USE_VERTEX_AI',
       vertexai: true,
+      credentialsFile: '/path/to/credentials.json',
       httpOptions: { headers: {} },
     });
   });

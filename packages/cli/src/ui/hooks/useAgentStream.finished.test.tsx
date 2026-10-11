@@ -219,11 +219,12 @@ describe('useAgentStream', () => {
       onAuthError = () => {},
     } = options;
 
-    return renderHook(async () =>
+    const agentForHook1 = await createFakeAgentFromMockClient(
+      new MockedAgentClientClass(mockConfig),
+    );
+    return renderHook(() =>
       useAgentStream(
-        await createFakeAgentFromMockClient(
-          new MockedAgentClientClass(mockConfig),
-        ),
+        agentForHook1,
         [],
         mockAddItem,
         createStreamRuntimeForTest(mockConfig, {
@@ -264,11 +265,12 @@ describe('useAgentStream', () => {
         })(),
       );
 
-      const { result } = renderHook(async () =>
+      const agentForHook2 = await createFakeAgentFromMockClient(
+        new MockedAgentClientClass(mockConfig),
+      );
+      const { result } = renderHook(() =>
         useAgentStream(
-          await createFakeAgentFromMockClient(
-            new MockedAgentClientClass(mockConfig),
-          ),
+          agentForHook2,
           [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig, {
@@ -466,11 +468,12 @@ describe('useAgentStream', () => {
         })(),
       );
 
-      const { result } = renderHook(async () =>
+      const agentForHook3 = await createFakeAgentFromMockClient(
+        new MockedAgentClientClass(mockConfig),
+      );
+      const { result } = renderHook(() =>
         useAgentStream(
-          await createFakeAgentFromMockClient(
-            new MockedAgentClientClass(mockConfig),
-          ),
+          agentForHook3,
           [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig, {
@@ -702,11 +705,12 @@ describe('useAgentStream', () => {
       ];
     });
 
-    const { result } = renderHook(async () =>
+    const agentForHook4 = await createFakeAgentFromMockClient(
+      new MockedAgentClientClass(mockConfig),
+    );
+    const { result } = renderHook(() =>
       useAgentStream(
-        await createFakeAgentFromMockClient(
-          new MockedAgentClientClass(mockConfig),
-        ),
+        agentForHook4,
         [],
         mockAddItem,
         createStreamRuntimeForTest(mockConfig, {

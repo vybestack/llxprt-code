@@ -255,7 +255,6 @@ async function wireAuthBeforeSwitch(
   const gcpProject = getStringValue(ephemeralSettings, 'GOOGLE_CLOUD_PROJECT');
   if (gcpProject) {
     setEphemeralSetting('GOOGLE_CLOUD_PROJECT', gcpProject);
-    process.env.GOOGLE_CLOUD_PROJECT = gcpProject;
   }
 
   const gcpLocation = getStringValue(
@@ -264,7 +263,14 @@ async function wireAuthBeforeSwitch(
   );
   if (gcpLocation) {
     setEphemeralSetting('GOOGLE_CLOUD_LOCATION', gcpLocation);
-    process.env.GOOGLE_CLOUD_LOCATION = gcpLocation;
+  }
+
+  for (const key of [
+    'GOOGLE_GENAI_USE_VERTEXAI',
+    'GOOGLE_APPLICATION_CREDENTIALS',
+  ]) {
+    if (ephemeralSettings[key] !== undefined)
+      setEphemeralSetting(key, ephemeralSettings[key]);
   }
 
   return { authKeyApplied, resolvedAuthKeyfilePath, authKeyNameApplied };
@@ -277,6 +283,8 @@ const PRE_APPLIED_EPHEMERAL_KEYS: readonly string[] = Object.freeze([
   'base-url',
   'GOOGLE_CLOUD_PROJECT',
   'GOOGLE_CLOUD_LOCATION',
+  'GOOGLE_GENAI_USE_VERTEXAI',
+  'GOOGLE_APPLICATION_CREDENTIALS',
 ]);
 
 function applyNonAuthEphemerals(

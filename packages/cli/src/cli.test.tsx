@@ -333,7 +333,7 @@ describe('cli.tsx main function', () => {
       throw new FatalConfigError('Test settings error');
     });
 
-    await expect(await main()).rejects.toThrow(FatalConfigError);
+    await expect(main()).rejects.toThrow(FatalConfigError);
   });
 
   it('should show help even when settings have config errors (--help)', async () => {
@@ -351,7 +351,7 @@ describe('cli.tsx main function', () => {
     });
 
     try {
-      await expect(await main()).rejects.toThrow(MockProcessExitError);
+      await expect(main()).rejects.toThrow(MockProcessExitError);
       expect(exitSpy).toHaveBeenCalledWith(0);
     } finally {
       process.argv = originalArgv;
@@ -378,7 +378,7 @@ describe('cli.tsx main function', () => {
     });
 
     try {
-      await expect(await main()).rejects.toThrow(MockProcessExitError);
+      await expect(main()).rejects.toThrow(MockProcessExitError);
       expect(exitSpy).toHaveBeenCalledWith(0);
     } finally {
       process.argv = originalArgv;
@@ -403,7 +403,7 @@ describe('cli.tsx main function', () => {
     mockWriteToStdout.mockClear();
 
     try {
-      await expect(await main()).rejects.toThrow(MockProcessExitError);
+      await expect(main()).rejects.toThrow(MockProcessExitError);
       expect(mockWriteToStdout).toHaveBeenCalledWith(`1.2.3
 `);
       expect(exitSpy).toHaveBeenCalledWith(0);
@@ -429,7 +429,7 @@ describe('cli.tsx main function', () => {
     mockWriteToStdout.mockClear();
 
     try {
-      await expect(await main()).rejects.toThrow(MockProcessExitError);
+      await expect(main()).rejects.toThrow(MockProcessExitError);
       expect(mockWriteToStdout).toHaveBeenCalledWith(`1.2.3
 `);
       expect(exitSpy).toHaveBeenCalledWith(0);

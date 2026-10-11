@@ -14,7 +14,7 @@ import {
   InteractiveAuthCancelledError,
   InteractiveAuthError,
   InteractiveAuthUnavailableError,
-  interactiveAuthCoordinator,
+  InteractiveAuthCoordinator,
   type InteractiveAuthChallenge,
 } from '../interactive-auth-coordinator.js';
 import { ProactiveRenewalManager } from '../proactive-renewal-manager.js';
@@ -183,6 +183,7 @@ interface AuthHarness {
 }
 
 function createHarness(
+  interactive: InteractiveAuthCoordinator,
   timeoutMs = 5_000,
   runtimeKind: RuntimeKind = 'subagent',
 ): AuthHarness {
@@ -222,6 +223,7 @@ function createHarness(
     renewalManager,
     bucketManager,
     facade,
+    interactive,
     undefined,
     () => configSettingsService.getCurrentProfileName(),
     () => Boolean(configSettingsOwner.readNamedParameter('auth-bucket-prompt')),
@@ -248,20 +250,22 @@ function getOnlyChallenge(
  * @requirement REQ-2562-3
  */
 describe('TokenAccessCoordinator host-owned authentication escalation', () => {
+  let interactive: InteractiveAuthCoordinator;
   beforeEach(async () => {
-    await interactiveAuthCoordinator.dispose();
-    interactiveAuthCoordinator.unbindHost();
+    interactive = new InteractiveAuthCoordinator();
+    await interactive.dispose();
+    interactive.unbindHost();
   });
 
   afterEach(async () => {
-    await interactiveAuthCoordinator.dispose();
-    interactiveAuthCoordinator.unbindHost();
+    await interactive.dispose();
+    interactive.unbindHost();
   });
 
   it('escalates subagent lazy auth to the host and re-reads the persisted token before request work', async () => {
-    const harness = createHarness();
+    const harness = createHarness(interactive);
     const challenges: InteractiveAuthChallenge[] = [];
-    interactiveAuthCoordinator.bindHost(async (challenge) => {
+    interactive.bindHost(async (challenge) => {
       challenges.push(challenge);
       harness.events.push('host-challenge');
       await harness.tokenStore.saveToken(
@@ -291,14 +295,14 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
   });
 
   it('marks escalation after expired credential refresh failure as reauthentication', async () => {
-    const harness = createHarness();
+    const harness = createHarness(interactive);
     const challenges: InteractiveAuthChallenge[] = [];
     await harness.tokenStore.saveToken(
       PROVIDER,
       { ...makeToken('expired-token'), expiry: 1 },
       BUCKET,
     );
-    interactiveAuthCoordinator.bindHost(async (challenge) => {
+    interactive.bindHost(async (challenge) => {
       challenges.push(challenge);
       await harness.tokenStore.saveToken(
         challenge.provider,
@@ -316,18 +320,18 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
   });
 
   it('fails immediately when a subagent has no interactive host', async () => {
-    const harness = createHarness();
+    const harness = createHarness(interactive);
 
     const auth = harness.coordinator.getToken(PROVIDER, BUCKET);
 
     await expect(auth).rejects.toBeInstanceOf(InteractiveAuthUnavailableError);
     expect(harness.facade.authenticateCallCount).toBe(0);
-    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
+    expect(interactive.getActiveSessions()).toStrictEqual([]);
   });
 
   it('surfaces host cancellation as a typed host-directed error', async () => {
-    const harness = createHarness();
-    interactiveAuthCoordinator.bindHost(async () => {
+    const harness = createHarness(interactive);
+    interactive.bindHost(async () => {
       throw new DOMException('Host cancelled authentication', 'AbortError');
     });
 
@@ -348,8 +352,8 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
   });
 
   it('carries a host failure message in a typed interactive authentication error', async () => {
-    const harness = createHarness();
-    interactiveAuthCoordinator.bindHost(async () => {
+    const harness = createHarness(interactive);
+    interactive.bindHost(async () => {
       throw new Error('Host authorization code was rejected');
     });
 
@@ -370,10 +374,8 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
   });
 
   it('surfaces host session expiry as a typed interactive authentication error', async () => {
-    const harness = createHarness(200);
-    interactiveAuthCoordinator.bindHost(
-      () => new Promise<void>(() => undefined),
-    );
+    const harness = createHarness(interactive, 200);
+    interactive.bindHost(() => new Promise<void>(() => undefined));
 
     const error = await harness.coordinator
       .getToken(PROVIDER, BUCKET)
@@ -391,9 +393,9 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
   });
 
   it('routes a host runtime through the coordinator when a host is bound', async () => {
-    const harness = createHarness(5_000, 'cli-interactive');
+    const harness = createHarness(interactive, 5_000, 'cli-interactive');
     const challenges: InteractiveAuthChallenge[] = [];
-    interactiveAuthCoordinator.bindHost(async (challenge) => {
+    interactive.bindHost(async (challenge) => {
       challenges.push(challenge);
       await harness.tokenStore.saveToken(
         challenge.provider,
@@ -413,7 +415,7 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
   });
 
   it('preserves the legacy direct path for a host runtime without a bound host', async () => {
-    const harness = createHarness(5_000, 'cli-interactive');
+    const harness = createHarness(interactive, 5_000, 'cli-interactive');
 
     const token = await harness.coordinator.getToken(PROVIDER, BUCKET);
 

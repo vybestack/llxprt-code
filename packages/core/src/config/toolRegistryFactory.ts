@@ -1,3 +1,4 @@
+import type { InteractiveAuthPromptOperation } from '../runtime/contracts/InteractiveAuthPrompt.js';
 import type { NetworkFetch } from '../utils/fetch.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import type { GitHubReportOperations } from '@vybestack/llxprt-code-tools';
@@ -121,6 +122,7 @@ export interface TaskToolRegistration {
 
 /** TaskTool dependencies argument shape */
 export interface TaskToolArgs {
+  readonly requestInteractiveAuth?: InteractiveAuthPromptOperation;
   readonly hookOwner?: SessionHookOwner;
   readonly workspaceTrust?: WorkspaceTrustControlPort;
   createChildSettings?: () => SettingsService;

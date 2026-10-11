@@ -37,20 +37,19 @@ describe('Acquisition rollback', () => {
     );
     let settled = false;
     const pending = Promise.resolve()
-      .then(
-        async () =>
-          await assembleAgentActivationBootstrap(
-            built.config,
-            built.settingsService,
-            built.handle.providerManager,
-            null,
-            () => undefined,
-            undefined,
-            built.mcp,
-            undefined,
-            undefined,
-            built.handle.settingsOwner,
-          ),
+      .then(() =>
+        assembleAgentActivationBootstrap(
+          built.config,
+          built.settingsService,
+          built.handle.providerManager,
+          null,
+          () => undefined,
+          undefined,
+          built.mcp,
+          undefined,
+          undefined,
+          built.handle.settingsOwner,
+        ),
       )
       .then(
         () => undefined,

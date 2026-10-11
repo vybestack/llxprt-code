@@ -10,13 +10,10 @@ import {
   MemoryTokenStore,
   createTestProvider,
 } from '../auth/__tests__/behavioral/test-utils.js';
-import { interactiveAuthCoordinator } from '../auth/interactive-auth-coordinator.js';
 
 describe('owner OAuth interactive authentication timeout', () => {
   const owners = useRuntimeTestOwners();
   afterEach(async () => {
-    await interactiveAuthCoordinator.dispose();
-    interactiveAuthCoordinator.unbindHost();
     vi.restoreAllMocks();
   });
 
@@ -53,7 +50,7 @@ describe('owner OAuth interactive authentication timeout', () => {
     const ready = new Promise<void>((resolve) => {
       started = resolve;
     });
-    interactiveAuthCoordinator.bindHost(async () => {
+    manager.bindInteractiveAuthHost(async () => {
       started();
       await new Promise<void>(() => {});
     });
@@ -75,8 +72,9 @@ describe('owner OAuth interactive authentication timeout', () => {
       .getToken('timeout-provider', 'work')
       .catch((error: unknown) => error);
     await ready;
-    interactiveAuthCoordinator.cancelActiveSessions();
+    manager.cancelInteractiveAuth();
     expect(await result).toMatchObject({ outcomeKind: 'cancelled' });
+    await manager.dispose();
     return delays;
   }
 

@@ -30,10 +30,7 @@ const activationBindings: RuntimeActivationBindings = {
     configureProviderRuntimeFactories(config, manager);
   },
 };
-import {
-  interactiveAuthCoordinator,
-  type InteractiveAuthChallenge,
-} from '../auth/interactive-auth-coordinator.js';
+import { type InteractiveAuthChallenge } from '../auth/interactive-auth-coordinator.js';
 
 const launches: Array<BrowserLaunchOptions | undefined> = [];
 import * as browser from '@vybestack/llxprt-code-core/utils/secure-browser-launcher.js';
@@ -135,8 +132,6 @@ describe('OAuth owner reads before registration', () => {
   afterEach(async () => {
     globalThis.fetch = originalFetch;
     launches.length = 0;
-    await interactiveAuthCoordinator.dispose();
-    interactiveAuthCoordinator.unbindHost();
     vi.restoreAllMocks();
   });
 
@@ -271,10 +266,11 @@ describe('OAuth owner reads before registration', () => {
         if (!manager.isOAuthEnabled('codex'))
           await manager.toggleOAuthEnabled('codex');
       }
-      interactiveAuthCoordinator.bindHost(async (challenge) => {
-        challenges.push(challenge);
-        await new Promise<void>(() => {});
-      });
+      for (const manager of managers)
+        manager.bindInteractiveAuthHost(async (challenge) => {
+          challenges.push(challenge);
+          await new Promise<void>(() => {});
+        });
       try {
         const first = managers[0]
           .getToken('codex', 'short')
@@ -309,12 +305,12 @@ describe('OAuth owner reads before registration', () => {
               (left.runtimeId ?? '').localeCompare(right.runtimeId ?? ''),
             ),
         ).toStrictEqual([requesterFor('timeout-a'), requesterFor('timeout-b')]);
-        expect(interactiveAuthCoordinator.cancelActiveSessions()).toBe(1);
+        expect(managers[1].cancelInteractiveAuth()).toBe(1);
         expect(await second).toMatchObject({
           name: 'InteractiveAuthCancelledError',
         });
       } finally {
-        await interactiveAuthCoordinator.dispose();
+        await Promise.all(managers.map((manager) => manager.dispose()));
         for (const cleanup of cleanups) await cleanup();
         await a.config.dispose();
         await b.config.dispose();

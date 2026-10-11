@@ -1,3 +1,4 @@
+import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
 import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import {
   OwnedClientLedger,
@@ -349,6 +350,10 @@ export class SessionClientOwner {
   }
 
   private initialBindingComplete = false;
+  private requestInteractiveAuth: InteractiveAuthPromptOperation | undefined;
+  bindInteractiveAuthRequests(operation: InteractiveAuthPromptOperation): void {
+    this.requestInteractiveAuth = operation;
+  }
 
   bindWorkspaceInstructions(
     workspace: McpRuntimeOwner['workspaceMemory'],
@@ -414,6 +419,7 @@ export class SessionClientOwner {
         definitions.subagentDefinitions,
         this.hookOperations,
         this.settingsOwner.telemetry,
+        this.requestInteractiveAuth,
       );
     workspace.bindSessionClient(
       this.config,

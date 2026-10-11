@@ -80,6 +80,15 @@ function createFixtureMemory(
   });
 }
 
+function createFixtureCatalogs(): WorkspaceMcpCatalogOwner {
+  return new WorkspaceMcpCatalogOwner(
+    () => true,
+    async () => {
+      throw new Error('Fixture resource transport is unavailable');
+    },
+  );
+}
+
 function createFixtureCheckpoints(
   filesystem: WorkspaceFilesystemOwner,
 ): WorkspaceCheckpointOwner {
@@ -189,12 +198,7 @@ export function installWorkspaceRuntimeFixture(
       false,
       async () => {},
     );
-    catalogs ??= new WorkspaceMcpCatalogOwner(
-      () => true,
-      async () => {
-        throw new Error('Fixture resource transport is unavailable');
-      },
-    );
+    catalogs ??= createFixtureCatalogs();
     const mcp = catalogs;
     publishFixtureCatalogs(source, mcp);
     checkpoints ??= createFixtureCheckpoints(root);

@@ -274,6 +274,8 @@ export interface GeminiModelsSeam {
 export interface GeminiApiClientOptions {
   fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   apiKey?: string;
+  credentialsFile?: string;
+  googleAuthOptions?: import('google-auth-library').GoogleAuthOptions;
   vertexai?: boolean;
   project?: string;
   location?: string;

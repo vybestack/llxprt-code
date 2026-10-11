@@ -443,11 +443,12 @@ describe('useAgentStream', () => {
     });
 
     it('should not call handleSlashCommand is shell mode is active', async () => {
-      const { result } = renderHook(async () =>
+      const agentForHook1 = await createFakeAgentFromMockClient(
+        new MockedAgentClientClass(mockConfig),
+      );
+      const { result } = renderHook(() =>
         useAgentStream(
-          await createFakeAgentFromMockClient(
-            new MockedAgentClientClass(mockConfig),
-          ),
+          agentForHook1,
           [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig),
@@ -492,11 +493,12 @@ describe('useAgentStream', () => {
         getModel: vi.fn(() => 'gemini-2.5-pro'),
       } as unknown as Config;
 
-      const { result } = renderHook(async () =>
+      const agentForHook2 = await createFakeAgentFromMockClient(
+        new MockedAgentClientClass(testConfig),
+      );
+      const { result } = renderHook(() =>
         useAgentStream(
-          await createFakeAgentFromMockClient(
-            new MockedAgentClientClass(testConfig),
-          ),
+          agentForHook2,
           [],
           mockAddItem,
           createStreamRuntimeForTest(testConfig),

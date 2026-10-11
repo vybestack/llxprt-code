@@ -220,20 +220,6 @@ export function buildRuntimeProfileSnapshot(
     }
   }
 
-  if (snapshot['GOOGLE_CLOUD_PROJECT'] === undefined) {
-    const project = process.env.GOOGLE_CLOUD_PROJECT;
-    if (typeof project === 'string' && project.trim().length > 0) {
-      snapshot['GOOGLE_CLOUD_PROJECT'] = project;
-    }
-  }
-
-  if (snapshot['GOOGLE_CLOUD_LOCATION'] === undefined) {
-    const location = process.env.GOOGLE_CLOUD_LOCATION;
-    if (typeof location === 'string' && location.trim().length > 0) {
-      snapshot['GOOGLE_CLOUD_LOCATION'] = location;
-    }
-  }
-
   const modelParams = stripSensitiveModelParams(
     extractModelParams(providerSettings) as ModelParams,
   );

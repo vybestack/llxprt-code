@@ -610,7 +610,7 @@ describe('loadCliConfig disableYoloMode', () => {
       security: { disableYoloMode: true },
     };
     await expect(
-      await loadCliConfig(
+      loadCliConfig(
         settings,
         [],
         new ExtensionEnablementManager(
@@ -676,7 +676,7 @@ describe('loadCliConfig secureModeEnabled', () => {
       admin: { secureModeEnabled: true },
     };
     await expect(
-      await loadCliConfig(
+      loadCliConfig(
         settings,
         [],
         new ExtensionEnablementManager(

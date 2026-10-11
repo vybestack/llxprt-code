@@ -44,9 +44,9 @@ describe('Error and edge case behavioral scenarios', () => {
       providers: [provider],
     });
 
-    const result = await manager.getOAuthToken(PROVIDER);
-
-    expect(result).toBeNull();
+    await expect(manager.getOAuthToken(PROVIDER)).rejects.toThrow(
+      'network timeout',
+    );
 
     const stored = await tokenStore.getToken(PROVIDER);
     expect(stored).not.toBeNull();

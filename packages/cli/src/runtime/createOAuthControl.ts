@@ -22,6 +22,27 @@ function clearProviderClientCache(
     instance.clearClientCache();
 }
 
+function interactiveHostControl(
+  manager: () => OAuthManager,
+): Pick<
+  OAuthControl,
+  | 'attachInteractiveAuthMessages'
+  | 'bindInteractiveAuthHost'
+  | 'unbindInteractiveAuthHost'
+  | 'cancelInteractiveAuth'
+  | 'getInteractiveAuthSessions'
+> {
+  return {
+    attachInteractiveAuthMessages: (callback) =>
+      manager().attachInteractiveAuthMessages(callback),
+    bindInteractiveAuthHost: (handler) =>
+      manager().bindInteractiveAuthHost(handler),
+    unbindInteractiveAuthHost: () => manager().unbindInteractiveAuthHost(),
+    cancelInteractiveAuth: () => manager().cancelInteractiveAuth(),
+    getInteractiveAuthSessions: () => manager().getInteractiveAuthSessions(),
+  };
+}
+
 export function createOAuthControl(
   readOAuthManager: () => OAuthManager | undefined,
   providerManager: RuntimeProviderManager,
@@ -33,6 +54,7 @@ export function createOAuthControl(
     return current;
   };
   return {
+    ...interactiveHostControl(manager),
     clearProviderClientCache: (provider) =>
       clearProviderClientCache(providerManager, provider),
     isAvailable: () => readOAuthManager() instanceof OAuthManager,

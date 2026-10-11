@@ -116,3 +116,76 @@ for (const forced of [false, true]) {
     });
   });
 }
+
+describe('Injected interactive OAuth shutdown', () => {
+  it('detaches a retiring child waiter without cancelling its live sibling', async () => {
+    const store = tokenStore();
+    const emptyStore: TokenStore = { ...store, getToken: async () => null };
+    const root = new OAuthManager(emptyStore);
+    const child = new OAuthManager(emptyStore, undefined, {
+      requestInteractiveAuth: (prompt) => root.requestInteractiveAuth(prompt),
+      readAuthIdentity: () => ({ runtimeId: 'child', runtimeKind: 'subagent' }),
+    });
+    const sibling = new OAuthManager(emptyStore, undefined, {
+      requestInteractiveAuth: (prompt) => root.requestInteractiveAuth(prompt),
+      readAuthIdentity: () => ({
+        runtimeId: 'sibling',
+        runtimeKind: 'subagent',
+      }),
+    });
+    const provider = {
+      name: 'held',
+      initiateAuth: async (): Promise<OAuthToken> => {
+        throw new Error('Children cannot launch authentication');
+      },
+      getToken: async () => null,
+      refreshToken: async () => null,
+    };
+    child.registerProvider(provider);
+    sibling.registerProvider(provider);
+    const held = gate();
+    let hostSignal: AbortSignal | undefined;
+    root.bindInteractiveAuthHost(async (_challenge, signal) => {
+      hostSignal = signal;
+      await held.promise;
+    });
+    const childRequest = child
+      .getToken('held', 'default')
+      .catch((error: unknown) => error);
+    const siblingRequest = sibling
+      .getToken('held', 'default')
+      .catch((error: unknown) => error);
+    let disposed = false;
+    let retirement: Promise<unknown> | undefined;
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(root.getInteractiveAuthSessions()[0]?.waiterCount).toBe(2);
+      retirement = child.dispose().then(
+        () => {
+          disposed = true;
+        },
+        (error: unknown) => {
+          disposed = true;
+          return error;
+        },
+      );
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(disposed).toBe(true);
+      expect(await childRequest).toMatchObject({ outcomeKind: 'cancelled' });
+      expect(await retirement).toBeInstanceOf(AggregateError);
+      expect(root.getInteractiveAuthSessions()[0]?.waiterCount).toBe(1);
+      expect(hostSignal?.aborted).toBe(false);
+      held.release();
+      expect(await siblingRequest).toBeNull();
+      await expect(child.getToken('held')).rejects.toThrow('disposed');
+    } finally {
+      held.release();
+      await Promise.all([childRequest, siblingRequest, retirement]);
+      await Promise.allSettled([
+        child.dispose(),
+        sibling.dispose(),
+        root.dispose(),
+      ]);
+    }
+  });
+});

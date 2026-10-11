@@ -7,6 +7,7 @@ import { readFixtureSessionAuthPolicy } from './__tests__/session-auth-policy-fi
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { InteractiveAuthCoordinator } from './interactive-auth-coordinator.js';
 import type {
   BucketFailoverOAuthManagerLike,
   OAuthManagerRuntimeMessageBusDeps,
@@ -229,6 +230,7 @@ describe('OAuthManager wiring', () => {
       proactiveRenewalManager,
       bucketManager,
       manager,
+      expect.any(InteractiveAuthCoordinator),
       undefined,
       expect.any(Function),
       expect.any(Function),
@@ -412,6 +414,7 @@ describe('OAuthManager wiring', () => {
     expect(tokenAccessCoordinator.getToken).toHaveBeenCalledWith(
       'claudecode',
       undefined,
+      expect.any(AbortSignal),
     );
 
     await expect(manager.peekStoredToken('claudecode')).resolves.toStrictEqual(

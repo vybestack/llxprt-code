@@ -293,9 +293,9 @@ describe('main() orchestration: guard stops before activation (#2481)', () => {
       throw new Error(`process.exit(${code})`);
     });
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-    await expect(
-      await runMainWithConfig(makeConfig(false, false)),
-    ).rejects.toThrow('process.exit(52)');
+    await expect(runMainWithConfig(makeConfig(false, false))).rejects.toThrow(
+      'process.exit(52)',
+    );
     expect(callOrder).toContain('guard');
     expect(callOrder).not.toContain('activation');
     expect(callOrder).not.toContain('agent-construction');
@@ -598,9 +598,9 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
     vi.spyOn(process, 'exit').mockImplementation((code) => {
       throw new Error(`process.exit(${code})`);
     });
-    await expect(
-      await runMainImageMode(makeConfig(true, false)),
-    ).rejects.toThrow('process.exit(0)');
+    await expect(runMainImageMode(makeConfig(true, false))).rejects.toThrow(
+      'process.exit(0)',
+    );
     // The stdin guard must NOT have been called (bypassed for image mode).
     expect(callOrder).not.toContain('stdin-guard');
     // The image dispatch MUST have been reached.

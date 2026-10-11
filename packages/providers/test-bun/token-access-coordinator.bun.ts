@@ -1,3 +1,4 @@
+import { InteractiveAuthCoordinator } from '../src/auth/interactive-auth-coordinator.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -159,6 +160,7 @@ function makeCoordinator(opts?: {
     renewalManager as never,
     bucketManager as never,
     facade as never,
+    new InteractiveAuthCoordinator(),
     opts?.settings,
     undefined, // config
   );

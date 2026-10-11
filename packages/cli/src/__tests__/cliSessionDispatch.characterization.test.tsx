@@ -1077,7 +1077,7 @@ describe('session-dispatch characterization', () => {
       });
 
       await expect(
-        await runDispatch(
+        runDispatch(
           createMinimalConfig({ interactive: false, question: 'prompt' }),
           createMinimalSettings(),
         ),
@@ -1114,7 +1114,7 @@ describe('session-dispatch characterization', () => {
       });
 
       await expect(
-        await runDispatch(
+        runDispatch(
           createMinimalConfig({ interactive: false, question: 'prompt' }),
           createMinimalSettings(),
           [RESUME_WARNING, 'second'],
@@ -1130,7 +1130,7 @@ describe('session-dispatch characterization', () => {
       process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY = '1';
 
       await expect(
-        await runDispatch(
+        runDispatch(
           createMinimalConfig({
             interactive: false,
             question: 'prompt',
@@ -1148,7 +1148,7 @@ describe('session-dispatch characterization', () => {
       delete process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY;
 
       await expect(
-        await runDispatch(
+        runDispatch(
           createMinimalConfig({ interactive: false, question: 'prompt' }),
           createMinimalSettings(),
         ),

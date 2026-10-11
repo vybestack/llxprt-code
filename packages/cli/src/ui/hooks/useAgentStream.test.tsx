@@ -444,11 +444,12 @@ describe('useAgentStream', () => {
       ];
     });
 
-    renderHook(async () =>
+    const agentForHook1 = await createFakeAgentFromMockClient(
+      new MockedAgentClientClass(mockConfig),
+    );
+    renderHook(() =>
       useAgentStream(
-        await createFakeAgentFromMockClient(
-          new MockedAgentClientClass(mockConfig),
-        ),
+        agentForHook1,
         [],
         mockAddItem,
         createStreamRuntimeForTest(mockConfig),
@@ -552,11 +553,12 @@ describe('useAgentStream', () => {
       ];
     });
 
-    renderHook(async () =>
+    const agentForHook2 = await createFakeAgentFromMockClient(
+      new MockedAgentClientClass(mockConfig),
+    );
+    renderHook(() =>
       useAgentStream(
-        await createFakeAgentFromMockClient(
-          new MockedAgentClientClass(mockConfig),
-        ),
+        agentForHook2,
         [],
         mockAddItem,
         createStreamRuntimeForTest(mockConfig),

@@ -171,10 +171,11 @@ describe('OAuthManager - Token Refresh Race Condition (Issue #1159)', () => {
       const releaseLockSpy = vi.spyOn(tokenStore, 'releaseRefreshLock');
 
       // When: We call getOAuthToken (refresh will fail)
-      const token = await oauthManager.getOAuthToken('test-provider');
+      await expect(oauthManager.getOAuthToken('test-provider')).rejects.toThrow(
+        'Network error',
+      );
 
       // Then: Lock should still be released (with bucket parameter)
-      expect(token).toBeNull();
       expect(releaseLockSpy).toHaveBeenCalledWith('test-provider', undefined);
     });
 

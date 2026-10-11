@@ -16,11 +16,12 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import { interactiveAuthCoordinator } from '@vybestack/llxprt-code-providers/auth.js';
 import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 
 type AuthCommandControl = Pick<
   OAuthControl,
+  | 'getInteractiveAuthSessions'
+  | 'cancelInteractiveAuth'
   | 'getSupportedProviders'
   | 'listBuckets'
   | 'isOAuthEnabled'
@@ -68,9 +69,14 @@ function isCancelSubcommand(args: string | undefined): boolean {
  * @plan PLAN-20260827-ISSUE2562.P05
  * @requirement REQ-2562-4
  */
-function cancelInteractiveAuthentication(): MessageActionReturn {
-  const activeSessions = interactiveAuthCoordinator.getActiveSessions();
-  const cancelledCount = interactiveAuthCoordinator.cancelActiveSessions();
+function cancelInteractiveAuthentication(
+  control: Pick<
+    OAuthControl,
+    'getInteractiveAuthSessions' | 'cancelInteractiveAuth'
+  >,
+): MessageActionReturn {
+  const activeSessions = control.getInteractiveAuthSessions();
+  const cancelledCount = control.cancelInteractiveAuth();
   if (cancelledCount === 0) {
     return {
       type: 'message',
@@ -351,7 +357,7 @@ export class AuthCommandExecutor {
     // Parse args while preserving original parts for error messages
     const trimmedArgs = args?.trim() ?? '';
     if (isCancelSubcommand(trimmedArgs)) {
-      return cancelInteractiveAuthentication();
+      return cancelInteractiveAuthentication(context.oauthControl);
     }
     const parts = trimmedArgs.split(/\s+/).filter((p) => p.length > 0);
     const rawProvider = parts[0];
@@ -824,7 +830,7 @@ export const authCommand: SlashCommand = {
   schema: authCommandSchema,
   action: async (context, args) => {
     if (isCancelSubcommand(args)) {
-      return cancelInteractiveAuthentication();
+      return cancelInteractiveAuthentication(context.oauthControl);
     }
     const oauthManager = getOAuthControl(context);
 

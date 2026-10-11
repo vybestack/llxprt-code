@@ -206,11 +206,12 @@ describe('useAgentStream', () => {
       processedQuery: processedQueryParts,
     });
 
-    const { result } = renderHook(async () =>
+    const agentForHook1 = await createFakeAgentFromMockClient(
+      new MockedAgentClientClass(mockConfig),
+    );
+    const { result } = renderHook(() =>
       useAgentStream(
-        await createFakeAgentFromMockClient(
-          new MockedAgentClientClass(mockConfig),
-        ),
+        agentForHook1,
         [],
         mockAddItem,
         createStreamRuntimeForTest(mockConfig),

@@ -367,14 +367,14 @@ describe('approvalModeParity: approval mode resolution', () => {
   it('disableYoloMode=true blocks --yolo and throws', async () => {
     process.argv = ['node', 'script.js', '--yolo'];
     await expect(
-      await getApprovalMode({ security: { disableYoloMode: true } }),
+      getApprovalMode({ security: { disableYoloMode: true } }),
     ).rejects.toThrow(/YOLO mode.*disabled/i);
   });
 
   it('disableYoloMode=true blocks --approval-mode=yolo and throws', async () => {
     process.argv = ['node', 'script.js', '--approval-mode', 'yolo'];
     await expect(
-      await getApprovalMode({ security: { disableYoloMode: true } }),
+      getApprovalMode({ security: { disableYoloMode: true } }),
     ).rejects.toThrow(/YOLO mode.*disabled/i);
   });
 
@@ -397,7 +397,7 @@ describe('approvalModeParity: approval mode resolution', () => {
   it('secureModeEnabled=true blocks YOLO and throws', async () => {
     process.argv = ['node', 'script.js', '--yolo'];
     await expect(
-      await getApprovalMode({ admin: { secureModeEnabled: true } }),
+      getApprovalMode({ admin: { secureModeEnabled: true } }),
     ).rejects.toThrow(/YOLO mode.*disabled/i);
   });
 

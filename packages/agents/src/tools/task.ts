@@ -1,3 +1,4 @@
+import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
@@ -95,6 +96,7 @@ export interface TaskToolParams {
 }
 
 export interface TaskToolDependencies {
+  readonly requestInteractiveAuth?: InteractiveAuthPromptOperation;
   readonly hookOwner?: SessionHookOwner;
   readonly workspaceTrust?: WorkspaceTrustControlPort;
   readRunPolicy: () => SubagentRunPolicy;
@@ -867,6 +869,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
       subagentManager,
       profileManager,
       foregroundConfig: this.config,
+      requestInteractiveAuth: this.dependencies.requestInteractiveAuth,
       hookOwner: this.dependencies.hookOwner,
       workspaceTrust: this.dependencies.workspaceTrust,
       createChildSettings: this.dependencies.createChildSettings,

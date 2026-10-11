@@ -12,6 +12,7 @@
  * via the injected AuthenticatorInterface to avoid a circular import cycle.
  */
 
+import type { InteractiveAuthRequestPort } from './interactive-auth-coordinator.js';
 import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
@@ -47,7 +48,7 @@ import {
   requiresInteractiveAuthentication,
 } from './interactive-auth-request.js';
 import {
-  extractRequestMetadata,
+  resolveTokenRequestBucket,
   resolveImplicitBucketToCheck,
 } from './token-request-args.js';
 import type { OAuthManagerRuntimeMessageBusDeps } from './types.js';
@@ -87,6 +88,7 @@ export class TokenAccessCoordinator {
     private readonly proactiveRenewalManager: ProactiveRenewalManager,
     private readonly bucketManager: OAuthBucketManager,
     private readonly facadeRef: BucketFailoverOAuthManagerLike,
+    private readonly interactiveAuth: InteractiveAuthRequestPort,
     private readonly settings?: IOAuthSettingsProvider,
     private readonly readCurrentProfileName: () => string | null = () => null,
     private readonly readBucketPrompt: () => boolean = () => false,
@@ -216,7 +218,7 @@ export class TokenAccessCoordinator {
     }
 
     const { explicitBucket, requestMetadata } =
-      this.resolveTokenRequestBucket(bucket);
+      resolveTokenRequestBucket(bucket);
     const effectiveMetadata = await this.resolveEffectiveMetadata(
       providerName,
       explicitBucket,
@@ -428,15 +430,6 @@ export class TokenAccessCoordinator {
     }
   }
 
-  private resolveTokenRequestBucket(bucket: string | unknown): {
-    explicitBucket: boolean;
-    requestMetadata: OAuthTokenRequestMetadata | undefined;
-  } {
-    const explicitBucket = typeof bucket === 'string';
-    const requestMetadata = extractRequestMetadata(bucket);
-    return { explicitBucket, requestMetadata };
-  }
-
   private async peekImplicitTokenRequest(
     providerName: string,
     explicitBucket: boolean,
@@ -488,7 +481,7 @@ export class TokenAccessCoordinator {
       () => `[FLOW] Attempting to get existing token for ${providerName}...`,
     );
     const { explicitBucket, requestMetadata } =
-      this.resolveTokenRequestBucket(bucket);
+      resolveTokenRequestBucket(bucket);
     const effectiveMetadata = await this.resolveEffectiveMetadata(
       providerName,
       explicitBucket,
@@ -542,6 +535,7 @@ export class TokenAccessCoordinator {
       authRequestContext,
       explicitBucket,
       effectiveMetadata,
+      signal,
     );
   }
 
@@ -587,6 +581,7 @@ export class TokenAccessCoordinator {
     bucket: string | unknown,
     explicitBucket: boolean,
     requestMetadata: OAuthTokenRequestMetadata | undefined,
+    signal?: AbortSignal,
   ): Promise<string | null> {
     logger.debug(
       () =>
@@ -634,6 +629,7 @@ export class TokenAccessCoordinator {
       requestMetadata,
       explicitBucket,
       challengeReason,
+      signal,
     );
   }
 
@@ -765,20 +761,24 @@ export class TokenAccessCoordinator {
     requestMetadata: OAuthTokenRequestMetadata | undefined,
     explicitBucket: boolean,
     reason: 'authentication-required' | 'reauthentication-required',
+    signal?: AbortSignal,
   ): Promise<string | null> {
+    signal?.throwIfAborted();
     // @plan PLAN-20260827-ISSUE2562.P04
     // @requirement REQ-2562-3
     const identity = this.readAuthIdentity?.();
     const runtimeKind = identity?.runtimeKind;
-    if (requiresInteractiveAuthentication(runtimeKind)) {
+    if (requiresInteractiveAuthentication(this.interactiveAuth, runtimeKind)) {
       const authenticatedBucket = bucketToCheck ?? 'default';
       await requestInteractiveAuthentication(
+        this.interactiveAuth,
         providerName,
         authenticatedBucket,
         runtimeKind,
         reason,
         this.readInteractiveAuthTimeout(),
         identity,
+        signal,
       );
       this.facadeRef.setSessionBucket(
         providerName,
@@ -826,6 +826,7 @@ export class TokenAccessCoordinator {
     const newToken = await this.getOAuthToken(
       providerName,
       explicitBucket ? bucketToCheck : requestMetadata,
+      signal,
     );
     return newToken ? newToken.access_token : null;
   }
