@@ -48,6 +48,7 @@ import {
 import { optionsWithSelectedModelPrompt } from './loadBalancing/selectedModelPrompt.js';
 import {
   projectLoadBalancerPromptEnvelope,
+  releaseEstimateOnlyPromptEnvelope,
   type PromptEnvelopeProjection,
 } from './loadBalancing/promptEnvelopeProjection.js';
 import { hasTransportAttemptRemaining } from './transportAttemptBudget.js';
@@ -407,6 +408,11 @@ export class LoadBalancingProvider implements IProvider {
       optionsOrContent,
       tools,
       signal,
+    );
+    // The send projects the member it selects itself, so a peek's delegate
+    // lease (issue #854) is spent once the send starts.
+    await releaseEstimateOnlyPromptEnvelope(
+      options.promptEnvelopeTransportToken,
     );
     this.resetTokenAccountingDiagnostics();
 

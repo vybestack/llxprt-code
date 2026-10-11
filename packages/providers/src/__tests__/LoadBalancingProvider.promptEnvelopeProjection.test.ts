@@ -12,8 +12,8 @@
  * It must not consume round-robin or failover selection state, the
  * send-time guard still re-estimates authoritatively, and rotation drift
  * between peek and send degrades to guard behavior. The estimate-only
- * wrapper carries a fresh transport token and releases the delegate's
- * request-scoped projection within the call.
+ * wrapper carries a fresh transport token and keeps the delegate's
+ * request-scoped projection alive until the peek owner releases it.
  *
  * Anti-mock-theater: every assertion reads values the delegate projection
  * actually returned and effects the delegate's release callback actually
@@ -473,53 +473,6 @@ function registerProjectionCase07(): void {
   });
 }
 
-function registerProjectionCase08(): void {
-  describe('release completion', () => {
-    it('awaits the delegate release exactly once per projection and forwards no release obligation', async () => {
-      const releases: string[] = [];
-      const delegate = createProjectingDelegate({
-        name: 'openai',
-        estimateTokens: () => 10,
-        releaseIfUnsent: async () => {
-          releases.push(`released-${releases.length}`);
-        },
-      });
-      providerManager.registerProvider(delegate.provider);
-
-      const lb = createLoadBalancer(providerManager);
-
-      const first = await lb.projectPromptEnvelope({
-        contents: replayableContents([]),
-      });
-      expect(releases).toStrictEqual(['released-0']);
-      expect('releaseIfUnsent' in (first ?? {})).toBe(false);
-
-      // Each projection call releases its own delegate projection.
-      await lb.projectPromptEnvelope({ contents: replayableContents([]) });
-      expect(releases).toStrictEqual(['released-0', 'released-1']);
-    });
-  });
-}
-
-function registerProjectionCase09(): void {
-  describe('release failure', () => {
-    it('propagates a failing delegate release', async () => {
-      const delegate = createProjectingDelegate({
-        name: 'openai',
-        estimateTokens: () => 10,
-        releaseIfUnsent: () => Promise.reject(new Error('release exploded')),
-      });
-      providerManager.registerProvider(delegate.provider);
-
-      const lb = createLoadBalancer(providerManager);
-
-      await expect(
-        lb.projectPromptEnvelope({ contents: replayableContents([]) }),
-      ).rejects.toThrow('release exploded');
-    });
-  });
-}
-
 function registerProjectionCase10(): void {
   describe('rendered system prompt', () => {
     it('delegate receives the sub-profile-rendered system prompt (guard-parity options)', async () => {
@@ -941,10 +894,6 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
   registerProjectionCase06();
 
   registerProjectionCase07();
-
-  registerProjectionCase08();
-
-  registerProjectionCase09();
 
   registerProjectionCase10();
 
