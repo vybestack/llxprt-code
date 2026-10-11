@@ -207,6 +207,29 @@ function receipt(
     })),
   };
 }
+// The measured sends run the source path (snapshot spool, reader, chunked
+// estimation); warm that same path so its one-time initialisation is not
+// counted as per-send growth.
+async function warmSourcePath(
+  large: boolean,
+  estimate: TokenCountFn,
+): Promise<void> {
+  const facts = census('none');
+  const ownership = new RowOwnership();
+  const snapshot = await makeSnapshot(large, facts, ownership);
+  try {
+    const memory = new RequestShapeSessionMemory(128);
+    for (let send = 0; send < 2; send++)
+      await memory.recordSourceRequestShape({
+        requestRows: snapshot,
+        tools: [],
+        instructionsText: 'memory instructions',
+        countTokens: estimate,
+      });
+  } finally {
+    snapshot.close();
+  }
+}
 async function measure(
   large: boolean,
   tokenizer: string,
@@ -216,6 +239,7 @@ async function measure(
   const facts = census(trap);
   const control = new WeakRef(Object.freeze({ control: true }));
   const memory = new RequestShapeSessionMemory(128);
+  await warmSourcePath(large, estimate);
   const baseline = await settled();
   const ownership = new RowOwnership();
   const snapshot = await makeSnapshot(large, facts, ownership);
