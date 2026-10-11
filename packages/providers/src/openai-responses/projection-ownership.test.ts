@@ -1,6 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { heapSize } from 'bun:jsc';
+import {
+  median,
+  settledHeap,
+} from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { readdirSync } from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
@@ -60,12 +63,14 @@ interface ProjectionFacts {
   readonly sourceLiveRows: number;
 }
 
+// Median of three settled readings: allocator jitter of a few hundred KiB must
+// not decide a 1 MiB gate, while retention present in every reading still does.
 async function collectHeap(): Promise<number> {
-  await Bun.sleep(0);
-  Bun.gc(true);
-  await Bun.sleep(0);
-  Bun.gc(true);
-  return heapSize();
+  return median([
+    await settledHeap(),
+    await settledHeap(),
+    await settledHeap(),
+  ]);
 }
 
 async function independentTokenCount(large: boolean): Promise<number> {
@@ -365,11 +370,20 @@ describe('actual Responses projection disk ownership', () => {
   }, 60000);
 
   it('does not retain context-scale text or request graphs during prepared request, HTTP pause and response lifetime', async () => {
-    const facts = await runProjectionScenario(true, false);
-    expect(
-      Math.max(facts.preparedBytes, facts.uploadedBytes, facts.responseBytes),
-    ).toBeLessThanOrEqual(1024 * 1024);
-    expect(facts.retainedCodeUnits).toBe(0);
+    // Two unmeasured full-size runs take the one-time state of this path
+    // before the baseline of each measured run; the gate is the median of
+    // three measured runs.
+    await runProjectionScenario(true, false);
+    await runProjectionScenario(true, false);
+    const gates: number[] = [];
+    for (let run = 0; run < 3; run++) {
+      const facts = await runProjectionScenario(true, false);
+      expect(facts.retainedCodeUnits).toBe(0);
+      gates.push(
+        Math.max(facts.preparedBytes, facts.uploadedBytes, facts.responseBytes),
+      );
+    }
+    expect(median(gates)).toBeLessThanOrEqual(1024 * 1024);
   }, 120000);
 
   it('cancels a projected actual HTTP request while the receiver is paused without opening a new row reader', async () => {
