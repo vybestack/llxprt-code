@@ -5,6 +5,7 @@
   "Agent",
   "AgentActivationOperation",
   "AgentActivationPreflightResult",
+  "AgentAttemptBoundaryEvent",
   "AgentAuth",
   "AgentAuthControl",
   "AgentAuthKeysControl",

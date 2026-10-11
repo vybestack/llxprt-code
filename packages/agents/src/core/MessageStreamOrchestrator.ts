@@ -49,6 +49,7 @@ import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/co
 import { handleTerminalEvent } from './MessageStreamTerminalHandler.js';
 import { applyRetryAwareLoopDetection } from './retryAwareLoopDetection.js';
 import { sendAfterAgentDecision } from './afterAgentDecisionStream.js';
+import { AttemptBoundaryTracker } from './AttemptBoundaryTracker.js';
 
 export interface MessageStreamDeps {
   config: Config;
@@ -101,6 +102,8 @@ export interface StreamContext {
   isPayloadRecoveryRetry: boolean;
   recordingExecution?: AgentChatRecordingExecution;
   modelParameters?: AdmittedModelParameters;
+  /** Presentation-only attempt separation (issue #3840). */
+  attemptBoundary: AttemptBoundaryTracker;
 }
 
 export interface IterationResult {
@@ -215,6 +218,16 @@ function discardAbandonedAttempt(rollback: AttemptRollbackContext): void {
   );
 }
 
+function recordAttemptActivity(
+  event: ServerAgentStreamEvent,
+  state: AttemptState,
+): void {
+  if (event.type === AgentEventType.ToolCallRequest)
+    state.hadToolCallsThisTurn = true;
+  if (event.type === AgentEventType.Thought) state.hadThinking = true;
+  if (event.type === AgentEventType.Content) state.hadContent = true;
+}
+
 function normalizeTodoSnapshotEntry(todo: Todo): Todo {
   const raw = todo as Partial<Todo>;
   return {
@@ -287,6 +300,7 @@ export class MessageStreamOrchestrator {
       isPayloadRecoveryRetry,
       recordingExecution,
       modelParameters,
+      attemptBoundary: new AttemptBoundaryTracker(),
     };
 
     const request = yield* this._preflight(narrowedRequest, ctx);
@@ -504,6 +518,7 @@ export class MessageStreamOrchestrator {
       );
       lastTurn = turn;
 
+      ctx.attemptBoundary.beginAttempt();
       const iterResult: IterationResult = yield* this._processStreamIteration(
         iterRequest,
         signal,
@@ -513,6 +528,7 @@ export class MessageStreamOrchestrator {
         initialRequest,
       );
       if (iterResult.earlyReturn) return turn;
+      ctx.attemptBoundary.endAttempt();
       hadToolCallsThisTurn = iterResult.hadToolCallsThisTurn;
 
       const postTurnResult: PostTurnResult = yield* this._evaluatePostTurn(
@@ -574,20 +590,21 @@ export class MessageStreamOrchestrator {
 
       if (event.type === AgentEventType.Retry) {
         discardAbandonedAttempt(rollback);
+        ctx.attemptBoundary.discardAttempt();
         yield event;
         this.deps.updateTelemetryTokenCount();
         continue;
       }
 
-      if (event.type === AgentEventType.ToolCallRequest)
-        state.hadToolCallsThisTurn = true;
-      if (event.type === AgentEventType.Thought) state.hadThinking = true;
-      if (event.type === AgentEventType.Content) state.hadContent = true;
+      recordAttemptActivity(event, state);
       if (event.type === AgentEventType.Finished && event.value.outcome)
         finishedOutcome = event.value.outcome;
       this._handleTodoToolCall(event, todoContinuationService);
       if (event.type === AgentEventType.Content && event.value)
         ctx.responseChunks.push(event.value);
+
+      const boundary = ctx.attemptBoundary.boundaryBefore(event);
+      if (boundary !== undefined) yield boundary;
 
       if (todoContinuationService.shouldDeferStreamEvent(event)) {
         deferredEvents.push(event);

@@ -19,6 +19,7 @@ import {
   readSessionHeader,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
+import type { ParsedCliArgs } from './cliBootstrap.js';
 import { LiveProviderConfig } from './__tests__/liveProviderConfig.js';
 import {
   buildNewRecordingService,
@@ -26,7 +27,6 @@ import {
   setupSessionRecording,
   type ResolvedRecording,
 } from './cliSessionBootstrap.js';
-import type { ParsedCliArgs } from './cliBootstrap.js';
 
 let projectHash = '';
 const CORRUPT_REASON =

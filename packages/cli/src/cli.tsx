@@ -114,6 +114,10 @@ import {
 } from './cliTerminalSession.js';
 import { maybeHopIntoSandbox } from './cliSandbox.js';
 import {
+  exitAfterSessionListOrDelete,
+  hasSessionManagementFlag,
+} from './cliSessionListAndDelete.js';
+import {
   type RuntimeConfigBootstrap,
   bootstrapRuntimeAndConfig,
   setupOwnerSessionRecording,
@@ -423,19 +427,16 @@ async function runPostParseStartup(): Promise<void> {
   await cleanupCheckpoints();
 }
 
-/** Guard stdin-or-prompt unless image mode is active (bypasses the guard). */
+/**
+ * Guard stdin-or-prompt unless image mode is active or a session-management
+ * flag is present (both bypass the guard: neither takes a prompt).
+ */
 async function ensureStdinOrPrompt(
   argv: ParsedCliArgs,
   hasPipedInput: boolean,
   readStdinOnce: () => Promise<string>,
 ): Promise<void> {
-  if (
-    argv.listSessions === true ||
-    (typeof argv.deleteSession === 'string' && argv.deleteSession.length > 0)
-  ) {
-    return;
-  }
-  if (!detectImageModeFromArgv(argv)) {
+  if (!detectImageModeFromArgv(argv) && !hasSessionManagementFlag(argv)) {
     await ensureStdinOrPromptProvided(
       hasPipedInput,
       readStdinOnce,
@@ -484,6 +485,7 @@ export async function main() {
   const { config, activationOperation } = boot;
 
   try {
+    await exitAfterSessionListOrDelete(argv, config);
     await rejectPromptInteractiveWithPipedStdin(argv);
 
     await prepareTerminalSession(config, settings, argv);

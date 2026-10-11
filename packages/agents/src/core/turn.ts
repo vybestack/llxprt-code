@@ -168,6 +168,7 @@ export type {
   ServerCitationEvent,
   ServerRetryEvent,
   ServerInvalidStreamEvent,
+  ServerAttemptBoundaryEvent,
   ServerAgentExecutionStoppedEvent,
   ServerAgentExecutionBlockedEvent,
   ServerContextWindowWillOverflowEvent,
