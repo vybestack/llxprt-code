@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { streamCallOptions } from './streamCallOptions.js';
@@ -179,7 +180,7 @@ async function withIngressFixture<T>(
     snapshot: NormalizedProviderRequestSnapshot,
   ) => Promise<T>,
 ): Promise<T> {
-  const root = mkdtempSync(join(process.cwd(), 'tmp/wrapper-ingress-fixture-'));
+  const root = mkdtempSync(join(tmpdir(), 'wrapper-ingress-fixture-'));
   const settings = new SettingsService();
   settings.set('retries', 2);
   settings.set('retrywait', 1);

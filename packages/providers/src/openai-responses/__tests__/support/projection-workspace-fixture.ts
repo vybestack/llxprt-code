@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, expect } from 'bun:test';
 import { createHash } from 'node:crypto';
 import {
@@ -48,9 +49,7 @@ export function registerProjectionWorkspace(): () => string {
   beforeEach(() => {
     previousTmpdir = process.env.TMPDIR;
     previousConfig = process.env.LLXPRT_CONFIG_HOME;
-    root = mkdtempSync(
-      join(process.cwd(), 'tmp/projection-workspace-lifecycle-'),
-    );
+    root = mkdtempSync(join(tmpdir(), 'projection-workspace-lifecycle-'));
     mkdirSync(join(root, 'config'));
     process.env.TMPDIR = root;
     process.env.LLXPRT_CONFIG_HOME = join(root, 'config');

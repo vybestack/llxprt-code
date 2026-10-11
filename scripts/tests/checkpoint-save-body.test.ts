@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { writeBodyFile } from '../../packages/test-utils/src/body-evidence-writer.js';
 import { describe, expect, it, vi } from 'bun:test';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
@@ -93,7 +94,7 @@ async function roundTrip(size: number): Promise<void> {
     await seedRows(recorder, size);
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     const config = internalConfig(agent);
-    const root = await mkdtemp(join(process.cwd(), 'tmp/checkpoint-body-'));
+    const root = await mkdtemp(join(tmpdir(), 'checkpoint-body-'));
     try {
       vi.spyOn(config, 'getTokenizerFactory').mockReturnValue(exactTokenizer());
       const client = config.getAgentClient();

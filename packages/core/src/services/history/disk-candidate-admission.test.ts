@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { describe, expect, it } from 'bun:test';
 import { appendFileSync, mkdtempSync, rmSync } from 'node:fs';
@@ -18,9 +19,7 @@ async function compensationPressure(size: number): Promise<{
   readonly pending: number;
   readonly bytes: number;
 }> {
-  const root = mkdtempSync(
-    join(import.meta.dir, '../../../../../tmp/candidate-admission-'),
-  );
+  const root = mkdtempSync(join(tmpdir(), 'candidate-admission-'));
   let release: (() => void) | undefined;
   let reached: (() => void) | undefined;
   let compensating = false;

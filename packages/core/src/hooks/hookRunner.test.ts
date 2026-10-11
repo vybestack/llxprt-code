@@ -495,7 +495,8 @@ function registerDiskExitTests(): void {
         await fixture([], async (snapshot, _owners, root) => {
           const result = await hookRunner.executeHookWithRequestRows(
             command(
-              `(async()=>{for await(const _ of process.stdin){};process.stdout.write('{"decision":"allow"}');await new Promise(r=>process.stderr.write(${JSON.stringify(message)},r));process.exit(${code});})();`,
+              `(async()=>{for await(const _ of process.stdin){};process.stdout.write('{"decision":"allow"}');await new Promise(r=>process.stderr.write(process.argv[1],r));process.exit(Number(process.argv[2]));})();`,
+              [message, String(code)],
             ),
             HookEventName.BeforeModel,
             input(mockInput, snapshot, root, HookEventName.BeforeModel),

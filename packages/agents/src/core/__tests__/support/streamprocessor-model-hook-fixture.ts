@@ -185,9 +185,10 @@ const actions: Record<ModelHookMode, string | readonly string[]> = {
 };
 
 function modelCommand(root: string, action: string): string {
-  const record = JSON.stringify(join(root, 'model-hooks.jsonl'));
-  const script = `(async()=>{const fs=require('node:fs');let data='';for await(const chunk of process.stdin)data+=chunk;const input=JSON.parse(data);fs.appendFileSync(${record},JSON.stringify({input})+'\\n');${action}fs.appendFileSync(${record},JSON.stringify({output})+'\\n');console.log(typeof output==='string'?output:JSON.stringify(output));})().catch(error=>{console.error(String(error));process.exitCode=1;});`;
-  return `exec node -e ${escapeShellArg(script, getShellConfiguration().shell)}`;
+  const shell = getShellConfiguration().shell;
+  const record = escapeShellArg(join(root, 'model-hooks.jsonl'), shell);
+  const script = `(async()=>{const fs=require('node:fs');let data='';for await(const chunk of process.stdin)data+=chunk;const input=JSON.parse(data);fs.appendFileSync(process.argv[1],JSON.stringify({input})+'\\n');${action}fs.appendFileSync(process.argv[1],JSON.stringify({output})+'\\n');console.log(typeof output==='string'?output:JSON.stringify(output));})().catch(error=>{console.error(String(error));process.exitCode=1;});`;
+  return `exec node -e ${escapeShellArg(script, shell)} -- ${record}`;
 }
 
 export function registerModelHook(

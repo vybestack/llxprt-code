@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /**
  * @license
@@ -149,9 +150,7 @@ describe('scoped repeatable request snapshot', () => {
     await withCoreSuffixFixture(
       64,
       async (history, sourceOwnership, counters) => {
-        const root = mkdtempSync(
-          join(process.cwd(), 'tmp/request-slice1-fixture-'),
-        );
+        const root = mkdtempSync(join(tmpdir(), 'request-slice1-fixture-'));
         const ownership = new RowOwnership();
         let escaped: ProviderRequestRows | undefined;
         const oracle = buildProviderContent(

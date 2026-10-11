@@ -1,9 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+// Imports built CLI output, so it belongs to the scripts shard, which builds
+// the workspaces before it runs (the package shards resolve TypeScript source).
 import { describe, expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
-const root = resolve(import.meta.dir, '../../../../../..');
+const root = resolve(import.meta.dir, '../..');
 
 describe('Bun memory sampler acquisition', () => {
   it('permits Node module loading but rejects actual sampling without a Bun fallback', () => {

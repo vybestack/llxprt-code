@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HistoryMediaOwnership } from './history-media-ownership.js';
@@ -154,11 +154,6 @@ async function verifyRejectsARetainingMediaConsumerUsingTheUnchangedChargeLimits
     await effect.publish();
     await effect.finalize?.();
     await owner.releaseAll();
-    await mkdir('tmp/verify854/p05d', { recursive: true });
-    await writeFile(
-      'tmp/verify854/p05d/mediapeak-retaining-control.json',
-      JSON.stringify(ownership.snapshot(), null, 2),
-    );
     expect(ownership.snapshot().liveRows).toBe(512);
     expect(
       ownership.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
@@ -216,10 +211,5 @@ async function verifyProtectsDistinctLiveObjectsFromReclamationThroughDiskBacked
   await owner.releaseAll();
   await store.reclaimUnreferenced(new Set(), Date.now());
   expect(await store.getStoredByteLength()).toBe(0);
-  await mkdir('tmp/verify854/p05d', { recursive: true });
-  await writeFile(
-    'tmp/verify854/p05d/mediapeak-distinct-control.json',
-    JSON.stringify(ownership.snapshot(), null, 2),
-  );
   expect(ownership.snapshot().liveRows).toBe(0);
 }

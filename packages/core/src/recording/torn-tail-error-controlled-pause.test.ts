@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import {
@@ -18,11 +19,10 @@ import type { RecordingWriterIo, RecordingWriterObservation } from './types.js';
 
 const byteCeiling = 8_388_608;
 const objectCeiling = 440;
-const evidenceRoot = join(process.cwd(), 'tmp/verify854/p05d');
 
 async function withDirectory(
   action: (dir: string) => Promise<void>,
-  parent = evidenceRoot,
+  parent = tmpdir(),
 ): Promise<void> {
   await mkdir(parent, { recursive: true });
   const dir = await mkdtemp(join(parent, 'torn-core-'));
@@ -35,13 +35,6 @@ async function withDirectory(
 
 function human(seq: number, text: string): string {
   return `${JSON.stringify({ v: 1, seq, ts: '', type: 'content', payload: { content: { speaker: 'human', blocks: [{ type: 'text', text }] } } })}\n`;
-}
-
-async function recordEvidence(name: string, value: unknown): Promise<void> {
-  await writeFile(
-    join(evidenceRoot, `${name}-${process.pid}.json`),
-    JSON.stringify(value, null, 2),
-  );
 }
 
 async function verifyCoreScan(): Promise<void> {
@@ -86,17 +79,6 @@ async function verifyCoreScan(): Promise<void> {
       expect(ownership.snapshot().peakSerializedBytes).toBeLessThanOrEqual(
         byteCeiling,
       );
-      await recordEvidence('torn-core', {
-        tailBytes: Buffer.byteLength(tail),
-        prefixBytes: Buffer.byteLength(prefix),
-        configuredChunkBytes: 65_536,
-        maximumDecodedLineBytes: cursor.metrics().maxAssembledRecordBytes,
-        decodedBeforePage: 0,
-        decodedAfterPage: stats.snapshot().rowsDecoded,
-        rowCharge: ownership.snapshot(),
-        scope:
-          'core backwards scan: no observation seam for allocated chunks; 65536 is a configured upper bound, not a measured chunk peak',
-      });
     } finally {
       await cursor.close();
       expect(ownership.snapshot().liveRows).toBe(0);
@@ -207,13 +189,6 @@ async function verifyAppendFault(code: string): Promise<void> {
         }),
       ).rejects.toBe(failure);
       expect(observations.some((point) => point.phase === 'acked')).toBe(false);
-      await recordEvidence(`append-${code}`, {
-        code,
-        observations,
-        outcome: settled,
-        scope:
-          'injected one-shot append rejection before durable bytes; does not prove disk-full or crash behavior',
-      });
     } finally {
       release();
       await service.dispose();
@@ -222,8 +197,8 @@ async function verifyAppendFault(code: string): Promise<void> {
 }
 
 describe('real core cursor and injected append failure', () => {
-  it('creates a fixture directory when its evidence parent is absent', async () => {
-    const parent = join(evidenceRoot, `fixture-parent-${randomUUID()}`);
+  it('creates a fixture directory when its parent is absent', async () => {
+    const parent = join(tmpdir(), `fixture-parent-${randomUUID()}`);
     try {
       await withDirectory(async (dir) => {
         expect((await stat(dir)).isDirectory()).toBe(true);

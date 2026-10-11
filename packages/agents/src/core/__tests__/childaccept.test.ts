@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readFile, readdir, rm, stat } from 'node:fs/promises';
@@ -11,11 +12,8 @@ import {
 import { localTransport, sendChildHistory } from './childaccept-transport.js';
 
 describe('child facade real launch', () => {
-  it('creates a fixture directory when its evidence parent is absent', async () => {
-    const parent = join(
-      resolve('tmp/verify854/p05d'),
-      `fixture-parent-${randomUUID()}`,
-    );
+  it('creates a fixture directory when its parent is absent', async () => {
+    const parent = join(tmpdir(), `fixture-parent-${randomUUID()}`);
     try {
       const directory = await acceptanceDirectory('childaccept-probe-', parent);
       expect((await stat(directory)).isDirectory()).toBe(true);

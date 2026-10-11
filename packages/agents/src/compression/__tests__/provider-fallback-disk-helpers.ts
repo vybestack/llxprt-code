@@ -1,8 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { vi } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   AdmissionFailureRecorder,
@@ -66,12 +66,7 @@ export async function withFallbackFixture(
   size: number,
   action: (fixture: FallbackFixture) => Promise<void>,
 ): Promise<void> {
-  const root = mkdtempSync(
-    join(
-      dirname(fileURLToPath(import.meta.url)),
-      '../../../../../tmp/provider-fallback-journal-',
-    ),
-  );
+  const root = mkdtempSync(join(tmpdir(), 'provider-fallback-journal-'));
   const recorder = new AdmissionFailureRecorder({
     sessionId: 'fallback',
     projectHash: 'fallback',

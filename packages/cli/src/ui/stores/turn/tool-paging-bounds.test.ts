@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -19,7 +20,7 @@ function groupPage(
 describe('disk paging ownership', () => {
   it('keeps disk paging bounded while distinguishing a retaining consumer', async () => {
     const directory = await mkdtemp(
-      join(process.cwd(), 'tmp/verify854/p05d/toolpaging-recovery-bounds-'),
+      join(tmpdir(), 'toolpaging-recovery-bounds-'),
     );
     const file = join(directory, 'journal');
     const bound = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
@@ -52,10 +53,6 @@ describe('disk paging ownership', () => {
         }
         expect(ownership.snapshot().liveRows).toBe(1);
         expect(ownership.within(bound)).toBe(true);
-        await writeFile(
-          'tmp/verify854/p05d/toolpaging-recovery-bounded.json',
-          JSON.stringify(ownership.snapshot()),
-        );
         cursor.retainWindow(undefined, undefined, 'newer');
         for (let index = 0; index < 512; index += 1) {
           const { entries } = await cursor.pageForward(1);
@@ -66,10 +63,6 @@ describe('disk paging ownership', () => {
         await cursor.close();
         expect(ownership.snapshot().liveRows).toBe(512);
         expect(ownership.within(bound)).toBe(false);
-        await writeFile(
-          'tmp/verify854/p05d/toolpaging-recovery-consumer.json',
-          JSON.stringify(ownership.snapshot()),
-        );
       } finally {
         await cursor.close();
         for (const item of retained) ownership.release(item);

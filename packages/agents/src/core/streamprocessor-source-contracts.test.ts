@@ -30,7 +30,7 @@ function hook(
   path: string,
   action = '',
 ): void {
-  const script = `(async()=>{let data='';for await(const chunk of process.stdin)data+=chunk;const input=JSON.parse(data);require('node:fs').writeFileSync(${JSON.stringify(path)},JSON.stringify(input));${action}})();`;
+  const script = `(async()=>{let data='';for await(const chunk of process.stdin)data+=chunk;const input=JSON.parse(data);require('node:fs').writeFileSync(process.argv[1],JSON.stringify(input));${action}})();`;
   const hooks = config.getHooks();
   if (hooks === undefined) throw new Error('Missing test hook config');
   hooks[event] = [
@@ -38,7 +38,7 @@ function hook(
       hooks: [
         {
           type: HookType.Command,
-          command: `exec node -e ${escapeShellArg(script, getShellConfiguration().shell)}`,
+          command: `exec node -e ${escapeShellArg(script, getShellConfiguration().shell)} -- ${escapeShellArg(path, getShellConfiguration().shell)}`,
         },
       ],
     },

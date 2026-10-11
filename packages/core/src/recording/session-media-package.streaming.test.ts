@@ -14,6 +14,7 @@ import {
   readFile,
   readdir,
   rm,
+  stat,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -73,7 +74,7 @@ async function writePackage(
       objects: [],
     }),
   );
-  const bytes = (await readFile(recordingPath)).byteLength;
+  const bytes = (await stat(recordingPath)).size;
   return { recordingPath, bytes };
 }
 

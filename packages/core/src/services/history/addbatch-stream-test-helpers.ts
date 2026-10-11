@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdtempSync, rmSync, appendFileSync } from 'node:fs';
@@ -85,7 +86,7 @@ export async function withBatchFixture<T>(
     releaseWriter(): void;
   }) => Promise<T>,
 ): Promise<T> {
-  const root = mkdtempSync(join(process.cwd(), 'tmp/addbatch-fixture-'));
+  const root = mkdtempSync(join(tmpdir(), 'addbatch-fixture-'));
   const writer = batchGate();
   const pausedWrite = batchGate();
   let paused = false;

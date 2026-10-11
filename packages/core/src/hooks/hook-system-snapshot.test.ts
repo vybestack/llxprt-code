@@ -28,12 +28,13 @@ const rows = Array.from({ length: 64 }, (_, index) => ({
   metadata: { ...rich.metadata, id: `row-${index}` },
 }));
 
-const readInput = `process.stdin.setEncoding('utf8'); let body='';
+const readInput = `const args = process.argv.slice(1);
+  process.stdin.setEncoding('utf8'); let body='';
   for await (const chunk of process.stdin) body += chunk;
   const input = JSON.parse(body); const request = input.llm_request;`;
 
-function script(action: string): HookConfig {
-  return command(`(async () => { ${readInput} ${action} })();`);
+function script(action: string, args: readonly string[] = []): HookConfig {
+  return command(`(async () => { ${readInput} ${action} })();`, args);
 }
 
 function system(
@@ -162,7 +163,9 @@ describe('real HookSystem snapshot final replacement', () => {
       await fixture(rows, async (snapshot, owners, root) => {
         const hooksSystem = system(root, [
           script(
-            `process.stdout.write(JSON.stringify({hookSpecificOutput:{llm_request:{contents:${contents}}}}));`,
+            `const contents = args[0] === 'reverse' ? request.contents.reverse() : [];
+            process.stdout.write(JSON.stringify({hookSpecificOutput:{llm_request:{contents}}}));`,
+            [contents === '[]' ? 'empty' : 'reverse'],
           ),
         ]);
         await hooksSystem.initialize();
@@ -210,9 +213,11 @@ describe('real HookSystem snapshot AfterModel receipt', () => {
         const hooksSystem = system(
           root,
           ['left', 'right'].map((name) =>
-            script(`
-          require('node:fs').writeFileSync('${name}.json', JSON.stringify(input));
-          process.stdout.write(JSON.stringify({hookSpecificOutput:{llm_request:{contents:[]},llm_response:input.llm_response}}));`),
+            script(
+              `require('node:fs').writeFileSync(args[0] + '.json', JSON.stringify(input));
+          process.stdout.write(JSON.stringify({hookSpecificOutput:{llm_request:{contents:[]},llm_response:input.llm_response}}));`,
+              [name],
+            ),
           ),
           sequential,
         );
@@ -273,7 +278,8 @@ describe('real HookSystem snapshot parallel receipt', () => {
         root,
         ['left', 'right'].map((name) =>
           script(
-            `require('node:fs').writeFileSync('${name}.json',JSON.stringify(request));`,
+            `require('node:fs').writeFileSync(args[0] + '.json',JSON.stringify(request));`,
+            [name],
           ),
         ),
         false,
@@ -509,10 +515,12 @@ describe('real snapshot reducer parity', () => {
             `request.contents.reverse();process.stdout.write(JSON.stringify({continue:false,decision:'deny',reason:'first',hookSpecificOutput:{llm_request:request,additionalContext:'first'}}));`,
           ),
           script(
-            `process.stdout.write(JSON.stringify({continue:true,decision:'allow',reason:'last',hookSpecificOutput:{llm_request:${JSON.stringify(override)}}}));`,
+            `process.stdout.write(JSON.stringify({continue:true,decision:'allow',reason:'last',hookSpecificOutput:{llm_request:JSON.parse(args[0])}}));`,
+            [JSON.stringify(override)],
           ),
           script(
-            `require('node:fs').writeFileSync(${JSON.stringify(file)},JSON.stringify(request));`,
+            `require('node:fs').writeFileSync(args[0],JSON.stringify(request));`,
+            [file],
           ),
         ];
         const hooksSystem = system(root, makeHooks('snapshot-chain.json'));

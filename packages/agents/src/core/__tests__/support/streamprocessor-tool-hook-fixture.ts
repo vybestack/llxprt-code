@@ -88,10 +88,11 @@ export function registerToolHook(
       "const output={hookSpecificOutput:{llm_request:{contents:[{speaker:'human',blocks:[{type:'text',text:'replace'}]}]}}};",
     noop: 'const output={};',
   };
-  const input = JSON.stringify(join(root, 'hook-input.json'));
-  const output = JSON.stringify(join(root, 'hook-output.json'));
-  const stderr = JSON.stringify(join(root, 'hook-stderr.txt'));
-  const script = `(async()=>{const fs=require('node:fs');try{let data='';for await(const chunk of process.stdin)data+=chunk;const input=JSON.parse(data);fs.writeFileSync(${input},data);${actions[mode]}fs.writeFileSync(${output},JSON.stringify(output));console.log(JSON.stringify(output));}catch(error){const message=String(error);fs.writeFileSync(${stderr},message);console.error(message);process.exitCode=1;}})();`;
+  const shell = getShellConfiguration().shell;
+  const paths = ['hook-input.json', 'hook-output.json', 'hook-stderr.txt']
+    .map((name) => escapeShellArg(join(root, name), shell))
+    .join(' ');
+  const script = `(async()=>{const fs=require('node:fs');try{let data='';for await(const chunk of process.stdin)data+=chunk;const input=JSON.parse(data);fs.writeFileSync(process.argv[1],data);${actions[mode]}fs.writeFileSync(process.argv[2],JSON.stringify(output));console.log(JSON.stringify(output));}catch(error){const message=String(error);fs.writeFileSync(process.argv[3],message);console.error(message);process.exitCode=1;}})();`;
   const hooks = config.getHooks();
   if (!hooks) throw new Error('Missing actual fixture hooks');
   hooks[HookEventName.BeforeToolSelection] = [
@@ -100,7 +101,7 @@ export function registerToolHook(
         {
           type: HookType.Command,
           name: 'actual-tool-hook',
-          command: `exec node -e ${escapeShellArg(script, getShellConfiguration().shell)}`,
+          command: `exec node -e ${escapeShellArg(script, shell)} -- ${paths}`,
         },
       ],
     },

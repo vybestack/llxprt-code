@@ -81,6 +81,7 @@ function makeOptions(
       invocation,
       contents: stream,
       systemInstruction: SYSTEM_PROMPT,
+      resolved: { model: 'gpt-4o' },
     }),
     contents: stream,
   };

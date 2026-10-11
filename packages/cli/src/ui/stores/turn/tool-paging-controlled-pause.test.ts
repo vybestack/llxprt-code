@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
 import {
   appendFile,
@@ -82,20 +83,6 @@ function projected(entry: DisplayJournalEntry): HistoryItem {
   return entry.item;
 }
 
-async function recordPause(
-  charge: ReturnType<RowOwnership['snapshot']>,
-  rowReleased: number,
-): Promise<void> {
-  await writeFile(
-    join(
-      process.cwd(),
-      'tmp/verify854/p05d',
-      `controlled-page-abort-${process.pid}.json`,
-    ),
-    JSON.stringify({ charge, rowReleased, scope: 'registered rows only' }),
-  );
-}
-
 async function nextPage(
   iterator: AsyncGenerator<HistoryItem, void, unknown>,
 ): Promise<HistoryItem> {
@@ -112,9 +99,7 @@ function register(ownership: RowOwnership) {
 async function withJournal(
   action: (directory: string, file: string) => Promise<void>,
 ): Promise<void> {
-  const directory = await mkdtemp(
-    join(process.cwd(), 'tmp/verify854/p05d/controlled-page-'),
-  );
+  const directory = await mkdtemp(join(tmpdir(), 'controlled-page-'));
   const file = join(directory, 'journal');
   try {
     await writeFile(file, journal());
@@ -158,28 +143,10 @@ async function verifyTraversalAndConsumer(): Promise<void> {
   await withJournal(async (directory, file) => {
     const ownership = new RowOwnership();
     const { counters, stats } = register(ownership);
-    const checkpoints = await walkPages(
-      directory,
-      file,
-      ownership,
-      counters,
-      stats,
-    );
-    await verifyRetainedPages(
-      directory,
-      file,
-      ownership,
-      counters,
-      stats,
-      checkpoints,
-    );
+    await walkPages(directory, file, ownership, counters, stats);
+    await verifyRetainedPages(directory, file, ownership, counters);
     expect(ownership.snapshot().liveRows).toBe(0);
   });
-}
-
-interface PageCheckpoint {
-  phase: string;
-  charge: ReturnType<RowOwnership['snapshot']>;
 }
 
 async function verifyForwardPages(
@@ -211,13 +178,12 @@ async function walkPages(
   ownership: RowOwnership,
   counters: ReturnType<typeof register>['counters'],
   stats: ReturnType<typeof createRowCounters>,
-): Promise<PageCheckpoint[]> {
+): Promise<void> {
   const cursor = await ProjectedJournalCursor.open(file, {
     counters,
     temporaryRoot: directory,
   });
   const retained: HistoryItem[] = [];
-  const checkpoints: PageCheckpoint[] = [];
   try {
     const first = await cursor.pageBack(1);
     const held = group(projected(first.entries[0]));
@@ -228,10 +194,6 @@ async function walkPages(
       callCount - 32,
     );
     expect(ownership.snapshot().liveRows).toBe(2);
-    checkpoints.push({
-      phase: 'caller-held old + cursor-held new',
-      charge: ownership.snapshot(),
-    });
     expect(stats.snapshot().rowsDecoded).toBe(1026);
     expect(stats.snapshot().peakDecodedRows).toBeLessThanOrEqual(1);
     assertBound(ownership);
@@ -267,16 +229,11 @@ async function walkPages(
     }
     await verifyForwardPages(cursor, ownership);
     await cursor.close();
-    checkpoints.push({
-      phase: 'cursor close',
-      charge: ownership.snapshot(),
-    });
     expect(ownership.snapshot().liveRows).toBe(0);
   } finally {
     await cursor.close();
     for (const item of retained) ownership.release(item);
   }
-  return checkpoints;
 }
 
 async function verifyRetainedPages(
@@ -284,8 +241,6 @@ async function verifyRetainedPages(
   file: string,
   ownership: RowOwnership,
   counters: ReturnType<typeof register>['counters'],
-  stats: ReturnType<typeof createRowCounters>,
-  checkpoints: PageCheckpoint[],
 ): Promise<void> {
   const retained: HistoryItem[] = [];
   const negative = await ProjectedJournalCursor.open(file, {
@@ -306,26 +261,6 @@ async function verifyRetainedPages(
   }
   expect(ownership.snapshot().liveRows).toBe(pageCount);
   expect(ownership.within(bound)).toBe(false);
-  await writeFile(
-    join(
-      process.cwd(),
-      'tmp/verify854/p05d',
-      `controlled-page-row-charge-${process.pid}.json`,
-    ),
-    JSON.stringify({
-      fixture: {
-        calls: callCount,
-        pages: pageCount,
-        responses: 1024,
-        openerCalls: 35,
-      },
-      afterConsumerClose: ownership.snapshot(),
-      checkpoints,
-      producer: stats.snapshot(),
-      scope:
-        'registered rows only; strings, buffers, parsed pages, wrappers and unregistered consumers excluded',
-    }),
-  );
   for (const item of retained) ownership.release(item);
   expect(ownership.snapshot().liveRows).toBe(0);
   expect(await readdir(directory)).toStrictEqual(['journal']);
@@ -494,7 +429,6 @@ async function verifyYieldAndPendingRead(): Promise<void> {
       // tail row: the carried tail group's indexed responses are not re-read.
       expect(released).toBe(1027);
       assertBound(ownership);
-      await recordPause(ownership.snapshot(), released);
       await cursor.close();
       expect(await outcome).toBe(true);
       expect(settled).toBe(true);

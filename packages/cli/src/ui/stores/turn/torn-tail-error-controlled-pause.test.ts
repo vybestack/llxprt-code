@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
 import { createReadStream, truncateSync } from 'node:fs';
 import { appendFile, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
@@ -10,7 +11,6 @@ import { ProjectedJournalCursor } from './projected-journal-cursor.js';
 const byteCeiling = 8_388_608;
 const objectCeiling = 440;
 const chunkBytes = 65_536;
-const evidenceRoot = join(process.cwd(), 'tmp/verify854/p05d');
 
 function human(seq: number, text: string): string {
   return `${JSON.stringify({ v: 1, seq, ts: '', type: 'content', payload: { content: { speaker: 'human', blocks: [{ type: 'text', text }] } } })}\n`;
@@ -19,7 +19,7 @@ function human(seq: number, text: string): string {
 async function fixture(
   action: (directory: string, file: string) => Promise<void>,
 ): Promise<void> {
-  const directory = await mkdtemp(join(evidenceRoot, 'torn-cli-'));
+  const directory = await mkdtemp(join(tmpdir(), 'torn-cli-'));
   const file = join(directory, 'journal');
   try {
     await writeFile(file, human(1, 'complete-one') + human(2, 'complete-two'));
@@ -137,19 +137,6 @@ async function verifyTornAccumulation(): Promise<number> {
       scan.release();
       cursor ??= await pending;
       await cursor.close();
-      await writeFile(
-        join(evidenceRoot, `torn-cli-${process.pid}.json`),
-        JSON.stringify(
-          {
-            ...scan.snapshot(),
-            rowsDecodedAtPause: 2,
-            scope:
-              'real file stream; accumulator inferred from delivered UTF-8 ASCII chunks; buffer capacities and JS/native allocations not measured',
-          },
-          null,
-          2,
-        ),
-      );
       expect(ownership.snapshot().liveRows).toBe(0);
       expect(await readdir(directory)).toStrictEqual(['journal']);
     }
@@ -194,7 +181,7 @@ async function verifyFailedPageRead(): Promise<void> {
 
 describe('projected cursor torn tail and page errors', () => {
   it('keeps a complete oversized record visible when followed by a torn suffix', async () => {
-    const directory = await mkdtemp(join(evidenceRoot, 'complete-cli-'));
+    const directory = await mkdtemp(join(tmpdir(), 'complete-cli-'));
     const file = join(directory, 'journal');
     const first = human(1, 'complete-one');
     const large = human(2, 'x'.repeat(byteCeiling));

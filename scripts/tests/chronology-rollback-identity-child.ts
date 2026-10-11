@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { gcAndSweep } from 'bun:jsc';
 import {
   closeSync,
@@ -179,9 +180,7 @@ function originalMarker(row: IContent): ChronologyMarker {
 }
 
 async function disk(strong: boolean): Promise<IdentityObservation> {
-  const directory = mkdtempSync(
-    join(import.meta.dir, '../../tmp/chronology-identity-disk-'),
-  );
+  const directory = mkdtempSync(join(tmpdir(), 'chronology-identity-disk-'));
   try {
     const rows = makeRows();
     const retained: ChronologyMarker[] = strong ? rows.map(originalMarker) : [];

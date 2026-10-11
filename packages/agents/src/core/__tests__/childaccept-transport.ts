@@ -27,6 +27,7 @@ export async function localTransport(directory: string): Promise<{
   let count = 0;
   let digest = '';
   let rejectNext = false;
+  const failures: string[] = [];
   const handle = async (
     request: IncomingMessage,
     response: ServerResponse,
@@ -57,8 +58,9 @@ export async function localTransport(directory: string): Promise<{
         'data: {"type":"content.delta","delta":"ok"}\n\ndata: {"type":"response.completed","response":{"id":"resp_child_local","status":"completed"}}\n\ndata: [DONE]\n\n',
       );
     } catch (error) {
+      failures.push(String(error));
       response.writeHead(500);
-      response.end(String(error));
+      response.end('local transport rejected the request');
     }
   };
   const server = createServer((request, response) => {
@@ -75,10 +77,15 @@ export async function localTransport(directory: string): Promise<{
     rejectNext: () => {
       rejectNext = true;
     },
-    close: () =>
-      new Promise<void>((resolve, reject) =>
+    close: async () => {
+      await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
-      ),
+      );
+      if (failures.length > 0)
+        throw new Error(
+          `Local transport rejected requests: ${failures.join('; ')}`,
+        );
+    },
   };
 }
 

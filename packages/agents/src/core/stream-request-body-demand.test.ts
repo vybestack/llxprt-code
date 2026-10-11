@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -235,7 +236,7 @@ async function captureProviderBody(
 }
 
 async function createFixture(): Promise<Fixture> {
-  const root = mkdtempSync(join(process.cwd(), 'tmp/issue854-agent-body-'));
+  const root = mkdtempSync(join(tmpdir(), 'issue854-agent-body-'));
   const receipt = join(root, 'hook-receipt.json');
   const recording = new SessionRecordingService({
     sessionId: randomUUID(),

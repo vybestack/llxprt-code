@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -65,7 +66,7 @@ export async function withPendingFixture<T>(
   bytes = 2048,
   contextLimit = 30000,
 ): Promise<T> {
-  const root = mkdtempSync(join(process.cwd(), 'tmp/pending-window-fixture-'));
+  const root = mkdtempSync(join(tmpdir(), 'pending-window-fixture-'));
   const writer = pendingGate();
   let paused = false;
   const recorder = new AdmissionFailureRecorder({

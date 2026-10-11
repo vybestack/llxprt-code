@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -8,9 +9,7 @@ import { batchRow } from './addbatch-stream-test-helpers.js';
 async function withDisk(
   action: (disk: ProviderNormalizationDisk, root: string) => Promise<void>,
 ): Promise<void> {
-  const root = mkdtempSync(
-    join(process.cwd(), 'tmp/provider-normalization-io-'),
-  );
+  const root = mkdtempSync(join(tmpdir(), 'provider-normalization-io-'));
   const disk = new ProviderNormalizationDisk(root);
   try {
     await action(disk, root);
