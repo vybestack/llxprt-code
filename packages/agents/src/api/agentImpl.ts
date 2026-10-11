@@ -1,3 +1,4 @@
+import { AuxiliaryWork } from '../core/auxiliary-work.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -1012,14 +1013,14 @@ export class AgentImpl implements Agent {
     schema: Readonly<Record<string, unknown>>,
     opts?: GenerateOptions,
   ): Promise<Record<string, unknown>> {
-    if (!this.isProviderReady()) {
-      throw new Error(UNCONFIGURED_AGENT_MESSAGE);
-    }
+    if (!this.isProviderReady()) throw new Error(UNCONFIGURED_AGENT_MESSAGE);
     const client = this.deps.resolveClient();
-    const contentsArr = [...contents];
-    const signal = opts?.signal ?? new AbortController().signal;
+    const input = [...contents];
     const model = opts?.model ?? this.getModel();
-    return client.generateJson(contentsArr, { ...schema }, signal, model);
+    return this.auxiliary.run(
+      (signal) => client.generateJson(input, { ...schema }, signal, model),
+      opts?.signal,
+    );
   }
 
   /**
@@ -1030,10 +1031,11 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-012
    */
   async generateEmbedding(texts: readonly string[]): Promise<number[][]> {
-    if (!this.isProviderReady()) {
-      throw new Error(UNCONFIGURED_AGENT_MESSAGE);
-    }
-    return this.deps.resolveClient().generateEmbedding([...texts]);
+    if (!this.isProviderReady()) throw new Error(UNCONFIGURED_AGENT_MESSAGE);
+    const client = this.deps.resolveClient();
+    return this.auxiliary.run((signal) =>
+      client.generateEmbedding([...texts], signal),
+    );
   }
 
   /**
@@ -1268,6 +1270,7 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-015
    * @pseudocode dispose.md 10-14, 20, 30, 40-47, 50-52, 55, 60, 70, 80-83, 90-92, 100-102
    */
+  private readonly auxiliary = new AuxiliaryWork();
   private lifecycle?: SessionLifecycle;
 
   dispose(): Promise<void> {
@@ -1280,6 +1283,7 @@ export class AgentImpl implements Agent {
       () => {
         this.ownership.disposed = true;
       },
+      () => this.deps.sessionClient.closeAdmission(),
       () => this.deps.taskLaunchOwner.closeAdmissionAndAbort(),
       () => this.deps.sessionClient.closeHookAdmission(),
       () => this.hooks.closeAdmission(),
@@ -1302,6 +1306,7 @@ export class AgentImpl implements Agent {
     return new SessionLifecycle({
       stopAdmissions: [
         ...this.stopShutdownAdmissions(),
+        () => start(() => this.auxiliary.close()),
         () => start(() => this.deps.sessionClient.closeImageAdmission()),
         () => start(() => this.deps.sessionClient.toolCatalog.closeAdmission()),
         () => start(() => this.tools.dispose()),

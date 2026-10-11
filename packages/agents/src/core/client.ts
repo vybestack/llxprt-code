@@ -1,3 +1,5 @@
+import { finishClientDisposal } from './client-disposal.js';
+import { AuxiliaryWork } from './auxiliary-work.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -21,7 +23,7 @@ import {
   assertSessionClientProvider,
   assertClientRuntimeState,
 } from './client-tool-selection.js';
-import { releaseClientModelSubscriptions } from './client-model-subscriptions.js';
+import { releaseClientModelSubscriptions as unlisten } from './client-model-subscriptions.js';
 import { publishClientPromptTokens } from './client-telemetry.js';
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderManager.js';
@@ -328,34 +330,25 @@ export class AgentClient
     this._baseLlmClient = undefined;
   }
 
-  async dispose(): Promise<void> {
-    const failures = releaseClientModelSubscriptions(
-      this.handleModelChanged,
-      this.handleModelProfileChanged,
-    );
-    const hasChatHistoryMedia = this._previousHistory?.some((content) =>
-      content.blocks.some(
-        (block) => block.type === 'media' && block.encoding === 'reference',
-      ),
-    );
-    if (this.chat !== undefined && hasChatHistoryMedia === true) {
-      try {
-        await this.chat.clearHistory();
+  private readonly auxiliary = new AuxiliaryWork();
+
+  dispose(): Promise<void> {
+    return finishClientDisposal(
+      this.auxiliary.close(),
+      () => unlisten(this.handleModelChanged, this.handleModelProfileChanged),
+      this._previousHistory,
+      () => this.chat?.clearHistory(),
+      () => {
         this.chat = undefined;
-      } catch (error: unknown) {
-        failures.push(error);
-      }
-    }
-    failures.push(
-      ...(await this.historyAdmissions.release(this.historyAdmissions.all)),
+      },
+      () => this.historyAdmissions.release(this.historyAdmissions.all),
+      () => {
+        if (this.historyAdmissions.all.length === 0) {
+          this._deferredHistoryAdmission = undefined;
+          this._previousHistory = undefined;
+        }
+      },
     );
-    if (failures.length === 0 && this.historyAdmissions.all.length === 0) {
-      this._deferredHistoryAdmission = undefined;
-      this._previousHistory = undefined;
-    }
-    if (failures.length > 0) {
-      throw new AggregateError(failures, 'Agent client disposal failed');
-    }
   }
 
   async initialize(contentGeneratorConfig: ContentGeneratorConfig) {
@@ -908,24 +901,26 @@ export class AgentClient
     model: string,
     config: ModelGenerationSettings = {},
   ): Promise<Record<string, unknown>> {
-    await this.lazyInitialize();
-    return clientLlmGenerateJson(
-      this.config,
-      this.readMcpInstructions,
-      this.getContentGenerator(),
-      this.getBaseLlmClient(),
-      contents,
-      schema,
-      abortSignal,
-      model,
-      { ...this.generateContentConfig, ...config },
-      this.lastPromptId ?? this.config.getSessionId(),
-      this.runtimeState.provider,
-      getEnabledToolNamesForPrompt(this.tools),
-      requireInstructionReads(this.instructions),
-      this.requireRuntimeSettings().promptPolicy ?? {},
-      this.subagentDefinitions,
-    );
+    return this.auxiliary.run(async (signal) => {
+      await this.lazyInitialize();
+      return clientLlmGenerateJson(
+        this.config,
+        this.readMcpInstructions,
+        this.getContentGenerator(),
+        this.getBaseLlmClient(),
+        contents,
+        schema,
+        signal,
+        model,
+        { ...this.generateContentConfig, ...config },
+        this.lastPromptId ?? this.config.getSessionId(),
+        this.runtimeState.provider,
+        getEnabledToolNamesForPrompt(this.tools),
+        requireInstructionReads(this.instructions),
+        this.requireRuntimeSettings().promptPolicy ?? {},
+        this.subagentDefinitions,
+      );
+    }, abortSignal);
   }
 
   async generateContent(
@@ -953,12 +948,18 @@ export class AgentClient
     );
   }
 
-  async generateEmbedding(texts: string[]): Promise<number[][]> {
-    await this.lazyInitialize();
-    return clientLlmGenerateEmbedding(
-      this.getBaseLlmClient(),
-      texts,
-      this.embeddingModel,
-    );
+  async generateEmbedding(
+    texts: string[],
+    abortSignal?: AbortSignal,
+  ): Promise<number[][]> {
+    return this.auxiliary.run(async (signal) => {
+      await this.lazyInitialize();
+      return clientLlmGenerateEmbedding(
+        this.getBaseLlmClient(),
+        texts,
+        this.embeddingModel,
+        signal,
+      );
+    }, abortSignal);
   }
 }

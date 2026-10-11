@@ -247,7 +247,7 @@ export interface AgentClientContract {
     abortSignal: AbortSignal,
     model: string,
   ): Promise<ModelOutput>;
-  generateEmbedding(texts: string[]): Promise<number[][]>;
+  generateEmbedding(texts: string[], signal?: AbortSignal): Promise<number[][]>;
   sendMessageStream(
     initialRequest: AgentRequestInput,
     signal: AbortSignal,

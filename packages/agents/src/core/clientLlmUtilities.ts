@@ -100,6 +100,7 @@ export async function generateJson(
         systemInstruction,
         temperature: generationConfig.temperature ?? 0,
         promptId: lastPromptId,
+        abortSignal,
       });
 
     const result = await retryWithBackoff(apiCall, { signal: abortSignal });
@@ -228,6 +229,7 @@ export async function generateEmbedding(
   baseLlmClient: BaseLLMClient,
   texts: string[],
   embeddingModel: string,
+  abortSignal?: AbortSignal,
 ): Promise<number[][]> {
   if (texts.length === 0) {
     return [];
@@ -236,6 +238,7 @@ export async function generateEmbedding(
   const result = await baseLlmClient.generateEmbedding({
     text: texts,
     model: embeddingModel,
+    abortSignal,
   });
 
   return result as number[][];
