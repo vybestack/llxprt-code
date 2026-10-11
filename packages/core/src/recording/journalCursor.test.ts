@@ -28,6 +28,7 @@ import * as fs from 'node:fs/promises';
 import { truncateSync } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { gcAndSweep } from 'bun:jsc';
 import { JournalCursor, MAX_RECORD_BYTES } from './journalCursor.js';
 import { SessionRecordingService } from './SessionRecordingService.js';
 import type {
@@ -231,6 +232,29 @@ function createCursorFixtures() {
     initialize,
     cleanup,
   };
+}
+
+const MAX_COLLECTION_CYCLES = 10;
+
+/**
+ * JSC scans the machine stack conservatively, so a stale stack slot can pin
+ * the probe target for one collection (flaky on Linux CI). Suspend and collect
+ * on a fresh stack up to MAX_COLLECTION_CYCLES times; a target genuinely held
+ * by a live structure is never collected, so the caller's assertion still
+ * fails for real retention.
+ */
+async function collected(ref: WeakRef<object>): Promise<boolean> {
+  for (
+    let cycle = 0;
+    cycle < MAX_COLLECTION_CYCLES && ref.deref() !== undefined;
+    cycle++
+  ) {
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    gcAndSweep();
+  }
+  return ref.deref() === undefined;
 }
 
 describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2 bounded raw chunk allocations', () => {
@@ -833,14 +857,7 @@ describe('JournalCursor @plan:PLAN-20260917-ISSUE854.P02 @requirement:G2 bounded
       MAX_RECORD_BYTES,
     );
 
-    // Suspend once so the collection runs on a fresh stack: conservative
-    // stack scanning would otherwise pin the probe target via a stale
-    // register from the paging call frames for one GC cycle.
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 0);
-    });
-    Bun.gc(true);
-    expect(ref.deref()).toBeUndefined();
+    expect(await collected(ref)).toBe(true);
 
     await cursor.close();
     await expect(cursor.pageBack(1)).rejects.toThrow('closed');
