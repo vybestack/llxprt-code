@@ -56,9 +56,8 @@ function retain(
       if (keys[3] !== 'replacement')
         return keys.length === 4 && keys[3] === 'replacedSeq';
     }
-    if (rowDepth(keys) === -1)
+    if (rowDepth(keys) === -1 && keys[1] === 'chronology')
       return (
-        keys[1] === 'chronology' &&
         keys.length === 3 &&
         ['seq', 'userTurn', 'step', 'recordedAt'].includes(String(keys[2]))
       );

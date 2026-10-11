@@ -16,7 +16,7 @@ const checkpointSchema = z.object({
   readings: z.array(z.number()),
 });
 const resultSchema = z.object({
-  mode: z.enum(['normal', 'trap']),
+  mode: z.enum(['normal', 'trap', 'release-trap']),
   baseline: checkpointSchema,
   checkpoints: z.array(checkpointSchema).length(4),
   requests: z.number(),
@@ -27,7 +27,7 @@ const resultSchema = z.object({
 });
 type Result = z.infer<typeof resultSchema>;
 
-async function runWorker(mode: 'normal' | 'trap'): Promise<Result> {
+async function runWorker(mode: Result['mode']): Promise<Result> {
   const root = createScratchDirSync('journal-retained-growth-');
   const log = join(root, 'worker.log');
   const fd = openSync(log, 'w');
@@ -71,7 +71,7 @@ function report(result: Result): string {
   const samples = [result.baseline, ...result.checkpoints]
     .map((point) => `turn ${point.turn}: [${point.readings.join(', ')}]`)
     .join('\n');
-  return `${result.mode} retained=${verdict.retainedBytes} intervals=${verdict.intervalGrowth.join(',')} requests=${result.requests} compressions=${result.compressions}\n${samples}`;
+  return `${result.mode} retained=${verdict.retainedBytes} deltas=${verdict.checkpointDeltas.join(',')} intervals=${verdict.intervalGrowth.join(',')} fitted=${Math.round(verdict.fittedRunGrowthBytes)} requests=${result.requests} compressions=${result.compressions}\n${samples}`;
 }
 
 function expectRealWorkload(result: Result): void {
@@ -88,9 +88,11 @@ describe('repeated-turn retained growth over the real journal-backed send path',
   // wall time is the slower run rather than the sum.
   let normalRun: Promise<Result>;
   let trapRun: Promise<Result>;
+  let releaseTrapRun: Promise<Result>;
   beforeAll(() => {
     normalRun = runWorker('normal');
     trapRun = runWorker('trap');
+    releaseTrapRun = runWorker('release-trap');
   });
 
   it('stays inside the allowance and does not accumulate with turn count', async () => {
@@ -101,6 +103,8 @@ describe('repeated-turn retained growth over the real journal-backed send path',
     const verdict = evaluateRetainedGrowth(result.baseline, result.checkpoints);
     expect(verdict.failures).toStrictEqual([]);
     expect(verdict.pass).toBe(true);
+    for (const delta of verdict.checkpointDeltas)
+      expect(delta).toBeLessThan(RETAINED_ALLOWANCE_BYTES);
   }, 300_000);
 
   it('trap: a test-installed observer keeping every request row fails the same predicate', async () => {
@@ -114,6 +118,39 @@ describe('repeated-turn retained growth over the real journal-backed send path',
       RETAINED_ALLOWANCE_BYTES,
     );
   }, 300_000);
+
+  it('trap: context retained between compressions and released before the last checkpoint fails', async () => {
+    const result = await releaseTrapRun;
+    process.stdout.write(`${report(result)}\n`);
+    expectRealWorkload(result);
+    expect(result.retainedRows).toBeGreaterThan(0);
+    const verdict = evaluateRetainedGrowth(result.baseline, result.checkpoints);
+    // The release happens before the last checkpoint, so a final-delta-only
+    // gate would pass this run. Only the per-checkpoint gate can fail it.
+    expect(verdict.retainedBytes).toBeLessThan(RETAINED_ALLOWANCE_BYTES);
+    expect(
+      verdict.checkpointDeltas
+        .slice(0, 3)
+        .some((delta) => delta >= RETAINED_ALLOWANCE_BYTES),
+    ).toBe(true);
+    expect(verdict.pass).toBe(false);
+  }, 300_000);
+
+  it('predicate rejects settled checkpoints above the allowance even when a later checkpoint is small', () => {
+    const point = (turn: number, heapBytes: number) => ({ turn, heapBytes });
+    const verdict = evaluateRetainedGrowth(point(40, 10_000_000), [
+      point(100, 10_000_000),
+      point(200, 11_500_000),
+      point(300, 12_000_000),
+      point(400, 10_700_000),
+    ]);
+    expect(verdict.retainedBytes).toBe(700_000);
+    expect(verdict.pass).toBe(false);
+    expect(verdict.checkpointDeltas).toStrictEqual([
+      0, 1_500_000, 2_000_000, 700_000,
+    ]);
+    expect(verdict.failures.length).toBeGreaterThanOrEqual(2);
+  });
 
   it('predicate rejects steady accumulation under the allowance and accepts flat noise', () => {
     const point = (turn: number, heapBytes: number) => ({ turn, heapBytes });

@@ -23,7 +23,14 @@ const CONTEXT_LIMIT = 5_000;
 const INSTRUCTIONS = 'Answer from the conversation history.';
 const RESPONSE_TEXT = `${'assistant reply '.repeat(40)}done`;
 
-export type WorkloadMode = 'normal' | 'trap';
+export type WorkloadMode = 'normal' | 'trap' | 'release-trap';
+
+/**
+ * The release-trap drops everything it retained after this turn, which is
+ * before the last checkpoint window opens, so only the earlier settled
+ * checkpoints can see the retention.
+ */
+export const RELEASE_TRAP_TURN = 380;
 
 /**
  * Deliberate retention for the trap: keeps every request row the real send
@@ -55,6 +62,19 @@ class RetainingHistory extends HistoryService {
       close: () => snapshot.close(),
     };
   }
+}
+
+function releaseTrapRetention(
+  mode: WorkloadMode,
+  history: HistoryService,
+  turn: number,
+): void {
+  if (
+    mode === 'release-trap' &&
+    turn === RELEASE_TRAP_TURN &&
+    history instanceof RetainingHistory
+  )
+    history.retained.length = 0;
 }
 
 /** Local server speaking the OpenAI Responses SSE protocol. */
@@ -180,9 +200,9 @@ export async function createWorkload(
     model: MODEL,
   });
   const history =
-    mode === 'trap'
-      ? new RetainingHistory({ recording })
-      : new HistoryService({ recording });
+    mode === 'normal'
+      ? new HistoryService({ recording })
+      : new RetainingHistory({ recording });
   const provider = new OpenAIResponsesProvider('test-key', baseURL);
   const providerRuntime = {
     config,
@@ -229,6 +249,7 @@ export async function createWorkload(
       );
       if (output !== RESPONSE_TEXT)
         throw new Error(`Turn ${turn} returned unexpected text`);
+      releaseTrapRetention(mode, history, turn);
     },
     async dispose() {
       history.dispose();

@@ -53,7 +53,7 @@ import {
   type RecordingWriterObservation,
 } from './types.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
-import { replaySession } from './ReplayEngine.js';
+import { validateReplayRows } from './ReplayEngine.js';
 import { CommitAckRegistry } from './CommitAckRegistry.js';
 import { diagnoseMissingPath, watchChatsDir } from './ChatsDirWatcher.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
@@ -1114,9 +1114,11 @@ export class SessionRecordingService {
         'Cannot create checkpoint: conversation has no content yet',
       );
     }
-    const replay = await replaySession(filePath, this.projectHash, {
-      mediaStore: this.mediaStore,
-    });
+    const { replay, rowCount } = await validateReplayRows(
+      filePath,
+      this.projectHash,
+      { mediaStore: this.mediaStore },
+    );
     if (!replay.ok) {
       throw new Error(`Cannot create checkpoint: ${replay.error}`);
     }
@@ -1125,7 +1127,7 @@ export class SessionRecordingService {
         'Cannot create checkpoint: recording has non-monotonic sequences',
       );
     }
-    if (replay.history.length === 0) {
+    if (rowCount === 0) {
       throw new Error(
         'Cannot create checkpoint: conversation has no content yet',
       );

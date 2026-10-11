@@ -14,6 +14,7 @@ import {
   HISTORY_RECORD_TYPES,
   ReplaceTransactionFold,
 } from './replaceTransaction.js';
+import { DurableDensityIndex } from './durableDensityIndex.js';
 import { ResolverIntervalIndex } from './resolverIntervalIndex.js';
 import { field, validSeq, validRow, chronology } from './resolverProjection.js';
 import {
@@ -284,14 +285,17 @@ export class JournalResolver {
 
   private async runPrepass(): Promise<void> {
     const staged = new ResolverDiskIndex(this.scratchRoot);
+    let density: DurableDensityIndex | null = null;
     let lastInvalid = false;
     try {
+      density = new DurableDensityIndex(this.scratchRoot);
       for await (const line of scanResolverLines(
         this.assertOpen(),
         this.chunkBytes,
         staged,
         this.maxBytes,
         this.replayObserver !== undefined,
+        density,
       )) {
         this.replayObserver?.line(line);
         const seq = field(line.parsed, 'seq');
@@ -302,17 +306,22 @@ export class JournalResolver {
         )
           break;
         lastInvalid = line.invalid;
-        this.absorb(line, staged);
+        this.absorb(line, staged, density);
       }
       if (lastInvalid) this.skippedRecordCount -= 1;
       this.transaction.abandon(diskIndexRowStore(this.units));
       this.prepassDone = true;
     } finally {
       staged.close();
+      density?.close();
     }
   }
 
-  private absorb(line: ProjectedLine, staged: ResolverDiskIndex): void {
+  private absorb(
+    line: ProjectedLine,
+    staged: ResolverDiskIndex,
+    density: DurableDensityIndex,
+  ): void {
     if (line.invalid) {
       this.skippedRecordCount += 1;
       return;
@@ -331,7 +340,7 @@ export class JournalResolver {
       return;
     }
     const type = field(line.parsed, 'type');
-    if (!this.fold(type, payload, seq, line, staged)) {
+    if (!this.fold(type, payload, seq, line, staged, density)) {
       this.skippedRecordCount += 1;
       this.replayObserver?.malformed(type, payload, line.lineNumber);
     }
@@ -343,32 +352,13 @@ export class JournalResolver {
     seq: number,
     line: ProjectedLine,
     staged: ResolverDiskIndex,
+    density: DurableDensityIndex,
   ): boolean {
     if (typeof type === 'string' && this.foldTransaction(type, payload))
       return true;
     switch (type) {
-      case 'chronology_bind': {
-        const binding = parseChronologyBinding(payload);
-        if (binding === null || binding.rowIndex >= this.units.length)
-          return false;
-        const content = field(payload, 'content');
-        if (content !== undefined && !validRow(content)) return false;
-        const row = this.units.get(binding.rowIndex);
-        const replacement =
-          content === undefined ? row : rowReference(content, seq, line);
-        this.units.set(binding.rowIndex, {
-          ...row,
-          start: replacement.start,
-          bytes: replacement.bytes,
-          chron: binding.chronology.seq,
-          userTurn: binding.chronology.userTurn,
-          step: binding.chronology.step,
-          recordedAt: binding.chronology.recordedAt,
-          invalidateResponses:
-            binding.invalidateResponses ?? row.invalidateResponses,
-        });
-        return true;
-      }
+      case 'chronology_bind':
+        return this.bindChronology(payload, seq, line);
       case 'content':
       case 'compressed': {
         const content = field(
@@ -406,7 +396,7 @@ export class JournalResolver {
       case 'rewind':
         return this.rewind(payload);
       case 'density_mutation':
-        return this.density(payload, seq, line);
+        return this.density(payload, line, density);
       case 'synthetic_insert':
         return this.insert(payload, seq, line);
       case 'compression_detail':
@@ -416,6 +406,32 @@ export class JournalResolver {
       default:
         return true;
     }
+  }
+
+  private bindChronology(
+    payload: object,
+    seq: number,
+    line: ProjectedLine,
+  ): boolean {
+    const binding = parseChronologyBinding(payload);
+    if (binding === null || binding.rowIndex >= this.units.length) return false;
+    const content = field(payload, 'content');
+    if (content !== undefined && !validRow(content)) return false;
+    const row = this.units.get(binding.rowIndex);
+    const replacement =
+      content === undefined ? row : rowReference(content, seq, line);
+    this.units.set(binding.rowIndex, {
+      ...row,
+      start: replacement.start,
+      bytes: replacement.bytes,
+      chron: binding.chronology.seq,
+      userTurn: binding.chronology.userTurn,
+      step: binding.chronology.step,
+      recordedAt: binding.chronology.recordedAt,
+      invalidateResponses:
+        binding.invalidateResponses ?? row.invalidateResponses,
+    });
+    return true;
   }
 
   /** True when the record was a replace record and is fully handled. */
@@ -443,35 +459,40 @@ export class JournalResolver {
     return cut === undefined || validSeq(cut);
   }
 
-  private density(payload: object, seq: number, line: ProjectedLine): boolean {
-    const removed = field(payload, 'removedSeqs');
-    const replacements = field(payload, 'replacements');
+  /**
+   * The projection streamed the event's removed sequences and replacement
+   * rows into the disk-backed density index, so only the row directory is
+   * walked here and no per-event collection is built.
+   */
+  private density(
+    payload: object,
+    line: ProjectedLine,
+    density: DurableDensityIndex,
+  ): boolean {
     if (
-      !Array.isArray(removed) ||
-      !removed.every(validSeq) ||
-      !Array.isArray(replacements)
+      !Array.isArray(field(payload, 'removedSeqs')) ||
+      !Array.isArray(field(payload, 'replacements')) ||
+      line.projection.invalidDensity
     )
       return false;
-    const replacementBySeq = new Map<number, IndexedRow>();
-    for (const entry of replacements) {
-      const marker = field(entry, 'replacedSeq');
-      const content = field(entry, 'replacement');
-      if (!validSeq(marker) || !validRow(content)) return false;
-      replacementBySeq.set(marker, rowReference(content, seq, line));
-    }
-    const dropped = new Set<number>(removed);
     let write = 0;
     for (let index = 0; index < this.units.length; index += 1) {
       const row = this.units.get(index);
-      const replacement = replacementBySeq.get(row.chron);
-      if (replacement !== undefined)
+      const replacement = Number.isNaN(row.chron)
+        ? null
+        : density.find('replacement', row.chron);
+      if (replacement !== null)
         this.units.set(write++, {
           ...row,
           start: replacement.start,
           bytes: replacement.bytes,
           invalidateResponses: false,
         });
-      else if (!dropped.has(row.chron)) this.units.set(write++, row);
+      else if (
+        Number.isNaN(row.chron) ||
+        density.find('removed', row.chron) === null
+      )
+        this.units.set(write++, row);
     }
     this.units.truncate(write);
     return true;
