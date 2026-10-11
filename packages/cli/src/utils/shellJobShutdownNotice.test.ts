@@ -5,6 +5,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'bun:test';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,21 +17,27 @@ import {
   type ExitListenerTarget,
 } from './shellJobShutdownNotice.js';
 
-/** Captures exit listeners instead of registering them on the real process. */
+/**
+ * A stand-in for `process` that keeps listeners on a private emitter instead
+ * of the real process. Signals are never raised against it: `kill` throws so
+ * a test that unexpectedly re-raises fails loudly instead of killing the
+ * test runner.
+ */
 function captureExitListeners(): {
   target: ExitListenerTarget;
   fireExit: () => void;
 } {
-  const listeners: Array<(code: number | undefined) => void> = [];
-  return {
-    target: {
-      on: (_event, listener) => {
-        listeners.push(listener);
-        return undefined;
-      },
+  const emitter = new EventEmitter();
+  const target: ExitListenerTarget = Object.assign(emitter, {
+    pid: 0,
+    kill: (): boolean => {
+      throw new Error('captured target must never be signalled');
     },
+  });
+  return {
+    target,
     fireExit: () => {
-      for (const listener of listeners) listener(0);
+      emitter.emit('exit', 0);
     },
   };
 }
@@ -47,13 +54,17 @@ function captureExitListeners(): {
  * (see `relaunch.test.ts`) would replace `spawn` for late importers.
  */
 interface BunSubprocessLike {
+  readonly stdout: ReadableStream<Uint8Array> | null;
   readonly stderr: ReadableStream<Uint8Array> | null;
   readonly exited: Promise<number>;
+  readonly signalCode: string | null;
+  kill(signal: NodeJS.Signals): void;
 }
 
 type BunSpawnFn = (
   cmds: string[],
   options: {
+    stdin?: 'ignore' | 'pipe' | 'inherit';
     stdout?: 'ignore' | 'pipe' | 'inherit';
     stderr?: 'ignore' | 'pipe' | 'inherit';
     env?: Record<string, string | undefined>;
@@ -71,6 +82,197 @@ function getBunSpawn(): BunSpawnFn {
 }
 
 const bunSpawn = getBunSpawn();
+
+/**
+ * Managed jobs are detached process-group leaders that outlive the process
+ * that launched them, so a fixture that leaves one running must have its
+ * group reaped explicitly. The fixture records the leader pid in `job.pid`;
+ * a missing or unparseable file yields NaN and is skipped.
+ */
+function reapJobGroup(fixtureDir: string): void {
+  const pidPath = path.join(fixtureDir, 'job.pid');
+  const pid = fs.existsSync(pidPath)
+    ? Number.parseInt(fs.readFileSync(pidPath, 'utf8'), 10)
+    : Number.NaN;
+  if (Number.isFinite(pid) && pid > 1) {
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      // The job may already have exited (ESRCH); nothing to reap.
+    }
+  }
+}
+
+type FixtureJobs = 'missing' | 'empty' | 'completed' | 'running';
+type FixtureHandler = 'none' | 'interactive' | 'noninteractive';
+
+interface SignalScenario {
+  /** `missing`: no manager at all; the others describe the manager's jobs. */
+  jobs: FixtureJobs;
+  /** Which existing production shutdown handler the child also installs. */
+  handler: FixtureHandler;
+  /** Whether that handler is registered before or after the notice. */
+  order: 'before' | 'after';
+  /** How many times the child registers the notice; defaults to once. */
+  registrations?: number;
+}
+
+interface SignalledChildResult {
+  stderr: string;
+  exitCode: number;
+  signalCode: string | null;
+  cleanupCompleted: boolean;
+}
+
+/**
+ * Source of a child that wires the real notice, a real `ShellJobManager`,
+ * patched stdio, and optionally the real production shutdown handlers
+ * (the interactive SIGTERM/SIGINT handlers behind a test-supplied TTY, or
+ * the non-interactive SIGINT handler), then writes `READY` to fd 1 and
+ * idles until the parent signals it. A registered async cleanup takes
+ * 150ms and leaves `cleanup.done` behind so the parent can tell whether a
+ * handler's cleanup ran to completion before the process ended.
+ */
+function buildSignalFixture(): string {
+  const coreSrc = path.resolve(import.meta.dirname, '../../../core/src');
+  const cliSrc = path.resolve(import.meta.dirname, '..');
+  const mod = (...segments: string[]): string =>
+    JSON.stringify(path.join(...segments));
+  return `
+const { writeFileSync, writeSync } = await import('node:fs');
+const { patchStdio } = await import(${mod(coreSrc, 'utils', 'stdio.ts')});
+const { ShellJobManager } = await import(${mod(coreSrc, 'services', 'shellJobManager.ts')});
+const { registerShellJobShutdownNotice } = await import(${mod(cliSrc, 'utils', 'shellJobShutdownNotice.ts')});
+const baseDir = process.env.NOTICE_FIXTURE_BASE_DIR;
+const jobs = process.env.NOTICE_FIXTURE_JOBS;
+const handler = process.env.NOTICE_FIXTURE_HANDLER;
+const order = process.env.NOTICE_FIXTURE_ORDER;
+const registrations = Number(process.env.NOTICE_FIXTURE_REGISTRATIONS);
+patchStdio();
+let manager;
+if (jobs !== 'missing') {
+  manager = new ShellJobManager({ baseDir });
+}
+if (jobs === 'completed') {
+  const done = manager.launch({ command: 'true', cwd: baseDir });
+  while (manager.get(done.id)?.state === 'running') {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+if (jobs === 'running') {
+  const job = manager.launch({ command: 'sleep 60', cwd: baseDir });
+  writeFileSync(baseDir + '/job.pid', String(job.pid));
+}
+const host = { peekShellJobManager: () => manager, isInteractive: () => true };
+async function installHandler() {
+  if (handler === 'none') return;
+  const { registerCleanup } = await import(${mod(cliSrc, 'utils', 'cleanup.ts')});
+  registerCleanup(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    writeFileSync(baseDir + '/cleanup.done', 'done');
+  });
+  if (handler === 'interactive') {
+    const { enableInteractiveRawModeIfNeeded } = await import(${mod(cliSrc, 'cliTerminalSession.ts')});
+    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
+    await enableInteractiveRawModeIfNeeded(host, { enable() {}, disable() {} }, false);
+  } else {
+    const { installNonInteractiveSigintHandler } = await import(${mod(cliSrc, 'session', 'signalHandlers.ts')});
+    installNonInteractiveSigintHandler();
+  }
+}
+if (order === 'before') await installHandler();
+for (let i = 0; i < registrations; i++) registerShellJobShutdownNotice(host);
+if (order === 'after') await installHandler();
+setInterval(() => {}, 1000);
+writeSync(1, 'READY');
+`;
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${ms}ms`)),
+      ms,
+    );
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Resolves once the child has written its `READY` line to stdout. */
+async function waitForReady(stdout: ReadableStream<Uint8Array>): Promise<void> {
+  const reader = stdout.getReader();
+  const decoder = new TextDecoder();
+  let seen = '';
+  try {
+    while (!seen.includes('READY')) {
+      const { done, value } = await reader.read();
+      if (done) {
+        throw new Error(`child exited before readiness; stdout: ${seen}`);
+      }
+      seen += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+/**
+ * Spawns the fixture with no TTY on any stream, waits for its readiness
+ * line, delivers a real OS signal, and reports how the child ended. Every
+ * wait is bounded, and the child and its job group are always reaped.
+ */
+async function runSignalledChild(
+  fixtureDir: string,
+  scenario: SignalScenario,
+  signal: 'SIGTERM' | 'SIGINT',
+): Promise<SignalledChildResult> {
+  const fixturePath = path.join(fixtureDir, 'signal-fixture.ts');
+  fs.writeFileSync(fixturePath, buildSignalFixture());
+  const proc = bunSpawn([process.execPath, fixturePath], {
+    stdin: 'ignore',
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: {
+      ...process.env,
+      NOTICE_FIXTURE_BASE_DIR: fixtureDir,
+      NOTICE_FIXTURE_JOBS: scenario.jobs,
+      NOTICE_FIXTURE_HANDLER: scenario.handler,
+      NOTICE_FIXTURE_ORDER: scenario.order,
+      NOTICE_FIXTURE_REGISTRATIONS: String(scenario.registrations ?? 1),
+    },
+  });
+  if (proc.stdout === null || proc.stderr === null) {
+    throw new Error('child stdout and stderr were not piped');
+  }
+  const stderrText = new Response(proc.stderr).text();
+  try {
+    await withTimeout(waitForReady(proc.stdout), 30_000, 'child readiness');
+    proc.kill(signal);
+    const exitCode = await withTimeout(proc.exited, 30_000, 'child exit');
+    return {
+      stderr: await withTimeout(stderrText, 10_000, 'child stderr drain'),
+      exitCode,
+      signalCode: proc.signalCode,
+      cleanupCompleted: fs.existsSync(path.join(fixtureDir, 'cleanup.done')),
+    };
+  } finally {
+    proc.kill('SIGKILL');
+    reapJobGroup(fixtureDir);
+  }
+}
+
+function countNotices(stderr: string): number {
+  return stderr.split('Shutting down with').length - 1;
+}
 
 describe('registerShellJobShutdownNotice', () => {
   let managers: ShellJobManager[] = [];
@@ -420,26 +622,6 @@ describe('registerShellJobShutdownNotice', () => {
     expect(stderrChunks).toStrictEqual([]);
   });
 
-  it('registers the exit listener on the real process by default', () => {
-    const before = process.listeners('exit');
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => undefined,
-    };
-
-    registerShellJobShutdownNotice(host);
-
-    const after = process.listeners('exit');
-    expect(after.length).toBe(before.length + 1);
-    // Remove exactly the listener that was added so the shared test process
-    // is not polluted for later files.
-    for (const listener of after) {
-      if (!before.includes(listener)) {
-        process.removeListener('exit', listener);
-      }
-    }
-    expect(process.listeners('exit')).toStrictEqual(before);
-  });
-
   it('reaches the physical stderr of a process whose stdio is patched when it exits via the quit path', async () => {
     // The quit path calls process.exit(0) without restoring stdio, so the
     // notice must bypass the patched process.stderr.write and land on the
@@ -494,22 +676,119 @@ describe('registerShellJobShutdownNotice', () => {
       );
       expect(stderr).toContain('sleep 30');
     } finally {
-      // The child's manager is not owned by this test's afterEach, and
-      // detached jobs outlive the process that launched them, so the leaked
-      // job must be reaped explicitly. Jobs are process-group leaders, so
-      // killing -pid terminates the whole tree. A missing or unparseable
-      // pid file yields NaN and is skipped.
-      const pidPath = path.join(fixtureDir, 'job.pid');
-      const pid = fs.existsSync(pidPath)
-        ? Number.parseInt(fs.readFileSync(pidPath, 'utf8'), 10)
-        : Number.NaN;
-      if (Number.isFinite(pid) && pid > 1) {
-        try {
-          process.kill(-pid, 'SIGKILL');
-        } catch {
-          // The job may already have exited (ESRCH); nothing to reap.
-        }
-      }
+      // The child's manager is not owned by this test's afterEach, so the
+      // job it leaked must be reaped explicitly.
+      reapJobGroup(fixtureDir);
     }
   }, 30_000);
+
+  describe.skipIf(process.platform === 'win32')(
+    'when a real no-TTY child process is sent a signal',
+    () => {
+      const signals = [
+        { signal: 'SIGTERM', status: 143 },
+        { signal: 'SIGINT', status: 130 },
+      ] as const;
+
+      function makeFixtureDir(): string {
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'notice-signal-'));
+        baseDirs.push(dir);
+        return dir;
+      }
+
+      for (const { signal, status } of signals) {
+        it(`reports a running job once and still dies from ${signal} with status ${status}`, async () => {
+          const result = await runSignalledChild(
+            makeFixtureDir(),
+            { jobs: 'running', handler: 'none', order: 'after' },
+            signal,
+          );
+
+          expect(result.signalCode).toBe(signal);
+          expect(result.exitCode).toBe(status);
+          expect(countNotices(result.stderr)).toBe(1);
+          expect(result.stderr).toContain('sleep 60');
+        }, 90_000);
+
+        for (const jobs of ['missing', 'empty', 'completed'] as const) {
+          it(`stays quiet on ${signal} when the manager is ${jobs} and still dies from the signal`, async () => {
+            const result = await runSignalledChild(
+              makeFixtureDir(),
+              { jobs, handler: 'none', order: 'after' },
+              signal,
+            );
+
+            expect(result.signalCode).toBe(signal);
+            expect(result.exitCode).toBe(status);
+            expect(result.stderr).toBe('');
+          }, 90_000);
+        }
+      }
+
+      for (const { signal, status } of signals) {
+        it(`reports a running job once and still dies from ${signal} with status ${status} when the notice is registered twice`, async () => {
+          const result = await runSignalledChild(
+            makeFixtureDir(),
+            {
+              jobs: 'running',
+              handler: 'none',
+              order: 'after',
+              registrations: 2,
+            },
+            signal,
+          );
+
+          // A duplicate registration must change nothing observable: one
+          // physical notice, and the process still ends from the signal
+          // itself rather than hanging on listeners that defer to each other.
+          expect(result.signalCode).toBe(signal);
+          expect(result.exitCode).toBe(status);
+          expect(countNotices(result.stderr)).toBe(1);
+          expect(result.stderr).toContain('sleep 60');
+        }, 90_000);
+      }
+
+      const handlerCases = [
+        // The interactive handlers exit normally after async cleanup: 0 on
+        // SIGTERM, 130 on SIGINT. The non-interactive handler covers SIGINT
+        // only and also exits 130.
+        { handler: 'interactive', signal: 'SIGTERM', status: 0 },
+        { handler: 'interactive', signal: 'SIGINT', status: 130 },
+        { handler: 'noninteractive', signal: 'SIGINT', status: 130 },
+      ] as const;
+
+      for (const { handler, signal, status } of handlerCases) {
+        for (const order of ['before', 'after'] as const) {
+          it(`reports a running job once with the ${handler} ${signal} handler registered ${order} the notice`, async () => {
+            const result = await runSignalledChild(
+              makeFixtureDir(),
+              { jobs: 'running', handler, order },
+              signal,
+            );
+
+            // The handler owns the exit: its async cleanup finishes, it
+            // exits with its own status, and the process is not killed by
+            // the signal.
+            expect(result.signalCode).toBeNull();
+            expect(result.exitCode).toBe(status);
+            expect(result.cleanupCompleted).toBe(true);
+            expect(countNotices(result.stderr)).toBe(1);
+          }, 90_000);
+        }
+
+        it(`stays quiet when the ${handler} ${signal} handler runs with no manager`, async () => {
+          const result = await runSignalledChild(
+            makeFixtureDir(),
+            { jobs: 'missing', handler, order: 'after' },
+            signal,
+          );
+
+          expect(result.signalCode).toBeNull();
+          expect(result.exitCode).toBe(status);
+          expect(result.cleanupCompleted).toBe(true);
+          expect(result.stderr).toBe('');
+        }, 90_000);
+      }
+    },
+  );
 });
