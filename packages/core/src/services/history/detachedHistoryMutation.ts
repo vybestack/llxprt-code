@@ -379,6 +379,15 @@ async function publishDetachedEffects(
   }
 }
 
+function attempt(action: () => void): unknown[] {
+  try {
+    action();
+    return [];
+  } catch (failure) {
+    return [failure];
+  }
+}
+
 async function commitDetachedHistory(
   host: DetachedHistoryHost,
   previous: DetachedHistoryJournal,
@@ -391,6 +400,7 @@ async function commitDetachedHistory(
 ): Promise<void> {
   const state = host.snapshot();
   const effects: PreparedHistoryBatchEffect[] = [];
+  let derived: Parameters<DetachedHistoryHost['apply']> | undefined;
   const publication = new DetachedHistoryPublication(
     host.journal,
     host.ownership,
@@ -409,6 +419,7 @@ async function commitDetachedHistory(
         state.spans,
         mergeCommitSpans([], undefined, previous, next),
       );
+    derived = [tokens, spans];
     await publishDetachedEffects(host, previous, next, effects, options);
     await publication.publish(
       previous,
@@ -431,22 +442,28 @@ async function commitDetachedHistory(
     );
   } catch (error) {
     const failures: unknown[] = [];
+    let compensated = true;
     if (publication.admittedCount > 0) {
       try {
         await publication.compensate(previous, next, appendOnly);
       } catch (failure) {
         failures.push(failure);
+        compensated = false;
       }
     }
-    try {
-      host.apply(state.tokens, state.spans);
-    } catch (failure) {
-      failures.push(failure);
-    }
-    try {
-      host.chronology.restore(state.chronology);
-    } catch (failure) {
-      failures.push(failure);
+    // Derived state follows the durable fold. When the replacement is durable
+    // and could not be taken back, the fold holds the new rows, so the new
+    // tokens and spans stay; otherwise the previous rows are still the fold.
+    const durableIsNext =
+      !compensated && !appendOnly && publication.replacementDurable;
+    const kept = derived;
+    if (durableIsNext && kept !== undefined) {
+      failures.push(...attempt(() => host.apply(kept[0], kept[1])));
+    } else {
+      failures.push(...attempt(() => host.apply(state.tokens, state.spans)));
+      failures.push(
+        ...attempt(() => host.chronology.restore(state.chronology)),
+      );
     }
     failures.push(...(await rollbackMutationEffects(effects)));
     throw historyMutationFailure(error, failures);

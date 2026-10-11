@@ -3,7 +3,8 @@
  * DetachedHistoryPublication.publish chooses what to record from the shape of
  * the replacement: nothing for a value-identical rebuild, one rewind for a
  * strict prefix, compressionDetail + compressed for a one-summary replacement
- * of an all-marked journal, and a full rewind plus content otherwise. In every
+ * of an all-marked journal, and one replace transaction (begin, rows, commit)
+ * otherwise. In every
  * case replaying the recording with the replay engine must reproduce exactly
  * the history that was published.
  */
@@ -170,7 +171,7 @@ describe('DetachedHistoryPublication.publish shape detection', () => {
     expectReplayEquals(outcome, [summary]);
   });
 
-  it('records a full rewind plus content for anything else', async () => {
+  it('records one replace transaction for anything else', async () => {
     const rows = marked(3);
     const replacement = [
       unmarked('a different first row', 'human'),
@@ -178,12 +179,13 @@ describe('DetachedHistoryPublication.publish shape detection', () => {
     ];
     const outcome = await publishAndReplay(rows, replacement);
     expect(outcome.recordedTypes).toStrictEqual([
-      'rewind',
+      'replace_begin',
       'content',
       'content',
       'content',
+      'replace_commit',
     ]);
-    expect(outcome.rewinds[0]).toMatchObject({ itemsRemoved: 3 });
+    expect(outcome.rewinds).toStrictEqual([]);
     expectReplayEquals(outcome, replacement);
   });
 });
@@ -195,8 +197,10 @@ describe('DetachedHistoryPublication.publish edge cases', () => {
       index === 2 ? unmarked('changed row', 'ai') : row,
     );
     const outcome = await publishAndReplay(rows, replacement);
-    expect(outcome.recordedTypes[0]).toBe('rewind');
-    expect(outcome.rewinds[0]).toMatchObject({ itemsRemoved: 4 });
+    expect(outcome.recordedTypes[0]).toBe('replace_begin');
+    expect(outcome.recordedTypes[outcome.recordedTypes.length - 1]).toBe(
+      'replace_commit',
+    );
     expect(outcome.recordedTypes.filter((t) => t === 'content')).toHaveLength(
       4,
     );
@@ -224,11 +228,11 @@ describe('DetachedHistoryPublication.publish edge cases', () => {
     ) as IContent[];
     const outcome = await publishAndReplay(rows, kept);
     expect(outcome.recordedTypes).toStrictEqual([
-      'rewind',
+      'replace_begin',
       'content',
       'content',
+      'replace_commit',
     ]);
-    expect(outcome.rewinds[0]).toMatchObject({ itemsRemoved: 4 });
     expectReplayEquals(outcome, kept);
   });
 
@@ -256,8 +260,11 @@ describe('DetachedHistoryPublication.publish edge cases', () => {
     const rows = [...marked(2), unmarked('no chronology marker', 'ai')];
     const summary = unmarked('<state_snapshot>kept</state_snapshot>', 'human');
     const outcome = await publishAndReplay(rows, [summary]);
-    expect(outcome.recordedTypes).toStrictEqual(['rewind', 'content']);
-    expect(outcome.rewinds[0]).toMatchObject({ itemsRemoved: 3 });
+    expect(outcome.recordedTypes).toStrictEqual([
+      'replace_begin',
+      'content',
+      'replace_commit',
+    ]);
     expectReplayEquals(outcome, [summary]);
   });
 });
@@ -285,6 +292,21 @@ describe('DetachedHistoryPublication.publish failure', () => {
     expect(outcome.recordedTypes.length).toBeGreaterThan(2);
     expectReplayEquals(outcome, rows);
   });
+
+  it.each([
+    ['the begin record', 0],
+    ['the first row', 1],
+    ['the commit record', 4],
+  ])(
+    'keeps the previous history when a full replacement fails at %s',
+    async (_label, failAfter) => {
+      const rows = marked(3);
+      const outcome = await publishAndReplay(rows, replacement, failAfter);
+      expect((outcome.failure as Error).message).toContain(failure);
+      expect(outcome.recordedTypes).not.toContain('rewind');
+      expectReplayEquals(outcome, rows);
+    },
+  );
 
   it('restores the previous history when the compressed event fails after its detail', async () => {
     const rows = marked(4);

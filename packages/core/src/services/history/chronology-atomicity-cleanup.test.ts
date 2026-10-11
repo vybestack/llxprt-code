@@ -49,17 +49,17 @@ describe('history mutation cleanup after compensation failure', () => {
         undefined,
         undefined,
       ]);
-      expect(history.getTotalTokens()).toBe(4);
-      // The injected fault lets the compensation rewind reach the journal but
-      // not the restoring row, so durable history is exactly what the journal
-      // holds: empty. No in-memory ledger resurrects the original row.
-      expect(await rowsOf(history)).toStrictEqual([]);
+      // The injected fault lets the restoring transaction begin but not write
+      // its first row. Readers discard an unfinished transaction, so durable
+      // history is the committed replacement and derived state follows it.
+      expect(history.getTotalTokens()).toBe(8);
+      expect(await rowsOf(history)).toHaveLength(2);
       const following = rollbackRow(3);
       await history.addBatch([following]);
       expect(following.metadata).toBeUndefined();
       const durable = await rowsOf(history);
-      expect(durable).toHaveLength(1);
-      expect(durable[0].metadata?.chronology?.seq).toBe(2);
+      expect(durable).toHaveLength(3);
+      expect(durable[2].metadata?.chronology?.seq).toBe(4);
     });
   });
 });

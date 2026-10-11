@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { IContent } from './IContent.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
@@ -99,8 +100,20 @@ function compressionOps(
   ];
 }
 
+interface ReplaceTransaction {
+  readonly txId: string;
+  rows: number;
+}
+
 export class DetachedHistoryPublication {
   admittedCount = 0;
+  /**
+   * True once a replacement is durable: the commit record of a transaction, or
+   * the acknowledged single record of an optimised shape. The durable fold then
+   * holds the new rows; before that it still holds the previous rows.
+   */
+  replacementDurable = false;
+  private transaction: ReplaceTransaction | null = null;
   private releaseEnvelope = (): void => {};
 
   constructor(
@@ -118,19 +131,25 @@ export class DetachedHistoryPublication {
     if (!appendOnly && rowsUnchanged(previous, next)) return;
     const compression = appendOnly ? undefined : compressionOps(previous, next);
     if (compression !== undefined) {
-      for (const op of compression) await this.admit(op, signal);
+      for (const op of compression) await this.admitShape(op, signal);
       return;
     }
     const truncation = appendOnly ? undefined : truncationCut(previous, next);
     if (truncation !== undefined) {
-      await this.admit({ kind: 'rewind', ...truncation }, signal);
+      await this.admitShape({ kind: 'rewind', ...truncation }, signal);
       return;
     }
-    if (!appendOnly && previous.length > 0)
-      await this.admit(
-        { kind: 'rewind', itemsRemoved: previous.length },
-        signal,
-      );
+    if (!appendOnly && previous.length > 0) {
+      if (next.length === 0) {
+        await this.admitShape(
+          { kind: 'rewind', itemsRemoved: previous.length },
+          signal,
+        );
+        return;
+      }
+      await this.publishReplacement(next, signal, awaitFinalCommit);
+      return;
+    }
     let index = 0;
     for (const content of next) {
       const ordinal = index++;
@@ -144,6 +163,49 @@ export class DetachedHistoryPublication {
     signal?.throwIfAborted();
   }
 
+  /**
+   * Stream a general replacement as one journal transaction. Every reader
+   * folds an unfinished transaction to the previous rows, so a crash or write
+   * failure before the commit record is durable never loses committed history.
+   */
+  private async publishReplacement(
+    next: DetachedHistoryJournal,
+    signal: AbortSignal | undefined,
+    awaitFinalCommit: boolean,
+  ): Promise<void> {
+    const open: ReplaceTransaction = { txId: randomUUID(), rows: 0 };
+    const { txId } = open;
+    this.transaction = open;
+    await this.admit({ kind: 'replaceBegin', txId }, signal);
+    for (const content of next)
+      await this.admit(
+        { kind: 'content', content, tx: txId },
+        signal,
+        true,
+        () => {
+          open.rows++;
+        },
+      );
+    await this.admit(
+      { kind: 'replaceCommit', txId, rowCount: open.rows },
+      signal,
+      awaitFinalCommit,
+      () => {
+        this.replacementDurable = true;
+      },
+    );
+    signal?.throwIfAborted();
+  }
+
+  private async admitShape(
+    op: HistoryJournalOp,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.admit(op, signal, true, () => {
+      this.replacementDurable = true;
+    });
+  }
+
   async compensate(
     previous: DetachedHistoryJournal,
     next: DetachedHistoryJournal,
@@ -153,18 +215,45 @@ export class DetachedHistoryPublication {
       await this.admit({ kind: 'rewind', itemsRemoved: this.admittedCount });
       return;
     }
-    await this.admit({
-      kind: 'rewind',
-      itemsRemoved: previous.length + next.length,
-    });
+    const open = this.transaction;
+    if (open !== null && !this.replacementDurable) {
+      // The recorder is still writable here: close the unfinished transaction.
+      await this.admit({
+        kind: 'replaceAbort',
+        txId: open.txId,
+        rowCount: open.rows,
+      });
+      this.transaction = null;
+      return;
+    }
+    await this.restorePrevious(previous, next);
+  }
+
+  /** Put the previous rows back after a replacement became durable. */
+  private async restorePrevious(
+    previous: DetachedHistoryJournal,
+    next: DetachedHistoryJournal,
+  ): Promise<void> {
+    if (previous.length === 0) {
+      await this.admit({ kind: 'rewind', itemsRemoved: next.length });
+      return;
+    }
+    const txId = randomUUID();
+    await this.admit({ kind: 'replaceBegin', txId });
     for (const content of previous)
-      await this.admit({ kind: 'content', content });
+      await this.admit({ kind: 'content', content, tx: txId });
+    await this.admit({
+      kind: 'replaceCommit',
+      txId,
+      rowCount: previous.length,
+    });
   }
 
   private async admit(
     op: HistoryJournalOp,
     signal?: AbortSignal,
     awaitCommit = true,
+    onDurable?: () => void,
   ): Promise<void> {
     signal?.throwIfAborted();
     let release = trackMutationOwners(
@@ -191,9 +280,12 @@ export class DetachedHistoryPublication {
         this.releaseEnvelope = (): void => {};
         release = (): void => {};
         void acknowledgement.then(releaseAcknowledged, releaseAcknowledged);
+        // The deferred acknowledgement cannot be awaited; admission is the last word.
+        onDurable?.();
         return;
       }
       await acknowledgement;
+      onDurable?.();
       this.close();
       signal?.throwIfAborted();
     } finally {
