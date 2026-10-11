@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { collectedWithin } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { describe, expect, it } from 'bun:test';
 import { errorMessage } from '@vybestack/llxprt-code-test-utils';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -335,8 +336,9 @@ describe('source prompt cancellation and ownership', () => {
     const preparer = createSourcePromptEnvelopePreparer(provider, buildOptions);
     try {
       const prepared = await preparer.prepare(fixture.source);
-      await Bun.sleep(0);
-      Bun.gc(true);
+      await Promise.all(
+        fixture.references.map((reference) => collectedWithin(reference)),
+      );
       expect(
         fixture.references.filter(
           (reference) => reference.deref() !== undefined,

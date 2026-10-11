@@ -1,3 +1,4 @@
+import { collectedWithin } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { withCuratedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /**
@@ -178,16 +179,10 @@ function makeRecorder(id: string): SessionRecordingService {
 async function gcUntilReleased(
   probes: ReadonlyArray<WeakRef<object>>,
 ): Promise<boolean> {
-  for (let cycle = 0; cycle < 10; cycle += 1) {
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 0);
-    });
-    Bun.gc(true);
-    if (probes.every((ref) => ref.deref() === undefined)) {
-      return true;
-    }
-  }
-  return probes.every((ref) => ref.deref() === undefined);
+  const collected = await Promise.all(
+    probes.map((ref) => collectedWithin(ref)),
+  );
+  return collected.every(Boolean);
 }
 
 async function seqOfPositionFromEnd(

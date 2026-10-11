@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { collectedWithin } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { HistoryService } from './HistoryService.js';
@@ -6,8 +7,6 @@ import type { HistoryDumpSnapshot } from './historyDumpSnapshot.js';
 import type { IContent } from './IContent.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import { createRowCounters } from '../../recording/journalCounters.js';
-
-declare const Bun: { gc(force: boolean): void };
 
 function valueRow(index: number, bytes: number): IContent {
   return {
@@ -47,11 +46,8 @@ function capture(
   return { history, probes, ownership, opening: history.openDumpSnapshot() };
 }
 
-async function settle(): Promise<void> {
-  for (let cycle = 0; cycle < 3; cycle++) {
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    Bun.gc(true);
-  }
+async function settle(probes: ReadonlyArray<WeakRef<object>>): Promise<void> {
+  await Promise.all(probes.map((probe) => collectedWithin(probe)));
 }
 
 describe('held production dump snapshots release caller identities', () => {
@@ -67,7 +63,7 @@ describe('held production dump snapshots release caller identities', () => {
         await fixture.history.waitForTokenUpdates();
         await fixture.history.waitForCommit();
         fixture.history.dispose();
-        await settle();
+        await settle(fixture.probes);
         expect(
           fixture.probes.filter((probe) => probe.deref() !== undefined),
         ).toHaveLength(0);

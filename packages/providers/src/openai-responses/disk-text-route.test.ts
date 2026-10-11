@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { collectedWithin } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { describe, expect, it } from 'bun:test';
 import { existsSync, readdirSync } from 'node:fs';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
@@ -15,11 +16,10 @@ import {
 } from './__tests__/support/disk-text-fixture.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
-async function gcRows(): Promise<void> {
-  for (let index = 0; index < 8; index++) {
-    await Bun.sleep(0);
-    Bun.gc(true);
-  }
+async function gcRows(
+  references: ReadonlyArray<WeakRef<object>>,
+): Promise<void> {
+  await Promise.all(references.map((row) => collectedWithin(row)));
 }
 
 describe('explicit actual provider disk text route', () => {
@@ -35,7 +35,7 @@ describe('explicit actual provider disk text route', () => {
       });
       const finalized = projection.finalizedProjection;
       expect(finalized).toBeInstanceOf(Gpt56SourceProjection);
-      await gcRows();
+      await gcRows(disk.references);
       expect(disk.state.pulled).toBe(64);
       expect(disk.state.active).toBe(0);
       expect(
@@ -79,7 +79,7 @@ describe('actual source HTTP replay', () => {
           throw new Error('Response escaped before HTTP arrival');
         }),
       ]);
-      await gcRows();
+      await gcRows(disk.references);
       const scanAtHttpArrival = disk.state.pulled;
       expect(
         disk.references.filter((row) => row.deref() !== undefined),

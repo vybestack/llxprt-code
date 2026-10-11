@@ -22,6 +22,7 @@
  * @requirement:G2
  */
 
+import { collectedWithin } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -131,17 +132,10 @@ async function waitFor(
   return condition();
 }
 
-function countRetainedAfterGc(probes: ReadonlyArray<WeakRef<object>>): number {
-  const bun: unknown = Reflect.get(globalThis, 'Bun');
-  if (
-    typeof bun !== 'object' ||
-    bun === null ||
-    !('gc' in bun) ||
-    typeof bun.gc !== 'function'
-  ) {
-    throw new Error('Bun.gc is required for the weak-reference probe');
-  }
-  bun.gc(true);
+async function countRetainedAfterGc(
+  probes: ReadonlyArray<WeakRef<object>>,
+): Promise<number> {
+  await Promise.all(probes.map((probe) => collectedWithin(probe)));
   return probes.filter((probe) => probe.deref() !== undefined).length;
 }
 
@@ -279,6 +273,6 @@ describe('P05b4 aborted transport and released rows @plan:PLAN-20260917-ISSUE854
     // history stream, and the pulled rows must be collectible after GC.
     expect(source.fullyDrained()).toBe(false);
     await sleep(10);
-    expect(countRetainedAfterGc(probes)).toBe(0);
+    expect(await countRetainedAfterGc(probes)).toBe(0);
   });
 });

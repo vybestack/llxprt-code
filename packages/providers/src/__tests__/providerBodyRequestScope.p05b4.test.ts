@@ -22,6 +22,7 @@
  * @requirement:G6
  */
 
+import { collectedWithin } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { describe, expect, it } from 'bun:test';
 import {
   acquireRequestScopedBody,
@@ -97,17 +98,8 @@ describe('P05b4 request-scoped transport body lease @plan:PLAN-20260917-ISSUE854
       return lease.release();
     };
     await probeLease();
-    const bun: unknown = Reflect.get(globalThis, 'Bun');
-    if (
-      typeof bun !== 'object' ||
-      bun === null ||
-      !('gc' in bun) ||
-      typeof bun.gc !== 'function'
-    ) {
-      throw new Error('Bun.gc is required for the weak-reference probe');
-    }
-    bun.gc(true);
-    expect(probe?.deref()).toBeUndefined();
+    if (probe === undefined) throw new Error('Weak-reference probe not set');
+    expect(await collectedWithin(probe)).toBe(true);
   });
 });
 

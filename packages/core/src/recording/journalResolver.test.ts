@@ -28,6 +28,7 @@
  * Generated journals must resolve to the same rows through both algorithms.
  */
 
+import { collectedWithin } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -724,15 +725,7 @@ async function releaseDecodedPayloads(): Promise<void> {
   // observable. Poll instead of asserting on a fixed cycle count: a resolver
   // that actually retained a payload in any live structure would never see
   // deref() turn undefined, however long we poll.
-  for (let cycle = 0; cycle < 10; cycle += 1) {
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 0);
-    });
-    Bun.gc(true);
-    if (probeRefs.every((ref) => ref.deref() === undefined)) {
-      break;
-    }
-  }
+  await Promise.all(probeRefs.map((ref) => collectedWithin(ref)));
   for (const ref of probeRefs) {
     expect(ref.deref()).toBeUndefined();
   }
