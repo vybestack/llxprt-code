@@ -208,6 +208,8 @@ function createEmptyRegistryConfig(): Config {
     getPolicyEngine: () => policyEngine,
     getTelemetryLogPromptsEnabled: () => false,
     getImagePayloadBudgetBytes: () => 50_000,
+    // The source before-model snapshot hook reads this required Config method.
+    getEnableHooks: () => false,
     isInteractive: () => false,
     // Prompt-assembly path (createChatObject → buildSystemInstruction →
     // resolvePromptMemory). JIT is disabled, so user memory is the empty
@@ -359,7 +361,7 @@ async function runDirectNonInteractive(
 
 function runtimeProviderFor(
   responses: readonly IContent[],
-  requests: RuntimeGenerateChatOptions[],
+  requestContents: IContent[][],
 ): RuntimeProvider {
   let index = 0;
   return {
@@ -373,7 +375,6 @@ function runtimeProviderFor(
         throw new Error('Expected request options from the runtime.');
       }
       const options = input as RuntimeGenerateChatOptions;
-      requests.push(options);
       const response = responses[index] ?? stopped();
       index += 1;
       // The stream validator requires a finishReason on the model output;
@@ -384,6 +385,11 @@ function runtimeProviderFor(
           block.type === 'tool_call',
       );
       return (async function* () {
+        // The request rows are a provider-owned snapshot that closes once the
+        // send settles, so a real provider reads them during the call.
+        const rows: IContent[] = [];
+        for await (const content of options.contents) rows.push(content);
+        requestContents.push(rows);
         yield {
           ...response,
           finishReason: hasToolCall ? 'tool_calls' : 'stop',
@@ -411,8 +417,8 @@ async function runInteractiveDirect(responses: readonly IContent[]): Promise<{
   const config = createEmptyRegistryConfig();
   config.getToolRegistry().registerTool(new UppercaseTool());
   config.getToolRegistry().registerTool(new RuntimeDisabledTool());
-  const requests: RuntimeGenerateChatOptions[] = [];
-  const provider = runtimeProviderFor(responses, requests);
+  const requestContents: IContent[][] = [];
+  const provider = runtimeProviderFor(responses, requestContents);
   // The ChatSession resolves its provider via adapter.getActiveProvider()
   // (see subagent.aggregate-output-budget.test.ts): the adapter method must
   // itself return a zero-arg fn that hands back the provider, and the name
@@ -429,10 +435,21 @@ async function runInteractiveDirect(responses: readonly IContent[]): Promise<{
   // as a bundle option so runtimeContext.provider is the scripted provider —
   // spreading it after construction would leave runtimeContext with the
   // default adapter, which yields an empty blocks[] IContent.
-  const bundle = createStatelessRuntimeBundle({
+  const baseBundle = createStatelessRuntimeBundle({
     history: new HistoryService(),
     providerAdapter,
   });
+  // The disk request path reads the live runtime config, as production runtimes provide.
+  const bundle = {
+    ...baseBundle,
+    runtimeContext: {
+      ...baseBundle.runtimeContext,
+      providerRuntime: {
+        ...baseBundle.runtimeContext.providerRuntime,
+        config,
+      },
+    },
+  };
   const toolRegistry = config.getToolRegistry();
   const toolExecutorContext = createToolExecutionConfig(
     bundle,
@@ -460,14 +477,6 @@ async function runInteractiveDirect(responses: readonly IContent[]): Promise<{
     {},
   );
   await scope.runInteractive(new ContextState());
-  const requestContents: IContent[][] = [];
-  for (const request of requests) {
-    const rows: IContent[] = [];
-    for await (const content of request.contents) {
-      rows.push(content);
-    }
-    requestContents.push(rows);
-  }
   return {
     output: scope.output,
     requestContents,

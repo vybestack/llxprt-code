@@ -86,7 +86,9 @@ describe('AgentClient deferred retained array suspended after durable acknowledg
     expect(positive.preBytes).toBeGreaterThan(8 * 1024 * 1024);
     expect(positive.callerRows).toBe(0);
     expect(positive.returnedRows).toBe(0);
-    expect(positive.storedRows).toBeGreaterThan(0);
+    // Caller rows are released; the publication spools to disk, so no row
+    // objects may remain owned by the store while finalization is suspended.
+    expect(positive.storedRows).toBe(0);
     expect(positive.heldRows).toBeLessThanOrEqual(440);
     expect(positive.heldBytes).toBeLessThanOrEqual(8 * 1024 * 1024);
     expect(trap.callerRows).toBe(8192);

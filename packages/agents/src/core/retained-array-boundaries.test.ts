@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { setImmediate, setTimeout } from 'node:timers/promises';
+import { setTimeout } from 'node:timers/promises';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -84,38 +84,57 @@ async function earliestPendingFailure(size: number): Promise<number> {
   }
 }
 async function abortPending(size: number): Promise<number> {
-  return withDetachedFixture(
-    (fixture) =>
-      withRetainedClient(fixture, async ({ client }) => {
-        for (let index = 0; index < size; index++)
-          fixture.history.add(detachedRow(index));
-        await fixture.history.waitForTokenUpdates();
-        const controller = new AbortController();
-        const failure = new Error('abort before pending ack');
-        const operation = rejectedValue(
-          client.storeHistoryForLaterUse(clientArrayRows(size), {
-            ownership: fixture.owners,
-            signal: controller.signal,
+  return withDetachedFixture((fixture) =>
+    withRetainedClient(fixture, async ({ client }) => {
+      for (let index = 0; index < size; index++)
+        fixture.history.add(detachedRow(index));
+      await fixture.history.waitForTokenUpdates();
+      const ready = gate();
+      const release = gate();
+      fixture.history.registerMediaOwner(
+        mediaParticipant(() => ({
+          publish: () => undefined,
+          rollback: () => undefined,
+          finalize: async () => {
+            ready.resolve();
+            await release.promise;
+          },
+        })),
+      );
+      forbidClientArrayRollback(fixture);
+      const controller = new AbortController();
+      const failure = new Error('abort during pending finalization');
+      const operation = rejectedValue(
+        client.storeHistoryForLaterUse(clientArrayRows(size), {
+          ownership: fixture.owners,
+          signal: controller.signal,
+        }),
+      );
+      try {
+        await Promise.race([
+          ready.promise,
+          operation.then((error) => {
+            throw error;
           }),
+        ]);
+        expect(boundedOwners(fixture.owners.snapshot())).toBe(true);
+        controller.abort(failure);
+        // A participant finalizer is not interruptible; the abort is honoured
+        // when it settles, and must then roll the whole history back.
+        release.resolve();
+        expect(
+          await Promise.race([operation, setTimeout(1000, 'pinned finalizer')]),
+        ).toBe(failure);
+        expect(fixture.owners.snapshot().liveRows).toBe(0);
+        expect(await detachedDigest(client.streamHistory())).toStrictEqual(
+          await detachedDigest(detachedRows(size)),
         );
-        try {
-          while (fixture.owners.snapshot().liveRows < size * 2)
-            await setImmediate();
-          controller.abort(failure);
-          expect(
-            await Promise.race([operation, setTimeout(1000, 'pinned writer')]),
-          ).toBe(failure);
-          expect(fixture.owners.snapshot().liveRows).toBe(0);
-          expect(await detachedDigest(client.streamHistory())).toStrictEqual(
-            await detachedDigest(detachedRows(size)),
-          );
-        } finally {
-          fixture.releaseWriter();
-          await operation;
-        }
-        return fixture.owners.snapshot().liveRows;
-      }),
-    true,
+      } finally {
+        release.resolve();
+        await operation;
+      }
+      return fixture.owners.snapshot().liveRows;
+    }),
   );
 }
 function registerParticipant(size: number, retain: boolean): void {
@@ -176,7 +195,7 @@ describe('retained array pending acquisition and participant boundaries', () => 
     it(`preserves earliest pending failure and does not admit candidate media at ${size}`, async () => {
       expect(await earliestPendingFailure(size)).toBe(0);
     }, 180_000);
-    it(`aborts ${size} pending owners before writer acknowledgement`, async () => {
+    it(`aborts a ${size}-row stored history during pending finalization`, async () => {
       expect(await abortPending(size)).toBe(0);
     }, 180_000);
     for (const retain of [false, true]) registerParticipant(size, retain);

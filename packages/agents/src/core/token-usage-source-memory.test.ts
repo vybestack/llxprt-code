@@ -24,6 +24,17 @@ async function settled(): Promise<number> {
   }
   return heapSize();
 }
+// JSC can keep a just-finished async generator alive across a few collections
+// (stack and continuation roots drain lazily). Keep collecting while any
+// observed reader is still reachable, bounded so a genuinely retained reader
+// (the reader trap holds one strongly) still reports live and fails the gate.
+async function settledReleasingReaders(facts: Census): Promise<number> {
+  let bytes = await settled();
+  for (let round = 0; round < 32 && live(facts.readers) > 0; round++) {
+    bytes = await settled();
+  }
+  return bytes;
+}
 function live<T extends object>(references: Array<WeakRef<T>>): number {
   return references.filter((reference) => reference.deref() !== undefined)
     .length;
@@ -261,7 +272,14 @@ async function measure(
     }
     await trapReader(snapshot, facts);
     const result = {
-      ...receipt(large, baseline, await settled(), memory, facts, control),
+      ...receipt(
+        large,
+        baseline,
+        await settledReleasingReaders(facts),
+        memory,
+        facts,
+        control,
+      ),
       ownership: ownership.snapshot(),
       tokenizer,
     };
