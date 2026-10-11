@@ -1,23 +1,23 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { appendBodyEvidence } from '../../../../test-utils/src/body-evidence-writer.js';
+import { appendBodyEvidence } from '../../packages/test-utils/src/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 
-import { captureCompressionBody } from './compression-value-openai-body.js';
-import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { withRollbackFixture } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { captureCompressionBody } from './support/compression-value-openai-body.js';
+import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
+import { DebugLogger } from '../../packages/core/src/debug/index.js';
+import { withRollbackFixture } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
+import type { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import {
   detachedDigest,
   detachedDurableDigest,
-} from '@vybestack/llxprt-code-core/services/history/detached-rollback-test-helpers.js';
+} from '../../packages/core/src/services/history/detached-rollback-test-helpers.js';
 import {
   purgeRankingRows,
   expectedPurgeRankingRow,
   prepareValueRoute,
   type ValueRoute,
-} from './purge-ranking-value-helpers.js';
+} from '../../packages/agents/src/compression/__tests__/purge-ranking-value-helpers.js';
 
 async function compareBodies(
   history: HistoryService,

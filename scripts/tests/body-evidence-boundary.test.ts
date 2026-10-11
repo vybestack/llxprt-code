@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { initializeEvidenceLane } from '../../packages/test-utils/src/body-evidence-writer.js';
-import { captureCuratedBody } from './provider-curated-body-helpers.js';
+import { captureCuratedBody } from './provider-curated-body-gemini.js';
 
 function receiptBodies(root: string): Buffer[] {
   return readdirSync(root)

@@ -24,7 +24,7 @@ import { recomposeFixture } from '../../packages/agents/src/compression/__tests_
 import { buildRuntimeContext } from '../../packages/agents/src/core/__tests__/chatSession-density-helpers.js';
 import { buildCompressionMetadata } from '../../packages/agents/src/compression/compressionContextBuilder.js';
 import { TopDownTruncationStrategy } from '../../packages/agents/src/compression/TopDownTruncationStrategy.js';
-import { captureCuratedBody } from './provider-curated-body-helpers.js';
+import { captureCuratedBody } from './provider-curated-body-gemini.js';
 import type { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import { PerformCompressionResult } from '../../packages/core/src/core/turn.js';
 

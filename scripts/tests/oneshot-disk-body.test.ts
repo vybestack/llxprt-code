@@ -15,7 +15,7 @@ import {
   OneshotDiskHistory,
 } from '../../packages/agents/src/compression/__tests__/oneshot-disk-helpers.js';
 import { recomposeFixture } from '../../packages/agents/src/compression/__tests__/provider-curated-recomposition-helpers.js';
-import { captureCuratedBody } from './provider-curated-body-helpers.js';
+import { captureCuratedBody } from './provider-curated-body-gemini.js';
 import { PerformCompressionResult } from '../../packages/core/src/core/turn.js';
 
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';

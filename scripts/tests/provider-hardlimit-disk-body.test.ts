@@ -23,7 +23,7 @@ import { TopDownTruncationStrategy } from '../../packages/agents/src/compression
 import { middleoutSetup } from '../../packages/agents/src/compression/__tests__/middleout-disk-helpers.js';
 import { PerformCompressionResult } from '../../packages/core/src/core/turn.js';
 import { createTruncationStub } from '../../packages/agents/src/compression/toolResultTruncator.js';
-import { captureCuratedBody } from './provider-curated-body-helpers.js';
+import { captureCuratedBody } from './provider-curated-body-gemini.js';
 
 const logger = new DebugLogger('test:actual-hardlimit-body');
 const cases = [512, 8192].flatMap((size) =>

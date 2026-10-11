@@ -9,7 +9,7 @@ import {
   seedRows,
 } from '../../packages/core/src/services/history/export-summary-test-helpers.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
-import { captureCuratedBody } from './provider-curated-body-helpers.js';
+import { captureCuratedBody } from './provider-curated-body-gemini.js';
 
 async function pair(
   size: number,

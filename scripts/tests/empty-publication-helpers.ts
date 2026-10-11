@@ -9,7 +9,7 @@ import type { HistoryService } from '../../packages/core/src/services/history/Hi
 import { buildCuratedHistory } from '../../packages/core/src/services/history/historyCuration.js';
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
 import { recomposeFixture } from '../../packages/agents/src/compression/__tests__/provider-curated-recomposition-helpers.js';
-import { captureCuratedBody } from './provider-curated-body-helpers.js';
+import { captureCuratedBody } from './provider-curated-body-gemini.js';
 import { writeBodyFile } from '../../packages/test-utils/src/body-evidence-writer.js';
 
 export const logger = new DebugLogger('test:empty-publication');

@@ -1,16 +1,16 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { captureBodyAttempt } from '../../../../test-utils/src/body-evidence-writer.js';
+import { captureBodyAttempt } from '../../../packages/test-utils/src/body-evidence-writer.js';
 import { randomUUID } from 'node:crypto';
-import { withFetchPreconnect } from '../../../../test-utils/src/fetch-test-helpers.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings/settings/SettingsService.js';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { withFetchPreconnect } from '../../../packages/test-utils/src/fetch-test-helpers.js';
+import type { IContent } from '../../../packages/core/src/services/history/IContent.js';
+import { SettingsService } from '../../../packages/settings/src/settings/SettingsService.js';
+import { createProviderRuntimeContext } from '../../../packages/core/src/runtime/providerRuntimeContext.js';
+import { createRuntimeInvocationContext } from '../../../packages/core/src/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
-import { OpenAIProvider } from '../../../../providers/src/openai/OpenAIProvider.js';
-import { RetryOrchestrator } from '../../../../providers/src/RetryOrchestrator.js';
-import { captureCuratedBody } from '../../../../../scripts/tests/provider-curated-body-helpers.js';
+import { OpenAIProvider } from '../../../packages/providers/src/openai/OpenAIProvider.js';
+import { RetryOrchestrator } from '../../../packages/providers/src/RetryOrchestrator.js';
+import { captureCuratedBody } from '../provider-curated-body-gemini.js';
 
 function chatResponse(): Response {
   return new Response(
@@ -32,13 +32,34 @@ function chatResponse(): Response {
   );
 }
 
-function prepareOpenAI(
+function createBodyCaptureFetch(
+  bodies: string[],
+  retry: boolean,
+): typeof fetch {
+  const captureId = randomUUID();
+  return withFetchPreconnect(
+    async (
+      _input: RequestInfo | URL,
+      init?: RequestInit,
+    ): Promise<Response> => {
+      if (init?.body === undefined || init.body === null)
+        throw new Error('Missing OpenAI request BODY');
+      await captureBodyAttempt(bodies, init.body, 'openai', captureId);
+      if (retry && bodies.length === 1) throw new TypeError('fetch failed');
+      return chatResponse();
+    },
+  );
+}
+
+export async function captureCompressionBody(
+  name: string,
   contents: Iterable<IContent> | AsyncIterable<IContent>,
   caching: boolean,
-): {
-  options: ReturnType<typeof createProviderCallOptions>;
-  rows: AsyncIterable<IContent>;
-} {
+  retry = false,
+  orchestrated = false,
+): Promise<string> {
+  if (name !== 'openai')
+    return captureCuratedBody(name, contents, caching, retry, orchestrated);
   const settings = new SettingsService();
   settings.set('auth-key', 'test-key');
   settings.set('prompt-caching', caching ? 'on' : 'off');
@@ -73,27 +94,6 @@ function prepareOpenAI(
     invocation,
     contents: rows,
   });
-  return { options, rows };
-}
-
-export async function captureTruncationBody(
-  name: string,
-  contents: Iterable<IContent> | AsyncIterable<IContent>,
-  caching: boolean,
-  retry = false,
-  orchestrated = false,
-  responseContents?: IContent[],
-): Promise<string> {
-  if (name !== 'openai')
-    return captureCuratedBody(
-      name,
-      contents,
-      caching,
-      retry,
-      orchestrated,
-      responseContents,
-    );
-  const { options, rows } = prepareOpenAI(contents, caching);
   const provider = new OpenAIProvider('test-key', 'https://api.openai.com/v1');
   const selected = orchestrated
     ? new RetryOrchestrator(provider, {
@@ -104,25 +104,13 @@ export async function captureTruncationBody(
     : provider;
   const original = globalThis.fetch;
   const bodies: string[] = [];
-  const captureId = randomUUID();
-  globalThis.fetch = withFetchPreconnect(
-    async (
-      _input: RequestInfo | URL,
-      init?: RequestInit,
-    ): Promise<Response> => {
-      if (init?.body === undefined || init.body === null)
-        throw new Error('Missing OpenAI request BODY');
-      await captureBodyAttempt(bodies, init.body, 'openai', captureId);
-      if (retry && bodies.length === 1) throw new TypeError('fetch failed');
-      return chatResponse();
-    },
-  );
+  globalThis.fetch = createBodyCaptureFetch(bodies, retry);
   try {
-    for await (const chunk of selected.generateChatCompletion({
+    for await (const _chunk of selected.generateChatCompletion({
       ...options,
       contents: rows,
     })) {
-      responseContents?.push(chunk);
+      void _chunk;
     }
   } finally {
     globalThis.fetch = original;

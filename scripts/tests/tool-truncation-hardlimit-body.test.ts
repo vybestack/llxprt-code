@@ -17,7 +17,7 @@ import {
 import { enforceWithHandler } from '../../packages/agents/src/compression/__tests__/support/enforce-with-handler.js';
 import { buildRuntimeContext } from '../../packages/agents/src/core/__tests__/chatSession-density-helpers.js';
 import { createTruncationStub } from '../../packages/agents/src/compression/toolResultTruncator.js';
-import { captureCuratedBody } from './provider-curated-body-helpers.js';
+import { captureCuratedBody } from './provider-curated-body-gemini.js';
 
 class FallbackCaptureHistory extends HistoryService {
   override replaceToolResponseBlock(): Promise<boolean> {

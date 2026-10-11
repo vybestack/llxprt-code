@@ -13,55 +13,48 @@ import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { OpenAIResponsesProvider } from '../../packages/providers/src/openai-responses/OpenAIResponsesProvider.js';
 import { AnthropicProvider } from '../../packages/providers/src/anthropic/AnthropicProvider.js';
-import { GeminiProvider } from '../../plugins/google-gemini/src/gemini/GeminiProvider.js';
 import type { IProvider } from '../../packages/providers/src/IProvider.js';
 import { RetryOrchestrator } from '../../packages/providers/src/RetryOrchestrator.js';
-function makeProvider(name: string): IProvider {
-  if (name === 'anthropic') return new AnthropicProvider('test-key');
-  if (name === 'gemini') return new GeminiProvider('test-key');
-  return new OpenAIResponsesProvider('test-key', 'https://api.openai.com/v1');
+export interface CuratedProviderAdapter {
+  readonly model: string;
+  makeProvider(): IProvider;
+  response(): Response;
 }
-function response(name: string): Response {
-  if (name === 'openai-responses')
-    return new Response(
+
+const ANTHROPIC_ADAPTER: CuratedProviderAdapter = {
+  model: 'claude-opus-5',
+  makeProvider: () => new AnthropicProvider('test-key'),
+  response: () =>
+    new Response(
+      JSON.stringify({
+        id: 'msg_purge',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-opus-5',
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 1, output_tokens: 1 },
+      }),
+      { headers: { 'content-type': 'application/json' } },
+    ),
+};
+
+const OPENAI_RESPONSES_ADAPTER: CuratedProviderAdapter = {
+  model: 'gpt-5.2',
+  makeProvider: () =>
+    new OpenAIResponsesProvider('test-key', 'https://api.openai.com/v1'),
+  response: () =>
+    new Response(
       'data: {"type":"response.output_text.delta","delta":"ok"}\n\ndata: {"type":"response.completed","response":{"id":"purge-body","status":"completed"}}\n\ndata: [DONE]\n\n',
       { headers: { 'content-type': 'text/event-stream' } },
-    );
-  const body =
-    name === 'anthropic'
-      ? {
-          id: 'msg_purge',
-          type: 'message',
-          role: 'assistant',
-          model: 'claude-opus-5',
-          content: [{ type: 'text', text: 'ok' }],
-          stop_reason: 'end_turn',
-          stop_sequence: null,
-          usage: { input_tokens: 1, output_tokens: 1 },
-        }
-      : {
-          candidates: [
-            {
-              content: { role: 'model', parts: [{ text: 'ok' }] },
-              finishReason: 'STOP',
-            },
-          ],
-          usageMetadata: {
-            promptTokenCount: 1,
-            candidatesTokenCount: 1,
-            totalTokenCount: 2,
-          },
-        };
-  return name === 'gemini'
-    ? new Response(
-        `data: ${JSON.stringify(body)}
+    ),
+};
 
-`,
-        { headers: { 'content-type': 'text/event-stream' } },
-      )
-    : new Response(JSON.stringify(body), {
-        headers: { 'content-type': 'application/json' },
-      });
+function packageAdapter(name: string): CuratedProviderAdapter {
+  if (name === 'anthropic') return ANTHROPIC_ADAPTER;
+  if (name === 'openai-responses') return OPENAI_RESPONSES_ADAPTER;
+  throw new Error(`No package-hosted curated body adapter for ${name}`);
 }
 function bodyRows(
   contents: Iterable<IContent> | AsyncIterable<IContent>,
@@ -72,8 +65,9 @@ function bodyRows(
     },
   };
 }
-export async function captureCuratedBody(
+export async function captureWithAdapter(
   name: string,
+  adapter: CuratedProviderAdapter,
   contents: Iterable<IContent> | AsyncIterable<IContent>,
   caching = false,
   retry = false,
@@ -81,13 +75,10 @@ export async function captureCuratedBody(
   responseContents?: IContent[],
   mediaResolver?: ProviderRuntimeContext['mediaResolver'],
 ): Promise<string> {
-  let model = 'gpt-5.2';
-  if (name === 'anthropic') model = 'claude-opus-5';
-  if (name === 'gemini') model = 'gemini-2.5-flash';
   const settings = new SettingsService();
   settings.set('auth-key', 'test-key');
   settings.set('prompt-caching', caching ? 'on' : 'off');
-  settings.setProviderSetting(name, 'model', model);
+  settings.setProviderSetting(name, 'model', adapter.model);
   settings.setProviderSetting(name, 'streaming', 'disabled');
   const runtime = createProviderRuntimeContext({
     settingsService: settings,
@@ -126,16 +117,16 @@ export async function captureCuratedBody(
       if (!init?.body) throw new Error('Missing real provider request body');
       await captureBodyAttempt(bodies, init.body, name, captureId);
       if (retry && bodies.length === 1) throw new TypeError('fetch failed');
-      return response(name);
+      return adapter.response();
     },
   );
   const provider = orchestrated
-    ? new RetryOrchestrator(makeProvider(name), {
+    ? new RetryOrchestrator(adapter.makeProvider(), {
         maxAttempts: 2,
         initialDelayMs: 1,
         maxDelayMs: 1,
       })
-    : makeProvider(name);
+    : adapter.makeProvider();
   try {
     for await (const chunk of provider.generateChatCompletion({
       ...options,
@@ -151,4 +142,26 @@ export async function captureCuratedBody(
   if (retry && bodies[0] !== bodies[1])
     throw new Error('Retry body differs from original');
   return bodies[bodies.length - 1];
+}
+
+/** Captures the request body for the providers hosted in packages/. */
+export function captureCuratedBody(
+  name: string,
+  contents: Iterable<IContent> | AsyncIterable<IContent>,
+  caching = false,
+  retry = false,
+  orchestrated = false,
+  responseContents?: IContent[],
+  mediaResolver?: ProviderRuntimeContext['mediaResolver'],
+): Promise<string> {
+  return captureWithAdapter(
+    name,
+    packageAdapter(name),
+    contents,
+    caching,
+    retry,
+    orchestrated,
+    responseContents,
+    mediaResolver,
+  );
 }

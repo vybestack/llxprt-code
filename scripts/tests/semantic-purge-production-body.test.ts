@@ -8,7 +8,7 @@ import { buildCuratedHistory } from '../../packages/core/src/services/history/hi
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
 import { sendTurnSource } from '../../packages/agents/src/core/turnSourceRequest.js';
 import { mediaRequestFixture } from '../../packages/agents/src/core/turn-media-request-test-helpers.js';
-import { captureCuratedBody } from './provider-curated-body-helpers.js';
+import { captureCuratedBody } from './provider-curated-body-gemini.js';
 const logger = new DebugLogger('test:semantic-purge-body-oracle');
 /**
  * Far above the largest history here (8192 rows of about 2 KiB): this test

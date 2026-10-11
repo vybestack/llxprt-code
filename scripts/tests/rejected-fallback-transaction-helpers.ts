@@ -25,7 +25,7 @@ import { applyPendingWindowFallback } from '../../packages/agents/src/compressio
 import { buildRuntimeContext } from '../../packages/agents/src/core/__tests__/chatSession-density-helpers.js';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import { PerformCompressionResult } from '../../packages/core/src/core/turn.js';
-import { captureCuratedBody } from './provider-curated-body-helpers.js';
+import { captureCuratedBody } from './provider-curated-body-gemini.js';
 
 interface RawState {
   rows: IContent[];

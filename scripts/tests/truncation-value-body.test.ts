@@ -1,23 +1,23 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { appendBodyEvidence } from '../../../../test-utils/src/body-evidence-writer.js';
+import { appendBodyEvidence } from '../../packages/test-utils/src/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
 
 import { createHash } from 'node:crypto';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { withRollbackFixture } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
+import type { IContent } from '../../packages/core/src/services/history/IContent.js';
+import type { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
+import { withRollbackFixture } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 import {
   detachedDigest,
   detachedDurableDigest,
-} from '@vybestack/llxprt-code-core/services/history/detached-rollback-test-helpers.js';
-import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { captureTruncationBody } from './truncation-value-body-capture.js';
+} from '../../packages/core/src/services/history/detached-rollback-test-helpers.js';
+import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
+import { DebugLogger } from '../../packages/core/src/debug/index.js';
+import { captureTruncationBody } from './support/truncation-value-body-capture.js';
 import {
   executeTruncation,
   truncationValues,
   expectedTruncationValue,
-} from './truncation-value-helpers.js';
+} from '../../packages/agents/src/compression/__tests__/truncation-value-helpers.js';
 
 type BodyFixture = {
   size: number;

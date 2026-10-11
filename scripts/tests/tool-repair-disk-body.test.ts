@@ -12,7 +12,7 @@ import {
   replacementFor,
 } from '../../packages/core/src/services/history/tool-repair-disk-test-helpers.js';
 import { recomposeFixture } from '../../packages/agents/src/compression/__tests__/provider-curated-recomposition-helpers.js';
-import { captureCuratedBody } from './provider-curated-body-helpers.js';
+import { captureCuratedBody } from './provider-curated-body-gemini.js';
 import type {
   IContent,
   ToolResponseBlock,

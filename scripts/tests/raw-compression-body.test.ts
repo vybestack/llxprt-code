@@ -21,7 +21,7 @@ import {
   summaryRow,
 } from '../../packages/agents/src/compression/__tests__/raw-compression-fixtures.js';
 import { recomposeFixture } from '../../packages/agents/src/compression/__tests__/provider-curated-recomposition-helpers.js';
-import { captureCuratedBody } from './provider-curated-body-helpers.js';
+import { captureCuratedBody } from './provider-curated-body-gemini.js';
 
 const logger = new DebugLogger('test:raw-compression-body');
 

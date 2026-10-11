@@ -1,18 +1,18 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { appendBodyEvidence } from '../../../../test-utils/src/body-evidence-writer.js';
+import { appendBodyEvidence } from '../../packages/test-utils/src/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
 
 import { createHash } from 'node:crypto';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { withValueTransformFixture } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
-import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { IContent } from '../../packages/core/src/services/history/IContent.js';
+import { withValueTransformFixture } from '../../packages/core/src/services/history/transform-value-test-helpers.js';
+import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
+import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import {
   highdensityRow,
   highdensityOracle,
   highdensitySetup,
-} from './highdensity-disk-helpers.js';
-import { captureTruncationBody } from './truncation-value-body-capture.js';
+} from '../../packages/agents/src/compression/__tests__/highdensity-disk-helpers.js';
+import { captureTruncationBody } from './support/truncation-value-body-capture.js';
 
 function bodyInput(index: number): IContent {
   const row = highdensityRow(index);

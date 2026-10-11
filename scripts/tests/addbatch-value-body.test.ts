@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { IContent } from '../../packages/core/src/services/history/IContent.js';
+import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
+import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import {
   detachedRow,
   withDetachedFixture,
-} from '../../../../core/src/services/history/detached-rollback-test-helpers.js';
-import { captureCompressionBody } from './compression-value-openai-body.js';
+} from '../../packages/core/src/services/history/detached-rollback-test-helpers.js';
+import { captureCompressionBody } from './support/compression-value-openai-body.js';
 
 function row(index: number, bytes = 2048): IContent {
   const value = detachedRow(index, bytes);

@@ -1,20 +1,20 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { appendBodyEvidence } from '../../../test-utils/src/body-evidence-writer.js';
+import { appendBodyEvidence } from '../../packages/test-utils/src/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 
-import { admitDeferredHistorySource } from './deferredHistorySource.js';
+import { admitDeferredHistorySource } from '../../packages/agents/src/core/deferredHistorySource.js';
 import {
   buildAgent,
   internalConfig,
-} from '../api/__tests__/helpers/agentHarness.js';
-import { captureCompressionBody } from '../compression/__tests__/compression-value-openai-body.js';
-import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { withValueTransformFixture } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
+} from '../../packages/agents/src/api/__tests__/helpers/agentHarness.js';
+import { captureCompressionBody } from './support/compression-value-openai-body.js';
+import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
+import { DebugLogger } from '../../packages/core/src/debug/index.js';
+import { withValueTransformFixture } from '../../packages/core/src/services/history/transform-value-test-helpers.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
+import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 
 async function* bodyInput(
   size: number,

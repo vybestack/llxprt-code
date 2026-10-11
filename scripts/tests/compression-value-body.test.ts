@@ -1,18 +1,18 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { IContent } from '../../packages/core/src/services/history/IContent.js';
+import { PerformCompressionResult } from '../../packages/core/src/core/turn.js';
+import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
+import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { captureCompressionBody } from './compression-value-openai-body.js';
+import { captureCompressionBody } from './support/compression-value-openai-body.js';
 import {
   middleoutRow,
   middleoutSetup,
   middleoutOracle,
-} from './middleout-disk-helpers.js';
-import { ValueCompressionHistory } from './compression-value-fixture.js';
-import { oneshotOracle } from './oneshot-disk-helpers.js';
+} from '../../packages/agents/src/compression/__tests__/middleout-disk-helpers.js';
+import { ValueCompressionHistory } from '../../packages/agents/src/compression/__tests__/compression-value-fixture.js';
+import { oneshotOracle } from '../../packages/agents/src/compression/__tests__/oneshot-disk-helpers.js';
 
 const png =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';

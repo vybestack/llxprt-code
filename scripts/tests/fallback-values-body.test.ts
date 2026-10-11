@@ -1,17 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { appendBodyEvidence } from '../../../../test-utils/src/body-evidence-writer.js';
+import { appendBodyEvidence } from '../../packages/test-utils/src/body-evidence-writer.js';
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 
-import { captureCompressionBody } from './compression-value-openai-body.js';
-import { publishProviderFallbackCandidate } from '../providerFallbackCandidate.js';
-import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
-import { withValueTransformFixture } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
+import { captureCompressionBody } from './support/compression-value-openai-body.js';
+import { publishProviderFallbackCandidate } from '../../packages/agents/src/compression/providerFallbackCandidate.js';
+import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
+import { DebugLogger } from '../../packages/core/src/debug/index.js';
+import { DetachedHistoryJournal } from '../../packages/core/src/services/history/detachedHistoryJournal.js';
+import { withValueTransformFixture } from '../../packages/core/src/services/history/transform-value-test-helpers.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
+import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 
 async function compareBodies(
   history: HistoryService,

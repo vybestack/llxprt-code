@@ -22,7 +22,7 @@ import { runDiskProviderFallback } from '../../../packages/agents/src/compressio
 import { buildCompressionMetadata } from '../../../packages/agents/src/compression/compressionContextBuilder.js';
 import { TopDownTruncationStrategy } from '../../../packages/agents/src/compression/TopDownTruncationStrategy.js';
 import { PerformCompressionResult } from '../../../packages/core/src/core/turn.js';
-import { captureCuratedBody } from '../provider-curated-body-helpers.js';
+import { captureCuratedBody } from '../provider-curated-body-gemini.js';
 const logger = new DebugLogger('test:pending-window-body');
 function enforcerFor(
   fixture: PendingFixture,

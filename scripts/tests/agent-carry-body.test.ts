@@ -5,7 +5,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { accountingRow } from '../../packages/core/src/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { withAgentCarry } from '../../packages/agents/src/api/__tests__/helpers/agent-carry-fixture.js';
-import { captureCuratedBody } from './provider-curated-body-helpers.js';
+import { captureCuratedBody } from './provider-curated-body-gemini.js';
 
 async function verifyBodies(size: number): Promise<void> {
   await withAgentCarry(size, async (agent) => {

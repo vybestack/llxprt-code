@@ -24,7 +24,7 @@ import {
   createTruncationStub,
   truncateOversizedToolResponsesUnified,
 } from '../../packages/agents/src/compression/toolResultTruncator.js';
-import { captureCuratedBody } from './provider-curated-body-helpers.js';
+import { captureCuratedBody } from './provider-curated-body-gemini.js';
 
 const logger = new DebugLogger('test:tool-truncation-bytes');
 function estimate(block: ContentBlock): Promise<number> {

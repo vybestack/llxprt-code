@@ -25,7 +25,7 @@ import {
 } from '../../packages/cli/src/ui/hooks/agentStream/checkpoint-disk-test-helpers.js';
 import { restoreCommand } from '../../packages/cli/src/ui/commands/restoreCommand.js';
 import { createMockCommandContext } from '../../packages/cli/src/__tests__/mockCommandContext.js';
-import { captureCuratedBody } from './provider-curated-body-helpers.js';
+import { captureCuratedBody } from './provider-curated-body-gemini.js';
 
 async function bodyPairs(
   size: number,

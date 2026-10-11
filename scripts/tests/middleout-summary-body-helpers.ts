@@ -25,7 +25,7 @@ import { annotateCompressionSpan } from '../../packages/core/src/services/histor
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
 import { providerPendingFixture } from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
 import { recomposeFixture } from '../../packages/agents/src/compression/__tests__/provider-curated-recomposition-helpers.js';
-import { captureCuratedBody } from './provider-curated-body-helpers.js';
+import { captureCuratedBody } from './provider-curated-body-gemini.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { CompressionProviderResult } from '../../packages/core/src/core/compression/types.js';
 import { PerformCompressionResult } from '../../packages/core/src/core/turn.js';

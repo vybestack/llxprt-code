@@ -16,7 +16,7 @@ import {
 } from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
 import { recomposeFixture } from '../../packages/agents/src/compression/__tests__/provider-curated-recomposition-helpers.js';
-import { captureCuratedBody } from './provider-curated-body-helpers.js';
+import { captureCuratedBody } from './provider-curated-body-gemini.js';
 
 class DiskOnlyTransformHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {

@@ -5,7 +5,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { accountingRow } from '../../packages/core/src/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { withReinitializeHistory } from '../../packages/agents/src/core/__tests__/support/reinitialize-history-test-helpers.js';
-import { captureCuratedBody } from './provider-curated-body-helpers.js';
+import { captureCuratedBody } from './provider-curated-body-gemini.js';
 
 async function recordBodies(
   output: string | undefined,
