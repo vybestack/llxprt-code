@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -55,7 +56,7 @@ async function* mediaRows(
 }
 
 async function run(size: number, rollback: boolean): Promise<number> {
-  const root = await mkdtemp(join(process.cwd(), 'tmp/fallback-media-'));
+  const root = await mkdtemp(join(tmpdir(), 'fallback-media-'));
   const store = new LocalMediaStore({ rootDirectory: root, quotaBytes: 1024 });
   const owner = new HistoryMediaOwnership(store);
   try {

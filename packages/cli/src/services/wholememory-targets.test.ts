@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -50,9 +51,7 @@ describe('full command target ownership', () => {
 
 async function measureTarget(target: string, version: number): Promise<void> {
   for (const count of [512, 2048]) {
-    const directory = await mkdtemp(
-      join(process.cwd(), 'tmp/verify854/p05d/acceptance-final-target-'),
-    );
+    const directory = await mkdtemp(join(tmpdir(), 'acceptance-final-target-'));
     await targetFixture(directory, count, version);
     const ownership = new RowOwnership();
     const command = new MemoryCommand(ownership);

@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
@@ -194,7 +195,7 @@ async function fixture(
   prompts = true,
   telemetry = true,
 ): Promise<RecoveryConfig> {
-  const root = await mkdtemp(join(process.cwd(), 'tmp/logging-recovery-'));
+  const root = await mkdtemp(join(tmpdir(), 'logging-recovery-'));
   directories.push(root);
   const config = new RecoveryConfig(
     root,

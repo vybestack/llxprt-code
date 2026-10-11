@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -92,9 +93,7 @@ let directory: string;
 
 describe('journal logical tool pages', () => {
   beforeEach(async () => {
-    directory = await mkdtemp(
-      join(process.cwd(), 'tmp/verify854/p05d/toolpaging-fixture-'),
-    );
+    directory = await mkdtemp(join(tmpdir(), 'toolpaging-fixture-'));
   });
   afterEach(async () => {
     await rm(directory, { recursive: true, force: true });

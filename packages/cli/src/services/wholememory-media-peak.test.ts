@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { RowOwnership } from '../../../core/src/recording/rowOwnership.js';
 import { isMediaReferenceBlock } from '../../../core/src/services/history/IContent.js';
@@ -29,9 +30,7 @@ class RetainingMediaConsumer extends RowOwnership {
 
 describe('bounded media ownership', () => {
   it('rejects media retained by a consumer after the real dense command closes', async () => {
-    const directory = await mkdtemp(
-      join(process.cwd(), 'tmp/verify854/p05d/mediapeak-consumer-'),
-    );
+    const directory = await mkdtemp(join(tmpdir(), 'mediapeak-consumer-'));
     const ownership = new RetainingMediaConsumer();
     const command = new MemoryCommand(ownership);
     try {
@@ -41,10 +40,6 @@ describe('bounded media ownership', () => {
       } finally {
         await command.close();
       }
-      await writeFile(
-        'tmp/verify854/p05d/mediapeak-command-retaining-control.json',
-        JSON.stringify(ownership.snapshot(), null, 2),
-      );
       expect(ownership.snapshot().liveRows).toBeGreaterThan(440);
       expect(
         ownership.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
@@ -63,25 +58,12 @@ describe('bounded media ownership', () => {
   ];
   for (const [count, workload] of cases) {
     it(`bounds real ${workload} continuation with ${count} rows`, async () => {
-      const directory = await mkdtemp(
-        join(process.cwd(), 'tmp/verify854/p05d/mediapeak-fixture-'),
-      );
+      const directory = await mkdtemp(join(tmpdir(), 'mediapeak-fixture-'));
       const ownership = new RowOwnership();
       const command = new MemoryCommand(ownership);
       try {
         await writeMemoryFixture(directory, count, workload);
         await command.run(directory, count, workload, 'latest');
-        await writeFile(
-          `tmp/verify854/p05d/mediapeak-command-${workload}-${count}.json`,
-          JSON.stringify(
-            {
-              ownership: ownership.snapshot(),
-              reader: command.counters.snapshot(),
-            },
-            null,
-            2,
-          ),
-        );
         expect(
           ownership.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
         ).toBe(true);

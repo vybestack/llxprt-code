@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { writeFile } from 'node:fs/promises';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import { RowOwnership } from '../../../../core/src/recording/rowOwnership.js';
 import { streamHistoryItems } from './streamHistoryItems.js';
@@ -139,10 +138,6 @@ async function verifyCapsWideResponsePayloadsBeforeRetainingADisplayPage(): Prom
     for (const tool of item.tools) expect(tool.retention?.capped).toBe(true);
   }
   expect(calls).toBe(32);
-  await writeFile(
-    'tmp/verify854/p05d/toolpeak-wide.json',
-    JSON.stringify(ownership.snapshot(), null, 2),
-  );
   expect(
     ownership.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
   ).toBe(true);
@@ -199,10 +194,6 @@ async function verifyBoundsCountResponsesWhilePreservingTheFinalMatchedResponse(
     expect(item.tools[2].resultDisplay).toBe(item.tools[0].resultDisplay);
   }
   expect(groups).toBe(1);
-  await writeFile(
-    `tmp/verify854/p05d/toolpeak-${count}.json`,
-    JSON.stringify(ownership.snapshot(), null, 2),
-  );
   expect(ownership.snapshot().liveRows).toBe(0);
   expect(ownership.within(bound)).toBe(true);
 }
@@ -254,10 +245,6 @@ async function verifyPagesCountCallsWithoutRetainingTheirResponseContextInUIRows
   }
   expect(calls).toBe(count);
   expect(identities.size).toBe(Math.ceil(count / 16));
-  await writeFile(
-    `tmp/verify854/p05d/toolpeak-calls-${count}.json`,
-    JSON.stringify(ownership.snapshot(), null, 2),
-  );
   expect(ownership.snapshot().liveRows).toBe(0);
   expect(ownership.within(bound)).toBe(true);
 }

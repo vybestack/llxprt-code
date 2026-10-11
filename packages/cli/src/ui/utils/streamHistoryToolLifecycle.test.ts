@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core';
 import { RowOwnership } from '../../../../core/src/recording/rowOwnership.js';
@@ -32,9 +33,7 @@ const response: IContent = {
 
 describe('tool response projection lifecycle', () => {
   beforeEach(async () => {
-    directory = await mkdtemp(
-      join(process.cwd(), 'tmp/verify854/p05d/toolpeak-lifecycle-'),
-    );
+    directory = await mkdtemp(join(tmpdir(), 'toolpeak-lifecycle-'));
   });
   afterEach(async () => {
     await rm(directory, { recursive: true, force: true });
@@ -172,10 +171,6 @@ async function verifyRejectsAConsumerRetainingProjectedGroupsAfterGeneratorAdvan
     expect(
       ownership.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
     ).toBe(false);
-    await writeFile(
-      'tmp/verify854/p05d/toolpeak-negative.json',
-      JSON.stringify(ownership.snapshot(), null, 2),
-    );
     expect(await readdir(directory)).toStrictEqual([]);
   } finally {
     for (const item of retained) ownership.release(item);

@@ -1,8 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { appendFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 import type {
   SessionEventType,
@@ -135,12 +135,7 @@ export async function withRollbackFixture<T>(
   });
   const releaseWriter = (): void => release?.();
   if (!pending) releaseWriter();
-  const root = mkdtempSync(
-    join(
-      dirname(fileURLToPath(import.meta.url)),
-      '../../../../../tmp/chronology-rollback-fixture-',
-    ),
-  );
+  const root = mkdtempSync(join(tmpdir(), 'chronology-rollback-fixture-'));
   const recorder = new AdmissionFailureRecorder({
     sessionId: 'rollback',
     projectHash: 'rollback',

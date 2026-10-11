@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -8,9 +9,7 @@ import { streamHistoryItems } from './streamHistoryItems.js';
 
 describe('controlled streaming cancellation', () => {
   it('aborts an explicitly cancellable pending source, awaits its closure and publishes no late item', async () => {
-    const directory = await mkdtemp(
-      join(process.cwd(), 'tmp/verify854/p05d/toolpaging-abort-'),
-    );
+    const directory = await mkdtemp(join(tmpdir(), 'toolpaging-abort-'));
     const controller = new AbortController();
     const ownership = new RowOwnership();
     let enter!: () => void;

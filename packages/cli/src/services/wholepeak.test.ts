@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -15,9 +16,7 @@ import { MemoryCommand } from './__tests__/support/wholememory-command.js';
 
 describe('overlapping readers', () => {
   it('separates overlapping resolvers and releases cancelled consumers', async () => {
-    const directory = await mkdtemp(
-      join(process.cwd(), 'tmp/verify854/p05d/peak-overlap-'),
-    );
+    const directory = await mkdtemp(join(tmpdir(), 'peak-overlap-'));
     await writeMemoryFixture(directory, 32, 'plain');
     const ownership = new RowOwnership();
     const counters = { ...createRowCounters().counters, ownership };
@@ -46,9 +45,7 @@ describe('overlapping readers', () => {
 
 describe('consumer retention control', () => {
   it('observes consumer retention after real resolver exhaustion and detects the peak', async () => {
-    const directory = await mkdtemp(
-      join(process.cwd(), 'tmp/verify854/p05d/peak-consumer-'),
-    );
+    const directory = await mkdtemp(join(tmpdir(), 'peak-consumer-'));
     const path = join(directory, 'rows.jsonl');
     const records = Array.from({ length: 512 }, (_, index) =>
       JSON.stringify({
@@ -89,18 +86,6 @@ describe('consumer retention control', () => {
       }
       expect(kit.snapshot().peakDecodedRows).toBe(1);
       expect(producerLive).toBe(0);
-      await writeFile(
-        'tmp/verify854/p05d/peak-consumer-control.json',
-        JSON.stringify(
-          {
-            producerLive,
-            ownership: ownership.snapshot(),
-            reader: kit.snapshot(),
-          },
-          null,
-          2,
-        ),
-      );
       expect(ownership.snapshot().liveRows).toBe(512);
       expect(
         ownership.within({ rows: 440, serializedBytes: 8 * 1024 * 1024 }),
@@ -177,9 +162,7 @@ describe('continuation ownership measurements', () => {
       ['media', 'latest'],
     ] satisfies Array<[MemoryWorkload, string]>) {
       for (const count of [512, 2048]) {
-        const directory = await mkdtemp(
-          join(process.cwd(), 'tmp/verify854/p05d/peak-command-'),
-        );
+        const directory = await mkdtemp(join(tmpdir(), 'peak-command-'));
         await writeMemoryFixture(directory, count, workload);
         const ownership = new RowOwnership();
         const command = new MemoryCommand(ownership);
@@ -225,9 +208,5 @@ describe('continuation ownership measurements', () => {
         expect(ownership.snapshot().liveRows).toBe(0);
       }
     }
-    await writeFile(
-      'tmp/verify854/p05d/peak-command-reports.json',
-      JSON.stringify(reports, null, 2),
-    );
   }, 600000);
 });

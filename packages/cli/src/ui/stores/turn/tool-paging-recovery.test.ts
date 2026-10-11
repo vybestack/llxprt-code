@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { appendFile, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -58,9 +59,7 @@ function purge(
 
 describe('journal paging boundaries and cancellation', () => {
   beforeEach(async () => {
-    directory = await mkdtemp(
-      join(process.cwd(), 'tmp/verify854/p05d/toolpaging-recovery-fixture-'),
-    );
+    directory = await mkdtemp(join(tmpdir(), 'toolpaging-recovery-fixture-'));
   });
   afterEach(async () => {
     await rm(directory, { recursive: true, force: true });

@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -71,7 +72,7 @@ let runner: HookRunner;
 
 describe('disk hook output scratch lifecycle', () => {
   beforeEach(() => {
-    root = fs.mkdtempSync(join(process.cwd(), 'tmp/hook-lifecycle-'));
+    root = fs.mkdtempSync(join(tmpdir(), 'hook-lifecycle-'));
     runner = new HookRunner(
       new Config({
         sessionId: 'scratch-lifecycle',

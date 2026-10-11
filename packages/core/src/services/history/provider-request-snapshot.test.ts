@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
@@ -18,7 +19,7 @@ const pending: IContent = {
 async function withRoot(
   action: (root: string) => Promise<void>,
 ): Promise<void> {
-  const root = mkdtempSync(join(process.cwd(), 'tmp/request-snapshot-'));
+  const root = mkdtempSync(join(tmpdir(), 'request-snapshot-'));
   try {
     await action(root);
   } finally {

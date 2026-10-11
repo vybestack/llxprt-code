@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { mkdir, mkdtemp } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import { ProfileManager, Storage } from '@vybestack/llxprt-code-settings';
@@ -13,7 +14,7 @@ import {
 
 export async function acceptanceDirectory(
   prefix: string,
-  parent = resolve('tmp/verify854/p05d'),
+  parent = tmpdir(),
 ): Promise<string> {
   await mkdir(parent, { recursive: true });
   return mkdtemp(join(parent, prefix));

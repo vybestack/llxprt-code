@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { expect } from 'bun:test';
 import { createRequire } from 'node:module';
 import { appendFileSync, mkdtempSync, rmSync } from 'node:fs';
@@ -133,7 +134,7 @@ export async function withValueTransformFixture<T>(
     releaseWriter(): void;
   }) => Promise<T>,
 ): Promise<T> {
-  const root = mkdtempSync(join(process.cwd(), 'tmp/transform-values-'));
+  const root = mkdtempSync(join(tmpdir(), 'transform-values-'));
   const gate = batchGate();
   const paused = batchGate();
   let pause = false;

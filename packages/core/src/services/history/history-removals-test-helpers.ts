@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { mkdtempSync, rmSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect } from 'bun:test';
@@ -15,7 +16,7 @@ export type RemovalFixture = Parameters<
 export async function withRemovalFixture(
   action: (fixture: RemovalFixture, store: LocalMediaStore) => Promise<void>,
 ): Promise<void> {
-  const root = mkdtempSync(join(process.cwd(), 'tmp/history-removals-media-'));
+  const root = mkdtempSync(join(tmpdir(), 'history-removals-media-'));
   const store = new LocalMediaStore({ rootDirectory: root, quotaBytes: 1024 });
   try {
     await withBatchFixture(async (fixture) => {

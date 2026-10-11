@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import {
@@ -26,7 +27,7 @@ describe('streamed history JSON export', () => {
     async (size) => {
       await withBatchFixture(async ({ history, recorder, owners }) => {
         await seedRows(recorder, size);
-        const root = mkdtempSync(join(process.cwd(), 'tmp/history-export-'));
+        const root = mkdtempSync(join(tmpdir(), 'history-export-'));
         const path = join(root, 'history.json');
         writeFileSync(path, '');
         const hash = createHash('sha256');
