@@ -16,9 +16,9 @@
  * hot-swapping the pager, and the residency knobs map into the store
  * settings (KiB → bytes).
  *
- * Since the end-of-P02 verification flip the schema default for
- * ui.scrollbackPagerEnabled is true; the "schema default" test proves the
- * default-on wiring end-to-end, and flag-off coverage passes the flag
+ * The schema default for ui.scrollbackPagerEnabled is false (the pager
+ * cannot yet render tool resultDisplay or UI-only rows); the "schema default"
+ * test proves the default-off wiring, and every pager test enables the flag
  * explicitly.
  *
  * The store factory and JournalCursor run for real; the journal is a real
@@ -181,8 +181,7 @@ describe('useScrollbackBootstrap', () => {
   });
 
   it('flag off constructs no pager and emits no notice', () => {
-    // The schema default is on since the P02e flip, so flag-off coverage
-    // passes the setting explicitly.
+    // Explicit false, independent of the schema default.
     const { props, addItem } = makeHarness({
       ui: { scrollbackPagerEnabled: false },
       recordingPath: '/tmp/unused-session.jsonl',
@@ -230,11 +229,12 @@ describe('useScrollbackBootstrap (group 2)', () => {
     unmount();
   });
 
-  it('schema default (no explicit flag) constructs the pager from the journal', async () => {
-    // Default-on wiring end-to-end: the flag value arrives purely through the
-    // schema default merged into LoadedSettings — no explicit override.
+  it('schema default (no explicit flag) leaves the pager off', async () => {
+    // The pager projects only journal rows (no tool resultDisplay or UI-only
+    // rows), so it is opt-in. The flag value arrives purely through the schema
+    // default merged into LoadedSettings, with no explicit override.
     const fixture = await makeJournalFixture([[1, 'r-01']]);
-    const { props } = makeHarness({
+    const { props, addItem } = makeHarness({
       ui: {},
       recordingPath: fixture.filePath,
     });
@@ -242,13 +242,9 @@ describe('useScrollbackBootstrap (group 2)', () => {
       (p: UseScrollbackBootstrapOptions) => useScrollbackBootstrap(p),
       { initialProps: props },
     );
-    const pager = result.current.pager;
-    expect(pager).not.toBeNull();
+    expect(result.current.pager).toBeNull();
     expect(result.current.restartNotice).toBeNull();
-    await pager?.store.pageBack();
-    expect(
-      pager?.store.getState().rows.map((row) => row.item.text),
-    ).toStrictEqual(['r-01']);
+    expect(addItem).not.toHaveBeenCalled();
     unmount();
   });
 
