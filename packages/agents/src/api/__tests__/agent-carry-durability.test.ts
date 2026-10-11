@@ -23,7 +23,7 @@ async function verifyAcknowledgementFailure(size: number): Promise<number> {
       if (history === null) throw new Error('Missing carried journal');
       const tokens = history.getTotalTokens();
       const failure = vi
-        .spyOn(SessionRecordingService.prototype, 'waitForCommit')
+        .spyOn(SessionRecordingService.prototype, 'waitForCommitSequence')
         .mockImplementation(async () => {
           throw new Error('Carried write acknowledgement failed');
         });

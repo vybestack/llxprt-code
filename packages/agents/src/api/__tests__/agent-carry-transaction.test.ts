@@ -25,7 +25,7 @@ async function verifyUnchangedDurableSource(size: number): Promise<number> {
         async (snapshot) => snapshot.durableTail,
       );
       const failure = vi
-        .spyOn(SessionRecordingService.prototype, 'waitForCommit')
+        .spyOn(SessionRecordingService.prototype, 'waitForCommitSequence')
         .mockImplementation(async () => {
           throw new Error('Candidate durable acknowledgement failed');
         });
