@@ -115,3 +115,13 @@ export class OwnedClientLedger {
       await this.releaseScope(scope);
   }
 }
+
+export function finishCleanup(
+  ...groups: Array<ReadonlyArray<PromiseSettledResult<unknown>>>
+): void {
+  const failures = groups
+    .flat()
+    .flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
+  if (failures.length > 0)
+    throw new AggregateError(failures, 'Session client cleanup failed');
+}

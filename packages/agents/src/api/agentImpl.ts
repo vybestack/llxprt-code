@@ -1280,6 +1280,7 @@ export class AgentImpl implements Agent {
       () => {
         this.ownership.disposed = true;
       },
+      () => this.deps.sessionClient.closeAdmission(),
       () => this.deps.taskLaunchOwner.closeAdmissionAndAbort(),
       () => this.deps.sessionClient.closeHookAdmission(),
       () => this.hooks.closeAdmission(),

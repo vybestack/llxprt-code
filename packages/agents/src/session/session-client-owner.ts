@@ -1,4 +1,4 @@
-import { OwnedClientLedger } from './session-client-cleanup.js';
+import { OwnedClientLedger, finishCleanup } from './session-client-cleanup.js';
 import {
   prepareNewSessionClient,
   prepareDetachedSessionClient,
@@ -251,6 +251,7 @@ export class SessionClientOwner {
   runImageOperation(
     input: ImageOperationRunnerInput,
   ): Promise<ImageOperationRunnerResult> {
+    this.getAgentClient();
     return this.images.run(input);
   }
 
@@ -267,6 +268,7 @@ export class SessionClientOwner {
   private client: AgentClientContract;
   private runtimeState: AgentRuntimeState;
   private closing: Promise<void> | undefined;
+  private admissionClosed = false;
   private releaseMcpBinding: (() => void) | undefined;
   private tail: Promise<void> = Promise.resolve();
   private readonly ownedClients = new OwnedClientLedger(async (scope) => {
@@ -432,7 +434,7 @@ export class SessionClientOwner {
     workspace.bindSessionClient(
       this.config,
       this.mcpBindingToken,
-      () => this.getAgentClient(),
+      () => this.client,
       () => this.publishTools(),
       () => this.publishInstructions(this.instructionReads),
       (read, release) => this.bindMcpInstructions(read, release),
@@ -502,7 +504,7 @@ export class SessionClientOwner {
   getAgentClient(): AgentClientContract {
     if (!this.initialBindingComplete)
       throw new Error('Session client owner is not initialized');
-    if (this.closing !== undefined)
+    if (this.admissionClosed)
       throw new Error('Session client owner is disposed');
     return this.client;
   }
@@ -746,6 +748,7 @@ export class SessionClientOwner {
         await this.ownedClients.releaseFailedReplacement(candidate, error);
       throw error;
     });
+    const ledger = this.ownedClients;
     return {
       client: prepared.client,
       prepareHistoryCommit:
@@ -753,7 +756,7 @@ export class SessionClientOwner {
           ? async () => () => {}
           : prepared.prepareHistoryCommit,
       publish: () => {
-        if (this.getAgentClient() !== previous)
+        if (this.client !== previous)
           throw new Error(
             'Profile candidate no longer belongs to the current session client',
           );
@@ -761,9 +764,9 @@ export class SessionClientOwner {
         this.runtimeState = prepared.runtimeState;
         this.config.setFallbackMode(false);
       },
-      retire: () => this.enqueue(() => this.ownedClients.dispose(previous)),
+      retire: () => this.enqueueAccepted(() => ledger.dispose(previous)),
       discard: () =>
-        this.enqueue(() => this.ownedClients.dispose(prepared.client)),
+        this.enqueueAccepted(() => ledger.dispose(prepared.client)),
     };
   }
 
@@ -799,10 +802,8 @@ export class SessionClientOwner {
   }
 
   private acceptSkillPublication() {
-    return acceptSkillPublication(
-      this.getAgentClient(),
-      this.toolCatalog,
-      (operation) => this.enqueueAccepted(operation),
+    return acceptSkillPublication(this.client, this.toolCatalog, (operation) =>
+      this.enqueueAccepted(operation),
     );
   }
 
@@ -819,7 +820,12 @@ export class SessionClientOwner {
     });
   }
 
+  closeAdmission(): void {
+    this.admissionClosed = true;
+  }
+
   dispose(): Promise<void> {
+    this.closeAdmission();
     this.closeHookAdmission();
     this.githubOwner?.closeAdmission();
     const imagesClosing = this.closeImageAdmission();
@@ -851,19 +857,15 @@ export class SessionClientOwner {
         const policy = await Promise.allSettled([
           this.ownsSessionPolicy ? this.sessionPolicy?.dispose() : undefined,
         ]);
-        const failures = [
-          ...hooks,
-          ...instructions,
-          ...services,
-          ...binding,
-          ...clients,
-          ...writes,
-          ...policy,
-        ].flatMap((result) =>
-          result.status === 'rejected' ? [result.reason] : [],
+        finishCleanup(
+          hooks,
+          instructions,
+          services,
+          binding,
+          clients,
+          writes,
+          policy,
         );
-        if (failures.length > 0)
-          throw new AggregateError(failures, 'Session client cleanup failed');
       },
     );
     return this.closing;
