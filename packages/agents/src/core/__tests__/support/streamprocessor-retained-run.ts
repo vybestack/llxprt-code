@@ -2,7 +2,10 @@
 import { existsSync, rmSync } from 'node:fs';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import type { DiskTextTail } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
-import { retainedCheckpoint } from './streamprocessor-retained-census.js';
+import {
+  retainedCheckpoint,
+  type RowRetention,
+} from './streamprocessor-retained-census.js';
 import { retainedSetup } from './streamprocessor-retained-setup.js';
 
 type RetainedSetup = Awaited<ReturnType<typeof retainedSetup>>;
@@ -36,6 +39,7 @@ async function measure(input: RetainedSetup) {
     const last = await retainedCheckpoint(census);
     http.respond.release();
     const stream = await started;
+    if (input.census.rowRetention === 'in-flight') input.census.trap.length = 0;
     const output: string[] = [];
     for await (const chunk of stream)
       output.push(
@@ -95,16 +99,31 @@ function requestFacts(input: RetainedSetup) {
  * state (encoder, code blocks) and then measures a second run.
  */
 export async function runRetainedCensus(
-  retainDerivedRows = false,
+  retention: RowRetention = 'none',
   tail: DiskTextTail = false,
 ) {
-  await runCensusOnce(false, tail);
-  return runCensusOnce(retainDerivedRows, tail);
+  await runCensusOnce('none', tail);
+  return runCensusOnce(retention, tail);
 }
 
-async function runCensusOnce(retainDerivedRows: boolean, tail: DiskTextTail) {
+/**
+ * One full-size warm pass at the large tail, then the measured scenario at
+ * the small tail and at the large tail, all in this process.
+ */
+export async function runRetainedScaling(
+  retention: RowRetention,
+  small: DiskTextTail,
+  large: DiskTextTail,
+) {
+  await runCensusOnce('none', large);
+  const smallFacts = await runCensusOnce(retention, small);
+  const largeFacts = await runCensusOnce(retention, large);
+  return { small: smallFacts, large: largeFacts };
+}
+
+async function runCensusOnce(retention: RowRetention, tail: DiskTextTail) {
   const input = await retainedSetup(tail);
-  input.census.retainDerivedRows = retainDerivedRows;
+  input.census.rowRetention = retention;
   try {
     const measured = await measure(input);
     const detached = await retainedCheckpoint(input.census);

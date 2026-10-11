@@ -1,19 +1,26 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { runRetainedCensus } from './__tests__/support/streamprocessor-retained-run.js';
+import {
+  runRetainedCensus,
+  runRetainedScaling,
+} from './__tests__/support/streamprocessor-retained-run.js';
 
 const mebibyte = 1_048_576;
-// Request-scoped bodies are in flight during the call and released after it.
-// The in-flight cost measured at 2, 4 and 8 MiB tails is flat (about 2.3 to
-// 3.0 MB), so this bound does not grow with context length. The settled and
-// detached bounds stay at 1 MiB. The tail is the largest measured size (8 MiB),
-// where retention that scales with context is far above the noise.
-const inFlightBound = 5 * mebibyte;
-const tail = { mixedChunks: 128 };
+// Settled and detached deltas keep the absolute 1 MiB bound. The in-flight
+// peak holds request-scoped bodies that are released after the call, so it is
+// a constant cost (about 2.3 to 3.4 MB at every tail size) and no absolute
+// bound near 1 MiB can hold. It is bounded by how it scales with context
+// instead: the same scenario runs at a 2 MiB and an 8 MiB tail in one warmed
+// process, and the in-flight peak may grow by less than 1 MiB across the 6 MiB
+// tail difference. Retention proportional to context grows by about 6 MiB, so
+// it fails; the 1 MiB allowance is not widened.
+const smallTail = { mixedChunks: 32 };
+const largeTail = { mixedChunks: 128 };
 
 describe('actual StreamProcessor source retained owner census', () => {
   it('releases derived rows, segments and request closures below the strict 1 MiB gate', async () => {
-    const facts = await runRetainedCensus(false, tail);
+    const scaling = await runRetainedScaling('none', smallTail, largeTail);
+    const facts = scaling.large;
     expect(facts.output).toBe('finished');
     expect(facts.estimate).toStrictEqual(facts.oracle);
     expect(facts.bodies).toStrictEqual([facts.expected, facts.expected]);
@@ -69,14 +76,21 @@ describe('actual StreamProcessor source retained owner census', () => {
     }
     expect(facts.settledDelta).toBeLessThan(mebibyte);
     expect(facts.detachedDelta).toBeLessThan(mebibyte);
-    expect(facts.gateDelta).toBeLessThan(inFlightBound);
+    expect(scaling.large.gateDelta - scaling.small.gateDelta).toBeLessThan(
+      mebibyte,
+    );
   }, 600000);
   it('trap: derived rows held by the test survive the census', async () => {
-    const facts = await runRetainedCensus(true, tail);
+    const facts = await runRetainedCensus('held', largeTail);
     expect(facts.final.survivors['progressive.row-copy']?.live).toBeGreaterThan(
       0,
     );
     expect(facts.settledDelta).toBeGreaterThanOrEqual(mebibyte);
-    expect(facts.gateDelta).toBeGreaterThanOrEqual(inFlightBound);
+  }, 600000);
+  it('trap: derived rows held only until the call returns grow in-flight with context', async () => {
+    const scaling = await runRetainedScaling('in-flight', smallTail, largeTail);
+    expect(
+      scaling.large.gateDelta - scaling.small.gateDelta,
+    ).toBeGreaterThanOrEqual(mebibyte);
   }, 600000);
 });

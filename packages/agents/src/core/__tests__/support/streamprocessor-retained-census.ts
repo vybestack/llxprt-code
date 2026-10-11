@@ -11,13 +11,19 @@ import { PromptKeyDiskWriter } from '@vybestack/llxprt-code-providers/runtime/pr
 import { Gpt56SourceProjection } from '@vybestack/llxprt-code-providers/tokenizers/gpt56-source-projection.js';
 import { SourcePromptEnvelopePreparer } from '../../prompt-envelope-source-send.js';
 
+/**
+ * Trap controls for the census. `held` keeps every derived row until the
+ * census is dropped; `in-flight` keeps them only until the call returns.
+ */
+export type RowRetention = 'none' | 'held' | 'in-flight';
+
 export class RetainedOwnerCensus {
   private readonly cohorts = new Map<
     string,
     { seen: WeakSet<object>; refs: Array<WeakRef<object>> }
   >();
   readonly trap: object[] = [];
-  retainDerivedRows = false;
+  rowRetention: RowRetention = 'none';
   readonly bodyShells: object[] = [];
   readonly peak = { heap: 0, external: 0, stringCharacters: 0 };
   readonly cleanup = {
@@ -144,7 +150,7 @@ function observeRowOwners(census: RetainedOwnerCensus): () => void {
     census.observe('progressive.owner', this);
     for await (const row of original.progressiveStream.call(this)) {
       census.row('progressive.row-copy', row);
-      if (census.retainDerivedRows) census.trap.push(row);
+      if (census.rowRetention !== 'none') census.trap.push(row);
       yield row;
     }
   };
