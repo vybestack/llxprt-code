@@ -116,7 +116,15 @@ function firstChronology(
   return -1;
 }
 
-/** Membership-changing operations resolve markers, never content rows. */
+/**
+ * Membership-changing operations resolve markers, never content rows.
+ *
+ * `length` is the logical length: while a replace transaction is open it stays
+ * the length before the transaction, because every reader hides the tagged
+ * rows until the commit record. Tagged rows and begin therefore leave it
+ * unchanged, commit makes it the transaction's row count, and abort or an
+ * abandoning record starts again from the prior length.
+ */
 export function nextHistoryLength(
   op: HistoryJournalOp,
   length: number,
@@ -124,14 +132,12 @@ export function nextHistoryLength(
 ): number {
   switch (op.kind) {
     case 'content':
-      return length + 1;
+      return op.tx === undefined ? length + 1 : length;
     case 'replaceBegin':
+    case 'replaceAbort':
       return length;
-    // Commit leaves exactly the transaction rows; abort removes them again.
     case 'replaceCommit':
       return op.rowCount;
-    case 'replaceAbort':
-      return length - op.rowCount;
     case 'compressed':
       return 1;
     case 'compressionDetail':
