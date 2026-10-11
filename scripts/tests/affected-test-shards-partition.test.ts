@@ -171,13 +171,14 @@ describe('affected-test-shards selector — CLI partition matrix (issue #3185)',
     expect(new Set(tuples).size).toBe(tuples.length);
   });
 
-  it('scripts splits into three partitions so no single leg outgrows the job limit', async () => {
+  it('scripts splits into four partitions so no single leg outgrows the job limit', async () => {
     const { buildMatrix } = await loadSelector();
     const scripts = buildMatrix(['scripts']);
     expect(scripts.map((r) => `${r.shard}:${r.partition}`)).toEqual([
-      'scripts:1of3',
-      'scripts:2of3',
-      'scripts:3of3',
+      'scripts:1of4',
+      'scripts:2of4',
+      'scripts:3of4',
+      'scripts:4of4',
     ]);
   });
 

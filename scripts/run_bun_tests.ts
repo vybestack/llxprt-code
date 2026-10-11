@@ -56,6 +56,7 @@ import {
   reapStaleBunTestProcesses,
   killTimedOutChild,
 } from './lib/bun-test-retry.js';
+import { scriptsTestFileWeight } from './lib/scripts-test-weights.js';
 import {
   parsePartitionIdentity,
   selectRootPartition,
@@ -667,7 +668,9 @@ function resolveSelectedFiles(
     ),
     options.filters,
   );
-  return { all, files: selectRootPartition(all, options.partition) };
+  const weightOf = (file: string): number =>
+    scriptsTestFileWeight(dependencies.repoRoot, file);
+  return { all, files: selectRootPartition(all, options.partition, weightOf) };
 }
 
 /** Exit status for a run with no files: success only when another partition owns them. */

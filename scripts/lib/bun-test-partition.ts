@@ -107,17 +107,63 @@ export function selectPartition(
 }
 
 /**
+ * Greedy longest-processing-time assignment: files are placed heaviest first
+ * (ties broken by path) into the currently lightest partition (ties broken by
+ * lowest index). Weights must be positive, so each of the first `count` files
+ * seeds a distinct partition and no partition ends up empty. Returns the owned
+ * file set for the identity's partition.
+ */
+function selectBalancedFiles(
+  files: readonly string[],
+  identity: PartitionIdentity,
+  weightOf: (file: string) => number,
+): ReadonlySet<string> {
+  const loads: number[] = Array.from({ length: identity.count }, () => 0);
+  const owners = new Map<string, number>();
+  const heaviestFirst = files
+    .map((file) => ({ file, weight: weightOf(file) }))
+    .sort((a, b) => b.weight - a.weight || (a.file < b.file ? -1 : 1));
+  for (const { file, weight } of heaviestFirst) {
+    if (!(weight > 0)) {
+      throw new Error(`partition weight for '${file}' must be positive`);
+    }
+    let lightest = 0;
+    for (let i = 1; i < loads.length; i++) {
+      if (loads[i] < loads[lightest]) lightest = i;
+    }
+    loads[lightest] += weight;
+    owners.set(file, lightest);
+  }
+  return new Set(
+    files.filter((file) => owners.get(file) === identity.index - 1),
+  );
+}
+
+/**
  * Applies a partition identity to one test root's files. A root with fewer
  * files than partitions (for example the single-file eslint-rules root) runs
  * entirely on partition 1 and is empty elsewhere, so every file still runs
  * exactly once across the partitions without failing the empty legs.
+ *
+ * Without `weightOf` the slice is round-robin over the sorted files. With it,
+ * files are balanced by weight so a few very slow files cannot pile onto one
+ * leg.
  */
 export function selectRootPartition<T extends { readonly file: string }>(
   entries: readonly T[],
   identity: PartitionIdentity | null,
+  weightOf?: (file: string) => number,
 ): readonly T[] {
   if (identity !== null && entries.length < identity.count) {
     return identity.index === 1 ? entries : [];
+  }
+  if (weightOf !== undefined && identity !== null && identity.count > 1) {
+    const owned = selectBalancedFiles(
+      entries.map((entry) => entry.file),
+      identity,
+      weightOf,
+    );
+    return entries.filter((entry) => owned.has(entry.file));
   }
   const owned = new Set(
     selectPartition(
