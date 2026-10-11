@@ -1,5 +1,4 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { createReadStream } from 'node:fs';
 import { open, stat, type FileHandle } from 'node:fs/promises';
 import type {
   IContent,
@@ -8,6 +7,14 @@ import type {
 import type { HistoryItem } from '../../types.js';
 import { rowIdentity, rowIdentityKey } from '../../utils/rowIdentity.js';
 import { HistoryProjection } from '../../utils/historyProjection.js';
+import {
+  frameRecords,
+  openFileChunks,
+  type FramingMetrics,
+  type FramingSource,
+  type OversizedLine,
+  type RecordLine,
+} from './projected-journal-records.js';
 import {
   JournalPageFile,
   type DisplayJournalEntry,
@@ -25,13 +32,6 @@ export interface ProjectedJournalOptions {
     endExclusive: number,
   ) => AsyncIterable<string>;
 }
-interface RecordLine {
-  readonly offset: number;
-  readonly length: number;
-  readonly seq: number;
-  readonly type: string;
-  readonly payload: Record<string, unknown>;
-}
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -41,32 +41,6 @@ function isContent(value: unknown): value is IContent {
     ['human', 'ai', 'tool'].includes(String(value.speaker)) &&
     Array.isArray(value.blocks)
   );
-}
-function parseLine(
-  text: string,
-  offset: number,
-  length: number,
-): RecordLine | undefined {
-  let value: unknown;
-  try {
-    value = JSON.parse(text.replace(/^\uFEFF/, ''));
-  } catch {
-    return undefined;
-  }
-  if (
-    !isRecord(value) ||
-    typeof value.seq !== 'number' ||
-    typeof value.type !== 'string' ||
-    !isRecord(value.payload)
-  )
-    return undefined;
-  return {
-    offset,
-    length,
-    seq: value.seq,
-    type: value.type,
-    payload: value.payload,
-  };
 }
 async function readBlock(
   file: FileHandle,
@@ -112,66 +86,48 @@ async function completePrefix(
     await file.close();
   }
 }
-async function* readChunks(
+function framingSource(
   filePath: string,
   options: ProjectedJournalOptions,
+  from: number,
   endExclusive: number,
-): AsyncIterable<string> {
+): FramingSource {
   const signal = options.signal ?? new AbortController().signal;
-  if (options.read) {
-    yield* options.read(filePath, signal);
-    return;
-  }
-  if (endExclusive === 0) return;
-  if (options.readBounded) {
-    yield* options.readBounded(filePath, signal, endExclusive);
-    return;
-  }
-  const stream = createReadStream(filePath, {
-    encoding: 'utf8',
-    highWaterMark: options.chunkBytes ?? 65536,
-    end: endExclusive - 1,
+  if (options.read)
+    return {
+      chunks: options.read(filePath, signal),
+      startOffset: from,
+      endExclusive: null,
+      skipBytes: from,
+      signal,
+    };
+  if (options.readBounded)
+    return {
+      chunks:
+        endExclusive === 0
+          ? emptyChunks()
+          : options.readBounded(filePath, signal, endExclusive),
+      startOffset: from,
+      endExclusive,
+      skipBytes: from,
+      signal,
+    };
+  return {
+    chunks: openFileChunks(
+      filePath,
+      options.chunkBytes ?? 65536,
+      from,
+      endExclusive,
+      signal,
+    ),
+    startOffset: from,
+    endExclusive,
+    skipBytes: 0,
     signal,
-  });
-  try {
-    yield* stream;
-  } finally {
-    stream.destroy();
-  }
+  };
 }
-async function* records(
-  filePath: string,
-  options: ProjectedJournalOptions,
-  endExclusive: number,
-): AsyncIterable<RecordLine> {
-  let text = '';
-  let offset = 0;
-  let readBytes = 0;
-  for await (const chunk of readChunks(filePath, options, endExclusive)) {
-    options.signal?.throwIfAborted();
-    if (!options.read && readBytes === endExclusive) break;
-    const remaining = endExclusive - readBytes;
-    const length = Buffer.byteLength(chunk);
-    const bounded =
-      !options.read && length > remaining
-        ? Buffer.from(chunk).subarray(0, remaining).toString('utf8')
-        : chunk;
-    readBytes += Buffer.byteLength(bounded);
-    text += bounded;
-    let newline = text.indexOf('\n');
-    while (newline !== -1) {
-      const line = text.slice(0, newline + 1);
-      const length = Buffer.byteLength(line);
-      const record = parseLine(line, offset, length);
-      if (record) yield record;
-      offset += length;
-      text = text.slice(newline + 1);
-      newline = text.indexOf('\n');
-    }
-  }
-  options.signal?.throwIfAborted();
-  if (!options.read && readBytes !== endExclusive)
-    throw new Error('Truncated journal while reading complete prefix');
+async function* emptyChunks(): AsyncIterable<string> {
+  // An empty complete prefix has nothing to read.
 }
 
 export class ProjectedJournalCursor {
@@ -185,6 +141,11 @@ export class ProjectedJournalCursor {
   private seq = 0;
   private retainedPage: HistoryItem[] = [];
   private readSettled: Promise<void> = Promise.resolve();
+  private readonly framing: FramingMetrics = {
+    maxAssembledBytes: 0,
+    completeThrough: 0,
+  };
+  private oversizedRecords = 0;
   private readonly options: ProjectedJournalOptions;
 
   private constructor(
@@ -273,6 +234,18 @@ export class ProjectedJournalCursor {
     }
   }
 
+  /** Oversized lines are diagnosed by offset and length and never displayed. */
+  private noteOversized(_line: OversizedLine): void {
+    this.oversizedRecords += 1;
+  }
+
+  metrics(): { maxAssembledRecordBytes: number; oversizedRecords: number } {
+    return {
+      maxAssembledRecordBytes: this.framing.maxAssembledBytes,
+      oversizedRecords: this.oversizedRecords,
+    };
+  }
+
   private rebuild(): Promise<void> {
     const read = this.buildPages();
     this.readSettled = read.then(
@@ -285,6 +258,7 @@ export class ProjectedJournalCursor {
   private async buildPages(): Promise<void> {
     this.options.signal?.throwIfAborted();
     this.pages.clear();
+    this.framing.completeThrough = 0;
     const snapshot = this.options.read
       ? { fileBytes: (await stat(this.filePath)).size, endExclusive: 0 }
       : await completePrefix(this.filePath, this.options.signal);
@@ -297,18 +271,20 @@ export class ProjectedJournalCursor {
     );
     let previousEnd = 0;
     try {
-      for await (const record of records(
-        this.filePath,
-        this.options,
-        snapshot.endExclusive,
-      )) {
-        this.acceptRecord(projection, record, previousEnd);
+      const framed = frameRecords(
+        framingSource(this.filePath, this.options, 0, snapshot.endExclusive),
+        this.framing,
+      );
+      for await (const record of framed) {
+        if (record.kind === 'record')
+          this.acceptRecord(projection, record, previousEnd);
+        else this.noteOversized(record);
         previousEnd = record.offset + record.length;
       }
       this.options.signal?.throwIfAborted();
       this.append(projection.flush(), previousEnd);
-      this.completeBytes = previousEnd;
-      this.observedCompleteBytes = previousEnd;
+      this.completeBytes = this.framing.completeThrough;
+      this.observedCompleteBytes = this.framing.completeThrough;
     } finally {
       projection.close();
     }
