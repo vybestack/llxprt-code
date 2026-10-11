@@ -6,7 +6,10 @@ import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 import { finishMediaRequest } from '../utils/request-media-resolution.js';
-import { serializeResponsesPromptEnvelope } from '../runtime/responses-source-serializer.js';
+import {
+  serializeResponsesPromptEnvelope,
+  type ResponsesSourceOptions,
+} from '../runtime/responses-source-serializer.js';
 import {
   findDanglingCalls,
   type HistoryDangling,
@@ -119,6 +122,28 @@ async function* estimationRows(
   for await (const row of rows) yield* toEstimationContents([row]);
 }
 
+/** Incremental and full-history passes the estimator needs for a stored parent. */
+function statefulAccounting(
+  rows: ProviderRequestRows,
+  stateful: StatefulConversation,
+  signal: AbortSignal | undefined,
+  skipRows: number,
+): Pick<ResponsesSourceOptions, 'stateful'> {
+  if (stateful.parentId === undefined) return {};
+  return {
+    stateful: {
+      statefulParentUsed: true,
+      retainedBaselineTokens: stateful.parentRetainedTokens,
+      incrementalContents: countedRows(rows, signal, skipRows),
+      ...(stateful.parentRetainedTokens === undefined
+        ? {
+            fullHistoryContents: estimationRows(countedRows(rows, signal)),
+          }
+        : {}),
+    },
+  };
+}
+
 export function assertDiskTextShape(
   options: NormalizedGenerateChatOptions,
   deps: ResponsesExecutorDeps,
@@ -191,23 +216,13 @@ export async function buildDiskTextResponsesContext(
       ...('input' in overrides
         ? { inputOverride: { value: overrides['input'] } }
         : {}),
-      ...(stateful.parentId === undefined
-        ? {}
-        : {
-            stateful: {
-              statefulParentUsed: true,
-              retainedBaselineTokens: stateful.parentRetainedTokens,
-              incrementalContents: countedRows(rows, signal, skipRows),
-              ...(stateful.parentRetainedTokens === undefined
-                ? {
-                    fullHistoryContents: estimationRows(
-                      countedRows(rows, signal),
-                    ),
-                  }
-                : {}),
-            },
-          }),
-      context: responsesInputContext(options, ephemerals, deps),
+      ...statefulAccounting(rows, stateful, signal, skipRows),
+      context: responsesInputContext(
+        options,
+        ephemerals,
+        deps,
+        stateful.parentId !== undefined,
+      ),
       signal,
     });
     prepared.mediaRequest.registerCleanup(() => prompt.dispose());
