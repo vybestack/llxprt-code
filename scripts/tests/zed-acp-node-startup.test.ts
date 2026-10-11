@@ -1,9 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+// Runs against built output, so it belongs to the scripts shard, which builds
+// the workspaces before it runs (the package shards resolve TypeScript source).
 import { describe, expect, it } from 'bun:test';
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 
-const root = resolve(import.meta.dir, '../../..');
+const root = resolve(import.meta.dir, '../..');
 interface StartupResult {
   readonly status: number | null;
   readonly stdout: string;
