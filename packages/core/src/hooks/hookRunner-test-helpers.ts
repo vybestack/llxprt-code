@@ -362,6 +362,38 @@ export function registerInputFailures(runner: () => HookRunner): void {
   });
 }
 
+/**
+ * The hook's node process is a grandchild of the runner (`node & wait`), so
+ * no child event reports its exit. After the group SIGKILL it may still be
+ * dying, or be a zombie waiting for init to reap it; both count as terminated.
+ */
+function isProcessTerminated(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ESRCH') return true;
+    throw error;
+  }
+  if (process.platform !== 'linux') return false;
+  let stat: string;
+  try {
+    stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+  } catch (error) {
+    // Reaped between the signal probe and the stat read.
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return true;
+    throw error;
+  }
+  const stateIndex = stat.lastIndexOf(')') + 2;
+  return stat.slice(stateIndex, stateIndex + 1) === 'Z';
+}
+
+async function expectProcessTerminated(pid: number): Promise<void> {
+  const deadline = Date.now() + 5000;
+  while (!isProcessTerminated(pid) && Date.now() < deadline)
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(isProcessTerminated(pid)).toBe(true);
+}
+
 export async function cancelsBlockedInput(
   runner: () => HookRunner,
 ): Promise<void> {
@@ -397,7 +429,7 @@ export async function cancelsBlockedInput(
       expect(result.error).toBe(reason);
       result.dispose();
       expect(owners.snapshot().liveRows).toBe(0);
-      expect(() => process.kill(pid, 0)).toThrow('ESRCH');
+      await expectProcessTerminated(pid);
       const reader = snapshot.openReader();
       expect((await reader.next()).done).toBe(false);
       expect(owners.snapshot().liveRows).toBe(1);

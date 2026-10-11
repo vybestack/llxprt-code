@@ -96,7 +96,11 @@ async function measureRetention(trap: boolean) {
   retained.length = 0;
   weakPrepared.length = 0;
   weakRows.length = 0;
-  await prepareCycle(false, false);
+  // The measured cycle runs the full-size path (chunked token estimation, lazy
+  // encoder initialisation); warm that same path so the baseline excludes
+  // one-time initialisation and only per-cycle growth is measured.
+  await prepareCycle(true, false);
+  await prepareCycle(true, false);
   await sourceHeap();
   weakPrepared.length = 0;
   weakRows.length = 0;

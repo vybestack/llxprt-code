@@ -50,7 +50,15 @@ export function submitTicketRows(
 export async function expectTicketCallersReleased(
   probes: TransformProbes,
 ): Promise<void> {
-  await sweepTransformRows();
+  // The collector can keep one row alive through a stale conservative stack
+  // slot; retention by the journal never frees, so repeated sweeps still fail it.
+  const live = (): number =>
+    probes.rows.filter((row) => row.deref() !== undefined).length +
+    probes.markers.filter((marker) => marker.deref() !== undefined).length;
+  for (let sweep = 0; sweep < 5; sweep++) {
+    await sweepTransformRows();
+    if (live() === 0) break;
+  }
   expect(probes.rows.filter((row) => row.deref() !== undefined)).toHaveLength(
     0,
   );
