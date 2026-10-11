@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'bun:test';
 import { mkdtempSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -23,7 +24,7 @@ function isReport(value: unknown): value is MemoryReport {
 async function measure(mode: string, size: number): Promise<MemoryReport> {
   const directory =
     process.env.SYNC_TICKET_EVIDENCE ??
-    mkdtempSync(join(process.cwd(), 'tmp/sync-ticket-memory-'));
+    mkdtempSync(join(tmpdir(), 'sync-ticket-memory-'));
   const output = join(directory, `memory-${mode}-${size}`);
   mkdirSync(output, { recursive: true });
   const child = Bun.spawn(

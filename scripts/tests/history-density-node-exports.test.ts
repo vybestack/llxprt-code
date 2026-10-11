@@ -1,10 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+// Runs against built output, so it belongs to the scripts shard, which builds
+// the workspaces before it runs (the package shards resolve TypeScript source).
 import { describe, expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 
-const root = resolve(import.meta.dir, '../../../../..');
+const root = resolve(import.meta.dir, '../..');
 const fixture: IContent = {
   speaker: 'human',
   blocks: [{ type: 'text', text: 'density row: 雪' }],
@@ -16,7 +18,7 @@ const fixture: IContent = {
 function nodeProbe(program: string): ReturnType<typeof spawnSync> {
   return spawnSync('node', ['--input-type=module', '-e', program], {
     cwd: root,
-    env: process.env,
+    env: { ...process.env, PROBE_ROW: JSON.stringify(fixture) },
     encoding: 'utf8',
     timeout: 30_000,
   });
@@ -33,7 +35,7 @@ describe('public density rows under default Node exports', () => {
     const result = nodeProbe(`${imports}
 const ownership = new RowOwnership();
 const rows = new HistoryDensityRows(ownership);
-const input = ${JSON.stringify(fixture)};
+const input = JSON.parse(process.env.PROBE_ROW);
 try {
   rows.append(input);
   rows.appendSanitized(input);
@@ -59,7 +61,7 @@ assert.throws(() => rows.readRow(0), /closed/);
 const ownership = new RowOwnership();
 const rows = new HistoryDensityRows(ownership);
 try {
-  rows.append(${JSON.stringify(fixture)});
+  rows.append(JSON.parse(process.env.PROBE_ROW));
   const iterator = rows[Symbol.iterator]();
   assert.equal(iterator.next().done, false);
   assert.equal(ownership.snapshot().liveRows, 1);

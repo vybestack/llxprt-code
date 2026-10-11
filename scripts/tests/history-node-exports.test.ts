@@ -1,9 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+// Runs against built output, so it belongs to the scripts shard, which builds
+// the workspaces before it runs (the package shards resolve TypeScript source).
 import { describe, expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 
-const root = resolve(import.meta.dir, '../../../../..');
+const root = resolve(import.meta.dir, '../..');
 const exports: ReadonlyArray<readonly [string, string]> = [
   ['services/history/detachedHistoryJournal.js', 'DetachedHistoryJournal'],
   ['services/history/compression-span-index.js', 'CompressionSpanIndex'],
@@ -13,10 +15,13 @@ const exports: ReadonlyArray<readonly [string, string]> = [
   ['storage/media-reference-lifecycle.js', 'collectMediaReferences'],
 ];
 
-function importUnderNode(program: string): number | null {
+function importUnderNode(
+  program: string,
+  probe: Record<string, string>,
+): number | null {
   const result = spawnSync('node', ['--input-type=module', '-e', program], {
     cwd: root,
-    env: process.env,
+    env: { ...process.env, ...probe },
     encoding: 'utf8',
     timeout: 30_000,
   });
@@ -29,11 +34,17 @@ describe('public history runtime exports', () => {
     'loads %s and its %s API under default Node conditions',
     (path, name) => {
       expect(
-        importUnderNode(`
+        importUnderNode(
+          `
 import assert from 'node:assert/strict';
-const api = await import(${JSON.stringify('@vybestack/llxprt-code-core/' + path)});
-assert.equal(typeof api[${JSON.stringify(name)}], 'function');
-`),
+const api = await import(process.env.PROBE_SPECIFIER);
+assert.equal(typeof api[process.env.PROBE_EXPORT], 'function');
+`,
+          {
+            PROBE_SPECIFIER: '@vybestack/llxprt-code-core/' + path,
+            PROBE_EXPORT: name,
+          },
+        ),
       ).toBe(0);
     },
   );
@@ -43,8 +54,10 @@ assert.equal(typeof api[${JSON.stringify(name)}], 'function');
     '@vybestack/llxprt-code-zed-acp',
     './packages/cli/dist/src/cli.js',
   ])('loads the production %s module without Bun test APIs', (specifier) => {
-    expect(importUnderNode(`await import(${JSON.stringify(specifier)});`)).toBe(
-      0,
-    );
+    expect(
+      importUnderNode('await import(process.env.PROBE_SPECIFIER);', {
+        PROBE_SPECIFIER: specifier,
+      }),
+    ).toBe(0);
   });
 });
