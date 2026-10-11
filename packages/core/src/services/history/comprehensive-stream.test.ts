@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import {
   journalShapeRow,
   scratchDirectories,
-} from './history-clone-trace-test-helpers.js';
+} from './__tests__/support/history-clone-trace-test-helpers.js';
 import {
   suffixRow,
   withSuffixFixture,

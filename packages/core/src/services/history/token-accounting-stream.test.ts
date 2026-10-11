@@ -1,14 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import {
   accountingFactory,
   accountingRow,
   accountingTexts,
   deferred,
   recalculate,
-} from './token-accounting-stream-test-helpers.js';
+} from './__tests__/support/token-accounting-stream-test-helpers.js';
 
 function expectedAccounting(size: number): { digest: string; total: number } {
   const expected = createHash('sha256');

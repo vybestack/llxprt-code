@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { HistoryService } from './HistoryService.js';
 import { buildProviderContent } from './historyProviderPipeline.js';
 import { DebugLogger } from '../../debug/index.js';
-import { scratchDirectories } from './history-clone-trace-test-helpers.js';
+import { scratchDirectories } from './__tests__/support/history-clone-trace-test-helpers.js';
 import {
   suffixRow,
   withSuffixFixture,
@@ -16,7 +16,7 @@ import {
   fixtureIncluded,
   collectCuratedFixture,
   consumeCuratedExit,
-} from './curated-stream-test-helpers.js';
+} from './__tests__/support/curated-stream-test-helpers.js';
 
 for (const size of [512, 8192]) {
   describe(`curated real journal iteration: ${size} rows`, () => {

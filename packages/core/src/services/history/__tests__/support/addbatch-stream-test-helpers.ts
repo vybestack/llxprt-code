@@ -4,15 +4,15 @@ import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test
 import { mkdtempSync, rmSync, appendFileSync } from 'node:fs';
 import { appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { RowOwnership } from '../../recording/rowOwnership.js';
-import { createRowCounters } from '../../recording/journalCounters.js';
-import { HistoryService } from './HistoryService.js';
-import type { IContent } from './IContent.js';
+import { RowOwnership } from '../../../../recording/rowOwnership.js';
+import { createRowCounters } from '../../../../recording/journalCounters.js';
+import { HistoryService } from '../../HistoryService.js';
+import type { IContent } from '../../IContent.js';
 import {
   AdmissionFailureRecorder,
   exactTokenizer,
   rollbackRow,
-} from './chronology-rollback-test-helpers.js';
+} from '../../chronology-rollback-test-helpers.js';
 
 export class BatchStreamHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {

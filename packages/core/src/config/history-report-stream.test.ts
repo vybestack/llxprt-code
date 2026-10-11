@@ -3,8 +3,8 @@ import { describe, expect, it } from 'bun:test';
 import { tmpdir } from 'node:os';
 import { Config } from './config.js';
 import { createHistoryReportClient } from './history-report-client-test-helpers.js';
-import { withCoreSuffixFixture } from '../services/history/core-suffix-fixture-test-helpers.js';
-import { accountingRow } from '../services/history/token-accounting-stream-test-helpers.js';
+import { withCoreSuffixFixture } from '../services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
+import { accountingRow } from '../services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 
 for (const size of [512, 8192]) {
   describe(`configuration history verification with ${size} rows`, () => {

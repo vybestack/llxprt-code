@@ -40,6 +40,7 @@
       "policy",
       "providers",
       "settings",
+      "telemetry",
       "tools"
     ],
     "auth": [],

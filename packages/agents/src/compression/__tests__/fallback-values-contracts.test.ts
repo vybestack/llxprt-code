@@ -18,7 +18,7 @@ import {
 } from '../pendingWindowFallback.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { batchGate } from '@vybestack/llxprt-code-core/services/history/addbatch-stream-test-helpers.js';
+import { batchGate } from '@vybestack/llxprt-code-core/services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import { rejectedValue } from '@vybestack/llxprt-code-core/services/history/chronology-rollback-test-helpers.js';
 import type { ProviderFallbackCandidate } from '../providerFallbackCandidate.js';
 

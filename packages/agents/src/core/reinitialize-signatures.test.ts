@@ -9,7 +9,7 @@ import { AgentClient } from './client.js';
 import {
   withReinitializeHistory,
   reinitializeConfig,
-} from './reinitialize-history-test-helpers.js';
+} from './__tests__/support/reinitialize-history-test-helpers.js';
 
 function signatureRow(): IContent {
   return {

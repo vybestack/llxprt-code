@@ -1,13 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { accountingRow } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
+import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { readAgentHistoryForReplay } from './zed-session-loader.js';
 import {
   NoArrayHistory,
   replayClient,
-} from './zed-history-stream-test-helpers.js';
+} from './__tests__/support/zed-history-stream-test-helpers.js';
 
 class FaultHistory extends NoArrayHistory {
   override async *streamRawHistory(

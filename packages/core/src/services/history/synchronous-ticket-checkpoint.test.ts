@@ -13,7 +13,7 @@ import {
   detachedDigest,
   detachedDurableDigest,
 } from './detached-rollback-test-helpers.js';
-import { batchGate } from './addbatch-stream-test-helpers.js';
+import { batchGate } from './__tests__/support/addbatch-stream-test-helpers.js';
 import {
   rejectedValue,
   mediaParticipant,

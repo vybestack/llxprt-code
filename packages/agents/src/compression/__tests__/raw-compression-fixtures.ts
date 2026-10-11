@@ -7,7 +7,7 @@ import type { HistoryDumpSnapshot } from '@vybestack/llxprt-code-core/services/h
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { createHash } from 'node:crypto';
-import { accountingRow } from '../../../../core/src/services/history/token-accounting-stream-test-helpers.js';
+import { accountingRow } from '../../../../core/src/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { annotateCompressionSpan } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
 import { invalidateResponsesStatefulChain } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 

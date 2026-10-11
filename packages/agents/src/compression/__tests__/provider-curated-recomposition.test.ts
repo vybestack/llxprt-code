@@ -4,7 +4,7 @@ import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { providerFixtureRow } from '@vybestack/llxprt-code-core/services/history/provider-curated-test-helpers.js';
+import { providerFixtureRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/provider-curated-test-helpers.js';
 import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';

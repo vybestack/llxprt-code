@@ -13,7 +13,7 @@ const logger = new DebugLogger('test:semantic-purge-body-oracle');
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { EagerSemanticPurgeOracle } from '../../packages/core/src/services/history/semantic-purge-eager-test-helpers.js';
+import { EagerSemanticPurgeOracle } from '../../packages/core/src/services/history/__tests__/support/semantic-purge-eager-test-helpers.js';
 import { SemanticMediaPurgeSession } from '../../packages/agents/src/core/semanticMediaPurgeSession.js';
 
 function row(index: number, bytes: number): IContent {

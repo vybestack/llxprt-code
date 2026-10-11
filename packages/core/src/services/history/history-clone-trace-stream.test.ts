@@ -4,7 +4,7 @@ import { HistoryService } from './HistoryService.js';
 import { buildChronologyTrace } from './historyChronology.js';
 import { sanitizeProviderHistoryForSerialization } from './historyCloneUtils.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import {
   exitMeasurement,
   mixedRow,
@@ -12,7 +12,7 @@ import {
   scratchDirectories,
   traversalMeasurement,
   type Exit,
-} from './history-clone-trace-test-helpers.js';
+} from './__tests__/support/history-clone-trace-test-helpers.js';
 
 describe('clone sanitization and independent objects', () => {
   it('preserves the eager sanitization transform, media and tool shape, and independent objects', async () => {

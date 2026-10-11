@@ -16,7 +16,7 @@ import {
 import {
   MergeRowHistory,
   mergeRow,
-} from '../../packages/core/src/services/history/history-merge-test-helpers.js';
+} from '../../packages/core/src/services/history/__tests__/support/history-merge-test-helpers.js';
 describe('media probe persistence cursor', () => {
   it('persists the accepted admitted row, counts with a scalar and releases save reservations', async () => {
     await withMetricStore(async (store) => {

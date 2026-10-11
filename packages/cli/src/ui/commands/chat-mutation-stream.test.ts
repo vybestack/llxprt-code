@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
-import { accountingRow } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
+import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { foldDurableRows } from '@vybestack/llxprt-code-core/recording/durableRowFold.js';
 import { chatCommand } from './chatCommand.js';
 import { withChatMutationFixture } from './chat-mutation-test-helpers.js';

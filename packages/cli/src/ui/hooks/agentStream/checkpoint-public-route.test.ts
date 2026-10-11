@@ -15,7 +15,7 @@ import {
   cleanupBounds,
   cleanupRow,
   recordCleanupOwners,
-} from '../../../utils/cleanup-history-test-helpers.js';
+} from '../../../utils/__tests__/support/cleanup-history-test-helpers.js';
 
 describe('checkpoint public disk route after eager preparation removal', () => {
   it('does not expose the unused whole-checkpoint string-map preparation API', () => {

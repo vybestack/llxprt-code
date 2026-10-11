@@ -9,7 +9,7 @@ import {
   type PairedDelta,
 } from '@vybestack/llxprt-code-test-utils/core/retained-growth.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { accountingRow } from './token-accounting-stream-test-helpers.js';
+import { accountingRow } from './__tests__/support/token-accounting-stream-test-helpers.js';
 import type { IContent } from './IContent.js';
 
 const measurementSchema = z.object({

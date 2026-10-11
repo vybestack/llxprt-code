@@ -6,7 +6,7 @@ import {
   removalRow,
   assertRemovalRows,
 } from './history-removals-test-helpers.js';
-import { batchRow } from './addbatch-stream-test-helpers.js';
+import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
 import { expectedRange } from './chronology-rollback-test-helpers.js';
 
 function registerRemovalFailure(

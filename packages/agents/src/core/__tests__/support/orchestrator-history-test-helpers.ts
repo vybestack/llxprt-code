@@ -7,12 +7,12 @@ import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/histor
 import {
   accountingRow,
   deferred,
-} from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
+} from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import {
   buildAgent,
   internalConfig,
-} from '../api/__tests__/helpers/agentHarness.js';
+} from '../../../api/__tests__/helpers/agentHarness.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 

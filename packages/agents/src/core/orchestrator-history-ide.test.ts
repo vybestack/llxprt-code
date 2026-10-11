@@ -5,7 +5,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import {
   sendHistoryTurn,
   withOrchestratorHistory,
-} from './orchestrator-history-test-helpers.js';
+} from './__tests__/support/orchestrator-history-test-helpers.js';
 
 async function observedIdeContext(
   size: number,

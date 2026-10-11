@@ -2,8 +2,8 @@
 import { describe, expect, it } from 'bun:test';
 import { readFile, readdir } from 'node:fs/promises';
 import type { IContent } from '../services/history/IContent.js';
-import { withCoreSuffixFixture } from '../services/history/core-suffix-fixture-test-helpers.js';
-import { mergeRow } from '../services/history/history-merge-test-helpers.js';
+import { withCoreSuffixFixture } from '../services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
+import { mergeRow } from '../services/history/__tests__/support/history-merge-test-helpers.js';
 import {
   createCursorPersistence,
   seedCursorPersistence,

@@ -11,7 +11,7 @@ import {
 } from './ticket-disk-contract-test-helpers.js';
 import { HistoryJournalStore } from './historyJournalStore.js';
 import { withRollbackFixture } from './chronology-rollback-test-helpers.js';
-import { batchRow } from './addbatch-stream-test-helpers.js';
+import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';

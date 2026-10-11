@@ -14,7 +14,7 @@ import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/histor
 import {
   accountingRow,
   accountingFactory,
-} from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
+} from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { AgentClient } from '../../../core/client.js';
 import { buildAgent, internalConfig, type Agent } from './agentHarness.js';
 

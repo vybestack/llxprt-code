@@ -13,7 +13,7 @@ import { buildProviderContent } from '../../packages/core/src/services/history/h
 import {
   providerFarFixtureRow,
   providerPendingFixture,
-} from '../../packages/core/src/services/history/provider-curated-test-helpers.js';
+} from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
 import { enforceWithHandler } from '../../packages/agents/src/compression/__tests__/support/enforce-with-handler.js';
 import { buildRuntimeContext } from '../../packages/agents/src/core/__tests__/chatSession-density-helpers.js';
 import { createTruncationStub } from '../../packages/agents/src/compression/toolResultTruncator.js';

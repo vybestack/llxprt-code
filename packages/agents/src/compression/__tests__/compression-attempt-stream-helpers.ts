@@ -7,7 +7,7 @@ import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-he
 import {
   curatedFixtureRow,
   fixtureIncluded,
-} from '../../../../core/src/services/history/curated-stream-test-helpers.js';
+} from '../../../../core/src/services/history/__tests__/support/curated-stream-test-helpers.js';
 
 export type AttemptHook = ConstructorParameters<typeof CompressionHandler>[4];
 

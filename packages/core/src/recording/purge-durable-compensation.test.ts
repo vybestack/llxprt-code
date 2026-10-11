@@ -6,7 +6,7 @@ import { statSync } from 'node:fs';
 import type { SessionRecordingService } from './SessionRecordingService.js';
 import { foldDurableRows } from './durableRowFold.js';
 import { SemanticMediaPurgeStreamCoordinator } from '../services/history/semantic-purge-stream.js';
-import { withCoreSuffixFixture } from '../services/history/core-suffix-fixture-test-helpers.js';
+import { withCoreSuffixFixture } from '../services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import { ownerFixtureRow } from '../services/history/chronology-rollback-owner-test-helpers.js';
 import { RowOwnership } from './rowOwnership.js';
 import type { IContent } from '../services/history/IContent.js';

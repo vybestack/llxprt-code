@@ -3,7 +3,7 @@ import { writeBodyFile } from '../../packages/test-utils/src/body-evidence-write
 import { describe, expect, it } from 'bun:test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { withBatchFixture } from '../../packages/core/src/services/history/addbatch-stream-test-helpers.js';
+import { withBatchFixture } from '../../packages/core/src/services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import {
   exportSummaryRow,
   seedRows,

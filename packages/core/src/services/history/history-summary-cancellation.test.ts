@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { withBatchFixture } from './addbatch-stream-test-helpers.js';
+import { withBatchFixture } from './__tests__/support/addbatch-stream-test-helpers.js';
 import { exportSummaryRow, summaryRow } from './export-summary-test-helpers.js';
 import { mediaParticipant } from './chronology-rollback-test-helpers.js';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';

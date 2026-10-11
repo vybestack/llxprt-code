@@ -5,12 +5,12 @@ import { ReadableStream as NodeReadableStream } from 'node:stream/web';
 import * as acp from '@agentclientprotocol/sdk';
 import { Config } from '@vybestack/llxprt-code-core';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { accountingRow } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
+import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import {
   NoArrayHistory,
   replayOracle,
   serializeUpdate,
-} from './acp-readable-stream-test-helpers.js';
+} from './__tests__/support/acp-readable-stream-test-helpers.js';
 import { toAcpReadableStream } from './acp-readable-stream.js';
 import {
   createInput,
@@ -18,7 +18,7 @@ import {
   connectPeer,
   ReplayPeer,
   type InputKind,
-} from './acp-readable-stream-test-helpers.js';
+} from './__tests__/support/acp-readable-stream-test-helpers.js';
 
 const inputKinds: InputKind[] = ['node', 'web'];
 for (const kind of inputKinds) {

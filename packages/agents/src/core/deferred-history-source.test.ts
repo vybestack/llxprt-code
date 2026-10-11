@@ -15,7 +15,7 @@ import {
 import { AgentClient } from './client.js';
 import { randomUUID } from 'node:crypto';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { accountingFactory } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
+import { accountingFactory } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';

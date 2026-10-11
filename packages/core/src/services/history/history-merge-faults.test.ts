@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
-import { mergeRow } from './history-merge-test-helpers.js';
+import { mergeRow } from './__tests__/support/history-merge-test-helpers.js';
 import {
   withRollbackFixture,
   rowsOf,

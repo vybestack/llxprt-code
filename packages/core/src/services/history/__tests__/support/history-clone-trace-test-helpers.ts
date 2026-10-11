@@ -1,14 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { existsSync, readdirSync } from 'node:fs';
 import { isDeepStrictEqual } from 'node:util';
-import { buildChronologyTrace } from './historyChronology.js';
-import { sanitizeProviderHistoryForSerialization } from './historyCloneUtils.js';
+import { buildChronologyTrace } from '../../historyChronology.js';
+import { sanitizeProviderHistoryForSerialization } from '../../historyCloneUtils.js';
 import { join } from 'node:path';
-import type { HistoryService } from './HistoryService.js';
-import type { IContent } from './IContent.js';
+import type { HistoryService } from '../../HistoryService.js';
+import type { IContent } from '../../IContent.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
-import { getScratchRoot } from '../../storage/scratch-root.js';
+import { getScratchRoot } from '../../../../storage/scratch-root.js';
 
 export type Query = 'clone' | 'trace';
 export function journalShapeRow(index: number, payloadBytes: number): IContent {

@@ -6,8 +6,8 @@ import {
   rejectedValue,
   durableRowsOf,
 } from './chronology-rollback-test-helpers.js';
-import { mergeRow } from './history-merge-test-helpers.js';
-import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { mergeRow } from './__tests__/support/history-merge-test-helpers.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 
 describe('history merge pending source identities', () => {
   it('appends the pending source row value and leaves the caller marker untouched', async () => {

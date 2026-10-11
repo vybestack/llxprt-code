@@ -2,7 +2,7 @@
 import { mkdir, rename, rm, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { GitService } from '@vybestack/llxprt-code-core';
-import { withCleanupHistory } from '../../../utils/cleanup-history-test-helpers.js';
+import { withCleanupHistory } from '../../../utils/__tests__/support/cleanup-history-test-helpers.js';
 import { createToolCheckpoint } from './checkpointPersistence.js';
 import type { FsOps } from './checkpointPersistence.js';
 import { checkpointFs } from './checkpoint-disk-writer.js';

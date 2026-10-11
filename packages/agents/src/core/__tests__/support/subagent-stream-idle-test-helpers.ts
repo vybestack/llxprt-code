@@ -5,7 +5,7 @@
  */
 
 import { vi } from 'bun:test';
-import { SubAgentScope } from './subagent.js';
+import { SubAgentScope } from '../../subagent.js';
 import type {
   ModelConfig,
   RunConfig,

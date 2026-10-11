@@ -5,7 +5,7 @@ import { appendFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionRecordingService } from './SessionRecordingService.js';
-import { batchGate } from '../services/history/addbatch-stream-test-helpers.js';
+import { batchGate } from '../services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import {
   rollbackRow,
   durableRowsOf,

@@ -15,7 +15,7 @@ import type { HistoryService } from '../../packages/core/src/services/history/Hi
 import {
   providerFarFixtureRow,
   providerPendingFixture,
-} from '../../packages/core/src/services/history/provider-curated-test-helpers.js';
+} from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
 import { enforceWithHandler } from '../../packages/agents/src/compression/__tests__/support/enforce-with-handler.js';
 import { runDiskProviderFallback } from '../../packages/agents/src/compression/diskProviderFallback.js';
 import { buildCompressionMetadata } from '../../packages/agents/src/compression/compressionContextBuilder.js';

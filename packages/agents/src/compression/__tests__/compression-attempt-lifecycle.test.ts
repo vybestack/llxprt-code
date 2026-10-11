@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { curatedFixtureRow } from '../../../../core/src/services/history/curated-stream-test-helpers.js';
+import { curatedFixtureRow } from '../../../../core/src/services/history/__tests__/support/curated-stream-test-helpers.js';
 import {
   AttemptHistory,
   attemptHandler,

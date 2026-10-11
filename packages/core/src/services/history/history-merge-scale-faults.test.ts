@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import {
   withRollbackFixture,
   rowsOf,
@@ -8,7 +8,10 @@ import {
   rejectedValue,
   rollbackRow,
 } from './chronology-rollback-test-helpers.js';
-import { mergeRow, MergeRowHistory } from './history-merge-test-helpers.js';
+import {
+  mergeRow,
+  MergeRowHistory,
+} from './__tests__/support/history-merge-test-helpers.js';
 
 describe('history merge scale partial admission', () => {
   for (const size of [512, 8192]) {

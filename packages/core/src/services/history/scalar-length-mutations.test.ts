@@ -10,7 +10,10 @@ import {
   expectTicketDisk,
 } from './ticket-disk-contract-test-helpers.js';
 import { HistoryJournalStore } from './historyJournalStore.js';
-import { withBatchFixture, batchRow } from './addbatch-stream-test-helpers.js';
+import {
+  withBatchFixture,
+  batchRow,
+} from './__tests__/support/addbatch-stream-test-helpers.js';
 import { withRollbackFixture } from './chronology-rollback-test-helpers.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import { expectScalarCharge } from './scalar-owner-contract-test-helpers.js';

@@ -14,7 +14,10 @@ import {
   recordScalarOwners,
   expectNoScalarOwners,
 } from './scalar-test-evidence.js';
-import { batchRow, withBatchFixture } from './addbatch-stream-test-helpers.js';
+import {
+  batchRow,
+  withBatchFixture,
+} from './__tests__/support/addbatch-stream-test-helpers.js';
 import { HistoryJournalStore } from './historyJournalStore.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import type { IContent } from './IContent.js';

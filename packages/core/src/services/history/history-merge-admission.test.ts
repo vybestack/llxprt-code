@@ -2,9 +2,12 @@
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
-import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import { exactTokenizer, rowsOf } from './chronology-rollback-test-helpers.js';
-import { mergeRow, MergeRowHistory } from './history-merge-test-helpers.js';
+import {
+  mergeRow,
+  MergeRowHistory,
+} from './__tests__/support/history-merge-test-helpers.js';
 
 function admissionRow(index: number): IContent {
   return index === 1 ? { speaker: 'ai', blocks: [] } : mergeRow(index);

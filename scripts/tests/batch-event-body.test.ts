@@ -9,8 +9,8 @@ import { buildProviderContent } from '../../packages/core/src/services/history/h
 import {
   providerFarFixtureRow,
   providerPendingFixture,
-} from '../../packages/core/src/services/history/provider-curated-test-helpers.js';
-import { withBatchFixture } from '../../packages/core/src/services/history/addbatch-stream-test-helpers.js';
+} from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
+import { withBatchFixture } from '../../packages/core/src/services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import { recomposeFixture } from '../../packages/agents/src/compression/__tests__/provider-curated-recomposition-helpers.js';
 import { captureCuratedBody } from './provider-curated-body-helpers.js';
 import { visitBatch } from '../../packages/core/src/services/history/batch-event-test-helpers.js';

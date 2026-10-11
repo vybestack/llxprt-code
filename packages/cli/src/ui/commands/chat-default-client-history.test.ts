@@ -6,7 +6,7 @@ import { createMockCommandContext } from '../../__tests__/mockCommandContext.js'
 import {
   withCleanupHistory,
   cleanupBounds,
-} from '../../utils/cleanup-history-test-helpers.js';
+} from '../../utils/__tests__/support/cleanup-history-test-helpers.js';
 import { SessionControl } from '../../../../agents/src/api/control/sessionControl.js';
 
 for (const size of [512, 8192]) {

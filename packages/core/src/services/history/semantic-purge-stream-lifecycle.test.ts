@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { SemanticMediaPurgeStreamCoordinator } from './semantic-purge-stream.js';
-import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
 import type { IContent } from './IContent.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';

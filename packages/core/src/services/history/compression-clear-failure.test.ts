@@ -4,7 +4,10 @@ import { appendFile } from 'node:fs/promises';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { batchGate, batchRow } from './addbatch-stream-test-helpers.js';
+import {
+  batchGate,
+  batchRow,
+} from './__tests__/support/addbatch-stream-test-helpers.js';
 import {
   AdmissionFailureRecorder,
   durableRowsOf,

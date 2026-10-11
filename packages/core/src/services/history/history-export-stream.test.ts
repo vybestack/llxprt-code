@@ -10,7 +10,10 @@ import {
   appendFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import { withBatchFixture, batchGate } from './addbatch-stream-test-helpers.js';
+import {
+  withBatchFixture,
+  batchGate,
+} from './__tests__/support/addbatch-stream-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
 import {
   assertOwnerBound,

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DebugLogger } from '../../debug/index.js';
 import { streamProviderContent } from './provider-curated-stream.js';
-import { providerFixtureRow } from './provider-curated-test-helpers.js';
+import { providerFixtureRow } from './__tests__/support/provider-curated-test-helpers.js';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 

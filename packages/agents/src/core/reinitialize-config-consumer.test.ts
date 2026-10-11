@@ -4,13 +4,13 @@ import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journal
 import {
   expectedHistoryDigest,
   sendHistoryTurn,
-} from './orchestrator-history-test-helpers.js';
+} from './__tests__/support/orchestrator-history-test-helpers.js';
 import {
   withReinitializeHistory,
   historyDigest,
   reinitializeBounds,
   recordReinitializeOwners,
-} from './reinitialize-history-test-helpers.js';
+} from './__tests__/support/reinitialize-history-test-helpers.js';
 
 function registerConfigTransfer(size: number): void {
   describe('replacement and provider send', () => {

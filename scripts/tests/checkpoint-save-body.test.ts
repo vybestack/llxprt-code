@@ -4,7 +4,7 @@ import { writeBodyFile } from '../../packages/test-utils/src/body-evidence-write
 import { describe, expect, it, vi } from 'bun:test';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { join, basename } from 'node:path';
-import { withBatchFixture } from '../../packages/core/src/services/history/addbatch-stream-test-helpers.js';
+import { withBatchFixture } from '../../packages/core/src/services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import { exactTokenizer } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 import {
   exportSummaryRow,

@@ -4,7 +4,7 @@ import { gcAndSweep } from 'bun:jsc';
 import { appendFileSync } from 'node:fs';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import type { IContent } from './IContent.js';
-import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
 import {
   exactTokenizer,

@@ -8,7 +8,7 @@ import {
   mediaObjectPath,
   recordCleanupOwners,
   withCleanupHistory,
-} from './cleanup-history-test-helpers.js';
+} from './__tests__/support/cleanup-history-test-helpers.js';
 
 const retainingModes: ReadonlyArray<'borrowed' | 'copy'> = ['borrowed', 'copy'];
 

@@ -3,15 +3,15 @@ import { describe, expect, it } from 'bun:test';
 import {
   accountingFactory,
   deferred,
-} from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
-import { expectedHistoryDigest } from './orchestrator-history-test-helpers.js';
+} from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
+import { expectedHistoryDigest } from './__tests__/support/orchestrator-history-test-helpers.js';
 import {
   historyDigest,
   reinitializeBounds,
   reinitializeConfig,
   recordReinitializeOwners,
   withReinitializeHistory,
-} from './reinitialize-history-test-helpers.js';
+} from './__tests__/support/reinitialize-history-test-helpers.js';
 
 for (const size of [512, 8192]) {
   describe(`paused active-history token consumer at ${size}`, () => {

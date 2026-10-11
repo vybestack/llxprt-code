@@ -2,11 +2,11 @@
 import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { withCoreSuffixFixture } from '../services/history/core-suffix-fixture-test-helpers.js';
+import { withCoreSuffixFixture } from '../services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import {
   mergeRow,
   MergeRowHistory,
-} from '../services/history/history-merge-test-helpers.js';
+} from '../services/history/__tests__/support/history-merge-test-helpers.js';
 import { createCursorPersistence } from './cursor-persistence-test-helpers.js';
 
 function expectedHistory(size: number, bytes: number): string {

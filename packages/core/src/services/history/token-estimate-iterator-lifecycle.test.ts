@@ -5,7 +5,7 @@ import {
   accountingFactory,
   accountingRow,
   accountingTexts,
-} from './token-accounting-stream-test-helpers.js';
+} from './__tests__/support/token-accounting-stream-test-helpers.js';
 import type { IContent } from './IContent.js';
 
 describe('hypothetical token estimate iterator lifecycle', () => {

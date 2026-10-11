@@ -16,7 +16,7 @@ import {
   type PendingFixture,
 } from '../../packages/agents/src/compression/__tests__/pending-window-disk-helpers.js';
 import { middleoutRow } from '../../packages/agents/src/compression/__tests__/middleout-disk-helpers.js';
-import { providerPendingFixture } from '../../packages/core/src/services/history/provider-curated-test-helpers.js';
+import { providerPendingFixture } from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
 import { PendingContextWindowEnforcer } from '../../packages/agents/src/compression/pendingContextWindowEnforcement.js';
 import { runDiskProviderFallback } from '../../packages/agents/src/compression/diskProviderFallback.js';
 import { buildCompressionMetadata } from '../../packages/agents/src/compression/compressionContextBuilder.js';

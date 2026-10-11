@@ -7,14 +7,14 @@ import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/histor
 import {
   accountingFactory,
   accountingRow,
-} from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
+} from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
   buildAgent,
   internalConfig,
-} from '../api/__tests__/helpers/agentHarness.js';
+} from '../../../api/__tests__/helpers/agentHarness.js';
 import { ControlledOrchestratorHistory } from './orchestrator-history-test-helpers.js';
 
 export function reinitializeConfig(config: Config): ContentGeneratorConfig {

@@ -1,12 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { convertToAnthropicMessages } from './AnthropicMessageNormalizer.js';
-import { attachAnchorCacheControl } from './AnthropicAnchorCache.js';
-import { attachPromptCaching } from './AnthropicRequestBuilder.js';
-import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
+import { convertToAnthropicMessages } from '../../AnthropicMessageNormalizer.js';
+import { attachAnchorCacheControl } from '../../AnthropicAnchorCache.js';
+import { attachPromptCaching } from '../../AnthropicRequestBuilder.js';
+import { prepareAnthropicRequest } from '../../AnthropicRequestPreparation.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
-import type { AnthropicMessage } from './AnthropicMessageNormalizer.js';
+import type { AnthropicMessage } from '../../AnthropicMessageNormalizer.js';
 type CacheTestLogger = { debug: (fn: () => string) => void };
 
 export function human(text: string, anchored = false): IContent {

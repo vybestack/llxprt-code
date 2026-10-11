@@ -9,7 +9,10 @@ import { setImmediate } from 'node:timers/promises';
 import { HistoryService } from './HistoryService.js';
 import type { HistoryRowTransform } from './historyRowTransform.js';
 import type { IContent, ChronologyMarker } from './IContent.js';
-import { BatchOwnerCensus, batchGate } from './addbatch-stream-test-helpers.js';
+import {
+  BatchOwnerCensus,
+  batchGate,
+} from './__tests__/support/addbatch-stream-test-helpers.js';
 import {
   AdmissionFailureRecorder,
   exactTokenizer,

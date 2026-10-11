@@ -1,7 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
-import { batchRow, withBatchFixture } from './addbatch-stream-test-helpers.js';
+import {
+  batchRow,
+  withBatchFixture,
+} from './__tests__/support/addbatch-stream-test-helpers.js';
 import { expectTicketDiskContents } from './ticket-disk-contract-test-helpers.js';
 import { withCuratedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 import type { IContent } from './IContent.js';

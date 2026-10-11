@@ -3,12 +3,12 @@ import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { accountingRow } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
+import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import {
   NoArrayHistory,
   replayClient,
   replayOracle,
-} from './zed-history-stream-test-helpers.js';
+} from './__tests__/support/zed-history-stream-test-helpers.js';
 import { readAgentHistoryForReplay } from './zed-session-loader.js';
 import { deliverHistoryUpdates } from './zed-session-replay.js';
 import { SessionTitleTracker } from './zed-session-info.js';

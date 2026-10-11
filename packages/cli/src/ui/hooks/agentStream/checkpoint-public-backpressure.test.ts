@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { readdir } from 'node:fs/promises';
-import { deferred } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
+import { deferred } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { createToolCheckpoint, type FsOps } from './checkpointPersistence.js';
 import {
   checkpointGit,
@@ -10,7 +10,7 @@ import {
   trackingFs,
   withCheckpoint,
 } from './checkpoint-disk-test-helpers.js';
-import { cleanupBounds } from '../../../utils/cleanup-history-test-helpers.js';
+import { cleanupBounds } from '../../../utils/__tests__/support/cleanup-history-test-helpers.js';
 
 function pausedSink(): {
   ops: FsOps;

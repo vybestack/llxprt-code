@@ -6,7 +6,7 @@ import {
   suffixRow,
   withSuffixFixture,
 } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { accountingRow } from './token-accounting-stream-test-helpers.js';
+import { accountingRow } from './__tests__/support/token-accounting-stream-test-helpers.js';
 import type { IContent } from './IContent.js';
 import { isSpeakerContent } from './historyJournalGuards.js';
 

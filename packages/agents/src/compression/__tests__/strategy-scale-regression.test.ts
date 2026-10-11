@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import { CompressionHandler } from '../CompressionHandler.js';
 import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { providerFixtureRow } from '../../../../core/src/services/history/provider-curated-test-helpers.js';
+import { providerFixtureRow } from '../../../../core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
 import { exactTokenizer } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
 import { collectRows } from './truncation-stream-helpers.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';

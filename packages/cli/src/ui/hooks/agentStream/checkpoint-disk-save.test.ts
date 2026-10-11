@@ -6,7 +6,7 @@ import {
   cleanupBounds,
   cleanupRow,
   recordCleanupOwners,
-} from '../../../utils/cleanup-history-test-helpers.js';
+} from '../../../utils/__tests__/support/cleanup-history-test-helpers.js';
 import {
   checkpointTool,
   checkpointUiHistory,

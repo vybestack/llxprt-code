@@ -11,7 +11,7 @@ import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/histor
 import {
   providerFarFixtureRow,
   providerPendingFixture,
-} from '../../packages/core/src/services/history/provider-curated-test-helpers.js';
+} from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
 import { recomposeFixture } from '../../packages/agents/src/compression/__tests__/provider-curated-recomposition-helpers.js';
 import { captureCuratedBody } from './provider-curated-body-helpers.js';

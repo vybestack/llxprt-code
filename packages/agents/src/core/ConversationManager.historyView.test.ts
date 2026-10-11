@@ -22,7 +22,7 @@
 import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import * as fc from 'fast-check';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
-import { collectCuratedFixture } from '@vybestack/llxprt-code-core/services/history/curated-stream-test-helpers.js';
+import { collectCuratedFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/curated-stream-test-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';

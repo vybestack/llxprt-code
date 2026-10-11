@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
-import { deferred } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
+import { deferred } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import {
   withCheckpoint,
   checkpointUiHistory,

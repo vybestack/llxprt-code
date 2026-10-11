@@ -14,7 +14,7 @@ import { readdirSync, rmSync } from 'node:fs';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { buildProviderContent } from '@vybestack/llxprt-code-core/services/history/historyProviderPipeline.js';
-import { withCoreSuffixFixture } from '@vybestack/llxprt-code-core/services/history/core-suffix-fixture-test-helpers.js';
+import { withCoreSuffixFixture } from '@vybestack/llxprt-code-core/services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';

@@ -13,7 +13,7 @@ import {
   withRollbackFixture,
 } from './chronology-rollback-test-helpers.js';
 import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
-import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import { createHistoryProviderFileBindingStore } from './provider-file-binding.js';
 import { changedTransformRow } from './row-transform-test-helpers.js';

@@ -7,7 +7,7 @@ import {
   assertRemovalRows,
   recordRemovalOwners,
 } from './history-removals-test-helpers.js';
-import { batchRow } from './addbatch-stream-test-helpers.js';
+import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
 import type { IContent, ChronologyMarker } from './IContent.js';
 
 function registerRemovalScale(size: number): void {

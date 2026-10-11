@@ -9,7 +9,7 @@ import {
   expectedMixedSummary,
   providerDigest,
   useDiagnosticSink,
-} from './provider-diagnostics-test-helpers.js';
+} from './__tests__/support/provider-diagnostics-test-helpers.js';
 
 describe('observable provider curation diagnostics', () => {
   const take = useDiagnosticSink();

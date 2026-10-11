@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import { buildCuratedHistory } from '../../packages/core/src/services/history/historyCuration.js';
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
-import { withBatchFixture } from '../../packages/core/src/services/history/addbatch-stream-test-helpers.js';
+import { withBatchFixture } from '../../packages/core/src/services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import {
   repairRow,
   replacementFor,

@@ -2,14 +2,14 @@
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import type { IContent } from './IContent.js';
-import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 import {
   MergeRowHistory,
   mergeRow,
   oracleDigest,
   streamDigest,
-} from './history-merge-test-helpers.js';
+} from './__tests__/support/history-merge-test-helpers.js';
 
 function assertPositiveBounds(owners: RowOwnership): void {
   expect(owners.snapshot().peakRows).toBeLessThanOrEqual(440);

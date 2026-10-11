@@ -75,7 +75,7 @@ const {
   registerParallelTests,
   registerSequentialTests,
   registerInvalidJsonTests,
-} = await import('./hookRunner-legacy-test-helpers.js');
+} = await import('./__tests__/support/hookRunner-legacy-test-helpers.js');
 const {
   rich,
   large,

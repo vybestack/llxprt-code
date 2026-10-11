@@ -6,8 +6,8 @@ import { gcAndSweep } from 'bun:jsc';
 import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { SemanticMediaPurgeStreamCoordinator } from './semantic-purge-stream.js';
-import { EagerSemanticPurgeOracle } from './semantic-purge-eager-test-helpers.js';
-import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { EagerSemanticPurgeOracle } from './__tests__/support/semantic-purge-eager-test-helpers.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import {

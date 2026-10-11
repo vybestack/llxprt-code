@@ -12,7 +12,7 @@ import {
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { ChatSession } from '../../../agents/src/core/chatSession.js';
-import { accountingRow } from '../../../core/src/services/history/token-accounting-stream-test-helpers.js';
+import { accountingRow } from '../../../core/src/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { createMockCommandContext } from './mockCommandContext.js';
 import type { CommandContext } from '../ui/commands/types.js';
 

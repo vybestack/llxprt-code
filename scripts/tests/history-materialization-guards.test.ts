@@ -3,9 +3,9 @@ import { describe, expect, it } from 'bun:test';
 import { observeHistorySynchronouslyForTest } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 import { DensityDiskHistory } from '../../packages/agents/src/compression/__tests__/density-disk-helpers.js';
 import { HighdensityPreparationHistory } from '../../packages/agents/src/compression/__tests__/highdensity-disk-helpers.js';
-import { BatchStreamHistory } from '../../packages/core/src/services/history/addbatch-stream-test-helpers.js';
-import { MergeRowHistory } from '../../packages/core/src/services/history/history-merge-test-helpers.js';
-import { DiagnosticsCursorHistory } from '../../packages/core/src/services/history/provider-diagnostics-test-helpers.js';
+import { BatchStreamHistory } from '../../packages/core/src/services/history/__tests__/support/addbatch-stream-test-helpers.js';
+import { MergeRowHistory } from '../../packages/core/src/services/history/__tests__/support/history-merge-test-helpers.js';
+import { DiagnosticsCursorHistory } from '../../packages/core/src/services/history/__tests__/support/provider-diagnostics-test-helpers.js';
 
 describe('journal materialization guard', () => {
   it('DensityDiskHistory rejects journal eager materialization', () => {

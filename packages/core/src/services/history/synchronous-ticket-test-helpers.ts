@@ -6,7 +6,10 @@ import { join } from 'node:path';
 import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 import { createRowCounters } from '../../recording/journalCounters.js';
 import { HistoryService } from './HistoryService.js';
-import { BatchOwnerCensus, batchGate } from './addbatch-stream-test-helpers.js';
+import {
+  BatchOwnerCensus,
+  batchGate,
+} from './__tests__/support/addbatch-stream-test-helpers.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 
 export async function withSynchronousFixture<T>(

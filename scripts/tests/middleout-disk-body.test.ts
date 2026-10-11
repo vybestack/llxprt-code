@@ -7,7 +7,7 @@ import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { buildCuratedHistory } from '../../packages/core/src/services/history/historyCuration.js';
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
-import { providerPendingFixture } from '../../packages/core/src/services/history/provider-curated-test-helpers.js';
+import { providerPendingFixture } from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
 import {
   middleoutSetup,
   middleoutOracle,

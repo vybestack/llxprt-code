@@ -2,7 +2,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { withSynchronousFixture } from '../../packages/core/src/services/history/synchronous-ticket-test-helpers.js';
-import { batchRow } from '../../packages/core/src/services/history/addbatch-stream-test-helpers.js';
+import { batchRow } from '../../packages/core/src/services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import {
   settledHeapCensus,
   heapCensus,

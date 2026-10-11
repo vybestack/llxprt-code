@@ -7,8 +7,8 @@ import { DebugLogger } from '../../debug/index.js';
 import { HistoryService } from './HistoryService.js';
 import { buildProviderContent } from './historyProviderPipeline.js';
 import type { IContent } from './IContent.js';
-import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
-import { providerFixtureRow } from './provider-curated-test-helpers.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
+import { providerFixtureRow } from './__tests__/support/provider-curated-test-helpers.js';
 
 class CursorOnlyProviderHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {

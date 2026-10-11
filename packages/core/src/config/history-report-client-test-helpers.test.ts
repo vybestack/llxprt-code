@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import type { AgentClientContract } from '../core/clientContract.js';
 import { Config } from './config.js';
 import { createHistoryReportClient } from './history-report-client-test-helpers.js';
-import { withCoreSuffixFixture } from '../services/history/core-suffix-fixture-test-helpers.js';
+import { withCoreSuffixFixture } from '../services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 
 describe('source history report client fixture', () => {

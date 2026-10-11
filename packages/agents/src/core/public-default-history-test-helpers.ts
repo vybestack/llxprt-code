@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { accountingRow } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
+import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { isSpeakerContent } from '@vybestack/llxprt-code-core/services/history/historyJournalGuards.js';
 
 export const publicDefaultBounds = {

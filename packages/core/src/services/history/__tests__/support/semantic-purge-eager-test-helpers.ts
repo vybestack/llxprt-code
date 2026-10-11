@@ -5,9 +5,9 @@
  */
 
 import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
-import type { HistoryService } from './HistoryService.js';
-import type { ContentBlock, IContent } from './IContent.js';
-import { sanitizeProviderHistoryForSerialization } from './historyCloneUtils.js';
+import type { HistoryService } from '../../HistoryService.js';
+import type { ContentBlock, IContent } from '../../IContent.js';
+import { sanitizeProviderHistoryForSerialization } from '../../historyCloneUtils.js';
 
 interface SemanticMediaPurgeFrontier {
   readonly contentIndex: number;

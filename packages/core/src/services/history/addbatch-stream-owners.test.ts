@@ -4,7 +4,7 @@ import {
   batchRow,
   recordBatchOwners,
   withBatchFixture,
-} from './addbatch-stream-test-helpers.js';
+} from './__tests__/support/addbatch-stream-test-helpers.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import type { IContent } from './IContent.js';
 

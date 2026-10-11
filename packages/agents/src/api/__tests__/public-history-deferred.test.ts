@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import { accountingRow } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
+import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { buildAgent } from './helpers/agentHarness.js';
 
 for (const size of [512, 8192]) {

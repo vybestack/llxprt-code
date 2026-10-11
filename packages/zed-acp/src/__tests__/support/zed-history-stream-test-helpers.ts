@@ -2,9 +2,9 @@ import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { accountingRow } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
+import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { mapHistoryToSessionUpdates } from './zed-session-replay.js';
+import { mapHistoryToSessionUpdates } from '../../zed-session-replay.js';
 
 export class NoArrayHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {

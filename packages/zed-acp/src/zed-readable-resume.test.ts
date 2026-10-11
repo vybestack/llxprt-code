@@ -5,7 +5,7 @@ import { ZedAgent } from './zedIntegration.js';
 import {
   connectPeer,
   type InputKind,
-} from './acp-readable-stream-test-helpers.js';
+} from './__tests__/support/acp-readable-stream-test-helpers.js';
 import {
   buildBaseConfig,
   buildStubAgent,

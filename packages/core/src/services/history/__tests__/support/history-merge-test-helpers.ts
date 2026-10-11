@@ -1,9 +1,9 @@
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
-import { HistoryService } from './HistoryService.js';
-import type { IContent, ChronologyMarker } from './IContent.js';
-import { rollbackRow } from './chronology-rollback-test-helpers.js';
+import { HistoryService } from '../../HistoryService.js';
+import type { IContent, ChronologyMarker } from '../../IContent.js';
+import { rollbackRow } from '../../chronology-rollback-test-helpers.js';
 
 export class MergeRowHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {

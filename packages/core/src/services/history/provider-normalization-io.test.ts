@@ -4,7 +4,7 @@ import { describe, expect, it } from 'bun:test';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { ProviderNormalizationDisk } from './provider-normalization-disk.js';
-import { batchRow } from './addbatch-stream-test-helpers.js';
+import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
 
 async function withDisk(
   action: (disk: ProviderNormalizationDisk, root: string) => Promise<void>,

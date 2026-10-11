@@ -8,7 +8,7 @@ import {
   mediaObjectPath,
   recordCleanupOwners,
   withCleanupHistory,
-} from './cleanup-history-test-helpers.js';
+} from './__tests__/support/cleanup-history-test-helpers.js';
 
 for (const size of [512, 8192]) {
   for (const active of [false, true]) {

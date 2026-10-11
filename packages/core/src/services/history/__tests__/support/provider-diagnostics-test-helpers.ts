@@ -6,13 +6,13 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ConfigurationManager } from '@vybestack/llxprt-code-telemetry/debug/ConfigurationManager.js';
 import { FileOutput } from '@vybestack/llxprt-code-telemetry/debug/FileOutput.js';
-import { DebugLogger, type LogEntry } from '../../debug/index.js';
-import type { IContent } from './IContent.js';
-import { HistoryService } from './HistoryService.js';
+import { DebugLogger, type LogEntry } from '../../../../debug/index.js';
+import type { IContent } from '../../IContent.js';
+import { HistoryService } from '../../HistoryService.js';
 import { providerFixtureRow } from './provider-curated-test-helpers.js';
 import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
-import { buildProviderContent } from './historyProviderPipeline.js';
-import { buildCuratedHistory } from './historyCuration.js';
+import { buildProviderContent } from '../../historyProviderPipeline.js';
+import { buildCuratedHistory } from '../../historyCuration.js';
 
 const oracleLogger = new DebugLogger('llxprt:history:service');
 

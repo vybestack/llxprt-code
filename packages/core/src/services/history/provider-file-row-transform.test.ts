@@ -10,7 +10,7 @@ import type {
 } from './IContent.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import { createHistoryProviderFileBindingStore } from './provider-file-binding.js';
-import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import { ownerFixtureRow } from './chronology-rollback-owner-test-helpers.js';
 import {
   exactTokenizer,

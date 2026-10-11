@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { withCoreSuffixFixture } from '../services/history/core-suffix-fixture-test-helpers.js';
+import { withCoreSuffixFixture } from '../services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import { MediaLifecycleMetrics } from './media-lifecycle-metrics.js';
 import {
   metricRow,

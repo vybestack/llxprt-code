@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { readdirSync } from 'node:fs';
 import { withSynchronousFixture } from './synchronous-ticket-test-helpers.js';
-import { batchRow } from './addbatch-stream-test-helpers.js';
+import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
 import { getScratchRoot } from '../../storage/scratch-root.js';
 
 function ticketFiles(): string[] {

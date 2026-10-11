@@ -6,7 +6,7 @@ import { HistoryService } from './HistoryService.js';
 import type { IContent } from './IContent.js';
 import { HistoryJournalStore } from './historyJournalStore.js';
 import { rowIndex } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import { getScratchRoot } from '../../storage/scratch-root.js';
 
 type Query = 'recent' | 'tokens';

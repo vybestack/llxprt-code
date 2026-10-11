@@ -8,7 +8,7 @@ import {
 import {
   curatedFixtureRow,
   fixtureIncluded,
-} from '@vybestack/llxprt-code-core/services/history/curated-stream-test-helpers.js';
+} from '@vybestack/llxprt-code-core/services/history/__tests__/support/curated-stream-test-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   buildRuntimeContext,

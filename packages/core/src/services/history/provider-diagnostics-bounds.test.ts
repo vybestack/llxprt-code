@@ -13,7 +13,7 @@ import {
   manyBlocksRow,
   providerDigest,
   useDiagnosticSink,
-} from './provider-diagnostics-test-helpers.js';
+} from './__tests__/support/provider-diagnostics-test-helpers.js';
 
 function reconstructedRow(): IContent {
   return {

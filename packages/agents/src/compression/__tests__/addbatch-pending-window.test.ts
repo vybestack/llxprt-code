@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import { mediaParticipant } from '../../../../core/src/services/history/chronology-rollback-test-helpers.js';
-import { batchRow } from '../../../../core/src/services/history/addbatch-stream-test-helpers.js';
+import { batchRow } from '../../../../core/src/services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import {
   pendingCaller,
   pendingGate,

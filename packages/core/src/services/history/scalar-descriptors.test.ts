@@ -1,7 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { fstatSync, appendFileSync, unlinkSync } from 'node:fs';
-import { batchRow, withBatchFixture } from './addbatch-stream-test-helpers.js';
+import {
+  batchRow,
+  withBatchFixture,
+} from './__tests__/support/addbatch-stream-test-helpers.js';
 import { HistoryJournalStore } from './historyJournalStore.js';
 import { withSynchronousHistoryCursor } from '../../recording/synchronousHistoryCursor.js';
 import {

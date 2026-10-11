@@ -7,7 +7,7 @@ import {
   batchGate,
   batchRow,
   withBatchFixture,
-} from './addbatch-stream-test-helpers.js';
+} from './__tests__/support/addbatch-stream-test-helpers.js';
 import { exactTokenizer } from './chronology-rollback-test-helpers.js';
 import { repairRow, replacementFor } from './tool-repair-disk-test-helpers.js';
 import type { IContent } from './IContent.js';

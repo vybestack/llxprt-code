@@ -5,7 +5,7 @@ import {
   StreamOnlyHistory,
 } from '../api/__tests__/helpers/public-history-fixture.js';
 import { internalConfig } from '../api/__tests__/helpers/agentHarness.js';
-import { accountingRow } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
+import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { ChatSession } from './chatSession.js';
 import { publicDefaultBounds } from './public-default-history-test-helpers.js';
 

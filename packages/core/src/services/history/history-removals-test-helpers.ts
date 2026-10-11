@@ -5,7 +5,10 @@ import { join } from 'node:path';
 import { expect } from 'bun:test';
 import { LocalMediaStore } from '../../storage/local-media-store.js';
 import { HistoryMediaOwnership } from '../../storage/history-media-ownership.js';
-import { batchRow, withBatchFixture } from './addbatch-stream-test-helpers.js';
+import {
+  batchRow,
+  withBatchFixture,
+} from './__tests__/support/addbatch-stream-test-helpers.js';
 import type { IContent, MediaReferenceBlock } from './IContent.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 

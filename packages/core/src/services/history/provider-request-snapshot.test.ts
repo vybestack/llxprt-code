@@ -6,8 +6,8 @@ import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import type { IContent } from './IContent.js';
-import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
-import { providerFixtureRow } from './provider-curated-test-helpers.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
+import { providerFixtureRow } from './__tests__/support/provider-curated-test-helpers.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 
 const pending: IContent = {

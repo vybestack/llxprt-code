@@ -17,14 +17,14 @@ import {
 import {
   deferred,
   accountingFactory,
-} from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
+} from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   buildAgent,
   internalConfig,
-} from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
+} from '../../../../../agents/src/api/__tests__/helpers/agentHarness.js';
 
 export const cleanupBounds = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
 const mediaInput = {

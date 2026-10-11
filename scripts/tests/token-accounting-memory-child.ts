@@ -7,7 +7,7 @@ import {
   accountingRow,
   deferred,
   recalculate,
-} from '../../packages/core/src/services/history/token-accounting-stream-test-helpers.js';
+} from '../../packages/core/src/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { retainHistoryForMemoryTrap } from './retaining-history-test-helper.js';
 
 async function settleHeap(): Promise<NodeJS.MemoryUsage> {

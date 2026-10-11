@@ -40,7 +40,7 @@ import {
   waitForConditionInRealTime,
   delayRealTime,
 } from '../test-utils/eventLoop.js';
-import { createIdleScope } from './subagent-stream-idle-test-helpers.js';
+import { createIdleScope } from './__tests__/support/subagent-stream-idle-test-helpers.js';
 
 const realEnvironmentContextModule = {
   ...(await import('@vybestack/llxprt-code-core/utils/environmentContext.js')),

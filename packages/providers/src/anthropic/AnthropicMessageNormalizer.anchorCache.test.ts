@@ -1,7 +1,7 @@
 import {
   noopLogger,
   convertOptions,
-} from './anthropic-anchor-cache-test-helpers.js';
+} from './__tests__/support/anthropic-anchor-cache-test-helpers.js';
 /// <reference lib="esnext.array" />
 /**
  * @license
@@ -814,4 +814,4 @@ import {
   cacheControlLocations,
   prepare,
   countRequestCacheControls,
-} from './anthropic-anchor-cache-test-helpers.js';
+} from './__tests__/support/anthropic-anchor-cache-test-helpers.js';

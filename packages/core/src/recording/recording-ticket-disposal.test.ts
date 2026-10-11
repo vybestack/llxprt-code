@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { withSynchronousFixture } from '../services/history/synchronous-ticket-test-helpers.js';
-import { batchRow } from '../services/history/addbatch-stream-test-helpers.js';
+import { batchRow } from '../services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import { durableRowsOf } from '../services/history/chronology-rollback-test-helpers.js';
 
 describe('recording ticket disposal admission boundary', () => {

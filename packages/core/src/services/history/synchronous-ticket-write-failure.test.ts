@@ -2,7 +2,7 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs';
 import { withSynchronousFixture } from './synchronous-ticket-test-helpers.js';
-import { batchRow } from './addbatch-stream-test-helpers.js';
+import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
 
 describe('synchronous admission disk write failures', () => {
   it.each([1, 2, 3, 4, 5, 6, 7, 8])(

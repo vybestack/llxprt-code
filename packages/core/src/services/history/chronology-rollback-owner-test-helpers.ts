@@ -2,7 +2,7 @@
 import { expect } from 'bun:test';
 import { appendFileSync } from 'node:fs';
 import { RowOwnership } from '../../recording/rowOwnership.js';
-import { withCoreSuffixFixture } from './core-suffix-fixture-test-helpers.js';
+import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import {
   exactTokenizer,
   mediaParticipant,

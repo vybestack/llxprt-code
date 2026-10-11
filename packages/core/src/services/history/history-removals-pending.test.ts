@@ -7,7 +7,7 @@ import {
   assertRemovalRows,
   recordRemovalOwners,
 } from './history-removals-test-helpers.js';
-import { batchRow } from './addbatch-stream-test-helpers.js';
+import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
 
 function registerPendingRemoval(size: number): void {
   describe('queued append during removal', () => {

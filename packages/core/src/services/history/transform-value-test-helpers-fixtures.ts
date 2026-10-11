@@ -3,7 +3,7 @@ import type { IContent, ProviderFileReferenceMetadata } from './IContent.js';
 import {
   batchRow,
   type BatchOwnerCensus,
-} from './addbatch-stream-test-helpers.js';
+} from './__tests__/support/addbatch-stream-test-helpers.js';
 import {
   probeTransformRow,
   type TransformProbes,

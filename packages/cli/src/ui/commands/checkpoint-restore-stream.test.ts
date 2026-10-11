@@ -13,7 +13,7 @@ import {
 } from '../hooks/agentStream/checkpoint-disk-test-helpers.js';
 import { restoreCommand } from './restoreCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { cleanupBounds } from '../../utils/cleanup-history-test-helpers.js';
+import { cleanupBounds } from '../../utils/__tests__/support/cleanup-history-test-helpers.js';
 
 function observeAdmission(
   client: ReturnType<

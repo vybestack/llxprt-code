@@ -12,7 +12,7 @@ import {
 import {
   accountingRow,
   deferred,
-} from './token-accounting-stream-test-helpers.js';
+} from './__tests__/support/token-accounting-stream-test-helpers.js';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import type { IContent } from './IContent.js';
 

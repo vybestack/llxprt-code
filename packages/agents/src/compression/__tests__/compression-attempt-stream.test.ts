@@ -6,7 +6,7 @@ import {
   withSuffixFixture,
   suffixRow,
 } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { curatedFixtureRow } from '../../../../core/src/services/history/curated-stream-test-helpers.js';
+import { curatedFixtureRow } from '../../../../core/src/services/history/__tests__/support/curated-stream-test-helpers.js';
 import {
   AttemptHistory,
   attemptHandler,

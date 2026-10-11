@@ -5,7 +5,7 @@ import {
   expectedHistoryDigest,
   sendHistoryTurn,
   withOrchestratorHistory,
-} from './orchestrator-history-test-helpers.js';
+} from './__tests__/support/orchestrator-history-test-helpers.js';
 
 for (const size of [512, 8192]) {
   describe(`orchestrator pinned reader at ${size}`, () => {

@@ -2,14 +2,17 @@
 import { describe, expect, it } from 'bun:test';
 import { setImmediate } from 'node:timers/promises';
 import { gcAndSweep } from 'bun:jsc';
-import { batchRow, withBatchFixture } from './addbatch-stream-test-helpers.js';
+import {
+  batchRow,
+  withBatchFixture,
+} from './__tests__/support/addbatch-stream-test-helpers.js';
 import {
   detachedDigest,
   detachedDurableDigest,
 } from './detached-rollback-test-helpers.js';
 import type { IContent } from './IContent.js';
 import type { HistoryService } from './HistoryService.js';
-import type { BatchOwnerCensus } from './addbatch-stream-test-helpers.js';
+import type { BatchOwnerCensus } from './__tests__/support/addbatch-stream-test-helpers.js';
 
 function submission(size: number): {
   rows: IContent[];
@@ -26,15 +29,32 @@ function submission(size: number): {
   };
 }
 
+const MAX_COLLECTION_CYCLES = 10;
+
+function liveProbes(probes: ReadonlyArray<WeakRef<object>>): number {
+  return probes.filter((probe) => probe.deref() !== undefined).length;
+}
+
+/**
+ * JSC scans the machine stack conservatively, so a stale stack slot can pin a
+ * few probe targets for one collection (observed as 4 of 1024 on Linux CI).
+ * Poll across several suspend+collect cycles instead of asserting on one: a
+ * submission genuinely retained by a live structure never reaches zero, so the
+ * caller's `toBe(0)` still fails for real retention.
+ */
 async function collected(
   probes: ReadonlyArray<WeakRef<object>>,
 ): Promise<number> {
-  for (let index = 0; index < 8; index++) {
+  let live = liveProbes(probes);
+  for (let cycle = 0; cycle < MAX_COLLECTION_CYCLES && live > 0; cycle++) {
+    for (let index = 0; index < 8; index++) {
+      await setImmediate();
+      gcAndSweep();
+    }
     await setImmediate();
-    gcAndSweep();
+    live = liveProbes(probes);
   }
-  await setImmediate();
-  return probes.filter((probe) => probe.deref() !== undefined).length;
+  return live;
 }
 
 async function turns(): Promise<void> {

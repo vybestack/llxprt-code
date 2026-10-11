@@ -6,7 +6,7 @@ import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/histor
 import {
   curatedFixtureRow,
   fixtureIncluded,
-} from '../../../../core/src/services/history/curated-stream-test-helpers.js';
+} from '../../../../core/src/services/history/__tests__/support/curated-stream-test-helpers.js';
 import {
   AttemptHistory,
   attemptHandler,

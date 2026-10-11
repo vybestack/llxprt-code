@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '../services/history/IContent.js';
 import { RowOwnership } from '../recording/rowOwnership.js';
-import { withCoreSuffixFixture } from '../services/history/core-suffix-fixture-test-helpers.js';
+import { withCoreSuffixFixture } from '../services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import { MediaLifecycleMetrics } from './media-lifecycle-metrics.js';
 import {
   metricRow,

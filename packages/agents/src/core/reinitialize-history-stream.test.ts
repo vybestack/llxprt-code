@@ -2,18 +2,18 @@
 import { describe, expect, it } from 'bun:test';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
-import { accountingTexts } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
+import { accountingTexts } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import {
   expectedHistoryDigest,
   sendHistoryTurn,
-} from './orchestrator-history-test-helpers.js';
+} from './__tests__/support/orchestrator-history-test-helpers.js';
 import {
   historyDigest,
   recordReinitializeOwners,
   reinitializeBounds,
   reinitializeConfig,
   withReinitializeHistory,
-} from './reinitialize-history-test-helpers.js';
+} from './__tests__/support/reinitialize-history-test-helpers.js';
 
 function expectedTokens(size: number): number {
   let total = 0;

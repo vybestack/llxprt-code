@@ -2,7 +2,7 @@
 import { describe, expect, it, mock } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
-import { deferred } from '@vybestack/llxprt-code-core/services/history/token-accounting-stream-test-helpers.js';
+import { deferred } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import {
   clipboardOracle,
   publicChat,

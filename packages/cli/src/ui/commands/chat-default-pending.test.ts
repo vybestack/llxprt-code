@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   batchRow,
   withBatchFixture,
-} from '@vybestack/llxprt-code-core/services/history/addbatch-stream-test-helpers.js';
+} from '@vybestack/llxprt-code-core/services/history/__tests__/support/addbatch-stream-test-helpers.js';
 import { publicChat } from '../../__tests__/public-history-cursor.js';
 
 for (const size of [512, 8192]) {

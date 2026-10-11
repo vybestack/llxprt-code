@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { withBatchFixture } from './addbatch-stream-test-helpers.js';
+import { withBatchFixture } from './__tests__/support/addbatch-stream-test-helpers.js';
 import { exportSummaryRow, sha256 } from './export-summary-test-helpers.js';
 import type { IContent } from './IContent.js';
 

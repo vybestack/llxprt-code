@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   sendHistoryTurn,
   withOrchestratorHistory,
-} from './orchestrator-history-test-helpers.js';
+} from './__tests__/support/orchestrator-history-test-helpers.js';
 
 const bounds = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
 const requireWithinBounds =

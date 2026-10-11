@@ -6,14 +6,14 @@ import {
 import {
   createRowCounters,
   type RowCounters,
-} from '../../recording/journalCounters.js';
-import { RowOwnership } from '../../recording/rowOwnership.js';
-import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
+} from '../../../../recording/journalCounters.js';
+import { RowOwnership } from '../../../../recording/rowOwnership.js';
+import { SessionRecordingService } from '../../../../recording/SessionRecordingService.js';
 import {
   HistoryService,
   type HistoryServiceJournalOptions,
-} from './HistoryService.js';
-import type { IContent } from './IContent.js';
+} from '../../HistoryService.js';
+import type { IContent } from '../../IContent.js';
 
 export interface CoreSuffixFixtureGraph {
   readonly service: HistoryService;

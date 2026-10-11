@@ -16,7 +16,7 @@ import {
   captureTicketWrite,
   expectTicketDisk,
 } from './ticket-disk-contract-test-helpers.js';
-import { batchGate } from './addbatch-stream-test-helpers.js';
+import { batchGate } from './__tests__/support/addbatch-stream-test-helpers.js';
 import { rejectedValue } from './chronology-rollback-test-helpers.js';
 import type { HistoryIndexedRows } from './historyMutationSnapshot.js';
 import type { IContent } from './IContent.js';

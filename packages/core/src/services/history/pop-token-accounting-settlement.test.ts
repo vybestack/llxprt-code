@@ -6,7 +6,7 @@ import {
   accountingRow,
   accountingTexts,
   deferred,
-} from './token-accounting-stream-test-helpers.js';
+} from './__tests__/support/token-accounting-stream-test-helpers.js';
 
 describe('pop token accounting settlement', () => {
   it('returns the removed row only after the streamed token recalculation releases its ownership', async () => {

@@ -8,13 +8,13 @@ import {
   type HookConfig,
   type HookInput,
   type HookOutput,
-} from './types.js';
-import type { HookRunner } from './hookRunner.js';
+} from '../../types.js';
+import type { HookRunner } from '../../hookRunner.js';
 import {
   mockInput,
   invalidJsonCases,
   type MockChildProcessWithoutNullStreams,
-} from './hookRunner-test-helpers.js';
+} from '../../hookRunner-test-helpers.js';
 let hookRunner: HookRunner;
 let mockSpawn: MockChildProcessWithoutNullStreams;
 let spawner: Mock<typeof spawn>;
@@ -194,7 +194,7 @@ export const configureFirstHookOutput = (output: unknown): void => {
 
 export const commandConfig: HookConfig = {
   type: HookType.Command,
-  command: './hooks/test.sh',
+  command: '../../hooks/test.sh',
   timeout: 5000,
 };
 
@@ -241,7 +241,7 @@ export async function usesNamedCommandError(): Promise<void> {
   const namedConfig: HookConfig = {
     name: 'my-friendly-hook',
     type: HookType.Command,
-    command: './hooks/fail.sh',
+    command: '../../hooks/fail.sh',
   };
 
   // Mock error during spawn
@@ -264,7 +264,7 @@ export async function escalatesSigkill(): Promise<void> {
   vi.useFakeTimers();
   const shortTimeoutConfig: HookConfig = {
     type: HookType.Command,
-    command: './hooks/slow.sh',
+    command: '../../hooks/slow.sh',
     timeout: 50,
   };
 
@@ -372,8 +372,8 @@ export async function rejectsCommandInjection(): Promise<void> {
 
 export async function passesBeforeAgentMutation(): Promise<void> {
   const configs: HookConfig[] = [
-    { type: HookType.Command, command: './hook1.sh' },
-    { type: HookType.Command, command: './hook2.sh' },
+    { type: HookType.Command, command: '../../hook1.sh' },
+    { type: HookType.Command, command: '../../hook2.sh' },
   ];
 
   const mockBeforeAgentInput = {
@@ -408,8 +408,8 @@ export async function passesBeforeAgentMutation(): Promise<void> {
 
 export async function passesBeforeModelMutation(): Promise<void> {
   const configs: HookConfig[] = [
-    { type: HookType.Command, command: './hook1.sh' },
-    { type: HookType.Command, command: './hook2.sh' },
+    { type: HookType.Command, command: '../../hook1.sh' },
+    { type: HookType.Command, command: '../../hook2.sh' },
   ];
 
   const mockBeforeModelInput = {
@@ -496,7 +496,7 @@ export function registerExecuteHookTests(): void {
       it('should handle command hook timeout', async () => {
         const shortTimeoutConfig: HookConfig = {
           type: HookType.Command,
-          command: './hooks/slow.sh',
+          command: '../../hooks/slow.sh',
           timeout: 50, // Very short timeout for testing
         };
 
@@ -533,8 +533,8 @@ export function registerParallelTests(): void {
   describe('executeHooksParallel', () => {
     it('should execute multiple hooks in parallel', async () => {
       const configs: HookConfig[] = [
-        { type: HookType.Command, command: './hook1.sh' },
-        { type: HookType.Command, command: './hook2.sh' },
+        { type: HookType.Command, command: '../../hook1.sh' },
+        { type: HookType.Command, command: '../../hook2.sh' },
       ];
 
       // Mock both commands to succeed
@@ -553,8 +553,8 @@ export function registerParallelTests(): void {
 
     it('should handle mixed success and failure', async () => {
       const configs: HookConfig[] = [
-        { type: HookType.Command, command: './hook1.sh' },
-        { type: HookType.Command, command: './hook2.sh' },
+        { type: HookType.Command, command: '../../hook1.sh' },
+        { type: HookType.Command, command: '../../hook2.sh' },
       ];
 
       configureMixedCloseResults();
@@ -576,8 +576,8 @@ export function registerSequentialTests(): void {
   describe('executeHooksSequential', () => {
     it('should execute multiple hooks in sequence', async () => {
       const configs: HookConfig[] = [
-        { type: HookType.Command, command: './hook1.sh' },
-        { type: HookType.Command, command: './hook2.sh' },
+        { type: HookType.Command, command: '../../hook1.sh' },
+        { type: HookType.Command, command: '../../hook2.sh' },
       ];
 
       const executionOrder: string[] = [];
@@ -595,14 +595,17 @@ export function registerSequentialTests(): void {
       expect(results.every((r) => r.success)).toBe(true);
       expect(spawn).toHaveBeenCalledTimes(2);
       // Verify they were called sequentially
-      expect(executionOrder).toStrictEqual(['./hook1.sh', './hook2.sh']);
+      expect(executionOrder).toStrictEqual([
+        '../../hook1.sh',
+        '../../hook2.sh',
+      ]);
     });
 
     it('should continue execution even if a hook fails', async () => {
       const configs: HookConfig[] = [
-        { type: HookType.Command, command: './hook1.sh' },
-        { type: HookType.Command, command: './hook2.sh' },
-        { type: HookType.Command, command: './hook3.sh' },
+        { type: HookType.Command, command: '../../hook1.sh' },
+        { type: HookType.Command, command: '../../hook2.sh' },
+        { type: HookType.Command, command: '../../hook3.sh' },
       ];
 
       configureContinueAfterFailure();
@@ -630,8 +633,8 @@ export function registerSequentialTests(): void {
 
     it('should not modify input if hook fails', async () => {
       const configs: HookConfig[] = [
-        { type: HookType.Command, command: './hook1.sh' },
-        { type: HookType.Command, command: './hook2.sh' },
+        { type: HookType.Command, command: '../../hook1.sh' },
+        { type: HookType.Command, command: '../../hook2.sh' },
       ];
 
       onStderrData('Hook failed');
@@ -666,7 +669,7 @@ export function registerInvalidJsonTests(): void {
       else onStderrData(text);
       onClose(exitCode);
       const result = await hookRunner.executeHook(
-        { type: HookType.Command, command: './hooks/test.sh' },
+        { type: HookType.Command, command: '../../hooks/test.sh' },
         HookEventName.BeforeTool,
         mockInput,
       );

@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { appendFileSync } from 'node:fs';
 import { expect } from 'bun:test';
-import { batchRow } from './addbatch-stream-test-helpers.js';
+import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
 import type { IContent, ToolResponseBlock } from './IContent.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 

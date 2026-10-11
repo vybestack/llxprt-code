@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
 import { expect } from 'bun:test';
 import type { IContent } from './IContent.js';
-import { batchRow } from './addbatch-stream-test-helpers.js';
+import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 
 export function exportSummaryRow(index: number, bytes = 2048): IContent {

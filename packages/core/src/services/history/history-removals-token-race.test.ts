@@ -9,7 +9,7 @@ import {
   accountingRow,
   accountingTexts,
   deferred,
-} from './token-accounting-stream-test-helpers.js';
+} from './__tests__/support/token-accounting-stream-test-helpers.js';
 
 describe('pop rollback with pending token updates', () => {
   it('restores the settled token total when admission-time estimates finish during pop', async () => {

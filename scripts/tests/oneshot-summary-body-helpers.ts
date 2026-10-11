@@ -23,7 +23,7 @@ import type { IContent } from '../../packages/core/src/services/history/IContent
 import { invalidateResponsesStatefulChain } from '../../packages/core/src/services/history/IContent.js';
 import { annotateCompressionSpan } from '../../packages/core/src/services/history/historyChronology.js';
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
-import { providerPendingFixture } from '../../packages/core/src/services/history/provider-curated-test-helpers.js';
+import { providerPendingFixture } from '../../packages/core/src/services/history/__tests__/support/provider-curated-test-helpers.js';
 import { recomposeFixture } from '../../packages/agents/src/compression/__tests__/provider-curated-recomposition-helpers.js';
 import { captureCuratedBody } from './provider-curated-body-helpers.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';

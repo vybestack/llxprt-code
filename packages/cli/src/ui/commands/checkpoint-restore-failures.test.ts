@@ -13,7 +13,7 @@ import {
 } from '../hooks/agentStream/checkpoint-disk-test-helpers.js';
 import { restoreCommand } from './restoreCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { expectedCleanupDigest } from '../../utils/cleanup-history-test-helpers.js';
+import { expectedCleanupDigest } from '../../utils/__tests__/support/cleanup-history-test-helpers.js';
 
 const png =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';

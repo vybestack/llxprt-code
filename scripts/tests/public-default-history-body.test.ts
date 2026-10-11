@@ -3,7 +3,7 @@ import { writeBodyFile } from '../../packages/test-utils/src/body-evidence-write
 import { describe, expect, it } from 'bun:test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { accountingRow } from '../../packages/core/src/services/history/token-accounting-stream-test-helpers.js';
+import { accountingRow } from '../../packages/core/src/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { withPublicHistory } from '../../packages/agents/src/api/__tests__/helpers/public-history-fixture.js';
 import { internalConfig } from '../../packages/agents/src/api/__tests__/helpers/agentHarness.js';
 import { captureCuratedBody } from './provider-curated-body-helpers.js';

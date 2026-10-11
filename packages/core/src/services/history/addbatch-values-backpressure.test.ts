@@ -11,7 +11,7 @@ import {
   batchRow,
   withBatchFixture,
   recordBatchOwners,
-} from './addbatch-stream-test-helpers.js';
+} from './__tests__/support/addbatch-stream-test-helpers.js';
 import {
   transformProbes,
   probeTransformRow,

@@ -20,7 +20,7 @@ import {
   withCoreSuffixFixture,
   createCoreSuffixFixtureGraph,
   type CoreSuffixFixtureGraph,
-} from './core-suffix-fixture-test-helpers.js';
+} from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import { pausedDensity } from './chronology-rollback-owner-test-helpers.js';
 import { rejectedValue } from './chronology-rollback-test-helpers.js';
 

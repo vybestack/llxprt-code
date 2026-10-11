@@ -1,6 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { withBatchFixture, batchRow } from './addbatch-stream-test-helpers.js';
+import {
+  withBatchFixture,
+  batchRow,
+} from './__tests__/support/addbatch-stream-test-helpers.js';
 
 describe('mutation snapshot disk ticket ownership', () => {
   it('releases each decoded pending row with its acquired identity', async () => {
