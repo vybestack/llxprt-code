@@ -17,7 +17,7 @@
  * imported reference), but delegates the body to the helpers in this module via
  * a dynamic `await import('./__tests__/configTestHarness.js')` inside the factory. The
  * three values that mock bodies close over (loadJitSubdirectoryMemory,
- * coreEvents, setGlobalProxy) are declared with `vi.hoisted` in each test file
+ * coreEvents) are declared with `vi.hoisted` in each test file
  * and passed in.
  */
 
@@ -47,12 +47,10 @@ export type CoreEventsMock = {
   emitModelChanged: ReturnType<typeof vi.fn>;
   emitConsoleLog: ReturnType<typeof vi.fn>;
 };
-export type SetGlobalProxyMock = ReturnType<typeof vi.fn>;
 
 export interface HoistedConfigMocks {
   loadJitSubdirectoryMemory: LoadJitSubdirectoryMemoryMock;
   coreEvents: CoreEventsMock;
-  setGlobalProxy: SetGlobalProxyMock;
 }
 
 // ---------------------------------------------------------------------------
@@ -234,12 +232,6 @@ export function buildEventsMockBody(
   return {
     ...(actual as object),
     coreEvents,
-  };
-}
-
-export function buildFetchMockBody(hoisted: HoistedConfigMocks) {
-  return {
-    setGlobalProxy: hoisted.setGlobalProxy,
   };
 }
 

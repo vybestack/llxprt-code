@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import {
   readInvocationPolicyRecord,
@@ -172,7 +173,12 @@ export abstract class BaseProvider implements IProvider {
       () => this.authResolver,
     );
   }
-  bindOwnerAuthentication(settings: SettingsService): this {
+  protected readonly requestFetch: NetworkFetch = globalThis.fetch;
+
+  bindOwnerAuthentication(
+    settings: SettingsService,
+    readFetch?: () => NetworkFetch,
+  ): this {
     const owner = composeProviderOwner(
       this.name,
       settings,
@@ -182,6 +188,8 @@ export abstract class BaseProvider implements IProvider {
     return new Proxy(this, {
       get(target, property, receiver): unknown {
         if (property === 'owner') return owner;
+        if (property === 'requestFetch' && readFetch !== undefined)
+          return readFetch();
         if (property === 'requestAuthentication') return readAuthentication;
         return Reflect.get(target, property, receiver);
       },

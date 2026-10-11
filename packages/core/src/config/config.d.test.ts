@@ -33,7 +33,6 @@ import {
   buildIdeIntegrationMockBody,
   buildMemoryDiscoveryMockBody,
   buildEventsMockBody,
-  buildFetchMockBody,
   type HoistedConfigMocks,
 } from './__tests__/configTestHarness.js';
 
@@ -45,7 +44,6 @@ const hoistedConfigMocks = {
     emitModelChanged: vi.fn(),
     emitConsoleLog: vi.fn(),
   },
-  setGlobalProxy: vi.fn(),
 } as HoistedConfigMocks;
 // Exposed for assertions / setup in the JIT context & model-change tests below.
 const mockCoreEvents = hoistedConfigMocks.coreEvents;
@@ -85,8 +83,6 @@ const __actual6 = { ...(await import('../utils/events.js')) };
 void vi.mock('../utils/events.js', () =>
   buildEventsMockBody(__actual6, hoistedConfigMocks),
 );
-
-void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
 const ownedPolicies: Array<{ dispose(): void }> = [];
 const approvalRoots: Array<() => Promise<void>> = [];

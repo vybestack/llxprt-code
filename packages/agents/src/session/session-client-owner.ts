@@ -1,3 +1,4 @@
+import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { OwnedClientLedger, finishCleanup } from './session-client-cleanup.js';
 import {
   prepareNewSessionClient,
@@ -20,11 +21,7 @@ import {
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  ImageOperationRunner,
-  ImageOperationRunnerInput,
-  ImageOperationRunnerResult,
-} from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
+import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import type { HostGitHubBrokerOwner } from '../api/host-github-broker-owner.js';
 import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
@@ -243,14 +240,12 @@ export class SessionClientOwner {
     cleanup?: () => Promise<void>,
   ): void {
     this.images.compose(runner, cleanup);
-    this.toolCatalog.bindImageOperation((input) =>
-      this.runImageOperation(input),
-    );
+    this.toolCatalog.bindImageOperation((input) => this.images.run(input));
   }
 
   runImageOperation(
-    input: ImageOperationRunnerInput,
-  ): Promise<ImageOperationRunnerResult> {
+    input: Parameters<ImageOperationRunner>[0],
+  ): ReturnType<ImageOperationRunner> {
     this.getAgentClient();
     return this.images.run(input);
   }
@@ -279,6 +274,8 @@ export class SessionClientOwner {
     return this.workspacePaths.directories();
   }
 
+  private readonly network: OwnedFetch;
+
   constructor(
     private readonly config: Config,
     private readonly readTaskSchemaPolicy: () => RegistryPolicy,
@@ -305,10 +302,13 @@ export class SessionClientOwner {
           'Borrowed session client must retain its explicit media store',
         );
     }
+    this.network = new OwnedFetch(config.getProxy());
+    manager.bindNetworkFetch?.(this.network.fetch);
     this.toolCatalog = new SessionToolCatalogOwner(
       config,
       this.readTaskSchemaPolicy,
       () => this.settingsOwner.readToolExecutionPolicy(),
+      this.network.fetch,
     );
     this.runtimeState = this.captureRuntimeState(
       config.getSessionId() || `runtime-${randomUUID()}`,
@@ -438,7 +438,10 @@ export class SessionClientOwner {
       () => this.publishTools(),
       () => this.publishInstructions(this.instructionReads),
       (read, release) => this.bindMcpInstructions(read, release),
-      () => this.acceptSkillPublication(),
+      () =>
+        acceptSkillPublication(this.client, this.toolCatalog, (operation) =>
+          this.enqueueAccepted(operation),
+        ),
     );
   }
 
@@ -590,6 +593,7 @@ export class SessionClientOwner {
       config: this.config,
       mediaStore: this.mediaStore,
       settingsOwner: this.settingsOwner,
+      fetch: this.network.fetch,
       manager: this.manager,
       tokenizerFactory: this.tokenizerFactory,
       runtimeId: state.runtimeId,
@@ -801,12 +805,6 @@ export class SessionClientOwner {
     );
   }
 
-  private acceptSkillPublication() {
-    return acceptSkillPublication(this.client, this.toolCatalog, (operation) =>
-      this.enqueueAccepted(operation),
-    );
-  }
-
   publishTools(): Promise<void> {
     const selection = this.getAgentClient().tools;
     const declarations = this.client.isInitialized()
@@ -853,6 +851,7 @@ export class SessionClientOwner {
             .clients()
             .map((client) => this.ownedClients.dispose(client)),
         );
+        const network = await Promise.allSettled([this.network.dispose()]);
         const writes = await Promise.allSettled([...this.policyWrites]);
         const policy = await Promise.allSettled([
           this.ownsSessionPolicy ? this.sessionPolicy?.dispose() : undefined,
@@ -863,6 +862,7 @@ export class SessionClientOwner {
           services,
           binding,
           clients,
+          network,
           writes,
           policy,
         );

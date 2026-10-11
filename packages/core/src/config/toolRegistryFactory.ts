@@ -1,3 +1,4 @@
+import type { NetworkFetch } from '../utils/fetch.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import type { GitHubReportOperations } from '@vybestack/llxprt-code-tools';
 import type {
@@ -396,6 +397,7 @@ function registerStandardTools(
   ide?: WorkspaceIdePort,
   githubReports?: GitHubReportOperations,
   imageOperation?: ImageOperationRunner,
+  requestFetch: NetworkFetch = globalThis.fetch,
 ): void {
   const ideServiceAdapter = new CoreIdeServiceAdapter(
     ide ?? { getClient: () => undefined },
@@ -450,7 +452,7 @@ function registerStandardTools(
     readExecution,
     messageBusAdapter,
   );
-  registerCoreTool(ExaWebSearchTool, { keyStorage: toolKeyStorageAdapter });
+
   // Registered only when the CLI layer supplied a broker transport, so a
   // host without the wiring does not advertise a tool it cannot serve.
   // @plan PLAN-20260731-GHBROKER.P15
@@ -461,11 +463,13 @@ function registerStandardTools(
   registerCoreTool(TodoWrite, todoServiceAdapter, toolHostAdapter);
   registerCoreTool(TodoRead, todoServiceAdapter);
   registerCoreTool(TodoPause, todoServiceAdapter, toolHostAdapter);
-  registerCoreTool(CodeSearchTool, {
-    keyStorage: toolKeyStorageAdapter,
-    readTokenLimit: () => readExecution()['tool-output-max-tokens'],
-  });
-  registerCoreTool(DirectWebFetchTool, toolHostAdapter);
+  registerNetworkTools(
+    registerCoreTool,
+    toolKeyStorageAdapter,
+    toolHostAdapter,
+    readExecution,
+    requestFetch,
+  );
 
   registerImageTool(registerCoreTool, readExecution, imageOperation);
 
@@ -608,6 +612,7 @@ export async function createToolRegistry(
   githubReports?: GitHubReportOperations,
   imageOperation?: ImageOperationRunner,
   telemetry?: RootTelemetry,
+  requestFetch: NetworkFetch = globalThis.fetch,
 ): Promise<{ registry: ToolRegistry; allPotentialTools: ToolRecord[] }> {
   const selected = requireRegistryAssembly(
     profileManager,
@@ -649,6 +654,7 @@ export async function createToolRegistry(
     ide,
     githubReports,
     imageOperation,
+    requestFetch,
   );
 
   registerAgentTools(
@@ -666,9 +672,7 @@ export async function createToolRegistry(
     readMcpInstructions,
   );
 
-  if (discover) await registry.discoverAllTools();
-  registry.sortTools();
-  return { registry, allPotentialTools };
+  return finishToolRegistry(registry, allPotentialTools, discover);
 }
 
 function effectiveRegistryCoreTools(
@@ -704,4 +708,33 @@ function requireRegistryAssembly(
   if (trust === undefined)
     throw new Error('Tool construction requires explicit workspace trust');
   return [profiles, subagents, trust];
+}
+
+function registerNetworkTools(
+  registerCoreTool: RegisterCoreToolFn,
+  toolKeyStorageAdapter: CoreToolKeyStorageAdapter,
+  toolHostAdapter: CoreToolHostAdapter,
+  readExecution: Parameters<typeof registerStandardTools>[6],
+  requestFetch: NetworkFetch,
+): void {
+  registerCoreTool(ExaWebSearchTool, {
+    keyStorage: toolKeyStorageAdapter,
+    fetch: requestFetch,
+  });
+  registerCoreTool(CodeSearchTool, {
+    keyStorage: toolKeyStorageAdapter,
+    fetch: requestFetch,
+    readTokenLimit: () => readExecution()['tool-output-max-tokens'],
+  });
+  registerCoreTool(DirectWebFetchTool, toolHostAdapter, requestFetch);
+}
+
+async function finishToolRegistry(
+  registry: ToolRegistry,
+  allPotentialTools: ToolRecord[],
+  discover: boolean,
+): Promise<{ registry: ToolRegistry; allPotentialTools: ToolRecord[] }> {
+  if (discover) await registry.discoverAllTools();
+  registry.sortTools();
+  return { registry, allPotentialTools };
 }

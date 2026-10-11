@@ -28,7 +28,6 @@ import {
   buildIdeIntegrationMockBody,
   buildMemoryDiscoveryMockBody,
   buildEventsMockBody,
-  buildFetchMockBody,
   createBaseParams,
   resetAgentClientMock,
   type HoistedConfigMocks,
@@ -45,7 +44,6 @@ const hoistedConfigMocks = {
     emitModelChanged: vi.fn(),
     emitConsoleLog: vi.fn(),
   },
-  setGlobalProxy: vi.fn(),
 } as HoistedConfigMocks;
 
 const __actual = { ...(await import('@vybestack/llxprt-code-tools')) };
@@ -77,8 +75,6 @@ const __actual4 = { ...(await import('../utils/events.js')) };
 void vi.mock('../utils/events.js', () =>
   buildEventsMockBody(__actual4, hoistedConfigMocks),
 );
-
-void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
 describe('Server Config includeDirectories (real filesystem)', () => {
   const baseParams = createBaseParams(new SettingsService());

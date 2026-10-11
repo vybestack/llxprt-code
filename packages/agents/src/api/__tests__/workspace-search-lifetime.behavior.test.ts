@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   WorkspaceControl,
@@ -14,8 +15,8 @@ import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
 import { gate } from './helpers/recording-finalizer-join-fixture.js';
 
 async function setup() {
-  const directory = await mkdtemp(
-    join(process.cwd(), 'tmp/verify2616-b/search-'),
+  const directory = await realpath(
+    await mkdtemp(join(tmpdir(), 'llxprt-workspace-search-')),
   );
   await writeFile(join(directory, 'owned-search.txt'), 'search fixture');
   const extra = join(directory, 'extra');

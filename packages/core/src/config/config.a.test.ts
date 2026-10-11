@@ -21,7 +21,6 @@ import {
   buildIdeIntegrationMockBody,
   buildMemoryDiscoveryMockBody,
   buildEventsMockBody,
-  buildFetchMockBody,
   createBaseParams,
   resetAgentClientMock,
   type HoistedConfigMocks,
@@ -35,7 +34,6 @@ const hoistedConfigMocks = {
     emitModelChanged: vi.fn(),
     emitConsoleLog: vi.fn(),
   },
-  setGlobalProxy: vi.fn(),
 } as HoistedConfigMocks;
 
 const initializeShellParser = vi.fn(() => Promise.resolve(true));
@@ -86,8 +84,6 @@ const __actual5 = { ...(await import('../utils/events.js')) };
 void vi.mock('../utils/events.js', () =>
   buildEventsMockBody(__actual5, hoistedConfigMocks),
 );
-
-void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
 describe('Server Config (config.ts)', () => {
   const baseParams = createBaseParams(new SettingsService());

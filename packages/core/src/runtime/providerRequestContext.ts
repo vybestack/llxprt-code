@@ -18,6 +18,10 @@ export function captureProviderInvocation(
   modelParameters?: AdmittedModelParameters,
   signal?: AbortSignal,
   sessionId?: string,
+  requestFetch?: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>,
 ): RuntimeInvocationContext {
   const global = owner.settingsService.getAllGlobalSettings();
   const active = global['activeProvider'];
@@ -35,6 +39,7 @@ export function captureProviderInvocation(
     providerSettings['base-url'];
   return createRuntimeInvocationContext({
     runtimeId: owner.runtimeId,
+    fetch: requestFetch,
     sessionId,
     fallbackRuntimeId: `${providerName}:admission`,
     runtimeMetadata: owner.metadata,

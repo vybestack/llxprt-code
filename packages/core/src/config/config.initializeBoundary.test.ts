@@ -38,7 +38,6 @@ import {
   buildIdeIntegrationMockBody,
   buildMemoryDiscoveryMockBody,
   buildEventsMockBody,
-  buildFetchMockBody,
   createBaseParams,
   resetAgentClientMock,
   type HoistedConfigMocks,
@@ -52,7 +51,6 @@ const hoistedConfigMocks = {
     emitModelChanged: vi.fn(),
     emitConsoleLog: vi.fn(),
   },
-  setGlobalProxy: vi.fn(),
 } as HoistedConfigMocks;
 
 const __actual = { ...(await import('fs')) };
@@ -87,8 +85,6 @@ const __actual5 = { ...(await import('../utils/events.js')) };
 void vi.mock('../utils/events.js', () =>
   buildEventsMockBody(__actual5, hoistedConfigMocks),
 );
-
-void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
 describe('Config.initialize / ensureInitialized boundary provenance (Finding 4)', () => {
   let settingsService: SettingsService;

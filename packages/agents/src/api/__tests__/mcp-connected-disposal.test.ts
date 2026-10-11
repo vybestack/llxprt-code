@@ -90,8 +90,9 @@ describe('connected MCP disposal', () => {
     let authentication: Promise<unknown> | undefined;
     let disposal: Promise<void> | undefined;
     try {
+      const tools = built.agent.agentClient.tools;
       expect(
-        built.agent.agentClient.tools
+        tools
           .getAllTools()
           .filter(
             (tool) => 'serverName' in tool && tool.serverName === 'local',
@@ -108,9 +109,7 @@ describe('connected MCP disposal', () => {
       ]);
       disposal = built.agent.dispose();
       expect(built.agent.dispose()).toBe(disposal);
-      expect(() => built.agent.agentClient.tools.getAllTools()).toThrow(
-        'closed',
-      );
+      expect(() => tools.getAllTools()).toThrow('closed');
       released.release();
       expect(await authentication).toHaveProperty('name', 'AbortError');
       await disposal;

@@ -76,7 +76,7 @@ describe('explicit provider switch ownership', () => {
     };
   }
   it('rejects external writes to the default preserved settings', () => {
-    const before = [...DEFAULT_PRESERVE_EPHEMERALS];
+    const before = structuredClone(DEFAULT_PRESERVE_EPHEMERALS);
     expect(Reflect.set(DEFAULT_PRESERVE_EPHEMERALS, '0', 'auth-key')).toBe(
       false,
     );

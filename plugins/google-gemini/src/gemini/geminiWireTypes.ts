@@ -272,6 +272,7 @@ export interface GeminiModelsSeam {
  * with `httpOptions.baseUrl` selects the Generative Language endpoint.
  */
 export interface GeminiApiClientOptions {
+  fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   apiKey?: string;
   vertexai?: boolean;
   project?: string;

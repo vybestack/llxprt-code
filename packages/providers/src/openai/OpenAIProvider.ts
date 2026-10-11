@@ -313,6 +313,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const headers = mergeInvocationHeaders(options);
 
     return instantiateClient(authToken, baseURL, agents, headers, {
+      fetch: options.invocation.fetch,
       headersTimeoutMs: agentSettings['openai-headers-timeout-ms'] as
         | number
         | undefined,
@@ -346,7 +347,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       const baseURL = this.getBaseURL();
       const agentSettings = this.providerConfig?.readConnectionPolicy?.() ?? {};
       const agents = createHttpAgents({ ...agentSettings });
-      const client = instantiateClient(authToken, baseURL, agents);
+      const client = instantiateClient(authToken, baseURL, agents, undefined, {
+        fetch: this.requestFetch,
+      });
 
       const modelsEndpoint = `${baseURL ?? 'https://api.openai.com/v1'}/models`;
       this.getLogger().debug(

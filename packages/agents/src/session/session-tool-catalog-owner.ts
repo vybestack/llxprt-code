@@ -79,6 +79,10 @@ export class SessionToolCatalogOwner {
     private readonly config: Config,
     private readonly readTaskSchemaPolicy: () => RegistryPolicy,
     private readonly readExecutionPolicy: () => ToolExecutionPolicy,
+    private readonly requestFetch: (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => Promise<Response> = globalThis.fetch,
   ) {}
 
   private imageOperation: ImageOperationRunner | undefined;
@@ -174,6 +178,7 @@ export class SessionToolCatalogOwner {
       this.githubReports,
       this.imageOperation,
       telemetry,
+      this.requestFetch,
     ).then(({ registry, allPotentialTools }) => {
       this.admission.assertOpen();
       this.configuration = allPotentialTools.map(

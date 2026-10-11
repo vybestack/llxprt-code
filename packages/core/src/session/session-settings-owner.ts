@@ -374,6 +374,10 @@ export class SessionSettingsOwner {
     modelParameters?: AdmittedModelParameters,
     signal?: AbortSignal,
     sessionId?: string,
+    requestFetch?: (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => Promise<Response>,
   ): RuntimeInvocationContext {
     this.assertOpen();
     return captureProviderInvocation(
@@ -382,6 +386,7 @@ export class SessionSettingsOwner {
       modelParameters,
       signal,
       sessionId,
+      requestFetch,
     );
   }
 

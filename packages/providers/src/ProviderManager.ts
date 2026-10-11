@@ -1,3 +1,4 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
@@ -334,6 +335,7 @@ export class ProviderManager implements IProviderManager {
       if (baseProvider instanceof BaseProvider)
         baseProvider = baseProvider.bindOwnerAuthentication(
           this.settingsService,
+          () => this.requestFetch,
         );
       this.syncProviderRuntime(baseProvider);
 
@@ -518,7 +520,14 @@ export class ProviderManager implements IProviderManager {
             userMemory: options.userMemory,
             invocation:
               options.invocation ??
-              captureProviderInvocation(owner, name, options.modelParameters),
+              captureProviderInvocation(
+                owner,
+                name,
+                options.modelParameters,
+                undefined,
+                undefined,
+                this.requestFetch,
+              ),
           };
         },
       },
@@ -532,9 +541,18 @@ export class ProviderManager implements IProviderManager {
    * @requirement REQ-SP2-001
    * @pseudocode base-provider-call-contract.md lines 3-5
    */
+  private requestFetch: NetworkFetch = globalThis.fetch;
+
+  bindNetworkFetch(requestFetch: NetworkFetch): void {
+    this.requestFetch = requestFetch;
+  }
+
   registerProvider(provider: IProvider): void {
     if (provider instanceof BaseProvider)
-      provider = provider.bindOwnerAuthentication(this.settingsService);
+      provider = provider.bindOwnerAuthentication(
+        this.settingsService,
+        () => this.requestFetch,
+      );
     this.syncProviderRuntime(provider);
 
     // Wrapping order (inner to outer):

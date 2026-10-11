@@ -8,6 +8,9 @@ import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/wo
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
 import { describe, expect, it } from 'bun:test';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import { writeFile, access, unlink, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AgentClient } from '../../core/client.js';
@@ -26,6 +29,81 @@ import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 import { AgentActivationBootstrap } from '../activationPreflightState.js';
 
 describe('Session owner cleanup joining', () => {
+  it('keeps owned fetch open until client cleanup joins and then closes it', async () => {
+    const built = await createSessionClientEngineFixture();
+    const entered = engineGate();
+    const released = engineGate();
+    const server = createServer((request, response) => {
+      response.end(request.url);
+    });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    if (address === null || typeof address === 'string')
+      throw new Error('Expected HTTP address');
+    const url = `http://127.0.0.1:${address.port}/joined`;
+    let requestFetch: NetworkFetch | undefined;
+    const manager = built.handle.providerManager;
+    if (manager.bindNetworkFetch === undefined)
+      throw new Error('Missing network fetch composition');
+    const bind = manager.bindNetworkFetch.bind(manager);
+    manager.bindNetworkFetch = (fetch) => {
+      requestFetch = fetch;
+      bind(fetch);
+    };
+    let received: string | undefined;
+    class GatedCleanupClient extends AgentClient {
+      override async dispose(): Promise<void> {
+        entered.release();
+        await released.promise;
+        try {
+          if (requestFetch === undefined) throw new Error('Missing fetch');
+          received = await (await requestFetch(url)).text();
+        } finally {
+          await super.dispose();
+        }
+      }
+    }
+    const owner = await SessionClientOwner.create(
+      built.config,
+      assembleTaskSchemaPolicy(built.settingsService),
+      manager,
+      (config, state, instructions, store) => {
+        if (store === undefined) throw new Error('Missing factory store');
+        return new GatedCleanupClient(
+          config,
+          state,
+          instructions ?? (() => undefined),
+          store,
+          built.mcp.workspacePaths,
+        );
+      },
+      built.media.store,
+      built.mcp.readInstructions,
+      built.mcp.workspacePaths,
+      built.handle.settingsOwner,
+      built.handle.contentGeneratorFactory,
+      built.handle.tokenizerFactory,
+    );
+    const closing = owner.dispose();
+    void closing.catch(() => undefined);
+    try {
+      await entered.promise;
+      expect(new Set([owner.dispose(), closing]).size).toBe(1);
+      released.release();
+      await closing;
+      expect(received).toBe(new URL(url).pathname);
+      if (requestFetch === undefined) throw new Error('Missing fetch');
+      await expect(requestFetch(url)).rejects.toThrow('Root fetch is closed');
+    } finally {
+      released.release();
+      await closing.catch(() => undefined);
+      await built.cleanup();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  });
   it('releases retained provider resources when a prepared activation is abandoned', async () => {
     const built = await createSessionClientEngineFixture();
     const file = join(built.config.projectTempDir, 'abandoned-provider-file');
