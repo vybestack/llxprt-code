@@ -174,9 +174,10 @@ export async function loadAgentRuntime(
     overrides.providerAdapter ??
     createProviderAdapterFromManager(profile.providerManager);
 
+  const sessionIdentity = { getSessionId: () => profile.state.sessionId };
   const telemetryAdapter: AgentRuntimeTelemetryAdapter =
     overrides.telemetryAdapter ??
-    createTelemetryAdapter(profile.config, profile.telemetry);
+    createTelemetryAdapter(sessionIdentity, profile.telemetry);
 
   const toolsView: ToolRegistryView =
     overrides.toolsView ??

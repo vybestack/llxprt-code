@@ -113,6 +113,8 @@ function makeDeps(client: AgentClientContract): SessionControlDeps {
     sessionIdentityOwnership: 'config',
     sessionId: () => 'test-session',
     resolveClient: () => client,
+    assertSessionIdle: () => {},
+    startNewSessionClient: () => client.resetChat(),
     getProvider: () => 'test-provider',
     getModel: () => 'test-model',
   };

@@ -3,6 +3,7 @@ import { SessionImageAdmission } from './session-image-admission.js';
 import {
   bindClientTokenization,
   bindFactoryClient,
+  captureSessionRuntimeState,
 } from './session-client-binding.js';
 import {
   acceptSkillPublication,
@@ -60,14 +61,7 @@ import type {
 } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import {
-  createAgentRuntimeState,
-  type AgentRuntimeState,
-} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import {
-  PLACEHOLDER_MODEL,
-  UNCONFIGURED_PROVIDER,
-} from '@vybestack/llxprt-code-core/config/models.js';
+import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import {
   buildNewContentGeneratorConfig,
@@ -311,6 +305,7 @@ export class SessionClientOwner {
     );
     this.runtimeState = this.captureRuntimeState(
       config.getSessionId() || `runtime-${randomUUID()}`,
+      config.getSessionId(),
     );
     this.client = borrowedClient ?? this.acquireClient(this.runtimeState);
     if (borrowedClient !== undefined) {
@@ -507,14 +502,13 @@ export class SessionClientOwner {
     return this.client;
   }
 
-  private captureRuntimeState(runtimeId: string): AgentRuntimeState {
-    return createAgentRuntimeState({
+  private captureRuntimeState(
+    runtimeId: string,
+    sessionId: string,
+  ): AgentRuntimeState {
+    return captureSessionRuntimeState(this.settingsOwner, {
       runtimeId,
-      provider:
-        this.settingsOwner.readSelectedProvider() ?? UNCONFIGURED_PROVIDER,
-      model: this.settingsOwner.readSelectedModel() ?? PLACEHOLDER_MODEL,
-      sessionId: this.config.getSessionId(),
-      baseUrl: this.settingsOwner.readSelectedEndpoint(),
+      sessionId,
       proxyUrl: this.config.getProxy(),
     });
   }
@@ -633,10 +627,22 @@ export class SessionClientOwner {
     return this.enqueue(() => this.replaceClient());
   }
 
-  private async replaceClient(): Promise<void> {
+  startNewSession(sessionId: string): Promise<void> {
+    return this.enqueue(async () => {
+      await this.settingsOwner.startNewSessionTelemetry(sessionId);
+      await this.replaceClient(sessionId, true);
+    });
+  }
+
+  private async replaceClient(
+    sessionId = this.runtimeState.sessionId,
+    startFresh = false,
+  ): Promise<void> {
     const previous = this.client;
+    const canReuseBorrowed = !startFresh && previous === this.borrowedClient;
     if (
-      previous === this.borrowedClient &&
+      canReuseBorrowed &&
+      this.runtimeState.sessionId === sessionId &&
       this.runtimeState.model === this.settingsOwner.readSelectedModel() &&
       this.runtimeState.provider === this.settingsOwner.readSelectedProvider()
     ) {
@@ -644,13 +650,12 @@ export class SessionClientOwner {
       return;
     }
     const logger = new DebugLogger('llxprt:session:refreshAuth');
-    const { history, historyService } = await extractExistingState(
-      logger,
-      previous,
-    );
+    const { history, historyService } = startFresh
+      ? { history: [], historyService: null }
+      : await extractExistingState(logger, previous);
     const prepared = buildNewContentGeneratorConfig(
       this.contentGeneratorFactory,
-      this.captureRuntimeState(this.runtimeState.runtimeId),
+      this.captureRuntimeState(this.runtimeState.runtimeId, sessionId),
     );
     await this.tokenizerFactory.prepareTokenizer?.(
       prepared.runtimeState.provider,
@@ -667,6 +672,7 @@ export class SessionClientOwner {
         prepared.contentGeneratorConfig,
         previous.getContentGeneratorConfig()?.vertexai,
       );
+      if (startFresh) await next.resetChat();
     } catch (error) {
       await this.ownedClients.releaseFailedReplacement(next, error);
     }
@@ -695,7 +701,10 @@ export class SessionClientOwner {
     SessionClientOwner['prepareProfileClientReplacement']
   > {
     const previous = this.client;
-    const selectedState = this.captureRuntimeState(this.runtimeState.runtimeId);
+    const selectedState = this.captureRuntimeState(
+      this.runtimeState.runtimeId,
+      this.runtimeState.sessionId,
+    );
     await this.tokenizerFactory.prepareTokenizer?.(
       selectedState.provider,
       selectedState.model,
@@ -737,10 +746,13 @@ export class SessionClientOwner {
   }
 
   createDetachedAgentClient(
-    id = `${this.config.getSessionId()}#detached#${randomUUID()}`,
+    id = `${this.runtimeState.sessionId}#detached#${randomUUID()}`,
   ): Promise<AgentClientContract> {
     return this.enqueue(async () => {
-      const selectedState = this.captureRuntimeState(id);
+      const selectedState = this.captureRuntimeState(
+        id,
+        this.runtimeState.sessionId,
+      );
       await this.tokenizerFactory.prepareTokenizer?.(
         selectedState.provider,
         selectedState.model,

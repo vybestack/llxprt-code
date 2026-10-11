@@ -7,7 +7,6 @@
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
-  HistoryClearOptions,
   HistoryMutationResult,
   RecordingIntegration,
   SessionRecordingService,
@@ -62,7 +61,6 @@ export async function restoreOwnerTurns(
 }
 
 export async function clearOwnerHistory(
-  options: HistoryClearOptions | undefined,
   client: AgentClientContract,
   recording: SessionRecordingService,
   integration: RecordingIntegration | null,
@@ -75,7 +73,6 @@ export async function clearOwnerHistory(
     history,
     recording,
     (remainingHistory) => preflightClearHistory(remainingHistory, mediaStore),
-    options,
   );
   if (!result.ok) throw new Error(result.error);
   await commitRecordedHistoryMutation({

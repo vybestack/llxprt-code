@@ -56,7 +56,6 @@ import type {
   PolicyDecision,
   DiscoveredMCPResource,
   ContinueTarget,
-  HistoryClearOptions,
   // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md line 95
   McpOAuthStatus,
 } from '@vybestack/llxprt-code-core';
@@ -792,11 +791,11 @@ export interface AgentSessionControl {
   /** Reads live conversation history through the session owner. */
   getHistory(): Promise<readonly AgentHistoryItem[]>;
   /**
-   * Durably clears turns and updates the live history. By default the initial
-   * human-led turn is retained; pass `retainInitialHistory: false` to remove
-   * everything.
+   * Durably clears non-initial turns and updates the live history.
    */
-  clearHistory(options?: HistoryClearOptions): Promise<void>;
+  clearHistory(): Promise<void>;
+  startNewSession(): Promise<void>;
+  getSessionId(): string;
   /** Creates and activates a self-contained child session from a checkpoint. */
   forkFromCheckpoint(ref: string): Promise<SessionInfo>;
   /** Lists live recording-native checkpoints in the current project. */
@@ -1201,7 +1200,7 @@ export interface Agent {
   ): Promise<void>;
   addHistory(message: AgentMessage): Promise<void>;
   restoreHistory(items: readonly AgentHistoryItem[]): Promise<void>;
-  resetChat(options?: HistoryClearOptions): Promise<void>;
+  resetChat(): Promise<void>;
   updateSystemInstruction(): Promise<void>;
   addDirectoryContext(): Promise<void>;
   compress(opts?: { readonly promptId?: string }): Promise<CompressionResult>;

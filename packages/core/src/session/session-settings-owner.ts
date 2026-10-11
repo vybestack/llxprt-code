@@ -129,6 +129,11 @@ export class SessionSettingsOwner {
     return this.telemetryRoot;
   }
 
+  async startNewSessionTelemetry(sessionId: string): Promise<void> {
+    this.assertOpen();
+    if (this.ownsTelemetry) await this.telemetry.startNewSession(sessionId);
+  }
+
   startTelemetry(config: Config): Promise<void> {
     if (!this.ownsTelemetry) return Promise.resolve();
     this.assertOpen();

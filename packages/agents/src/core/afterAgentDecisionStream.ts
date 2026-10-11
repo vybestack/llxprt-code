@@ -5,7 +5,7 @@
  */
 
 import type { AfterAgentHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
-import type { ServerAgentStreamEvent } from './turn.js';
+import { AgentEventType, type ServerAgentStreamEvent } from './turn.js';
 import type {
   MessageStreamDeps,
   StreamContext,
@@ -32,4 +32,26 @@ export async function* sendAfterAgentDecision(
       ctx.modelParameters,
     );
   }
+}
+
+export async function* emitAfterAgentContextClear(
+  hooks: MessageStreamDeps['agentHookManager'],
+  ctx: StreamContext,
+): AsyncGenerator<ServerAgentStreamEvent, AfterAgentHookOutput | undefined> {
+  const output = await hooks.fireAfterAgentHookSafe(
+    ctx.prompt_id,
+    ctx.promptText,
+    ctx.responseChunks.join(''),
+    false,
+    ctx.recordingExecution?.hookOwner,
+  );
+  if (output?.shouldClearContext() === true) {
+    yield {
+      type: AgentEventType.AgentExecutionStopped,
+      reason:
+        output.getEffectiveReason() || 'Context cleared by AfterAgent hook',
+      contextCleared: true,
+    };
+  }
+  return output;
 }

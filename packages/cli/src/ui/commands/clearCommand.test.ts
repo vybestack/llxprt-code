@@ -4,68 +4,65 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { mkdtemp, readFile, rm, writeFile, appendFile } from 'node:fs/promises';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { z } from 'zod';
 import {
-  Config,
   HookEventName,
   HookType,
   escapeShellArg,
+  CONTINUE_LATEST,
 } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
-import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
+import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import { buildCliStyleConfig } from '../../../../agents/src/api/__tests__/helpers/buildCliStyleConfig.js';
+import { drain } from '../../../../agents/src/api/__tests__/helpers/agentHarness.js';
+import { setupOwnerSessionRecording } from '../../cliSessionBootstrap.js';
 import { clearCommand } from './clearCommand.js';
+import { continueCommand } from './continueCommand.js';
 import type { HistoryItemWithoutId } from '../types.js';
 import type { CommandContext } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { assertDefined } from '../../__tests__/assertions.js';
 
-const realTelemetry = { ...(await import('@vybestack/llxprt-code-telemetry')) };
-void vi.mock('@vybestack/llxprt-code-telemetry', () => ({
-  ...realTelemetry,
-  uiTelemetryService: { reset: vi.fn() },
-}));
-import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 const clearAction = clearCommand.action;
 assertDefined(clearAction);
+const continueAction = continueCommand.action;
+assertDefined(continueAction);
+const hookInput = z.object({
+  hook_event_name: z.string(),
+  session_id: z.string(),
+  transcript_path: z.string(),
+  reason: z.string().optional(),
+  source: z.string().optional(),
+});
 
-describe('clearCommand', () => {
+describe('clearCommand new session', () => {
   let directory: string;
-  let config: Config;
+  let built: Awaited<ReturnType<typeof buildCliStyleConfig>>;
+  let agent: Agent;
   let context: CommandContext;
-  let resetCount: number;
   let uiEvents: string[];
-  let agent: ReturnType<typeof createUiSessionOwner> & {
-    resetChat: Agent['resetChat'];
-  };
+  let oldId: string;
+  let oldPath: string;
 
   beforeEach(async () => {
-    vi.clearAllMocks();
-    vi.spyOn(uiTelemetryService, 'reset').mockReset();
     directory = await mkdtemp(join(tmpdir(), 'clear-hook-'));
     const script = join(directory, 'hook.ts');
     await writeFile(
       script,
       `import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 const input = JSON.parse(await Bun.stdin.text());
-appendFileSync(${JSON.stringify(join(directory, 'order'))}, input.hook_event_name + '\\n');
+appendFileSync(${JSON.stringify(join(directory, 'hooks.jsonl'))}, JSON.stringify(input) + '\\n');
 const failure = ${JSON.stringify(join(directory, 'failure'))};
 if (existsSync(failure) && readFileSync(failure, 'utf8') === input.hook_event_name) process.exit(1);
 console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'}));
 `,
     );
     const command = `exec ${escapeShellArg(process.execPath, 'bash')} ${escapeShellArg(script, 'bash')}`;
-    config = new Config({
-      sessionId: 'clear-test',
-      targetDir: directory,
-      cwd: directory,
-      model: 'clear-test',
-      debugMode: false,
-      trustedFolder: true,
-      enableHooks: true,
+    built = await buildCliStyleConfig('multi-turn-text.jsonl', {
+      workingDir: directory,
       hooks: {
         [HookEventName.SessionEnd]: [
           { hooks: [{ type: HookType.Command, command }] },
@@ -75,17 +72,31 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
         ],
       },
     });
-    resetCount = 0;
+    built.config.adoptSessionId(crypto.randomUUID());
+    agent = await fromConfig({
+      config: built.config,
+      agentClient: built.agentClient,
+      providerManager: built.providerManager,
+      messageBus: built.messageBus,
+      mcpRuntime: built.mcpRuntime,
+      settingsService: built.settingsService,
+      providerFileLifecycle: built.runtime.providerFileLifecycle,
+      sessionId: built.config.getSessionId(),
+      sessionIdentityOwnership: 'config',
+    });
+    await agent.setHistory([
+      { speaker: 'human', blocks: [{ type: 'text', text: 'old question' }] },
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'old answer' }] },
+    ]);
+    await agent.session.setRecording({ enabled: true });
+    oldId = agent.session.getSessionId();
+    const path = agent.session.getRecording().path;
+    if (path === undefined) throw new Error('Expected old recording');
+    oldPath = path;
     uiEvents = [];
-    agent = {
-      ...createUiSessionOwner(config),
-      resetChat: async () => {
-        resetCount++;
-        await appendFile(join(directory, 'order'), 'reset\n');
-      },
-    };
     context = createMockCommandContext({
-      services: { config, agent },
+      recordingOwner: 'agent',
+      services: { config: built.config, agent },
       ui: {
         setDebugMessage: (text: string) => {
           uiEvents.push(text);
@@ -103,134 +114,116 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
       },
     });
   });
+
   afterEach(async () => {
-    vi.restoreAllMocks();
-    await config.dispose();
+    await agent.dispose();
+    await built.cleanup();
     await rm(directory, { recursive: true, force: true });
   });
-  async function order(): Promise<string[]> {
-    return (await readFile(join(directory, 'order'), 'utf8'))
+
+  async function inputs(): Promise<Array<z.infer<typeof hookInput>>> {
+    return (await readFile(join(directory, 'hooks.jsonl'), 'utf8'))
       .trim()
-      .split('\n');
+      .split('\n')
+      .map((line) => hookInput.parse(JSON.parse(line)));
   }
 
-  it('should set debug message, reset chat via agent, reset telemetry, update history token count, and clear UI when agent is available', async () => {
-    const telemetryOrders: string[] = [];
-    vi.spyOn(uiTelemetryService, 'reset').mockImplementation(() => {
-      telemetryOrders.push(readFileSync(join(directory, 'order'), 'utf8'));
-      uiEvents.push('telemetry');
-    });
+  it('ends the old session before starting the new one and updates Config identity', async () => {
     await clearAction(context, '');
-    expect(telemetryOrders).toStrictEqual([
-      'SessionEnd\nreset\nSessionStart\n',
-    ]);
-    expect(uiEvents.slice(-3)).toStrictEqual([
-      'telemetry',
-      'tokens:0',
-      'clear',
-    ]);
-    expect(resetCount).toBe(1);
-    expect(uiEvents[0]).toBe('Clearing terminal and resetting chat.');
-    expect(uiEvents).toContain('SessionStart feedback');
-    expect(uiEvents.slice(-2)).toStrictEqual(['tokens:0', 'clear']);
-    expect(await order()).toStrictEqual([
+    const hooks = await inputs();
+    expect(hooks.map((input) => input.hook_event_name)).toStrictEqual([
       'SessionEnd',
-      'reset',
       'SessionStart',
     ]);
-    expect(uiTelemetryService.reset).toHaveBeenCalledTimes(1);
+    expect(hooks[0].session_id).toBe(oldId);
+    expect(hooks[0].transcript_path).toBe(oldPath);
+    expect(hooks[0].reason).toBe('clear');
+    expect(hooks[1].source).toBe('clear');
+    expect(hooks[1].session_id).not.toBe(oldId);
+    expect(hooks[1].session_id).toBe(agent.session.getSessionId());
+    expect(built.config.getSessionId()).toBe(hooks[1].session_id);
+    expect(await agent.getHistory()).toStrictEqual([]);
+    expect(uiEvents).toContain('SessionStart feedback');
+    expect(uiEvents.slice(-2)).toStrictEqual(['tokens:0', 'clear']);
   });
-  it('should ask the agent to drop the whole conversation, including the initial turn', async () => {
-    let history = ['first question', 'first answer', 'later question'];
-    agent.resetChat = async (options) => {
-      history =
-        options?.retainInitialHistory === false ? [] : history.slice(0, 2);
-    };
+
+  it('keeps the old conversation available to /continue and the session picker', async () => {
     await clearAction(context, '');
-    expect(history).toStrictEqual([]);
+    await drain(agent.stream('new question'));
+    await agent.session.flushRecording();
+    const targets = await agent.session.listBrowserTargets();
+    expect(targets.filter((target) => target.kind === 'session')).toHaveLength(
+      2,
+    );
+    expect(
+      targets.some(
+        (target) =>
+          target.kind === 'session' && target.session.sessionId === oldId,
+      ),
+    ).toBe(true);
+    const result = await continueAction(context, oldId);
+    if (result?.type !== 'perform_resume')
+      throw new Error('Expected resume action');
+    const history = await agent.session.resumeSession(result.sessionRef);
+    expect(history.id).toBe(oldId);
+    expect(
+      (await agent.getHistory()).flatMap((item) => item.blocks),
+    ).toStrictEqual([
+      { type: 'text', text: 'old question' },
+      { type: 'text', text: 'old answer' },
+    ]);
   });
-  it('should skip reset when no agent is available (terminal-only clear)', async () => {
+
+  it('resumes the pre-clear session through startup --continue after an immediate exit', async () => {
+    await clearAction(context, '');
+    await agent.session.setRecording({ enabled: false });
+    const config = built.config;
+    const request = new Proxy(config, {
+      get(target, property, receiver) {
+        if (property === 'getContinueSessionRef') return () => CONTINUE_LATEST;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const resumed = await setupOwnerSessionRecording(request, agent, {}, null);
+    expect(resumed?.flatMap((item) => item.blocks)).toStrictEqual([
+      { type: 'text', text: 'old question' },
+      { type: 'text', text: 'old answer' },
+    ]);
+    expect(await agent.session.listSessions()).toHaveLength(1);
+  });
+
+  it.each(['SessionEnd', 'SessionStart'])(
+    'starts a fresh session when the %s command hook fails',
+    async (event) => {
+      await writeFile(join(directory, 'failure'), event);
+      await clearAction(context, '');
+      expect(agent.session.getSessionId()).not.toBe(oldId);
+      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(
+        (await inputs()).map((input) => input.hook_event_name),
+      ).toStrictEqual(['SessionEnd', 'SessionStart']);
+      expect(uiEvents.at(-1)).toBe('clear');
+    },
+  );
+
+  it('clears only the terminal when no Agent is available', async () => {
     const terminal = createMockCommandContext({
       services: { config: null, agent: null },
       ui: context.ui,
     });
     await clearAction(terminal, '');
-    expect(resetCount).toBe(0);
-    expect(uiEvents[0]).toBe('Clearing terminal.');
-    expect(uiEvents.slice(-2)).toStrictEqual(['tokens:0', 'clear']);
-    expect(uiTelemetryService.reset).toHaveBeenCalledTimes(1);
-  });
-  it('should trigger SessionEnd hook before resetChat when clearing', async () => {
-    const observed: string[] = [];
-    agent.hooks.onHookExecution((request) => {
-      observed.push(request.event);
-    });
-    await clearAction(context, '');
-    expect(await order()).toStrictEqual([
-      'SessionEnd',
-      'reset',
-      'SessionStart',
-    ]);
-    expect(observed).toStrictEqual(['SessionEnd', 'SessionStart']);
-    expect(resetCount).toBe(1);
-    expect(uiEvents).toContain('SessionStart feedback');
-    expect(uiEvents.at(-1)).toBe('clear');
-  });
-  it('should complete clear even if SessionEnd hook throws', async () => {
-    await writeFile(join(directory, 'failure'), 'SessionEnd');
-    await clearAction(context, '');
-    expect(resetCount).toBe(1);
-    expect(await order()).toStrictEqual([
-      'SessionEnd',
-      'reset',
-      'SessionStart',
-    ]);
-    expect(uiEvents).toContain('SessionStart feedback');
-    expect(uiEvents.at(-1)).toBe('clear');
-    expect(uiTelemetryService.reset).toHaveBeenCalledTimes(1);
-  });
-  it('should complete clear even if SessionStart hook throws', async () => {
-    await writeFile(join(directory, 'failure'), 'SessionStart');
-    await clearAction(context, '');
-    expect(resetCount).toBe(1);
-    expect(await order()).toStrictEqual([
-      'SessionEnd',
-      'reset',
-      'SessionStart',
-    ]);
-    expect(uiEvents).not.toContain('SessionStart feedback');
-    expect(uiEvents.at(-1)).toBe('clear');
-    expect(uiTelemetryService.reset).toHaveBeenCalledTimes(1);
-  });
-  it('should not trigger hooks when agent is absent (terminal-only clear)', async () => {
-    const observed: string[] = [];
-    agent.hooks.onHookExecution((request) => {
-      observed.push(request.event);
-    });
-    const terminal = createMockCommandContext({
-      services: { config: null, agent: null },
-      ui: context.ui,
-    });
-    await clearAction(terminal, '');
-    expect(observed).toStrictEqual([]);
-    expect(resetCount).toBe(0);
+    expect(agent.session.getSessionId()).toBe(oldId);
     expect(uiEvents).toStrictEqual(['Clearing terminal.', 'tokens:0', 'clear']);
-    expect(uiTelemetryService.reset).toHaveBeenCalledTimes(1);
   });
-  it('should use explicit agent hooks when agent is present but config is null', async () => {
+
+  it('uses the explicit Agent without needing Config on the command context', async () => {
     const explicit = createMockCommandContext({
       services: { config: null, agent },
       ui: context.ui,
     });
     await clearAction(explicit, '');
-    expect(resetCount).toBe(1);
-    expect(await order()).toStrictEqual([
-      'SessionEnd',
-      'reset',
-      'SessionStart',
-    ]);
+    expect(agent.session.getSessionId()).not.toBe(oldId);
+    expect(await agent.getHistory()).toStrictEqual([]);
     expect(uiEvents).toContain('SessionStart feedback');
-    expect(uiEvents.at(-1)).toBe('clear');
-    expect(uiTelemetryService.reset).toHaveBeenCalledTimes(1);
   });
 });

@@ -4,7 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ReplayResult } from '@vybestack/llxprt-code-core';
+import {
+  replaySession,
+  type ReplayResult,
+  type SessionSummary,
+  type LocalMediaStore,
+} from '@vybestack/llxprt-code-core';
 import type { SessionInfo } from '../agent.js';
 
 export function sessionInfoFromReplay(
@@ -27,4 +32,20 @@ export function sessionInfoFromReplay(
           checkpointName: replay.ancestry.checkpointName,
         }),
   };
+}
+
+export async function readSessionInfo(
+  summary: SessionSummary,
+  projectHash: string,
+  mediaStore: LocalMediaStore,
+): Promise<SessionInfo> {
+  const replay = await replaySession(summary.filePath, projectHash, {
+    mediaStore,
+  });
+  if (!replay.ok) throw new Error(replay.error);
+  return sessionInfoFromReplay(
+    summary.sessionId,
+    replay,
+    summary.lastModified.toISOString(),
+  );
 }

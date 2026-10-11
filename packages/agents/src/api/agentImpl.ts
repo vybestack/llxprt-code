@@ -19,7 +19,6 @@ import { generateDetachedText } from './detached-generation.js';
 import { executeHookCompression } from './compression-execution.js';
 import {
   ApprovalMode,
-  type HistoryClearOptions,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 // @plan:PLAN-20260622-COREAPIGAP.P16 @requirement:REQ-007
@@ -82,8 +81,7 @@ import { PolicyControl } from './control/policyControl.js';
 import { createTasksControl } from './control/tasksControl.js';
 import type { TasksControl } from './control/tasksControl.js';
 import { SessionControl } from './control/sessionControl.js';
-import { AgentSessionPersistence } from './control/recordedHistoryPersistence.js';
-import type { SessionControlDeps } from './control/sessionControl.js';
+import { createAgentSessionPersistence } from './control/recordedHistoryPersistence.js';
 import {
   createRecordingExecution,
   currentRecordingPath,
@@ -391,7 +389,7 @@ export class AgentImpl implements Agent {
       this.deps.mediaStore ?? this.deps.resolveClient().mediaStore;
     if (mediaStore === undefined)
       throw new Error('Agent client requires explicit media store');
-    const sessionDeps: SessionControlDeps = {
+    return new SessionControl({
       readRecordingQueueLimit: () =>
         this.deps.settingsOwner.readRecordingQueueLimit(
           this.deps.config.getSessionRecordingQueueByteLimit(),
@@ -399,23 +397,26 @@ export class AgentImpl implements Agent {
       config: this.deps.config,
       directories: () => this.deps.mcpOperations.workspacePaths.directories(),
       mediaStore,
-      persistence: new AgentSessionPersistence(
-        {
-          projectRoot: this.deps.config.storageRoot,
-          chatsDir: this.deps.config.projectChatsDir,
-        },
-        {
-          mediaStore,
-          maxQueueBytes: this.deps.config.getSessionPersistenceQueueByteLimit(),
-        },
+      persistence: createAgentSessionPersistence(
+        this.deps.config.storageRoot,
+        this.deps.config.projectChatsDir,
+        mediaStore,
+        this.deps.config.getSessionPersistenceQueueByteLimit(),
       ),
       sessionIdentityOwnership: this.deps.sessionIdentityOwnership,
       sessionId: () => this.deps.runtimeId,
+      assertSessionIdle: () => {
+        this.assertProfileIdle();
+        if (this.activeRun !== undefined) throw new AgentBusyError();
+      },
+      startNewSessionClient: async (id) => {
+        await this.deps.sessionClient.startNewSession(id);
+        this.rebuild();
+      },
       resolveClient: () => this.deps.resolveClient(),
       getProvider: () => this.providerState.provider,
       getModel: () => this.getModel(),
-    };
-    return new SessionControl(sessionDeps);
+    });
   }
 
   /**
@@ -895,19 +896,17 @@ export class AgentImpl implements Agent {
 
   /**
    * Resets the chat through the durable history-clear path while recording is
-   * active, preserving its initial history prefix unless
-   * `retainInitialHistory` is false. Without recording, delegates to the
+   * active, preserving its initial history prefix. Without recording, delegates to the
    * client's full reset contract.
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  async resetChat(options?: HistoryClearOptions): Promise<void> {
+  async resetChat(): Promise<void> {
     if (this.session.getRecording().enabled) {
-      await this.session.clearHistory(options);
+      await this.session.clearHistory();
       return;
     }
-    const client = this.deps.resolveClient();
-    await client.resetChat();
+    await this.deps.resolveClient().resetChat();
   }
 
   /**
@@ -1229,7 +1228,8 @@ export class AgentImpl implements Agent {
    * when no provider is configured.
    */
 
-  private readonly readHookSessionId = (): string => this.deps.runtimeId;
+  private readonly readHookSessionId = (): string =>
+    this.session.getSessionId();
   private isProviderReady(): boolean {
     if (this.ownership.disposed) throw new Error('Agent is closed');
     return this.deps.providerManager.hasActiveProvider();

@@ -351,7 +351,7 @@ export function logFileOperation(
 }
 
 export function logApiRequest(
-  config: Config,
+  config: SessionConfig,
   event: ApiRequestEvent,
   telemetry: RootTelemetry,
 ): void {
@@ -383,7 +383,7 @@ export function logApiRequest(
 }
 
 export function logApiError(
-  config: Config,
+  config: SessionConfig,
   event: ApiErrorEvent,
   telemetry: RootTelemetry,
 ): void {
@@ -428,7 +428,7 @@ export function logApiError(
 }
 
 export function logApiResponse(
-  config: Config,
+  config: SessionConfig,
   event: ApiResponseEvent,
   telemetry: RootTelemetry,
 ): void {
@@ -458,7 +458,7 @@ export function logApiResponse(
 }
 
 function buildApiResponseAttributes(
-  config: Config,
+  config: SessionConfig,
   event: ApiResponseEvent,
   telemetry: RootTelemetry,
 ): LogAttributes {
@@ -504,7 +504,7 @@ function truncateBody(body: string, maxChars: number): string {
 }
 
 function recordTokenUsageMetricsForResponse(
-  config: Config,
+  config: SessionConfig,
   event: ApiResponseEvent,
   telemetry: RootTelemetry,
 ): void {

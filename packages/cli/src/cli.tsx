@@ -485,7 +485,7 @@ export async function main() {
   const { config, activationOperation } = boot;
 
   try {
-    await exitAfterSessionListOrDelete(argv, config);
+    await exitAfterSessionListOrDelete(argv, config, () => config.dispose());
     await rejectPromptInteractiveWithPipedStdin(argv);
 
     await prepareTerminalSession(config, settings, argv);

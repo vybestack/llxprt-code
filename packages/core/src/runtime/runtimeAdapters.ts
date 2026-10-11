@@ -84,7 +84,7 @@ function normalizeAttemptIdentity(attemptId: string | undefined): string {
 }
 
 export function createTelemetryAdapter(
-  config: Config,
+  config: Pick<Config, 'getSessionId'>,
   telemetry: RootTelemetry,
 ): AgentRuntimeTelemetryAdapter {
   const spans = new Map<string, TelemetrySpan>();

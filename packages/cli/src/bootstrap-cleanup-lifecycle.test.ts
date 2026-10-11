@@ -501,12 +501,18 @@ describe('real startup activation owner cleanup', () => {
       ];
       const output: string[] = [];
       restore.push(
-        spyOn(stdio, 'writeToStdout').mockImplementation((chunk) => {
+        spyOn(stdio, 'writeToStdout').mockImplementation((chunk, ...args) => {
           output.push(String(chunk));
+          for (const argument of args) {
+            if (typeof argument === 'function') argument();
+          }
           return true;
         }),
-        spyOn(stdio, 'writeToStderr').mockImplementation((chunk) => {
+        spyOn(stdio, 'writeToStderr').mockImplementation((chunk, ...args) => {
           output.push(String(chunk));
+          for (const argument of args) {
+            if (typeof argument === 'function') argument();
+          }
           return true;
         }),
       );
@@ -557,12 +563,18 @@ describe('real startup activation owner cleanup', () => {
       const unrelated = await recordSession(otherRoot);
       const output: string[] = [];
       restore.push(
-        spyOn(stdio, 'writeToStdout').mockImplementation((chunk) => {
+        spyOn(stdio, 'writeToStdout').mockImplementation((chunk, ...args) => {
           output.push(String(chunk));
+          for (const argument of args) {
+            if (typeof argument === 'function') argument();
+          }
           return true;
         }),
-        spyOn(stdio, 'writeToStderr').mockImplementation((chunk) => {
+        spyOn(stdio, 'writeToStderr').mockImplementation((chunk, ...args) => {
           output.push(String(chunk));
+          for (const argument of args) {
+            if (typeof argument === 'function') argument();
+          }
           return true;
         }),
         spyOn(process, 'exit').mockImplementation((code) => {
@@ -604,8 +616,11 @@ describe('real startup activation owner cleanup', () => {
       ];
       const output: string[] = [];
       restore.push(
-        spyOn(stdio, 'writeToStdout').mockImplementation((chunk) => {
+        spyOn(stdio, 'writeToStdout').mockImplementation((chunk, ...args) => {
           output.push(String(chunk));
+          for (const argument of args) {
+            if (typeof argument === 'function') argument();
+          }
           return true;
         }),
         spyOn(process, 'exit').mockImplementation((code) => {

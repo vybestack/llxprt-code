@@ -13,6 +13,18 @@ import {
   type SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
 
+export function createAgentSessionPersistence(
+  projectRoot: string,
+  chatsDir: string,
+  mediaStore: LocalMediaStore,
+  maxQueueBytes: number,
+): AgentSessionPersistence {
+  return new AgentSessionPersistence(
+    { projectRoot, chatsDir },
+    { mediaStore, maxQueueBytes },
+  );
+}
+
 export class AgentSessionPersistence {
   private readonly journals = new Map<string, SessionPersistenceService>();
   private closed = false;

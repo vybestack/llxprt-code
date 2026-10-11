@@ -90,7 +90,6 @@ export {
 } from './SessionTransitionService.js';
 export {
   HistoryMutationService,
-  type HistoryClearOptions,
   type HistoryMutationResult,
   type HistoryMutationError,
 } from './HistoryMutationService.js';

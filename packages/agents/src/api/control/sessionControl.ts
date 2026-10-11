@@ -44,7 +44,6 @@ import {
   type ResumeRequest,
   type SessionSummary,
   type LockHandle,
-  type HistoryClearOptions,
 } from '@vybestack/llxprt-code-core';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
@@ -64,7 +63,10 @@ import {
   rollbackPreparedSessionArtifacts,
 } from './sessionControlRollback.js';
 import { exportRecordedSession } from './sessionControlExport.js';
-import { sessionInfoFromReplay } from './sessionControlInfo.js';
+import {
+  sessionInfoFromReplay,
+  readSessionInfo,
+} from './sessionControlInfo.js';
 import { recordSessionEvent } from './recordSessionEvent.js';
 import type { SessionRecordingEvent } from './recordSessionEvent.js';
 import {
@@ -113,6 +115,8 @@ export interface SessionControlDeps {
   readonly sessionIdentityOwnership: 'config' | 'facade';
   /** The per-agent session id (AgentImpl uses deps.runtimeId). */
   readonly sessionId: () => string;
+  readonly assertSessionIdle: () => void;
+  readonly startNewSessionClient: (sessionId: string) => Promise<void>;
   /** Resolves the live AgentClient (the same contract restoreHistory uses). */
   readonly resolveClient: () => AgentClientContract;
   /** The per-agent active provider name. */
@@ -445,7 +449,7 @@ export class SessionControl implements AgentSessionControl {
       );
       logger.warn(
         () =>
-          `ensureSubscribed: re-attach failed for session ${this.deps.sessionId()}; ` +
+          `ensureSubscribed: re-attach failed for session ${this.recordingSessionId}; ` +
           `dropped the dead integration so the operation can rebuild it: ${
             error instanceof Error ? error.message : String(error)
           }`,
@@ -725,10 +729,32 @@ export class SessionControl implements AgentSessionControl {
   getHistory = (): Promise<readonly IContent[]> =>
     this.runExclusive(() => this.deps.resolveClient().getHistory());
 
-  async clearHistory(options?: HistoryClearOptions): Promise<void> {
+  getSessionId = (): string => this.recordingSessionId;
+
+  async startNewSession(): Promise<void> {
+    await this.runExclusive(async () => {
+      this.deps.assertSessionIdle();
+      const ownsConfig = this.deps.sessionIdentityOwnership === 'config';
+      if (
+        ownsConfig &&
+        this.deps.config.getSessionId() !== this.recordingSessionId
+      ) {
+        throw new Error('Cannot replace a session owned by another facade');
+      }
+      const recordingEnabled = this.getRecording().enabled;
+      const nextSessionId = crypto.randomUUID();
+      await this.teardownActiveSession();
+      await this.deps.startNewSessionClient(nextSessionId);
+      if (ownsConfig) this.deps.config.adoptSessionId(nextSessionId);
+      this.recordingSessionId = nextSessionId;
+      this.adoptedPath = null;
+      if (recordingEnabled) await this.startRecording();
+    });
+  }
+
+  async clearHistory(): Promise<void> {
     await this.runExclusive(() =>
       clearOwnerHistory(
-        options,
         this.deps.resolveClient(),
         this.requireRecording(),
         this.integration,
@@ -883,19 +909,12 @@ export class SessionControl implements AgentSessionControl {
     );
   }
 
-  private async sessionInfoFor(summary: SessionSummary): Promise<SessionInfo> {
-    const replay = await replaySession(
-      summary.filePath,
+  private sessionInfoFor = (summary: SessionSummary): Promise<SessionInfo> =>
+    readSessionInfo(
+      summary,
       this.persistenceProjectHash(),
-      { mediaStore: this.deps.mediaStore },
+      this.deps.mediaStore,
     );
-    if (!replay.ok) throw new Error(replay.error);
-    return sessionInfoFromReplay(
-      summary.sessionId,
-      replay,
-      summary.lastModified.toISOString(),
-    );
-  }
 
   // ─── Recording helpers ───────────────────────────────────────────────────
 
@@ -1016,7 +1035,7 @@ export class SessionControl implements AgentSessionControl {
     // loss; warn so it is diagnosable AND flag it for bounded re-attach.
     logger.warn(
       () =>
-        `attachHistory: HistoryService unavailable for session ${this.deps.sessionId()}; ` +
+        `attachHistory: HistoryService unavailable for session ${this.recordingSessionId}; ` +
         `recording integration left unsubscribed (subsequent turns will not be recorded until re-subscribed)`,
     );
     return false;
@@ -1037,13 +1056,7 @@ export class SessionControl implements AgentSessionControl {
     this.integration = null;
     this.integrationNeedsSubscribe = false;
     this.recording = null;
-    const errors: unknown[] = [];
-    if (integration !== null) {
-      await captureRollbackFailure(errors, () => integration.dispose());
-    }
-    await captureRollbackFailure(errors, async () => {
-      if (service !== null) await service.dispose();
-    });
+    const errors = await cleanupSessionResources(integration, service, null);
     if (errors.length === 1) throw errors[0];
     if (errors.length > 1) {
       throw new AggregateError(errors, 'Recording cleanup failed');

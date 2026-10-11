@@ -397,7 +397,7 @@ export class RootTelemetry {
   };
 
   private constructor(
-    private readonly options: RootTelemetryOptions,
+    private options: RootTelemetryOptions,
     private readonly transports: () => RootTelemetryTransports,
   ) {}
 
@@ -447,6 +447,13 @@ export class RootTelemetry {
 
   isEnabled(): boolean {
     return this.accepting;
+  }
+
+  async startNewSession(sessionId: string): Promise<void> {
+    const enabled = this.requestedEnabled;
+    await this.setEnabled(false);
+    this.options = Object.freeze({ ...this.options, sessionId });
+    await this.setEnabled(enabled);
   }
 
   private requireLifetime(): ProviderLifetime {

@@ -48,7 +48,10 @@ import type { Todo } from '@vybestack/llxprt-code-tools';
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
 import { handleTerminalEvent } from './MessageStreamTerminalHandler.js';
 import { applyRetryAwareLoopDetection } from './retryAwareLoopDetection.js';
-import { sendAfterAgentDecision } from './afterAgentDecisionStream.js';
+import {
+  sendAfterAgentDecision,
+  emitAfterAgentContextClear,
+} from './afterAgentDecisionStream.js';
 import { AttemptBoundaryTracker } from './AttemptBoundaryTracker.js';
 
 export interface MessageStreamDeps {
@@ -930,18 +933,6 @@ export class MessageStreamOrchestrator {
     todoContinuationService.toolActivityCount = 0;
   }
 
-  private async _fireAfterHook(
-    ctx: StreamContext,
-  ): Promise<AfterAgentHookOutput | undefined> {
-    return this.deps.agentHookManager.fireAfterAgentHookSafe(
-      ctx.prompt_id,
-      ctx.promptText,
-      ctx.responseChunks.join(''),
-      false,
-      ctx.recordingExecution?.hookOwner,
-    );
-  }
-
   /**
    * If the AfterAgent hook requested context clearing, emit an
    * AgentExecutionStopped event with contextCleared=true so the UI can react.
@@ -950,15 +941,6 @@ export class MessageStreamOrchestrator {
   private async *_fireAfterHookAndEmitClearContext(
     ctx: StreamContext,
   ): AsyncGenerator<ServerAgentStreamEvent, AfterAgentHookOutput | undefined> {
-    const afterOut = await this._fireAfterHook(ctx);
-    if (afterOut?.shouldClearContext() === true) {
-      yield {
-        type: AgentEventType.AgentExecutionStopped,
-        reason:
-          afterOut.getEffectiveReason() || 'Context cleared by AfterAgent hook',
-        contextCleared: true,
-      };
-    }
-    return afterOut;
+    return yield* emitAfterAgentContextClear(this.deps.agentHookManager, ctx);
   }
 }

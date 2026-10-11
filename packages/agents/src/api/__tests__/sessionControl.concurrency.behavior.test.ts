@@ -178,6 +178,8 @@ function buildDeps(
     sessionIdentityOwnership: 'config',
     sessionId: () => sessionId,
     resolveClient: () => client,
+    assertSessionIdle: () => {},
+    startNewSessionClient: () => client.resetChat(),
     getProvider: () => 'fake',
     getModel: () => 'fake-model',
   };

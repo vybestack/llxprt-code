@@ -24,7 +24,7 @@ export const clearCommand: SlashCommand = {
       // Trigger SessionEnd hook before clearing (fail-open)
       await agent.hooks.triggerSessionEnd(SessionEndReason.Clear);
 
-      await agent.resetChat({ retainInitialHistory: false });
+      await agent.session.startNewSession();
 
       // Trigger SessionStart hook after clearing (fail-open)
       const sessionStartOutput = await agent.hooks.triggerSessionStart(

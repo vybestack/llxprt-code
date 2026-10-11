@@ -14,6 +14,26 @@ import { createProviderAdapterFromManager } from '@vybestack/llxprt-code-core/ru
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { bindTelemetry } from '../api/agentBootstrap.js';
+import {
+  createAgentRuntimeState,
+  type AgentRuntimeState,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import {
+  PLACEHOLDER_MODEL,
+  UNCONFIGURED_PROVIDER,
+} from '@vybestack/llxprt-code-core/config/models.js';
+
+export function captureSessionRuntimeState(
+  settings: SessionSettingsOwner,
+  identity: Pick<AgentRuntimeState, 'runtimeId' | 'sessionId' | 'proxyUrl'>,
+): AgentRuntimeState {
+  return createAgentRuntimeState({
+    ...identity,
+    provider: settings.readSelectedProvider() ?? UNCONFIGURED_PROVIDER,
+    model: settings.readSelectedModel() ?? PLACEHOLDER_MODEL,
+    baseUrl: settings.readSelectedEndpoint(),
+  });
+}
 
 export function bindClientTokenization(
   client: AgentClientContract,
