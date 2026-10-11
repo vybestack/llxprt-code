@@ -13,6 +13,7 @@
  * @requirement REQ-STAT8-001
  */
 
+import type { NetworkFetch } from '../utils/fetch.js';
 import type { RedactionConfig } from '../config/config.js';
 /**
  * @plan:PLAN-20260603-ISSUE1584.P05
@@ -32,6 +33,7 @@ import { separateSettings } from '@vybestack/llxprt-code-settings';
 export type { TelemetryContext } from './contracts/TelemetryContext.js';
 
 export interface RuntimeInvocationContext {
+  readonly fetch?: NetworkFetch;
   /** Stable identifier for the invocation/runtime */
   readonly runtimeId: string;
   readonly sessionId?: string;
@@ -71,6 +73,7 @@ export interface RuntimeInvocationContext {
 }
 
 export interface RuntimeInvocationContextInit {
+  fetch?: NetworkFetch;
   providerDefaults?: Readonly<Record<string, unknown>>;
   configuredHeaders?: Readonly<Record<string, string>>;
   runtimeId?: string;
@@ -185,14 +188,7 @@ export function createRuntimeInvocationContext(
   const ephemerals = captureInvocationEphemerals(init.ephemeralsSnapshot);
 
   const separated = separateSettings(ephemerals, init.providerName);
-  if (
-    init.modelParams !== undefined &&
-    init.modelParamsProviderName !== init.providerName
-  ) {
-    throw new Error(
-      `Admitted model parameters belong to ${init.modelParamsProviderName}, not ${init.providerName}`,
-    );
-  }
+  assertModelParameterOwner(init);
 
   const cliSettings = Object.freeze(separated.cliSettings);
   const modelBehavior = Object.freeze(separated.modelBehavior);
@@ -215,6 +211,7 @@ export function createRuntimeInvocationContext(
 
   const context: RuntimeInvocationContext = {
     runtimeId,
+    fetch: init.fetch,
     sessionId: init.sessionId,
     metadata: mergedMetadata,
     ephemerals,
@@ -273,4 +270,15 @@ function freezeInvocationMetadata(
   init: RuntimeInvocationContextInit,
 ): Readonly<Record<string, unknown>> {
   return Object.freeze({ ...init.runtimeMetadata, ...init.metadata });
+}
+
+function assertModelParameterOwner(init: RuntimeInvocationContextInit): void {
+  if (
+    init.modelParams !== undefined &&
+    init.modelParamsProviderName !== init.providerName
+  ) {
+    throw new Error(
+      `Admitted model parameters belong to ${init.modelParamsProviderName}, not ${init.providerName}`,
+    );
+  }
 }

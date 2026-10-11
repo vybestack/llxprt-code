@@ -74,6 +74,12 @@ export interface RuntimeProviderManager {
   getSessionTokenUsage(): RuntimeSessionTokenUsage;
   setConfig(config: Config): void;
   setRuntimeContext(runtimeContext: ProviderRuntimeContext): void;
+  bindNetworkFetch?(
+    requestFetch: (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => Promise<Response>,
+  ): void;
   hasActiveProvider(): boolean;
   accumulateSessionTokens(providerName: string, usage: unknown): void;
 }

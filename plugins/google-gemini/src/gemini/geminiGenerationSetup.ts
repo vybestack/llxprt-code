@@ -28,6 +28,7 @@ export type HttpOptions = { headers: Record<string, string> };
 
 /** Resolved setup for a generation call. */
 export interface GeminiGenerationSetup {
+  fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   authMode: GeminiAuthMode;
   authToken: string;
   currentModel: string;
@@ -79,6 +80,7 @@ export async function buildGenerationSetup(
   ) => IContent[] = createGeminiResponseMapper();
   return {
     authMode,
+    fetch: options.invocation.fetch,
     authToken,
     currentModel,
     contentsWithSignatures,

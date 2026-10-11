@@ -55,7 +55,6 @@ import {
   type ContentGenerator,
   type ContentGeneratorConfig,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import type { LoopDetectionService } from '@vybestack/llxprt-code-core/services/loopDetectionService.js';
 import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
@@ -219,11 +218,6 @@ export class AgentClient
     this.logger = new DebugLogger('llxprt:core:client');
 
     void this._historyService;
-
-    const proxyUrl = runtimeState.proxyUrl;
-    if (proxyUrl) {
-      setGlobalDispatcher(new ProxyAgent(proxyUrl));
-    }
 
     this.embeddingModel = config.getEmbeddingModel() ?? runtimeState.model;
     this.loopDetector = this.createLoopDetector(config);

@@ -56,6 +56,10 @@ export function bindClientSettings(
   settingsOwner: SessionSettingsOwner,
   runtimeId: string,
   sessionId: string,
+  requestFetch?: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>,
 ): void {
   client.bindRuntimeSettings(
     () => settingsOwner.readRuntimePolicy(),
@@ -68,6 +72,7 @@ export function bindClientSettings(
       parameters,
       signal,
       sessionId,
+      requestFetch,
     ),
   );
 }
@@ -78,6 +83,10 @@ type DefinitionReaders = Parameters<
 
 /** What a factory-created client is bound to; owned by the session client owner. */
 export interface FactoryClientBindings {
+  readonly fetch?: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>;
   readonly config: Config;
   readonly mediaStore: LocalMediaStore;
   readonly settingsOwner: SessionSettingsOwner;
@@ -134,6 +143,7 @@ export function bindFactoryClient(
     bindings.settingsOwner,
     bindings.runtimeId,
     bindings.sessionId,
+    bindings.fetch,
   );
   if (bindings.providerFiles !== undefined)
     client.bindProviderFiles?.(

@@ -174,6 +174,7 @@ export class GeminiProvider extends BaseProvider {
       'none',
       () => Promise.resolve(''),
       () => this.getBaseURL(),
+      this.requestFetch,
     );
     let authMode: GeminiAuthMode;
     try {
@@ -187,6 +188,7 @@ export class GeminiProvider extends BaseProvider {
       authMode,
       () => this.getAuthToken(),
       () => this.getBaseURL(),
+      this.requestFetch,
     );
   }
 
@@ -446,14 +448,15 @@ export class GeminiProvider extends BaseProvider {
       params: GenerateContentParameters,
     ) => Promise<AsyncIterable<GenerateContentResponse>>;
   }> {
-    const client = await this.createClient(
-      this.buildGoogleGenAIOptions(
+    const client = await this.createClient({
+      ...this.buildGoogleGenAIOptions(
         setup.authToken,
         setup.authMode,
         setup.httpOptions,
         setup.baseURL,
       ),
-    );
+      fetch: setup.fetch,
+    });
     return client.models;
   }
 

@@ -69,7 +69,7 @@ export async function createGeminiApiClient(
       ...(options.httpOptions?.headers !== undefined
         ? { headers: options.httpOptions.headers }
         : {}),
-      fetch: createPatternPreservingFetch(tools),
+      fetch: createPatternPreservingFetch(tools, options.fetch),
     }).languageModel(params.model);
 
   return {
