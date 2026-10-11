@@ -8,9 +8,9 @@ import type {
   RuntimePromptEstimateResult,
   RuntimeTokenizerFactory,
 } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
-import { countPromptTokens } from '../runtime/promptEnvelopeProjections.js';
 import type { Gpt56SourceProjection } from './gpt56-source-projection.js';
-import { SourceFamilyInput, wholePromptText } from './source-family-input.js';
+import { countLegacyPromptTokens } from './legacy-source-estimate.js';
+import { SourceFamilyInput } from './source-family-input.js';
 
 /**
  * Estimate a sealed disk prompt through the factory's family registry for
@@ -22,10 +22,10 @@ import { SourceFamilyInput, wholePromptText } from './source-family-input.js';
  *
  * - Claude-calibrated families spool the prompt text to a scratch file, count
  *   it with the chunked o200k counter and add additive content signals.
- * - Official families (kimi, glm, minimax) count one segment at a time, the
- *   same unit the array route sums over, so peak memory is one segment.
- * - Unregistered and unresolved models use the legacy whole-string heuristic;
- *   its string is built only inside the legacy callback, for this request.
+ * - Official families (kimi, glm, minimax) count each segment in bounded
+ *   chunks cut at exact pre-tokenizer boundaries.
+ * - Unregistered and unresolved models use the legacy heuristic through a
+ *   streaming equivalent (special-string scan, then the chunked o200k count).
  *
  * Only a scalar result is returned and nothing is retained after the call.
  */
@@ -48,8 +48,7 @@ export async function estimateSourceThroughFamilyRegistry(
     return await factory.estimatePrompt({
       ...request,
       finalizedProjection: input,
-      legacyEstimate: async () =>
-        countPromptTokens(await wholePromptText(input)),
+      legacyEstimate: () => countLegacyPromptTokens(input),
     });
   } finally {
     await release();

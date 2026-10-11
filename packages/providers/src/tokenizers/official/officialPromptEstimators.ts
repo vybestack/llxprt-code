@@ -16,7 +16,8 @@ import {
   type ProviderFinalizedPromptProjection,
 } from '../../runtime/promptEnvelopeProjections.js';
 import { ModelPromptEstimatorError } from '../ModelPromptEstimatorError.js';
-import { readSegmentText, SourceFamilyInput } from '../source-family-input.js';
+import { segmentChunks, SourceFamilyInput } from '../source-family-input.js';
+import { countAtSafeBoundaries } from './official-segment-chunking.js';
 import type { ModelPromptEstimatorRegistration } from '../ModelPromptEstimatorRegistry.js';
 import type { AssetManifest } from './assetManifest.js';
 import { KimiK3Tokenizer, KIMI_K3_MANIFEST } from './kimiK3Tokenizer.js';
@@ -227,14 +228,11 @@ function countProjectionImageTokens(
 
 /**
  * Sealed-segment counterpart of {@link countProjection}. The unit of counting
- * is the same one segment per prompt key, so the sum is identical; segments
- * are read and counted one at a time and each is dropped before the next.
- *
- * No exact piece-level chunking is provided for these families: their
- * pre-tokenizer patterns use constructs the JS regex engine does not share
- * (character-class intersection, scoped case folding) and MiniMax normalizes
- * each segment to NFC. Cutting a segment anywhere but a verified piece
- * boundary could change the count, so peak memory here is one segment.
+ * is the same one segment per prompt key, so the sum is identical. Within a
+ * segment, text is counted in bounded chunks cut only where the pre-tokenizer
+ * (and MiniMax's NFC normalizer) provably splits, so the segment is never one
+ * string; see official-segment-chunking.ts for the cut rules and the single
+ * run-sized exception for text with no such boundary.
  */
 async function countSourceSegments(
   counter: OfficialSegmentCounter,
@@ -243,7 +241,10 @@ async function countSourceSegments(
 ): Promise<number> {
   let total = 0;
   for (const segment of source.projection.promptSegments) {
-    total += counter.countTokens(await readSegmentText(segment, source.signal));
+    total += await countAtSafeBoundaries(
+      segmentChunks(segment, source.signal),
+      (text) => counter.countTokens(text),
+    );
   }
   // The literal 'openai' provider mirrors countProjectionImageTokens.
   return (

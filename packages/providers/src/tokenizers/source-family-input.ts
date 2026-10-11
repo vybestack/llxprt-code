@@ -19,7 +19,7 @@ const BLOCK_BYTES = 64 * 1024;
  * What a non-o200k family estimator receives instead of a materialized
  * prompt: the sealed segments plus the scoped lease that keeps them alive.
  * Families read it a block at a time; none of them is handed the joined
- * prompt text unless its tokenizer cannot count anything smaller.
+ * prompt text.
  */
 export class SourceFamilyInput {
   readonly kind = 'llxprt-source-family-input-v1';
@@ -61,16 +61,6 @@ export async function* segmentChunks(
   } finally {
     await handle.close();
   }
-}
-
-/** One whole segment, for tokenizers whose unit of counting is a segment. */
-export async function readSegmentText(
-  segment: Gpt56SourceSegment,
-  signal?: AbortSignal,
-): Promise<string> {
-  let text = '';
-  for await (const chunk of segmentChunks(segment, signal)) text += chunk;
-  return text;
 }
 
 /**
@@ -129,18 +119,4 @@ export async function spoolPromptText(
     await rm(directory, { recursive: true, force: true });
     throw error;
   }
-}
-
-/**
- * The complete prompt text as one string. Only for estimators whose counter is
- * a whole-string function with no known piece boundary (the legacy heuristic).
- * The string is request-local to the estimate that asked for it.
- */
-export async function wholePromptText(
-  input: SourceFamilyInput,
-): Promise<string> {
-  let text = '';
-  for await (const piece of promptTextPieces(input.projection, input.signal))
-    text += piece;
-  return text;
 }
