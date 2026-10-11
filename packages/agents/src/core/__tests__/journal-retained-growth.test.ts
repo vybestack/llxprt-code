@@ -17,6 +17,7 @@ const checkpointSchema = z.object({
 });
 const resultSchema = z.object({
   mode: z.enum(['normal', 'trap', 'release-trap']),
+  warmup: z.array(z.object({ turn: z.number(), heapBytes: z.number() })),
   baseline: checkpointSchema,
   checkpoints: z.array(checkpointSchema).length(4),
   requests: z.number(),
@@ -68,18 +69,25 @@ async function runWorker(mode: Result['mode']): Promise<Result> {
 
 function report(result: Result): string {
   const verdict = evaluateRetainedGrowth(result.baseline, result.checkpoints);
+  const warmup = result.warmup
+    .map((sample) => `${sample.turn}:${sample.heapBytes}`)
+    .join(' ');
   const samples = [result.baseline, ...result.checkpoints]
     .map((point) => `turn ${point.turn}: [${point.readings.join(', ')}]`)
     .join('\n');
-  return `${result.mode} retained=${verdict.retainedBytes} deltas=${verdict.checkpointDeltas.join(',')} intervals=${verdict.intervalGrowth.join(',')} fitted=${Math.round(verdict.fittedRunGrowthBytes)} requests=${result.requests} compressions=${result.compressions}\n${samples}`;
+  return `${result.mode} retained=${verdict.retainedBytes} deltas=${verdict.checkpointDeltas.join(',')} intervals=${verdict.intervalGrowth.join(',')} fitted=${Math.round(verdict.fittedRunGrowthBytes)} requests=${result.requests} compressions=${result.compressions}\nwarmup ${warmup}\n${samples}`;
 }
 
 function expectRealWorkload(result: Result): void {
-  expect(result.requests).toBe(400);
+  const warmedTurn = result.baseline.turn;
+  expect(result.requests).toBe(warmedTurn + 400);
   expect(result.compressions).toBeGreaterThanOrEqual(10);
   expect(result.journalBytes).toBeGreaterThan(0);
   expect(result.checkpoints.map((point) => point.turn)).toStrictEqual([
-    100, 200, 300, 400,
+    warmedTurn + 100,
+    warmedTurn + 200,
+    warmedTurn + 300,
+    warmedTurn + 400,
   ]);
 }
 
@@ -123,7 +131,9 @@ describe('repeated-turn retained growth over the real journal-backed send path',
     const result = await releaseTrapRun;
     process.stdout.write(`${report(result)}\n`);
     expectRealWorkload(result);
-    expect(result.retainedRows).toBeGreaterThan(0);
+    // Retention was switched off and its rows dropped after the third
+    // checkpoint, so nothing is held when the run ends.
+    expect(result.retainedRows).toBe(0);
     const verdict = evaluateRetainedGrowth(result.baseline, result.checkpoints);
     // The release happens before the last checkpoint, so a final-delta-only
     // gate would pass this run. Only the per-checkpoint gate can fail it.
