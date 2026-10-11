@@ -199,7 +199,7 @@ export function assembleProcessorFixture(
   };
 }
 
-export function largestSourceRowBytes(large: boolean): number {
+export function largestSourceRowBytes(large: DiskTextTail): number {
   return diskTextRow(63, large).blocks.reduce(
     (sum, block) =>
       sum + (block.type === 'text' ? Buffer.byteLength(block.text) : 0),
@@ -208,7 +208,7 @@ export function largestSourceRowBytes(large: boolean): number {
 }
 
 export function sourceWireOracle(
-  large: boolean,
+  large: DiskTextTail,
   pending: IContent = sourcePending,
 ): {
   bytes: number;

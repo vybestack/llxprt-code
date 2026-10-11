@@ -72,12 +72,22 @@ export class RetainedOwnerCensus {
   }
 }
 
-export async function retainedCheckpoint(census: RetainedOwnerCensus) {
+async function settledHeapReading(): Promise<number> {
   for (let round = 0; round < 8; round++) {
     await Bun.sleep(0);
     Bun.gc(true);
   }
-  const heap = heapSize();
+  return heapSize();
+}
+
+/** Median of three settled readings, so one code-block jettison cannot decide a checkpoint. */
+export async function retainedCheckpoint(census: RetainedOwnerCensus) {
+  const readings = [
+    await settledHeapReading(),
+    await settledHeapReading(),
+    await settledHeapReading(),
+  ].sort((left, right) => left - right);
+  const heap = readings[1];
   const memory = process.memoryUsage();
   const stats = heapStats();
   return {

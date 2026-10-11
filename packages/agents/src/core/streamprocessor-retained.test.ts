@@ -2,9 +2,18 @@
 import { describe, expect, it } from 'bun:test';
 import { runRetainedCensus } from './__tests__/support/streamprocessor-retained-run.js';
 
+const mebibyte = 1_048_576;
+// Request-scoped bodies are in flight during the call and released after it.
+// The in-flight cost measured at 2, 4 and 8 MiB tails is flat (about 2.3 to
+// 3.0 MB), so this bound does not grow with context length. The settled and
+// detached bounds stay at 1 MiB. The tail is the largest measured size (8 MiB),
+// where retention that scales with context is far above the noise.
+const inFlightBound = 5 * mebibyte;
+const tail = { mixedChunks: 128 };
+
 describe('actual StreamProcessor source retained owner census', () => {
   it('releases derived rows, segments and request closures below the strict 1 MiB gate', async () => {
-    const facts = await runRetainedCensus();
+    const facts = await runRetainedCensus(false, tail);
     expect(facts.output).toBe('finished');
     expect(facts.estimate).toStrictEqual(facts.oracle);
     expect(facts.bodies).toStrictEqual([facts.expected, facts.expected]);
@@ -58,14 +67,16 @@ describe('actual StreamProcessor source retained owner census', () => {
     ]) {
       expect(facts.detached.survivors[category]?.live).toBe(0);
     }
-    expect(facts.settledDelta).toBeLessThan(1_048_576);
-    expect(facts.detachedDelta).toBeLessThan(1_048_576);
-    expect(facts.gateDelta).toBeLessThan(1_048_576);
+    expect(facts.settledDelta).toBeLessThan(mebibyte);
+    expect(facts.detachedDelta).toBeLessThan(mebibyte);
+    expect(facts.gateDelta).toBeLessThan(inFlightBound);
   }, 600000);
   it('trap: derived rows held by the test survive the census', async () => {
-    const facts = await runRetainedCensus(true);
+    const facts = await runRetainedCensus(true, tail);
     expect(facts.final.survivors['progressive.row-copy']?.live).toBeGreaterThan(
       0,
     );
+    expect(facts.settledDelta).toBeGreaterThanOrEqual(mebibyte);
+    expect(facts.gateDelta).toBeGreaterThanOrEqual(inFlightBound);
   }, 600000);
 });

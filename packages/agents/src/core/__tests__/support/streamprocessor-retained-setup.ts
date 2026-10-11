@@ -5,7 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
+import {
+  diskTextRow,
+  type DiskTextTail,
+} from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import {
   projectionEndpoint,
   projectionInstructions,
@@ -54,7 +57,7 @@ function observePreparation(
 async function nativeOracle(
   setup: Awaited<ReturnType<typeof processorFixture>>,
   count: number,
-  large: boolean,
+  large: DiskTextTail,
 ) {
   const projected = await setup.provider.projectPromptEnvelope({
     contents: {
@@ -95,9 +98,10 @@ export interface RetainedSetup {
   readonly pending: IContent | IContent[];
 }
 
-export async function retainedSetup(): Promise<RetainedSetup> {
+export async function retainedSetup(
+  large: DiskTextTail = false,
+): Promise<RetainedSetup> {
   const root = mkdtempSync(join(tmpdir(), 'streamprocessor-retained-'));
-  const large = false;
   const count = 64;
   await warmSourceProcessor(root);
   const census = new RetainedOwnerCensus();

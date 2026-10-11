@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { existsSync, rmSync } from 'node:fs';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
+import type { DiskTextTail } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import { retainedCheckpoint } from './streamprocessor-retained-census.js';
 import { retainedSetup } from './streamprocessor-retained-setup.js';
 
@@ -89,8 +90,20 @@ function requestFacts(input: RetainedSetup) {
   };
 }
 
-export async function runRetainedCensus(retainDerivedRows = false) {
-  const input = await retainedSetup();
+/**
+ * Runs the scenario once at full size on the same path to settle one-time
+ * state (encoder, code blocks) and then measures a second run.
+ */
+export async function runRetainedCensus(
+  retainDerivedRows = false,
+  tail: DiskTextTail = false,
+) {
+  await runCensusOnce(false, tail);
+  return runCensusOnce(retainDerivedRows, tail);
+}
+
+async function runCensusOnce(retainDerivedRows: boolean, tail: DiskTextTail) {
+  const input = await retainedSetup(tail);
   input.census.retainDerivedRows = retainDerivedRows;
   try {
     const measured = await measure(input);

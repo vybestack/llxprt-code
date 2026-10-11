@@ -16,7 +16,12 @@ import {
  * is that many 64 KiB single-character runs, which exercise the large-piece
  * estimator path.
  */
-export type DiskTextTail = boolean | number;
+export type DiskTextTail = boolean | number | MixedTextTail;
+
+/** `mixedChunks` 64 KiB pieces of the same deterministic mixed text. */
+export interface MixedTextTail {
+  readonly mixedChunks: number;
+}
 
 const chunkBytes = 65536;
 const largeChunkCount = 161;
@@ -78,18 +83,26 @@ function mixedChunk(variant: number): string {
   return chunk;
 }
 
-function tailText(large: DiskTextTail): string {
-  if (typeof large === 'number')
-    return `${'a'.repeat(chunkBytes)} `.repeat(large);
-  if (!large) return 'tail';
+function mixedTail(count: number): string {
   const chunks: string[] = [];
-  for (let index = 0; index < largeChunkCount; index++)
+  for (let index = 0; index < count; index++)
     chunks.push(mixedChunk(index % 8));
   return `${chunks.join(' ')} `;
 }
 
+function tailText(large: DiskTextTail): string {
+  if (typeof large === 'number')
+    return `${'a'.repeat(chunkBytes)} `.repeat(large);
+  if (typeof large === 'object') return mixedTail(large.mixedChunks);
+  if (!large) return 'tail';
+  return mixedTail(largeChunkCount);
+}
+
 export function diskTextRow(index: number, large: DiskTextTail): IContent {
-  const hasTail = large !== false && large !== 0;
+  const hasTail =
+    typeof large === 'object'
+      ? large.mixedChunks > 0
+      : large !== false && large !== 0;
   return {
     speaker: index % 2 === 0 ? 'human' : 'ai',
     blocks: [
