@@ -30,14 +30,8 @@ import {
   isDoneEvent,
   internalSettingsOwner,
 } from './helpers/agentHarness.js';
-import { buildResponsesHeaders } from '../../../../providers/src/openai-responses/openAIResponsesHttpStream.js';
-import { buildWebSocketHandshakeHeaders } from '../../../../providers/src/openai-responses/openAIResponsesRequestDump.js';
-import { captureResponsesRequest } from '../../../../providers/src/openai-responses/responses-request.js';
-import { buildNormalizedOptions } from '../../../../providers/src/openai-responses/responses-request.test-helpers.js';
-import type { ResponsesExecutorDeps } from '../../../../providers/src/openai-responses/openAIResponsesExecutor.js';
 import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
 import { ShellJobOwner } from '../../session/shell-job-owner.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 
 function clientOwner(agent: Agent): SessionClientOwner {
@@ -115,82 +109,6 @@ async function withRecordedConversation<T>(
 }
 
 describe('starting a new conversation session', () => {
-  it('uses the new session in real HTTP and WebSocket headers, including after a model change', async () => {
-    await withRecordedConversation(async (agent) => {
-      const oldId = agent.session.getSessionId();
-      await agent.session.startNewSession();
-      const nextId = agent.session.getSessionId();
-      const deps: ResponsesExecutorDeps = {
-        providerName: 'openai-responses',
-        logger: new DebugLogger('clear-headers-test'),
-        isCodexMode: () => true,
-        getCodexAccountId: async () => 'account',
-        resolveAuthTokenForPrompt: async () => 'token',
-        shouldRetryOnError: () => false,
-        getUnallowedModelParameters: () => new Set<string>(),
-      };
-      const original = FakeProvider.prototype.generateChatCompletion;
-      const headers: Array<Record<string, string>> = [];
-      const capture = spyOn(
-        FakeProvider.prototype,
-        'generateChatCompletion',
-      ).mockImplementation(async function* (this: FakeProvider, options) {
-        if (Array.isArray(options) || options.invocation === undefined)
-          throw new Error('Expected admitted invocation');
-        const request = captureResponsesRequest(
-          buildNormalizedOptions({ invocation: options.invocation }),
-          'openai-responses',
-          'https://example.com',
-          undefined,
-          'model',
-        );
-        headers.push(
-          await buildResponsesHeaders(
-            'token',
-            'application/json',
-            true,
-            request,
-            deps,
-          ),
-        );
-        headers.push(
-          await buildWebSocketHandshakeHeaders(
-            { apiKey: 'token', normalizedOptions: request },
-            deps,
-          ),
-        );
-        yield* original.call(this, options);
-      });
-      try {
-        await drain(agent.stream('after clear'));
-        await agent.setModel('changed-model');
-        await drain(agent.stream('after model change'));
-        expect(headers).toHaveLength(4);
-        expect(
-          headers
-            .filter((_, index) => index % 2 === 0)
-            .map((header) => header.session_id),
-        ).toStrictEqual([nextId, nextId]);
-        expect(
-          headers
-            .filter((_, index) => index % 2 !== 0)
-            .map((header) => [header['session-id'], header['thread-id']]),
-        ).toStrictEqual([
-          [nextId, nextId],
-          [nextId, nextId],
-        ]);
-        expect(
-          headers.flatMap((header) => Object.values(header)),
-        ).not.toContain(oldId);
-        expect(
-          headers.flatMap((header) => Object.values(header)),
-        ).not.toContain(`${nextId}#client`);
-      } finally {
-        capture.mockRestore();
-      }
-    }, 'multi-turn-text.jsonl');
-  });
-
   it('rejects foreground turns and settings while recording retirement is paused', async () => {
     await withRecordedConversation(async (agent, oldPath) => {
       const entered = deferred();

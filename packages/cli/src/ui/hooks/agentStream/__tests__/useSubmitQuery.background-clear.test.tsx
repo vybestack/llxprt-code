@@ -100,6 +100,95 @@ function renderNotificationQueue(
 }
 
 describe('background notification queue ownership', () => {
+  it('aborts an in-flight completion on unmount and retains ownership until it settles', async () => {
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    if (
+      !('deps' in agent) ||
+      typeof agent.deps !== 'object' ||
+      agent.deps === null
+    ) {
+      throw new Error('Expected agent dependencies');
+    }
+    if (
+      !('taskLaunchOwner' in agent.deps) ||
+      !(agent.deps.taskLaunchOwner instanceof TaskLaunchOwner)
+    ) {
+      throw new Error('Expected task owner');
+    }
+    const owner = agent.deps.taskLaunchOwner;
+    const submissions: React.MutableRefObject<QueuedSubmission[]> = {
+      current: [],
+    };
+    const suppressed = { current: true };
+    const entered = createDeferred<AbortSignal>();
+    const release = createDeferred<void>();
+    const finished = createDeferred<void>();
+    const runStreamRef: UseSubmitQueryDeps['runStreamRef'] = {
+      current: async (query, signal) => {
+        entered.resolve(signal);
+        await release.promise;
+        try {
+          signal.throwIfAborted();
+          await drain(
+            agent.stream(
+              typeof query === 'string' ? query : JSON.stringify(query),
+              { signal },
+            ),
+          );
+        } finally {
+          finished.resolve();
+        }
+      },
+    };
+    const rendered = renderNotificationQueue(
+      agent,
+      submissions,
+      suppressed,
+      runStreamRef,
+    );
+    try {
+      await owner.start(async (launch, publish) => {
+        owner.manager.registerTask({
+          id: 'unmount-old-task',
+          subagentName: 'worker',
+          goalPrompt: 'work',
+          abortController: launch.controller,
+        });
+        launch.register('unmount-old-task');
+        publish({ llmContent: '', returnDisplay: '' });
+      });
+      owner.manager.completeTask('unmount-old-task', {
+        terminate_reason: SubagentTerminateMode.GOAL,
+        emitted_vars: { result: 'OLD_SESSION_OUTPUT' },
+      });
+      await waitFor(() => expect(submissions.current).toHaveLength(1));
+      act(() => {
+        suppressed.current = false;
+        rendered.result.current.scheduleNextQueuedSubmission();
+      });
+      const signal = await entered.promise;
+      rendered.unmount();
+      expect(signal.aborted).toBe(true);
+      expect(owner.getPendingNotifications()).toHaveLength(1);
+      const oldSession = { id: agent.session.getSessionId() };
+      await expect(agent.session.startNewSession()).rejects.toThrow(
+        'completion notices',
+      );
+      expect({ id: agent.session.getSessionId() }).toStrictEqual(oldSession);
+      release.resolve();
+      await finished.promise;
+      await waitFor(() =>
+        expect(owner.getPendingNotifications()).toStrictEqual([]),
+      );
+      await agent.session.startNewSession();
+      expect(await agent.getHistory()).toStrictEqual([]);
+    } finally {
+      release.resolve();
+      rendered.unmount();
+      await cleanup();
+    }
+  });
+
   it('blocks clear while a completion is queued and until its submitted turn finishes', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     if (

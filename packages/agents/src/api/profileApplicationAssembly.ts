@@ -66,6 +66,7 @@ export function assembleProfileApplication(
     result: ProfileLoadResult,
     signal: AbortSignal,
   ) => Promise<PreparedProfileFacade | void> = async () => {},
+  assertAdmission: () => void = () => {},
 ): AgentProfileApplication {
   let installed:
     | Awaited<ReturnType<typeof finishProfileApplication>>
@@ -130,6 +131,7 @@ export function assembleProfileApplication(
       }
     },
     () => installed?.cancelAndJoin() ?? Promise.resolve(),
+    assertAdmission,
   );
 }
 
@@ -208,14 +210,16 @@ function queueProfileApplications(
     signal: AbortSignal,
   ) => Promise<ProfileLoadResult>,
   cancelInstalled: () => Promise<void>,
+  assertAdmission: () => void,
 ): AgentProfileApplication {
   const controller = new AbortController();
   const signal = controller.signal;
   let tail: Promise<unknown> = Promise.resolve();
   let pending = 0;
-  const enqueue = (
+  const enqueue = async (
     run: () => Promise<ProfileLoadResult>,
   ): Promise<ProfileLoadResult> => {
+    assertAdmission();
     pending++;
     const result = tail.then(() => {
       signal.throwIfAborted();
@@ -270,6 +274,7 @@ export function assembleAgentProfiles(
     signal: AbortSignal,
   ) => Promise<PreparedProfileFacade>,
   profiles: ProfileDefinitionReads,
+  assertAdmission: () => void,
 ): ProfilesControl {
   const readString = (key: string): string | undefined => {
     const value = settingsOwner.readNamedParameter(key);
@@ -311,6 +316,7 @@ export function assembleAgentProfiles(
           discard: () => replacement.discard(),
         };
       },
+      assertAdmission,
     ),
     captureEphemerals: () => ({ ...settingsOwner.captureUserParameters() }),
     workingDir: config.getTargetDir(),

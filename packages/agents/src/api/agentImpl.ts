@@ -335,6 +335,7 @@ export class AgentImpl implements Agent {
       this.captureProfile,
       (changed, signal) => this.prepareReplacement(changed, signal),
       deps.mcpOperations.profileDefinitions,
+      () => this.coordinator.assertNoCommit(),
     );
     this.auth = this.buildAuthControl();
     this.mcp = this.buildMcpControl();

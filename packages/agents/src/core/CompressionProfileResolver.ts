@@ -375,6 +375,7 @@ export async function resolveStandardCompressionProvider(
   );
   const invocation = createRuntimeInvocationContext({
     runtimeId: runtime.runtimeId,
+    sessionId: ctx.runtimeState.sessionId,
     runtimeMetadata: runtime.metadata,
 
     providerName: profile.provider,
@@ -506,6 +507,7 @@ export async function resolveLoadBalancedCompressionProvider(
   };
   const invocation = createRuntimeInvocationContext({
     runtimeId: runtime.runtimeId,
+    sessionId: ctx.runtimeState.sessionId,
     runtimeMetadata: runtime.metadata,
 
     providerName: 'load-balancer',

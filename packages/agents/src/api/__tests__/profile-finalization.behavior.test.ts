@@ -7,6 +7,7 @@ import { describe, expect, it } from 'bun:test';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
 import { assembleAgentProfiles } from '../profileApplicationAssembly.js';
+import { AgentExecutionCoordinator } from '../agentExecutionCoordinator.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { createAgentAuthState } from '../control/authState.js';
 import type { AgentProviderState } from '../agentImpl.js';
@@ -33,6 +34,7 @@ describe('Profile finalization', () => {
       );
       const failure = new Error('loop rebuild failed');
       let failRebuild = true;
+      const coordinator = new AgentExecutionCoordinator();
       const profiles = assembleAgentProfiles(
         config,
         settings,
@@ -66,6 +68,7 @@ describe('Profile finalization', () => {
           };
         },
         built.mcpRuntime.profileDefinitions,
+        () => coordinator.assertNoCommit(),
       );
       const profile: Profile = {
         version: 1,
