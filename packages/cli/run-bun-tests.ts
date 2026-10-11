@@ -33,6 +33,12 @@ import {
   parseCaseCounts,
   failureExcerpt,
 } from '../../scripts/lib/bun-test-retry.js';
+import {
+  PARTITION_ENV_VAR,
+  parsePartitionIdentity,
+  selectPartition,
+  type PartitionIdentity,
+} from '../../scripts/lib/bun-test-partition.js';
 import { spawn } from 'node:child_process';
 import { readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join, relative, win32 } from 'node:path';
@@ -130,101 +136,12 @@ export function isTestFile(fileName: string): boolean {
 // Partition selection (issue #3185)
 // ---------------------------------------------------------------------------
 
-/**
- * Environment variable consumed by this runner for partition selection.
- * Exported so the workflow wiring test can assert the YAML env key matches,
- * preventing string drift between the runner and the workflow.
- */
-export const PARTITION_ENV_VAR = 'LLXPRT_CLI_TEST_PARTITION';
-
-/**
- * A one-based partition identity parsed from the canonical `NofM` form
- * (e.g. `2of3`). `null` from {@link parsePartitionIdentity} means "no
- * partition" — run the full discovered inventory.
- */
-export interface PartitionIdentity {
-  /** One-based partition index (1..count). */
-  readonly index: number;
-  /** Number of partitions (positive integer ≥ 1). */
-  readonly count: number;
-}
-
-/**
- * Canonical form: one-or-more digits, literal `of`, one-or-more digits. The
- * first digit must be 1-9 so leading zeros (`01of3`) are rejected as
- * noncanonical.
- */
-const PARTITION_RE = /^([1-9][0-9]*)of([1-9][0-9]*)$/;
-
-/**
- * Parses an optional partition identity from the canonical `NofM` form (e.g.
- * `2of3`). Returns `null` when the input is absent or blank, meaning the full
- * discovered inventory should run.
- *
- * Throws on any noncanonical, zero, negative, unsafe, or out-of-range value so
- * a misconfigured {@link PARTITION_ENV_VAR} never silently runs a partial
- * suite. The variable name appears in every error so the cause is obvious.
- *
- * Blank semantics: undefined, empty, and whitespace-only values are treated as
- * "no partition" (full run). Every nonblank value must match canonical `NofM`
- * exactly — the raw string is validated, not a trimmed copy — so surrounding
- * whitespace (` 1of3 `) is rejected rather than silently starting a partial run.
- */
-export function parsePartitionIdentity(
-  raw: string | undefined,
-): PartitionIdentity | null {
-  if (raw === undefined || raw.trim() === '') return null;
-  const match = PARTITION_RE.exec(raw);
-  if (match === null) {
-    throw new Error(
-      `${PARTITION_ENV_VAR}='${raw}' is not a canonical partition identity (expected NofM, e.g. 2of3)`,
-    );
-  }
-  const indexStr = match[1];
-  const countStr = match[2];
-  const index = Number.parseInt(indexStr, 10);
-  const count = Number.parseInt(countStr, 10);
-  // Number.isSafeInteger rejects values outside [-(2^53 - 1), 2^53 - 1],
-  // including 2^53 which round-trips through String() without precision loss
-  // but is still not safely representable.
-  if (!Number.isSafeInteger(index) || !Number.isSafeInteger(count)) {
-    throw new Error(`${PARTITION_ENV_VAR}='${raw}' contains an unsafe integer`);
-  }
-  if (index > count) {
-    throw new Error(
-      `${PARTITION_ENV_VAR}='${raw}' has index ${index} greater than count ${count}`,
-    );
-  }
-  return { index, count };
-}
-
-/**
- * Selects one partition from a sorted list by round-robin: file position
- * modulo partition count equals partition index minus one. This maps every
- * array position to exactly one partition and preserves relative order.
- *
- * Returns the full list (a copy) when there is no partition (`null`) or when
- * the identity is `1of1`. Throws when a well-formed partitioned identity
- * (count > 1) selects no files, so an empty explicit selection fails fast
- * rather than producing a green no-op run.
- */
-export function selectPartition(
-  files: readonly string[],
-  identity: PartitionIdentity | null,
-): readonly string[] {
-  if (identity === null || identity.count === 1) {
-    return [...files];
-  }
-  const selected = files.filter(
-    (_, i) => i % identity.count === identity.index - 1,
-  );
-  if (selected.length === 0) {
-    throw new Error(
-      `${PARTITION_ENV_VAR}='${identity.index}of${identity.count}' selected 0 of ${files.length} discovered test files`,
-    );
-  }
-  return selected;
-}
+export {
+  PARTITION_ENV_VAR,
+  parsePartitionIdentity,
+  selectPartition,
+  type PartitionIdentity,
+};
 
 function collectTestFiles(
   dir: string,
