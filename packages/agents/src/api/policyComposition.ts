@@ -9,6 +9,7 @@ import { NodeFileSystem } from '@vybestack/llxprt-code-providers/composition.js'
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { createProviderManager } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import { createFileOAuthSettingsProvider } from '@vybestack/llxprt-code-providers/auth.js';
+import { rethrowAfterCleanup } from '../session/session-client-cleanup.js';
 import { AgentBootstrapError } from './agentBootstrap.js';
 import {
   createIsolatedRuntimeContext,
@@ -116,12 +117,20 @@ async function bindCreatedSessionClient(
     mcp.messageBus,
     imageOperation,
   );
-  client.bindMcpRuntime(mcp, registration);
-  client.bindHooks();
-  if (forceConfirmations)
-    injectConfirmationForcingPolicy({
-      addRule: (rule) => client.addSessionPolicyRule(rule),
-    });
+  try {
+    client.bindMcpRuntime(mcp, registration);
+    client.bindHooks();
+    if (forceConfirmations)
+      injectConfirmationForcingPolicy({
+        addRule: (rule) => client.addSessionPolicyRule(rule),
+      });
+  } catch (error) {
+    await rethrowAfterCleanup(
+      error,
+      () => client.dispose(),
+      'Session policy binding cleanup failed',
+    );
+  }
   return client;
 }
 
