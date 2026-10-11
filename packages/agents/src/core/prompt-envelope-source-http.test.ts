@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { OpenAIResponsesProvider } from '@vybestack/llxprt-code-providers';
 import { createRuntimeTokenizerFactory } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
@@ -25,6 +26,22 @@ const responseExitModes: ReadonlyArray<'return' | 'abort'> = [
   'abort',
 ];
 const instructions = 'Read rows.';
+const OVERSIZED_RUN_CHARS = 10 * 1024 * 1024;
+const OVERSIZED_RUN_SAMPLE_CHARS = 16 * 1024;
+
+/**
+ * Tokens of the oversized `z` run. The pinned whole-string encoder traps on a
+ * single run this long (and the in-memory estimate then falls back to
+ * length / 3), so the oracle measures a run it can encode and scales it.
+ */
+function oversizedRunTokens(): number {
+  const sampleTokens = estimateTokens('z'.repeat(OVERSIZED_RUN_SAMPLE_CHARS));
+  // length / 3 would mean the sample hit the fallback instead of the encoder.
+  expect(sampleTokens).toBeGreaterThan(
+    Math.ceil(OVERSIZED_RUN_SAMPLE_CHARS / 3),
+  );
+  return sampleTokens * (OVERSIZED_RUN_CHARS / OVERSIZED_RUN_SAMPLE_CHARS);
+}
 
 function expectedDigest(
   count: number,
@@ -147,7 +164,8 @@ async function runOracle(large: boolean): Promise<number> {
   const fixture = await diskSource(root(), 64, large);
   const http = endpoint(true);
   const setup = runtime(`http://127.0.0.1:${http.server.port}/v1`);
-  const expectedTokens = await independentEstimate(setup, 64, large);
+  const baseTokens = await independentEstimate(setup, 64, false);
+  const expectedTokens = large ? baseTokens + oversizedRunTokens() : baseTokens;
   let enforcedTokens = -1;
   let stream: AsyncIterableIterator<IContent> | undefined;
   try {

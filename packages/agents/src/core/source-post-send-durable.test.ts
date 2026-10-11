@@ -130,9 +130,13 @@ describe('request-local durable source response acknowledgement after real uploa
       expect(receipt.writeFault).toBe('EISDIR');
       expect(receipt.source.error).toMatchObject({
         code: 'EISDIR',
-        path: receipt.faultPath,
         syscall: 'open',
       });
+      // Bun on Linux reports `path: null` for an EISDIR open; a present path
+      // must still be the faulted file.
+      expect(receipt.source.error?.path ?? receipt.faultPath).toBe(
+        receipt.faultPath,
+      );
       expect(receipt.source.error?.stack).toContain('appendEntry');
       expect(receipt.source.usage).toHaveLength(0);
       expect(receipt.source.finishes).toHaveLength(0);
