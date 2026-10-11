@@ -76,8 +76,7 @@ class DumpPlugin implements IProvider {
     return [];
   }
 
-  // eslint-disable-next-line require-yield -- the dump path never sends a request
-  async *generateChatCompletion(): AsyncIterableIterator<IContent> {
+  generateChatCompletion(): AsyncIterableIterator<IContent> {
     throw new Error('DumpPlugin does not generate completions');
   }
 
