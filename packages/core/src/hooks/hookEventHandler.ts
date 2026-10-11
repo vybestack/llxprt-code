@@ -52,6 +52,12 @@ import type {
 } from './hookSnapshotAggregator.js';
 import type { HookModelRowsInput } from './hookModelInputStream.js';
 import { executeHookSnapshotPlan } from './hookSnapshotExecution.js';
+import { disposeHookSnapshots } from './hookSnapshotAggregator.js';
+import {
+  snapshotHookCallInput,
+  snapshotHookCallResult,
+} from './hookSnapshotTelemetry.js';
+import type { HookSnapshotResult } from './hookOutputSnapshot.js';
 
 const moduleDebugLogger = DebugLogger.getLogger(
   'llxprt:core:hooks:eventHandler',
@@ -299,6 +305,14 @@ export class HookEventHandler {
       plan === null
         ? []
         : await executeHookSnapshotPlan(this.runner, plan, input, combined);
+    // Telemetry reads stdout/stderr from scratch that aggregation may dispose
+    // eagerly, so it must be emitted first.
+    try {
+      this.emitSnapshotHookCalls(input, results);
+    } catch (error) {
+      disposeHookSnapshots(results);
+      throw error;
+    }
     const aggregated = this.aggregator.aggregateSnapshotResults(
       results,
       combined,
@@ -307,6 +321,23 @@ export class HookEventHandler {
       `Hook snapshot event ${input.hook_event_name}: ${results.length} hook(s), success=${aggregated.success}`,
     );
     return aggregated;
+  }
+
+  private emitSnapshotHookCalls(
+    input: HookModelRowsInput,
+    results: readonly HookSnapshotResult[],
+  ): void {
+    const hookInput = snapshotHookCallInput(input);
+    for (const result of results) {
+      logHookCall(
+        this.config,
+        new HookCallEvent(
+          input.hook_event_name,
+          hookInput,
+          snapshotHookCallResult(result),
+        ),
+      );
+    }
   }
 
   /**
