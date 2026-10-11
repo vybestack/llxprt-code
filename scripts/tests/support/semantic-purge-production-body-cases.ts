@@ -219,8 +219,6 @@ async function verify(
   );
 }
 
-const PROVIDERS = ['openai-responses', 'anthropic', 'gemini'] as const;
-
 /**
  * Registers the explicit-flag x caching cases for the given sizes and
  * providers. Each 8192-row case costs 30 s to 40 s on a CI runner, so the
@@ -229,14 +227,21 @@ const PROVIDERS = ['openai-responses', 'anthropic', 'gemini'] as const;
  */
 export function registerProductionBodyCases(
   sizes: readonly number[],
-  providers: readonly (typeof PROVIDERS)[number][],
+  providers: ReadonlyArray<'openai-responses' | 'anthropic' | 'gemini'>,
 ): void {
-  const cases: Array<[number, boolean, string, boolean]> = [];
-  for (const size of sizes)
-    for (const explicit of [false, true])
-      for (const provider of providers)
-        for (const caching of [false, true])
-          cases.push([size, explicit, provider, caching]);
+  const cases: Array<[number, boolean, string, boolean]> = sizes.flatMap(
+    (size) =>
+      [false, true].flatMap((explicit) =>
+        providers.flatMap((provider) =>
+          [false, true].map((caching): [number, boolean, string, boolean] => [
+            size,
+            explicit,
+            provider,
+            caching,
+          ]),
+        ),
+      ),
+  );
   describe('production semantic purge provider bytes through real transports', () => {
     it.each(cases)(
       'preserves %i-row explicit %s %s caching %s body and retry bytes',
