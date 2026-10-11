@@ -1,7 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import type {
+  PromptEnvelopeAccountingProjection,
+  PromptEnvelopeEstimationProjection,
+  PromptEnvelopeProjection,
+} from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
@@ -9,6 +13,7 @@ import { finishMediaRequest } from '../utils/request-media-resolution.js';
 import {
   serializeResponsesPromptEnvelope,
   type ResponsesSourceOptions,
+  type ResponsesSourcePrompt,
 } from '../runtime/responses-source-serializer.js';
 import {
   findDanglingCalls,
@@ -244,6 +249,38 @@ export async function buildDiskTextResponsesContext(
   }
 }
 
+const pinnedSourceEstimatorOnly = (): Promise<number> =>
+  Promise.reject(
+    new Error('Disk text projection requires the pinned source estimator'),
+  );
+
+function estimationProjectionOf(
+  prompt: ResponsesSourcePrompt,
+): PromptEnvelopeEstimationProjection {
+  return {
+    finalizedProjection: prompt.toEstimatorProjection(),
+    legacyEstimate: pinnedSourceEstimatorOnly,
+  };
+}
+
+/** Shares the retained, incremental and full-history prompts' ownership with the base prompt. */
+function accountingOf(
+  accounting: NonNullable<ResponsesSourcePrompt['accounting']>,
+): PromptEnvelopeAccountingProjection {
+  return {
+    statefulParentUsed: accounting.statefulParentUsed,
+    ...(accounting.retainedBaselineTokens === undefined
+      ? {}
+      : { retainedBaselineTokens: accounting.retainedBaselineTokens }),
+    ...(accounting.incremental === undefined
+      ? {}
+      : { incremental: estimationProjectionOf(accounting.incremental) }),
+    ...(accounting.fullHistory === undefined
+      ? {}
+      : { fullHistory: estimationProjectionOf(accounting.fullHistory) }),
+  };
+}
+
 export function diskTextProjection(
   prepared: PreparedResponsesRequestContext,
   token: object,
@@ -258,11 +295,10 @@ export function diskTextProjection(
     projectionRevision: prompt.projectionRevision,
     unsupportedMedia: [],
     transportToken: token,
-    finalizedProjection: prompt.toEstimatorProjection(),
-    legacyEstimate: () =>
-      Promise.reject(
-        new Error('Disk text projection requires the pinned source estimator'),
-      ),
+    ...estimationProjectionOf(prompt),
+    ...(prompt.accounting === undefined
+      ? {}
+      : { accounting: accountingOf(prompt.accounting) }),
     releaseIfUnsent,
   };
 }
