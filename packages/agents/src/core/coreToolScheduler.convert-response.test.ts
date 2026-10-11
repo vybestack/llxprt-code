@@ -1,3 +1,4 @@
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -6,7 +7,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { convertToFunctionResponse } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   ContentBlock,
   MediaBlock,
@@ -237,20 +238,22 @@ describe('convertToFunctionResponse', () => {
 
   it('should trim string outputs using tool-output limits when config is provided', () => {
     const llmContent = Array(5000).fill('long-line').join('\n');
-    const config = {
-      getEphemeralSettings: () => ({
+    const config = new Config({
+      sessionId: 'output-limit-fixture',
+      model: 'gemini-2.5-pro',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
+      initialSettings: {
         'tool-output-max-tokens': 50,
         'tool-output-truncate-mode': 'truncate',
-      }),
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
+      },
+    });
+    const root = createSessionSettingsFixture(config);
 
-    const result = convertToFunctionResponse(
-      toolName,
-      callId,
-      llmContent,
-      config,
-    );
+    const result = convertToFunctionResponse(toolName, callId, llmContent, {
+      readExecutionPolicy: () => root.settingsOwner.readToolExecutionPolicy(),
+    });
     const primary = result[0] as ToolResponseBlock | undefined;
     const output = (primary?.result as Record<string, unknown> | undefined)?.[
       'output'

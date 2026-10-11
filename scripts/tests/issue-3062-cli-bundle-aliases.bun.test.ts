@@ -29,6 +29,7 @@
  * production behavioral regression that must run on every PR.
  */
 
+import { createBundleBuildFixture } from './bundle-build-fixture.js';
 import { afterAll, describe, expect, it } from 'bun:test';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
@@ -46,10 +47,12 @@ import { collectAliasAssets } from '../bun-build.config.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = resolve(__filename, '..', '..', '..');
+const buildFixture = createBundleBuildFixture(repoRoot);
+const buildRoot = buildFixture.root;
 // process.execPath is the Bun running this test; the node_modules/bun layout is
 // platform-specific and absent on some dev machines.
 const bunExecutable = process.execPath;
-const bundleDir = join(repoRoot, 'packages', 'cli', 'bundle');
+const bundleDir = join(buildRoot, 'packages', 'cli', 'bundle');
 const bundlePath = join(bundleDir, 'llxprt.js');
 const bundleAliasDir = join(bundleDir, 'providers', 'aliases');
 const sourceAliasDir = join(
@@ -163,7 +166,7 @@ describe('issue #3062: CLI bundle ships built-in provider aliases and activates 
   // The bundle is a gitignored publish artifact; clean it so a stale copy
   // cannot mask a regression in either the build or the alias emission.
   afterAll(() => {
-    rmSync(bundleDir, { recursive: true, force: true });
+    buildFixture.dispose();
   });
 
   it('the CLI bundle build emits the built-in alias assets the bundled loader reads', () => {
@@ -174,9 +177,9 @@ describe('issue #3062: CLI bundle ships built-in provider aliases and activates 
     // because Bun's in-test bundler cannot resolve the CLI's dynamic imports
     // on every host, whereas the script-mode bundler always can; this is the
     // real publish boundary either way.
-    const buildScript = join(repoRoot, 'scripts', 'bun-build.config.ts');
+    const buildScript = join(buildRoot, 'scripts', 'bun-build.config.ts');
     const build = spawnSync(bunExecutable, [buildScript, '--cli-only'], {
-      cwd: repoRoot,
+      cwd: buildRoot,
       encoding: 'utf8',
       timeout: 120_000,
       env: { ...process.env, CI: 'true' },

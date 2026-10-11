@@ -3,22 +3,19 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createSchedulerPolicyFixture } from './__tests__/scheduler-policy-fixture.js';
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from 'bun:test';
 import type { ToolCall, WaitingToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import {
-  createMockMessageBus,
-  createMockPolicyEngine,
-  waitForStatus,
-} from './__tests__/coreToolScheduler-test-helpers.js';
+import { waitForStatus } from './__tests__/coreToolScheduler-test-helpers.js';
 
 describe('CoreToolScheduler cancellation prevents continuation', () => {
   it('should not process tool completions after cancelAll is called', async () => {
@@ -45,29 +42,37 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
 
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
-    const mockPolicyEngine = createMockPolicyEngine();
+    const policyDecision = PolicyDecision.ALLOW;
 
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      getApprovalMode: () => ApprovalMode.YOLO,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getEnableHooks: () => false,
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
+    const {
+      config: mockConfig,
+      settingsOwner,
+      messageBus: runtimeMessageBus,
+    } = createSchedulerPolicyFixture(
+      {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        getApprovalMode: () => ApprovalMode.YOLO,
+
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+        getEnableHooks: () => false,
+        getModel: () => 'gemini-2.5-pro',
+      },
+      policyDecision,
+    );
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
       config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+      messageBus: runtimeMessageBus,
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -156,29 +161,37 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
 
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
-    const mockPolicyEngine = createMockPolicyEngine();
+    const policyDecision = PolicyDecision.ALLOW;
 
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      getApprovalMode: () => ApprovalMode.YOLO,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getEnableHooks: () => false,
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
+    const {
+      config: mockConfig,
+      settingsOwner,
+      messageBus: runtimeMessageBus,
+    } = createSchedulerPolicyFixture(
+      {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        getApprovalMode: () => ApprovalMode.YOLO,
+
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+        getEnableHooks: () => false,
+        getModel: () => 'gemini-2.5-pro',
+      },
+      policyDecision,
+    );
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
       config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+      messageBus: runtimeMessageBus,
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -258,33 +271,38 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
-    const mockMessageBus = createMockMessageBus();
-    const mockPolicyEngine = createMockPolicyEngine();
-    mockPolicyEngine.evaluate = vi
-      .fn()
-      .mockReturnValue(PolicyDecision.ASK_USER);
+    let policyDecision = PolicyDecision.ALLOW;
+    policyDecision = PolicyDecision.ASK_USER;
 
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      isInteractive: () => true,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: () => mockMessageBus,
-      getPolicyEngine: () => mockPolicyEngine,
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
+    const {
+      config: mockConfig,
+      settingsOwner,
+      messageBus: runtimeMessageBus,
+    } = createSchedulerPolicyFixture(
+      {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        isInteractive: () => true,
+        getApprovalMode: () => ApprovalMode.DEFAULT,
+
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+        getModel: () => 'gemini-2.5-pro',
+      },
+      policyDecision,
+    );
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
       config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+      messageBus: runtimeMessageBus,
+      toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -317,6 +335,8 @@ describe('CoreToolScheduler cancellation prevents continuation', () => {
     const confirmationDetails = (waitingCall as WaitingToolCall)
       .confirmationDetails;
     expect(confirmationDetails).toBeDefined();
+    if (!('onConfirm' in confirmationDetails))
+      throw new Error('Expected live confirmation');
 
     // Simulate calling handleConfirmationResponse twice with the same call ID
     // The first call should proceed with execution

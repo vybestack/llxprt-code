@@ -1,3 +1,4 @@
+import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 /**
  * Copyright 2025 Vybestack LLC
  *
@@ -14,13 +15,12 @@
  * limitations under the License.
  */
 
+import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { type IModel } from './IModel.js';
 import { type ITool } from './ITool.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { StructuredError } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
@@ -45,12 +45,14 @@ export type ProviderToolset = ToolDeclaration[];
  * @pseudocode base-provider-call-contract.md lines 1-3
  * @pseudocode provider-runtime-handling.md lines 10-16
  */
-export interface GenerateChatOptions {
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
+
+export interface GenerateChatOptions extends ProviderRetryOperations {
+  modelParameters?: AdmittedModelParameters;
+  runtimeKind?: RuntimeKind;
+  requestDiagnostics?: ProviderRequestDiagnostics;
   contents: IContent[];
   tools?: ProviderToolset;
-  settings?: SettingsService;
-  config?: Config;
-  runtime?: ProviderRuntimeContext;
   invocation?: RuntimeInvocationContext;
   onProviderError?: (error: StructuredError) => void;
   /**

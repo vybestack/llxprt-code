@@ -88,9 +88,7 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
         },
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       const messages: IContent[] = [
         {
@@ -184,9 +182,7 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
         },
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       const messages: IContent[] = [
         {
@@ -228,9 +224,7 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
         },
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       const messages: IContent[] = [
         {
@@ -279,9 +273,7 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
         },
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       const messages: IContent[] = [
         {
@@ -349,9 +341,7 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
         },
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       const messages: IContent[] = [
         {
@@ -409,9 +399,7 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
         },
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       const messages: IContent[] = [
         {
@@ -460,9 +448,7 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
         },
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       const messages: IContent[] = [
         {
@@ -527,9 +513,7 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
         },
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       const messages: IContent[] = [
         {
@@ -568,9 +552,7 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
         usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
       });
 
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       const messages: IContent[] = [
         {
@@ -607,9 +589,7 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
       });
 
       settingsService.set('model', 'gpt-4');
-      provider = new OpenAIVercelProvider('test-api-key', undefined, {
-        settingsService,
-      });
+      provider = new OpenAIVercelProvider('test-api-key', undefined, {});
 
       const messages: IContent[] = [
         {
@@ -650,7 +630,7 @@ describe('OpenAIVercelProvider - Non-Streaming Generation (P09)', () => {
       provider = new OpenAIVercelProvider(
         'test-api-key',
         'https://custom-api.example.com/v1',
-        { settingsService },
+        undefined,
       );
 
       const messages: IContent[] = [

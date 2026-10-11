@@ -1,18 +1,29 @@
+import { WorkspaceTrustLifecycle } from '../services/workspace-trust-lifecycle.js';
+import { CoreToolHostAdapter } from '../tools-adapters/CoreToolHostAdapter.js';
+import { WorkspaceFilesystemOwner } from '../services/workspace-filesystem-owner.js';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { SessionHookOwner } from '../hooks/session-hook-owner.js';
+import {
+  fixtureHookRuntime,
+  fixtureHookDefinitions,
+} from '../hooks/__tests__/hook-runtime-fixture.js';
+import { MessageBus } from '../confirmation-bus/message-bus.js';
+import { initializeTestMcpRuntime } from '@vybestack/llxprt-code-test-utils/core/config.js';
 
-import path from 'node:path';
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { SessionSettingsOwner } from '../session/session-settings-owner.js';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { ConfigParameters } from './config.js';
 import { Config, ApprovalMode } from './config.js';
 import type { HookDefinition } from '../hooks/types.js';
 import { HookType, HookEventName } from '../hooks/types.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
-import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
+import { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import {
   buildFsMockBody,
   buildToolsMockBody,
@@ -37,56 +48,7 @@ const hoistedConfigMocks = {
   setGlobalProxy: vi.fn(),
 } as HoistedConfigMocks;
 // Exposed for assertions / setup in the JIT context & model-change tests below.
-const mockLoadJitSubdirectoryMemory =
-  hoistedConfigMocks.loadJitSubdirectoryMemory;
 const mockCoreEvents = hoistedConfigMocks.coreEvents;
-
-const mcpInstances: Array<{
-  getMcpServers: ReturnType<typeof vi.fn>;
-  getDiscoveryFailures: ReturnType<typeof vi.fn>;
-  getDiscoveryState: ReturnType<typeof vi.fn>;
-  whenDiscoverySettled: ReturnType<typeof vi.fn>;
-  restart: ReturnType<typeof vi.fn>;
-  restartServer: ReturnType<typeof vi.fn>;
-  reconcileConfiguredMcpServers: ReturnType<typeof vi.fn>;
-  getMcpInstructions: ReturnType<typeof vi.fn>;
-  startConfiguredMcpServers: ReturnType<typeof vi.fn>;
-  onFolderTrustGained: ReturnType<typeof vi.fn>;
-  onFolderTrustRevoked: ReturnType<typeof vi.fn>;
-  quarantineForTrustRevocation: ReturnType<typeof vi.fn>;
-  stop: ReturnType<typeof vi.fn>;
-}> = [];
-
-const __actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
-void vi.mock('@vybestack/llxprt-code-mcp', () => {
-  const actual = __actual as Record<string, unknown>;
-  return {
-    ...actual,
-    McpClientManager: vi.fn().mockImplementation(() => {
-      const mock = {
-        getMcpServers: vi.fn().mockReturnValue({}),
-        getDiscoveryFailures: vi
-          .fn()
-          .mockReturnValue(new Map<string, string>()),
-        getDiscoveryState: vi
-          .fn()
-          .mockReturnValue(MCPDiscoveryState.NOT_STARTED),
-        whenDiscoverySettled: vi.fn().mockResolvedValue(undefined),
-        restart: vi.fn().mockResolvedValue(undefined),
-        restartServer: vi.fn().mockResolvedValue(undefined),
-        reconcileConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
-        getMcpInstructions: vi.fn().mockReturnValue(''),
-        startConfiguredMcpServers: vi.fn().mockResolvedValue(undefined),
-        onFolderTrustGained: vi.fn().mockResolvedValue(undefined),
-        onFolderTrustRevoked: vi.fn().mockResolvedValue(undefined),
-        quarantineForTrustRevocation: vi.fn(),
-        stop: vi.fn().mockResolvedValue(undefined),
-      };
-      mcpInstances.push(mock);
-      return mock;
-    }),
-  };
-});
 
 const __actual2 = { ...(await import('fs')) };
 void vi.mock('fs', () => buildFsMockBody(__actual2));
@@ -126,7 +88,13 @@ void vi.mock('../utils/events.js', () =>
 
 void vi.mock('../utils/fetch.js', () => buildFetchMockBody(hoistedConfigMocks));
 
+const ownedPolicies: Array<{ dispose(): void }> = [];
+const approvalRoots: Array<() => Promise<void>> = [];
+
 describe('setApprovalMode with folder trust', () => {
+  afterEach(async () => {
+    for (const close of approvalRoots.splice(0)) await close();
+  });
   const baseParams: ConfigParameters = {
     sessionId: 'test',
     targetDir: '.',
@@ -137,40 +105,40 @@ describe('setApprovalMode with folder trust', () => {
 
   it('should throw an error when setting YOLO mode in an untrusted folder', () => {
     const config = new Config(baseParams);
-    vi.spyOn(config, 'isTrustedFolder').mockReturnValue(false);
-    expect(() => config.setApprovalMode(ApprovalMode.YOLO)).toThrow(
+    const host = approvalHost(config, false);
+    expect(() => host.setApprovalMode(ApprovalMode.YOLO)).toThrow(
       'Cannot enable privileged approval modes in an untrusted folder.',
     );
   });
 
   it('should throw an error when setting AUTO_EDIT mode in an untrusted folder', () => {
     const config = new Config(baseParams);
-    vi.spyOn(config, 'isTrustedFolder').mockReturnValue(false);
-    expect(() => config.setApprovalMode(ApprovalMode.AUTO_EDIT)).toThrow(
+    const host = approvalHost(config, false);
+    expect(() => host.setApprovalMode(ApprovalMode.AUTO_EDIT)).toThrow(
       'Cannot enable privileged approval modes in an untrusted folder.',
     );
   });
 
   it('should NOT throw an error when setting DEFAULT mode in an untrusted folder', () => {
     const config = new Config(baseParams);
-    vi.spyOn(config, 'isTrustedFolder').mockReturnValue(false);
-    expect(() => config.setApprovalMode(ApprovalMode.DEFAULT)).not.toThrow();
+    const host = approvalHost(config, false);
+    expect(() => host.setApprovalMode(ApprovalMode.DEFAULT)).not.toThrow();
   });
 
   it('should NOT throw an error when setting any mode in a trusted folder', () => {
     const config = new Config(baseParams);
-    vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true);
-    expect(() => config.setApprovalMode(ApprovalMode.YOLO)).not.toThrow();
-    expect(() => config.setApprovalMode(ApprovalMode.AUTO_EDIT)).not.toThrow();
-    expect(() => config.setApprovalMode(ApprovalMode.DEFAULT)).not.toThrow();
+    const host = approvalHost(config, true);
+    expect(() => host.setApprovalMode(ApprovalMode.YOLO)).not.toThrow();
+    expect(() => host.setApprovalMode(ApprovalMode.AUTO_EDIT)).not.toThrow();
+    expect(() => host.setApprovalMode(ApprovalMode.DEFAULT)).not.toThrow();
   });
 
   it('should NOT throw an error when setting any mode if trustedFolder is undefined', () => {
     const config = new Config(baseParams);
-    vi.spyOn(config, 'isTrustedFolder').mockReturnValue(true); // isTrustedFolder defaults to true
-    expect(() => config.setApprovalMode(ApprovalMode.YOLO)).not.toThrow();
-    expect(() => config.setApprovalMode(ApprovalMode.AUTO_EDIT)).not.toThrow();
-    expect(() => config.setApprovalMode(ApprovalMode.DEFAULT)).not.toThrow();
+    const host = approvalHost(config, undefined);
+    expect(() => host.setApprovalMode(ApprovalMode.YOLO)).not.toThrow();
+    expect(() => host.setApprovalMode(ApprovalMode.AUTO_EDIT)).not.toThrow();
+    expect(() => host.setApprovalMode(ApprovalMode.DEFAULT)).not.toThrow();
   });
 });
 
@@ -333,145 +301,81 @@ describe('Config JIT context', () => {
       expect(config.isJitContextEnabled()).toBe(constructorValue);
     },
   );
-
-  describe('getJitMemoryForPath', () => {
-    beforeEach(() => {
-      mockLoadJitSubdirectoryMemory.mockReset();
-    });
-
-    it('should return JIT memory content when enabled', async () => {
-      mockLoadJitSubdirectoryMemory.mockResolvedValue({
-        files: [
-          { path: '/path/to/target/sub/LLXPRT.md', content: 'sub memory' },
-        ],
-      });
-
-      const config = new Config({
-        ...baseParams,
-        jitContextEnabled: true,
-      });
-
-      const result = await config.getJitMemoryForPath(
-        '/path/to/target/sub/file.ts',
-      );
-
-      expect(result).toContain('sub memory');
-      expect(mockLoadJitSubdirectoryMemory).toHaveBeenCalledWith(
-        '/path/to/target/sub/file.ts',
-        [path.resolve(baseParams.targetDir)],
-        expect.any(Set),
-        baseParams.debugMode,
-        true,
-      );
-    });
-
-    it('should return empty string when JIT context is disabled', async () => {
-      const config = new Config({
-        ...baseParams,
-        jitContextEnabled: false,
-      });
-
-      const result = await config.getJitMemoryForPath(
-        '/path/to/target/sub/file.ts',
-      );
-
-      expect(result).toBe('');
-      expect(mockLoadJitSubdirectoryMemory).not.toHaveBeenCalled();
-    });
-
-    it('should return empty string when no JIT files are found', async () => {
-      mockLoadJitSubdirectoryMemory.mockResolvedValue({ files: [] });
-
-      const config = new Config({
-        ...baseParams,
-        jitContextEnabled: true,
-      });
-
-      const result = await config.getJitMemoryForPath(
-        '/path/to/target/sub/file.ts',
-      );
-
-      expect(result).toBe('');
-    });
-
-    it('should exclude already-loaded paths', async () => {
-      mockLoadJitSubdirectoryMemory.mockResolvedValue({ files: [] });
-
-      const config = new Config({
-        ...baseParams,
-        jitContextEnabled: true,
-        llxprtMdFilePaths: ['/path/to/target/LLXPRT.md'],
-      });
-
-      await config.getJitMemoryForPath('/path/to/target/sub/file.ts');
-
-      const calledAlreadyLoaded = mockLoadJitSubdirectoryMemory.mock
-        .calls[0]?.[2] as Set<string>;
-      expect(calledAlreadyLoaded.has('/path/to/target/LLXPRT.md')).toBe(true);
-    });
-  });
 });
 
-describe('Config setModel', () => {
+describe('Session model selection with immutable Config declarations', () => {
   const baseParams: ConfigParameters = {
-    cwd: '/tmp',
-    targetDir: '/path/to/target',
+    cwd: process.cwd(),
+    targetDir: process.cwd(),
     debugMode: false,
     sessionId: 'test-session-id',
+    provider: 'gemini',
     model: 'gemini-pro',
     usageStatisticsEnabled: false,
   };
-
-  it('should allow setting a pro (any) model and disable fallback mode', () => {
-    const config = new Config(baseParams);
-    config.setFallbackMode(true);
-    expect(config.isInFallbackMode()).toBe(true);
-
-    const proModel = 'gemini-2.5-pro';
-    config.setModel(proModel);
-
-    expect(config.getModel()).toBe(proModel);
-    expect(config.isInFallbackMode()).toBe(false);
-    expect(mockCoreEvents.emitModelChanged).toHaveBeenCalledWith(proModel);
+  const owners: SessionSettingsOwner[] = [];
+  afterEach(async () => {
+    for (const owner of owners.splice(0)) await owner.dispose();
   });
-
-  it('should allow setting auto model from non-auto model and disable fallback mode', () => {
-    const config = new Config(baseParams);
-    config.setFallbackMode(true);
-    expect(config.isInFallbackMode()).toBe(true);
-
-    config.setModel('auto');
-
-    expect(config.getModel()).toBe('auto');
-    expect(config.isInFallbackMode()).toBe(false);
-    expect(mockCoreEvents.emitModelChanged).toHaveBeenCalledWith('auto');
-  });
-
-  it('should allow setting auto model from auto model if it is in the fallback mode', () => {
-    const config = new Config({
-      cwd: '/tmp',
-      targetDir: '/path/to/target',
-      debugMode: false,
-      sessionId: 'test-session-id',
-      model: 'auto',
-      usageStatisticsEnabled: false,
+  for (const [initial, selected] of [
+    ['gemini-pro', 'gemini-2.5-pro'],
+    ['gemini-pro', 'auto'],
+    ['auto', 'auto'],
+  ]) {
+    it(`selects ${selected} from ${initial} without rewriting the declaration or fallback marker`, () => {
+      const config = new Config({ ...baseParams, model: initial });
+      const owner = new SessionSettingsOwner(new SettingsService());
+      owners.push(owner);
+      owner.initializeProviderSelection(
+        config.getProvider(),
+        config.getModel(),
+      );
+      config.setFallbackMode(true);
+      expect(config.isInFallbackMode()).toBe(true);
+      mockCoreEvents.emitModelChanged.mockClear();
+      const publication = owner.beginModelPublication();
+      owner.chooseModel(selected);
+      publication.commit();
+      expect(owner.readSelectedModel()).toBe(selected);
+      expect(config.getModel()).toBe(initial);
+      expect(config.isInFallbackMode()).toBe(true);
+      expect(mockCoreEvents.emitModelChanged.mock.calls).toStrictEqual(
+        initial === selected ? [] : [[selected]],
+      );
     });
-    config.setFallbackMode(true);
-    expect(config.isInFallbackMode()).toBe(true);
-
-    config.setModel('auto');
-
-    expect(config.getModel()).toBe('auto');
-    expect(config.isInFallbackMode()).toBe(false);
-    expect(mockCoreEvents.emitModelChanged).toHaveBeenCalledWith('auto');
-  });
+  }
 });
 
 /**
  * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P04
  * @requirement:HOOK-001,HOOK-002,HOOK-010
  */
-describe('Config getHookSystem', () => {
+describe('Declarative hook configuration and explicit session lifetime', () => {
+  const hooks: SessionHookOwner[] = [];
+  const root = (config: Config): SessionHookOwner => {
+    const owner = new SessionHookOwner(
+      fixtureHookDefinitions(config),
+      fixtureHookRuntime(config),
+      config.getEnableHooks(),
+      new MessageBus(),
+    );
+    hooks.push(owner);
+    return owner;
+  };
+  afterEach(async () => {
+    const retired = await Promise.allSettled(
+      hooks.splice(0).map((owner) => owner.dispose()),
+    );
+    const failures = retired.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(
+        failures,
+        'Hook configuration fixture retirement failed',
+      );
+    for (const owner of ownedPolicies.splice(0)) owner.dispose();
+  });
   const baseParams = {
     cwd: '/tmp',
     targetDir: '/path/to/target',
@@ -488,7 +392,7 @@ describe('Config getHookSystem', () => {
       enableHooks: true,
     });
 
-    const hookSystem = config.getHookSystem();
+    const hookSystem = root(config);
     expect(hookSystem).toBeDefined();
     expect(hookSystem).not.toBeNull();
   });
@@ -500,8 +404,8 @@ describe('Config getHookSystem', () => {
       enableHooks: false,
     });
 
-    const hookSystem = config.getHookSystem();
-    expect(hookSystem).toBeUndefined();
+    const hookSystem = root(config);
+    expect(hookSystem.listHooks()).toStrictEqual([]);
   });
 
   it('tools.enableHooks does not enable hooks', () => {
@@ -513,22 +417,30 @@ describe('Config getHookSystem', () => {
       // Note: tools.enableHooks is not a valid config key for enabling hooks
     });
 
-    const hookSystem = config.getHookSystem();
-    expect(hookSystem).toBeUndefined();
+    const hookSystem = root(config);
+    expect(hookSystem.listHooks()).toStrictEqual([]);
     expect(config.getEnableHooks()).toBe(false);
   });
 
-  it('getHookSystem returns same instance on multiple calls', () => {
+  it('one explicit owner supplies repeated session operations', () => {
     // @requirement:HOOK-001 - Lazy creation, same instance returned
     const config = new Config({
       ...baseParams,
       enableHooks: true,
     });
 
-    const hookSystem1 = config.getHookSystem();
-    const hookSystem2 = config.getHookSystem();
+    const hookSystem1 = root(config);
+    const execution1 = hookSystem1.execution({
+      sessionId: () => config.getSessionId(),
+      transcriptPath: () => undefined,
+    });
+    const execution2 = hookSystem1.execution({
+      sessionId: () => config.getSessionId(),
+      transcriptPath: () => undefined,
+    });
 
-    expect(hookSystem1).toBe(hookSystem2);
+    expect(execution1.sessionId()).toBe(execution2.sessionId());
+    expect(hookSystem1.listHooks()).toStrictEqual([]);
   });
 
   it('getEnableHooks reflects enableHooks config value', () => {
@@ -548,7 +460,7 @@ describe('Config getHookSystem', () => {
   it('enableHooks defaults to false when not specified', () => {
     const config = new Config(baseParams);
     expect(config.getEnableHooks()).toBe(false);
-    expect(config.getHookSystem()).toBeUndefined();
+    expect(root(config).listHooks()).toStrictEqual([]);
   });
 
   it('getEnableHooksUI returns true while getEnableHooks returns false and getHookSystem returns undefined', () => {
@@ -559,7 +471,7 @@ describe('Config getHookSystem', () => {
     });
     expect(config.getEnableHooksUI()).toBe(true);
     expect(config.getEnableHooks()).toBe(false);
-    expect(config.getHookSystem()).toBeUndefined();
+    expect(root(config).listHooks()).toStrictEqual([]);
   });
 
   it('getEnableHooksUI defaults to true when not specified', () => {
@@ -574,40 +486,43 @@ describe('Config getHookSystem', () => {
         blockedMcpServers: [{ name: 'blocked', extensionName: '' }],
         settingsMcpServers: { fresh: { command: 'fresh-command' } },
       });
+      const readReloadSettings = reloadMcpServers;
+
       const config = new Config({
         ...baseParams,
         mcpServers: { stale: { command: 'stale-command' } },
-        onReloadMcpServers: reloadMcpServers,
       });
 
-      await config.reloadMcpServers();
+      const reloaded = await reloadSettings(config, readReloadSettings);
 
-      expect(config.getMcpServers()).toStrictEqual({
+      expect(reloaded.mcpServers).toStrictEqual({
         fresh: { command: 'fresh-command' },
       });
-      expect(config.getBlockedMcpServers()).toStrictEqual([
+      expect(reloaded.blockedMcpServers).toStrictEqual([
         { name: 'blocked', extensionName: '' },
       ]);
     });
 
     it('replaces trusted MCP policy rules with rules from the reloaded configuration', async () => {
+      const readReloadSettings = vi.fn().mockResolvedValue({
+        mcpServers: { fresh: { command: 'fresh-command', trust: true } },
+        blockedMcpServers: [],
+        settingsMcpServers: {
+          fresh: { command: 'fresh-command', trust: true },
+        },
+      });
+
       const config = new Config({
         ...baseParams,
         trustedFolder: true,
         mcpServers: { stale: { command: 'stale-command', trust: true } },
-        onReloadMcpServers: vi.fn().mockResolvedValue({
-          mcpServers: { fresh: { command: 'fresh-command', trust: true } },
-          blockedMcpServers: [],
-          settingsMcpServers: {
-            fresh: { command: 'fresh-command', trust: true },
-          },
-        }),
       });
+      const configPolicy = new RuntimePolicyOwner(config);
+      ownedPolicies.push(configPolicy);
 
-      await config.reloadMcpServers();
+      await reloadSettings(config, readReloadSettings, configPolicy);
 
-      const trustedPrefixes = config
-        .getPolicyEngine()
+      const trustedPrefixes = configPolicy.session.inspection
         .getRules()
         .filter((rule) => rule.source === 'Settings (MCP Trusted)')
         .map((rule) => rule.toolNamePrefix);
@@ -615,16 +530,17 @@ describe('Config getHookSystem', () => {
     });
 
     it('preserves existing MCP state when reload resolution fails', async () => {
+      const readReloadSettings = vi
+        .fn()
+        .mockRejectedValue(new Error('settings invalid'));
+
       const config = new Config({
         ...baseParams,
         mcpServers: { stable: { command: 'stable-command' } },
         blockedMcpServers: [{ name: 'stable-blocked', extensionName: '' }],
-        onReloadMcpServers: vi
-          .fn()
-          .mockRejectedValue(new Error('settings invalid')),
       });
 
-      await expect(config.reloadMcpServers()).rejects.toThrow(
+      await expect(reloadSettings(config, readReloadSettings)).rejects.toThrow(
         'settings invalid',
       );
       expect(config.getMcpServers()).toStrictEqual({
@@ -635,13 +551,13 @@ describe('Config getHookSystem', () => {
       ]);
     });
 
-    it('throws when onReloadMcpServers is not wired instead of silently no-oping', async () => {
+    it('throws when MCP settings reload is not wired instead of silently no-oping', async () => {
       const config = new Config({
         ...baseParams,
         mcpServers: { existing: { command: 'existing' } },
       });
 
-      await expect(config.reloadMcpServers()).rejects.toThrow(
+      await expect(reloadSettings(config)).rejects.toThrow(
         'MCP server reload is not available in this composition.',
       );
       expect(config.getMcpServers()).toStrictEqual({
@@ -650,27 +566,29 @@ describe('Config getHookSystem', () => {
     });
 
     it('builds trusted rules from settingsMcpServers, not the merged mcpServers map', async () => {
+      const readReloadSettings = vi.fn().mockResolvedValue({
+        mcpServers: {
+          mergedOnly: { command: 'merged', trust: true },
+          shared: { command: 'shared', trust: true },
+        },
+        blockedMcpServers: [],
+        settingsMcpServers: {
+          settingsOnly: { command: 'settings', trust: true },
+          shared: { command: 'shared', trust: true },
+        },
+      });
+
       const config = new Config({
         ...baseParams,
         trustedFolder: true,
         mcpServers: { stale: { command: 'stale', trust: true } },
-        onReloadMcpServers: vi.fn().mockResolvedValue({
-          mcpServers: {
-            mergedOnly: { command: 'merged', trust: true },
-            shared: { command: 'shared', trust: true },
-          },
-          blockedMcpServers: [],
-          settingsMcpServers: {
-            settingsOnly: { command: 'settings', trust: true },
-            shared: { command: 'shared', trust: true },
-          },
-        }),
       });
+      const configPolicy = new RuntimePolicyOwner(config);
+      ownedPolicies.push(configPolicy);
 
-      await config.reloadMcpServers();
+      await reloadSettings(config, readReloadSettings, configPolicy);
 
-      const trustedPrefixes = config
-        .getPolicyEngine()
+      const trustedPrefixes = configPolicy.session.inspection
         .getRules()
         .filter((rule) => rule.source === 'Settings (MCP Trusted)')
         .map((rule) => rule.toolNamePrefix)
@@ -679,141 +597,150 @@ describe('Config getHookSystem', () => {
     });
 
     it('preserves non-MCP policy rules during reload', async () => {
+      const readReloadSettings = vi.fn().mockResolvedValue({
+        mcpServers: { fresh: { command: 'fresh-command', trust: true } },
+        blockedMcpServers: [],
+        settingsMcpServers: {
+          fresh: { command: 'fresh-command', trust: true },
+        },
+      });
+
       const config = new Config({
         ...baseParams,
         trustedFolder: true,
         mcpServers: { stale: { command: 'stale-command', trust: true } },
-        onReloadMcpServers: vi.fn().mockResolvedValue({
-          mcpServers: { fresh: { command: 'fresh-command', trust: true } },
-          blockedMcpServers: [],
-          settingsMcpServers: {
-            fresh: { command: 'fresh-command', trust: true },
-          },
-        }),
       });
+      const configPolicy = new RuntimePolicyOwner(config);
+      ownedPolicies.push(configPolicy);
 
-      config.getPolicyEngine().addRule({
+      configPolicy.session.confirmation.addRule({
         toolNamePrefix: 'custom__',
         decision: 'allow',
         priority: 1,
         source: 'Test Custom Source',
       });
 
-      await config.reloadMcpServers();
+      await reloadSettings(config, readReloadSettings, configPolicy);
 
-      const sources = config
-        .getPolicyEngine()
+      const sources = configPolicy.session.inspection
         .getRules()
         .map((rule) => rule.source);
       expect(sources).toContain('Test Custom Source');
     });
   });
 
-  describe('reloadSkills', () => {
-    it('should call onReload, update disabledSkills, discover, and apply disabled list', async () => {
-      const mockOnReload = vi.fn().mockResolvedValue({
-        disabledSkills: ['skill2'],
-      });
-      const params: ConfigParameters = {
+  describe('workspace skill settings reload', () => {
+    function skillParams(
+      overrides: Partial<ConfigParameters> = {},
+    ): ConfigParameters {
+      return {
         sessionId: 'test-session',
         targetDir: '/tmp/test',
         debugMode: false,
         model: 'test-model',
         cwd: '/tmp/test',
         skillsSupport: true,
-        onReload: mockOnReload,
+        extensions: [
+          {
+            name: 'skills',
+            version: '1',
+            isActive: true,
+            path: '/skills',
+            contextFiles: [],
+            skills: ['skill1', 'skill2'].map((name) => ({
+              name,
+              description: name,
+              body: name,
+              location: `/skills/${name}/SKILL.md`,
+            })),
+          },
+        ],
+        ...overrides,
       };
+    }
 
-      const config = new Config(params);
-      await initializeTestConfig(config);
-
-      const skillManager = config.getSkillManager();
-
-      vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
-      vi.spyOn(skillManager, 'setDisabledSkills');
-
-      await config.reloadSkills();
-
-      expect(mockOnReload).toHaveBeenCalled();
-      expect(skillManager.discoverSkills).toHaveBeenCalled();
-      expect(skillManager.setDisabledSkills).toHaveBeenCalledWith(['skill2']);
+    it('updates the disabled skill surface from onReload', async () => {
+      const config = new Config(skillParams());
+      const runtime = await initializeTestMcpRuntime(
+        config,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          reloadPolicy: async () => ({ disabledSkills: ['skill2'] }),
+          registerTools: () => {},
+        },
+      );
+      try {
+        await runtime.workspaceSkills.operations.reload();
+        expect(
+          runtime.workspaceSkills.operations.list().map((skill) => skill.name),
+        ).toStrictEqual(['skill1']);
+        expect(config.getDisabledSkills()).toStrictEqual(['skill2']);
+      } finally {
+        await runtime.dispose();
+        await config.dispose();
+      }
     });
 
-    it('should discover and apply defaults when no onReload is provided', async () => {
-      const params: ConfigParameters = {
-        sessionId: 'test-session',
-        targetDir: '/tmp/test',
-        debugMode: false,
-        model: 'test-model',
-        cwd: '/tmp/test',
-        skillsSupport: true,
-      };
-
-      const config = new Config(params);
-      await initializeTestConfig(config);
-
-      const skillManager = config.getSkillManager();
-
-      vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
-      vi.spyOn(skillManager, 'setDisabledSkills');
-
-      await config.reloadSkills();
-
-      expect(skillManager.discoverSkills).toHaveBeenCalled();
-      expect(skillManager.setDisabledSkills).toHaveBeenCalled();
+    it('discovers and applies defaults when no onReload is provided', async () => {
+      const config = new Config(skillParams());
+      const runtime = await initializeTestMcpRuntime(config);
+      try {
+        await runtime.workspaceSkills.operations.reload();
+        expect(
+          runtime.workspaceSkills.operations.list().map((skill) => skill.name),
+        ).toStrictEqual(['skill1', 'skill2']);
+        expect(config.getDisabledSkills()).toStrictEqual([]);
+      } finally {
+        await runtime.dispose();
+        await config.dispose();
+      }
     });
 
-    it('should preserve existing disabledSkills when onReload returns undefined for them', async () => {
-      const mockOnReload = vi.fn().mockResolvedValue({
-        disabledSkills: undefined,
-      });
-      const params: ConfigParameters = {
-        sessionId: 'test-session',
-        targetDir: '/tmp/test',
-        debugMode: false,
-        model: 'test-model',
-        cwd: '/tmp/test',
-        skillsSupport: true,
-        disabledSkills: ['skill1'],
-        onReload: mockOnReload,
-      };
-
-      const config = new Config(params);
-      await initializeTestConfig(config);
-
-      const skillManager = config.getSkillManager();
-      vi.spyOn(skillManager, 'discoverSkills').mockResolvedValue(undefined);
-      vi.spyOn(skillManager, 'setDisabledSkills');
-
-      await config.reloadSkills();
-
-      // disabledSkills undefined is falsy, so original value is preserved
-      expect(skillManager.setDisabledSkills).toHaveBeenCalledWith(['skill1']);
+    it('preserves existing disabledSkills when onReload leaves them undefined', async () => {
+      const config = new Config(
+        skillParams({
+          disabledSkills: ['skill1'],
+        }),
+      );
+      const runtime = await initializeTestMcpRuntime(config);
+      try {
+        await runtime.workspaceSkills.operations.reload();
+        expect(
+          runtime.workspaceSkills.operations.list().map((skill) => skill.name),
+        ).toStrictEqual(['skill2']);
+      } finally {
+        await runtime.dispose();
+        await config.dispose();
+      }
     });
 
-    it('should update admin settings from onReload', async () => {
-      const mockOnReload = vi.fn().mockResolvedValue({
-        adminSkillsEnabled: false,
-      });
-      const params: ConfigParameters = {
-        sessionId: 'test-session',
-        targetDir: '/tmp/test',
-        debugMode: false,
-        model: 'test-model',
-        cwd: '/tmp/test',
-        skillsSupport: true,
-        onReload: mockOnReload,
-      };
-
-      const config = new Config(params);
-      await initializeTestConfig(config);
-
-      const skillManager = config.getSkillManager();
-      vi.spyOn(skillManager, 'setAdminSettings');
-
-      await config.reloadSkills();
-
-      expect(skillManager.setAdminSettings).toHaveBeenCalledWith(false);
+    it('updates admin settings from onReload', async () => {
+      const config = new Config(skillParams());
+      const runtime = await initializeTestMcpRuntime(
+        config,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        {
+          reloadPolicy: async () => ({ adminSkillsEnabled: false }),
+          registerTools: () => {},
+        },
+      );
+      try {
+        await runtime.workspaceSkills.operations.reload();
+        expect(runtime.workspaceSkills.operations.isAdminEnabled()).toBe(false);
+      } finally {
+        await runtime.dispose();
+        await config.dispose();
+      }
     });
   });
 });
@@ -828,121 +755,141 @@ describe('Config MCP runtime capabilities (agents boundary)', () => {
   };
 
   beforeEach(() => {
-    mcpInstances.length = 0;
+    vi.spyOn(
+      McpClientManager.prototype,
+      'startConfiguredMcpServers',
+    ).mockResolvedValue(undefined);
+    vi.spyOn(
+      McpClientManager.prototype,
+      'reconcileConfiguredMcpServers',
+    ).mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('reloadMcpServers reconciliation ownership', () => {
     it('swaps MCP/blocked state then invokes the live manager reconcile exactly once', async () => {
+      const readReloadSettings = vi.fn().mockResolvedValue({
+        mcpServers: { fresh: { command: 'fresh' } },
+        blockedMcpServers: [{ name: 'blocked', extensionName: 'ext' }],
+        settingsMcpServers: { fresh: { command: 'fresh' } },
+      });
+
       const config = new Config({
         ...baseParams,
         trustedFolder: true,
         mcpServers: { stale: { command: 'stale' } },
-        onReloadMcpServers: vi.fn().mockResolvedValue({
-          mcpServers: { fresh: { command: 'fresh' } },
-          blockedMcpServers: [{ name: 'blocked', extensionName: 'ext' }],
-          settingsMcpServers: { fresh: { command: 'fresh' } },
-        }),
       });
-      await initializeTestConfig(config);
-      const manager = mcpInstances[0];
+      const owner = await initializeTestMcpRuntime(
+        config,
+        McpClientManager,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        createReloadBinding(config, readReloadSettings),
+      );
 
-      await config.reloadMcpServers();
+      await owner.reload();
 
-      expect(config.getMcpServers()).toStrictEqual({
+      expect(owner.readServerSettings().mcpServers).toStrictEqual({
         fresh: { command: 'fresh' },
       });
-      expect(config.getBlockedMcpServers()).toStrictEqual([
+      expect(owner.readServerSettings().blockedMcpServers).toStrictEqual([
         { name: 'blocked', extensionName: 'ext' },
       ]);
-      expect(manager.reconcileConfiguredMcpServers).toHaveBeenCalledTimes(1);
+      expect(config.getMcpServers()).not.toStrictEqual(
+        owner.readServerSettings().mcpServers,
+      );
     });
 
     it('skips reconciliation when the manager is not initialized', async () => {
+      const readReloadSettings = vi.fn().mockResolvedValue({
+        mcpServers: { fresh: { command: 'fresh' } },
+        blockedMcpServers: [],
+        settingsMcpServers: { fresh: { command: 'fresh' } },
+      });
+
       const config = new Config({
         ...baseParams,
         mcpServers: { stale: { command: 'stale' } },
-        onReloadMcpServers: vi.fn().mockResolvedValue({
-          mcpServers: { fresh: { command: 'fresh' } },
-          blockedMcpServers: [],
-          settingsMcpServers: { fresh: { command: 'fresh' } },
-        }),
       });
-      await config.reloadMcpServers();
-      expect(config.getMcpServers()).toStrictEqual({
+      const reloaded = await reloadSettings(config, readReloadSettings);
+      expect(reloaded.mcpServers).toStrictEqual({
         fresh: { command: 'fresh' },
       });
-      expect(mcpInstances).toHaveLength(0);
-    });
-  });
-
-  describe('getMcpRuntimeStatus', () => {
-    it('exposes servers, failures, and state without exposing the manager', async () => {
-      const config = new Config({ ...baseParams, trustedFolder: true });
-      await initializeTestConfig(config);
-      const manager = mcpInstances[0];
-      const failures = new Map<string, string>([['srv', 'boom']]);
-      manager.getMcpServers.mockReturnValue({ srv: { command: 'run' } });
-      manager.getDiscoveryFailures.mockReturnValue(failures);
-      manager.getDiscoveryState.mockReturnValue(MCPDiscoveryState.COMPLETED);
-
-      const status = config.getMcpRuntimeStatus();
-      expect(status).toStrictEqual({
-        servers: { srv: { command: 'run' } },
-        discoveryFailures: failures,
-        discoveryState: MCPDiscoveryState.COMPLETED,
-      });
-
-      const uninit = new Config(baseParams);
-      expect(uninit.getMcpRuntimeStatus()).toBeUndefined();
-    });
-  });
-
-  describe('refreshMcpServers', () => {
-    it('delegates restart(name)/restart() to the live manager; no-op when un-initialized', async () => {
-      const config = new Config({ ...baseParams, trustedFolder: true });
-      await initializeTestConfig(config);
-      const manager = mcpInstances[0];
-
-      await config.refreshMcpServers('srv');
-      expect(manager.restartServer).toHaveBeenCalledWith('srv');
-      expect(manager.restart).not.toHaveBeenCalled();
-
-      await config.refreshMcpServers();
-      expect(manager.restart).toHaveBeenCalledTimes(1);
-
-      const uninit = new Config(baseParams);
-      await expect(uninit.refreshMcpServers()).resolves.toBeUndefined();
-      await expect(uninit.refreshMcpServers('srv')).resolves.toBeUndefined();
-      expect(mcpInstances).toHaveLength(1);
-    });
-  });
-
-  describe('awaitMcpDiscoveryGate', () => {
-    it('awaits whenDiscoverySettled and returns failures; empty map when un-initialized', async () => {
-      const config = new Config({ ...baseParams, trustedFolder: true });
-      await initializeTestConfig(config);
-      const manager = mcpInstances[0];
-      const failures = new Map<string, string>([['srv', 'timeout']]);
-      manager.whenDiscoverySettled.mockResolvedValue(undefined);
-      manager.getDiscoveryFailures.mockReturnValue(failures);
-      const result = await config.awaitMcpDiscoveryGate();
-      expect(manager.whenDiscoverySettled).toHaveBeenCalledTimes(1);
-      expect(result).toBe(failures);
-
-      const uninit = new Config(baseParams);
-      expect((await uninit.awaitMcpDiscoveryGate()).size).toBe(0);
-    });
-  });
-
-  describe('getMcpInstructions', () => {
-    it('returns the live manager instructions; undefined when un-initialized', async () => {
-      const config = new Config({ ...baseParams, trustedFolder: true });
-      await initializeTestConfig(config);
-      mcpInstances[0].getMcpInstructions.mockReturnValue('do things');
-      expect(config.getMcpInstructions()).toBe('do things');
-
-      const uninit = new Config(baseParams);
-      expect(uninit.getMcpInstructions()).toBeUndefined();
+      expect(config.getMcpServers()).not.toStrictEqual(reloaded.mcpServers);
     });
   });
 });
+
+function createReloadBinding(
+  config: Config,
+  load: () => Promise<
+    import('../session/session-settings-owner.js').WorkspaceMcpSettings
+  >,
+): import('../session/session-settings-owner.js').SessionMcpSettingsReads {
+  const owner = new SessionSettingsOwner(new SettingsService());
+  owner.bindMcpSettings(
+    {
+      mcpServers: config.getMcpServers() ?? {},
+      blockedMcpServers: config.getBlockedMcpServers() ?? [],
+      settingsMcpServers: config.getMcpServers() ?? {},
+    },
+    load,
+  );
+  const binding = owner.readMcpSettingsBinding();
+  if (binding === undefined) throw new Error('Missing fixture reload binding');
+  approvalRoots.push(async () => owner.dispose());
+  return binding;
+}
+
+async function reloadSettings(
+  config: Config,
+  load?: () => Promise<
+    import('../session/session-settings-owner.js').WorkspaceMcpSettings
+  >,
+  policy?: RuntimePolicyOwner,
+): Promise<
+  import('../session/session-settings-owner.js').WorkspaceMcpSettings
+> {
+  if (load === undefined)
+    throw new Error('MCP server reload is not available in this composition.');
+  const binding = createReloadBinding(config, load);
+  const settings = await binding.reload();
+  policy?.workspace.bindMcpServers(() => settings.settingsMcpServers);
+  policy?.workspace.refreshTrust();
+  return settings;
+}
+
+function approvalHost(
+  config: Config,
+  trusted: boolean | undefined,
+): CoreToolHostAdapter {
+  const trust = new WorkspaceTrustLifecycle({ localTrust: trusted });
+  const filesystem = new WorkspaceFilesystemOwner({
+    targetDir: process.cwd(),
+    isTrusted: () => trust.isTrustedFolder(),
+  });
+  const settings = new SessionSettingsOwner(new SettingsService());
+  settings.bindTelemetry(config);
+  approvalRoots.push(async () => {
+    await settings.dispose();
+    await filesystem.dispose();
+    await trust.dispose();
+  });
+  return new CoreToolHostAdapter(
+    config,
+    filesystem.paths,
+    filesystem.files,
+    filesystem.ignore,
+    filesystem.scans,
+    () => settings.readToolExecutionPolicy(),
+    trust,
+    settings.telemetry,
+  );
+}

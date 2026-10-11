@@ -20,8 +20,8 @@ import type {
   MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
-  limitOutputTokens,
-  type ToolOutputSettingsProvider,
+  limitOutputTokensWithLimits,
+  type OutputLimitConfig,
 } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import {
@@ -40,7 +40,7 @@ import type {
 
 export interface ResponsesInputBuildContext {
   includeReasoningInContext: boolean;
-  outputLimiterConfig: ToolOutputSettingsProvider;
+  outputLimits: OutputLimitConfig;
   debug: (messageFactory: () => string) => void;
   /**
    * Whether a server-side conversation parent is active for this request
@@ -276,10 +276,7 @@ function appendToolInput(
     input.push({
       type: 'function_call_output',
       call_id: outputCallId,
-      output: getLimitedToolOutput(
-        toolResponseBlock,
-        context.outputLimiterConfig,
-      ),
+      output: getLimitedToolOutput(toolResponseBlock, context.outputLimits),
     });
     emittedOutput = true;
   }
@@ -300,7 +297,7 @@ function getLimitedToolOutput(
     IContent['blocks'][number],
     { type: 'tool_response' }
   >,
-  outputLimiterConfig: ToolOutputSettingsProvider,
+  outputLimits: OutputLimitConfig,
 ): string {
   const rawResult =
     typeof toolResponseBlock.result === 'string'
@@ -308,9 +305,9 @@ function getLimitedToolOutput(
       : JSON.stringify(toolResponseBlock.result);
   const toolName =
     (toolResponseBlock.toolName as string | undefined) ?? 'tool_response';
-  const limited = limitOutputTokens(
+  const limited = limitOutputTokensWithLimits(
     rawResult,
-    outputLimiterConfig,
+    outputLimits,
     toolName,
   ) as {
     content?: string;

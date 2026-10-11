@@ -1,3 +1,4 @@
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -176,6 +177,10 @@ describe('MiddleOutStrategy core', () => {
       const ctx = buildContext({
         history,
         resolveProvider: () => ({
+          invocation: captureProviderInvocation(
+            testProviderRuntime,
+            fakeProvider.name,
+          ),
           provider: fakeProvider,
           runtime: testProviderRuntime,
         }),
@@ -232,11 +237,22 @@ describe('MiddleOutStrategy core', () => {
           resolveProvider: (profileName?: string) => {
             if (profileName === 'compression-profile') {
               return {
+                invocation: captureProviderInvocation(
+                  testProviderRuntime,
+                  profileProvider.name,
+                ),
                 provider: profileProvider,
                 runtime: testProviderRuntime,
               };
             }
-            return { provider: defaultProvider, runtime: testProviderRuntime };
+            return {
+              invocation: captureProviderInvocation(
+                testProviderRuntime,
+                defaultProvider.name,
+              ),
+              provider: defaultProvider,
+              runtime: testProviderRuntime,
+            };
           },
         });
         const profileResult = await strategy.compress(ctxWithProfile);
@@ -262,7 +278,14 @@ describe('MiddleOutStrategy core', () => {
         history,
         resolveProvider: (profileName?: string) => {
           resolvedWithProfileName = profileName;
-          return { provider: defaultProvider, runtime: testProviderRuntime };
+          return {
+            invocation: captureProviderInvocation(
+              testProviderRuntime,
+              defaultProvider.name,
+            ),
+            provider: defaultProvider,
+            runtime: testProviderRuntime,
+          };
         },
       });
 

@@ -1,8 +1,29 @@
+import type { ProviderRequestDiagnostics } from '../runtime/providerRequestDiagnostics.js';
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { ProviderRetryOperations } from '../runtime/contracts/ProviderRetryOperations.js';
+import type { RuntimeTokenizerFactory } from '../runtime/contracts/RuntimeTokenizerFactory.js';
+import type { IdeContext } from '@vybestack/llxprt-code-ide-integration';
+
+import type {
+  ProfileDefinitionReads,
+  SubagentDefinitionReads,
+} from '../services/workspace-definition-owner.js';
+import type { ToolGovernance } from '@vybestack/llxprt-code-tools';
+import type {
+  ReadonlySettingsSnapshot,
+  PrepareProviderInvocation,
+} from '../runtime/AgentRuntimeContext.js';
+
+import type { InstructionReadOperations } from '../services/workspace-memory-owner.js';
+import type { ToolSelection } from '@vybestack/llxprt-code-tools';
+import type { ToolDeclaration } from '../llm-types/index.js';
+import type { WorkspacePathOperations } from '../services/workspace-filesystem-owner.js';
+import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
 
 /**
  * @plan PLAN-20260610-ISSUE1592.P01
@@ -22,10 +43,11 @@
  * - CLI consumers (14+ files: sendMessageStream, setTools, updateSystemInstruction, etc.)
  */
 
-import type { ToolDeclaration } from '../llm-types/toolDeclaration.js';
+import type { AdmittedModelParameters } from '../runtime/admittedModelParameters.js';
 import type { ContentGeneratorConfig } from './contentGenerator.js';
 import type { HistoryService } from '../services/history/HistoryService.js';
 import type { IContent } from '../services/history/IContent.js';
+import type { SemanticMediaPurgeFrontier } from '../services/history/semantic-media-purge.js';
 import type { CompletedToolCall } from '../scheduler/types.js';
 import type {
   PerformCompressionResult,
@@ -35,8 +57,12 @@ import type { StreamEvent } from './chatSessionTypes.js';
 import type { Config } from '../config/config.js';
 import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
 import type { ContentGenerator } from './contentGenerator.js';
+import type { TaskToolRegistration } from '../config/toolRegistryFactory.js';
 import type { ModelOutput } from '../llm-types/modelEnvelope.js';
 import type { AgentMessageInput } from '../llm-types/agentMessageInput.js';
+import type { LocalMediaStore } from '../storage/local-media-store.js';
+import type { AgentRuntimeProviderAdapter } from '../runtime/AgentRuntimeContext.js';
+import type { HookExecutionOwner } from '../hooks/hookEventHandler.js';
 
 /**
  * Neutral request-input type for the agent-client send surface.
@@ -55,6 +81,7 @@ export type AgentRequestInput = AgentMessageInput;
  * accepts AgentRequestInput (neutral AgentMessageInput).
  */
 export interface AgentClientMessageParams {
+  readonly hookOwner?: HookExecutionOwner;
   message: AgentRequestInput;
   config?: AgentClientGenerateConfig;
 }
@@ -77,10 +104,27 @@ export interface AgentClientGenerateConfig {
   systemInstruction?: unknown;
 }
 
+export interface AgentChatRecordingExecution {
+  readonly historyOrigin?: object;
+  readonly hookOwner?: HookExecutionOwner;
+  readonly transcriptPath: () => string | undefined;
+  readonly persistSemanticMediaPurge: (
+    history: readonly IContent[],
+    frontier: SemanticMediaPurgeFrontier,
+  ) => Promise<void>;
+}
+
+export interface AgentHistoryAdmission {
+  readonly history: readonly IContent[];
+  readonly release: () => Promise<void>;
+}
+
 export interface AgentChatContract {
+  takeHistoryAdmissions(): readonly AgentHistoryAdmission[];
   sendMessage(
     params: AgentClientMessageParams,
     prompt_id: string,
+    execution?: AgentChatRecordingExecution,
   ): Promise<ModelOutput>;
   sendMessageStream(
     params: AgentClientMessageParams,
@@ -89,13 +133,21 @@ export interface AgentChatContract {
   generateDirectMessage(
     params: AgentClientMessageParams,
     prompt_id: string,
+    execution?: AgentChatRecordingExecution,
   ): Promise<ModelOutput>;
   getHistory(): readonly IContent[];
   setHistory(history: readonly IContent[]): Promise<void>;
   clearHistory(): void;
   getHistoryService(): HistoryService | null;
   wasRecentlyCompressed(): boolean;
-  performCompression(promptId: string): Promise<PerformCompressionResult>;
+  performCompression(
+    promptId: string,
+    options?: {
+      transcriptPathProvider?: () => string | undefined;
+      historyOrigin?: object;
+      hookOwner?: HookExecutionOwner;
+    },
+  ): Promise<PerformCompressionResult>;
   recordCompletedToolCalls(
     model: string,
     completedToolCalls: CompletedToolCall[],
@@ -107,6 +159,43 @@ export interface AgentChatContract {
  * Core-owned; the concrete AgentClient class implements this.
  */
 export interface AgentClientContract {
+  readonly tools: ToolSelection;
+  bindToolSelection(selection: ToolSelection): void;
+  assertConfig(config: Config): void;
+  assertProviderManager(manager: RuntimeProviderManager): void;
+  bindProviderInvocation(prepare: PrepareProviderInvocation): void;
+  bindIdeContext?(
+    read: () => IdeContext | undefined,
+    enabled: () => boolean,
+  ): void;
+  bindWorkspaceDefinitions?(
+    profiles: Pick<ProfileDefinitionReads, 'loadProfile'>,
+    subagents: Pick<SubagentDefinitionReads, 'listSubagents'>,
+  ): void;
+  bindTelemetry(
+    root: RootTelemetry,
+    diagnostics?: ProviderRequestDiagnostics,
+  ): void;
+  bindRuntimeSettings(
+    read: () => ReadonlySettingsSnapshot,
+    readGovernance: () => ToolGovernance,
+  ): void;
+  bindProviderFiles?(
+    lifecycle: object,
+    composeRetryOperations: (provider: string) => ProviderRetryOperations,
+  ): void;
+  bindTokenization?(
+    getTokenizer: RuntimeTokenizerFactory['getTokenizer'],
+    promptEstimator: Pick<
+      RuntimeTokenizerFactory,
+      'estimatePrompt' | 'claimsModel' | 'getEstimatorFamily'
+    >,
+  ): void;
+  bindProviderSelection?(
+    selection: AgentRuntimeProviderAdapter,
+    manager: RuntimeProviderManager,
+  ): void;
+  readonly mediaStore?: LocalMediaStore;
   initialize(config: ContentGeneratorConfig): Promise<void>;
   isInitialized(): boolean;
   hasChatInitialized(): boolean;
@@ -114,25 +203,36 @@ export interface AgentClientContract {
   getHistory(): Promise<readonly IContent[]>;
   getHistoryService(): HistoryService | null;
   storeHistoryServiceForReuse(service: HistoryService): void;
+  prepareHistoryRebind(
+    service: HistoryService,
+    previousChat?: AgentChatContract,
+  ): () => void;
   storeHistoryForLaterUse(history: readonly IContent[]): Promise<void>;
   dispose(): Promise<void>;
-  setTools(): Promise<void>;
+  setTools(publicationDeclarations?: readonly ToolDeclaration[]): Promise<void>;
   clearTools(): void;
-  updateSystemInstruction(): Promise<void>;
+  updateSystemInstruction(
+    instructions?: InstructionReadOperations,
+  ): Promise<void>;
   addHistory(content: IContent): Promise<void>;
   resetChat(): Promise<void>;
   resumeChat(history: readonly IContent[]): Promise<void>;
   setHistory(
     history: readonly IContent[],
-    options?: { stripThoughts?: boolean },
+    options?: { stripThoughts?: boolean; historyOrigin?: object },
   ): Promise<void>;
-  restoreHistory(historyItems: readonly IContent[]): Promise<void>;
+  restoreHistory(
+    historyItems: readonly IContent[],
+    historyOrigin?: object,
+  ): Promise<void>;
   addDirectoryContext(): Promise<void>;
   getContentGenerator(): ContentGenerator;
+  getContentGeneratorConfig(): ContentGeneratorConfig | undefined;
   startChat(extraHistory?: readonly IContent[]): Promise<AgentChatContract>;
   generateDirectMessage(
     params: AgentClientMessageParams,
     promptId: string,
+    execution?: AgentChatRecordingExecution,
   ): Promise<ModelOutput>;
   generateJson(
     contents: IContent[],
@@ -155,6 +255,8 @@ export interface AgentClientContract {
     turns?: number,
     isInvalidStreamRetry?: boolean,
     isPayloadRecoveryRetry?: boolean,
+    recordingExecution?: AgentChatRecordingExecution,
+    modelParameters?: AdmittedModelParameters,
   ): AsyncGenerator<ServerAgentStreamEvent, unknown>;
   getCurrentSequenceModel(): string | null;
 }
@@ -168,4 +270,18 @@ export interface AgentClientContract {
 export type AgentClientFactory = (
   config: Config,
   runtimeState: AgentRuntimeState,
+  readMcpInstructions?: () => string | undefined,
+  mediaStore?: LocalMediaStore,
+  workspacePaths?: WorkspacePathOperations,
+  instructions?: InstructionReadOperations,
 ) => AgentClientContract;
+
+/**
+ * Aggregation of the agent-runtime factory primitives the composition
+ * root wires into Config. Single source of truth — both agents and providers
+ * import this from core (no duplicated structural re-declaration).
+ */
+export interface AgentRuntimeFactoryBindings {
+  agentClientFactory: AgentClientFactory;
+  taskToolRegistration: () => TaskToolRegistration;
+}

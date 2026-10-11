@@ -1,8 +1,17 @@
+import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import { fixtureToolSelection } from './subagentOrchestrator-test-helpers.js';
+
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
 
 /**
  * Runtime assembly tests extracted from the original monolithic
@@ -96,10 +105,22 @@ describe('SubagentOrchestrator - Runtime Assembly (load balancer profiles)', () 
       .fn<typeof SubAgentScope.create>()
       .mockResolvedValue(scope);
 
+    const foregroundConfig1 = config;
+    const foregroundSettings1 = createSessionSettingsFixture(foregroundConfig1);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: foregroundSettings1.workspaceTrust,
+      createChildSettings: () =>
+        foregroundSettings1.settingsOwner.createChildStore(),
+      readRunPolicy: () =>
+        foregroundSettings1.settingsOwner.readSubagentRunPolicy(),
+
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager: { loadSubagent } as unknown as SubagentManager,
       profileManager: { loadProfile } as unknown as ProfileManager,
-      foregroundConfig: config,
+      foregroundConfig: foregroundConfig1,
       scopeFactory,
       runtimeLoader,
       messageBus: new MessageBus(),
@@ -138,8 +159,8 @@ describe('SubagentOrchestrator - Runtime Assembly (load balancer profiles)', () 
       'load-balancer',
     );
     expect(loaderArgs.profile.contentGeneratorConfig.apiKey).toBeUndefined();
-    expect(loaderArgs.profile.contentGeneratorConfig.providerManager).toBe(
-      loaderArgs.profile.providerManager,
+    expect(loaderArgs.profile.contentGeneratorConfig).not.toHaveProperty(
+      'providerManager',
     );
     expect(loaderArgs.profile.providerManager).toBeDefined();
     expect(settingsService.getCurrentProfileName()).toBe(
@@ -175,10 +196,22 @@ describe('SubagentOrchestrator - Runtime Assembly (load balancer profiles)', () 
     const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
     const scopeFactory = vi.fn<typeof SubAgentScope.create>();
 
+    const foregroundConfig2 = makeForegroundConfig();
+    const foregroundSettings2 = createSessionSettingsFixture(foregroundConfig2);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: foregroundSettings2.workspaceTrust,
+      createChildSettings: () =>
+        foregroundSettings2.settingsOwner.createChildStore(),
+      readRunPolicy: () =>
+        foregroundSettings2.settingsOwner.readSubagentRunPolicy(),
+
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager: { loadSubagent } as unknown as SubagentManager,
       profileManager: { loadProfile } as unknown as ProfileManager,
-      foregroundConfig: makeForegroundConfig(),
+      foregroundConfig: foregroundConfig2,
       scopeFactory,
       runtimeLoader,
       messageBus: new MessageBus(),
@@ -233,10 +266,22 @@ describe('SubagentOrchestrator - Runtime Assembly (load balancer profiles)', () 
     const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
     const scopeFactory = vi.fn<typeof SubAgentScope.create>();
 
+    const foregroundConfig3 = makeForegroundConfig();
+    const foregroundSettings3 = createSessionSettingsFixture(foregroundConfig3);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: foregroundSettings3.workspaceTrust,
+      createChildSettings: () =>
+        foregroundSettings3.settingsOwner.createChildStore(),
+      readRunPolicy: () =>
+        foregroundSettings3.settingsOwner.readSubagentRunPolicy(),
+
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager: { loadSubagent } as unknown as SubagentManager,
       profileManager: { loadProfile } as unknown as ProfileManager,
-      foregroundConfig: makeForegroundConfig(),
+      foregroundConfig: foregroundConfig3,
       scopeFactory,
       runtimeLoader,
       messageBus: new MessageBus(),

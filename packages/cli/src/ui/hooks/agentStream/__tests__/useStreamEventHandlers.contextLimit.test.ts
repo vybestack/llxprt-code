@@ -26,6 +26,7 @@ describe('contextLimit helper (cli wrapper)', () => {
 
     return getTokenLimitForConfiguredContext(
       createStreamRuntimeForTest(configWithContextLimit),
+      undefined,
     );
   };
 
@@ -46,8 +47,16 @@ describe('contextLimit helper (cli wrapper)', () => {
 
     const limit = getTokenLimitForConfiguredContext(
       createStreamRuntimeForTest(configWithoutLimit),
+      undefined,
     );
 
     expect(limit).toBe(128_000);
+  });
+  it('uses the explicit active provider limit rather than a generator-config manager alias', () => {
+    const runtime = createStreamRuntimeForTest({
+      getModel: () => 'gpt-4o',
+      getEphemeralSetting: () => undefined,
+    });
+    expect(getTokenLimitForConfiguredContext(runtime, 350_000)).toBe(350_000);
   });
 });

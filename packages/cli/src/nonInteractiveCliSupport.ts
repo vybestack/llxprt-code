@@ -27,12 +27,10 @@ import { REFUSAL_NOTICE_MESSAGE } from './utils/refusalNotice.js';
 import { AttemptSeparator } from './nonInteractiveAttemptSeparator.js';
 
 /** The slice of Config the printer reads, so callers need no full Config. */
-export type StreamConsumerConfig = Pick<
-  Config,
-  'getSessionId' | 'getEphemeralSetting'
->;
+export type StreamConsumerConfig = Pick<Config, 'getSessionId'>;
 
 type StreamConsumerContext = {
+  readonly includeThinking: boolean;
   config: StreamConsumerConfig;
   jsonOutput: boolean;
   streamJsonOutput: boolean;
@@ -674,7 +672,7 @@ export async function processAgentStream(
     !context.quiet &&
     !context.jsonOutput &&
     !context.streamJsonOutput &&
-    context.config.getEphemeralSetting('reasoning.includeInResponse') !== false;
+    context.includeThinking;
   const state: StreamState = {
     thoughtBuffer: [],
     responseText: '',

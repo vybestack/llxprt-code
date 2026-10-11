@@ -1,7 +1,21 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { assembleModelSelection } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import {
+  assembleProfileApplication,
+  assembleProviderSwitch,
+} from '@vybestack/llxprt-code-agents';
+import {
+  providerSwitchInputs,
+  baseUrlInputs,
+  overrideInputs,
+  modelParamInputs,
+} from '../../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
 /**
  * @plan PLAN-20251018-STATELESSPROVIDER2.P14
  * @requirement REQ-SP2-003
  */
+import { installDefinitionRuntimeFixture } from '../../__tests__/definition-runtime-fixture.js';
+const definitionFixture = installDefinitionRuntimeFixture();
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
@@ -9,34 +23,32 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 import { SettingsService, type Profile } from '@vybestack/llxprt-code-settings';
-import { Config } from '@vybestack/llxprt-code-core';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import {
   activateIsolatedRuntimeContext,
-  applyProfileSnapshot,
   buildRuntimeProfileSnapshot,
   createIsolatedRuntimeContext,
-  configureCliStatelessHardening,
   setActiveModel,
   setActiveModelParam,
-  setEphemeralSetting,
   switchActiveProvider,
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
-  resetCliProviderInfrastructure,
-  getCliStatelessHardeningOverride,
+  listProviders,
+  getEphemeralSettings,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import {
-  runWithRuntimeScope,
-  type IsolatedRuntimeContextHandle,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeContextFactory.js';
+  Config,
+  createProviderRuntimeContext,
+} from '@vybestack/llxprt-code-core';
+import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeContextFactory.js';
+import { createProviderSessionOwner } from '../../integration-tests/__tests__/session-client-owner-fixture.js';
 import {
   cleanupTempDirectory,
   createTempDirectory,
 } from '../../integration-tests/test-utils.js';
-import { testRegex } from '../../__tests__/regex.js';
+import { MissingProviderRuntimeError } from '../../../../providers/src/runtime/messages.js';
 
 interface RuntimeFixture {
   id: string;
@@ -47,17 +59,13 @@ interface RuntimeFixture {
   secondaryModel: string;
   tempDir: string;
   handle: IsolatedRuntimeContextHandle;
+  sessionClient: ReturnType<typeof createProviderSessionOwner>['sessionClient'];
 }
 
 const runtimeFixtures: RuntimeFixture[] = [];
 
 describe('CLI runtime isolation', () => {
-  beforeEach(() => {
-    resetCliProviderInfrastructure();
-  });
-
   afterEach(async () => {
-    resetCliProviderInfrastructure();
     while (runtimeFixtures.length > 0) {
       const fixture = runtimeFixtures.pop();
       if (!fixture) {
@@ -65,6 +73,7 @@ describe('CLI runtime isolation', () => {
       }
       try {
         await fixture.handle.cleanup();
+        await fixture.handle.config.dispose();
       } finally {
         await cleanupTempDirectory(fixture.tempDir);
       }
@@ -92,13 +101,23 @@ describe('CLI runtime isolation', () => {
 
     await Promise.all([
       runWithRuntime(runtimeA, barrier, async () => {
-        await setActiveModel('alpha-primary-updated');
+        await setActiveModel(
+          'alpha-primary-updated',
+          assembleModelSelection(runtimeA.handle.settingsOwner),
+          runtimeA.handle.settingsService,
+          runtimeA.handle.providerManager.getActiveProvider(),
+        );
       }),
       runWithRuntime(
         runtimeB,
         barrier,
         async () => {
-          await setActiveModel('beta-primary-updated');
+          await setActiveModel(
+            'beta-primary-updated',
+            assembleModelSelection(runtimeB.handle.settingsOwner),
+            runtimeB.handle.settingsService,
+            runtimeB.handle.providerManager.getActiveProvider(),
+          );
         },
         { delayBeforeActivationMs: 5 },
       ),
@@ -109,14 +128,22 @@ describe('CLI runtime isolation', () => {
         runtimeA.primaryProvider,
       ).model,
     ).toBe('alpha-primary-updated');
-    expect(runtimeA.handle.config.getModel()).toBe('alpha-primary-updated');
+    expect(
+      runtimeA.handle.settingsService.getProviderSettings(
+        runtimeA.primaryProvider,
+      ).model,
+    ).toBe('alpha-primary-updated');
 
     expect(
       runtimeB.handle.settingsService.getProviderSettings(
         runtimeB.primaryProvider,
       ).model,
     ).toBe('beta-primary-updated');
-    expect(runtimeB.handle.config.getModel()).toBe('beta-primary-updated');
+    expect(
+      runtimeB.handle.settingsService.getProviderSettings(
+        runtimeB.primaryProvider,
+      ).model,
+    ).toBe('beta-primary-updated');
   });
 
   it('scopes command mutations to active runtime contexts @plan:PLAN-20251018-STATELESSPROVIDER2.P14 @requirement:REQ-SP2-003 @pseudocode cli-runtime-isolation.md lines 4-10', async () => {
@@ -141,9 +168,26 @@ describe('CLI runtime isolation', () => {
 
     await Promise.all([
       runWithRuntime(runtimeA, barrier, async () => {
-        await switchActiveProvider(runtimeA.secondaryProvider);
-        await setActiveModel('alpha-secondary-tuned');
-        setActiveModelParam('temperature', 0.2);
+        await switchActiveProvider(
+          runtimeA.secondaryProvider,
+          {},
+          ...(await providerSwitchInputs(
+            runtimeA.handle,
+            runtimeA.handle.providerManager,
+            () => runtimeA.sessionClient.refreshAuth(),
+          )),
+        );
+        await setActiveModel(
+          'alpha-secondary-tuned',
+          assembleModelSelection(runtimeA.handle.settingsOwner),
+          runtimeA.handle.settingsService,
+          runtimeA.handle.providerManager.getActiveProvider(),
+        );
+        setActiveModelParam(
+          'temperature',
+          0.2,
+          ...modelParamInputs(runtimeA.handle, runtimeA.handle.providerManager),
+        );
         const profile: Profile = {
           version: 1,
           provider: runtimeA.secondaryProvider,
@@ -154,17 +198,42 @@ describe('CLI runtime isolation', () => {
             'auth-key': 'alpha-profile-key',
           },
         };
-        await applyProfileSnapshot(profile, {
-          profileName: runtimeA.profileName,
-        });
-        await updateActiveProviderBaseUrl('https://alpha.isolated.example.com');
-        await updateActiveProviderApiKey('alpha-updated-key');
-        setEphemeralSetting(
+        await assembleProfileApplication(
+          runtimeA.handle.config,
+          runtimeA.handle.settingsService,
+          runtimeA.handle.providerManager,
+          runtimeA.handle.oauthManager,
+          assembleProviderSwitch(
+            runtimeA.handle.config,
+            runtimeA.handle.settingsService,
+            runtimeA.handle.providerManager,
+            runtimeA.handle.oauthManager,
+            () => runtimeA.handle.readRuntimeKind(),
+            () => runtimeA.sessionClient.refreshAuth(),
+
+            runtimeA.handle.settingsOwner,
+          ),
+          runtimeA.handle.settingsOwner,
+          definitionFixture().profileDefinitions,
+        ).applySnapshot(profile, { profileName: runtimeA.profileName });
+        await updateActiveProviderBaseUrl(
+          'https://alpha.isolated.example.com',
+          ...(await baseUrlInputs(
+            runtimeA.handle,
+            runtimeA.handle.providerManager,
+          )),
+        );
+        await updateActiveProviderApiKey(
+          'alpha-updated-key',
+          ...(await overrideInputs(runtimeA.handle)),
+          runtimeA.handle.providerManager.getActiveProvider(),
+        );
+        runtimeA.handle.settingsOwner.writeUserParameter(
           'auth-keyfile',
           `${runtimeA.tempDir}/alpha-keyfile`,
         );
         // Set custom-headers AFTER profile load to ensure it persists
-        setEphemeralSetting('custom-headers', {
+        runtimeA.handle.settingsOwner.writeUserParameter('custom-headers', {
           'x-runtime': runtimeA.id,
         });
       }),
@@ -172,9 +241,29 @@ describe('CLI runtime isolation', () => {
         runtimeB,
         barrier,
         async () => {
-          await switchActiveProvider(runtimeB.secondaryProvider);
-          await setActiveModel('beta-secondary-tuned');
-          setActiveModelParam('temperature', 0.9);
+          await switchActiveProvider(
+            runtimeB.secondaryProvider,
+            {},
+            ...(await providerSwitchInputs(
+              runtimeB.handle,
+              runtimeB.handle.providerManager,
+              () => runtimeB.sessionClient.refreshAuth(),
+            )),
+          );
+          await setActiveModel(
+            'beta-secondary-tuned',
+            assembleModelSelection(runtimeB.handle.settingsOwner),
+            runtimeB.handle.settingsService,
+            runtimeB.handle.providerManager.getActiveProvider(),
+          );
+          setActiveModelParam(
+            'temperature',
+            0.9,
+            ...modelParamInputs(
+              runtimeB.handle,
+              runtimeB.handle.providerManager,
+            ),
+          );
           const profile: Profile = {
             version: 1,
             provider: runtimeB.secondaryProvider,
@@ -185,19 +274,42 @@ describe('CLI runtime isolation', () => {
               'auth-key': 'beta-profile-key',
             },
           };
-          await applyProfileSnapshot(profile, {
-            profileName: runtimeB.profileName,
-          });
+          await assembleProfileApplication(
+            runtimeB.handle.config,
+            runtimeB.handle.settingsService,
+            runtimeB.handle.providerManager,
+            runtimeB.handle.oauthManager,
+            assembleProviderSwitch(
+              runtimeB.handle.config,
+              runtimeB.handle.settingsService,
+              runtimeB.handle.providerManager,
+              runtimeB.handle.oauthManager,
+              () => runtimeB.handle.readRuntimeKind(),
+              () => runtimeB.sessionClient.refreshAuth(),
+
+              runtimeB.handle.settingsOwner,
+            ),
+            runtimeB.handle.settingsOwner,
+            definitionFixture().profileDefinitions,
+          ).applySnapshot(profile, { profileName: runtimeB.profileName });
           await updateActiveProviderBaseUrl(
             'https://beta.isolated.example.com',
+            ...(await baseUrlInputs(
+              runtimeB.handle,
+              runtimeB.handle.providerManager,
+            )),
           );
-          await updateActiveProviderApiKey('beta-updated-key');
-          setEphemeralSetting(
+          await updateActiveProviderApiKey(
+            'beta-updated-key',
+            ...(await overrideInputs(runtimeB.handle)),
+            runtimeB.handle.providerManager.getActiveProvider(),
+          );
+          runtimeB.handle.settingsOwner.writeUserParameter(
             'auth-keyfile',
             `${runtimeB.tempDir}/beta-keyfile`,
           );
           // Set custom-headers AFTER profile load to ensure it persists
-          setEphemeralSetting('custom-headers', {
+          runtimeB.handle.settingsOwner.writeUserParameter('custom-headers', {
             'x-runtime': runtimeB.id,
           });
         },
@@ -209,21 +321,23 @@ describe('CLI runtime isolation', () => {
       runtimeA.handle.settingsService.getProviderSettings(
         runtimeA.secondaryProvider,
       );
-    expect(runtimeA.handle.config.getProvider()).toBe(
+    expect(runtimeA.handle.settingsOwner.readSelectedProvider()).toBe(
       runtimeA.secondaryProvider,
     );
-    expect(runtimeA.handle.config.getModel()).toBe('alpha-profile-model');
-    expect(runtimeA.handle.config.getEphemeralSetting('base-url')).toBe(
+    expect(runtimeA.handle.settingsOwner.readSelectedModel()).toBe(
+      'alpha-profile-model',
+    );
+    expect(runtimeA.handle.settingsOwner.readNamedParameter('base-url')).toBe(
       'https://alpha.isolated.example.com',
     );
-    expect(runtimeA.handle.config.getEphemeralSetting('auth-key')).toBe(
+    expect(runtimeA.handle.settingsOwner.readNamedParameter('auth-key')).toBe(
       'alpha-updated-key',
     );
-    expect(runtimeA.handle.config.getEphemeralSetting('auth-keyfile')).toBe(
-      `${runtimeA.tempDir}/alpha-keyfile`,
-    );
     expect(
-      runtimeA.handle.config.getEphemeralSetting('custom-headers'),
+      runtimeA.handle.settingsOwner.readNamedParameter('auth-keyfile'),
+    ).toBe(`${runtimeA.tempDir}/alpha-keyfile`);
+    expect(
+      runtimeA.handle.settingsOwner.readNamedParameter('custom-headers'),
     ).toStrictEqual({ 'x-runtime': runtimeA.id });
     expect(aSecondarySettings.temperature).toBe(0.6);
     expect(aSecondarySettings['auth-key']).toBe('alpha-updated-key');
@@ -235,21 +349,23 @@ describe('CLI runtime isolation', () => {
       runtimeB.handle.settingsService.getProviderSettings(
         runtimeB.secondaryProvider,
       );
-    expect(runtimeB.handle.config.getProvider()).toBe(
+    expect(runtimeB.handle.settingsOwner.readSelectedProvider()).toBe(
       runtimeB.secondaryProvider,
     );
-    expect(runtimeB.handle.config.getModel()).toBe('beta-profile-model');
-    expect(runtimeB.handle.config.getEphemeralSetting('base-url')).toBe(
+    expect(runtimeB.handle.settingsOwner.readSelectedModel()).toBe(
+      'beta-profile-model',
+    );
+    expect(runtimeB.handle.settingsOwner.readNamedParameter('base-url')).toBe(
       'https://beta.isolated.example.com',
     );
-    expect(runtimeB.handle.config.getEphemeralSetting('auth-key')).toBe(
+    expect(runtimeB.handle.settingsOwner.readNamedParameter('auth-key')).toBe(
       'beta-updated-key',
     );
-    expect(runtimeB.handle.config.getEphemeralSetting('auth-keyfile')).toBe(
-      `${runtimeB.tempDir}/beta-keyfile`,
-    );
     expect(
-      runtimeB.handle.config.getEphemeralSetting('custom-headers'),
+      runtimeB.handle.settingsOwner.readNamedParameter('auth-keyfile'),
+    ).toBe(`${runtimeB.tempDir}/beta-keyfile`);
+    expect(
+      runtimeB.handle.settingsOwner.readNamedParameter('custom-headers'),
     ).toStrictEqual({ 'x-runtime': runtimeB.id });
     expect(bSecondarySettings.temperature).toBe(0.4);
     expect(bSecondarySettings['auth-key']).toBe('beta-updated-key');
@@ -276,33 +392,57 @@ describe('CLI runtime isolation', () => {
       },
     });
 
-    await updateActiveProviderApiKey('runtime-clear-secret');
-    await updateActiveProviderBaseUrl('https://runtime-clear.example.com/v1');
+    await updateActiveProviderApiKey(
+      'runtime-clear-secret',
+      ...(await overrideInputs(runtime.handle)),
+      runtime.handle.providerManager.getActiveProvider(),
+    );
+    await updateActiveProviderBaseUrl(
+      'https://runtime-clear.example.com/v1',
+      ...(await baseUrlInputs(runtime.handle, runtime.handle.providerManager)),
+    );
 
-    expect(runtime.handle.config.getEphemeralSetting('auth-key')).toBe(
+    expect(runtime.handle.settingsOwner.readNamedParameter('auth-key')).toBe(
       'runtime-clear-secret',
     );
-    expect(runtime.handle.config.getEphemeralSetting('base-url')).toBe(
+    expect(runtime.handle.settingsOwner.readNamedParameter('base-url')).toBe(
       'https://runtime-clear.example.com/v1',
     );
 
-    await updateActiveProviderApiKey(null);
-    await updateActiveProviderBaseUrl('NONE');
+    await updateActiveProviderApiKey(
+      null,
+      ...(await overrideInputs(runtime.handle)),
+      runtime.handle.providerManager.getActiveProvider(),
+    );
+    await updateActiveProviderBaseUrl(
+      'NONE',
+      ...(await baseUrlInputs(runtime.handle, runtime.handle.providerManager)),
+    );
 
     expect(
-      runtime.handle.config.getEphemeralSetting('auth-key'),
+      runtime.handle.settingsOwner.readNamedParameter('auth-key'),
     ).toBeUndefined();
     expect(
-      runtime.handle.config.getEphemeralSetting('auth-keyfile'),
+      runtime.handle.settingsOwner.readNamedParameter('auth-keyfile'),
     ).toBeUndefined();
     expect(
-      runtime.handle.config.getEphemeralSetting('auth-key-name'),
+      runtime.handle.settingsOwner.readNamedParameter('auth-key-name'),
     ).toBeUndefined();
     expect(
-      runtime.handle.config.getEphemeralSetting('base-url'),
+      runtime.handle.settingsOwner.readNamedParameter('base-url'),
     ).toBeUndefined();
 
-    const runtimeSnapshot = buildRuntimeProfileSnapshot();
+    const selectedModel = runtime.handle.settingsOwner.readSelectedModel();
+    if (selectedModel === undefined)
+      throw new Error('Runtime fixture has no selected model');
+    const runtimeSnapshot = buildRuntimeProfileSnapshot({
+      providerName: runtime.handle.settingsOwner.readSelectedProvider() ?? '',
+      modelName: selectedModel,
+      providerSettings: runtime.handle.settingsService.getProviderSettings(
+        runtime.handle.settingsOwner.readSelectedProvider() ?? '',
+      ),
+      ephemeralSettings: runtime.handle.settingsOwner.captureNamedParameters(),
+    });
     expect(runtimeSnapshot.ephemeralSettings['auth-key']).toBeUndefined();
     expect(runtimeSnapshot.ephemeralSettings['auth-keyfile']).toBeUndefined();
     expect(runtimeSnapshot.ephemeralSettings['auth-key-name']).toBeUndefined();
@@ -336,11 +476,18 @@ describe('CLI runtime isolation', () => {
         barrier,
         async () => {
           await cleanupSignal.promise;
-          await setActiveModel('alpha-primary-post-dispose');
+          await setActiveModel(
+            'alpha-primary-post-dispose',
+            assembleModelSelection(runtimeA.handle.settingsOwner),
+            runtimeA.handle.settingsService,
+            runtimeA.handle.providerManager.getActiveProvider(),
+          );
         },
         { delayBeforeActivationMs: 0 },
       );
-      return runtimeA.handle.config.getModel();
+      return runtimeA.handle.settingsService.getProviderSettings(
+        runtimeA.primaryProvider,
+      ).model;
     })();
 
     const taskB = (async () => {
@@ -348,141 +495,74 @@ describe('CLI runtime isolation', () => {
         runtimeB,
         barrier,
         async () => {
-          await setActiveModel('beta-primary-post-dispose');
+          await setActiveModel(
+            'beta-primary-post-dispose',
+            assembleModelSelection(runtimeB.handle.settingsOwner),
+            runtimeB.handle.settingsService,
+            runtimeB.handle.providerManager.getActiveProvider(),
+          );
           await runtimeB.handle.cleanup();
           cleanupSignal.resolve();
         },
         { delayBeforeActivationMs: 5 },
       );
-      return runtimeB.handle.config.getModel();
+      return runtimeB.handle.settingsService.getProviderSettings(
+        runtimeB.primaryProvider,
+      ).model;
     })();
 
     await expect(taskB).resolves.toBe('beta-primary-post-dispose');
     await expect(taskA).resolves.toBe('alpha-primary-post-dispose');
   });
 
-  it('enforces runtime guard when stateless hardening is active @plan:PLAN-20251023-STATELESS-HARDENING.P07 @requirement:REQ-SP4-005 @pseudocode provider-runtime-handling.md lines 10-16', async () => {
-    const previousPreference = getCliStatelessHardeningOverride();
-    configureCliStatelessHardening('strict');
-    resetCliProviderInfrastructure();
-
-    try {
-      await expect(setActiveModel('stateless-model')).rejects.toThrow(
-        testRegex(
-          'No active runtime[\\s\\S]*MissingProviderRuntimeError[\\s\\S]*REQ-SP4-004',
-          'i',
-        ),
-      );
-    } finally {
-      configureCliStatelessHardening(previousPreference);
-    }
+  it('enforces runtime guard for ownerless provider queries @plan:PLAN-20251023-STATELESS-HARDENING.P07 @requirement:REQ-SP4-005 @pseudocode provider-runtime-handling.md lines 10-16', () => {
+    expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
+      'Provider listing requires an explicit owner',
+    );
   });
 
-  it('enforces explicit SettingsService when stateless hardening enabled @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-004', async () => {
-    const previousPreference = getCliStatelessHardeningOverride();
-    configureCliStatelessHardening('strict');
-
-    try {
-      resetCliProviderInfrastructure();
-
-      const { getCliRuntimeContext } = await import(
-        '@vybestack/llxprt-code-providers/runtime.js'
-      );
-
-      // Try to get context with stateless mode enabled but no runtime registered
-      // This simulates missing SettingsService scenario
-      expect(() => getCliRuntimeContext()).toThrow(
-        testRegex(
-          'No active runtime[\\s\\S]*MissingProviderRuntimeError[\\s\\S]*REQ-SP4-004',
-          'i',
-        ),
-      );
-    } finally {
-      configureCliStatelessHardening(previousPreference);
-      resetCliProviderInfrastructure();
-    }
+  it('enforces explicit SettingsService for ownerless settings queries @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-004', () => {
+    expect(() => getEphemeralSettings()).toThrow(MissingProviderRuntimeError);
   });
 
-  it('enforces explicit runtime registration when stateless hardening enabled @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-004', async () => {
-    const previousPreference = getCliStatelessHardeningOverride();
-    configureCliStatelessHardening('strict');
-    resetCliProviderInfrastructure();
+  it('prepares a stateless invocation from the explicit runtime context', async () => {
+    const runtimeA = await bootstrapRuntimeFixture({
+      id: 'runtime-stateless-ready',
+      profileName: 'profile-ready',
+      primaryProvider: 'primary',
+      secondaryProvider: 'secondary',
+      primaryModel: 'ready-model',
+      secondaryModel: 'ready-model-2',
+    });
 
-    try {
-      const { getCliRuntimeContext } = await import(
-        '@vybestack/llxprt-code-providers/runtime.js'
-      );
+    await activateIsolatedRuntimeContext(runtimeA.handle, {
+      runtimeId: runtimeA.id,
+      metadata: {
+        source: 'test-ensure-ready',
+        statelessHardening: 'strict',
+      },
+    });
 
-      // Try to get context without any runtime registration
-      expect(() => getCliRuntimeContext()).toThrow(
-        testRegex(
-          'No active runtime[\\s\\S]*MissingProviderRuntimeError[\\s\\S]*REQ-SP4-004',
-          'i',
-        ),
-      );
-    } finally {
-      configureCliStatelessHardening(previousPreference);
-    }
+    const context = createProviderRuntimeContext({
+      settingsService: runtimeA.handle.settingsService,
+      config: runtimeA.handle.config,
+      providerFileLifecycle: runtimeA.handle.providerFileLifecycle,
+      runtimeId: runtimeA.id,
+      runtimeKind: 'cli-interactive',
+      metadata: { statelessHardening: 'strict' },
+    });
+    const prepare =
+      runtimeA.handle.providerManager.prepareStatelessProviderInvocation;
+    if (!prepare) throw new Error('Stateless preparation is unavailable');
+    expect(() =>
+      prepare.call(runtimeA.handle.providerManager, context),
+    ).not.toThrow();
   });
 
-  it('ensureStatelessProviderReady normalizes and pushes runtime context @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-004 @requirement:REQ-SP4-005', async () => {
-    const previousPreference = getCliStatelessHardeningOverride();
-    configureCliStatelessHardening('strict');
-    resetCliProviderInfrastructure();
-
-    try {
-      const runtimeA = await bootstrapRuntimeFixture({
-        id: 'runtime-stateless-ready',
-        profileName: 'profile-ready',
-        primaryProvider: 'primary',
-        secondaryProvider: 'secondary',
-        primaryModel: 'ready-model',
-        secondaryModel: 'ready-model-2',
-      });
-
-      await activateIsolatedRuntimeContext(runtimeA.handle, {
-        runtimeId: runtimeA.id,
-        metadata: {
-          source: 'test-ensure-ready',
-        },
-      });
-
-      const { ensureStatelessProviderReady } = await import(
-        '@vybestack/llxprt-code-providers/runtime.js'
-      );
-
-      // Should not throw - runtime properly registered
-      expect(() => ensureStatelessProviderReady()).not.toThrow();
-
-      // Verify prepareStatelessProviderInvocation was called
-      // (We can't directly verify this without exposing internals, but we can verify it doesn't throw)
-    } finally {
-      configureCliStatelessHardening(previousPreference);
-    }
-  });
-
-  it('ensureStatelessProviderReady throws when services missing @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-004', async () => {
-    const previousPreference = getCliStatelessHardeningOverride();
-    configureCliStatelessHardening('strict');
-
-    try {
-      resetCliProviderInfrastructure();
-
-      const { ensureStatelessProviderReady } = await import(
-        '@vybestack/llxprt-code-providers/runtime.js'
-      );
-
-      // Try to ensure ready with no runtime registered - should throw
-      expect(() => ensureStatelessProviderReady()).toThrow(
-        testRegex(
-          'No active runtime[\\s\\S]*MissingProviderRuntimeError[\\s\\S]*REQ-SP4-004',
-          'i',
-        ),
-      );
-    } finally {
-      configureCliStatelessHardening(previousPreference);
-      resetCliProviderInfrastructure();
-    }
+  it('rejects ownerless provider queries without consulting process preference', () => {
+    expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
+      'Provider listing requires an explicit owner',
+    );
   });
 });
 
@@ -495,64 +575,82 @@ async function bootstrapRuntimeFixture(options: {
   secondaryModel: string;
 }): Promise<RuntimeFixture> {
   const tempDir = await createTempDirectory();
-  const handle = createIsolatedRuntimeContext({
-    runtimeId: options.id,
-    // The caller supplies the Config (issue #3222): providers no longer
-    // constructs one for isolated runtimes.
-    config: new Config({
+  const handle = (() => {
+    const capturedConfig3 = new Config({
       sessionId: options.id,
       targetDir: tempDir,
       cwd: tempDir,
       model: options.primaryModel,
       debugMode: false,
-      settingsService: new SettingsService(),
-    }),
-    metadata: {
-      profileName: options.profileName,
-    },
-    prepare: async ({ providerManager, settingsService, config }) => {
-      providerManager.registerProvider(
-        createStubProvider(options.primaryProvider, options.primaryModel),
-      );
-      providerManager.registerProvider(
-        createStubProvider(options.secondaryProvider, options.secondaryModel),
-      );
-      void providerManager.setActiveProvider(options.primaryProvider);
-      settingsService.set('activeProvider', options.primaryProvider);
-      settingsService.setCurrentProfileName(options.profileName);
-      settingsService.setProviderSetting(
-        options.primaryProvider,
-        'model',
-        options.primaryModel,
-      );
-      settingsService.setProviderSetting(
-        options.primaryProvider,
-        'base-url',
-        `https://${options.id}.primary.example.com`,
-      );
-      settingsService.setProviderSetting(
-        options.primaryProvider,
-        'auth-key',
-        `${options.id}-initial-key`,
-      );
-      config.setProvider(options.primaryProvider);
-      config.setModel(options.primaryModel);
-      config.setEphemeralSetting(
-        'base-url',
-        `https://${options.id}.primary.example.com`,
-      );
-      config.setEphemeralSetting('auth-key', `${options.id}-initial-key`);
-      config.setEphemeralSetting(
-        'auth-keyfile',
-        `${tempDir}/${options.id}-initial.key`,
-      );
-    },
-  });
+      initialSettings: {},
+    });
+    const settingsService = new SettingsService();
+    const settingsOwner = new SessionSettingsOwner(settingsService);
+    return createIsolatedRuntimeContext(
+      {
+        settingsOwner,
+        runtimeId: options.id,
+        config: capturedConfig3,
+        metadata: {
+          profileName: options.profileName,
+        },
+        prepare: async ({ providerManager, settingsService }) => {
+          providerManager.registerProvider(
+            createStubProvider(options.primaryProvider, options.primaryModel),
+          );
+          providerManager.registerProvider(
+            createStubProvider(
+              options.secondaryProvider,
+              options.secondaryModel,
+            ),
+          );
+          void providerManager.setActiveProvider(options.primaryProvider);
+          settingsService.set('activeProvider', options.primaryProvider);
+          settingsService.setCurrentProfileName(options.profileName);
+          settingsService.setProviderSetting(
+            options.primaryProvider,
+            'model',
+            options.primaryModel,
+          );
+          settingsService.setProviderSetting(
+            options.primaryProvider,
+            'base-url',
+            `https://${options.id}.primary.example.com`,
+          );
+          settingsService.setProviderSetting(
+            options.primaryProvider,
+            'auth-key',
+            `${options.id}-initial-key`,
+          );
+
+          settingsOwner.writeUserParameter(
+            'base-url',
+            `https://${options.id}.primary.example.com`,
+          );
+          settingsOwner.writeUserParameter(
+            'auth-key',
+            `${options.id}-initial-key`,
+          );
+          settingsOwner.writeUserParameter(
+            'auth-keyfile',
+            `${tempDir}/${options.id}-initial.key`,
+          );
+        },
+      },
+      settingsService,
+    );
+  })();
 
   const fixture: RuntimeFixture = {
     ...options,
     tempDir,
     handle,
+    sessionClient: createProviderSessionOwner(
+      handle.config,
+      handle.providerManager,
+      handle.settingsService,
+      handle.settingsOwner,
+    ).sessionClient,
   };
   runtimeFixtures.push(fixture);
   return fixture;
@@ -637,15 +735,10 @@ async function runWithRuntime<T>(
     profileName: fixture.profileName,
     source: `runtime-isolation-test:${fixture.id}`,
   };
-  return runWithRuntimeScope(
-    { runtimeId: fixture.handle.runtimeId, metadata },
-    async () => {
-      await activateIsolatedRuntimeContext(fixture.handle, {
-        runtimeId: fixture.handle.runtimeId,
-        metadata,
-      });
-      await barrier();
-      return action();
-    },
-  );
+  await activateIsolatedRuntimeContext(fixture.handle, {
+    runtimeId: fixture.handle.runtimeId,
+    metadata,
+  });
+  await barrier();
+  return action();
 }

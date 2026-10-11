@@ -655,11 +655,14 @@ describe('AnthropicStreamProcessor terminal-event validation (issue #2532)', () 
         maxAttempts: 2,
         initialDelayMs: 1,
       });
-      const request = resolveRetryRequestContext(setup.buildCallOptions([]), {
-        maxAttempts: 2,
-        initialDelayMs: 1,
-        authRetryTimeoutMs: 0,
-      });
+      const request = resolveRetryRequestContext(
+        setup.buildCallOptions([], { resolved: { streaming: true } }),
+        {
+          maxAttempts: 2,
+          initialDelayMs: 1,
+          authRetryTimeoutMs: 0,
+        },
+      );
 
       const { error } = await collect(
         orchestrator.generateChatCompletion(request.options),

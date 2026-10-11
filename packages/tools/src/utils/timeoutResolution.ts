@@ -200,8 +200,7 @@ export function requireEffectiveTimeoutSeconds(
  * reason (TIMEOUT), the effective timeout applied, and the parameter +
  * settings that would raise it. The effective timeout is a finite `number`:
  * a timeout termination cannot be unbounded, because an unbounded run arms no
- * timer and therefore can never fire. Shared by the agents `task` tool and the
- * core `CoreSubagentServiceAdapter` so the wording cannot drift (Issue #3031).
+ * timer and therefore can never fire. Used by the agents `task` tool (Issue #3031).
  */
 export function describeTimeoutTermination(
   effectiveTimeoutSeconds: number,

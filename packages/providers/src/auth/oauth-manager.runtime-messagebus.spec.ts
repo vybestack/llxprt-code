@@ -1,3 +1,5 @@
+import { readFixtureSessionAuthPolicy } from './__tests__/session-auth-policy-fixture.js';
+import { createProviderConfigFixture } from '../runtime/__tests__/provider-config-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -9,17 +11,7 @@ import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { OAuthManager } from './oauth-manager.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from './types.js';
-import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
-
-const mockEphemeralSettings = new Map<string, unknown>();
-
-function setMockEphemeralSetting<T>(key: string, value: T): void {
-  mockEphemeralSettings.set(key, value);
-}
-
-function clearMockEphemeralSettings(): void {
-  mockEphemeralSettings.clear();
-}
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 function createMockTokenStore(): TokenStore {
   const tokens = new Map<string, OAuthToken>();
@@ -79,20 +71,6 @@ describe('OAuthManager explicit runtime MessageBus seam', () => {
   let manager: OAuthManager;
 
   beforeEach(() => {
-    clearMockEphemeralSettings();
-
-    // Register runtime accessors backed by the mock ephemeral map
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: (key: string) => mockEphemeralSettings.get(key),
-      getProviderManager: () => ({
-        getProviderByName: () => null,
-      }),
-      getRuntimeContext: () => ({
-        runtimeId: 'test-runtime',
-      }),
-      getCurrentProfileName: () => null,
-    });
-
     manager = new OAuthManager(createMockTokenStore(), undefined, {
       messageBus: new MessageBus(new PolicyEngine()),
     });
@@ -100,7 +78,6 @@ describe('OAuthManager explicit runtime MessageBus seam', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    oauthRuntimeBridge.setAccessors(undefined);
   });
 
   /**
@@ -117,7 +94,19 @@ describe('OAuthManager explicit runtime MessageBus seam', () => {
    */
 
   it('uses the explicit auth-surface MessageBus seam for bucket confirmation while keeping multi-provider registration intact', async () => {
-    setMockEphemeralSetting('auth-bucket-prompt', true);
+    const {
+      config: config,
+      settingsOwner: configSettingsOwner,
+      settingsService,
+    } = createProviderConfigFixture({
+      sessionId: 'messagebus',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
+      model: 'gpt-5',
+      settingsService: new SettingsService(),
+    });
+    configSettingsOwner.writeUserParameter('auth-bucket-prompt', true);
 
     const explicitBus = new MessageBus(new PolicyEngine());
     explicitBus.requestBucketAuthConfirmation = vi.fn(
@@ -126,6 +115,8 @@ describe('OAuthManager explicit runtime MessageBus seam', () => {
 
     manager = new OAuthManager(createMockTokenStore(), undefined, {
       messageBus: explicitBus,
+      readSessionAuthPolicy: readFixtureSessionAuthPolicy(settingsService),
+      config,
     });
     manager.registerProvider(createMockProvider('anthropic'));
     manager.registerProvider(createMockProvider('gemini'));

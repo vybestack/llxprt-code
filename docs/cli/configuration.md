@@ -829,7 +829,7 @@ In addition to a project settings file, a project's `.llxprt` directory can cont
   - **Requires restart:** Yes
 
 - **`experimental.jitContext`** (boolean):
-  - **Description:** Enable just-in-time context memory loading via ContextManager instead of eager loading at startup.
+  - **Description:** Enable just-in-time loading of workspace instruction files.
   - **Default:** `true`
   - **Requires restart:** Yes
 

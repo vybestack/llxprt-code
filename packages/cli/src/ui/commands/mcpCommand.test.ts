@@ -3,15 +3,12 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { unsupportedApprovalPolicy } from '../../../../mcp/src/client/test-support/approval-policy.js';
 
-import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { mcpCommand } from './mcpCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import {
-  MCPServerStatus,
-  getMCPServerStatus,
-  DiscoveredMCPTool,
-} from '@vybestack/llxprt-code-mcp';
+import { MCPServerStatus, DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 import type { MessageActionReturn } from './types.js';
 import type {
   Agent,
@@ -29,8 +26,6 @@ void vi.mock('open', () => ({
 const actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
 void vi.mock('@vybestack/llxprt-code-mcp', () => ({
   ...actual,
-  getMCPServerStatus: vi.fn(),
-  mcpServerRequiresOAuth: new Map<string, boolean>(),
   MCPOAuthProvider: {
     authenticate: vi.fn(),
   },
@@ -74,10 +69,11 @@ const createMockMCPTool = (
   description?: string,
 ): DiscoveredMCPTool =>
   new DiscoveredMCPTool(
+    unsupportedApprovalPolicy(),
     {
       callTool: vi.fn(),
       tool: vi.fn(),
-    } as unknown as ConstructorParameters<typeof DiscoveredMCPTool>[0],
+    } as unknown as ConstructorParameters<typeof DiscoveredMCPTool>[1],
     serverName,
     serverToolName,
     description === undefined || description === ''
@@ -121,62 +117,6 @@ interface MockAgentOptions {
  * Creates a minimal Agent mock whose mcp.details() returns per-server tool /
  * resource projections. This replaces the old config.getToolRegistry() mock.
  */
-function createMockAgent(opts: MockAgentOptions = {}): Agent {
-  const tools = opts.tools ?? [];
-  const toolsByServer = new Map<string, ToolInfo[]>();
-  for (const tool of tools) {
-    const bucket = toolsByServer.get(tool.serverName) ?? [];
-    bucket.push(projectToolToInfo(tool));
-    toolsByServer.set(tool.serverName, bucket);
-  }
-  const resourcesByServer = new Map<string, McpResourceInfo[]>();
-  for (const entry of opts.resources ?? []) {
-    const bucket = resourcesByServer.get(entry.serverName) ?? [];
-    bucket.push(entry.resource);
-    resourcesByServer.set(entry.serverName, bucket);
-  }
-  const servers: McpServerDetail[] = [
-    ...new Set([...toolsByServer.keys(), ...resourcesByServer.keys()]),
-  ].map((name) => ({
-    name,
-    authenticated: false,
-    requiresAuth: false,
-    oauthStatus: 'not-required' as const,
-    sessionAuthenticated: false,
-    tools: toolsByServer.get(name) ?? [],
-    resources: resourcesByServer.get(name) ?? [],
-  }));
-  const detailStatus: McpDetailStatus = {
-    servers,
-    blockedServers: opts.blockedServers ?? [],
-  };
-  return {
-    mcp: {
-      details:
-        opts.detailsRejectsWith !== undefined
-          ? vi.fn().mockRejectedValue(opts.detailsRejectsWith)
-          : vi.fn().mockResolvedValue(detailStatus),
-      refresh: vi.fn().mockResolvedValue(undefined),
-      status: vi.fn(),
-      listServers: vi.fn().mockReturnValue([]),
-      toolsByServer: vi.fn().mockReturnValue({}),
-      auth: vi.fn(),
-      discoveryState: vi.fn().mockReturnValue(opts.discoveryState ?? 'ready'),
-      authenticate: vi.fn(),
-    },
-    tools: {
-      list: vi.fn().mockReturnValue([]),
-      get: vi.fn(),
-      setEnabled: vi.fn(),
-      onConfirmationRequest: vi.fn(),
-      respondToConfirmation: vi.fn(),
-      onToolUpdate: vi.fn(),
-      setEditorCallbacks: vi.fn(),
-      keys: {} as never,
-    },
-  } as unknown as Agent;
-}
-
 describe('mcpCommand', () => {
   let mockContext: ReturnType<typeof createMockCommandContext>;
   let mockConfig: {
@@ -184,12 +124,74 @@ describe('mcpCommand', () => {
     getBlockedMcpServers: ReturnType<typeof vi.fn>;
   };
 
+  const readServerStatus = vi.fn<(name: string) => MCPServerStatus>();
+
+  function createMockAgent(opts: MockAgentOptions = {}): Agent {
+    const tools = opts.tools ?? [];
+    const toolsByServer = new Map<string, ToolInfo[]>();
+    for (const tool of tools) {
+      const bucket = toolsByServer.get(tool.serverName) ?? [];
+      bucket.push(projectToolToInfo(tool));
+      toolsByServer.set(tool.serverName, bucket);
+    }
+    const resourcesByServer = new Map<string, McpResourceInfo[]>();
+    for (const entry of opts.resources ?? []) {
+      const bucket = resourcesByServer.get(entry.serverName) ?? [];
+      bucket.push(entry.resource);
+      resourcesByServer.set(entry.serverName, bucket);
+    }
+    const servers: McpServerDetail[] = [
+      ...new Set([...toolsByServer.keys(), ...resourcesByServer.keys()]),
+    ].map((name) => ({
+      name,
+      authenticated: false,
+      requiresAuth: false,
+      oauthStatus: 'not-required' as const,
+      sessionAuthenticated: false,
+      tools: toolsByServer.get(name) ?? [],
+      resources: resourcesByServer.get(name) ?? [],
+    }));
+    const detailStatus: McpDetailStatus = {
+      servers,
+      blockedServers: opts.blockedServers ?? [],
+    };
+    return {
+      mcp: {
+        details:
+          opts.detailsRejectsWith !== undefined
+            ? vi.fn().mockRejectedValue(opts.detailsRejectsWith)
+            : vi.fn().mockResolvedValue(detailStatus),
+        refresh: vi.fn().mockResolvedValue(undefined),
+        status: vi.fn(),
+        listBlockedServers: () => detailStatus.blockedServers,
+        listServers: () =>
+          Object.keys(mockConfig.getMcpServers()).map((name) => ({
+            name,
+            status: readServerStatus(name),
+            config: mockConfig.getMcpServers()[name],
+          })),
+        toolsByServer: vi.fn().mockReturnValue({}),
+        auth: vi.fn(),
+        discoveryState: vi.fn().mockReturnValue(opts.discoveryState ?? 'ready'),
+        authenticate: vi.fn(),
+      },
+      tools: {
+        list: vi.fn().mockReturnValue([]),
+        get: vi.fn(),
+        setEnabled: vi.fn(),
+        onConfirmationRequest: vi.fn(),
+        respondToConfirmation: vi.fn(),
+        onToolUpdate: vi.fn(),
+        setEditorCallbacks: vi.fn(),
+        keys: {} as never,
+      },
+    } as unknown as Agent;
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.SANDBOX;
-    (getMCPServerStatus as Mock<typeof getMCPServerStatus>).mockReturnValue(
-      MCPServerStatus.CONNECTED,
-    );
+    readServerStatus.mockReturnValue(MCPServerStatus.CONNECTED);
     mockConfig = {
       getMcpServers: vi.fn().mockReturnValue({}),
       getBlockedMcpServers: vi.fn().mockReturnValue([]),
@@ -264,9 +266,7 @@ describe('mcpCommand', () => {
     });
 
     it('should display configured MCP servers with status indicators and their tools', async () => {
-      (
-        getMCPServerStatus as Mock<typeof getMCPServerStatus>
-      ).mockImplementation(
+      readServerStatus.mockImplementation(
         createServerStatusResolver({
           server1: MCPServerStatus.CONNECTED,
           server2: MCPServerStatus.CONNECTED,
@@ -302,7 +302,7 @@ describe('mcpCommand', () => {
       );
       expect(message).toContain('server2_tool1');
       expect(message).toContain(
-        '[READY] \u001b[1mserver3\u001b[0m - Ready (1 tool)',
+        '[DISCONNECTED] \u001b[1mserver3\u001b[0m - Disconnected (1 tools cached)',
       );
       expect(message).toContain('server3_tool1');
       expect(message).toContain('TIP: Tips:');
@@ -313,9 +313,7 @@ describe('mcpCommand', () => {
     });
 
     it('should include resource counts and resource names in MCP status output', async () => {
-      (
-        getMCPServerStatus as Mock<typeof getMCPServerStatus>
-      ).mockImplementation(
+      readServerStatus.mockImplementation(
         createServerStatusResolver({
           server1: MCPServerStatus.CONNECTED,
           server2: MCPServerStatus.CONNECTED,
@@ -428,9 +426,7 @@ describe('mcpCommand', () => {
         server2: { command: 'cmd2' },
       });
 
-      (
-        getMCPServerStatus as Mock<typeof getMCPServerStatus>
-      ).mockImplementation(
+      readServerStatus.mockImplementation(
         createServerStatusResolver({ server1: MCPServerStatus.CONNECTED }),
       );
 
@@ -461,9 +457,7 @@ describe('mcpCommand', () => {
         server2: { command: 'cmd2' },
       });
 
-      (
-        getMCPServerStatus as Mock<typeof getMCPServerStatus>
-      ).mockImplementation(
+      readServerStatus.mockImplementation(
         createServerStatusResolver({
           server1: MCPServerStatus.CONNECTED,
           server2: MCPServerStatus.CONNECTING,
@@ -564,9 +558,7 @@ describe('mcpCommand', () => {
     });
 
     it('degrades gracefully when agent.mcp.details() rejects, showing servers and a warning', async () => {
-      (
-        getMCPServerStatus as Mock<typeof getMCPServerStatus>
-      ).mockImplementation(
+      readServerStatus.mockImplementation(
         createServerStatusResolver({ server1: MCPServerStatus.CONNECTED }),
       );
 
@@ -609,9 +601,7 @@ describe('mcpCommand', () => {
       mockConfig.getMcpServers = vi.fn().mockReturnValue({
         server1: { command: 'cmd1' },
       });
-      (getMCPServerStatus as Mock<typeof getMCPServerStatus>).mockReturnValue(
-        MCPServerStatus.CONNECTED,
-      );
+      readServerStatus.mockReturnValue(MCPServerStatus.CONNECTED);
 
       const tools = [createMockMCPTool('server1_tool1', 'server1')];
 
@@ -636,9 +626,7 @@ describe('mcpCommand', () => {
       mockConfig.getMcpServers = vi.fn().mockReturnValue({
         server1: { command: 'cmd1' },
       });
-      (getMCPServerStatus as Mock<typeof getMCPServerStatus>).mockReturnValue(
-        MCPServerStatus.CONNECTED,
-      );
+      readServerStatus.mockReturnValue(MCPServerStatus.CONNECTED);
 
       const tools = [createMockMCPTool('server1_tool1', 'server1')];
 

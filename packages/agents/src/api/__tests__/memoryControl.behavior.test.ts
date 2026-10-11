@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { buildAgent, internalConfig } from './helpers/agentHarness.js';
+import { buildAgent } from './helpers/agentHarness.js';
 
 describe('agent.memory control @plan:PLAN-20260626-RUNTIMEBOUNDARY.P02', () => {
   it('setMemory handles empty string without throwing @scenario:set-empty @given:an agent built normally @when:agent.memory.setMemory("") @then:agent.memory.getMemory() returns an empty string', async () => {
@@ -42,18 +42,13 @@ describe('agent.memory control @plan:PLAN-20260626-RUNTIMEBOUNDARY.P02', () => {
     }
   });
 
-  it('setMemory delegates to Config.setUserMemory: after setMemory, internalConfig(agent).getUserMemory() reflects it when JIT context is disabled @scenario:set-memory @given:an agent built normally @when:agent.memory.setMemory("updated-content") @then:internalConfig(agent).getUserMemory() reflects the raw field OR contains the value', async () => {
+  it('setMemory retains independent session instructions: after setMemory, agent.memory.getMemory() reflects it when JIT context is disabled @scenario:set-memory @given:an agent built normally @when:agent.memory.setMemory("updated-content") @then:agent.memory.getMemory() contains the supplied value', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
       settings: { jitContextEnabled: false },
     });
     try {
       agent.memory.setMemory('updated-content');
-      // The control delegates to Config.setUserMemory; with JIT context disabled,
-      // getUserMemory() returns the raw field.
-      const controlMemory = agent.memory.getMemory();
-      const configMemory = internalConfig(agent).getUserMemory();
-      expect(controlMemory).toContain('updated-content');
-      expect(configMemory).toContain('updated-content');
+      expect(agent.memory.getMemory()).toContain('updated-content');
     } finally {
       await cleanup();
     }
@@ -64,7 +59,8 @@ describe('agent.memory control @plan:PLAN-20260626-RUNTIMEBOUNDARY.P02', () => {
     try {
       const before = agent.memory.getMemory();
       agent.memory.setMemory('jit-content');
-      expect(agent.memory.getMemory()).toBe(before);
+      expect(agent.memory.getMemory()).toContain('jit-content');
+      expect(agent.memory.getMemory()).not.toBe(before);
       expect(typeof agent.memory.getMemory()).toBe('string');
     } finally {
       await cleanup();
@@ -108,34 +104,15 @@ describe('agent.memory control @plan:PLAN-20260626-RUNTIMEBOUNDARY.P02', () => {
       }
     };
 
-  it('setCoreMemory delegates without throwing @scenario:core-memory-set @given:an agent built normally @when:agent.memory.setCoreMemory("core-content") @then:the core memory projection remains a safe optional string', async () => {
-    const {
-      agent,
-      setCoreMemoryDelegatesWithoutThrowingScenarioCoreMemorySetGivenAnAgentBuiltObservation1,
-    } =
-      await observeSetCoreMemoryDelegatesWithoutThrowingScenarioCoreMemorySetGivenAnAgentBuilt();
-    expect(() => agent.memory.setCoreMemory('core-content')).not.toThrow();
-    expect(
-      setCoreMemoryDelegatesWithoutThrowingScenarioCoreMemorySetGivenAnAgentBuiltObservation1,
-    ).toBe(true);
+  it('publishes core memory while the session is alive', async () => {
+    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    try {
+      agent.memory.setCoreMemory('core-content');
+      expect(agent.memory.getCoreMemory()).toBe('core-content');
+    } finally {
+      await cleanup();
+    }
   });
-
-  const observeSetCoreMemoryDelegatesWithoutThrowingScenarioCoreMemorySetGivenAnAgentBuilt =
-    async () => {
-      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-      try {
-        const core = agent.memory.getCoreMemory();
-
-        const setCoreMemoryDelegatesWithoutThrowingScenarioCoreMemorySetGivenAnAgentBuiltObservation1 =
-          core === undefined || typeof core === 'string';
-        return {
-          agent,
-          setCoreMemoryDelegatesWithoutThrowingScenarioCoreMemorySetGivenAnAgentBuiltObservation1,
-        };
-      } finally {
-        await cleanup();
-      }
-    };
 
   it('refresh resolves without throwing @scenario:refresh @given:an agent built normally @when:agent.memory.refresh() @then:the promise resolves (no throw)', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');

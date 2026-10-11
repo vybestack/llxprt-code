@@ -414,6 +414,8 @@ function* mapValueEventComplex(
     // It only records the finished payload now; the terminal done is
     // synthesized at loop end.
     case AgentEventType.Finished: {
+      if (state.pendingDoneReason === 'context-overflow')
+        state.pendingDoneReason = null;
       const v = value as {
         reason: string;
         stopReason?: string;

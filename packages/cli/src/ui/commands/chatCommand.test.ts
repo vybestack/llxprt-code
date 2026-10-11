@@ -89,10 +89,14 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
       },
     });
     assertDefined(context.services.config);
-    Object.assign(context.services.config, {
-      getProjectRoot: () => root,
-      getLocalMediaStore: () => mediaStore,
-    });
+    Object.assign(context.services.config, { getProjectRoot: () => root });
+    context.services.agent = createMockCommandContext({
+      services: {
+        agent: {
+          agentClient: { mediaStore, hasChatInitialized: () => false },
+        },
+      },
+    }).services.agent;
   });
 
   afterEach(async () => {
@@ -153,6 +157,7 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
     });
     const replay = await replaySession(recordingPath(recording), PROJECT_HASH);
     expect(replay.ok).toBe(true);
+    if (!replay.ok) throw new Error(replay.error);
     expect(replay.sessionName).toBe('living-branch');
     expect(replay.metadata).toStrictEqual(
       expect.not.objectContaining({ title: expect.anything() }),
@@ -219,6 +224,7 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
 
     const result = await command('save').action?.(context, 'dupe');
     const replay = await replaySession(recordingPath(recording), PROJECT_HASH);
+    if (!replay.ok) throw new Error(replay.error);
 
     expect({
       result,
@@ -256,15 +262,19 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
   });
 
   it('treats an initialized empty history as having nothing to clear', async () => {
-    Object.assign(context.services.config, {
-      getAgentClient: () => ({
-        hasChatInitialized: () => true,
-        getChat: () => ({
-          getHistory: () => [],
-          setHistory: () => undefined,
-        }),
-      }),
-    });
+    context.services.agent = createMockCommandContext({
+      services: {
+        agent: {
+          agentClient: {
+            hasChatInitialized: () => true,
+            getChat: () => ({
+              getHistory: () => [],
+              setHistory: () => undefined,
+            }),
+          },
+        },
+      },
+    }).services.agent;
 
     expect(await command('clear').action?.(context, '')).toStrictEqual({
       type: 'message',
@@ -280,14 +290,18 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
       content('human', 'C'),
       content('ai', 'D'),
     ];
-    Object.assign(context.services.config, {
-      getAgentClient: () => ({
-        hasChatInitialized: () => true,
-        getChat: () => ({
-          getHistory: () => history,
-        }),
-      }),
-    });
+    context.services.agent = createMockCommandContext({
+      services: {
+        agent: {
+          agentClient: {
+            hasChatInitialized: () => true,
+            getChat: () => ({
+              getHistory: () => history,
+            }),
+          },
+        },
+      },
+    }).services.agent;
     recording.recordContent(content('human', 'C'));
     recording.recordContent(content('ai', 'D'));
     await recording.flush();
@@ -323,14 +337,18 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
       content('human', 'C'),
       content('ai', 'D'),
     ];
-    Object.assign(context.services.config, {
-      getAgentClient: () => ({
-        hasChatInitialized: () => true,
-        getChat: () => ({
-          getHistory: () => history,
-        }),
-      }),
-    });
+    context.services.agent = createMockCommandContext({
+      services: {
+        agent: {
+          agentClient: {
+            hasChatInitialized: () => true,
+            getChat: () => ({
+              getHistory: () => history,
+            }),
+          },
+        },
+      },
+    }).services.agent;
     recording.recordContent(content('human', 'C'));
     recording.recordContent(content('ai', 'D'));
     await recording.flush();
@@ -368,6 +386,12 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
   });
 
   it('reports recording-native debug information', async () => {
+    assertDefined(context.services.config);
+    Object.assign(context.services.config, {
+      getModel: () => {
+        throw new Error('No model configured for the recording fixture');
+      },
+    });
     const result = await command('debug').action?.(context, '');
 
     expect(result).toStrictEqual({

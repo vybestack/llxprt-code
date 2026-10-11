@@ -3,12 +3,15 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createSchedulerPolicyFixture } from './__tests__/scheduler-policy-fixture.js';
+
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from 'bun:test';
 import type { ToolCall, WaitingToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
@@ -21,9 +24,6 @@ import {
 import {
   AbortDuringConfirmationTool,
   createMockMessageBus,
-  createMockPolicyEngine,
-  DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
-  DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
 } from './__tests__/coreToolScheduler-test-helpers.js';
 
 describe('CoreToolScheduler suggest edit and abort', () => {
@@ -41,6 +41,7 @@ describe('CoreToolScheduler suggest edit and abort', () => {
           title: 'Confirm Shell Command',
           command: String(params['command'] ?? ''),
           rootCommand: 'npm',
+          rootCommands: ['npm'],
           onConfirm: async () => {},
         }),
       execute: (params) => executeFn(params),
@@ -63,57 +64,47 @@ describe('CoreToolScheduler suggest edit and abort', () => {
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
-    const mockMessageBus = createMockMessageBus();
-    const mockPolicyEngine = createMockPolicyEngine();
-    mockPolicyEngine.evaluate = vi
-      .fn()
-      .mockReturnValue(PolicyDecision.ASK_USER);
+    const mockMessageBus = Object.assign(
+      new MessageBus(),
+      createMockMessageBus(),
+    );
+    let policyDecision = PolicyDecision.ALLOW;
+    policyDecision = PolicyDecision.ASK_USER;
 
-    let busHandler: ((message: ToolConfirmationResponse) => void) | undefined;
-    mockMessageBus.subscribe.mockImplementation(
-      (type: MessageBusType, handler: unknown) => {
-        if (type === MessageBusType.TOOL_CONFIRMATION_RESPONSE) {
-          busHandler = handler as (message: ToolConfirmationResponse) => void;
-        }
-        return () => {};
+    const {
+      config: mockConfig,
+      settingsOwner,
+      messageBus: runtimeMessageBus,
+    } = createSchedulerPolicyFixture(
+      {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        isInteractive: () => true,
+        getApprovalMode: () => ApprovalMode.DEFAULT,
+
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+        getShellExecutionConfig: () => ({
+          terminalWidth: 80,
+          terminalHeight: 24,
+        }),
+        getModel: () => 'gemini-2.5-pro',
       },
+      policyDecision,
     );
 
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      isInteractive: () => true,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: () => mockMessageBus,
-      getPolicyEngine: () => mockPolicyEngine,
-      getShellExecutionConfig: () => ({
-        terminalWidth: 80,
-        terminalHeight: 24,
-      }),
-      getTerminalWidth: vi.fn(() => 80),
-      getTerminalHeight: vi.fn(() => 24),
-      storage: {
-        getProjectTempDir: () => '/tmp',
-      },
-      getTruncateToolOutputThreshold: () =>
-        DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
-      getTruncateToolOutputLines: () => DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
-      getUseSmartEdit: () => false,
-      getUseModelRouter: () => false,
-      getAgentClient: () => null,
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
-
+    const busHandler = (message: ToolConfirmationResponse): void =>
+      runtimeMessageBus.publish(message);
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
       config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
+      messageBus: runtimeMessageBus,
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
@@ -134,15 +125,19 @@ describe('CoreToolScheduler suggest edit and abort', () => {
       new AbortController().signal,
     );
 
-    const latestUpdate = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
+    const latestUpdate = onToolCallsUpdate.mock.calls[
+      onToolCallsUpdate.mock.calls.length - 1
+    ]?.[0] as ToolCall[];
     const waitingCall = latestUpdate[0] as WaitingToolCall;
     expect(waitingCall.status).toBe('awaiting_approval');
+    if (!('correlationId' in waitingCall.confirmationDetails))
+      throw new Error('Missing confirmation correlation');
     expect(waitingCall.confirmationDetails.correlationId).toBeDefined();
     const correlationId = waitingCall.confirmationDetails
       .correlationId as string;
 
-    expect(busHandler).toBeDefined();
-    busHandler?.({
+    expect(waitingCall.status).toBe('awaiting_approval');
+    busHandler({
       type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
       correlationId,
       outcome: ToolConfirmationOutcome.SuggestEdit,
@@ -153,9 +148,9 @@ describe('CoreToolScheduler suggest edit and abort', () => {
 
     await waitFor(() => {
       expect(onAllToolCallsComplete).toHaveBeenCalled();
-      const completedCallsAsk = onAllToolCallsComplete.mock.calls.at(
-        -1,
-      )?.[0] as ToolCall[];
+      const completedCallsAsk = onAllToolCallsComplete.mock.calls[
+        onAllToolCallsComplete.mock.calls.length - 1
+      ]?.[0] as ToolCall[];
       expect(completedCallsAsk[0]?.status).toBe('success');
     });
 
@@ -195,44 +190,42 @@ describe('CoreToolScheduler suggest edit and abort', () => {
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
-    const mockPolicyEngine = createMockPolicyEngine();
-    mockPolicyEngine.evaluate = vi
-      .fn()
-      .mockReturnValue(PolicyDecision.ASK_USER);
+    let policyDecision = PolicyDecision.ALLOW;
+    policyDecision = PolicyDecision.ASK_USER;
 
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      isInteractive: () => true,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getShellExecutionConfig: () => ({
-        terminalWidth: 90,
-        terminalHeight: 30,
-      }),
-      storage: {
-        getProjectTempDir: () => '/tmp',
+    const {
+      config: mockConfig,
+      settingsOwner,
+      messageBus: runtimeMessageBus,
+    } = createSchedulerPolicyFixture(
+      {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        isInteractive: () => true,
+        getApprovalMode: () => ApprovalMode.DEFAULT,
+
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+        getShellExecutionConfig: () => ({
+          terminalWidth: 90,
+          terminalHeight: 30,
+        }),
+        getEnableHooks: () => false,
+        getModel: () => 'gemini-2.5-pro',
       },
-      getTruncateToolOutputThreshold: () =>
-        DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
-      getTruncateToolOutputLines: () => DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
-      getToolRegistry: () => mockToolRegistry,
-      getUseModelRouter: () => false,
-      getAgentClient: () => null,
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getEnableHooks: () => false,
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
+      policyDecision,
+    );
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
       config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
+      messageBus: runtimeMessageBus,
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,

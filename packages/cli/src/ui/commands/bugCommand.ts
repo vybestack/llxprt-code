@@ -80,8 +80,7 @@ async function appendHistoryExport(
   context: CommandContext,
   info: string,
 ): Promise<string> {
-  const { config } = context.services;
-  const client = config?.getAgentClient();
+  const client = context.services.agent?.agentClient;
   if (client?.hasChatInitialized() !== true) {
     return info;
   }

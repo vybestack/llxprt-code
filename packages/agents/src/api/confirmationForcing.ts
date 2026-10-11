@@ -38,7 +38,7 @@ import type {
   AnyToolInvocation,
   ToolCallConfirmationDetails,
 } from '@vybestack/llxprt-code-tools';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { ToolLookup, ToolSelection } from '@vybestack/llxprt-code-tools';
 import { PolicyDecision } from '@vybestack/llxprt-code-policy';
 import type { PolicyEngine } from '@vybestack/llxprt-code-policy';
 
@@ -69,7 +69,7 @@ export const CONFIRMATION_FORCING_SOURCE =
  * @pseudocode tool-confirmation-merge.md steps 10-31
  */
 export function injectConfirmationForcingPolicy(
-  policyEngine: PolicyEngine,
+  policyEngine: Pick<PolicyEngine, 'addRule'>,
 ): void {
   policyEngine.addRule({
     toolName: undefined,
@@ -178,7 +178,7 @@ function wrapToolWithConfirmation(
 }
 
 /**
- * Wraps a ToolRegistry so every tool returned from `getTool`,
+ * Wraps a ToolLookup so every tool returned from `getTool`,
  * `getAllTools`, and `getEnabledTools` forces confirmation. All other registry
  * methods delegate to the original registry.
  *
@@ -186,16 +186,12 @@ function wrapToolWithConfirmation(
  * @requirement:REQ-006
  * @pseudocode tool-confirmation-merge.md steps 10-31
  */
-export function wrapRegistryWithConfirmation(
-  registry: ToolRegistry,
-): ToolRegistry {
+export function wrapRegistryWithConfirmation<T extends ToolLookup>(
+  registry: T,
+): T {
   const wrap = wrapToolWithConfirmation;
   return new Proxy(registry, {
-    get(
-      target: ToolRegistry,
-      prop: string | symbol,
-      receiver: unknown,
-    ): unknown {
+    get(target: T, prop: string | symbol, receiver: unknown): unknown {
       if (prop === 'getTool') {
         return (
           name: string,
@@ -208,11 +204,10 @@ export function wrapRegistryWithConfirmation(
           return original !== undefined ? wrap(original) : undefined;
         };
       }
-      if (prop === 'getAllTools') {
-        return (): AnyDeclarativeTool[] => target.getAllTools().map(wrap);
-      }
-      if (prop === 'getEnabledTools') {
-        return (): AnyDeclarativeTool[] => target.getEnabledTools().map(wrap);
+      if (hasBulkSelection(target)) {
+        if (prop === 'getAllTools') return () => target.getAllTools().map(wrap);
+        if (prop === 'getEnabledTools')
+          return () => target.getEnabledTools().map(wrap);
       }
       const value = Reflect.get(target, prop, receiver) as unknown;
       return typeof value === 'function'
@@ -220,4 +215,16 @@ export function wrapRegistryWithConfirmation(
         : value;
     },
   });
+}
+
+function hasBulkSelection(
+  target: ToolLookup,
+): target is ToolLookup &
+  Pick<ToolSelection, 'getAllTools' | 'getEnabledTools'> {
+  return (
+    'getAllTools' in target &&
+    typeof target.getAllTools === 'function' &&
+    'getEnabledTools' in target &&
+    typeof target.getEnabledTools === 'function'
+  );
 }

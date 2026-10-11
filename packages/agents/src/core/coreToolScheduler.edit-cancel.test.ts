@@ -3,11 +3,17 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CompletedToolCall } from './coreToolScheduler.js';
+import type {
+  GeminiContent as Content,
+  GeminiContentPart as Part,
+} from '@vybestack/llxprt-code-core/llm-types/geminiContent.js';
+import { createSchedulerPolicyFixture } from './__tests__/scheduler-policy-fixture.js';
 
 import { describe, it, expect, vi } from 'bun:test';
-import type { ToolCall, WaitingToolCall } from './coreToolScheduler.js';
+import type { WaitingToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
@@ -16,8 +22,6 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import type { ToolCallBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
-  createMockMessageBus,
-  createMockPolicyEngine,
   waitForStatus,
   MockEditTool,
 } from './__tests__/coreToolScheduler-test-helpers.js';
@@ -43,32 +47,38 @@ describe('CoreToolScheduler edit cancellation', () => {
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
-    const mockPolicyEngine = createMockPolicyEngine();
-    mockPolicyEngine.evaluate = vi
-      .fn()
-      .mockReturnValue(PolicyDecision.ASK_USER);
+    let policyDecision = PolicyDecision.ALLOW;
+    policyDecision = PolicyDecision.ASK_USER;
 
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      isInteractive: () => true,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getEnableHooks: () => false,
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
+    const {
+      config: mockConfig,
+      settingsOwner,
+      messageBus: runtimeMessageBus,
+    } = createSchedulerPolicyFixture(
+      {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        isInteractive: () => true,
+        getApprovalMode: () => ApprovalMode.DEFAULT,
+
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+        getEnableHooks: () => false,
+        getModel: () => 'gemini-2.5-pro',
+      },
+      policyDecision,
+    );
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
       config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
+      messageBus: runtimeMessageBus,
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
@@ -94,11 +104,13 @@ describe('CoreToolScheduler edit cancellation', () => {
 
     // Cancel the edit
     const confirmationDetails = awaitingCall.confirmationDetails;
+    if (!('onConfirm' in confirmationDetails))
+      throw new Error('Expected live confirmation');
     await confirmationDetails.onConfirm(ToolConfirmationOutcome.Cancel);
 
     expect(onAllToolCallsComplete).toHaveBeenCalled();
     const completedCalls = onAllToolCallsComplete.mock
-      .calls[0][0] as ToolCall[];
+      .calls[0][0] as CompletedToolCall[];
 
     expect(completedCalls[0].status).toBe('cancelled');
 

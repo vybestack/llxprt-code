@@ -3,18 +3,19 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CommandContext } from '../commands/types.js';
 
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { Box } from 'ink';
 import { useCallback, useMemo } from 'react';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import type { ContinueTarget } from '@vybestack/llxprt-code-core';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { getProjectHash } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import { join } from 'node:path';
 import {
   performResume,
-  type PerformResumeResult,
   type ResumeContext,
 } from '../../services/performResume.js';
 import {
@@ -66,6 +67,7 @@ import {
 } from '../stores/dialog/dialogStore.js';
 import type { LoadedSettings, SettingScope } from '../../config/settings.js';
 import { type UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+import { resumeOwnerSession } from '../utils/ownerSessionUi.js';
 // import { IdeTrustChangeDialog } from './IdeTrustChangeDialog.js'; // NOTE: Not yet ported from upstream
 
 interface DialogManagerProps {
@@ -151,6 +153,57 @@ function useDialogData(): DialogData {
  * @plan PLAN-20260214-SESSIONBROWSER.P23
  * @requirement REQ-PR-001, REQ-PR-002
  */
+async function selectOwnerBrowserTarget(
+  agent: Agent,
+  target: ContinueTarget,
+  config: CliUiRuntime,
+  loadHistory: UseHistoryManagerReturn['loadHistory'],
+  addItem: UseHistoryManagerReturn['addItem'],
+  closeDialog: (kind: ListDialogKind) => void,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const ref =
+      target.kind === 'session'
+        ? target.session.sessionId
+        : target.checkpointId;
+    const replay = await resumeOwnerSession(
+      agent,
+      ref,
+      resolveEmojiFilterMode(config),
+    );
+    loadHistory([...replay.uiHistory]);
+    // After the restore: loading history would erase warnings added before it.
+    for (const warning of replay.warnings) {
+      addItem({ type: 'info', text: `Warning: ${warning}` });
+    }
+    closeDialog('sessionBrowser');
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    addItem({ type: 'error', text: message });
+    return { ok: false, error: message };
+  }
+}
+
+function browserResumeContext(
+  config: CliUiRuntime,
+  agent: NonNullable<CommandContext['services']['agent']>,
+  recordingCallbacks: NonNullable<ResumeContext['recordingCallbacks']>,
+): ResumeContext {
+  return {
+    chatsDir: join(config.getProjectTempDir(), 'chats'),
+    projectHash: getProjectHash(config.getProjectRoot()),
+    currentSessionId: config.getSessionId(),
+    currentProvider: config.getProvider() ?? 'unknown',
+    currentModel: config.getModel(),
+    workspaceDirs: [...config.directories()],
+    recordingCallbacks,
+    historyService: agent.agentClient.getHistoryService(),
+    adoptSessionId: (sessionId) => config.adoptSessionId(sessionId),
+    logger: dialogManagerLogger,
+  };
+}
+
 export function useSessionBrowserHandler(
   config: CliUiRuntime,
   commandContext: {
@@ -158,14 +211,31 @@ export function useSessionBrowserHandler(
       clear: () => void;
       addItem: UseHistoryManagerReturn['addItem'];
       pendingItem: unknown;
+      loadHistory: UseHistoryManagerReturn['loadHistory'];
     };
+    recordingOwner?: 'agent';
+    services: { agent: Agent | null };
     recordingSwapCallbacks?: unknown;
   },
   addItem: UseHistoryManagerReturn['addItem'],
   closeDialog: (kind: ListDialogKind) => void,
 ) {
   return useCallback(
-    async (target: ContinueTarget): Promise<PerformResumeResult> => {
+    async (
+      target: ContinueTarget,
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      if (commandContext.recordingOwner === 'agent') {
+        const agent = commandContext.services.agent;
+        if (agent === null) throw new Error('Session agent is unavailable');
+        return selectOwnerBrowserTarget(
+          agent,
+          target,
+          config,
+          commandContext.ui.loadHistory,
+          addItem,
+          closeDialog,
+        );
+      }
       const recordingSwapCallbacks = commandContext.recordingSwapCallbacks;
       if (recordingSwapCallbacks == null) {
         dialogManagerLogger.warn(
@@ -176,26 +246,13 @@ export function useSessionBrowserHandler(
           error: 'Recording infrastructure not available.',
         };
       }
-      const chatsDir = join(config.getProjectTempDir(), 'chats');
-      const projectHash = getProjectHash(config.getProjectRoot());
-      const currentSessionId = config.getSessionId();
-      const currentProvider = config.getProvider() ?? 'unknown';
-      const currentModel = config.getModel();
-      const workspaceDirs = [...config.getWorkspaceContext().getDirectories()];
-      const resumeContext: ResumeContext = {
-        chatsDir,
-        projectHash,
-        currentSessionId,
-        currentProvider,
-        currentModel,
-        workspaceDirs,
-        recordingCallbacks: recordingSwapCallbacks as NonNullable<
+      const resumeContext = browserResumeContext(
+        config,
+        requireBrowserAgent(commandContext.services.agent),
+        recordingSwapCallbacks as NonNullable<
           ResumeContext['recordingCallbacks']
         >,
-        historyService: config.getAgentClient().getHistoryService(),
-        adoptSessionId: (sessionId) => config.adoptSessionId(sessionId),
-        logger: dialogManagerLogger,
-      };
+      );
       const ref =
         target.kind === 'session'
           ? target.session.sessionId
@@ -467,7 +524,12 @@ function renderUtilityStoreDialog(
   const close = state.closeStoreDialog;
   switch (active.kind) {
     case 'privacy':
-      return <PrivacyNotice onExit={() => close('privacy')} config={config} />;
+      return (
+        <PrivacyNotice
+          onExit={() => close('privacy')}
+          provider={state.currentProvider}
+        />
+      );
     case 'models':
       return renderModelsDialog(
         active.payload,
@@ -492,6 +554,7 @@ function renderUtilityStoreDialog(
       return (
         <PoliciesDialog
           config={config}
+          policy={state.commandContext.services.agent?.policy}
           addItem={addItem}
           onExit={() => close('policies')}
         />
@@ -561,3 +624,10 @@ export const DialogManager = ({ config, settings }: DialogManagerProps) => {
   // NOTE: IdeTrustChangeDialog not yet ported from upstream
   return renderDialogBody(uiState, uiActions, settings, config, addItem, state);
 };
+
+function requireBrowserAgent(
+  agent: CommandContext['services']['agent'],
+): NonNullable<CommandContext['services']['agent']> {
+  if (!agent) throw new Error('Session agent is unavailable');
+  return agent;
+}

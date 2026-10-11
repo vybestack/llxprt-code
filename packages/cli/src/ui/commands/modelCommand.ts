@@ -12,7 +12,6 @@ import type {
   ModelsDialogData,
 } from './types.js';
 import { CommandKind } from './types.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 /**
  * Parse command arguments for /model command
@@ -92,6 +91,28 @@ function argsToDialogData(args: ModelCommandArgs): ModelsDialogData {
   };
 }
 
+async function recordModelSwitch(
+  context: CommandContext,
+  provider: string,
+  model: string,
+): Promise<void> {
+  if (context.recordingOwner === 'agent') {
+    const agent = context.services.agent;
+    if (!agent) throw new Error('Session agent is unavailable');
+    await agent.session.recordRecordingEvent({
+      type: 'provider_switch',
+      provider,
+      model,
+    });
+    return;
+  }
+  try {
+    context.recordingIntegration?.recordProviderSwitch(provider, model);
+  } catch {
+    // Recording failure should not mask a successful model switch
+  }
+}
+
 export const modelCommand: SlashCommand = {
   name: 'model',
   description: 'browse, search, or switch models',
@@ -108,16 +129,9 @@ export const modelCommand: SlashCommand = {
     // but "/model gpt-4o --tools" opens dialog with search + filter
     if (parsedArgs.search && !hasAnyFlags(parsedArgs)) {
       try {
-        const runtime = getRuntimeApi();
+        const runtime = context.runtimeApi;
         const result = await runtime.setActiveModel(parsedArgs.search);
-        try {
-          context.recordingIntegration?.recordProviderSwitch(
-            result.providerName,
-            result.nextModel,
-          );
-        } catch {
-          // Recording failure should not mask a successful model switch
-        }
+        await recordModelSwitch(context, result.providerName, result.nextModel);
         return {
           type: 'message',
           messageType: 'info',

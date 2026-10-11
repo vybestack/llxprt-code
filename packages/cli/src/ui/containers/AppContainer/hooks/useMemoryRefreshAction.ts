@@ -9,7 +9,6 @@ import { getErrorMessage } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { type HistoryItem, MessageType } from '../../../types.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
-import { loadHierarchicalLlxprtMemory } from '../../../../config/environmentLoader.js';
 import type {
   AppStateRuntime,
   ExtensionRuntime,
@@ -33,7 +32,6 @@ interface UseMemoryRefreshActionParams {
 
 export function useMemoryRefreshAction({
   config,
-  settings,
   addItem,
   setLlxprtMdFileCount,
 }: UseMemoryRefreshActionParams): () => Promise<void> {
@@ -47,35 +45,7 @@ export function useMemoryRefreshAction({
     );
 
     try {
-      let memoryContent = '';
-      let fileCount = 0;
-
-      if (config.isJitContextEnabled()) {
-        const result = await config.refreshMemory();
-        memoryContent = result.memoryContent;
-        fileCount = result.fileCount;
-      } else {
-        const result = await loadHierarchicalLlxprtMemory(
-          config.getWorkingDir(),
-          settings.merged.loadMemoryFromIncludeDirectories === true
-            ? config.getWorkspaceContext().getDirectories()
-            : [],
-          config.getDebugMode(),
-          config.getFileService(),
-          settings.merged,
-          config.getExtensions(),
-          config.getFolderTrust(),
-          settings.merged.ui.memoryImportFormat ?? 'tree',
-          config.getFileFilteringOptions(),
-        );
-
-        memoryContent = result.memoryContent;
-        fileCount = result.fileCount;
-
-        config.setUserMemory(memoryContent);
-        config.setLlxprtMdFileCount(fileCount);
-        config.setLlxprtMdFilePaths(result.filePaths);
-      }
+      const { memoryContent, fileCount } = await config.refreshMemory();
 
       setLlxprtMdFileCount(fileCount);
 
@@ -104,5 +74,5 @@ export function useMemoryRefreshAction({
       debugLogger.error('Error refreshing memory:', error);
     }
     // settings.merged reference changes when any setting changes, so this dep is correct.
-  }, [config, addItem, settings.merged, setLlxprtMdFileCount]);
+  }, [config, addItem, setLlxprtMdFileCount]);
 }

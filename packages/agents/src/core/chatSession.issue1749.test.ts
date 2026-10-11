@@ -1,3 +1,8 @@
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { afterEach } from 'bun:test';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -21,7 +26,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { AfterModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
@@ -57,7 +62,7 @@ function createConfigParams(
     sandbox: undefined,
     sessionId: 'test-session',
     model: 'gemini-1.5-pro',
-    settingsService,
+    initialSettings: settingsService.getAllGlobalSettings(),
   };
 }
 
@@ -75,9 +80,15 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
   let config: Config;
   let manager: TestRuntimeProviderManager;
   let providerRuntime: ProviderRuntimeContext;
+  let settingsOwner: SessionSettingsOwner;
+  afterEach(async () => {
+    await settingsOwner.dispose();
+    await config.dispose();
+  });
 
   beforeEach(() => {
     settingsService = new SettingsService();
+    settingsOwner = new SessionSettingsOwner(settingsService);
     config = new Config(createConfigParams(settingsService));
 
     settingsService.set('providers.stub.base-url', 'https://stub.example.com');
@@ -93,10 +104,12 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    config.setProviderManager(manager);
+    configureProviderRuntimeFactories(config, manager);
   });
 
-  function buildChatSession(hookConfig: Config): ChatSession {
+  function buildChatSession(
+    hookOwner: HookExecutionOwner,
+  ): Pick<ChatSession, 'generateDirectMessage'> {
     const runtimeState = createAgentRuntimeState({
       runtimeId: 'runtime-test',
       provider: 'stub',
@@ -104,6 +117,13 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
       sessionId: config.getSessionId(),
     });
     const view = createAgentRuntimeContext({
+      prepareProviderInvocation: (name, parameters, signal) =>
+        settingsOwner.prepareProviderInvocation(
+          runtimeState.runtimeId,
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: new HistoryService(),
       settings: {
@@ -116,13 +136,25 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
         },
         'reasoning.includeInContext': true,
       },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
-      providerRuntime: { ...providerRuntime, config: hookConfig },
+      provider: createProviderAdapterFromManager(manager),
+      telemetry: createTelemetryAdapter(
+        config,
+        createSessionSettingsFixture(config).settingsOwner.telemetry,
+      ),
+      tools: createToolRegistryViewFromRegistry(undefined),
+      providerRuntime: { ...providerRuntime, config },
     });
 
-    return new ChatSession(view, {} as unknown as ContentGenerator, {}, []);
+    const chat = new ChatSession(
+      view,
+      {} as unknown as ContentGenerator,
+      {},
+      [],
+    );
+    return {
+      generateDirectMessage: (params, promptId) =>
+        chat.generateDirectMessage({ ...params, hookOwner }, promptId),
+    };
   }
 
   function registerStubProvider(text: string): void {
@@ -146,32 +178,27 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
   it('reflects hook-modified text in response.text instead of stale provider text', async () => {
     registerStubProvider('original provider text');
 
-    const hookConfig = Object.create(config) as Config;
-    Object.defineProperties(hookConfig, {
-      getEnableHooks: { value: () => true },
-      getHookSystem: {
-        value: () => ({
-          initialize: async () => undefined,
-          fireBeforeToolSelectionEvent: async () => undefined,
-          fireBeforeModelEvent: async () => undefined,
-          fireAfterModelEvent: async () =>
-            new AfterModelHookOutput({
-              hookSpecificOutput: {
-                llm_response: {
-                  version: 2,
-                  content: {
-                    speaker: 'ai',
-                    blocks: [{ type: 'text', text: 'hook modified text' }],
-                  },
-                  finishReason: 'stop',
-                },
+    const hookOwner: HookExecutionOwner = {
+      sessionId: () => config.getSessionId(),
+      transcriptPath: () => undefined,
+      beforeToolSelection: async () => undefined,
+      beforeModel: async () => undefined,
+      afterModel: async () =>
+        new AfterModelHookOutput({
+          hookSpecificOutput: {
+            llm_response: {
+              version: 2,
+              content: {
+                speaker: 'ai',
+                blocks: [{ type: 'text', text: 'hook modified text' }],
               },
-            }),
+              finishReason: 'stop',
+            },
+          },
         }),
-      },
-    });
+    };
 
-    const chat = buildChatSession(hookConfig);
+    const chat = buildChatSession(hookOwner);
 
     const response = await chat.generateDirectMessage(
       { message: 'Trigger AfterModel modification' },
@@ -186,20 +213,15 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
   it('preserves provider text when AfterModel hook does not modify the response', async () => {
     registerStubProvider('plain provider text');
 
-    const hookConfig = Object.create(config) as Config;
-    Object.defineProperties(hookConfig, {
-      getEnableHooks: { value: () => true },
-      getHookSystem: {
-        value: () => ({
-          initialize: async () => undefined,
-          fireBeforeToolSelectionEvent: async () => undefined,
-          fireBeforeModelEvent: async () => undefined,
-          fireAfterModelEvent: async () => new AfterModelHookOutput({}),
-        }),
-      },
-    });
+    const hookOwner: HookExecutionOwner = {
+      sessionId: () => config.getSessionId(),
+      transcriptPath: () => undefined,
+      beforeToolSelection: async () => undefined,
+      beforeModel: async () => undefined,
+      afterModel: async () => new AfterModelHookOutput({}),
+    };
 
-    const chat = buildChatSession(hookConfig);
+    const chat = buildChatSession(hookOwner);
 
     const response = await chat.generateDirectMessage(
       { message: 'No modification' },
@@ -225,20 +247,15 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
       finishReason: 'stop',
     } as unknown as ReturnType<AfterModelHookOutput['getModifiedResponse']>);
 
-    const hookConfig = Object.create(config) as Config;
-    Object.defineProperties(hookConfig, {
-      getEnableHooks: { value: () => true },
-      getHookSystem: {
-        value: () => ({
-          initialize: async () => undefined,
-          fireBeforeToolSelectionEvent: async () => undefined,
-          fireBeforeModelEvent: async () => undefined,
-          fireAfterModelEvent: async () => afterModelResult,
-        }),
-      },
-    });
+    const hookOwner: HookExecutionOwner = {
+      sessionId: () => config.getSessionId(),
+      transcriptPath: () => undefined,
+      beforeToolSelection: async () => undefined,
+      beforeModel: async () => undefined,
+      afterModel: async () => afterModelResult,
+    };
 
-    const chat = buildChatSession(hookConfig);
+    const chat = buildChatSession(hookOwner);
 
     const response = await chat.generateDirectMessage(
       { message: 'Trigger thought filtering' },

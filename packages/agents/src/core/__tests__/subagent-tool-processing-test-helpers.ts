@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -24,7 +25,6 @@ import { ToolRegistry } from '@vybestack/llxprt-code-tools/tools/tool-registry.j
 import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
-import { CoreToolScheduler } from '../coreToolScheduler.js';
 import { createToolExecutionConfig } from '../subagentRuntimeSetup.js';
 import { createStatelessRuntimeBundle } from './subagent-test-helpers.js';
 import { processFunctionCalls } from '../subagentToolProcessing.js';
@@ -86,7 +86,6 @@ export async function dispatch(
     debugMode: false,
     model: 'test-model',
     approvalMode: ApprovalMode.YOLO,
-    toolSchedulerFactory: (options) => new CoreToolScheduler(options),
   });
   const policy = new PolicyEngine({});
   policy.setApprovalMode(ApprovalMode.YOLO);
@@ -94,14 +93,12 @@ export async function dispatch(
   const registry = new ToolRegistry(
     config,
     new CoreMessageBusAdapter(messageBus),
-    new SettingsService(),
+    assembleTaskSchemaPolicy(new SettingsService()),
   );
   registry.registerTool(new DivideTool());
   const toolExecutorContext = createToolExecutionConfig(
     createStatelessRuntimeBundle(),
     registry,
-    config,
-    messageBus,
   );
   // The processing context object is the scheduler registry owner for this
   // run: executeNonInteractiveTool acquires the 'subagent' entry keyed on it,
@@ -122,12 +119,6 @@ export async function dispatch(
       processingContext,
     );
   } finally {
-    // disposeScheduler is synchronous (void); guard only against a sync throw
-    // so config.dispose() always runs.
-    try {
-      toolExecutorContext.disposeScheduler(processingContext, 'subagent');
-    } finally {
-      await config.dispose();
-    }
+    await config.dispose();
   }
 }

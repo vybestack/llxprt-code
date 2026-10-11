@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { bindCompressionProvider } from './utils.js';
 /**
  * @plan PLAN-20260211-COMPRESSION.P06
  * @plan PLAN-20260211-HIGHDENSITY.P03
@@ -26,7 +27,7 @@ import type {
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
@@ -70,7 +71,7 @@ const LAST_PROMPT_CONTEXT_MAX_LENGTH = 200;
 
 function destructureProviderResult(result: CompressionProviderResult): {
   provider: IProvider;
-  resolvedRuntime: ProviderRuntimeContext;
+  resolvedRuntime: ProviderRequestCollaborators;
   resolvedConfig?: Config;
   resolvedOptions?: RuntimeGenerateChatOptions['resolved'];
   invocation?: RuntimeGenerateChatOptions['invocation'];
@@ -192,7 +193,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     context: CompressionContext,
     provider: IProvider,
     summary: string,
-    resolvedRuntime: ProviderRuntimeContext,
+    resolvedRuntime: ProviderRequestCollaborators,
     resolvedConfig: Config | undefined,
     resolvedOptions: RuntimeGenerateChatOptions['resolved'] | undefined,
     invocation: RuntimeGenerateChatOptions['invocation'] | undefined,
@@ -422,11 +423,25 @@ export class MiddleOutStrategy implements CompressionStrategy {
     return { finalSummary, capturedUsage };
   }
 
+  private bindProvider(
+    provider: IProvider,
+    owner: ProviderRequestCollaborators,
+  ): IProvider {
+    return bindCompressionProvider(
+      provider,
+      owner.mediaResolver,
+      owner.requestMediaBudgetBytes,
+      owner.providerFileBindings,
+      owner.providerFileLifecycle,
+      owner.config?.getTargetDir(),
+    );
+  }
+
   private async callProvider(
     provider: IProvider,
     request: IContent[],
     context: CompressionContext,
-    resolvedRuntime: ProviderRuntimeContext,
+    resolvedRuntime: ProviderRequestCollaborators,
     resolvedConfig: Config | undefined,
     resolvedOptions: RuntimeGenerateChatOptions['resolved'] | undefined,
     invocation: RuntimeGenerateChatOptions['invocation'] | undefined,
@@ -439,7 +454,6 @@ export class MiddleOutStrategy implements CompressionStrategy {
       blockTypeCounts?: Record<string, number>;
     };
   }> {
-    const providerRuntime = resolvedRuntime;
     // Declared above the try block so partial diagnostics are available
     // to the catch handler when a mid-stream error interrupts the loop.
     let summary = '';
@@ -450,10 +464,13 @@ export class MiddleOutStrategy implements CompressionStrategy {
     const blockTypeCounts: Record<string, number> = {};
 
     try {
-      const stream = provider.generateChatCompletion(
+      const stream = this.bindProvider(
+        provider,
+        resolvedRuntime,
+      ).generateChatCompletion(
         await buildCompressionChatOptions({
           contents: request,
-          providerRuntime,
+          providerRuntime: resolvedRuntime,
           resolvedConfig,
           fallbackConfig: context.config,
           resolvedOptions,
@@ -461,6 +478,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
           fallbackModel: context.runtimeState.model,
           runtimeState: context.runtimeState,
           provider,
+          modelParameters: context.modelParameters,
           source: 'MiddleOutStrategy.callProvider',
         }),
       );

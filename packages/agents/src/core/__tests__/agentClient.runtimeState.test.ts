@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
+
 /**
  * @plan PLAN-20251027-STATELESS5.P09
  * @requirement REQ-STAT5-003.1
@@ -17,6 +23,7 @@
  * and an optional HistoryService as its third constructor argument.
  */
 
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { describe, it, expect } from 'bun:test';
 import { AgentClient } from '../client.js';
 import {
@@ -25,7 +32,6 @@ import {
 } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   createAgentRuntimeState,
-  updateAgentRuntimeState,
   type AgentRuntimeState,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -33,11 +39,15 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 /**
  * Test helper: Create minimal Config for testing
  */
-function createTestConfig(): Config {
+function createTestConfig(overrides: Partial<ConfigParameters> = {}): Config {
   const config = new Config({
     sessionId: 'test-session-id',
     targetDir: '/tmp/test-dir',
-  } as unknown as ConfigParameters);
+    cwd: '/tmp/test-dir',
+    debugMode: false,
+    model: 'construction-model',
+    ...overrides,
+  });
   // Note: We don't set provider/model/auth here because runtime state should override them
   return config;
 }
@@ -76,7 +86,16 @@ describe('AgentClient - Runtime State Integration', () => {
 
       // AgentClient constructor accepts AgentRuntimeState as second parameter.
       expect(() => {
-        new AgentClient(config, runtimeState);
+        new AgentClient(
+          config,
+          runtimeState,
+          () => undefined,
+          new LocalMediaStore({
+            rootDirectory: config.projectTempDir + '/media',
+            quotaBytes: config.getMediaStoreQuotaByteLimit(),
+          }),
+          fixturePaths(),
+        );
       }).not.toThrow();
     });
 
@@ -91,7 +110,17 @@ describe('AgentClient - Runtime State Integration', () => {
 
       // AgentClient constructor accepts HistoryService as third parameter.
       expect(() => {
-        new AgentClient(config, runtimeState, historyService);
+        new AgentClient(
+          config,
+          runtimeState,
+          () => undefined,
+          new LocalMediaStore({
+            rootDirectory: config.projectTempDir + '/media',
+            quotaBytes: config.getMediaStoreQuotaByteLimit(),
+          }),
+          fixturePaths(),
+          historyService,
+        );
       }).not.toThrow();
     });
   });
@@ -109,14 +138,22 @@ describe('AgentClient - Runtime State Integration', () => {
       // @requirement REQ-STAT5-003.1
       // @pseudocode gemini-runtime.md lines 245-248
 
-      const config = createTestConfig();
-      config.setProvider('openai'); // Config has different provider
+      const config = createTestConfig({ provider: 'openai' }); // Config has different provider
 
       const runtimeState = createTestRuntimeState({
         provider: 'gemini', // Runtime state has gemini
       });
 
-      const client = new AgentClient(config, runtimeState);
+      const client = new AgentClient(
+        config,
+        runtimeState,
+        () => undefined,
+        new LocalMediaStore({
+          rootDirectory: config.projectTempDir + '/media',
+          quotaBytes: config.getMediaStoreQuotaByteLimit(),
+        }),
+        fixturePaths(),
+      );
 
       // When we initialize the client, it should use 'gemini' from runtime state
       // Verify that the client has stored the runtime state
@@ -129,14 +166,22 @@ describe('AgentClient - Runtime State Integration', () => {
       // @requirement REQ-STAT5-003.1
       // @pseudocode gemini-runtime.md lines 171-176
 
-      const config = createTestConfig();
-      config.setModel('gemini-1.5-pro'); // Config has different model
+      const config = createTestConfig({ model: 'gemini-1.5-pro' }); // Config has different model
 
       const runtimeState = createTestRuntimeState({
         model: 'gemini-2.0-flash', // Runtime state has different model
       });
 
-      const client = new AgentClient(config, runtimeState);
+      const client = new AgentClient(
+        config,
+        runtimeState,
+        () => undefined,
+        new LocalMediaStore({
+          rootDirectory: config.projectTempDir + '/media',
+          quotaBytes: config.getMediaStoreQuotaByteLimit(),
+        }),
+        fixturePaths(),
+      );
 
       // Model selection should use runtime state value
       expect(client['runtimeState']).toBeDefined();
@@ -148,63 +193,25 @@ describe('AgentClient - Runtime State Integration', () => {
       // @requirement REQ-STAT5-003.1
       // @pseudocode gemini-runtime.md lines 90-104
 
-      const config = createTestConfig();
-      config.setProvider('openai');
+      const config = createTestConfig({ provider: 'openai' });
 
       const runtimeState = createTestRuntimeState({
         provider: 'gemini',
       });
 
-      const client = new AgentClient(config, runtimeState);
+      const client = new AgentClient(
+        config,
+        runtimeState,
+        () => undefined,
+        new LocalMediaStore({
+          rootDirectory: config.projectTempDir + '/media',
+          quotaBytes: config.getMediaStoreQuotaByteLimit(),
+        }),
+        fixturePaths(),
+      );
 
       expect(client['runtimeState']).toBeDefined();
       expect(client['runtimeState'].provider).toBe('gemini');
-    });
-  });
-
-  /**
-   * @plan PLAN-20251027-STATELESS5.P09
-   * @requirement REQ-STAT5-003.2
-   * @pseudocode gemini-runtime.md lines 55-59
-   *
-   * Test: Runtime state change subscription for telemetry
-   */
-  describe('Runtime State Subscription', () => {
-    it('should subscribe to runtime state changes on construction', () => {
-      // @plan PLAN-20251027-STATELESS5.P09
-      // @requirement REQ-STAT5-003.2
-      // @pseudocode gemini-runtime.md lines 55-59
-
-      const config = createTestConfig();
-      const runtimeState = createTestRuntimeState();
-
-      const client = new AgentClient(config, runtimeState);
-
-      // Verify that the client has subscribed (has an unsubscribe function)
-      expect(client['_unsubscribe']).toBeDefined();
-      expect(typeof client['_unsubscribe']).toBe('function');
-    });
-
-    it('should update telemetry metadata when runtime state changes', async () => {
-      // @plan PLAN-20251027-STATELESS5.P09
-      // @requirement REQ-STAT5-003.2
-      // @pseudocode gemini-runtime.md lines 55-59
-
-      const config = createTestConfig();
-      const runtimeState = createTestRuntimeState();
-
-      const client = new AgentClient(config, runtimeState);
-
-      // Verify subscription exists
-      expect(client['_unsubscribe']).toBeDefined();
-
-      // Change runtime state
-      const updatedState = updateAgentRuntimeState(runtimeState.runtimeId, {
-        model: 'gemini-2.5-flash',
-      });
-
-      // Client should still have reference to updated runtime state
-      expect(updatedState.model).toBe('gemini-2.5-flash');
     });
   });
 
@@ -225,7 +232,16 @@ describe('AgentClient - Runtime State Integration', () => {
       const originalModel = runtimeState.model;
       const originalUpdatedAt = runtimeState.updatedAt;
 
-      const _client = new AgentClient(config, runtimeState);
+      new AgentClient(
+        config,
+        runtimeState,
+        () => undefined,
+        new LocalMediaStore({
+          rootDirectory: config.projectTempDir + '/media',
+          quotaBytes: config.getMediaStoreQuotaByteLimit(),
+        }),
+        fixturePaths(),
+      );
 
       // Perform some operations (mocked)
       // Client operations should not mutate the runtime state object
@@ -253,7 +269,17 @@ describe('AgentClient - Runtime State Integration', () => {
       const runtimeState = createTestRuntimeState();
       const historyService = {} as HistoryService; // Mock
 
-      const client = new AgentClient(config, runtimeState, historyService);
+      const client = new AgentClient(
+        config,
+        runtimeState,
+        () => undefined,
+        new LocalMediaStore({
+          rootDirectory: config.projectTempDir + '/media',
+          quotaBytes: config.getMediaStoreQuotaByteLimit(),
+        }),
+        fixturePaths(),
+        historyService,
+      );
 
       // Client should store the injected HistoryService
       expect(client['_historyService']).toBe(historyService);
@@ -267,7 +293,16 @@ describe('AgentClient - Runtime State Integration', () => {
       const config = createTestConfig();
       const runtimeState = createTestRuntimeState();
 
-      const client = new AgentClient(config, runtimeState);
+      const client = new AgentClient(
+        config,
+        runtimeState,
+        () => undefined,
+        new LocalMediaStore({
+          rootDirectory: config.projectTempDir + '/media',
+          quotaBytes: config.getMediaStoreQuotaByteLimit(),
+        }),
+        fixturePaths(),
+      );
       // No history service provided
 
       // Client should not have a history service yet (lazy creation)
@@ -299,7 +334,16 @@ describe('AgentClient - Runtime State Integration', () => {
       } as unknown as AgentRuntimeState;
 
       expect(() => {
-        new AgentClient(config, runtimeState);
+        new AgentClient(
+          config,
+          runtimeState,
+          () => undefined,
+          new LocalMediaStore({
+            rootDirectory: config.projectTempDir + '/media',
+            quotaBytes: config.getMediaStoreQuotaByteLimit(),
+          }),
+          fixturePaths(),
+        );
       }).toThrow(/provider/i);
     });
 
@@ -319,7 +363,16 @@ describe('AgentClient - Runtime State Integration', () => {
       } as unknown as AgentRuntimeState;
 
       expect(() => {
-        new AgentClient(config, runtimeState);
+        new AgentClient(
+          config,
+          runtimeState,
+          () => undefined,
+          new LocalMediaStore({
+            rootDirectory: config.projectTempDir + '/media',
+            quotaBytes: config.getMediaStoreQuotaByteLimit(),
+          }),
+          fixturePaths(),
+        );
       }).toThrow(/model/i);
     });
 
@@ -336,7 +389,16 @@ describe('AgentClient - Runtime State Integration', () => {
       }) as AgentRuntimeState;
 
       expect(() => {
-        new AgentClient(config, runtimeState);
+        new AgentClient(
+          config,
+          runtimeState,
+          () => undefined,
+          new LocalMediaStore({
+            rootDirectory: config.projectTempDir + '/media',
+            quotaBytes: config.getMediaStoreQuotaByteLimit(),
+          }),
+          fixturePaths(),
+        );
       }).toThrow(/provider/i);
     });
   });

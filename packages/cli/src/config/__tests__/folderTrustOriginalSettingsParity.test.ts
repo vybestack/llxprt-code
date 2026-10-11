@@ -168,51 +168,21 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
         warnings: [],
       }),
     ),
-    getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
-    setCliRuntimeContext: vi.fn(
-      (
-        svc: SettingsService,
-        cfg?: ServerConfig.Config,
-        opts: { metadata?: Record<string, unknown>; runtimeId?: string } = {},
-      ) => {
-        runtimeSettingsState.context = {
-          settingsService: svc,
-          config: cfg ?? null,
-          runtimeId: opts.runtimeId ?? 'mock-runtime',
-          metadata: opts.metadata ?? {},
-        };
-      },
-    ),
     switchActiveProvider: vi.fn(async () => ({
       changed: true,
       previousProvider: null,
       nextProvider: 'gemini',
       infoMessages: [],
     })),
-    registerCliProviderInfrastructure: vi.fn(
-      (mgr: ProviderManager, oauth: unknown) => {
-        runtimeSettingsState.providerManager = mgr;
-        runtimeSettingsState.oauthManager = oauth ?? null;
-      },
-    ),
     applyCliArgumentOverrides: vi.fn(async () => {}),
-    getCliRuntimeConfig: vi.fn(
-      () => runtimeSettingsState.context?.config ?? null,
-    ),
-    getCliRuntimeServices: vi.fn(() => ({
-      config: runtimeSettingsState.context?.config ?? null,
-      settingsService:
-        runtimeSettingsState.context?.settingsService ?? new SettingsService(),
-      providerManager: getProviderManager(),
-    })),
-    getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
-    getCliOAuthManager: vi.fn(() => {
+    providerManager: vi.fn(() => runtimeSettingsState.providerManager),
+    oauthManager: vi.fn(() => {
       if (runtimeSettingsState.oauthManager === null) {
         throw new Error('OAuthManager missing from runtime registration');
       }
       return runtimeSettingsState.oauthManager;
     }),
-    getActiveProviderStatus: vi.fn(() => ({ name: null })),
+    providerStatus: vi.fn(() => ({ name: null })),
     listProviders: vi.fn(() => []),
     getActiveProviderName: vi.fn(() => null),
     setActiveModel: vi.fn(async () => ({

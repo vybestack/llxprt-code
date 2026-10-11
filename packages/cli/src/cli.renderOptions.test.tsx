@@ -1,3 +1,6 @@
+import { createUiSessionOwner } from './__tests__/uiSessionOwner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -14,9 +17,11 @@ import { inkRenderOptions } from './ui/inkRenderOptions.js';
 import { __setRenderForTesting } from './session/interactiveUI.js';
 
 import { LoadedSettings } from './config/settings.js';
+import { CliSessionPersistence } from './cliSessionPersistence.js';
 
 const createFakeAgent = (config: Config): Agent =>
   ({
+    workspace: createUiSessionOwner(config).workspace,
     dispose: vi.fn().mockResolvedValue(undefined),
     getConfig: () => config,
   }) as unknown as Agent;
@@ -78,7 +83,12 @@ const createLoadedSettings = () =>
     true,
   );
 
+const startupOwners: SessionSettingsOwner[] = [];
+
 describe('startInteractiveUI ink render options', () => {
+  afterEach(async () => {
+    for (const owner of startupOwners.splice(0)) await owner.dispose();
+  });
   let tempDir: string;
 
   // Module loading (cli.js + transitive deps) is expensive in jsdom;
@@ -123,6 +133,15 @@ describe('startInteractiveUI ink render options', () => {
       settings,
       [],
       tempDir,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      'raw',
+      rawPersistence(),
+      startupSettings(),
     );
 
     expect(renderSpy).toHaveBeenCalledTimes(1);
@@ -156,6 +175,15 @@ describe('startInteractiveUI ink render options', () => {
       createLoadedSettings(),
       [],
       tempDir,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      'raw',
+      rawPersistence(),
+      startupSettings(),
     );
 
     expect(renderSpy).toHaveBeenCalledTimes(1);
@@ -171,3 +199,20 @@ describe('startInteractiveUI ink render options', () => {
     );
   }, 120_000);
 });
+
+function startupSettings(): {
+  owner: SessionSettingsOwner;
+  store: SettingsService;
+} {
+  const store = new SettingsService();
+  const owner = new SessionSettingsOwner(store);
+  startupOwners.push(owner);
+  return { owner, store };
+}
+
+function rawPersistence(): CliSessionPersistence {
+  return new CliSessionPersistence(
+    { projectRoot: '/root', chatsDir: '/root/chats' },
+    {},
+  );
+}

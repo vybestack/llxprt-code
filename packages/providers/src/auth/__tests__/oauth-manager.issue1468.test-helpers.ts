@@ -1,3 +1,5 @@
+import { readFixtureSessionAuthPolicy } from './session-auth-policy-fixture.js';
+import { createProviderConfigFixture } from '../../runtime/__tests__/provider-config-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -66,11 +68,7 @@ void vi.mock('@vybestack/llxprt-code-settings', () => {
   };
 });
 
-// Mock the current profile name via the bridge
-export const mockGetCurrentProfileName = vi.fn();
-export const mockSettingsGet = vi.fn();
-
-import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 import { OAuthManager } from '../oauth-manager.js';
 import type { OAuthToken, TokenStore } from '../types.js';
@@ -166,35 +164,29 @@ export function createFakeOAuthSettings(): IOAuthSettingsProvider {
 export function createIssue1468Fixture(): {
   tokenStore: MockTokenStore;
   manager: OAuthManager;
+  settingsService: SettingsService;
 } {
-  // Register runtime accessors for profile name resolution (no mock theater).
-  // This mirrors the old vi.mock that was active for all importing tests.
-  // Registering here (rather than at module load) scopes the accessors to the
-  // fixture lifecycle, so suites that import this helper do not leak shared
-  // bridge state into unrelated tests via import order.
-  oauthRuntimeBridge.setAccessors({
-    getEphemeralSetting: () => undefined,
-    getProviderManager: () => undefined,
-    getRuntimeContext: () => undefined,
-    getCurrentProfileName: () =>
-      (mockGetCurrentProfileName() ?? mockSettingsGet() ?? null) as
-        | string
-        | null,
-    getBrowserProfileAssociation: () => undefined,
+  const settingsService = new SettingsService();
+  const { config: config } = createProviderConfigFixture({
+    sessionId: 'issue1468',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    debugMode: false,
+    model: 'gpt-5',
+    settingsService,
   });
-
   const tokenStore = new MockTokenStore();
   const settings = createFakeOAuthSettings();
-  const manager = new OAuthManager(tokenStore, settings);
+  const manager = new OAuthManager(tokenStore, settings, {
+    config,
+    readSessionAuthPolicy: readFixtureSessionAuthPolicy(settingsService),
+  });
   vi.clearAllMocks();
   mockFetchAnthropicUsage.mockReset();
 
-  return { tokenStore, manager };
+  return { tokenStore, manager, settingsService };
 }
 
 export function clearIssue1468Fixture(tokenStore: MockTokenStore): void {
   tokenStore.clear();
-  // Clear the bridge accessors registered in createIssue1468Fixture so this
-  // helper does not leave shared global state behind for other suites.
-  oauthRuntimeBridge.setAccessors(undefined);
 }

@@ -41,9 +41,11 @@ function makeWrapper(
 
 void mock.module('../ProviderManager.js', () => {
   class MockProviderManager {
+    setRetryOperationsFactory(): void {}
     setConfig(): void {}
     setActiveProvider(): void {}
     registerProvider(): void {}
+    registerAliasRefresher(): void {}
   }
   return { ProviderManager: MockProviderManager };
 });
@@ -63,7 +65,6 @@ void mock.module('./oauth-provider-registration.js', () => ({
   ensureOAuthProviderRegistered: vi.fn(),
   registerStandardOAuthProviders: vi.fn(),
   isOAuthProviderRegistered: vi.fn(),
-  resetRegisteredProviders: vi.fn(),
 }));
 
 describe('providerManagerInstance schema-default behavior (issue #2033)', () => {
@@ -79,18 +80,18 @@ describe('providerManagerInstance schema-default behavior (issue #2033)', () => 
     ) => unknown;
 
     const { MockFileSystem } = await import('./IFileSystem.js');
-    const { createProviderManager, resetProviderManager, setFileSystem } =
-      await import('./providerManagerInstance.js');
+    const { createProviderManager } = await import(
+      './providerManagerInstance.js'
+    );
 
     // Empty mock file system => no user settings file on disk.
-    setFileSystem(new MockFileSystem());
-    resetProviderManager();
 
     const activeContext = {
       settingsService: new SettingsService(),
       metadata: { scope: 'test' },
     };
     createProviderManager(activeContext, {
+      fileSystem: new MockFileSystem(),
       config: undefined,
       allowBrowserEnvironment: false,
     });
@@ -113,8 +114,9 @@ describe('providerManagerInstance schema-default behavior (issue #2033)', () => 
     ) => unknown;
 
     const { MockFileSystem } = await import('./IFileSystem.js');
-    const { createProviderManager, resetProviderManager, setFileSystem } =
-      await import('./providerManagerInstance.js');
+    const { createProviderManager } = await import(
+      './providerManagerInstance.js'
+    );
     const { Storage } = await import('@vybestack/llxprt-code-settings');
 
     const fs = new MockFileSystem();
@@ -127,14 +129,13 @@ describe('providerManagerInstance schema-default behavior (issue #2033)', () => 
         openaiResponsesEnabled: true,
       }),
     );
-    setFileSystem(fs);
-    resetProviderManager();
 
     const activeContext = {
       settingsService: new SettingsService(),
       metadata: { scope: 'test' },
     };
     createProviderManager(activeContext, {
+      fileSystem: fs,
       config: undefined,
       allowBrowserEnvironment: false,
     });

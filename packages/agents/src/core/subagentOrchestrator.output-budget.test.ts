@@ -5,12 +5,11 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import {
   createOrchestratorForTurns,
   extractRunConfig,
-  makeForegroundConfig,
 } from './__tests__/subagentOrchestrator-test-helpers.js';
 
 const baseProfile: Profile = {
@@ -22,12 +21,15 @@ const baseProfile: Profile = {
 };
 
 function foregroundWithOutputBudget(value: number | undefined): Config {
-  const foreground = makeForegroundConfig();
-  return {
-    ...foreground,
-    getEphemeralSetting: (key: string) =>
-      key === 'subagent-max-output-tokens-total' ? value : undefined,
-  } as unknown as Config;
+  return new Config({
+    sessionId: 'output-budget-parent',
+    cwd: process.cwd(),
+    targetDir: process.cwd(),
+    model: 'gemini-2.0-pro',
+    provider: 'gemini',
+    debugMode: false,
+    initialSettings: { 'subagent-max-output-tokens-total': value },
+  });
 }
 
 describe('SubagentOrchestrator aggregate output budget resolution', () => {

@@ -3,6 +3,44 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+const retainedActivationOperations: Array<{ dispose(): void | Promise<void> }> =
+  [];
+
+const retainedConfigFixtures: Array<{
+  config: Awaited<ReturnType<typeof loadCliConfig>>;
+  settingsOwner: SessionSettingsOwner;
+}> = [];
+
+async function loadConfigFixture(...args: Parameters<typeof loadCliConfig>) {
+  const store = new SettingsService();
+  const settingsOwner = new SessionSettingsOwner(store);
+  try {
+    const config = await loadCliConfig(
+      args[0],
+      args[1],
+      args[2],
+      args[3],
+      args[4],
+      args[5],
+      {
+        ...args[6],
+        settingsService: store,
+        sessionSettingsOwner: settingsOwner,
+        onActivationBootstrapReady: (operation) => {
+          operation.takeSettingsOwner(store);
+          retainedActivationOperations.push(operation);
+        },
+      },
+    );
+    const root = { config, settingsOwner };
+    retainedConfigFixtures.push(root);
+    return root;
+  } catch (error) {
+    await settingsOwner.dispose();
+    throw error;
+  }
+}
 
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
@@ -16,6 +54,7 @@ import {
 } from 'bun:test';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import { ApprovalMode } from '@vybestack/llxprt-code-core';
 import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
@@ -117,6 +156,7 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
       getProviderByName: vi.fn(() => ({
         getDefaultModel: () => 'gemini-2.5-pro',
       })),
+      accumulateSessionTokens: vi.fn(),
     } as unknown as ServerConfig.RuntimeProviderManager);
 
   return {
@@ -135,49 +175,16 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
         warnings: [],
       }),
     ),
-    getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
-    setCliRuntimeContext: vi.fn(
-      (
-        settingsService: SettingsService,
-        config?: ServerConfig.Config,
-        options: {
-          metadata?: Record<string, unknown>;
-          runtimeId?: string;
-        } = {},
-      ) => {
-        runtimeSettingsState.context = {
-          settingsService,
-          config: config ?? null,
-          runtimeId: options.runtimeId ?? 'mock-runtime',
-          metadata: options.metadata ?? {},
-        };
-      },
-    ),
     switchActiveProvider: vi.fn(async () => ({
       changed: true,
       previousProvider: null,
       nextProvider: 'mock-provider',
       infoMessages: [],
     })),
-    registerCliProviderInfrastructure: vi.fn(
-      (manager: ServerConfig.RuntimeProviderManager, oauthManager: unknown) => {
-        runtimeSettingsState.providerManager = manager;
-        runtimeSettingsState.oauthManager = oauthManager ?? null;
-      },
-    ),
     applyCliArgumentOverrides: vi.fn(async () => {}),
-    getCliRuntimeConfig: vi.fn(
-      () => runtimeSettingsState.context?.config ?? null,
-    ),
-    getCliRuntimeServices: vi.fn(() => ({
-      config: runtimeSettingsState.context?.config ?? null,
-      settingsService:
-        runtimeSettingsState.context?.settingsService ?? new SettingsService(),
-      providerManager: getProviderManager(),
-    })),
-    getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
-    getCliOAuthManager: vi.fn(() => runtimeSettingsState.oauthManager ?? null),
-    getActiveProviderStatus: vi.fn(() => ({
+    providerManager: vi.fn(() => runtimeSettingsState.providerManager),
+    oauthManager: vi.fn(() => runtimeSettingsState.oauthManager ?? null),
+    providerStatus: vi.fn(() => ({
       name:
         runtimeSettingsState.providerManager?.getActiveProviderName() ??
         runtimeSettingsState.context?.config?.getProvider() ??
@@ -224,17 +231,25 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
         config: unknown;
         runtimeId: string;
         metadata?: Record<string, unknown>;
-      }) => ({
-        runtime: {
-          settingsService: input.settingsService,
-          config: input.config,
-          runtimeId: input.runtimeId,
-          metadata: input.metadata,
-        },
-        runtimeMessageBus: { kind: 'session-bus' },
-        providerManager: getProviderManager(),
-        oauthManager: { id: 'oauth-manager' },
-      }),
+      }) => {
+        const providerFileLifecycle = new ProviderFileLifecycle({
+          maxFiles: 100,
+          maxBytes: 512 * 1024 * 1024,
+        });
+        return {
+          registration: { providerFileLifecycle },
+          runtime: {
+            providerFileLifecycle,
+            settingsService: input.settingsService,
+            config: input.config,
+            runtimeId: input.runtimeId,
+            metadata: input.metadata,
+          },
+          runtimeMessageBus: { kind: 'session-bus' },
+          providerManager: getProviderManager(),
+          oauthManager: { id: 'oauth-manager' },
+        };
+      },
     ),
   };
 });
@@ -297,6 +312,33 @@ function normalizeDisabledTools(
 }
 
 describe('defaultDisabledTools', () => {
+  afterEach(async () => {
+    const results = await Promise.allSettled(
+      retainedActivationOperations
+        .splice(0)
+        .map(async (operation) => operation.dispose()),
+    );
+    const errors = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (errors.length > 0)
+      throw new AggregateError(errors, 'Activation fixture cleanup');
+  });
+  afterEach(async () => {
+    const retiring = retainedConfigFixtures.splice(0);
+    const results = await Promise.allSettled(
+      retiring.map(async ({ config, settingsOwner }) => {
+        await settingsOwner.dispose();
+        await config.dispose();
+      }),
+    );
+    const errors = results.flatMap((r) =>
+      r.status === 'rejected' ? [r.reason] : [],
+    );
+    if (errors.length > 0)
+      throw new AggregateError(errors, 'Config fixture cleanup');
+  });
+
   const originalIsTTY = process.stdin.isTTY;
 
   beforeEach(() => {
@@ -314,7 +356,7 @@ describe('defaultDisabledTools', () => {
     };
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { settingsOwner: configSettingsOwner } = await loadConfigFixture(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -324,7 +366,7 @@ describe('defaultDisabledTools', () => {
       'test-session',
       argv,
     );
-    const disabled = config.getEphemeralSetting('tools.disabled');
+    const disabled = configSettingsOwner.readNamedParameter('tools.disabled');
     expect(disabled).toStrictEqual(expect.arrayContaining(['read_file']));
   });
 
@@ -334,7 +376,7 @@ describe('defaultDisabledTools', () => {
     };
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { settingsOwner: configSettingsOwner } = await loadConfigFixture(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -344,7 +386,7 @@ describe('defaultDisabledTools', () => {
       'test-session',
       argv,
     );
-    const disabled = config.getEphemeralSetting('tools.disabled');
+    const disabled = configSettingsOwner.readNamedParameter('tools.disabled');
     expect(disabled).toStrictEqual(
       expect.arrayContaining(['read_file', 'glob']),
     );
@@ -356,7 +398,7 @@ describe('defaultDisabledTools', () => {
     };
     process.argv = ['node', 'script.js', '--set', 'tools.disabled=["glob"]'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { settingsOwner: configSettingsOwner } = await loadConfigFixture(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -366,9 +408,9 @@ describe('defaultDisabledTools', () => {
       'test-session',
       argv,
     );
-    const currentDisabled = config.getEphemeralSetting('tools.disabled') as
-      | string[]
-      | undefined;
+    const currentDisabled = configSettingsOwner.readNamedParameter(
+      'tools.disabled',
+    ) as string[] | undefined;
     expect(currentDisabled).toStrictEqual(
       expect.arrayContaining(['glob', 'read_file']),
     );
@@ -385,7 +427,7 @@ describe('defaultDisabledTools', () => {
       'tools.disabled=["read_file"]',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { settingsOwner: configSettingsOwner } = await loadConfigFixture(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -395,7 +437,9 @@ describe('defaultDisabledTools', () => {
       'test-session',
       argv,
     );
-    const disabled = config.getEphemeralSetting('tools.disabled') as string[];
+    const disabled = configSettingsOwner.readNamedParameter(
+      'tools.disabled',
+    ) as string[];
     const readFileCount = disabled.filter((t) => t === 'read_file').length;
     expect(readFileCount).toBe(1);
   });
@@ -406,7 +450,7 @@ describe('defaultDisabledTools', () => {
     };
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { settingsOwner: configSettingsOwner } = await loadConfigFixture(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -416,7 +460,7 @@ describe('defaultDisabledTools', () => {
       'test-session',
       argv,
     );
-    const disabled = config.getEphemeralSetting('tools.disabled');
+    const disabled = configSettingsOwner.readNamedParameter('tools.disabled');
     // Should be either undefined, null, or empty array
     expect(hasNoDisabledTools(disabled)).toBe(true);
   });
@@ -427,7 +471,7 @@ describe('defaultDisabledTools', () => {
     };
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { settingsOwner: configSettingsOwner } = await loadConfigFixture(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -437,7 +481,7 @@ describe('defaultDisabledTools', () => {
       'test-session',
       argv,
     );
-    const disabled = config.getEphemeralSetting('tools.disabled');
+    const disabled = configSettingsOwner.readNamedParameter('tools.disabled');
     // Should be either undefined, null, or empty array
     expect(hasNoDisabledTools(disabled)).toBe(true);
   });
@@ -448,20 +492,23 @@ describe('defaultDisabledTools', () => {
     };
     process.argv = ['node', 'script.js'];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
-      settings,
-      [],
-      new ExtensionEnablementManager(
-        ExtensionStorage.getUserExtensionsDir(),
-        argv.extensions,
-      ),
-      'test-session',
-      argv,
-    );
+    const { config: config, settingsOwner: configSettingsOwner } =
+      await loadConfigFixture(
+        settings,
+        [],
+        new ExtensionEnablementManager(
+          ExtensionStorage.getUserExtensionsDir(),
+          argv.extensions,
+        ),
+        'test-session',
+        argv,
+      );
     // read_file should NOT be in excludeTools
     expect(config.getExcludeTools()).not.toContain('read_file');
     // But it SHOULD be in tools.disabled
-    const disabled = config.getEphemeralSetting('tools.disabled') as string[];
+    const disabled = configSettingsOwner.readNamedParameter(
+      'tools.disabled',
+    ) as string[];
     expect(disabled).toContain('read_file');
   });
 
@@ -476,7 +523,7 @@ describe('defaultDisabledTools', () => {
       'tools.allowed=["read_file"]',
     ];
     const argv = await parseArguments({} as Settings);
-    const config = await loadCliConfig(
+    const { settingsOwner: configSettingsOwner } = await loadConfigFixture(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -486,15 +533,42 @@ describe('defaultDisabledTools', () => {
       'test-session',
       argv,
     );
-    const disabled = config.getEphemeralSetting('tools.disabled') as
-      | string[]
-      | undefined;
+    const disabled = configSettingsOwner.readNamedParameter(
+      'tools.disabled',
+    ) as string[] | undefined;
     // read_file is in tools.allowed, so it must NOT be added to tools.disabled
     expect(normalizeDisabledTools(disabled)).not.toContain('read_file');
   });
 });
 
 describe('loadCliConfig disableYoloMode', () => {
+  afterEach(async () => {
+    const results = await Promise.allSettled(
+      retainedActivationOperations
+        .splice(0)
+        .map(async (operation) => operation.dispose()),
+    );
+    const errors = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (errors.length > 0)
+      throw new AggregateError(errors, 'Activation fixture cleanup');
+  });
+  afterEach(async () => {
+    const retiring = retainedConfigFixtures.splice(0);
+    const results = await Promise.allSettled(
+      retiring.map(async ({ config, settingsOwner }) => {
+        await settingsOwner.dispose();
+        await config.dispose();
+      }),
+    );
+    const errors = results.flatMap((r) =>
+      r.status === 'rejected' ? [r.reason] : [],
+    );
+    if (errors.length > 0)
+      throw new AggregateError(errors, 'Config fixture cleanup');
+  });
+
   beforeEach(() => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();
@@ -516,7 +590,7 @@ describe('loadCliConfig disableYoloMode', () => {
     const settings: Settings = {
       security: { disableYoloMode: true },
     };
-    const config = await loadCliConfig(
+    const { config: config } = await loadConfigFixture(
       settings,
       [],
       new ExtensionEnablementManager(
@@ -553,6 +627,33 @@ describe('loadCliConfig disableYoloMode', () => {
 });
 
 describe('loadCliConfig secureModeEnabled', () => {
+  afterEach(async () => {
+    const results = await Promise.allSettled(
+      retainedActivationOperations
+        .splice(0)
+        .map(async (operation) => operation.dispose()),
+    );
+    const errors = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (errors.length > 0)
+      throw new AggregateError(errors, 'Activation fixture cleanup');
+  });
+  afterEach(async () => {
+    const retiring = retainedConfigFixtures.splice(0);
+    const results = await Promise.allSettled(
+      retiring.map(async ({ config, settingsOwner }) => {
+        await settingsOwner.dispose();
+        await config.dispose();
+      }),
+    );
+    const errors = results.flatMap((r) =>
+      r.status === 'rejected' ? [r.reason] : [],
+    );
+    if (errors.length > 0)
+      throw new AggregateError(errors, 'Config fixture cleanup');
+  });
+
   beforeEach(() => {
     resetRuntimeSettingsState();
     vi.resetAllMocks();

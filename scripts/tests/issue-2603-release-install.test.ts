@@ -18,6 +18,17 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { afterEach } from 'bun:test';
+import {
+  assertReleaseGraph,
+  installReleaseArtifacts,
+  packReleaseArtifacts,
+  readReleaseManifest,
+} from './release-bound-artifact-helpers.ts';
+import {
+  deriveNpmReleasePackages,
+  getWorkspaceInfo,
+  rewriteDeps,
+} from '../bind-release-deps.ts';
 
 // Track smoke handles that need disposal after each test. Under Vitest,
 // ctx.onTestFinished provides per-test cleanup; Bun does not pass a test
@@ -419,4 +430,57 @@ describe('rewriteOnePkgDeps does not rewrite peerDependencies', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+});
+
+describe('release-bound artifact graph (issue #3771)', () => {
+  const workspaceInfo = getWorkspaceInfo();
+  const published = new Set(deriveNpmReleasePackages());
+  const manifests = [...workspaceInfo.values()].map((pkg) =>
+    readReleaseManifest(pkg.pkgJsonPath),
+  );
+  const workspaceNames = new Set(workspaceInfo.keys());
+
+  it('rejects dependency metadata retaining local workspace paths', () => {
+    expect(() => assertReleaseGraph(manifests, workspaceNames)).toThrow(
+      'expected release version',
+    );
+  });
+
+  it('accepts the actual workspace runtime graph after official release binding', () => {
+    const bound = manifests
+      .filter((pkg) => published.has(pkg.name))
+      .map((pkg) => {
+        const dependencies = { ...pkg.dependencies };
+        const optionalDependencies = { ...pkg.optionalDependencies };
+        const peerDependencies = { ...pkg.peerDependencies };
+        for (const deps of [
+          dependencies,
+          optionalDependencies,
+          peerDependencies,
+        ]) {
+          rewriteDeps(deps, workspaceInfo, published);
+        }
+        return { ...pkg, dependencies, optionalDependencies, peerDependencies };
+      });
+    expect(() => assertReleaseGraph(bound, workspaceNames)).not.toThrow();
+  });
+
+  it.skipIf(!process.env.LLXPRT_RELEASE_BUILT_ROOT)(
+    'installs actual release-bound tarballs offline without workspace links and runs installed help',
+    async () => {
+      const builtRoot = process.env.LLXPRT_RELEASE_BUILT_ROOT;
+      if (!builtRoot) throw new Error('LLXPRT_RELEASE_BUILT_ROOT is required');
+      const evidence = process.env.LLXPRT_RELEASE_PROOF_DIR;
+      if (!evidence) throw new Error('LLXPRT_RELEASE_PROOF_DIR is required');
+      const artifacts = await packReleaseArtifacts(
+        builtRoot,
+        repoRoot,
+        evidence,
+      );
+      const help = await installReleaseArtifacts(artifacts, evidence);
+      expect(help).toContain('llxprt [promptWords...]');
+      expect(help).toContain('--help');
+    },
+    1_200_000,
+  );
 });

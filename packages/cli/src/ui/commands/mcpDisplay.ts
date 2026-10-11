@@ -12,11 +12,7 @@ import type {
   Agent,
   McpServerDetail,
 } from '@vybestack/llxprt-code-agents';
-import {
-  getMCPServerStatus,
-  MCPServerStatus,
-  mcpServerRequiresOAuth,
-} from '@vybestack/llxprt-code-mcp';
+import { MCPServerStatus } from '@vybestack/llxprt-code-mcp';
 import type { McpCommandRuntime } from '../cliUiRuntime.js';
 
 export const COLOR_GREEN = '\u001b[32m';
@@ -55,35 +51,23 @@ function resolveTokenStatus(isExpired: boolean): {
   };
 }
 
-async function buildOAuthStatusSuffix(
-  serverName: string,
-  server: MCPServerConfig,
-): Promise<{ suffix: string; needsAuthHint: boolean }> {
-  let suffix = '';
-  let needsAuthHint = mcpServerRequiresOAuth.get(serverName) ?? false;
-  if (
-    server.oauth?.enabled === true ||
-    mcpServerRequiresOAuth.has(serverName)
-  ) {
-    needsAuthHint = true;
-    try {
-      const { MCPOAuthTokenStorage } = await import(
-        '@vybestack/llxprt-code-core'
-      );
-      const tokenStorage = new MCPOAuthTokenStorage();
-      const credentials = await tokenStorage.getToken(serverName);
-      if (credentials !== null) {
-        ({ suffix, needsAuthHint } = resolveTokenStatus(
-          MCPOAuthTokenStorage.isTokenExpired(credentials.token),
-        ));
-      } else {
-        suffix = ` ${COLOR_RED}(OAuth not authenticated)${RESET_COLOR}`;
-      }
-    } catch {
-      // If we can't check OAuth status, just continue
-    }
+function buildOAuthStatusSuffix(detail: McpServerDetail | undefined): {
+  suffix: string;
+  needsAuthHint: boolean;
+} {
+  switch (detail?.oauthStatus) {
+    case 'authenticated':
+      return resolveTokenStatus(false);
+    case 'expired':
+      return resolveTokenStatus(true);
+    case 'none':
+      return {
+        suffix: ` ${COLOR_RED}(OAuth not authenticated)${RESET_COLOR}`,
+        needsAuthHint: true,
+      };
+    default:
+      return { suffix: '', needsAuthHint: false };
   }
-  return { suffix, needsAuthHint };
 }
 
 function appendIndentedLines(
@@ -260,26 +244,13 @@ function buildAuthHintSuffix(
   return '';
 }
 
-function getServerDisplayStatus(
-  serverName: string,
-  serverTools: ToolInfo[],
-  serverPrompts: McpPromptInfo[],
-  serverResources: McpResourceInfo[],
-): {
+function getServerDisplayStatus(originalStatus: MCPServerStatus): {
   status: MCPServerStatus;
   originalStatus: MCPServerStatus;
   indicator: string;
   text: string;
 } {
-  const originalStatus = getMCPServerStatus(serverName);
-  const hasCachedItems =
-    serverTools.length > 0 ||
-    serverPrompts.length > 0 ||
-    serverResources.length > 0;
-  const status =
-    originalStatus === MCPServerStatus.DISCONNECTED && hasCachedItems
-      ? MCPServerStatus.CONNECTED
-      : originalStatus;
+  const status = originalStatus;
 
   let indicator = '';
   let text = '';
@@ -292,6 +263,10 @@ function getServerDisplayStatus(
       indicator = '[STARTING]';
       text = 'Starting... (first startup may take longer)';
       break;
+    case MCPServerStatus.DISCONNECTING:
+      indicator = '[STOPPING]';
+      text = 'Stopping...';
+      break;
     case MCPServerStatus.DISCONNECTED:
     default:
       indicator = '[DISCONNECTED]';
@@ -302,6 +277,7 @@ function getServerDisplayStatus(
 }
 
 async function buildServerHeader(
+  detail: McpServerDetail | undefined,
   serverName: string,
   server: MCPServerConfig,
   statusInfo: ReturnType<typeof getServerDisplayStatus>,
@@ -320,10 +296,7 @@ async function buildServerHeader(
 
   let message = `${statusInfo.indicator} \u001b[1m${serverDisplayName}\u001b[0m - ${statusInfo.text}`;
 
-  const { suffix: oauthSuffix, needsAuthHint } = await buildOAuthStatusSuffix(
-    serverName,
-    server,
-  );
+  const { suffix: oauthSuffix, needsAuthHint } = buildOAuthStatusSuffix(detail);
   message += oauthSuffix;
 
   message += buildToolCountSuffix(
@@ -340,6 +313,8 @@ async function buildServerHeader(
 }
 
 async function buildServerEntry(
+  status: MCPServerStatus,
+  detail: McpServerDetail | undefined,
   serverName: string,
   server: MCPServerConfig,
   serverTools: ToolInfo[],
@@ -348,13 +323,9 @@ async function buildServerEntry(
   showDescriptions: boolean,
   showSchema: boolean,
 ): Promise<string> {
-  const statusInfo = getServerDisplayStatus(
-    serverName,
-    serverTools,
-    serverPrompts,
-    serverResources,
-  );
+  const statusInfo = getServerDisplayStatus(status);
   const { header, needsAuthHint, originalStatus } = await buildServerHeader(
+    detail,
     serverName,
     server,
     statusInfo,
@@ -434,6 +405,19 @@ function buildBlockedServersSection(
   return message;
 }
 
+function resolveConnectionStatus(status: string | undefined): MCPServerStatus {
+  switch (status) {
+    case 'connected':
+      return MCPServerStatus.CONNECTED;
+    case 'connecting':
+      return MCPServerStatus.CONNECTING;
+    case 'disconnecting':
+      return MCPServerStatus.DISCONNECTING;
+    default:
+      return MCPServerStatus.DISCONNECTED;
+  }
+}
+
 export async function buildMcpStatusMessage(
   agent: Agent | null,
   serverNames: string[],
@@ -447,8 +431,11 @@ export async function buildMcpStatusMessage(
     return '';
   }
 
+  const statuses = new Map(
+    agent.mcp.listServers().map((server) => [server.name, server.status]),
+  );
   const connectingServers = serverNames.filter(
-    (name) => getMCPServerStatus(name) === MCPServerStatus.CONNECTING,
+    (name) => statuses.get(name) === 'connecting',
   );
   // Derive the aggregate discovery indicator from the REAL manager instance
   // via the Agent surface, NOT the stale process-global singleton. The
@@ -493,6 +480,8 @@ export async function buildMcpStatusMessage(
     }
     const detail = detailByServer.get(serverName);
     message += await buildServerEntry(
+      resolveConnectionStatus(statuses.get(serverName)),
+      detail,
       serverName,
       server,
       [...(detail?.tools ?? [])],

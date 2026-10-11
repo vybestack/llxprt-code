@@ -1,3 +1,6 @@
+import { SessionSettingsOwner } from '../session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { afterEach } from 'bun:test';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -25,7 +28,18 @@ function makeConfig(telemetry?: ConfigParameters['telemetry']): Config {
   });
 }
 
+const owners: SessionSettingsOwner[] = [];
+function settingsFor(config: Config): SessionSettingsOwner {
+  const owner = new SessionSettingsOwner(new SettingsService());
+  owner.bindTelemetry(config);
+  owners.push(owner);
+  return owner;
+}
+
 describe('Config.getTelemetryPerfEnabled / getTelemetryPerfMemory', () => {
+  afterEach(async () => {
+    for (const owner of owners.splice(0)) await owner.dispose();
+  });
   describe('defaults', () => {
     it('perf enabled defaults to false when perf is absent', () => {
       const config = makeConfig({ enabled: true });
@@ -79,29 +93,33 @@ describe('Config.getTelemetryPerfEnabled / getTelemetryPerfMemory', () => {
   });
 
   describe('reflects updates', () => {
-    it('getters reflect an update that enables the master switch and memory', () => {
+    it('getters reflect an update that enables the master switch and memory', async () => {
       const config = makeConfig();
-      expect(config.getTelemetryPerfEnabled()).toBe(false);
-      expect(config.getTelemetryPerfMemory()).toBe(false);
+      const owner = settingsFor(config);
+      expect(owner.getTelemetryPerfEnabled()).toBe(false);
+      expect(owner.getTelemetryPerfMemory()).toBe(false);
 
-      config.updateTelemetrySettings({ perf: { enabled: true, memory: true } });
-      expect(config.getTelemetryPerfEnabled()).toBe(true);
-      expect(config.getTelemetryPerfMemory()).toBe(true);
+      await owner.updateTelemetrySettings({
+        perf: { enabled: true, memory: true },
+      });
+      expect(owner.getTelemetryPerfEnabled()).toBe(true);
+      expect(owner.getTelemetryPerfMemory()).toBe(true);
     });
 
-    it('disabling the master switch gates memory back to false', () => {
+    it('disabling the master switch gates memory back to false', async () => {
       const config = makeConfig({ perf: { enabled: true, memory: true } });
-      config.updateTelemetrySettings({
+      const owner = settingsFor(config);
+      await owner.updateTelemetrySettings({
         perf: { enabled: false, memory: true },
       });
 
-      expect(config.getTelemetryPerfEnabled()).toBe(false);
-      expect(config.getTelemetryPerfMemory()).toBe(false);
+      expect(owner.getTelemetryPerfEnabled()).toBe(false);
+      expect(owner.getTelemetryPerfMemory()).toBe(false);
     });
   });
 
   describe('return types', () => {
-    it('always returns booleans across the full state space', () => {
+    it('always returns booleans across the full state space', async () => {
       const cases: Array<ConfigParameters['telemetry']> = [
         undefined,
         { enabled: true },

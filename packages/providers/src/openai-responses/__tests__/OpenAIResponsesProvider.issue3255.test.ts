@@ -1,3 +1,7 @@
+import {
+  captureResponsesTestRequest,
+  type ResponsesTestDeps,
+} from '../responses-request.test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -12,10 +16,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
 import { loadProviderAliasEntries } from '../../composition/providerAliases.js';
 import { computeModelDefaults } from '../../runtime/providerMutations.js';
-import {
-  buildRequestContext,
-  type ResponsesExecutorDeps,
-} from '../openAIResponsesExecutor.js';
+import { buildRequestContext } from '../openAIResponsesExecutor.js';
 import type { OpenAIResponsesRequest } from '../OpenAIResponsesTypes.js';
 
 const PROVIDER_NAME = 'openai-responses';
@@ -113,20 +114,20 @@ function createInvocation(
 function createDeps(
   logger: RecordingDebugLogger,
   baseURL: string,
-): ResponsesExecutorDeps {
+): ResponsesTestDeps {
   return {
     providerName: PROVIDER_NAME,
     logger,
-    getProviderBaseURL: () => baseURL,
-    getCustomHeaders: () => undefined,
+    requestBaseURL: baseURL,
+    requestHeaders: undefined,
     isCodexMode: () => false,
     getCodexAccountId: async () => 'test-account',
     resolveAuthTokenForPrompt: async () => 'test-token',
     shouldRetryOnError: () => false,
-    getDefaultModel: () => 'gpt-5.6-sol',
-    getGlobalConfig: () => undefined,
+    defaultModel: 'gpt-5.6-sol',
+
     getUnallowedModelParameters: () => new Set<string>(),
-  } satisfies ResponsesExecutorDeps;
+  } satisfies ResponsesTestDeps;
 }
 
 async function build(fixture: RequestFixture): Promise<BuiltFixture> {
@@ -136,7 +137,7 @@ async function build(fixture: RequestFixture): Promise<BuiltFixture> {
   );
   const baseURL = fixture.baseURL ?? BASE_URL;
   const context = await buildRequestContext(
-    options,
+    captureResponsesTestRequest(options, createDeps(logger, baseURL)),
     [...options.contents],
     { ...options.invocation.ephemerals },
     createDeps(logger, baseURL),

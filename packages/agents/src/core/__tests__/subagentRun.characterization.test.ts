@@ -102,13 +102,16 @@ describe('subagentRun characterization: isFatalToolError', () => {
   it('returns true for TOOL_NOT_REGISTERED', () => {
     expect(isFatalToolError(ToolErrorType.TOOL_NOT_REGISTERED)).toBe(true);
   });
+  it('returns true for POLICY_VIOLATION', () => {
+    expect(isFatalToolError(ToolErrorType.POLICY_VIOLATION)).toBe(true);
+  });
   it('returns false for undefined', () => {
     expect(isFatalToolError(undefined)).toBe(false);
   });
   it('returns false for other error types', () => {
     expect(isFatalToolError(ToolErrorType.VALIDATION_ERROR)).toBe(false);
   });
-  it('PROPERTY: only TOOL_DISABLED and TOOL_NOT_REGISTERED are fatal', () => {
+  it('PROPERTY: only disabled, unregistered and policy-denied tools are fatal', () => {
     const mismatches = observeFatalToolErrorMismatches();
     expect(mismatches).toStrictEqual([]);
   });
@@ -118,7 +121,8 @@ describe('subagentRun characterization: isFatalToolError', () => {
     for (const errorType of Object.values(ToolErrorType)) {
       const expected =
         errorType === ToolErrorType.TOOL_DISABLED ||
-        errorType === ToolErrorType.TOOL_NOT_REGISTERED;
+        errorType === ToolErrorType.TOOL_NOT_REGISTERED ||
+        errorType === ToolErrorType.POLICY_VIOLATION;
       if (isFatalToolError(errorType) !== expected) {
         mismatches.push(errorType);
       }

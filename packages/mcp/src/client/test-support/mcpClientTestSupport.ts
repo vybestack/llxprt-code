@@ -8,7 +8,7 @@ import type { Resource } from '@modelcontextprotocol/sdk/types.js';
 import type {
   MCPServerConfig,
   McpExtensionConfig,
-} from '../../config/mcpServerConfig.js';
+} from '../../config/index.js';
 import type {
   DiscoveredMCPPrompt,
   McpHostConfig,

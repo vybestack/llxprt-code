@@ -1,8 +1,16 @@
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import { BeforeToolSelectionHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
+const modelTools = installModelToolFixture();
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import type { ChatSessionConfig } from './chatSession.js';
@@ -25,7 +33,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import {
@@ -80,15 +88,16 @@ describe('ChatSession runtime context', () => {
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    config.setProviderManager(manager);
+    configureProviderRuntimeFactories(config, manager);
   });
 
   it('passes runtime context and tools to provider generateChatCompletion', async () => {
     const calls: GenerateChatOptions[] = [];
 
     const generateChatCompletionMock = vi.fn(async function* (
-      options: GenerateChatOptions,
-    ) {
+      options: GenerateChatOptions | IContent[],
+    ): AsyncIterableIterator<IContent> {
+      if (Array.isArray(options)) throw new Error('Expected request options');
       calls.push(options);
       yield {
         speaker: 'ai',
@@ -102,7 +111,6 @@ describe('ChatSession runtime context', () => {
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'stub-model',
       generateChatCompletion: generateChatCompletionMock,
-      getAuthToken: vi.fn(async () => 'stub-auth-token'),
     };
 
     manager.registerProvider(provider);
@@ -128,6 +136,8 @@ describe('ChatSession runtime context', () => {
     });
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
+      prepareProviderInvocation: (name, parameters, signal) =>
+        captureProviderInvocation(providerRuntime, name, parameters, signal),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -140,9 +150,12 @@ describe('ChatSession runtime context', () => {
         },
         'reasoning.includeInContext': true,
       },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      provider: createProviderAdapterFromManager(manager),
+      telemetry: createTelemetryAdapter(
+        config,
+        createSessionSettingsFixture(config).settingsOwner.telemetry,
+      ),
+      tools: createToolRegistryViewFromRegistry(modelTools()),
       providerRuntime: { ...providerRuntime },
     });
 
@@ -164,10 +177,12 @@ describe('ChatSession runtime context', () => {
 
     const options = calls[0];
     expect(options).toBeDefined();
-    expect(options.runtime).toBeDefined();
-    expect(options.runtime?.settingsService).toBe(settingsService);
-    expect(options.runtime?.config).toBe(config);
-    expect(options.config).toBe(config);
+    expect(options).not.toHaveProperty('runtime');
+    expect(options.invocation).toBeDefined();
+    expect(options).not.toHaveProperty('config');
+    expect(options.invocation?.getProviderOverrides('stub')).toMatchObject(
+      settingsService.getProviderSettings('stub'),
+    );
     expect(options.tools).toBeDefined();
     expect(options.tools?.length).toBe(tools.length);
 
@@ -177,48 +192,50 @@ describe('ChatSession runtime context', () => {
   });
 
   it('filters hook-disallowed provider function calls from non-stream responses and history', async () => {
-    const generateChatCompletionMock = vi.fn(async function* () {
-      yield {
-        speaker: 'ai',
-        blocks: [
-          {
-            type: 'tool_call',
-            id: 'allowed-call',
-            name: 'read_file',
-            parameters: { file_path: 'file.txt' },
+    const generateChatCompletionMock = vi.fn(
+      async function* (): AsyncIterableIterator<IContent> {
+        yield {
+          speaker: 'ai',
+          blocks: [
+            {
+              type: 'tool_call',
+              id: 'allowed-call',
+              name: 'read_file',
+              parameters: { file_path: 'file.txt' },
+            },
+            {
+              type: 'tool_call',
+              id: 'blocked-call',
+              name: 'run_shell_command',
+              parameters: { command: 'echo blocked' },
+            },
+          ],
+          metadata: {
+            providerMetadata: {
+              automaticFunctionCallingHistory: [
+                {
+                  speaker: 'ai',
+                  blocks: [
+                    {
+                      type: 'tool_call',
+                      id: 'history-allowed-call',
+                      name: 'read_file',
+                      parameters: { file_path: 'file.txt' },
+                    },
+                    {
+                      type: 'tool_call',
+                      id: 'history-blocked-call',
+                      name: 'run_shell_command',
+                      parameters: { command: 'echo blocked-history' },
+                    },
+                  ],
+                },
+              ],
+            },
           },
-          {
-            type: 'tool_call',
-            id: 'blocked-call',
-            name: 'run_shell_command',
-            parameters: { command: 'echo blocked' },
-          },
-        ],
-        metadata: {
-          providerMetadata: {
-            automaticFunctionCallingHistory: [
-              {
-                speaker: 'ai',
-                blocks: [
-                  {
-                    type: 'tool_call',
-                    id: 'history-allowed-call',
-                    name: 'read_file',
-                    parameters: { file_path: 'file.txt' },
-                  },
-                  {
-                    type: 'tool_call',
-                    id: 'history-blocked-call',
-                    name: 'run_shell_command',
-                    parameters: { command: 'echo blocked-history' },
-                  },
-                ],
-              },
-            ],
-          },
-        },
-      };
-    });
+        };
+      },
+    );
 
     const provider: IProvider = {
       name: 'stub',
@@ -226,7 +243,6 @@ describe('ChatSession runtime context', () => {
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'stub-model',
       generateChatCompletion: generateChatCompletionMock,
-      getAuthToken: vi.fn(async () => 'stub-auth-token'),
     };
     manager.registerProvider(provider);
 
@@ -241,20 +257,17 @@ describe('ChatSession runtime context', () => {
       sessionId: config.getSessionId(),
     });
     const historyService = new HistoryService();
-    const hookConfig = Object.create(config) as Config;
-    Object.defineProperties(hookConfig, {
-      getEnableHooks: { value: () => true },
-      getHookSystem: {
-        value: () => ({
-          initialize: async () => undefined,
-          fireBeforeToolSelectionEvent: async () => ({
-            applyToolChoiceModifications: () => ({
-              toolChoice: { mode: 'auto', allowedToolNames: ['read_file'] },
-            }),
-          }),
+    const hookOwner: HookExecutionOwner = {
+      sessionId: () => config.getSessionId(),
+      transcriptPath: () => undefined,
+      beforeToolSelection: async () =>
+        new BeforeToolSelectionHookOutput({
+          hookSpecificOutput: {
+            toolChoice: { mode: 'auto', allowedToolNames: ['read_file'] },
+          },
         }),
-      },
-    });
+    };
+    const hookRuntime = { ...providerRuntime, config };
     const view = createAgentRuntimeContext({
       state: runtimeState,
       history: historyService,
@@ -268,10 +281,15 @@ describe('ChatSession runtime context', () => {
         },
         'reasoning.includeInContext': true,
       },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
-      providerRuntime: { ...providerRuntime, config: hookConfig },
+      provider: createProviderAdapterFromManager(manager),
+      telemetry: createTelemetryAdapter(
+        config,
+        createSessionSettingsFixture(config).settingsOwner.telemetry,
+      ),
+      tools: createToolRegistryViewFromRegistry(modelTools()),
+      providerRuntime: hookRuntime,
+      prepareProviderInvocation: (name, parameters, signal) =>
+        captureProviderInvocation(hookRuntime, name, parameters, signal),
     });
 
     const chat = new ChatSession(
@@ -282,7 +300,7 @@ describe('ChatSession runtime context', () => {
     );
 
     const response = await chat.sendMessage(
-      { message: 'Use tools', config: { tools } },
+      { message: 'Use tools', config: { tools }, hookOwner },
       'prompt-hook-selection',
     );
 
@@ -297,41 +315,43 @@ describe('ChatSession runtime context', () => {
   });
 
   it('preserves direct response text when filtering hook-disallowed tool calls', async () => {
-    const generateChatCompletionMock = vi.fn(async function* () {
-      yield {
-        speaker: 'ai',
-        blocks: [
-          { type: 'text', text: 'visible text' },
-          {
-            type: 'tool_call',
-            id: 'blocked-call',
-            name: 'run_shell_command',
-            parameters: { command: 'echo blocked' },
+    const generateChatCompletionMock = vi.fn(
+      async function* (): AsyncIterableIterator<IContent> {
+        yield {
+          speaker: 'ai',
+          blocks: [
+            { type: 'text', text: 'visible text' },
+            {
+              type: 'tool_call',
+              id: 'blocked-call',
+              name: 'run_shell_command',
+              parameters: { command: 'echo blocked' },
+            },
+          ],
+          metadata: {
+            providerMetadata: {
+              automaticFunctionCallingHistory: [
+                {
+                  speaker: 'ai',
+                  blocks: [
+                    {
+                      type: 'tool_call',
+                      id: 'metadata-blocked-call',
+                      name: 'run_shell_command',
+                      parameters: { command: 'echo metadata-blocked' },
+                    },
+                  ],
+                },
+              ],
+            },
           },
-        ],
-        metadata: {
-          providerMetadata: {
-            automaticFunctionCallingHistory: [
-              {
-                speaker: 'ai',
-                blocks: [
-                  {
-                    type: 'tool_call',
-                    id: 'metadata-blocked-call',
-                    name: 'run_shell_command',
-                    parameters: { command: 'echo metadata-blocked' },
-                  },
-                ],
-              },
-            ],
-          },
-        },
-      };
-      yield {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'still visible' }],
-      };
-    });
+        };
+        yield {
+          speaker: 'ai',
+          blocks: [{ type: 'text', text: 'still visible' }],
+        };
+      },
+    );
 
     const provider: IProvider = {
       name: 'stub',
@@ -339,7 +359,6 @@ describe('ChatSession runtime context', () => {
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'stub-model',
       generateChatCompletion: generateChatCompletionMock,
-      getAuthToken: vi.fn(async () => 'stub-auth-token'),
     };
     manager.registerProvider(provider);
 
@@ -347,28 +366,25 @@ describe('ChatSession runtime context', () => {
       { name: 'read_file', parametersJsonSchema: {} },
       { name: 'run_shell_command', parametersJsonSchema: {} },
     ];
-    const hookConfig = Object.create(config) as Config;
-    Object.defineProperties(hookConfig, {
-      getEnableHooks: { value: () => true },
-      getHookSystem: {
-        value: () => ({
-          initialize: async () => undefined,
-          fireBeforeToolSelectionEvent: async () => ({
-            applyToolChoiceModifications: () => ({
-              toolChoice: { mode: 'auto', allowedToolNames: ['read_file'] },
-            }),
-          }),
-          fireBeforeModelEvent: async () => new BeforeModelHookOutput({}),
-          fireAfterModelEvent: async () => new AfterModelHookOutput({}),
+    const hookOwner: HookExecutionOwner = {
+      sessionId: () => config.getSessionId(),
+      transcriptPath: () => undefined,
+      beforeToolSelection: async () =>
+        new BeforeToolSelectionHookOutput({
+          hookSpecificOutput: {
+            toolChoice: { mode: 'auto', allowedToolNames: ['read_file'] },
+          },
         }),
-      },
-    });
+      beforeModel: async () => new BeforeModelHookOutput({}),
+      afterModel: async () => new AfterModelHookOutput({}),
+    };
     const runtimeState = createAgentRuntimeState({
       runtimeId: 'runtime-test',
       provider: provider.name,
       model: config.getModel(),
       sessionId: config.getSessionId(),
     });
+    const hookRuntime = { ...providerRuntime, config };
     const view = createAgentRuntimeContext({
       state: runtimeState,
       history: new HistoryService(),
@@ -382,10 +398,15 @@ describe('ChatSession runtime context', () => {
         },
         'reasoning.includeInContext': true,
       },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
-      providerRuntime: { ...providerRuntime, config: hookConfig },
+      provider: createProviderAdapterFromManager(manager),
+      telemetry: createTelemetryAdapter(
+        config,
+        createSessionSettingsFixture(config).settingsOwner.telemetry,
+      ),
+      tools: createToolRegistryViewFromRegistry(modelTools()),
+      providerRuntime: hookRuntime,
+      prepareProviderInvocation: (name, parameters, signal) =>
+        captureProviderInvocation(hookRuntime, name, parameters, signal),
     });
 
     const chat = new ChatSession(
@@ -396,7 +417,7 @@ describe('ChatSession runtime context', () => {
     );
 
     const response = await chat.generateDirectMessage(
-      { message: 'Use direct response' },
+      { message: 'Use direct response', hookOwner },
       'prompt-direct-hook-selection',
     );
 

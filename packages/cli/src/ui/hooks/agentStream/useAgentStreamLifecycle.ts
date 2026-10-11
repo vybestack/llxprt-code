@@ -6,12 +6,9 @@
 
 import { useCallback, useMemo, useRef } from 'react';
 import {
-  type CompletedToolCall,
   type EditorType,
-  type MessageBus,
   type ToolCallRequestInfo,
 } from '@vybestack/llxprt-code-core';
-import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   MessageType,
@@ -83,21 +80,16 @@ function isTerminalToolCall(status: TrackedToolCall['status']): boolean {
 }
 
 export function useToolSchedulerSetup(
-  runtime: StreamRuntime,
   setPendingHistoryItem: React.Dispatch<
     React.SetStateAction<HistoryItemWithoutId | null>
   >,
   getPreferredEditor: () => EditorType | undefined,
   onEditorClose: () => void,
   onEditorOpen: () => void,
-  runtimeMessageBus: MessageBus | undefined,
   addItem: UseHistoryManagerReturn['addItem'],
   agent: Agent,
 ) {
-  const schedulerRuntime = useMemo(
-    () => ({ scheduler: runtime.scheduler, session: runtime.session }),
-    [runtime],
-  );
+  const schedulerRuntime = useMemo(() => ({ agent }), [agent]);
   const toolSchedulerResult = useReactToolScheduler(
     async (_schedulerId, completedToolCallsFromScheduler, { isPrimary }) => {
       if (completedToolCallsFromScheduler.length === 0) return;
@@ -105,7 +97,6 @@ export function useToolSchedulerSetup(
         processPrimaryCompletion(
           completedToolCallsFromScheduler,
           addItem,
-          agent,
           toolSchedulerResult[2],
         );
         return;
@@ -121,7 +112,6 @@ export function useToolSchedulerSetup(
     getPreferredEditor,
     onEditorClose,
     onEditorOpen,
-    runtimeMessageBus,
   );
 
   return { toolSchedulerResult };
@@ -130,22 +120,12 @@ export function useToolSchedulerSetup(
 function processPrimaryCompletion(
   completedToolCallsFromScheduler: TrackedToolCall[],
   addItem: UseHistoryManagerReturn['addItem'],
-  agent: Agent,
   markToolsAsDisplayCleared: (callIds: string[]) => void,
 ): void {
   addItem(
     mapTrackedToolCallsToDisplay(completedToolCallsFromScheduler),
     Date.now(),
   );
-  try {
-    agent.tools.recordCompletedToolCalls(
-      completedToolCallsFromScheduler as CompletedToolCall[],
-    );
-  } catch (error) {
-    debugLogger.error(
-      `Error recording completed tool call information: ${error}`,
-    );
-  }
   // Mark external (subagent) tools as cleared from display. Continuation is
   // owned by the Agent/loop; this is display-only.
   const { externalTools } = classifyCompletedTools(

@@ -29,7 +29,6 @@
  */
 
 import { readFileSync, statSync } from 'node:fs';
-import { isSourceMemoryEntrypoint } from './entrypoint.ts';
 
 type MetaTypes = ReadonlyArray<readonly string[] | string>;
 
@@ -921,6 +920,6 @@ export function runAnalyzeCli(usage = SOURCE_ANALYZE_USAGE): void {
   }
 }
 
-if (isSourceMemoryEntrypoint(import.meta.url)) {
+export async function main(): Promise<void> {
   runAnalyzeCli();
 }

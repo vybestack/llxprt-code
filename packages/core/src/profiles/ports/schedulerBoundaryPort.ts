@@ -30,7 +30,8 @@ export type SafeBoundaryOutcome<T> =
  * abort signal fires first or the window cannot be held; `fn` is not invoked on
  * cancellation.
  *
- * The coordinator-backed implementation lands with the #2640 cutover.
+ * AgentExecutionCoordinator implements this port per Agent. ProfileController
+ * wiring to that owner is part of the #2640 public profile cutover.
  */
 export interface SchedulerBoundaryPort {
   withSafeBoundary<T>(

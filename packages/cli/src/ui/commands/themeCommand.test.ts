@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'bun:test';
-import { themeCommand } from './themeCommand';
+import { themeCommand } from './themeCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { assertDefined } from '../../__tests__/assertions.js';
@@ -21,7 +21,7 @@ describe('themeCommand', () => {
     // Ensure the command has an action to test.
     assertDefined(themeCommand.action);
 
-    const result = themeCommand.action!(mockContext, '');
+    const result = themeCommand.action(mockContext, '');
 
     // Assert that the action returns the correct object to trigger the theme dialog.
     expect(result).toStrictEqual({

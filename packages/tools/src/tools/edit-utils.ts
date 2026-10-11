@@ -5,18 +5,13 @@
  */
 
 import * as path from 'path';
-import process from 'node:process';
 import type {
   IIdeService,
   ILspService,
   IToolHost,
   IToolMessageBus,
 } from '../interfaces/index.js';
-import {
-  hasWorkspaceContextCap,
-  hasIdeCap,
-  hasLspCap,
-} from '../interfaces/host-capabilities.js';
+import { hasIdeCap, hasLspCap } from '../interfaces/host-capabilities.js';
 import type { ModifyContext } from './modifiable-tool.js';
 import { isNodeError } from '../utils/errors.js';
 import { EmojiFilter } from '../utils/EmojiFilter.js';
@@ -144,7 +139,7 @@ export function applyLineGuardedReplacement(
  */
 export function getEmojiFilter(host: IToolHost): EmojiFilter {
   // IToolHost types getEphemeralSettings() as required. Call it directly.
-  const settings = host.getEphemeralSettings();
+  const settings = host.readExecutionPolicy();
   const mode = settings.emojifilter as 'allowed' | 'auto' | 'warn' | 'error';
 
   // Map auto to warn for file operations (we want warnings when filtering files)
@@ -384,14 +379,7 @@ export async function readTextFileViaHost(
   host: IToolHost,
   filePath: string,
 ): Promise<string> {
-  const fileSystemService = host.getFileSystemService?.();
-  if (fileSystemService !== undefined) {
-    return fileSystemService.readTextFile(filePath);
-  }
-  // Defer import to keep this module side-effect free for callers that only
-  // use the pure helpers above.
-  const fs = await import('node:fs/promises');
-  return fs.readFile(filePath, 'utf8');
+  return host.readTextFile(filePath);
 }
 
 function isNonNullObject(value: unknown): value is object {
@@ -450,36 +438,6 @@ export function toIdeConnectionStatus(
   return 'disconnected';
 }
 
-/** Creates a minimal {@link IToolHost} used as a default argument fallback. */
-export function createDefaultToolHost(): IToolHost {
-  return {
-    getTargetDir: () => process.cwd(),
-    getWorkspaceRoots: () => [path.parse(process.cwd()).root],
-    getApprovalMode: () => 'auto',
-    setApprovalMode: () => {},
-    isInteractive: () => false,
-    hasFeatureFlag: () => false,
-    getFileService: () => ({
-      shouldGitIgnoreFile: () => false,
-      shouldLlxprtIgnoreFile: () => false,
-      shouldIgnoreFile: () => false,
-      filterFiles: (paths: string[]) => paths,
-    }),
-    getFileFilteringOptions: () => ({
-      respectGitIgnore: true,
-      respectLlxprtIgnore: true,
-    }),
-    getFileExclusions: () => [],
-    getReadManyFilesExclusions: () => [],
-    getFileFilteringRespectLlxprtIgnore: () => true,
-    getLlxprtIgnoreFilePath: () => null,
-    recordFileRead: () => {},
-    getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({}),
-    getDebugMode: () => false,
-  };
-}
-
 /** Returns the working directory for a host, falling back to cwd. */
 export function getTargetDirCompat(host: IToolHost): string {
   return host.getTargetDir();
@@ -487,12 +445,6 @@ export function getTargetDirCompat(host: IToolHost): string {
 
 /** Resolves workspace roots from a host with optional legacy accessors. */
 export function getWorkspaceRootsCompat(host: IToolHost): string[] {
-  if (hasWorkspaceContextCap(host)) {
-    const dirs = host.getWorkspaceContext().getDirectories?.();
-    if (dirs) {
-      return dirs;
-    }
-  }
   return host.getWorkspaceRoots();
 }
 
@@ -553,31 +505,10 @@ export function getLegacyLspService(host: IToolHost): ILspService | undefined {
   if (!hasLspCap(host)) {
     return undefined;
   }
-  const lspClient = host.getLspServiceClient();
-  if (typeof lspClient !== 'object' || lspClient === null) {
-    return undefined;
-  }
   return {
     getDiagnostics: () => [],
-    waitForDiagnostics: async (filePath, _timeout) => {
-      const isAlive = (lspClient as { isAlive?: () => boolean }).isAlive?.();
-      if (isAlive !== true) {
-        return [];
-      }
-      const checkFile = (
-        lspClient as {
-          checkFile?: (
-            filePath: string,
-            signal?: AbortSignal,
-          ) => Promise<unknown>;
-        }
-      ).checkFile;
-      if (typeof checkFile !== 'function') {
-        return [];
-      }
-      const diagnostics = await checkFile.call(lspClient, filePath);
-      return Array.isArray(diagnostics) ? diagnostics : [];
-    },
+    waitForDiagnostics: (filePath, timeout) =>
+      host.checkFileDiagnostics(filePath, timeout),
     getLspConfig: () => host.getLspConfig?.(),
   };
 }

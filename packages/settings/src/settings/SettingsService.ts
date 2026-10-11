@@ -55,6 +55,7 @@ interface SettingsChangeEvent {
 
 interface ProviderSettingsChangeEvent extends SettingsChangeEvent {
   provider: string;
+  readonly selectionOwner?: object;
 }
 
 /**
@@ -254,6 +255,23 @@ export class SettingsService extends EventEmitter {
   }
 
   setProviderSetting(provider: string, key: string, value: unknown): void {
+    this.updateProviderSetting(provider, key, value);
+  }
+
+  selectSessionModel(
+    provider: string,
+    model: string,
+    selectionOwner: object,
+  ): void {
+    this.updateProviderSetting(provider, 'model', model, selectionOwner);
+  }
+
+  private updateProviderSetting(
+    provider: string,
+    key: string,
+    value: unknown,
+    selectionOwner?: object,
+  ): void {
     assertCanonicalSettingKey(key);
     this.assertSafePath([provider]);
     const entry = this.getOrCreateProvider(provider);
@@ -270,6 +288,7 @@ export class SettingsService extends EventEmitter {
       key,
       oldValue: redactEventValue(key, oldValue),
       newValue: redactEventValue(key, value),
+      ...(selectionOwner === undefined ? {} : { selectionOwner }),
     });
   }
 
@@ -323,8 +342,8 @@ export class SettingsService extends EventEmitter {
       ...this.settings.global,
     };
 
-    if (this.settings.tools) {
-      const tools = this.settings.tools;
+    const tools = this.settings.global['tools'];
+    if (isPlainObject(tools)) {
       snapshot.tools = { ...tools };
 
       if (Array.isArray(tools.allowed)) {

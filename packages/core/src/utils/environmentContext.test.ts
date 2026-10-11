@@ -9,24 +9,28 @@ import {
   getDirectoryContextString,
   getEnvironmentContext,
 } from './environmentContext.js';
-import type { Config } from '../config/config.js';
 
-function makeConfig(directories: string[], environmentMemory: string): Config {
+function makeConfig(
+  directories: string[],
+  environmentMemory: string,
+): {
+  config: string;
+  directories: readonly string[];
+} {
   return {
-    getWorkspaceContext: () =>
-      ({
-        getDirectories: () => directories,
-      }) as unknown as ReturnType<Config['getWorkspaceContext']>,
-    getFileService: () => undefined as never,
-    getEnvironmentMemory: () => environmentMemory,
-  } as Partial<Config> as Config;
+    config: environmentMemory,
+    directories,
+  };
 }
 
 describe('getEnvironmentContext', () => {
   it('includes date, OS, working-directory preamble, and environment memory', async () => {
     const config = makeConfig(['/test/dir'], 'Memory line');
 
-    const parts = await getEnvironmentContext(config);
+    const parts = await getEnvironmentContext(
+      config.config,
+      config.directories,
+    );
 
     expect(parts).toHaveLength(1);
     const text = parts[0].text;
@@ -40,7 +44,10 @@ describe('getEnvironmentContext', () => {
   it('lists multiple directories with the following-directories preamble', async () => {
     const config = makeConfig(['/test/dir1', '/test/dir2'], '');
 
-    const parts = await getEnvironmentContext(config);
+    const parts = await getEnvironmentContext(
+      config.config,
+      config.directories,
+    );
 
     expect(parts).toHaveLength(1);
     expect(parts[0].text).toContain(
@@ -51,7 +58,10 @@ describe('getEnvironmentContext', () => {
   it('does not render a folder-tree listing', async () => {
     const config = makeConfig(['/test/dir'], 'Memory line');
 
-    const parts = await getEnvironmentContext(config);
+    const parts = await getEnvironmentContext(
+      config.config,
+      config.directories,
+    );
 
     const text = parts[0].text;
     expect(text).not.toContain('Here is the folder structure');
@@ -62,7 +72,10 @@ describe('getEnvironmentContext', () => {
   it('returns exactly one env part', async () => {
     const config = makeConfig(['/test/dir'], '');
 
-    const parts = await getEnvironmentContext(config);
+    const parts = await getEnvironmentContext(
+      config.config,
+      config.directories,
+    );
 
     expect(parts).toHaveLength(1);
   });
@@ -72,7 +85,7 @@ describe('getDirectoryContextString', () => {
   it('returns a single-directory preamble for one workspace directory', async () => {
     const config = makeConfig(['/test/dir'], '');
 
-    await expect(getDirectoryContextString(config)).resolves.toBe(
+    await expect(getDirectoryContextString(config.directories)).resolves.toBe(
       "I'm currently working in the directory: /test/dir",
     );
   });
@@ -80,7 +93,7 @@ describe('getDirectoryContextString', () => {
   it('returns a bulleted preamble for multiple workspace directories', async () => {
     const config = makeConfig(['/test/dir1', '/test/dir2'], '');
 
-    await expect(getDirectoryContextString(config)).resolves.toBe(
+    await expect(getDirectoryContextString(config.directories)).resolves.toBe(
       "I'm currently working in the following directories:\n  - /test/dir1\n  - /test/dir2",
     );
   });
@@ -88,7 +101,7 @@ describe('getDirectoryContextString', () => {
   it('resolves to a string (async public contract)', async () => {
     const config = makeConfig(['/test/dir'], '');
 
-    const preamble = getDirectoryContextString(config);
+    const preamble = getDirectoryContextString(config.directories);
 
     expect(preamble).toBeInstanceOf(Promise);
     expect(typeof (await preamble)).toBe('string');

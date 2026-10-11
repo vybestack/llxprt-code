@@ -21,9 +21,13 @@ import type { Mock } from 'bun:test';
 export type MockedChatInstance = {
   sendMessageStream: Mock<(...args: never[]) => AsyncIterable<unknown>>;
   getHistory: Mock<(...args: never[]) => unknown>;
-  getConfig: () =>
-    | { getEphemeralSetting: (key: string) => unknown }
+  getStreamTimeoutPolicy: () =>
+    | {
+        readonly 'stream-idle-timeout-ms'?: unknown;
+        readonly 'stream-first-response-timeout-ms'?: unknown;
+      }
     | undefined;
+  shouldShowCitations: () => boolean;
   getResolvedBaseUrl: () => string | undefined;
 };
 

@@ -5,14 +5,14 @@
  */
 
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
-
+import { withRetryRequestState } from './retry-request-state.js';
+import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { resolveStreamIdleTimeoutMs } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type {
   IContent,
   UsageStats,
@@ -134,16 +134,21 @@ export class TurnProcessor {
     return this.currentPromptEnvelopeEstimate;
   }
 
+  rebindHistory(runtimeContext: AgentRuntimeContext): void {
+    this.runtimeContext = runtimeContext;
+    this.historyService = runtimeContext.history;
+  }
+
   constructor(
-    private readonly runtimeContext: AgentRuntimeContext,
+    private runtimeContext: AgentRuntimeContext,
     private readonly compressionHandler: CompressionHandler,
     private readonly providerResolver: (contextLabel: string) => IProvider,
     private readonly providerRuntimeBuilder: (
       source: string,
       extras?: Record<string, unknown>,
-    ) => ProviderRuntimeContext,
+    ) => ProviderRequestCollaborators,
     private readonly generationConfig: ChatSessionConfig,
-    private readonly historyService: HistoryService,
+    private historyService: HistoryService,
     private readonly streamProcessor: StreamProcessor,
     private readonly resolveProviderBaseUrl: (
       provider: IProvider,
@@ -203,6 +208,7 @@ export class TurnProcessor {
         prepared,
         prompt_id,
         provider,
+        params.recordingExecution?.historyOrigin,
       );
       await this.sendPromise;
       semanticMediaPurge?.finalize();
@@ -295,7 +301,7 @@ export class TurnProcessor {
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
     onDone: () => void,
   ): AsyncGenerator<StreamEvent> {
-    const requestParams = this._withProviderRequestContext(params);
+    const requestParams = withRetryRequestState(params);
     let primaryFailure: { readonly error: unknown } | undefined;
     try {
       let lastError: unknown = new Error('Request failed after all retries.');
@@ -440,18 +446,6 @@ export class TurnProcessor {
     return normalizeToolInteractionInput(params.message);
   }
 
-  private _withProviderRequestContext(
-    params: SendMessageParams,
-  ): SendMessageParams {
-    return {
-      ...params,
-      config: {
-        ...params.config,
-        providerRequestContext: params.config?.providerRequestContext ?? {},
-      },
-    };
-  }
-
   /**
    * Waits for any pending send operation to complete.
    * Fail-open: swallows errors from previous failed sends.
@@ -491,7 +485,7 @@ export class TurnProcessor {
     prompt_id: string,
     semanticMediaPurge: SemanticMediaPurgeAttempt | undefined,
   ): Promise<ModelOutput> {
-    const requestParams = this._withProviderRequestContext(params);
+    const requestParams = withRetryRequestState(params);
     this._validateProvider(provider);
     const timing = createProviderSendTiming();
 
@@ -554,8 +548,8 @@ export class TurnProcessor {
   ): Promise<ModelOutput> {
     const requestTools = this._selectRequestTools(requestParams);
     const toolSelection = await this._applyToolSelectionHook(
-      this.runtimeContext.providerRuntime.config,
       requestTools,
+      requestParams.hookOwner ?? requestParams.recordingExecution?.hookOwner,
     );
     const runtimeContext = this.providerRuntimeBuilder(
       'TurnProcessor.executeProviderCall',
@@ -567,8 +561,17 @@ export class TurnProcessor {
             toolSelection.tools?.length === 0),
       },
     );
+    provider = bindProviderMediaAndFiles(
+      provider,
+      runtimeContext.mediaResolver,
+      runtimeContext.requestMediaBudgetBytes,
+      runtimeContext.providerFileBindings,
+      runtimeContext.providerFileLifecycle,
+      runtimeContext.config?.getTargetDir(),
+    );
     return enforceAndSendWithPromptEnvelopeRetries({
       provider,
+      tokenizerFactory: this.runtimeContext.promptEstimator,
       contents: userIContents,
       buildOptions: (contents) =>
         this._buildProviderChatOptions(
@@ -577,6 +580,7 @@ export class TurnProcessor {
           runtimeContext,
           requestParams.config?.abortSignal ?? new AbortController().signal,
           requestParams.config?.providerRequestContext,
+          provider.name,
         ),
       enforce: (contents, estimate) =>
         enforceTurnMediaRequestContents({
@@ -588,6 +592,8 @@ export class TurnProcessor {
           promptId: prompt_id,
           semanticMediaPurge,
           estimateFinalizedPromptTokens: estimate,
+          recordingExecution: requestParams.recordingExecution,
+          hookOwner: requestParams.hookOwner,
         }),
       fallbackEstimate: (contents) =>
         this.compressionHandler.estimatePendingTokens(contents),
@@ -624,7 +630,7 @@ export class TurnProcessor {
     requestContents: IContent[],
     providerBaseUrl: string | undefined,
     toolSelection: ToolSelectionHookResult,
-    runtimeContext: ProviderRuntimeContext,
+    runtimeContext: ProviderRequestCollaborators,
     preparedAtEnforcement?: Awaited<ReturnType<typeof prepareAtSendSeam>>,
   ): Promise<ModelOutput> {
     const tools = toolSelection.tools;
@@ -649,7 +655,9 @@ export class TurnProcessor {
             runtimeContext,
             timeoutController.signal,
             params.config?.providerRequestContext,
+            provider.name,
           ),
+          this.runtimeContext.promptEstimator,
         ));
       this.currentPromptEnvelopeEstimate = prepared.estimate;
       recordSendSeamTelemetry({
@@ -716,17 +724,20 @@ export class TurnProcessor {
   private _buildProviderChatOptions(
     requestContents: IContent[],
     tools: ToolDeclaration[] | undefined,
-    runtimeContext: ProviderRuntimeContext,
+    runtimeContext: ProviderRequestCollaborators,
     timeoutSignal: AbortSignal,
     requestContext: Record<string, unknown> | undefined,
+    providerName: string,
   ): GenerateChatOptions {
     return buildProviderChatOptions(
       requestContents,
       tools,
-      runtimeContext,
-      {
-        signal: timeoutSignal,
-      } as GenerateChatOptions['invocation'],
+      runtimeContext.metadata,
+      this.runtimeContext.prepareProviderInvocation(
+        providerName,
+        undefined,
+        timeoutSignal,
+      ),
       requestContext,
       this.generationConfig.systemInstruction,
       this.generationConfig.systemPromptAssembler,
@@ -735,7 +746,7 @@ export class TurnProcessor {
 
   private async _consumeProviderStream(
     streamResponse: AsyncIterable<IContent>,
-    runtimeContext: ProviderRuntimeContext,
+    runtimeContext: ProviderRequestCollaborators,
     timeoutController: AbortController,
     upstreamAbortSignal: AbortSignal | undefined,
   ): Promise<IContent> {
@@ -747,7 +758,7 @@ export class TurnProcessor {
     const blocks: IContent['blocks'] = [];
     const iterator = streamResponse[Symbol.asyncIterator]();
     const effectiveTimeoutMs = resolveStreamIdleTimeoutMs(
-      runtimeContext.config,
+      this.runtimeContext.readStreamTimeoutPolicy(),
     );
 
     let nextResponse = await readProviderStreamResponse(
@@ -797,32 +808,22 @@ export class TurnProcessor {
   }
 
   private async _applyToolSelectionHook(
-    configForHooks: Config | undefined,
     tools: AgentClientGenerateConfig['tools'],
+    hookOwner?: NonNullable<
+      SendMessageParams['recordingExecution']
+    >['hookOwner'],
   ): Promise<ToolSelectionHookResult> {
     const toolsFromConfig = Array.isArray(tools) ? tools : [];
-    if (
-      configForHooks === undefined ||
-      typeof configForHooks.getEnableHooks !== 'function' ||
-      configForHooks.getEnableHooks() !== true
-    ) {
-      return {
-        tools: toolsFromConfig,
-        allowedFunctionNames: undefined,
-      };
-    }
-
-    const hookSystem = configForHooks.getHookSystem();
-    if (hookSystem === undefined) {
+    if (hookOwner?.beforeToolSelection === undefined)
       return { tools: toolsFromConfig, allowedFunctionNames: undefined };
-    }
-
-    await hookSystem.initialize();
-    const toolSelectionResult = await hookSystem.fireBeforeToolSelectionEvent({
-      model: this.runtimeContext.state.model,
-      contents: [],
-      tools: toolsFromConfig,
-    });
+    const toolSelectionResult = await hookOwner.beforeToolSelection(
+      {
+        model: this.runtimeContext.state.model,
+        contents: [],
+        tools: toolsFromConfig,
+      },
+      hookOwner.signal,
+    );
     const modifiedConfig = toolSelectionResult?.applyToolChoiceModifications({
       tools: toolsFromConfig,
     });
@@ -875,10 +876,12 @@ export class TurnProcessor {
     preparedUserTurn: PreparedUserTurn,
     promptId: string,
     provider: IProvider,
+    origin?: object,
   ): Promise<void> {
     const currentModel = resolveGeneratingModel(this.runtimeContext, provider);
     this.stampingBaseUrl = this.resolveProviderBaseUrl(provider);
     return commitTurnHistory({
+      origin,
       runtimeContext: this.runtimeContext,
       historyService: this.historyService,
       compressionHandler: this.compressionHandler,

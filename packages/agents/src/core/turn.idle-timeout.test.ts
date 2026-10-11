@@ -1,3 +1,6 @@
+import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
+import { createTurnCitationPolicy } from './__tests__/session-policy-fixture.js';
+import { createTurnStreamPolicy } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -59,9 +62,11 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     delete process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS;
     delete process.env.LLXPRT_STREAM_FIRST_RESPONSE_TIMEOUT_MS;
     mockChatInstance = {
+      ...createChatPolicyFixture(),
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
-      getConfig: () => undefined,
+      shouldShowCitations: createTurnCitationPolicy(),
+      getStreamTimeoutPolicy: createTurnStreamPolicy({}),
       getResolvedBaseUrl: () => undefined,
     };
     turn = new Turn(
@@ -82,26 +87,17 @@ describe('Turn - stream idle timeout behavioral tests', () => {
 
   it('honors config setting: timeout fires after custom timeout value from getConfig()', async () => {
     const customTimeoutMs = 30_000;
-    const mockGetConfig = vi.fn().mockReturnValue({
-      getSettingsService: () => ({ get: () => undefined }),
-      getEphemeralSetting: (key: string) => {
-        if (key === 'stream-idle-timeout-ms') {
-          return customTimeoutMs;
-        }
-        // Disable the first-response watchdog so this test isolates the
-        // inter-chunk idle watchdog (the first chunk arrives immediately,
-        // then an inter-chunk gap exceeds the timeout).
-        if (key === 'stream-first-response-timeout-ms') {
-          return 0;
-        }
-        return undefined;
-      },
+    const mockGetConfig = createTurnStreamPolicy({
+      'stream-idle-timeout-ms': customTimeoutMs,
+      'stream-first-response-timeout-ms': 0,
     });
 
     mockChatInstance = {
+      ...createChatPolicyFixture(),
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
-      getConfig: mockGetConfig,
+      shouldShowCitations: createTurnCitationPolicy(),
+      getStreamTimeoutPolicy: mockGetConfig,
       getResolvedBaseUrl: () => undefined,
     } as unknown as MockedChatInstance;
 
@@ -174,25 +170,23 @@ describe('Turn - stream idle timeout behavioral tests', () => {
     expect(events).not.toContainEqual(
       expect.objectContaining({ value: 'Late response' }),
     );
-    expect(mockGetConfig).toHaveBeenCalled();
+    expect(
+      events.filter((event) => event.type === AgentEventType.StreamIdleTimeout),
+    ).toHaveLength(1);
   });
 
   it('honors config setting: no timeout when iterator yields within custom timeout', async () => {
     const customTimeoutMs = 30_000;
-    const mockGetConfig = vi.fn().mockReturnValue({
-      getSettingsService: () => ({ get: () => undefined }),
-      getEphemeralSetting: (key: string) => {
-        if (key === 'stream-idle-timeout-ms') {
-          return customTimeoutMs;
-        }
-        return undefined;
-      },
+    const mockGetConfig = createTurnStreamPolicy({
+      'stream-idle-timeout-ms': customTimeoutMs,
     });
 
     mockChatInstance = {
+      ...createChatPolicyFixture(),
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
-      getConfig: mockGetConfig,
+      shouldShowCitations: createTurnCitationPolicy(),
+      getStreamTimeoutPolicy: mockGetConfig,
       getResolvedBaseUrl: () => undefined,
     } as unknown as MockedChatInstance;
 
@@ -226,26 +220,17 @@ describe('Turn - stream idle timeout behavioral tests', () => {
   });
 
   it('disabled path: no timeout when setting is 0, even after 30 minutes', async () => {
-    const mockGetConfig = vi.fn().mockReturnValue({
-      getSettingsService: () => ({ get: () => undefined }),
-      getEphemeralSetting: (key: string) => {
-        if (key === 'stream-idle-timeout-ms') {
-          return 0;
-        }
-        // Also disable the first-response watchdog so this test isolates the
-        // inter-chunk-disabled path (a stream whose first chunk is delayed
-        // must not time out when both watchdogs are disabled).
-        if (key === 'stream-first-response-timeout-ms') {
-          return 0;
-        }
-        return undefined;
-      },
+    const mockGetConfig = createTurnStreamPolicy({
+      'stream-idle-timeout-ms': 0,
+      'stream-first-response-timeout-ms': 0,
     });
 
     mockChatInstance = {
+      ...createChatPolicyFixture(),
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
-      getConfig: mockGetConfig,
+      shouldShowCitations: createTurnCitationPolicy(),
+      getStreamTimeoutPolicy: mockGetConfig,
       getResolvedBaseUrl: () => undefined,
     } as unknown as MockedChatInstance;
 
@@ -323,26 +308,17 @@ describe('Turn - stream idle timeout behavioral tests', () => {
 
     process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS = String(envTimeoutMs);
 
-    const mockGetConfig = vi.fn().mockReturnValue({
-      getSettingsService: () => ({ get: () => undefined }),
-      getEphemeralSetting: (key: string) => {
-        if (key === 'stream-idle-timeout-ms') {
-          return configTimeoutMs;
-        }
-        // Disable the first-response watchdog so this test isolates the
-        // inter-chunk idle env-var precedence (first chunk arrives fast,
-        // then an inter-chunk gap exceeds the env-driven inter-chunk timeout).
-        if (key === 'stream-first-response-timeout-ms') {
-          return 0;
-        }
-        return undefined;
-      },
+    const mockGetConfig = createTurnStreamPolicy({
+      'stream-idle-timeout-ms': configTimeoutMs,
+      'stream-first-response-timeout-ms': 0,
     });
 
     mockChatInstance = {
+      ...createChatPolicyFixture(),
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
-      getConfig: mockGetConfig,
+      shouldShowCitations: createTurnCitationPolicy(),
+      getStreamTimeoutPolicy: mockGetConfig,
       getResolvedBaseUrl: () => undefined,
     } as unknown as MockedChatInstance;
 
@@ -418,27 +394,17 @@ describe('Turn - stream idle timeout behavioral tests', () => {
   it('default-off: no watchdog timer when no env var and no ephemeral setting', async () => {
     delete process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS;
 
-    const mockGetConfig = vi.fn().mockReturnValue({
-      getSettingsService: () => ({ get: () => undefined }),
-      getEphemeralSetting: (key: string) => {
-        if (key === 'stream-idle-timeout-ms') {
-          return undefined;
-        }
-        // Explicitly disable the first-response watchdog so this test isolates
-        // the inter-chunk default-off contract. (By default first-response is
-        // ON at 5 min; disabling it here lets the stream's delayed first chunk
-        // flow unbounded, which is what the inter-chunk default-off path tests.)
-        if (key === 'stream-first-response-timeout-ms') {
-          return 0;
-        }
-        return undefined;
-      },
+    const mockGetConfig = createTurnStreamPolicy({
+      'stream-idle-timeout-ms': undefined,
+      'stream-first-response-timeout-ms': 0,
     });
 
     mockChatInstance = {
+      ...createChatPolicyFixture(),
       sendMessageStream: mockSendMessageStream,
       getHistory: mockGetHistory,
-      getConfig: mockGetConfig,
+      shouldShowCitations: createTurnCitationPolicy(),
+      getStreamTimeoutPolicy: mockGetConfig,
       getResolvedBaseUrl: () => undefined,
     } as unknown as MockedChatInstance;
 

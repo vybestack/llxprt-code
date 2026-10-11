@@ -6,8 +6,8 @@
 
 import type { ToolResponseBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
-  limitOutputTokens,
-  type ToolOutputSettingsProvider,
+  limitOutputTokensWithLimits,
+  type OutputLimitConfig,
 } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import {
   ensureJsonSafe,
@@ -184,7 +184,7 @@ function formatToolResult(
 function limitToolPayload(
   serializedResult: string,
   block: ToolResponseBlock,
-  config?: ToolOutputSettingsProvider,
+  config?: OutputLimitConfig,
 ): {
   text: string;
   truncated: boolean;
@@ -209,7 +209,11 @@ function limitToolPayload(
     };
   }
 
-  const limited = limitOutputTokens(serializedResult, config, block.toolName);
+  const limited = limitOutputTokensWithLimits(
+    serializedResult,
+    config,
+    block.toolName,
+  );
   const candidate = firstTruthyString(
     limited.content,
     limited.message,
@@ -226,7 +230,7 @@ function limitToolPayload(
 
 export function buildToolResponsePayload(
   block: ToolResponseBlock,
-  config?: ToolOutputSettingsProvider,
+  config?: OutputLimitConfig,
   humanizeJson?: boolean,
 ): ToolResponsePayload {
   const payload: ToolResponsePayload = {

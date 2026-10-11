@@ -154,7 +154,7 @@ describe('extractModelFacingErrorText (issue #3037)', () => {
       (_, index) => `word${index}`,
     ).join(' ');
     const lowConfig: ToolOutputSettingsProvider = {
-      getEphemeralSettings: () => ({
+      readExecutionPolicy: () => ({
         'tool-output-max-tokens': 50,
         'tool-output-truncate-mode': 'truncate',
       }),
@@ -177,7 +177,7 @@ describe('extractModelFacingErrorText (issue #3037)', () => {
   // suppress the error.message fallback required by AC3.
   it('keeps the blank check ahead of truncation for an oversized whitespace-only string (AC3)', () => {
     const lowConfig: ToolOutputSettingsProvider = {
-      getEphemeralSettings: () => ({
+      readExecutionPolicy: () => ({
         'tool-output-max-tokens': 5,
         'tool-output-truncate-mode': 'truncate',
       }),
@@ -189,7 +189,7 @@ describe('extractModelFacingErrorText (issue #3037)', () => {
 
   it('keeps the blank check ahead of truncation for an oversized whitespace-only text-part array (AC3)', () => {
     const lowConfig: ToolOutputSettingsProvider = {
-      getEphemeralSettings: () => ({
+      readExecutionPolicy: () => ({
         'tool-output-max-tokens': 5,
         'tool-output-truncate-mode': 'truncate',
       }),

@@ -4,11 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core/runtime/contracts/index.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
-import type { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 // Type-only import of bun:test: erased at compile time, creates no runtime edge.
 // Required to obtain the precise `vi.fn()` Mock<T> return type.
 import type { vi as ViNamespace } from 'bun:test';
@@ -108,61 +107,19 @@ export function createProviderWithRuntime<P>(
  * Produces a lightweight Config stub sufficient for provider runtime tests.
  */
 export function createRuntimeConfigStub(
-  settingsService: SettingsService,
+  _settingsService: SettingsService,
   overrides: Partial<Record<string, unknown>> = {},
 ): Config {
-  const noop = () => {};
-  const base = {
-    getConversationLoggingEnabled: () => false,
-    setConversationLoggingEnabled: noop,
-    getTelemetryLogPromptsEnabled: () => false,
-    setTelemetryLogPromptsEnabled: noop,
-    getUsageStatisticsEnabled: () => false,
-    setUsageStatisticsEnabled: noop,
-    getDebugMode: () => false,
-    setDebugMode: noop,
-    isInteractive: () => false,
-    getSessionId: () => 'test-session',
-    setSessionId: noop,
-    getFlashFallbackMode: () => 'off',
-    setFlashFallbackMode: noop,
-    getProvider: () => 'test-provider',
-    setProvider: noop,
-    getSettingsService: () => settingsService,
-    getProviderSettings: () => ({}),
-    setProviderSettings: noop,
-    getProviderConfig: () => ({}),
-    setProviderConfig: noop,
-    resetProvider: noop,
-    resetProviderSettings: noop,
-    resetProviderConfig: noop,
-    getActiveWorkspace: () => undefined as string | undefined,
-    setActiveWorkspace: noop,
-    clearActiveWorkspace: noop,
-    getExtensionConfig: () => ({}),
-    setExtensionConfig: noop,
-    getFeatures: () => ({}),
-    setFeatures: noop,
-    getRedactionConfig: () => ({ replacements: [] }),
-    setRuntimeProviderManager: noop,
-    getProviderManager: () => undefined as RuntimeProviderManager | undefined,
-    getProviderSetting: () => undefined,
-    getEphemeralSettings: () => ({ model: 'test-model' }),
-    getEphemeralSetting: () => undefined,
-    setEphemeralSetting: noop,
-    getUserMemory: () => '',
-    getJitMemoryForPath: () => Promise.resolve(''),
-    setUserMemory: noop,
-    getModel: () => 'test-model',
-    setModel: noop,
-    getQuotaErrorOccurred: () => false,
-    setQuotaErrorOccurred: noop,
-    getLlxprtMdFilePaths: () => [] as string[],
-    getLlxprtMdFileCount: () => 0,
-    getCoreMemoryFileCount: () => 0,
-  };
-
-  return Object.assign(base, overrides) as unknown as Config;
+  const config = new Config({
+    sessionId: 'test-session',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    model: 'test-model',
+    provider: 'test-provider',
+    debugMode: false,
+    telemetry: { enabled: false, logPrompts: false, logConversations: false },
+  });
+  return Object.assign(config, overrides);
 }
 
 interface TestRuntimeInitOptions {
@@ -236,10 +193,9 @@ interface ChatSessionConfigShape {
   getEphemeralSetting: ReturnType<ReturnType<typeof requireVi>['fn']>;
   getProvider: ReturnType<ReturnType<typeof requireVi>['fn']>;
   setProvider: ReturnType<ReturnType<typeof requireVi>['fn']>;
-  getProviderManager: ReturnType<ReturnType<typeof requireVi>['fn']>;
+  onEphemeralSettingChange: ReturnType<ReturnType<typeof requireVi>['fn']>;
+  onTelemetrySettingsChange: ReturnType<ReturnType<typeof requireVi>['fn']>;
   getSettingsService: ReturnType<ReturnType<typeof requireVi>['fn']>;
-  getTokenizerFactory: () => RuntimeTokenizerFactory | undefined;
-  getSessionRecordingService: () => SessionRecordingService | undefined;
 }
 
 interface ChatSessionRuntimeOptions {
@@ -252,9 +208,13 @@ interface ChatSessionRuntimeOptions {
 }
 
 interface ChatSessionRuntimeResult {
+  tokenizerFactory: RuntimeTokenizerFactory;
   config: Config;
   provider: IProvider;
-  providerManager: Pick<RuntimeProviderManager, 'getActiveProvider'>;
+  providerManager: Pick<
+    RuntimeProviderManager,
+    'getActiveProvider' | 'setActiveProvider' | 'getProviderByName'
+  >;
   settingsService: SettingsService;
   runtime: ProviderRuntimeContext;
 }
@@ -293,11 +253,9 @@ export function createChatSessionRuntime(
 
   const provider = options.provider ?? createDefaultProvider();
 
-  const providerManager =
-    options.providerManager ??
-    ({
-      getActiveProvider: vi.fn().mockReturnValue(provider),
-    } as Pick<RuntimeProviderManager, 'getActiveProvider'>);
+  const providerManager = options.providerManager ?? {
+    getActiveProvider: vi.fn().mockReturnValue(provider),
+  };
   let currentProviderName = provider.name;
   const getProviderSpy = vi.fn().mockImplementation(() => currentProviderName);
   const setProviderSpy = vi.fn().mockImplementation((next: unknown) => {
@@ -319,7 +277,7 @@ export function createChatSessionRuntime(
       };
     },
   };
-  const baseConfig: ChatSessionConfigShape = {
+  const baseConfig = Object.assign(createRuntimeConfigStub(settingsService), {
     getSessionId: () => 'test-session-id',
     getTelemetryLogPromptsEnabled: () => true,
     getUsageStatisticsEnabled: () => true,
@@ -336,24 +294,36 @@ export function createChatSessionRuntime(
     getEphemeralSetting: vi.fn().mockReturnValue(undefined),
     getProvider: getProviderSpy,
     setProvider: setProviderSpy,
-    getProviderManager: vi.fn().mockReturnValue(providerManager),
+    onEphemeralSettingChange: vi.fn().mockReturnValue(() => {}),
+    onTelemetrySettingsChange: vi.fn().mockReturnValue(() => {}),
     getSettingsService: vi.fn().mockReturnValue(settingsService),
-    getTokenizerFactory: () => tokenizerFactory,
-    getSessionRecordingService: () => undefined,
-  };
+  });
 
-  const config = {
-    ...baseConfig,
-    ...(options.configOverrides ?? {}),
-  } as ChatSessionConfigShape;
+  const config = Object.assign(baseConfig, options.configOverrides ?? {});
 
-  Object.assign(runtime, { config: config as unknown as Config });
+  Object.assign(runtime, { config });
 
   return {
-    config: config as unknown as Config,
+    tokenizerFactory,
+    config,
     provider,
-    providerManager,
+    providerManager: createSingleProviderSelection(providerManager, provider),
     settingsService,
     runtime,
+  };
+}
+
+function createSingleProviderSelection(
+  manager: Pick<RuntimeProviderManager, 'getActiveProvider'>,
+  provider: IProvider,
+) {
+  return {
+    getActiveProvider: () => manager.getActiveProvider(),
+    setActiveProvider: (name: string) => {
+      if (name !== provider.name)
+        throw new Error(`Unknown test provider: ${name}`);
+    },
+    getProviderByName: (name: string) =>
+      name === provider.name ? provider : undefined,
   };
 }

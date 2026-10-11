@@ -1,3 +1,6 @@
+import { Config as HostConfig } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -164,7 +167,26 @@ function makeRealLoopDetector(
   threshold: number,
   maxTurnsPerPrompt?: number,
 ): LoopDetectionService {
-  return new LoopDetectionService(makeLoopConfig(threshold, maxTurnsPerPrompt));
+  const policy = createSessionPolicyFixture(
+    createFixtureSettings({
+      toolCallLoopThreshold: threshold,
+      maxTurnsPerPrompt,
+    }),
+  );
+  const config = new HostConfig({
+    sessionId: 'checkpoint-fixture',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    model: 'test-model',
+    debugMode: false,
+    telemetry: { enabled: false },
+  });
+  policy.owner.bindTelemetry(config);
+  return new LoopDetectionService(
+    config,
+    policy.readLoopDetectionPolicy,
+    () => policy.owner.telemetry,
+  );
 }
 
 function makeRealTodoContinuationService(): TodoContinuationService {
@@ -230,6 +252,7 @@ function buildHarness(options: HarnessOptions): Harness {
     loopDetector,
     todoContinuationService,
     ideContextTracker: {
+      isEnabled: () => false,
       getContextParts: vi.fn().mockReturnValue({
         contextParts: [],
         newIdeContext: undefined,
@@ -736,3 +759,11 @@ describe('MessageStreamOrchestrator — attempt checkpoint rollback (issue #3048
     });
   });
 });
+
+function createFixtureSettings(
+  values: Readonly<Record<string, unknown>>,
+): SettingsService {
+  const settings = new SettingsService();
+  for (const [key, value] of Object.entries(values)) settings.set(key, value);
+  return settings;
+}

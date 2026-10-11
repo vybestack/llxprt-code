@@ -30,11 +30,12 @@ import { PendingResponseBuffer } from '../pendingResponseBuffer.js';
 describe('useDisplayUserMessage — consolidated profile_change path (issue #1770)', () => {
   const mockConfig = {
     getModel: vi.fn(() => 'gpt-4o'),
+    readProfileName: () => 'work',
     getMaxSessionTurns: vi.fn(() => 42),
     getEphemeralSetting: vi.fn(() => undefined),
     getSettingsService: vi.fn(() => ({
       get: vi.fn(() => null),
-      getCurrentProfileName: vi.fn(() => 'work'),
+      readProfileName: vi.fn(() => 'work'),
     })),
   } as unknown as Config;
 
@@ -82,6 +83,7 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
         shellModeActive: false,
         agent: {
           tools: { get: vi.fn(() => undefined) },
+          getActiveProfileName: () => 'work',
         } as unknown as Agent,
         loopDetectedRef: { current: false },
         lastProfileNameRef,
@@ -163,6 +165,7 @@ describe('useDisplayUserMessage — consolidated profile_change path (issue #177
         shellModeActive: false,
         agent: {
           tools: { get: vi.fn(() => undefined) },
+          getActiveProfileName: () => 'work',
         } as unknown as Agent,
         loopDetectedRef: { current: false },
         lastProfileNameRef,

@@ -21,22 +21,18 @@ describe('OpenAIProvider model resolution', () => {
         metadata: { source: 'OpenAIProvider.setModel.test.ts' },
       },
     ));
+    provider.setRuntimeSettingsService(settingsService);
   });
 
-  it('should have provider see the same settings service', () => {
-    const internal = provider as unknown as {
-      defaultSettingsService?: SettingsService;
-    };
-    expect(internal.defaultSettingsService).toStrictEqual(settingsService);
+  it('observes replacements from its explicitly bound owner', () => {
+    settingsService.setProviderSetting('openai', 'model', 'owner-model');
+    expect(provider.getCurrentModel()).toBe('owner-model');
   });
 
   it('uses SettingsService global model override when present', () => {
     const modelId = 'gpt-4-turbo';
-    const service = (
-      provider as unknown as {
-        resolveSettingsService: () => SettingsService;
-      }
-    ).resolveSettingsService();
+    const service = new SettingsService();
+    provider.setRuntimeSettingsService(service);
     service.set('model', modelId);
 
     expect(provider.getCurrentModel()).toBe(modelId);
@@ -53,11 +49,8 @@ describe('OpenAIProvider model resolution', () => {
   });
 
   it('prefers provider-specific model setting when global override absent', () => {
-    const service = (
-      provider as unknown as {
-        resolveSettingsService: () => SettingsService;
-      }
-    ).resolveSettingsService();
+    const service = new SettingsService();
+    provider.setRuntimeSettingsService(service);
     service.set('model', undefined);
     service.setProviderSetting('openai', 'model', 'gpt-4o');
 

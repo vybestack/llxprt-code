@@ -1,9 +1,11 @@
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { AgentRequestInput } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -187,4 +189,34 @@ function safeJsonLength(value: unknown): number {
   } catch {
     return 0;
   }
+}
+
+export function createClientComplexity(
+  settings: ReturnType<Config['getComplexityAnalyzerSettings']>,
+): { analyzer: ComplexityAnalyzer; cooldown: number } {
+  return {
+    analyzer: new ComplexityAnalyzer({
+      complexityThreshold: settings.complexityThreshold,
+      minTasksForSuggestion: settings.minTasksForSuggestion,
+    }),
+    cooldown: settings.suggestionCooldownMs ?? 300000,
+  };
+}
+
+export async function readSettledChatHistory(chat: {
+  waitForIdle?: () => Promise<void>;
+  getHistory: () => readonly IContent[];
+}): Promise<readonly IContent[]> {
+  await chat.waitForIdle?.();
+  return chat.getHistory();
+}
+
+export async function readClientHistory(
+  chat: Parameters<typeof readSettledChatHistory>[0] | undefined,
+  previous: readonly IContent[] | undefined,
+  readStored: (() => readonly IContent[]) | undefined,
+): Promise<readonly IContent[]> {
+  if (chat !== undefined) return readSettledChatHistory(chat);
+  if (previous !== undefined) return [...previous];
+  return readStored?.() ?? [];
 }

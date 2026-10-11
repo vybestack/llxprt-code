@@ -19,7 +19,7 @@ import type { CheckpointRuntime, StreamRuntime } from '../../cliUiRuntime.js';
 import { useEffect, useRef } from 'react';
 import path from 'path';
 import { promises as nodeFs } from 'fs';
-import type { GitService } from '@vybestack/llxprt-code-core';
+import type { WorkspaceCheckpointOperations } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { getErrorMessage, isNodeError } from '@vybestack/llxprt-code-core';
 import type { TrackedToolCall } from '../useReactToolScheduler.js';
@@ -52,8 +52,11 @@ export interface FsOps {
 export async function createToolCheckpoint(
   toolCall: TrackedToolCall,
   checkpointDir: string,
-  gitService: GitService,
-  agent: Agent,
+  gitService: Pick<
+    WorkspaceCheckpointOperations,
+    'createFileSnapshot' | 'getCurrentCommitHash'
+  >,
+  agent: Pick<Agent, 'getHistory'>,
   history: HistoryItem[],
   onDebugMessage: (message: string) => void,
   fsOps: FsOps = {
@@ -134,11 +137,16 @@ function isRestorableToolCall(toolCall: TrackedToolCall): boolean {
 
 async function saveRestorableToolCalls(
   toolCalls: TrackedToolCall[],
-  checkpoint: CheckpointRuntime,
-  gitService: GitService | undefined,
+  checkpoint: Pick<CheckpointRuntime, 'getCheckpointingEnabled'>,
+  gitService:
+    | Pick<
+        WorkspaceCheckpointOperations,
+        'createFileSnapshot' | 'getCurrentCommitHash'
+      >
+    | undefined,
   history: HistoryItem[],
   agent: Agent,
-  storage: StreamRuntime['storage'],
+  checkpointDir: StreamRuntime['projectCheckpointsDir'],
   onDebugMessage: (message: string) => void,
   fsOps?: FsOps,
   checkpointedCallIds?: Set<string>,
@@ -153,7 +161,6 @@ async function saveRestorableToolCalls(
   );
   if (restorableToolCalls.length === 0) return;
 
-  const checkpointDir = storage.getProjectTempCheckpointsDir();
   if (!checkpointDir) return;
 
   const effectiveFsOps: FsOps = fsOps ?? {
@@ -218,11 +225,16 @@ async function saveRestorableToolCalls(
  */
 export function useCheckpointPersistence(
   toolCalls: TrackedToolCall[],
-  runtime: StreamRuntime | CheckpointRuntime,
-  gitService: GitService | undefined,
+  runtime: StreamRuntime | Pick<CheckpointRuntime, 'getCheckpointingEnabled'>,
+  gitService:
+    | Pick<
+        WorkspaceCheckpointOperations,
+        'createFileSnapshot' | 'getCurrentCommitHash'
+      >
+    | undefined,
   history: HistoryItem[],
   agent: Agent,
-  storage: StreamRuntime['storage'],
+  checkpointDir: StreamRuntime['projectCheckpointsDir'],
   onDebugMessage: (message: string) => void,
   fsOps?: FsOps,
 ): void {
@@ -245,7 +257,7 @@ export function useCheckpointPersistence(
       gitService,
       history,
       agent,
-      storage,
+      checkpointDir,
       onDebugMessage,
       fsOps,
       checkpointedCallIdsRef.current,
@@ -257,7 +269,7 @@ export function useCheckpointPersistence(
     gitService,
     history,
     agent,
-    storage,
+    checkpointDir,
     fsOps,
   ]);
 }

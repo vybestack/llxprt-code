@@ -1,3 +1,4 @@
+import type { McpAuthFactoryRegistry } from '../auth/mcp-auth-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -13,22 +14,12 @@
  * bidirectional, which is what let the published package ship declaring `core`
  * in `devDependencies` while importing it at runtime.
  *
- * So the dependency is inverted rather than declared: this package states what
- * it needs, and the host registers implementations during startup. Nothing here
- * imports `core`.
+ * The host passes capabilities to its MCP runtime owner explicitly. Nothing
+ * here imports `core`.
  *
- * Standalone defaults preserve the existing fallback behavior when a host has
- * not registered either capability:
- *
- * - Feedback is advisory. The default routes to the debug logger so the
- *   information still reaches a log, just not the UI.
- * - The browser launcher is already best-effort at every call site; the OAuth
- *   flow prints the authorization URL for manual paste *before* attempting to
- *   open a browser, and wraps the attempt in a try/catch. The default
- *   preserves exactly that documented fallback.
- *
- * This mirrors `OAuthUIBridge` in `@vybestack/llxprt-code-auth`, which solves
- * the same problem for the OAuth UI channel.
+ * Standalone defaults apply when an owner does not supply a capability:
+ * feedback goes to the debug logger, and browser launching rejects. The OAuth
+ * flow prints the authorization URL for manual paste before opening a browser.
  */
 
 import { debugLogger } from '@vybestack/llxprt-code-telemetry/utils/debugLogger.js';
@@ -58,11 +49,16 @@ export type HostBrowserLauncher = (url: string) => Promise<void>;
 
 /** The host capabilities this package consumes. */
 export interface McpHostServices {
+  readonly getAuthProviderFactory?: McpAuthFactoryRegistry['getAuthProviderFactory'];
   readonly emitFeedback: HostFeedbackSink;
   readonly openBrowser: HostBrowserLauncher;
 }
 
-const defaultFeedbackSink: HostFeedbackSink = (severity, message, error) => {
+export const defaultFeedbackSink: HostFeedbackSink = (
+  severity,
+  message,
+  error,
+) => {
   const detail = error === undefined ? message : `${message}: ${String(error)}`;
   if (severity === 'error') {
     debugLogger.error(() => `[mcp] ${detail}`);
@@ -75,59 +71,19 @@ const defaultFeedbackSink: HostFeedbackSink = (severity, message, error) => {
   debugLogger.debug(() => `[mcp] ${detail}`);
 };
 
-const defaultBrowserLauncher: HostBrowserLauncher = () =>
+export const defaultBrowserLauncher: HostBrowserLauncher = () =>
   Promise.reject(new Error('No browser launcher registered by the host'));
 
-let services: McpHostServices = {
-  emitFeedback: defaultFeedbackSink,
-  openBrowser: defaultBrowserLauncher,
-};
-
-/**
- * Registers host implementations, replacing any previously registered ones.
- *
- * Partial registration is supported so a host can supply only what it has;
- * unspecified capabilities keep their current implementation.
- */
-export function registerMcpHostServices(
-  overrides: Partial<McpHostServices>,
-): void {
-  services = { ...services, ...overrides };
-}
-
-/** Restores the built-in defaults. Intended for test isolation. */
-export function resetMcpHostServices(): void {
-  services = {
-    emitFeedback: defaultFeedbackSink,
-    openBrowser: defaultBrowserLauncher,
+export function captureHostFeedback(
+  sink: HostFeedbackSink = defaultFeedbackSink,
+): HostFeedbackSink {
+  return (...args): void => {
+    try {
+      sink(...args);
+    } catch (sinkError) {
+      debugLogger.error(
+        () => `[mcp] host feedback sink threw: ${String(sinkError)}`,
+      );
+    }
   };
-}
-
-/**
- * Sends advisory feedback to the user via the host.
- *
- * Never throws: a host callback that fails must not take down the MCP
- * operation that was merely reporting on itself.
- */
-export function emitHostFeedback(
-  severity: HostFeedbackSeverity,
-  message: string,
-  ...rest: [error?: unknown]
-): void {
-  try {
-    // `error` is forwarded through a rest parameter rather than a named
-    // optional so the sink observes the caller's exact arity. Naming it and
-    // passing it positionally appends an explicit `undefined` to every
-    // two-argument call, which callers can observe.
-    services.emitFeedback(severity, message, ...rest);
-  } catch (sinkError) {
-    debugLogger.error(
-      () => `[mcp] host feedback sink threw: ${String(sinkError)}`,
-    );
-  }
-}
-
-/** Opens a URL via the host launcher. Rejects if the host cannot. */
-export function openHostBrowser(url: string): Promise<void> {
-  return services.openBrowser(url);
 }

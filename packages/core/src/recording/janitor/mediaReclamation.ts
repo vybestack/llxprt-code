@@ -293,3 +293,17 @@ export async function reclaimSessionMedia(
   }
   return errors;
 }
+
+export async function projectRecordedContentIds(
+  projectDirectory: string,
+): Promise<ReadonlySet<string>> {
+  const ids = new Set<string>();
+  await collectOwnedContentIds(
+    projectDirectory,
+    join(projectDirectory, 'media'),
+    ids,
+    DEFAULT_LIMITS,
+    { files: 0, directories: 0, bytes: 0 },
+  );
+  return ids;
+}

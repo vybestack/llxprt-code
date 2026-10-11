@@ -22,6 +22,7 @@ import {
   resolveRetentionConfig,
   runSessionCleanup,
   type Config,
+  type IContent,
   type SessionCleanupResult,
 } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-storage';
@@ -57,6 +58,7 @@ export async function cleanupExpiredSessions(
   config: Config,
   settings: Settings,
   globalTempDirOverride?: string,
+  readActiveHistory: () => Promise<readonly IContent[]> = async () => [],
 ): Promise<SessionCleanupResult> {
   // Configuration resolution happens before any external filesystem access so
   // invalid settings fail fast and clearly (finding D).  This throw is
@@ -67,7 +69,7 @@ export async function cleanupExpiredSessions(
   const currentSessionId = config.getSessionId();
 
   try {
-    const activeHistory = await config.getAgentClient().getHistory();
+    const activeHistory = await readActiveHistory();
     const result = await runSessionCleanup({
       globalTempDir,
       currentSessionId,

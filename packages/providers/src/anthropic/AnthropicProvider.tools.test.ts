@@ -181,7 +181,7 @@ describe('AnthropicProvider', () => {
       ];
 
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
       );
 
       const firstChunk = await generator.next();
@@ -229,7 +229,10 @@ describe('AnthropicProvider', () => {
         },
       ];
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages, { tools }),
+        buildCallOptions(messages, {
+          ...{ tools },
+          resolved: { streaming: true },
+        }),
       );
 
       const chunks = [];
@@ -272,7 +275,7 @@ describe('AnthropicProvider', () => {
         },
       ];
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, { resolved: { streaming: true } }),
       );
 
       const chunks = [];
@@ -311,7 +314,7 @@ describe('AnthropicProvider', () => {
         },
       ];
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
       );
 
       const chunks = [];
@@ -370,7 +373,7 @@ describe('AnthropicProvider', () => {
         ];
 
         const generator = provider.generateChatCompletion(
-          buildCallOptions(messages),
+          buildCallOptions(messages, { resolved: { streaming: true } }),
         );
 
         const chunks = [];
@@ -435,10 +438,15 @@ describe('AnthropicProvider', () => {
 
       const generator = provider.generateChatCompletion(
         buildCallOptions(messages, {
-          settingsOverrides: {
-            provider: {
-              streaming: 'disabled',
+          ...{
+            settingsOverrides: {
+              provider: {
+                streaming: 'disabled',
+              },
             },
+          },
+          resolved: {
+            streaming: true,
           },
         }),
       );
@@ -483,10 +491,15 @@ describe('AnthropicProvider', () => {
 
       const generator = provider.generateChatCompletion(
         buildCallOptions(messages, {
-          settingsOverrides: {
-            provider: {
-              streaming: 'disabled',
+          ...{
+            settingsOverrides: {
+              provider: {
+                streaming: 'disabled',
+              },
             },
+          },
+          resolved: {
+            streaming: true,
           },
         }),
       );
@@ -534,10 +547,15 @@ describe('AnthropicProvider', () => {
 
       const generator = provider.generateChatCompletion(
         buildCallOptions(messages, {
-          settingsOverrides: {
-            provider: {
-              streaming: 'disabled',
+          ...{
+            settingsOverrides: {
+              provider: {
+                streaming: 'disabled',
+              },
             },
+          },
+          resolved: {
+            streaming: true,
           },
         }),
       );
@@ -586,10 +604,15 @@ describe('AnthropicProvider', () => {
 
       const generator = provider.generateChatCompletion(
         buildCallOptions(messages, {
-          settingsOverrides: {
-            provider: {
-              streaming: 'disabled',
+          ...{
+            settingsOverrides: {
+              provider: {
+                streaming: 'disabled',
+              },
             },
+          },
+          resolved: {
+            streaming: true,
           },
         }),
       );
@@ -647,10 +670,15 @@ describe('AnthropicProvider', () => {
 
       const generator = provider.generateChatCompletion(
         buildCallOptions(messages, {
-          settingsOverrides: {
-            provider: {
-              streaming: 'disabled',
+          ...{
+            settingsOverrides: {
+              provider: {
+                streaming: 'disabled',
+              },
             },
+          },
+          resolved: {
+            streaming: true,
           },
         }),
       );
@@ -702,10 +730,15 @@ describe('AnthropicProvider', () => {
 
       const generator = provider.generateChatCompletion(
         buildCallOptions(messages, {
-          settingsOverrides: {
-            provider: {
-              streaming: 'disabled',
+          ...{
+            settingsOverrides: {
+              provider: {
+                streaming: 'disabled',
+              },
             },
+          },
+          resolved: {
+            streaming: true,
           },
         }),
       );
@@ -757,10 +790,15 @@ describe('AnthropicProvider', () => {
 
       const generator = provider.generateChatCompletion(
         buildCallOptions(messages, {
-          settingsOverrides: {
-            provider: {
-              streaming: 'disabled',
+          ...{
+            settingsOverrides: {
+              provider: {
+                streaming: 'disabled',
+              },
             },
+          },
+          resolved: {
+            streaming: true,
           },
         }),
       );

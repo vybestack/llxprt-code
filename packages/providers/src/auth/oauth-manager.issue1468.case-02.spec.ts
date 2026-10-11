@@ -8,7 +8,6 @@ import { describe, expect, it, vi } from 'bun:test';
 import type { OAuthProvider } from './types.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
 import {
-  mockGetCurrentProfileName,
   createIssue1468Fixture,
   mockLoadProfile,
 } from './__tests__/oauth-manager.issue1468.test-helpers.js';
@@ -31,9 +30,9 @@ async function loadCaseTwoProfile(profileName: string) {
 
 describe('Issue #1468 getProfileBuckets case 2', () => {
   it('does not inherit a foreground session bucket when request metadata targets a different profile', async () => {
-    const { tokenStore, manager } = createIssue1468Fixture();
+    const { tokenStore, manager, settingsService } = createIssue1468Fixture();
 
-    mockGetCurrentProfileName.mockReturnValue('foreground-profile');
+    settingsService.setCurrentProfileName('foreground-profile');
     mockLoadProfile.mockImplementation(loadCaseTwoProfile);
 
     const provider: OAuthProvider = {

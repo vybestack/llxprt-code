@@ -21,7 +21,6 @@ import { CommandKind } from './types.js';
  */
 
 import type { CommandArgumentSchema, CompleterFn } from './schema/types.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { maskKeyForDisplay } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { SecureStoreError } from '@vybestack/llxprt-code-storage';
@@ -250,7 +249,7 @@ async function handleLoad(
     }
 
     // Set as active session key (R14.1)
-    const runtime = getRuntimeApi();
+    const runtime = context.runtimeApi;
     await runtime.updateActiveProviderApiKey(key);
 
     // Set auth-key-name so profile saves capture the name reference,
@@ -609,7 +608,7 @@ async function handleLegacyKeyAction(
   apiKey: string | null,
   context: CommandContext,
 ): Promise<MessageActionReturn> {
-  const runtime = getRuntimeApi();
+  const runtime = context.runtimeApi;
   try {
     const targetKey =
       !apiKey || apiKey.toLowerCase() === 'none' ? null : apiKey;
@@ -628,7 +627,7 @@ async function handleLegacyKeyAction(
       content: result.message,
     };
   } catch (error) {
-    const status = runtime.getActiveProviderStatus();
+    const status = runtime.providerStatus();
     return {
       type: 'message',
       messageType: 'error',

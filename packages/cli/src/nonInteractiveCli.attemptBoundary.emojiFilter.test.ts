@@ -35,8 +35,6 @@ async function* streamFromEvents(
 
 const config: StreamConsumerConfig = {
   getSessionId: () => 'test-session',
-  getEphemeralSetting: (key: string) =>
-    key === 'reasoning.includeInResponse' ? true : undefined,
 };
 
 function thinking(subject: string, description: string): AgentEvent {
@@ -85,6 +83,7 @@ describe('processAgentStream attempt boundaries with the default emoji filter (i
       streamFromEvents(events),
       {
         config,
+        includeThinking: true,
         jsonOutput: overrides.jsonOutput ?? false,
         streamJsonOutput: streamFormatter !== null,
         quiet: overrides.quiet ?? false,

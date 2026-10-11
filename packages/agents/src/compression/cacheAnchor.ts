@@ -61,7 +61,11 @@ function extractSeq(entry: IContent): number {
  */
 export async function applyCompressionWithAnchor(
   historyService: {
-    replaceAll(contents: readonly IContent[], model?: string): Promise<void>;
+    replaceAll(
+      contents: readonly IContent[],
+      model?: string,
+      options?: { readonly origin?: object },
+    ): Promise<void>;
     resetCacheAnchorSeq(): void;
     setCacheAnchorSeq(seq: number): void;
     getRawHistory(): readonly IContent[];
@@ -73,6 +77,7 @@ export async function applyCompressionWithAnchor(
     oldHistory: readonly IContent[],
     newHist: readonly IContent[],
   ) => IContent[],
+  historyOrigin?: object,
 ): Promise<void> {
   const anchorSeq = resolveHeadAnchorSeq(newHistory, topPreserved);
   const isPrefixDestroyed = topPreserved <= 0;
@@ -94,7 +99,7 @@ export async function applyCompressionWithAnchor(
   // multi-step rebuild only lands when the compression queue is flushed, so a
   // caller reading history straight after the apply saw it empty; replaceAll
   // is awaited and leaves no interleaving window for late streaming writes.
-  await historyService.replaceAll(annotated, model);
+  await historyService.replaceAll(annotated, model, { origin: historyOrigin });
   if (isPrefixDestroyed) {
     historyService.resetCacheAnchorSeq();
   } else if (anchorSeq !== undefined) {

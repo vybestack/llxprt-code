@@ -51,10 +51,7 @@ describe('AsyncWorkFacade aggregation', () => {
       taskManager = new AsyncTaskManager(5);
       baseDir = makeTempBase();
       jobManager = new ShellJobManager({ baseDir });
-      facade = new AsyncWorkFacade(
-        () => taskManager,
-        () => jobManager,
-      );
+      facade = new AsyncWorkFacade(taskManager, () => jobManager);
     });
 
     afterEach(async () => {
@@ -83,10 +80,7 @@ describe('AsyncWorkFacade aggregation', () => {
       });
 
       it('handles undefined managers gracefully', () => {
-        const emptyFacade = new AsyncWorkFacade(
-          () => undefined,
-          () => undefined,
-        );
+        const emptyFacade = new AsyncWorkFacade(undefined, () => undefined);
         expect(emptyFacade.list()).toHaveLength(0);
       });
     });

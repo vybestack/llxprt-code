@@ -46,7 +46,6 @@ import {
 } from '../utils/fileUtils.js';
 import { stringOrDefault } from '../utils/stringCoalescing.js';
 import {
-  createDefaultToolHost,
   getTargetDirCompat,
   getWorkspaceRootsCompat,
   getLegacyIdeService,
@@ -477,29 +476,19 @@ class ApplyPatchToolInvocation extends BaseToolInvocation<
   }
 
   private async readTextFile(filePath: string): Promise<string> {
-    const fileSystemService = this.host.getFileSystemService?.();
-    if (fileSystemService !== undefined) {
-      return fileSystemService.readTextFile(filePath);
-    }
-    return fs.readFile(filePath, 'utf8');
+    return this.host.readTextFile(filePath);
   }
 
   private async writeTextFile(
     filePath: string,
     content: string,
   ): Promise<void> {
-    const fileSystemService = this.host.getFileSystemService?.();
-    if (fileSystemService !== undefined) {
-      await fileSystemService.writeTextFile(filePath, content);
-      return;
-    }
-    await fs.writeFile(filePath, content, 'utf8');
+    await this.host.writeTextFile(filePath, content);
   }
 
   private async deleteTextFile(filePath: string): Promise<void> {
-    const fileSystemService = this.host.getFileSystemService?.();
-    if (fileSystemService?.deleteFile !== undefined) {
-      await fileSystemService.deleteFile(filePath);
+    if (this.host.deleteFile !== undefined) {
+      await this.host.deleteFile(filePath);
       return;
     }
     // The abstraction's paths are real filesystem paths (AcpFileSystemService
@@ -761,7 +750,7 @@ export class ApplyPatchTool extends BaseDeclarativeTool<
   private readonly lspService?: ILspService;
 
   constructor(
-    private readonly host: IToolHost = createDefaultToolHost(),
+    private readonly host: IToolHost,
     messageBusOrIdeService?: IToolMessageBus | IIdeService,
     ideServiceOrLspService?: IIdeService | ILspService,
     lspService?: ILspService,

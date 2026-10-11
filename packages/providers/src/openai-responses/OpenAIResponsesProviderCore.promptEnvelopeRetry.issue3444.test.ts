@@ -132,9 +132,7 @@ describe('OpenAIResponsesProvider prompt-envelope retry (@issue:3444)', () => {
   });
 
   it('an orchestrator outer retry sends a freshly projected envelope, not the spent one', async () => {
-    const provider = new OpenAIResponsesProvider('test-key', undefined, {
-      getEphemeralSettings: () => ({}),
-    });
+    const provider = new OpenAIResponsesProvider('test-key', undefined, {});
 
     const callOptions = createProviderCallOptions({
       providerName: provider.name,
@@ -192,9 +190,7 @@ describe('OpenAIResponsesProvider prompt-envelope retry (@issue:3444)', () => {
   });
 
   it('surfaces a refresh projection failure without consuming the released media again', async () => {
-    const provider = new OpenAIResponsesProvider('test-key', undefined, {
-      getEphemeralSettings: () => ({}),
-    });
+    const provider = new OpenAIResponsesProvider('test-key', undefined, {});
     const options = createProviderCallOptions({
       providerName: provider.name,
       contents: mediaMessages(),
@@ -236,9 +232,7 @@ describe('OpenAIResponsesProvider prompt-envelope retry (@issue:3444)', () => {
         headers: { 'retry-after': '0' },
       });
     });
-    const provider = new OpenAIResponsesProvider('test-key', undefined, {
-      getEphemeralSettings: () => ({}),
-    });
+    const provider = new OpenAIResponsesProvider('test-key', undefined, {});
     const options = createProviderCallOptions({
       providerName: provider.name,
       contents: mediaMessages(),

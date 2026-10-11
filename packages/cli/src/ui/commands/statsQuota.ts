@@ -4,7 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import type { RuntimeApi } from '../contexts/RuntimeContext.js';
+import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
   CodexUsageInfoSchema,
@@ -22,8 +23,10 @@ const logger = new DebugLogger('llxprt:cli:stats');
 
 export type UsageMap = Map<string, Record<string, unknown>>;
 
-type RuntimeApi = ReturnType<typeof getRuntimeApi>;
-type OAuthManager = NonNullable<ReturnType<RuntimeApi['getCliOAuthManager']>>;
+type OAuthUsage = Pick<
+  OAuthControl,
+  'getAllAnthropicUsageInfo' | 'getAllCodexUsageInfo'
+>;
 
 /** Sort bucket names with 'default' first, then lexicographic. */
 export function defaultFirstSort(a: string, b: string): number {
@@ -34,18 +37,6 @@ export function defaultFirstSort(a: string, b: string): number {
     return 1;
   }
   return a.localeCompare(b);
-}
-
-/**
- * Returns the trimmed URL if it is a non-empty string, otherwise undefined.
- * Empty/whitespace base-url values must fall through so detection continues.
- */
-function resolveBaseUrlOrNull(value: string | undefined): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  return trimmed === '' ? undefined : trimmed;
 }
 
 /**
@@ -90,44 +81,6 @@ async function resolveApiKey(runtimeApi: RuntimeApi): Promise<string | null> {
   return null;
 }
 
-interface ProviderConfigCandidate {
-  readonly providerConfig?: { readonly 'base-url'?: string };
-  readonly baseProviderConfig?: { readonly 'base-url'?: string };
-}
-
-function detectFromProviderConfig(providerInstance: unknown): {
-  provider: string | null;
-  baseUrl: string | undefined;
-} {
-  const candidate = providerInstance as ProviderConfigCandidate;
-
-  const providerConfigUrl = resolveBaseUrlOrNull(
-    candidate.providerConfig?.['base-url'],
-  );
-  if (providerConfigUrl) {
-    const detected = detectApiKeyProvider(providerConfigUrl);
-    if (detected) {
-      logger.debug(() => `Detected ${detected} from provider config base-url`);
-      return { provider: detected, baseUrl: providerConfigUrl };
-    }
-  }
-
-  const baseConfigUrl = resolveBaseUrlOrNull(
-    candidate.baseProviderConfig?.['base-url'],
-  );
-  if (baseConfigUrl) {
-    const detected = detectApiKeyProvider(baseConfigUrl);
-    if (detected) {
-      logger.debug(
-        () => `Detected ${detected} from base provider config base-url`,
-      );
-      return { provider: detected, baseUrl: baseConfigUrl };
-    }
-  }
-
-  return { provider: null, baseUrl: undefined };
-}
-
 /**
  * Attempt to fetch quota for the current profile's API-key-based provider.
  * Returns null if the profile doesn't use a supported API-key provider.
@@ -151,11 +104,8 @@ async function fetchApiKeyProviderQuota(
 
   // Strategy 2 & 3: If not found, try provider config base URLs
   if (!provider && activeProviderName) {
-    const providerManager = runtimeApi.getCliProviderManager();
-    const providerInstance =
-      providerManager.getProviderByName(activeProviderName);
-    if (providerInstance) {
-      const result = detectFromProviderConfig(providerInstance);
+    const result = runtimeApi.detectProviderQuota(activeProviderName);
+    if (result) {
       provider = result.provider as
         | 'zai'
         | 'synthetic'
@@ -275,7 +225,7 @@ function formatCodexLines(codexUsageInfo: UsageMap): string[] {
 }
 
 async function fetchOAuthQuotaLines(
-  oauthManager: OAuthManager,
+  oauthManager: OAuthUsage,
 ): Promise<string[]> {
   const output: string[] = [];
 
@@ -327,12 +277,13 @@ async function fetchOAuthQuotaLines(
  */
 export async function fetchAllQuotaInfo(
   runtimeApi: RuntimeApi,
+  oauthControl: OAuthControl,
 ): Promise<string[]> {
   const output: string[] = [];
 
   try {
-    const oauthManager = runtimeApi.maybeGetCliOAuthManager();
-    if (oauthManager != null) {
+    const oauthManager = oauthControl;
+    if (oauthManager.isAvailable()) {
       const oauthLines = await fetchOAuthQuotaLines(oauthManager);
       output.push(...oauthLines);
     }

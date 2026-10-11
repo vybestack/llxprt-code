@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import { renderWithProviders } from '../../__tests__/render.js';
 import { waitFor } from '../../__tests__/async.js';
@@ -219,6 +222,7 @@ describe('InputPrompt', () => {
       getCommandFromSuggestion: vi.fn().mockReturnValue(null),
       isArgumentCompletion: false,
       leafCommand: null,
+      activeHint: '',
     };
     mockedUseCommandCompletion.mockReturnValue(mockCommandCompletion);
 
@@ -249,14 +253,12 @@ describe('InputPrompt', () => {
       onSubmit: vi.fn(),
       userMessages: [],
       onClearScreen: vi.fn(),
-      config: {
+      config: composeFixtureRuntime({
+        getMcpServers: () => undefined,
         getProjectRoot: () => path.join('test', 'project'),
         getTargetDir: () => path.join('test', 'project', 'src'),
         getVimMode: () => false,
-        getWorkspaceContext: () => ({
-          getDirectories: () => ['/test/project/src'],
-        }),
-      } as unknown as Config,
+      } as unknown as Config),
       slashCommands: mockSlashCommands,
       commandContext: mockCommandContext,
       shellModeActive: false,

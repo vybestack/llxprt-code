@@ -1,3 +1,4 @@
+import { CoreToolScheduler } from '../../coreToolScheduler.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -5,6 +6,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import { bindSchedulerOwner } from '../../../session/assembleSchedulerOwner.js';
 import { AgenticLoop } from '../AgenticLoop.js';
 import type { AgenticLoopEvent } from '../types.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
@@ -91,17 +93,32 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
 
       const toolRegistry = createToolRegistryForTest([tool]);
       const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-      const config = createTestConfig({
-        messageBus,
-        toolRegistry,
-        policyEngine: createAllowPolicyEngine(),
-        interactive: false,
-        approvalMode: ApprovalMode.YOLO,
-      });
+      const { config: config, settingsOwner: configSettingsOwner } =
+        createTestConfig({
+          messageBus,
+          toolRegistry,
+          policyEngine: createAllowPolicyEngine(),
+          interactive: false,
+          approvalMode: ApprovalMode.YOLO,
+        });
       const { client, history, turnMessages } = createScriptedAgentClient([
         [toolCallRequestEvent('terminal_tool', 'terminal-call'), terminalEvent],
       ]);
       const loop = new AgenticLoop({
+        createSchedulerOwner: bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
         agentClient: client,
         config,
         messageBus,
@@ -132,19 +149,34 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
     const tool = new MockTool({ name: 'clear_tool' });
     const toolRegistry = createToolRegistryForTest([tool]);
     const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: false,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: false,
+        approvalMode: ApprovalMode.YOLO,
+      });
     const displaySizes: number[] = [];
     const { client } = createScriptedAgentClient([
       [toolCallRequestEvent('clear_tool', 'clear-call'), finishedEvent()],
       [contentEvent('done'), finishedEvent()],
     ]);
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
       agentClient: client,
       config,
       messageBus,
@@ -192,13 +224,14 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
 
     const toolRegistry = createToolRegistryForTest([tool]);
     const messageBus = new MessageBus(createAskPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAskPolicyEngine(),
-      interactive: false,
-      approvalMode: ApprovalMode.DEFAULT,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAskPolicyEngine(),
+        interactive: false,
+        approvalMode: ApprovalMode.DEFAULT,
+      });
     const { client, history, turnMessages } = createScriptedAgentClient([
       [
         toolCallRequestEvent(
@@ -209,7 +242,25 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
       ],
       [contentEvent('denied'), finishedEvent()],
     ]);
-    const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+    const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
+      agentClient: client,
+      config,
+      messageBus,
+    });
 
     const events = await collectEvents(
       loop,
@@ -228,13 +279,14 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
   it('terminates instead of hanging when scheduler filters all tool requests', async () => {
     const toolRegistry = createToolRegistryForTest([]);
     const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: false,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: false,
+        approvalMode: ApprovalMode.YOLO,
+      });
     const { client, history, turnMessages } = createScriptedAgentClient([
       [
         toolCallRequestEvent(
@@ -248,7 +300,25 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
         finishedEvent(),
       ],
     ]);
-    const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+    const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
+      agentClient: client,
+      config,
+      messageBus,
+    });
 
     const events = await collectEvents(
       loop,
@@ -274,13 +344,14 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
       tool.shouldConfirm = true;
       const toolRegistry = createToolRegistryForTest([tool]);
       const messageBus = new MessageBus(createAskPolicyEngine(), false);
-      const config = createTestConfig({
-        messageBus,
-        toolRegistry,
-        policyEngine: createAskPolicyEngine(),
-        interactive: true,
-        approvalMode: ApprovalMode.DEFAULT,
-      });
+      const { config: config, settingsOwner: configSettingsOwner } =
+        createTestConfig({
+          messageBus,
+          toolRegistry,
+          policyEngine: createAskPolicyEngine(),
+          interactive: true,
+          approvalMode: ApprovalMode.DEFAULT,
+        });
 
       let approvalCount = 0;
       const approvalHandler: ApprovalHandler = async () => {
@@ -292,6 +363,20 @@ describe('AgenticLoop integration - terminal outcomes and bus scoping', () => {
         [contentEvent('done'), finishedEvent()],
       ]);
       const loop = new AgenticLoop({
+        createSchedulerOwner: bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
         agentClient: client,
         config,
         messageBus,

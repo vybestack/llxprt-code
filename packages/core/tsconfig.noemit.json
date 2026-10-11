@@ -173,7 +173,6 @@
     "src/telemetry/loggers.misc.test.ts",
     "src/telemetry/loggers.toolcall.test.ts",
     "src/telemetry/uiTelemetry.test.ts",
-    "src/tools-adapters/CoreSubagentServiceAdapter.test.ts",
     "src/tools/tool-key-storage.test.ts",
     "src/utils/asyncIterator.test.ts",
     "src/utils/bunPtyAdapter.test.ts",

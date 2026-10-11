@@ -4,21 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  vi,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
-  type Mock,
-} from 'bun:test';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { initCommand } from './initCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { type CommandContext } from './types.js';
 
+const mockMemoryExists = vi.fn();
 // Mock the 'fs' module
 const realFsModule = { ...(await import('fs')) };
 
@@ -27,7 +20,10 @@ void vi.mock('fs', () => {
   return {
     ...actual,
     default: actual,
-    existsSync: vi.fn(),
+    existsSync: (filePath: Parameters<typeof actual.existsSync>[0]) =>
+      String(filePath).endsWith('LLXPRT.md')
+        ? mockMemoryExists(filePath)
+        : actual.existsSync(filePath),
     writeFileSync: vi.fn(),
   };
 });
@@ -55,7 +51,7 @@ describe('initCommand', () => {
 
   it('should inform the user if LLXPRT.md already exists', async () => {
     // Arrange: Simulate that the file exists
-    (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+    mockMemoryExists.mockReturnValue(true);
 
     // Act: Run the command's action
     const result = await initCommand.action!(mockContext, '');
@@ -73,7 +69,7 @@ describe('initCommand', () => {
 
   it('should create LLXPRT.md and submit a prompt if it does not exist', async () => {
     // Arrange: Simulate that the file does not exist
-    (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(false);
+    mockMemoryExists.mockReturnValue(false);
 
     // Act: Run the command's action
     const result = await initCommand.action!(mockContext, '');
@@ -91,6 +87,8 @@ describe('initCommand', () => {
     );
 
     // Assert: Check that the correct prompt is submitted
+    if (result?.type !== 'submit_prompt')
+      throw new Error('Expected submitted prompt');
     expect(result.type).toBe('submit_prompt');
     expect(result.content).toContain(
       'You are an AI agent that brings the power of multiple LLM providers',

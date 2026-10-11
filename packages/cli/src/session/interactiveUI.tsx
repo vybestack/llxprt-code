@@ -1,3 +1,22 @@
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  type SessionSettingsOwner,
+  type LlxprtExtension,
+  type WorkspaceSkillOperations,
+  type Config,
+  type SessionRecordingService,
+  type RecordingIntegration,
+  type IContent,
+  type LockHandle,
+  type MessageBus,
+  type TelemetrySettings,
+  resolvePerfSettings,
+  getProjectHash,
+  writeToStdout,
+} from '@vybestack/llxprt-code-core';
+import type { BucketFailoverRuntime } from '../ui/cliUiRuntime.js';
+import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+
 import React, { type ErrorInfo } from 'react';
 import { render as inkRender } from 'ink';
 
@@ -7,6 +26,8 @@ import { render as inkRender } from 'ink';
  * which is unsupported under Bun's native test runner) can replace this
  * via the exported __setRenderForTesting seam.
  */
+import { createSessionModelCommand } from '../runtime/session-model-command.js';
+
 let render: typeof inkRender = inkRender;
 
 export function __setRenderForTesting(fn: typeof inkRender | null): void {
@@ -16,16 +37,6 @@ import { AppWrapper } from '../ui/App.js';
 import { ErrorBoundary } from '../ui/components/ErrorBoundary.js';
 import { basename } from 'node:path';
 import { type LoadedSettings } from '../config/settings.js';
-import {
-  type Config,
-  type SessionRecordingService,
-  type RecordingIntegration,
-  type IContent,
-  type LockHandle,
-  type MessageBus,
-  type TelemetrySettings,
-  writeToStdout,
-} from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { getCliVersion } from '../utils/version.js';
 import { enableMouseEvents, disableMouseEvents } from '../ui/utils/mouse.js';
@@ -34,10 +45,6 @@ import { checkForUpdates } from '../ui/utils/updateCheck.js';
 import { handleAutoUpdate } from '../utils/handleAutoUpdate.js';
 import { SettingsContext } from '../ui/contexts/SettingsContext.js';
 import { inkRenderOptions } from '../ui/inkRenderOptions.js';
-import {
-  resolvePerfSettings,
-  getProjectHash,
-} from '@vybestack/llxprt-code-core';
 import {
   createInteractivePerfRuntime,
   createIdentityProviderFromGetters,
@@ -51,6 +58,7 @@ import { isMouseEventsEnabled } from '../ui/mouseEventsEnabled.js';
 import { computeTerminalTitle } from '../utils/windowTitle.js';
 import { StreamingState } from '../ui/types.js';
 import { registerCleanup, registerSyncCleanup } from '../utils/cleanup.js';
+import type { CliSessionPersistencePort } from '../cliSessionPersistence.js';
 import { appendInteractiveUiDebug } from './debugLog.js';
 import { mouseEventsExitHandler } from './terminalCleanup.js';
 import {
@@ -62,6 +70,11 @@ import {
   type InteractiveTerminalRestore,
 } from './interactiveUiLifecycle.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import {
+  createRuntimeOwnerFeatures,
+  createProviderAliasRefresh,
+} from '../runtime/createRuntimeOwnerFeatures.js';
+import { createOAuthControl } from '../runtime/createOAuthControl.js';
 import {
   buildUiRuntimeFromSource,
   buildSlashCommandRuntime,
@@ -288,6 +301,11 @@ function buildRenderElement(
   uiRuntime: ReturnType<typeof buildUiRuntimeFromSource>,
   slashCommandRuntime: ReturnType<typeof buildSlashCommandRuntime>,
   agent: Agent,
+  runtimeOwner: Config,
+  runtimeSettings: {
+    readonly owner: SessionSettingsOwner;
+    readonly store: SettingsService;
+  },
   settings: LoadedSettings,
   startupWarnings: string[],
   version: string,
@@ -298,7 +316,19 @@ function buildRenderElement(
   initialLockHandle: LockHandle | null | undefined,
   suppressStartupWelcome: boolean | undefined,
   perfOwner: InteractivePerfRuntime | null,
+  recordingOwner?: 'agent' | 'raw',
+  oauthManager?: OAuthManager,
 ): React.ReactElement {
+  const runtimeOwnerFeatures = () =>
+    createRuntimeOwnerFeatures(
+      runtimeOwner,
+      agent.providerManager,
+      () => agent.workspace.getDirectories(),
+      createSessionModelCommand(agent),
+      runtimeSettings.owner,
+      runtimeSettings.store,
+      agent.workspace,
+    );
   return (
     <React.StrictMode>
       <ErrorBoundary onError={handleError}>
@@ -307,16 +337,29 @@ function buildRenderElement(
             uiRuntime={uiRuntime}
             slashCommandRuntime={slashCommandRuntime}
             agent={agent}
+            runtimeOwner={{ create: runtimeOwnerFeatures }}
+            providerAliasRefresh={createProviderAliasRefresh(
+              agent.providerManager,
+            )}
+            oauthControl={createOAuthControl(
+              () => oauthManager,
+              agent.providerManager,
+            )}
             settings={settings}
             runtimeMessageBus={runtimeMessageBus}
             startupWarnings={startupWarnings}
             version={version}
             terminalBackgroundColor={uiRuntime.shell.getTerminalBackground()}
-            recordingIntegration={recordingIntegration}
-            resumedHistory={resumedHistory}
-            initialRecordingService={initialRecordingService}
-            initialLockHandle={initialLockHandle}
-            suppressStartupWelcome={suppressStartupWelcome}
+            {...(recordingOwner === 'agent'
+              ? { recordingOwner, resumedHistory, suppressStartupWelcome }
+              : {
+                  recordingIntegration,
+                  recordingOwner,
+                  resumedHistory,
+                  initialRecordingService,
+                  initialLockHandle,
+                  suppressStartupWelcome,
+                })}
             operationLifecycle={perfOwner?.registry}
             memoryController={perfOwner?.memoryController ?? undefined}
           />
@@ -348,7 +391,32 @@ function setupTerminalExitHandlers(
   process.on('exit', restoreTerminalProtocolsSync);
 }
 
-export async function startInteractiveUI(
+export interface OwnerInteractiveStartup {
+  readonly oauthManager?: OAuthManager;
+  readonly runtimeSettings: {
+    readonly owner: SessionSettingsOwner;
+    readonly store: SettingsService;
+  };
+  readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
+  readonly skillOperations?: Pick<
+    WorkspaceSkillOperations,
+    'list' | 'find' | 'reload' | 'isAdminEnabled'
+  >;
+  readonly recordingOwner: 'agent';
+  readonly runtimeMessageBus?: MessageBus;
+  readonly resumedHistory?: IContent[];
+  readonly suppressStartupWelcome?: boolean;
+}
+
+export function startInteractiveUI(
+  config: Config,
+  agent: Agent,
+  settings: LoadedSettings,
+  startupWarnings: string[],
+  workspaceRoot: string,
+  startup: OwnerInteractiveStartup,
+): Promise<InteractiveInstanceCapability>;
+export function startInteractiveUI(
   config: Config,
   agent: Agent,
   settings: LoadedSettings,
@@ -360,28 +428,68 @@ export async function startInteractiveUI(
   initialRecordingService?: SessionRecordingService,
   initialLockHandle?: LockHandle | null,
   suppressStartupWelcome?: boolean,
+  recordingOwner?: 'raw',
+  sessionPersistence?: CliSessionPersistencePort,
+  runtimeSettings?: {
+    readonly owner: SessionSettingsOwner;
+    readonly store: SettingsService;
+  },
+): Promise<InteractiveInstanceCapability>;
+export async function startInteractiveUI(
+  config: Config,
+  agent: Agent,
+  settings: LoadedSettings,
+  startupWarnings: string[],
+  workspaceRoot: string,
+  startup?: OwnerInteractiveStartup | MessageBus,
+  recordingIntegration?: RecordingIntegration,
+  resumedHistory?: IContent[],
+  initialRecordingService?: SessionRecordingService,
+  initialLockHandle?: LockHandle | null,
+  suppressStartupWelcome?: boolean,
+  recordingOwner?: 'raw',
+  sessionPersistence?: CliSessionPersistencePort,
+  runtimeSettings?: {
+    readonly owner: SessionSettingsOwner;
+    readonly store: SettingsService;
+  },
 ) {
-  const version = await getCliVersion();
+  const ownerStartup =
+    startup && 'recordingOwner' in startup ? startup : undefined;
+  const runtimeMessageBus =
+    startup && 'recordingOwner' in startup
+      ? startup.runtimeMessageBus
+      : startup;
 
-  appendInteractiveUiDebug(
-    `startInteractiveUI version=${version} stdoutTTY=${String(process.stdout.isTTY)} columns=${String(process.stdout.columns)} rows=${String(process.stdout.rows)} builtinOnly=${String(process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY)} suppressStatic=${String(process.env.LLXPRT_CODE_SUPPRESS_STATIC_HEADER)}`,
+  if (!ownerStartup && !sessionPersistence) {
+    throw new Error(
+      'Raw interactive startup requires its own CLI session persistence',
+    );
+  }
+
+  const version = await initializeInteractivePresentation(
+    workspaceRoot,
+    settings,
   );
-  setWindowTitle(basename(workspaceRoot), settings);
 
   // Deterministic pre-start replacement: tear down any previous instance and
   // perf owner BEFORE constructing/starting a new owner. This prevents
   // observer-conflict: a new owner's installObservers() must not collide with
   // a previous owner's still-installed observers.
   await replacePreviousInstanceAndOwner();
-
   const perfOwner = await buildAndStartPerfOwner(
     config,
     agent,
     settings,
     version,
   );
-
+  const selectedSettings = ownerStartup?.runtimeSettings ?? runtimeSettings;
+  if (selectedSettings === undefined)
+    throw new Error(
+      'Interactive startup requires explicit session settings ownership',
+    );
   return commitInteractiveStartup({
+    oauthManager: ownerStartup?.oauthManager,
     config,
     agent,
     settings,
@@ -389,11 +497,16 @@ export async function startInteractiveUI(
     version,
     startupWarnings,
     runtimeMessageBus,
-    recordingIntegration,
-    resumedHistory,
-    initialRecordingService,
-    initialLockHandle,
-    suppressStartupWelcome,
+    ...(ownerStartup ?? {
+      runtimeSettings: selectedSettings,
+      recordingOwner,
+      recordingIntegration,
+      resumedHistory,
+      initialRecordingService,
+      initialLockHandle,
+      suppressStartupWelcome,
+      sessionPersistence,
+    }),
   });
 }
 
@@ -474,7 +587,17 @@ interface StartupTransactionState {
  * Arguments for {@link commitInteractiveStartup}. Every fallible stage after a
  * perf owner successfully starts runs inside this one transaction.
  */
-export interface CommitInteractiveStartupArgs {
+export type CommitInteractiveStartupArgs = {
+  readonly oauthManager?: OAuthManager;
+  readonly restartExtension?: (extension: LlxprtExtension) => Promise<void>;
+  readonly skillOperations?: Pick<
+    WorkspaceSkillOperations,
+    'list' | 'find' | 'reload' | 'isAdminEnabled'
+  >;
+  readonly runtimeSettings: {
+    readonly owner: SessionSettingsOwner;
+    readonly store: SettingsService;
+  };
   readonly config: Config;
   readonly agent: Agent;
   readonly settings: LoadedSettings;
@@ -483,12 +606,23 @@ export interface CommitInteractiveStartupArgs {
   readonly startupWarnings: string[];
   readonly ports?: Partial<InteractiveStartupPorts>;
   readonly runtimeMessageBus?: MessageBus;
-  readonly recordingIntegration?: RecordingIntegration;
   readonly resumedHistory?: IContent[];
-  readonly initialRecordingService?: SessionRecordingService;
-  readonly initialLockHandle?: LockHandle | null | undefined;
   readonly suppressStartupWelcome?: boolean;
-}
+} & (
+  | {
+      readonly recordingOwner: 'agent';
+      readonly recordingIntegration?: never;
+      readonly initialRecordingService?: never;
+      readonly initialLockHandle?: never;
+    }
+  | {
+      readonly recordingOwner?: 'raw';
+      readonly recordingIntegration?: RecordingIntegration;
+      readonly initialRecordingService?: SessionRecordingService;
+      readonly initialLockHandle?: LockHandle | null;
+      readonly sessionPersistence?: CliSessionPersistencePort;
+    }
+);
 
 /**
  * Runs every fallible stage after a perf owner successfully starts as ONE
@@ -506,6 +640,52 @@ export interface CommitInteractiveStartupArgs {
  *
  * No nested/double rollback — one explicit try/catch with transaction state.
  */
+function composeUiBucketOperations(
+  config: Config,
+  oauth: OAuthManager | undefined,
+): BucketFailoverRuntime {
+  const readProviderName = () => config.getProvider() ?? '';
+  return oauth instanceof OAuthManager
+    ? {
+        resetBuckets: () => oauth.resetBuckets(readProviderName(), false),
+        resetBucketSession: () => oauth.resetBuckets(readProviderName(), true),
+        ensureBucketsAuthenticated: () =>
+          oauth.ensureBucketsAuthenticated(readProviderName()),
+        readFailoverBuckets: () =>
+          oauth.readFailoverBuckets(readProviderName()),
+        readCurrentBucket: () => oauth.getSessionBucket(readProviderName()),
+      }
+    : {};
+}
+
+function startupBucketOperations(args: CommitInteractiveStartupArgs) {
+  return composeUiBucketOperations(args.config, args.oauthManager);
+}
+
+function startupCommandRuntimes(
+  args: CommitInteractiveStartupArgs,
+  ports: InteractiveStartupPorts,
+  operations: ReturnType<typeof startupBucketOperations>,
+) {
+  const uiRuntime = ports.buildUiRuntime(
+    args.config,
+    args.agent,
+    operations,
+    args.runtimeSettings.owner,
+  );
+  const slashCommandRuntime = ports.buildSlashRuntime(
+    args.config,
+    args.agent,
+    args.perfOwner?.snapshotCapability ?? null,
+    args.recordingOwner === 'agent' ? undefined : args.sessionPersistence,
+    operations,
+    args.skillOperations,
+    args.restartExtension,
+    args.runtimeSettings.owner,
+  );
+  return { uiRuntime, slashCommandRuntime };
+}
+
 export async function commitInteractiveStartup(
   args: CommitInteractiveStartupArgs,
 ): Promise<InteractiveInstanceCapability> {
@@ -521,10 +701,11 @@ export async function commitInteractiveStartup(
 
   try {
     const renderOptions = ports.renderOptions(args.config, args.settings);
-    const uiRuntime = ports.buildUiRuntime(args.config);
-    const slashCommandRuntime = ports.buildSlashRuntime(
-      args.config,
-      args.perfOwner?.snapshotCapability ?? null,
+    const operations = startupBucketOperations(args);
+    const { uiRuntime, slashCommandRuntime } = startupCommandRuntimes(
+      args,
+      ports,
+      operations,
     );
     ports.debugAppend(
       `renderOptions alternateBuffer=${String(renderOptions.alternateBuffer)} incrementalRendering=${String(renderOptions.incrementalRendering)} stdoutColumns=${String(renderOptions.stdout?.columns)} stdoutRows=${String(renderOptions.stdout?.rows)}`,
@@ -541,6 +722,8 @@ export async function commitInteractiveStartup(
         uiRuntime,
         slashCommandRuntime,
         args.agent,
+        args.config,
+        args.runtimeSettings,
         args.settings,
         args.startupWarnings,
         args.version,
@@ -551,6 +734,8 @@ export async function commitInteractiveStartup(
         args.initialLockHandle,
         args.suppressStartupWelcome,
         args.perfOwner,
+        args.recordingOwner,
+        args.oauthManager,
       ),
       renderOptions,
     );
@@ -664,4 +849,18 @@ function captureAndClearTrackedInstanceAndOwner(): {
 export async function replacePreviousInstanceAndOwner(): Promise<void> {
   const { instance, owner } = captureAndClearTrackedInstanceAndOwner();
   await cleanupInstanceAndOwner(instance, owner);
+}
+
+async function initializeInteractivePresentation(
+  workspaceRoot: string,
+  settings: LoadedSettings,
+): Promise<string> {
+  const version = await getCliVersion();
+
+  appendInteractiveUiDebug(
+    `startInteractiveUI version=${version} stdoutTTY=${String(process.stdout.isTTY)} columns=${String(process.stdout.columns)} rows=${String(process.stdout.rows)} builtinOnly=${String(process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY)} suppressStatic=${String(process.env.LLXPRT_CODE_SUPPRESS_STATIC_HEADER)}`,
+  );
+  setWindowTitle(basename(workspaceRoot), settings);
+
+  return version;
 }

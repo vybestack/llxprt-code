@@ -7,7 +7,6 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import type { Config } from '@vybestack/llxprt-code-core';
 import { todoEvents } from '@vybestack/llxprt-code-core';
 
 import { Session } from './zedIntegration.js';
@@ -110,12 +109,15 @@ describe('Zed Session.prompt (Agent API) - streaming output', () => {
       { type: 'done', reason: 'stop' },
     ]);
     const connection = new RecordingConnection();
-    const config = {
-      ...buildMinimalConfig(),
-      getEphemeralSetting: (key: string) =>
-        key === 'emojifilter' ? 'error' : undefined,
-    } as unknown as Config;
-    const session = createSession(agent, connection, config);
+    const session = createSession(
+      {
+        ...agent,
+        getEphemeralSetting: (key: string): unknown =>
+          key === 'emojifilter' ? 'error' : undefined,
+      },
+      connection,
+      buildMinimalConfig(),
+    );
     createdSessions.push(session);
     await runPrompt(session);
     const update = connection.onlySessionUpdates()[0] as {
@@ -141,12 +143,15 @@ describe('Zed Session.prompt (Agent API) - streaming output', () => {
       { type: 'done', reason: 'stop' },
     ]);
     const connection = new RecordingConnection();
-    const config = {
-      ...buildMinimalConfig(),
-      getEphemeralSetting: (key: string) =>
-        key === 'emojifilter' ? 'error' : undefined,
-    } as unknown as Config;
-    const session = createSession(agent, connection, config);
+    const session = createSession(
+      {
+        ...agent,
+        getEphemeralSetting: (key: string): unknown =>
+          key === 'emojifilter' ? 'error' : undefined,
+      },
+      connection,
+      buildMinimalConfig(),
+    );
     createdSessions.push(session);
     await runPrompt(session);
     const texts = connection

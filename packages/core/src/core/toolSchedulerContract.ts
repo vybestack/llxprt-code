@@ -1,3 +1,4 @@
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -24,11 +25,16 @@ import type {
 } from '../scheduler/types.js';
 import type { Config } from '../config/config.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type {
+  ToolExecutionPolicy,
+  ToolGovernance,
+  ToolLookup,
+} from '@vybestack/llxprt-code-tools';
 import type { ToolCallRequestInfo } from './turn.js';
 import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import type { ToolConfirmationPayload } from '@vybestack/llxprt-code-tools';
 import type { EditorType } from '../utils/editor.js';
+import type { HookExecutionOwner } from '../hooks/hookEventHandler.js';
 
 // Re-export types that staying consumers need
 export type {
@@ -49,9 +55,12 @@ export type {
  * @requirement REQ-INV-002
  */
 export interface ToolSchedulerFactoryOptions {
+  readonly telemetry: RootTelemetry;
+  readonly readExecutionPolicy: () => ToolExecutionPolicy;
+  readonly getToolGovernance: () => ToolGovernance;
   config: Config;
   messageBus: MessageBus;
-  toolRegistry: ToolRegistry;
+  toolRegistry: ToolLookup;
   outputUpdateHandler?: OutputUpdateHandler;
   onAllToolCallsComplete?: AllToolCallsCompleteHandler;
   onToolCallsUpdate?: ToolCallsUpdateHandler;
@@ -87,6 +96,7 @@ export interface ToolSchedulerContract {
   schedule(
     request: ToolCallRequestInfo | ToolCallRequestInfo[],
     signal: AbortSignal,
+    hookOwner?: HookExecutionOwner,
   ): Promise<void>;
   cancelAll(): void;
   dispose(): void;
@@ -106,10 +116,19 @@ export interface ToolSchedulerContract {
 
 /**
  * Factory type for creating ToolScheduler instances.
- * Injected into Config via ConfigParameters.toolSchedulerFactory.
+ * Used by agents-owned scheduler composition.
  * @plan PLAN-20260610-ISSUE1592.P01
  * @requirement REQ-INV-002
  */
 export type ToolSchedulerFactory = (
   options: ToolSchedulerFactoryOptions,
 ) => ToolSchedulerContract;
+
+export interface SchedulerCallbacks {
+  outputUpdateHandler?: OutputUpdateHandler;
+  onAllToolCallsComplete?: AllToolCallsCompleteHandler;
+  onToolCallsUpdate?: ToolCallsUpdateHandler;
+  getPreferredEditor: () => EditorType | undefined;
+  onEditorClose: () => void;
+  onEditorOpen?: () => void;
+}

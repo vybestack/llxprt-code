@@ -16,6 +16,8 @@
  * No mocks of the code under test.
  */
 
+import { resolveRuntimeAuthToken } from '../../utils/authToken.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { describe, it, expect, afterEach } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 
@@ -45,8 +47,6 @@ import {
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   AuthPrecedenceResolver,
-  flushRuntimeAuthScope,
-  runtimeScopedStates,
   type OAuthTokenRequestMetadata,
 } from '@vybestack/llxprt-code-auth';
 
@@ -75,7 +75,7 @@ class AuthProbeProvider extends BaseProvider {
   protected async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
-    const token = options.resolved.authToken;
+    const token = await resolveRuntimeAuthToken(options.resolved.authToken);
     if (typeof token !== 'string')
       throw new Error('Expected resolved OAuth token');
     yield { speaker: 'ai', blocks: [{ type: 'text', text: token }] };
@@ -166,10 +166,10 @@ describe('load balancer member OAuth identity (#2643)', () => {
   it('member-scoped bucket resolution returns each member its own account', async () => {
     manager = await createFixtureProfiles();
 
-    const bucketsA = await resolveProfileBuckets(PROVIDER, {
+    const bucketsA = await resolveProfileBuckets(PROVIDER, () => null, {
       profileId: memberAName,
     });
-    const bucketsB = await resolveProfileBuckets(PROVIDER, {
+    const bucketsB = await resolveProfileBuckets(PROVIDER, () => null, {
       profileId: memberBName,
     });
 
@@ -177,13 +177,10 @@ describe('load balancer member OAuth identity (#2643)', () => {
     expect(bucketsB).toStrictEqual(['acct-beta']);
   });
 
-  it('ambient lookup cannot identify member buckets (old failure mode)', async () => {
+  it('an absent owner profile cannot identify member buckets', async () => {
     manager = await createFixtureProfiles();
 
-    // No metadata: oauthRuntimeBridge has no current profile in tests, so the
-    // bucket resolution has no member to scope to and returns no buckets. The LB
-    // parent has provider '' so it can never match the requested provider either.
-    const buckets = await resolveProfileBuckets(PROVIDER);
+    const buckets = await resolveProfileBuckets(PROVIDER, () => null);
     expect(buckets).toStrictEqual([]);
   });
 
@@ -191,8 +188,8 @@ describe('load balancer member OAuth identity (#2643)', () => {
     manager = await createFixtureProfiles();
 
     const [bucketsA, bucketsB] = await Promise.all([
-      resolveProfileBuckets(PROVIDER, { profileId: memberAName }),
-      resolveProfileBuckets(PROVIDER, { profileId: memberBName }),
+      resolveProfileBuckets(PROVIDER, () => null, { profileId: memberAName }),
+      resolveProfileBuckets(PROVIDER, () => null, { profileId: memberBName }),
     ]);
 
     expect(bucketsA).toStrictEqual(['acct-alpha']);
@@ -232,59 +229,62 @@ describe('load balancer member OAuth identity (#2643)', () => {
       settings,
     );
     const observed: IContent[] = [];
-    try {
-      for (const name of [memberAName, memberBName, memberAName]) {
-        const options = buildRoundRobinResolvedOptions(
-          {
-            name,
-            providerName: PROVIDER,
-            model: 'm1',
-            ephemeralSettings: {},
-            modelParams: {},
-            auth: { type: 'oauth' },
-          },
-          { contents: [], settings, config, runtime },
-          {
-            lbProfileEphemeralSettings: undefined,
-            lbProfileModelParams: undefined,
-            logger: noopLogger,
-            providerName: 'load-balancer',
-            getEffectiveContextLimit: () => undefined,
-          },
-        );
-        for await (const chunk of delegate.generateChatCompletion(options))
-          observed.push(chunk);
-      }
-      expect(observed).toStrictEqual([
-        { speaker: 'ai', blocks: [{ type: 'text', text: 'alpha-token' }] },
-        { speaker: 'ai', blocks: [{ type: 'text', text: 'beta-token' }] },
-        { speaker: 'ai', blocks: [{ type: 'text', text: 'alpha-token' }] },
-      ]);
-      expect(oauth.requests.map((request) => request?.profileId)).toStrictEqual(
-        [memberAName, memberBName, memberAName],
+    for (const name of [memberAName, memberBName, memberAName]) {
+      const options = buildRoundRobinResolvedOptions(
+        {
+          name,
+          providerName: PROVIDER,
+          model: 'm1',
+          ephemeralSettings: {},
+          modelParams: {},
+          auth: { type: 'oauth' },
+        },
+        createProviderCallOptions({
+          providerName: 'load-balancer',
+          contents: [],
+          settings,
+          config,
+          runtime,
+        }),
+        {
+          lbProfileEphemeralSettings: undefined,
+          lbProfileModelParams: undefined,
+          logger: noopLogger,
+          providerName: 'load-balancer',
+          getEffectiveContextLimit: () => undefined,
+        },
       );
-      expect(
-        oauth.requests.map((request) =>
-          buckets.getSessionBucketScopeKey(PROVIDER, request),
-        ),
-      ).toStrictEqual([
-        `${PROVIDER}::${memberAName}`,
-        `${PROVIDER}::${memberBName}`,
-        `${PROVIDER}::${memberAName}`,
-      ]);
-      expect(
-        oauth.getSessionBucket(PROVIDER, { profileId: memberAName }),
-      ).toStrictEqual('acct-alpha');
-      expect(
-        oauth.getSessionBucket(PROVIDER, { profileId: memberBName }),
-      ).toStrictEqual('acct-beta');
-    } finally {
-      flushRuntimeAuthScope(lbParentName);
+      for await (const chunk of delegate.generateChatCompletion(options))
+        observed.push(chunk);
     }
+    expect(observed).toStrictEqual([
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'alpha-token' }] },
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'beta-token' }] },
+      { speaker: 'ai', blocks: [{ type: 'text', text: 'alpha-token' }] },
+    ]);
+    expect(oauth.requests.map((request) => request?.profileId)).toStrictEqual([
+      memberAName,
+      memberBName,
+      memberAName,
+    ]);
+    expect(
+      oauth.requests.map((request) =>
+        buckets.getSessionBucketScopeKey(PROVIDER, request),
+      ),
+    ).toStrictEqual([
+      `${PROVIDER}::${memberAName}`,
+      `${PROVIDER}::${memberBName}`,
+      `${PROVIDER}::${memberAName}`,
+    ]);
+    expect(
+      oauth.getSessionBucket(PROVIDER, { profileId: memberAName }),
+    ).toStrictEqual('acct-alpha');
+    expect(
+      oauth.getSessionBucket(PROVIDER, { profileId: memberBName }),
+    ).toStrictEqual('acct-beta');
   });
 
-  it('scopes runtime token caches by explicit member and retains ambient fallback', async () => {
-    expect(runtimeScopedStates.has(lbParentName)).toStrictEqual(false);
+  it('resolves tokens by explicit member and retains ambient fallback', async () => {
     manager = await createFixtureProfiles();
     const store = new MemoryTokenStore();
     await store.saveToken(PROVIDER, makeToken('alpha-token'), 'acct-alpha');
@@ -294,7 +294,6 @@ describe('load balancer member OAuth identity (#2643)', () => {
     await oauth.toggleOAuthEnabled(PROVIDER);
     const settings = new SettingsService();
     settings.setCurrentProfileName(memberAName);
-    const runtime = { settingsService: settings, runtimeId: lbParentName };
     const resolver = new AuthPrecedenceResolver(
       {
         providerId: PROVIDER,
@@ -305,41 +304,33 @@ describe('load balancer member OAuth identity (#2643)', () => {
       {
         settingsService: settings,
         oauthManager: oauth,
-        getActiveRuntimeContext: () => runtime,
       },
     );
-    try {
-      const tokens: Array<string | null> = [];
-      for (const profileId of [
-        memberAName,
-        memberBName,
-        undefined,
-        memberBName,
-      ]) {
-        const result = await resolver.resolveAuthenticationResult({
-          includeOAuth: true,
-          profileId,
-        });
-        tokens.push(result.token);
-      }
-      expect(tokens).toStrictEqual([
-        'alpha-token',
-        'beta-token',
-        'alpha-token',
-        'beta-token',
-      ]);
-      expect(oauth.requests.map((request) => request?.profileId)).toStrictEqual(
-        [memberAName, memberBName],
-      );
-      expect([
-        ...(runtimeScopedStates.get(lbParentName)?.entries.keys() ?? []),
-      ]).toStrictEqual([
-        `${lbParentName}::${PROVIDER}::${memberAName}`,
-        `${lbParentName}::${PROVIDER}::${memberBName}`,
-      ]);
-    } finally {
-      flushRuntimeAuthScope(lbParentName);
+    const tokens: Array<string | null> = [];
+    for (const profileId of [
+      memberAName,
+      memberBName,
+      undefined,
+      memberBName,
+    ]) {
+      const result = await resolver.resolveAuthenticationResult({
+        includeOAuth: true,
+        profileId,
+      });
+      tokens.push(result.token);
     }
+    expect(tokens).toStrictEqual([
+      'alpha-token',
+      'beta-token',
+      'alpha-token',
+      'beta-token',
+    ]);
+    expect(oauth.requests.map((request) => request?.profileId)).toStrictEqual([
+      memberAName,
+      memberBName,
+      memberAName,
+      memberBName,
+    ]);
   });
 
   it('delegate options carry the member identity', async () => {

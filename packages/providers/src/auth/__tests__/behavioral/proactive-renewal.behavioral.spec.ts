@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import {
@@ -109,7 +113,10 @@ describe('Proactive renewal behavioral scenarios', () => {
 
     await advanceTimersByTimeAsync(305 * 1000);
 
-    expect(refreshTokenSpy).toHaveBeenCalledWith(originalToken);
+    expect(refreshTokenSpy).toHaveBeenCalledWith(
+      originalToken,
+      expect.any(AbortSignal),
+    );
     expect(saveTokenSpy).toHaveBeenCalledWith(
       PROVIDER,
       expect.objectContaining({ access_token: 'refreshed-access' }),
@@ -222,6 +229,105 @@ describe('Proactive renewal behavioral scenarios', () => {
       PROVIDER,
       expect.objectContaining({ bucket: 'old-bucket' }),
     );
+  });
+
+  it('preserves prior renewals when a replacement token read fails', async () => {
+    const original = makeToken('original', { expiresInSec: 600 });
+    await tokenStore.saveToken(PROVIDER, original, 'old');
+    manager.scheduleProactiveRenewal(PROVIDER, 'old', original);
+    refreshTokenSpy.mockImplementation(async (token: OAuthToken) => ({
+      ...token,
+      access_token: `${token.access_token}-renewed`,
+      expiry: Math.floor(Date.now() / 1000) + 3600,
+    }));
+    const failure = new Error('token store unavailable');
+    const read = vi.spyOn(tokenStore, 'getToken');
+    read.mockRejectedValueOnce(failure);
+
+    await expect(
+      manager.configureProactiveRenewalsForProfile({
+        provider: PROVIDER,
+        auth: { type: 'oauth', buckets: ['replacement'] },
+      }),
+    ).rejects.toBe(failure);
+    await advanceTimersByTimeAsync(305 * 1000);
+
+    expect((await tokenStore.getToken(PROVIDER, 'old'))?.access_token).toBe(
+      'original-renewed',
+    );
+    expect(await tokenStore.getToken(PROVIDER, 'replacement')).toBeNull();
+  });
+
+  it('keeps the prior schedule until a prepared replacement is committed', async () => {
+    for (const bucket of ['old', 'replacement']) {
+      await tokenStore.saveToken(
+        PROVIDER,
+        makeToken(bucket, { expiresInSec: bucket === 'old' ? 600 : 900 }),
+        bucket,
+      );
+    }
+    refreshTokenSpy.mockImplementation(async (token: OAuthToken) => ({
+      ...token,
+      access_token: `${token.access_token}-renewed`,
+      expiry: Math.floor(Date.now() / 1000) + 3600,
+    }));
+    await manager.configureProactiveRenewalsForProfile({
+      provider: PROVIDER,
+      auth: { type: 'oauth', buckets: ['old'] },
+    });
+    const commit = await manager.prepareProactiveRenewalsForProfile({
+      provider: PROVIDER,
+      auth: { type: 'oauth', buckets: ['replacement'] },
+    });
+    await advanceTimersByTimeAsync(305 * 1000);
+    expect((await tokenStore.getToken(PROVIDER, 'old'))?.access_token).toBe(
+      'old-renewed',
+    );
+    expect(
+      (await tokenStore.getToken(PROVIDER, 'replacement'))?.access_token,
+    ).toBe('replacement');
+    commit();
+    await advanceTimersByTimeAsync(305 * 1000);
+    expect(
+      (await tokenStore.getToken(PROVIDER, 'replacement'))?.access_token,
+    ).toBe('replacement-renewed');
+  });
+
+  it('discovers load-balancer renewals in the owner profile store', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'llxprt-renewal-owner-'));
+    try {
+      const profiles = new ProfileManager(root);
+      await profiles.saveProfile('member', {
+        version: 1,
+        provider: PROVIDER,
+        model: 'test',
+        modelParams: {},
+        ephemeralSettings: {},
+        auth: { type: 'oauth', buckets: ['owned'] },
+      });
+      await tokenStore.saveToken(
+        PROVIDER,
+        makeToken('owned', { expiresInSec: 600 }),
+        'owned',
+      );
+      refreshTokenSpy.mockImplementation(async (token: OAuthToken) => ({
+        ...token,
+        access_token: `${token.access_token}-renewed`,
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      }));
+
+      await manager.configureProactiveRenewalsForProfile(
+        { type: 'loadbalancer', profiles: ['member'] },
+        (name) => profiles.loadProfile(name),
+      );
+      await advanceTimersByTimeAsync(305 * 1000);
+
+      expect((await tokenStore.getToken(PROVIDER, 'owned'))?.access_token).toBe(
+        'owned-renewed',
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('PR-10: Dedup -- same expiry already scheduled is a no-op', async () => {

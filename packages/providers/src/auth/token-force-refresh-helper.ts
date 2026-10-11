@@ -18,7 +18,6 @@
 import { type OAuthTokenWithExtras } from '@vybestack/llxprt-code-auth';
 import { mergeRefreshedToken } from '@vybestack/llxprt-code-auth/token-merge.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import { invalidateProviderRuntimeCache } from '@vybestack/llxprt-code-auth/precedence.js';
 import type { OAuthToken, TokenStore } from './types.js';
 import type { ProviderRegistry } from './provider-registry.js';
 import type { ProactiveRenewalManager } from './proactive-renewal-manager.js';
@@ -164,35 +163,4 @@ export async function refreshStoredToken(
   );
 
   return mergedToken;
-}
-
-/**
- * Invalidate in-memory runtime-scoped auth caches after a successful token
- * refresh, so retries (and other agents/runtimes) resolve the fresh disk token
- * instead of the revoked one. Best-effort: never throws, because the token has
- * already been refreshed on disk.
- *
- * Scope note: the runtimeScopedStates cache is keyed by
- * runtimeId::providerId::profileId and has no bucket dimension, so the coarsest
- * meaningful granularity is provider-wide. We intentionally invalidate the whole
- * provider (rather than a single bucket/profile): a 401 means the revoked access
- * token must not be served anywhere, and any collateral re-resolution for other
- * profiles simply re-reads the correct token from disk — a cheap, safe recovery
- * rather than a correctness risk.
- *
- * @fix issue2035
- */
-export function invalidateRuntimeCacheAfterRefresh(providerName: string): void {
-  try {
-    const invalidated = invalidateProviderRuntimeCache(providerName);
-    logger.debug(
-      () =>
-        `[issue2035] Invalidated ${invalidated} runtime cache entr${invalidated === 1 ? 'y' : 'ies'} for ${providerName} after token refresh`,
-    );
-  } catch (error) {
-    logger.debug(
-      () =>
-        `[issue2035] Failed to invalidate runtime cache for ${providerName}: ${error instanceof Error ? error.message : error}`,
-    );
-  }
 }

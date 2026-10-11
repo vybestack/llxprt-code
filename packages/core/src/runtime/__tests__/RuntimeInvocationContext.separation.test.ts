@@ -16,28 +16,8 @@
 
 import { describe, it, expect } from 'bun:test';
 import { createRuntimeInvocationContext } from '../RuntimeInvocationContext.js';
-import type { ProviderRuntimeContext } from '../providerRuntimeContext.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
 describe('RuntimeInvocationContext Settings Separation', () => {
-  function createMockSettings(): SettingsService {
-    return {
-      getAllGlobalSettings: () => ({}),
-      getProviderSettings: () => ({}),
-      getEphemeralSetting: () => undefined,
-      setEphemeralSetting: () => {},
-    } as unknown as SettingsService;
-  }
-
-  function createMockRuntime(
-    runtimeId: string = 'test-runtime-id',
-  ): ProviderRuntimeContext {
-    return {
-      runtimeId,
-      metadata: {},
-    } as ProviderRuntimeContext;
-  }
-
   /**
    * GROUP 1: Field population
    * Each test verifies one field is populated correctly.
@@ -45,8 +25,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context created with temperature=0.7 in ephemerals returns 0.7 from getModelParam', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: { temperature: 0.7 },
     });
@@ -56,8 +36,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context created with shell-replacement=none returns none from getCliSetting', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: { 'shell-replacement': 'none' },
     });
@@ -67,8 +47,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context created with reasoning.enabled=true returns true from getModelBehavior', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: { 'reasoning.enabled': true },
     });
@@ -78,8 +58,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context created with custom-headers has X-Foo=bar in customHeaders', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: {
         'custom-headers': { 'X-Foo': 'bar' },
@@ -96,8 +76,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with shell-replacement in ephemerals does not contain shell-replacement in modelParams', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: {
         'shell-replacement': 'none',
@@ -110,8 +90,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with temperature in ephemerals does not contain temperature in cliSettings', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: {
         temperature: 0.7,
@@ -124,8 +104,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with auth-key in ephemerals does not contain auth-key in modelParams', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: {
         'auth-key': 'sk-test-key',
@@ -144,8 +124,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with max_tokens=4096 in ephemerals returns 4096 from getModelParam', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: {
         max_tokens: 4096,
@@ -163,8 +143,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with temperature=0.7 in ephemerals still contains temperature in ephemerals field', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: {
         temperature: 0.7,
@@ -176,8 +156,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with shell-replacement=none in ephemerals still contains shell-replacement in ephemerals field', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: {
         'shell-replacement': 'none',
@@ -194,8 +174,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('cliSettings is frozen', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: {
         'shell-replacement': 'none',
@@ -207,8 +187,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('modelParams is frozen', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: {
         temperature: 0.7,
@@ -220,8 +200,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('modelBehavior is frozen', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: {
         'reasoning.enabled': true,
@@ -233,8 +213,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('customHeaders is frozen', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: {
         'custom-headers': { 'X-Foo': 'bar' },
@@ -250,8 +230,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with empty ephemerals has empty cliSettings', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: {},
     });
@@ -261,8 +241,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with empty ephemerals has empty modelParams', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: {},
     });
@@ -272,8 +252,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with multiple settings puts temperature in modelParams', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: {
         temperature: 0.7,
@@ -288,8 +268,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with multiple settings puts max_tokens in modelParams', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: {
         temperature: 0.7,
@@ -305,8 +285,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with multiple settings puts shell-replacement in cliSettings', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: {
         temperature: 0.7,
@@ -321,8 +301,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
   it('context with multiple settings puts reasoning.enabled in modelBehavior', () => {
     const context = createRuntimeInvocationContext({
-      runtime: createMockRuntime(),
-      settings: createMockSettings(),
+      runtimeId: 'test-runtime-id',
+
       providerName: 'openai',
       ephemeralsSnapshot: {
         temperature: 0.7,
@@ -346,8 +326,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
   describe('issue #2182: modelParams must stay free of leaked settings', () => {
     it('does not place a nested text object into modelParams for anthropic', () => {
       const context = createRuntimeInvocationContext({
-        runtime: createMockRuntime(),
-        settings: createMockSettings(),
+        runtimeId: 'test-runtime-id',
+
         providerName: 'anthropic',
         ephemeralsSnapshot: { text: { verbosity: 'medium' } },
       });
@@ -360,8 +340,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
     it('does not place stream-idle-timeout-ms into modelParams for any provider', () => {
       for (const provider of ['anthropic', 'codex', 'openai']) {
         const context = createRuntimeInvocationContext({
-          runtime: createMockRuntime(),
-          settings: createMockSettings(),
+          runtimeId: 'test-runtime-id',
+
           providerName: provider,
           ephemeralsSnapshot: { 'stream-idle-timeout-ms': 60_000 },
         });
@@ -374,8 +354,8 @@ describe('RuntimeInvocationContext Settings Separation', () => {
 
     it('reproduces the full opusfirst ephemeral snapshot without leaking to modelParams', () => {
       const context = createRuntimeInvocationContext({
-        runtime: createMockRuntime(),
-        settings: createMockSettings(),
+        runtimeId: 'test-runtime-id',
+
         providerName: 'anthropic',
         ephemeralsSnapshot: {
           'stream-idle-timeout-ms': 60_000,

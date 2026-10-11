@@ -15,6 +15,9 @@ import {
 const cloneRule = (rule: PolicyRule): PolicyRule => ({
   ...rule,
   modes: rule.modes ? [...rule.modes] : undefined,
+  argsPattern: rule.argsPattern
+    ? new RegExp(rule.argsPattern.source, rule.argsPattern.flags)
+    : undefined,
 });
 
 const compareRulePriority = (a: PolicyRule, b: PolicyRule): number =>
@@ -37,6 +40,11 @@ function readStringCommand(args: Record<string, unknown>): string | undefined {
  * which is the sole mechanism for mode transitions — no rules are added or
  * removed on transition, only the mode filter changes.
  */
+export interface PolicyEvaluation {
+  readonly mode: ApprovalMode;
+  readonly rules: readonly PolicyRule[];
+}
+
 export class PolicyEngine {
   private readonly baseRules: PolicyRule[];
   private readonly defaultDecision: PolicyDecision;
@@ -65,6 +73,7 @@ export class PolicyEngine {
     toolName: string,
     args: Record<string, unknown>,
     serverName?: string,
+    evaluation?: PolicyEvaluation,
   ): PolicyDecision {
     // Validate serverName to prevent spoofing
     if (serverName) {
@@ -85,7 +94,7 @@ export class PolicyEngine {
     }
 
     // Find the highest priority matching rule
-    const matchingRule = this.findMatchingRule(toolName, args);
+    const matchingRule = this.findMatchingRule(toolName, args, evaluation);
 
     if (matchingRule) {
       return this.evaluateMatchingRule(
@@ -93,10 +102,11 @@ export class PolicyEngine {
         args,
         serverName,
         matchingRule,
+        evaluation,
       );
     }
 
-    return this.evaluateDefault(toolName, args, serverName);
+    return this.evaluateDefault(toolName, args, serverName, evaluation);
   }
 
   private evaluateMatchingRule(
@@ -104,6 +114,7 @@ export class PolicyEngine {
     args: Record<string, unknown>,
     serverName: string | undefined,
     matchingRule: PolicyRule,
+    evaluation?: PolicyEvaluation,
   ): PolicyDecision {
     const decision = matchingRule.decision;
 
@@ -121,6 +132,7 @@ export class PolicyEngine {
           serverName,
           command,
           matchingRule,
+          evaluation,
         );
         if (shellResult !== undefined) {
           return shellResult;
@@ -147,6 +159,7 @@ export class PolicyEngine {
     serverName: string | undefined,
     command: string,
     matchingRule: PolicyRule,
+    evaluation?: PolicyEvaluation,
   ): PolicyDecision | undefined {
     const subCommands = splitCommands(command);
 
@@ -165,6 +178,7 @@ export class PolicyEngine {
         serverName,
         command,
         subCommands,
+        evaluation,
       );
     }
 
@@ -185,6 +199,7 @@ export class PolicyEngine {
     serverName: string | undefined,
     command: string,
     subCommands: string[],
+    evaluation?: PolicyEvaluation,
   ): PolicyDecision {
     // Filter out the original command to prevent infinite recursion
     const subCommandsToEvaluate = subCommands
@@ -198,6 +213,7 @@ export class PolicyEngine {
         toolName,
         { ...args, command: subCmd },
         serverName,
+        evaluation,
       );
 
       if (subResult === PolicyDecision.DENY) {
@@ -218,6 +234,7 @@ export class PolicyEngine {
     toolName: string,
     args: Record<string, unknown>,
     serverName: string | undefined,
+    evaluation?: PolicyEvaluation,
   ): PolicyDecision {
     let defaultResult = this.defaultDecision;
 
@@ -234,6 +251,7 @@ export class PolicyEngine {
         args,
         serverName,
         defaultResult,
+        evaluation,
       );
     }
 
@@ -249,6 +267,7 @@ export class PolicyEngine {
     args: Record<string, unknown>,
     serverName: string | undefined,
     currentResult: PolicyDecision,
+    evaluation?: PolicyEvaluation,
   ): PolicyDecision {
     const command = readStringCommand(args);
     if (command === undefined) {
@@ -269,6 +288,7 @@ export class PolicyEngine {
         toolName,
         { ...args, command: subCmd },
         serverName,
+        evaluation,
       );
 
       if (subResult === PolicyDecision.DENY) {
@@ -291,10 +311,14 @@ export class PolicyEngine {
   private findMatchingRule(
     toolName: string,
     args: Record<string, unknown>,
+    evaluation?: PolicyEvaluation,
   ): PolicyRule | undefined {
     const argsString = stableStringify(args);
 
-    return this.baseRules.find((rule) => {
+    const rules = evaluation
+      ? [...this.baseRules, ...evaluation.rules].sort(compareRulePriority)
+      : this.baseRules;
+    return rules.find((rule) => {
       // Check tool name match (exact, prefix, or wildcard)
       const matchesAllTools =
         rule.toolName === undefined && rule.toolNamePrefix === undefined;
@@ -312,13 +336,18 @@ export class PolicyEngine {
       if (
         rule.modes &&
         rule.modes.length > 0 &&
-        !rule.modes.includes(this.currentMode)
+        !rule.modes.includes(evaluation?.mode ?? this.currentMode)
       ) {
         return false;
       }
 
       // Check args pattern match
-      return !rule.argsPattern || rule.argsPattern.test(argsString);
+      return (
+        !rule.argsPattern ||
+        new RegExp(rule.argsPattern.source, rule.argsPattern.flags).test(
+          argsString,
+        )
+      );
     });
   }
 

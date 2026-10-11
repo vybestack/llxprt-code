@@ -3,14 +3,15 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { RootTelemetry } from './root-telemetry.js';
+let selectedTelemetry: RootTelemetry;
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { logApiResponse, logApiError, logToolCall } from './loggers.js';
 import { UiTelemetryService } from './uiTelemetry.js';
 import { uiTelemetryService } from './uiTelemetry.js';
 import { ApiResponseEvent, ApiErrorEvent } from './events/api-events.js';
 import type { ToolCallEvent } from './events/tool-events.js';
-import * as sdk from './sdk.js';
 import type { TelemetryConfig } from '../internal/interfaces.js';
 
 const mockConfig = {
@@ -32,21 +33,29 @@ const mockConfig = {
  */
 
 describe('Provider-owned local aggregation (SDK disabled)', () => {
+  afterEach(async () => {
+    await selectedTelemetry.close();
+  });
   beforeEach(() => {
+    selectedTelemetry = RootTelemetry.prepare({
+      enabled: false,
+      sessionId: 'local-observer-root',
+      maxBytes: 1048576,
+      maxFiles: 2,
+    });
     vi.restoreAllMocks();
-    vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
     uiTelemetryService.reset();
   });
 
   it('aggregates provider-owned API responses locally even when SDK is NOT initialized', () => {
-    expect(sdk.isTelemetrySdkInitialized()).toBe(false);
+    expect(selectedTelemetry.isEnabled()).toBe(false);
     const event = new ApiResponseEvent('test-model-owned', 1000, 'prompt-1', {
       inputTokenCount: 100,
       outputTokenCount: 50,
       totalTokenCount: 150,
     });
     event.provider_owned = true;
-    logApiResponse(mockConfig, event);
+    logApiResponse(mockConfig, event, selectedTelemetry);
 
     const metrics = uiTelemetryService.getMetrics();
     expect(metrics.models['test-model-owned']).toBeDefined();
@@ -61,7 +70,7 @@ describe('Provider-owned local aggregation (SDK disabled)', () => {
       'prompt-error-1',
     );
     event.provider_owned = true;
-    logApiError(mockConfig, event);
+    logApiError(mockConfig, event, selectedTelemetry);
 
     const metrics = uiTelemetryService.getMetrics();
     expect(metrics.models['test-model-owned-err']).toBeDefined();
@@ -78,7 +87,7 @@ describe('Provider-owned local aggregation (SDK disabled)', () => {
       { inputTokenCount: 100, outputTokenCount: 50, totalTokenCount: 150 },
     );
     // provider_owned is NOT set — this is the agent adapter path
-    logApiResponse(mockConfig, event);
+    logApiResponse(mockConfig, event, selectedTelemetry);
 
     const metrics = uiTelemetryService.getMetrics();
     expect(metrics.models['agent-only-model']).toBeUndefined();
@@ -94,7 +103,7 @@ describe('Provider-owned local aggregation (SDK disabled)', () => {
       'prompt-agent-err',
     );
     // provider_owned is NOT set
-    logApiError(mockConfig, event);
+    logApiError(mockConfig, event, selectedTelemetry);
 
     const metrics = uiTelemetryService.getMetrics();
     expect(metrics.models['agent-only-err-model']).toBeUndefined();
@@ -113,7 +122,7 @@ describe('Provider-owned local aggregation (SDK disabled)', () => {
       agent_id: 'primary',
       call_id: 'tool-call-1',
     } as ToolCallEvent;
-    logToolCall(mockConfig, toolEvent);
+    logToolCall(mockConfig, toolEvent, selectedTelemetry);
 
     const metrics = uiTelemetryService.getMetrics();
     expect(metrics.tools.totalCalls).toBe(1);
@@ -123,7 +132,6 @@ describe('Provider-owned local aggregation (SDK disabled)', () => {
 describe('Exactly-once producer path (provider_owned dedup)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
     uiTelemetryService.reset();
   });
 
@@ -141,8 +149,8 @@ describe('Exactly-once producer path (provider_owned dedup)', () => {
     event.provider_owned = true;
 
     // Simulate dual emission: provider wrapper + agent adapter both log
-    logApiResponse(mockConfig, event);
-    logApiResponse(mockConfig, event);
+    logApiResponse(mockConfig, event, selectedTelemetry);
+    logApiResponse(mockConfig, event, selectedTelemetry);
 
     const metrics = uiTelemetryService.getMetrics();
     // Provider-owned event counted once by attempt_id dedup
@@ -178,8 +186,8 @@ describe('Exactly-once producer path (provider_owned dedup)', () => {
     );
     event2.provider_owned = true;
 
-    logApiResponse(mockConfig, event1);
-    logApiResponse(mockConfig, event2);
+    logApiResponse(mockConfig, event1, selectedTelemetry);
+    logApiResponse(mockConfig, event2, selectedTelemetry);
 
     const metrics = uiTelemetryService.getMetrics();
     expect(metrics.models['dedup-model-2'].api.totalRequests).toBe(2);
@@ -210,8 +218,8 @@ describe('Exactly-once producer path (provider_owned dedup)', () => {
     );
     // agentEvent.provider_owned is NOT set
 
-    logApiResponse(mockConfig, providerEvent);
-    logApiResponse(mockConfig, agentEvent);
+    logApiResponse(mockConfig, providerEvent, selectedTelemetry);
+    logApiResponse(mockConfig, agentEvent, selectedTelemetry);
 
     const metrics = uiTelemetryService.getMetrics();
     expect(metrics.models['dual-model'].api.totalRequests).toBe(1);
@@ -222,7 +230,6 @@ describe('Reset clears canonical state', () => {
   beforeEach(() => {
     uiTelemetryService.reset();
     vi.restoreAllMocks();
-    vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
   });
 
   it('reset clears all model/tool/timing metrics', () => {
@@ -232,7 +239,7 @@ describe('Reset clears canonical state', () => {
       totalTokenCount: 150,
     });
     event.provider_owned = true;
-    logApiResponse(mockConfig, event);
+    logApiResponse(mockConfig, event, selectedTelemetry);
 
     expect(uiTelemetryService.getMetrics().models['reset-model']).toBeDefined();
 
@@ -257,7 +264,7 @@ describe('Reset clears canonical state', () => {
     );
     event.provider_owned = true;
 
-    logApiResponse(mockConfig, event);
+    logApiResponse(mockConfig, event, selectedTelemetry);
     expect(
       uiTelemetryService.getMetrics().models['reset-dedup-model'].api
         .totalRequests,
@@ -265,7 +272,7 @@ describe('Reset clears canonical state', () => {
 
     uiTelemetryService.reset();
 
-    logApiResponse(mockConfig, event);
+    logApiResponse(mockConfig, event, selectedTelemetry);
     expect(
       uiTelemetryService.getMetrics().models['reset-dedup-model'].api
         .totalRequests,

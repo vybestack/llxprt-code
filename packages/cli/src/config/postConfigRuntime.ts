@@ -5,28 +5,32 @@
  */
 
 import {
+  type WorkspaceTrustControlPort,
+  SessionSettingsOwner,
+  type WorkspaceMemoryOwner,
+  type WorkspaceFilesystemOwner,
   ApprovalMode,
-  runImageOperation,
   STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
   STREAM_IDLE_TIMEOUT_SETTING_KEY,
   type Config,
-  type ImageOperationBackend,
 } from '@vybestack/llxprt-code-core';
+
 import { setOsKeyringDisabledBySetting } from '@vybestack/llxprt-code-storage';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type {
   EphemeralSettings,
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
-import {
-  getCliRuntimeContext,
-  setCliRuntimeContext,
-  applyCliSetArguments,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+import { applyCliSetArguments } from '@vybestack/llxprt-code-providers/runtime/cliEphemeralSettings.js';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { createCodexImageBackendResolver } from '@vybestack/llxprt-code-providers';
-import { preflightAgentActivation } from '@vybestack/llxprt-code-agents';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import {
+  assembleProfileApplication,
+  type AgentProfileApplication,
+  assembleProviderSwitch,
+  assembleAgentActivationBootstrap,
+  type AgentActivationOperation,
+} from '@vybestack/llxprt-code-agents';
 import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
 import {
   READ_ONLY_TOOL_NAMES,
@@ -52,6 +56,10 @@ const logger = new DebugLogger('llxprt:config:postConfigRuntime');
 // ─── DTOs ───────────────────────────────────────────────────────────────────
 
 export interface PostConfigInput {
+  readonly workspaceTrust: WorkspaceTrustControlPort;
+  readonly trustCleanup?: () => Promise<void>;
+  readonly filesystem: WorkspaceFilesystemOwner;
+  readonly memory: WorkspaceMemoryOwner;
   readonly config: Config;
   readonly runtimeState: BootstrapRuntimeState;
   readonly bootstrapArgs: BootstrapProfileArgs;
@@ -71,8 +79,12 @@ export interface PostConfigInput {
 /** Fields consumed by setupRuntimeContext (steps 10-11). */
 type SetupRuntimeContextInput = Pick<
   PostConfigInput,
-  'config' | 'runtimeState' | 'profileSettingsWithTools' | 'runtimeOverrides'
->;
+  | 'config'
+  | 'runtimeState'
+  | 'profileSettingsWithTools'
+  | 'runtimeOverrides'
+  | 'workspaceTrust'
+> & { readonly sessionSettings: SessionSettingsOwner };
 
 /** Fields consumed by reapplyCliOverrides (step 14). */
 type ReapplyCliOverridesInput = Pick<
@@ -100,17 +112,17 @@ export type StreamTimeoutSettingsInput = Pick<
 >;
 
 function applyStreamTimeoutSetting(
-  config: Pick<Config, 'setEphemeralSetting'>,
+  config: Pick<SessionSettingsOwner, 'writeUserParameter'>,
   value: number | undefined,
   key: 'stream-idle-timeout-ms' | 'stream-first-response-timeout-ms',
 ): void {
   if (value !== undefined) {
-    config.setEphemeralSetting(key, value);
+    config.writeUserParameter(key, value);
   }
 }
 
 export function applyStreamIdleTimeoutSettings(
-  config: Pick<Config, 'setEphemeralSetting'>,
+  config: Pick<SessionSettingsOwner, 'writeUserParameter'>,
   settings: StreamTimeoutSettingsInput,
 ): void {
   applyStreamTimeoutSetting(
@@ -121,7 +133,7 @@ export function applyStreamIdleTimeoutSettings(
 }
 
 export function applyStreamFirstResponseTimeoutSettings(
-  config: Pick<Config, 'setEphemeralSetting'>,
+  config: Pick<SessionSettingsOwner, 'writeUserParameter'>,
   settings: StreamTimeoutSettingsInput,
 ): void {
   applyStreamTimeoutSetting(
@@ -132,7 +144,7 @@ export function applyStreamFirstResponseTimeoutSettings(
 }
 
 interface ProfileEphemeralSettingsInput {
-  readonly config: Pick<Config, 'setEphemeralSetting'>;
+  readonly config: Pick<SessionSettingsOwner, 'writeUserParameter'>;
   readonly bootstrapArgs: Pick<BootstrapProfileArgs, 'profileJson'>;
   readonly argv: Pick<CliArgs, 'provider'>;
   readonly settings: StreamTimeoutSettingsInput;
@@ -187,7 +199,7 @@ export function applyGlobalAndProfileEphemeralSettings(
   for (const key of ephemeralKeys) {
     const value = (profileSettingsWithTools as Record<string, unknown>)[key];
     if (value !== undefined) {
-      config.setEphemeralSetting(key, value);
+      config.writeUserParameter(key, value);
     }
   }
 }
@@ -214,27 +226,9 @@ function readDisabledFlag(
   return null;
 }
 
-/**
- * Step 10: Set CLI runtime context.
- * Step 11: Re-register provider infrastructure (conditional, dynamic import).
- * This is the SECOND call to registerCliProviderInfrastructure — the first
- * happened inside prepareRuntimeForProfile() (step 2).
- */
-async function setupRuntimeContext(
-  input: SetupRuntimeContextInput,
-): Promise<void> {
-  const { config, runtimeState } = input;
-  const settingsService = getSettingsService(input);
-
-  const bootstrapRuntimeId =
-    runtimeState.runtime.runtimeId ?? resolveForegroundRuntimeId();
-  const baseBootstrapMetadata = {
-    ...(runtimeState.runtime.metadata ?? {}),
-    stage: 'post-config',
-  };
-
-  // Set disabled hooks from hooksConfig (post-migration target) with
-  // hooks.disabled fallback for unmigrated settings
+// Set disabled hooks from hooksConfig (post-migration target) with
+// hooks.disabled fallback for unmigrated settings
+function applyDisabledHooks(input: SetupRuntimeContextInput): void {
   const hooksConfig = input.profileSettingsWithTools.hooksConfig as
     | { disabled?: unknown }
     | undefined;
@@ -244,78 +238,57 @@ async function setupRuntimeContext(
   const disabledHooks =
     readDisabledFlag(hooksConfig) ?? readDisabledFlag(hooksLegacy);
   if (Array.isArray(disabledHooks)) {
-    config.setDisabledHooks(disabledHooks as string[]);
+    input.config.setDisabledHooks(disabledHooks as string[]);
   }
+}
 
-  const profileManager = new ProfileManager();
-  setCliRuntimeContext(settingsService, config, {
-    runtimeId: bootstrapRuntimeId,
-    metadata: baseBootstrapMetadata,
-    profileManager,
-  });
+/** Recompose the pre-Config runtime on the exact Config's policy bus. */
+async function setupRuntimeContext(
+  input: SetupRuntimeContextInput,
+): Promise<void> {
+  const { config, runtimeState } = input;
+  const settingsService = getSettingsService(input);
+  const bootstrapRuntimeId =
+    runtimeState.runtime.runtimeId ?? resolveForegroundRuntimeId();
+  const baseBootstrapMetadata = {
+    ...(runtimeState.runtime.metadata ?? {}),
+    stage: 'post-config',
+  };
+  applyDisabledHooks(input);
 
   // The early profile runtime has no Config, so its bus cannot carry the
   // resolved policy. Recompose once Config exists and adopt that final runtime.
   const { assembleCliProviderRuntime } = await import(
-    '@vybestack/llxprt-code-providers/runtime.js'
+    '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js'
   );
   const providerContributions = input.runtimeOverrides.providerContributions;
   const finalRuntime = assembleCliProviderRuntime({
+    trustPort: input.workspaceTrust,
     settingsService,
     config,
+    settingsOwner: input.sessionSettings,
     runtimeId: bootstrapRuntimeId,
     metadata: baseBootstrapMetadata,
     oauthSettings: createOAuthSettingsAdapter(),
+    ...(runtimeState.registration && {
+      registration: runtimeState.registration,
+      oauthManager: runtimeState.oauthManager,
+    }),
     ...(providerContributions !== undefined ? { providerContributions } : {}),
   });
+  runtimeState.runtime = finalRuntime.runtime;
   runtimeState.providerManager =
     finalRuntime.providerManager as ProviderManager;
   runtimeState.oauthManager = finalRuntime.oauthManager;
   runtimeState.runtimeMessageBus = finalRuntime.runtimeMessageBus;
-  config.setProviderManager(finalRuntime.providerManager);
-  config.setRuntimeMessageBus(finalRuntime.runtimeMessageBus);
-  // Associate the exact assembled OAuthManager with the Config's runtime bundle
-  // (#2378 Finding 3). fromConfig adopts THIS manager by reference, so the
-  // OAuthManager the Agent sees is the exact one assembled on the same bus — no
-  // second OAuthManager is constructed or looked up.
-  config.setRuntimeOAuthManager(finalRuntime.oauthManager);
-
-  // Wire the Codex image backend resolver. resolveBackend is called lazily
-  // (when the model invokes generate_image), so even though the tool registry
-  // was already created during config.initialize(), the lazy closure reads
-  // this resolver at invocation time.
-  const imageBackendResolver = createCodexImageBackendResolver({
-    oauthManager: finalRuntime.oauthManager,
-    getActiveProvider: () => runtimeState.providerManager.getActiveProvider(),
-  });
-  config.setImageBackendResolver(imageBackendResolver);
-
-  // Wire the common image-operation runner so `/image` and direct CLI image
-  // mode converge on the SAME service as the generate_image tool. The runner
-  // is bound to the workspace root and the image backend resolver; it owns
-  // request normalization, output/input path validation, provider dispatch,
-  // atomic write, and the normalized result.
-  config.setRunImageOperation((input) =>
-    runImageOperation(
-      {
-        prompt: input.prompt,
-        outputPath: input.outputPath,
-        ...(input.inputPaths !== undefined
-          ? { inputPaths: input.inputPaths }
-          : {}),
-        ...(input.signal !== undefined ? { signal: input.signal } : {}),
-      },
-      {
-        workspaceRoot: config.getTargetDir(),
-        resolveBackend: () => {
-          const backend = imageBackendResolver();
-          if (backend === null) {
-            return null;
-          }
-          return backend as ImageOperationBackend | null;
-        },
-      },
-    ),
+  await runtimeState.policyOwner?.dispose();
+  runtimeState.policyOwner = finalRuntime.policyOwner;
+  if (finalRuntime.policyOwner)
+    input.runtimeOverrides.onPolicyOwnerReady?.(finalRuntime.policyOwner);
+  input.runtimeOverrides.onProviderManagerReady?.(finalRuntime.providerManager);
+  input.runtimeOverrides.onOAuthManagerReady?.(finalRuntime.oauthManager);
+  input.runtimeOverrides.onProviderFilesReady?.(
+    finalRuntime.registration.providerFileLifecycle,
   );
 
   logger.debug(
@@ -328,22 +301,27 @@ async function setupRuntimeContext(
  */
 async function activateProviderAndProfile(
   input: PostConfigInput,
+  profileApplication: AgentProfileApplication,
+  activationOperation: AgentActivationOperation,
 ): Promise<string | undefined> {
   const { bootstrapArgs, argv, profileLoadResult, providerModelResult } = input;
 
-  const profileApplicationResult = await applyProfileToRuntime({
-    loadedProfile: profileLoadResult.loadedProfile,
-    profileToLoad: profileLoadResult.profileToLoad ?? undefined,
-    bootstrapArgs,
-    argv,
-    finalModel: providerModelResult.model,
-    finalProvider: providerModelResult.provider,
-    profileWarnings: [...profileLoadResult.profileWarnings],
-  });
+  const profileApplicationResult = await applyProfileToRuntime(
+    {
+      loadedProfile: profileLoadResult.loadedProfile,
+      profileToLoad: profileLoadResult.profileToLoad ?? undefined,
+      bootstrapArgs,
+      argv,
+      finalModel: providerModelResult.model,
+      finalProvider: providerModelResult.provider,
+      profileWarnings: [...profileLoadResult.profileWarnings],
+    },
+    profileApplication,
+  );
 
   const finalProvider = profileApplicationResult.resolvedFinalProvider;
 
-  const runtimeContext = getCliRuntimeContext();
+  const runtimeContext = input.runtimeState.runtime;
   const bootstrapResult = createBootstrapResult({
     runtime: runtimeContext,
     providerManager: input.runtimeState.providerManager,
@@ -379,33 +357,7 @@ async function activateProviderAndProfile(
     finalProvider !== undefined &&
     !profileApplicationResult.appliedFromLoadedProfile
   ) {
-    try {
-      // The preflight's authMode 'none' path swallows the provider-switch error
-      // internally (safeActivateProvider does not throw) and surfaces it via
-      // result.switchError. The surrounding try/catch remains necessary because
-      // the 'none' path also calls applyRuntimeProviderOverrides (file I/O for
-      // auth-keyfile resolution) and applyModelAndParams, which can still throw.
-      // The CLI routes this declarative provider switch through the public
-      // agent-bootstrap preflight (#2378) rather than the runtime activation
-      // primitive directly.
-      const activationResult = await preflightAgentActivation(input.config, {
-        provider: finalProvider,
-        authMode: 'none',
-      });
-      if (activationResult.switchError !== undefined) {
-        logger.warn(
-          () =>
-            `[bootstrap] Failed to switch active provider to ${finalProvider}: ${activationResult.switchError}`,
-        );
-      }
-    } catch (error) {
-      logger.warn(
-        () =>
-          `[bootstrap] Failed to switch active provider to ${finalProvider}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-      );
-    }
+    await activateUnprofiledProvider(finalProvider, activationOperation);
   }
 
   return finalProvider;
@@ -435,7 +387,9 @@ function hasCliArgumentOverrides(args: BootstrapProfileArgs): boolean {
  * The provider switch clears ephemerals, so we reapply CLI args here.
  */
 async function reapplyCliOverrides(
-  input: ReapplyCliOverridesInput,
+  input: ReapplyCliOverridesInput & {
+    readonly sessionSettings: SessionSettingsOwner;
+  },
   finalProvider: string | undefined,
 ): Promise<void> {
   const { config, bootstrapArgs, argv } = input;
@@ -460,8 +414,8 @@ async function reapplyCliOverrides(
         'model',
         cliModelOverride,
       );
+      input.sessionSettings.chooseModel(cliModelOverride);
     }
-    config.setModel(cliModelOverride);
     (config as Config & { _cliModelOverride?: string })._cliModelOverride =
       cliModelOverride;
     logger.debug(
@@ -472,7 +426,7 @@ async function reapplyCliOverrides(
 
   if (hasCliArgumentOverrides(bootstrapArgs)) {
     const { applyCliArgumentOverrides } = await import(
-      '@vybestack/llxprt-code-providers/runtime.js'
+      '@vybestack/llxprt-code-providers/runtime/settingsResolver.js'
     );
     await applyCliArgumentOverrides(
       {
@@ -482,6 +436,12 @@ async function reapplyCliOverrides(
         set: argv.set,
       },
       bootstrapArgs,
+      {
+        setEphemeralSetting: (key, value) =>
+          input.sessionSettings.writeUserParameter(key, value),
+      },
+      settingsService,
+      input.runtimeState.providerManager.getActiveProvider(),
     );
   }
 }
@@ -489,9 +449,12 @@ async function reapplyCliOverrides(
 /**
  * Step 15: Apply tool governance policy (ephemeral settings for allowed/excluded tools).
  */
-function applyToolPolicies(input: ApplyToolPoliciesInput): void {
-  const { config, argv, profileSettingsWithTools, approvalMode, interactive } =
-    input;
+function applyToolPolicies(
+  input: ApplyToolPoliciesInput & {
+    readonly sessionSettings: SessionSettingsOwner;
+  },
+): void {
+  const { argv, profileSettingsWithTools, approvalMode, interactive } = input;
 
   const explicitAllowedTools = buildNormalizedToolSet(
     argv.allowedTools && argv.allowedTools.length > 0
@@ -505,9 +468,9 @@ function applyToolPolicies(input: ApplyToolPoliciesInput): void {
 
   const applyPolicy = (allowedSet: Set<string> | undefined): void => {
     if (allowedSet === undefined) {
-      config.setEphemeralSetting('tools.allowed', undefined);
+      input.sessionSettings.writeUserParameter('tools.allowed', undefined);
     } else {
-      config.setEphemeralSetting(
+      input.sessionSettings.writeUserParameter(
         'tools.allowed',
         Array.from(allowedSet).sort(),
       );
@@ -552,7 +515,9 @@ function applyToolPolicies(input: ApplyToolPoliciesInput): void {
 /**
  * Step 16: Apply emojifilter, profile ephemeral settings, CLI /set args, disabled hooks.
  */
-function applyEphemeralSettings(input: PostConfigInput): void {
+function applyEphemeralSettings(
+  input: PostConfigInput & { readonly sessionSettings: SessionSettingsOwner },
+): void {
   const { config, argv, profileSettingsWithTools, runtimeOverrides } = input;
 
   const settingsService = getSettingsService(input);
@@ -571,7 +536,10 @@ function applyEphemeralSettings(input: PostConfigInput): void {
   // Apply stream idle timeout from settings.json and profile ephemerals.
   // Global stream idle timeout settings are always applied; profile-specific
   // ephemeral settings are skipped if --provider was explicitly specified.
-  applyGlobalAndProfileEphemeralSettings(input);
+  applyGlobalAndProfileEphemeralSettings({
+    ...input,
+    config: input.sessionSettings,
+  });
 
   // In non-interactive mode, tool governance is enforced from approval mode,
   // so /set must not override governance-managed keys after step 15.
@@ -591,7 +559,13 @@ function applyEphemeralSettings(input: PostConfigInput): void {
     enforceGovernanceSetProtection &&
     setArgsForApplication.length < rawSetArgs.length;
 
-  const cliSetResult = applyCliSetArguments(config, setArgsForApplication);
+  const cliSetResult = applyCliSetArguments(
+    {
+      setEphemeralSetting: (key, value) =>
+        input.sessionSettings.writeUserParameter(key, value),
+    },
+    setArgsForApplication,
+  );
 
   if (Object.keys(cliSetResult.modelParams).length > 0) {
     (
@@ -603,6 +577,7 @@ function applyEphemeralSettings(input: PostConfigInput): void {
   if (hadGovernanceOverrides) {
     applyToolPolicies({
       config,
+      sessionSettings: input.sessionSettings,
       argv,
       profileSettingsWithTools,
       approvalMode: input.approvalMode,
@@ -614,7 +589,9 @@ function applyEphemeralSettings(input: PostConfigInput): void {
 /**
  * Step 17: Seed default disabled tools, store profile model params, store bootstrap args, log warnings.
  */
-function finalizeMetadata(input: PostConfigInput): void {
+function finalizeMetadata(
+  input: PostConfigInput & { readonly sessionSettings: SessionSettingsOwner },
+): void {
   const { config, profileLoadResult, defaultDisabledTools } = input;
 
   // Store profile model params on config
@@ -627,12 +604,12 @@ function finalizeMetadata(input: PostConfigInput): void {
   // Seed tools.disabled with defaultDisabledTools from settings
   if (Array.isArray(defaultDisabledTools) && defaultDisabledTools.length > 0) {
     const currentDisabled = Array.isArray(
-      config.getEphemeralSetting('tools.disabled'),
+      input.sessionSettings.readNamedParameter('tools.disabled'),
     )
-      ? (config.getEphemeralSetting('tools.disabled') as string[])
+      ? (input.sessionSettings.readNamedParameter('tools.disabled') as string[])
       : [];
     const currentAllowed = buildNormalizedToolSet(
-      config.getEphemeralSetting('tools.allowed'),
+      input.sessionSettings.readNamedParameter('tools.allowed'),
     );
     const disabledSet = new Set(currentDisabled);
     for (const toolName of defaultDisabledTools) {
@@ -640,7 +617,10 @@ function finalizeMetadata(input: PostConfigInput): void {
         disabledSet.add(toolName);
       }
     }
-    config.setEphemeralSetting('tools.disabled', Array.from(disabledSet));
+    input.sessionSettings.writeUserParameter(
+      'tools.disabled',
+      Array.from(disabledSet),
+    );
   }
 }
 
@@ -649,16 +629,21 @@ function finalizeMetadata(input: PostConfigInput): void {
 /**
  * Orchestrates all post-Config side effects in the correct order.
  *
- * Step 10: setCliRuntimeContext()
- * Step 11: registerCliProviderInfrastructure() — re-registration, conditional, dynamic import
+ * Steps 10-11: recompose the bootstrap handle with the exact Config and policy bus
  * Step 12: applyProfileToRuntime() — snapshot application
- * Step 13: preflightAgentActivation() — declarative provider switch (authMode 'none'; auth happens later)
+ * Step 13: activationOperation.preflight() — declarative provider switch (authMode 'none'; auth happens later)
  * Step 14: reapplyCliOverrides() — CLI args win after provider switch clears ephemerals
  * Step 15: applyToolGovernance() — tool policy (ephemeral settings for allowed/excluded tools)
  * Step 16: applyEphemeralSettings() — emojifilter, profile ephemerals, CLI /set args, disabled hooks
  * Step 17: finalizeMetadata() — seed default disabled tools, store model params, store bootstrap args, log warnings
  */
-export async function finalizeConfig(input: PostConfigInput): Promise<Config> {
+export async function finalizeConfig(
+  original: PostConfigInput,
+): Promise<Config> {
+  const sessionSettings =
+    original.runtimeOverrides.sessionSettingsOwner ??
+    new SessionSettingsOwner(getSettingsService(original));
+  const input = { ...original, sessionSettings };
   // Propagate security.disableOsKeyring into the storage package's process-wide
   // opt-out (issue #2928 R3.2) BEFORE any profile/auth application. Profile
   // auth wiring (applyProfileToRuntime → createProviderKeyStorage().getKey())
@@ -675,19 +660,121 @@ export async function finalizeConfig(input: PostConfigInput): Promise<Config> {
   await setupRuntimeContext(input);
 
   // Steps 12-13: Apply profile + switch provider
-  const finalProvider = await activateProviderAndProfile(input);
+  const activationOperation = assembleAgentActivationBootstrap(
+    input.config,
+    getSettingsService(input),
+    input.runtimeState.providerManager,
+    input.runtimeState.oauthManager ?? null,
+    () => input.runtimeState.runtime.runtimeKind,
+    undefined,
+    undefined,
+    input.filesystem,
+    input.memory,
+    sessionSettings,
+    original.runtimeOverrides.sessionSettingsOwner === undefined
+      ? 'transferred'
+      : 'borrowed',
+    input.workspaceTrust,
+    input.trustCleanup,
+    undefined,
+    undefined,
+    requireSelectedProviderFiles(
+      input.runtimeState.runtime.providerFileLifecycle,
+    ),
+    input.runtimeState.runtimeMessageBus,
+    // The CLI builds this memory solely for the activation (alongside the
+    // filesystem and trust it hands over), so the activation owns its release.
+    'transferred',
+  );
+  const switchProvider = assembleProviderSwitch(
+    input.config,
+    getSettingsService(input),
+    input.runtimeState.providerManager,
+    input.runtimeState.oauthManager ?? null,
+    () => input.runtimeState.runtime.runtimeKind,
+    () => activationOperation.sessionClient.refreshAuth(),
+    sessionSettings,
+  );
+  const profileApplication = assembleProfileApplication(
+    input.config,
+    getSettingsService(input),
+    input.runtimeState.providerManager,
+    input.runtimeState.oauthManager ?? null,
+    switchProvider,
+    sessionSettings,
+    activationOperation.workspaceDefinitions.profileReads,
+  );
+  let transferred = false;
+  try {
+    input.runtimeOverrides.onProviderSwitchReady?.(switchProvider);
+    input.runtimeOverrides.onProfileApplicationReady?.(profileApplication);
+    const finalProvider = await activateProviderAndProfile(
+      input,
+      profileApplication,
+      activationOperation,
+    );
 
-  // Step 14: Reapply CLI overrides after provider switch
-  await reapplyCliOverrides(input, finalProvider);
+    // Step 14: Reapply CLI overrides after provider switch
+    await reapplyCliOverrides(input, finalProvider);
 
-  // Step 15: Apply tool governance policy
-  applyToolPolicies(input);
+    // Step 15: Apply tool governance policy
+    applyToolPolicies(input);
 
-  // Step 16: Apply ephemeral settings
-  applyEphemeralSettings(input);
+    // Step 16: Apply ephemeral settings
+    applyEphemeralSettings(input);
 
-  // Step 17: Finalize metadata
-  finalizeMetadata(input);
+    // Step 17: Finalize metadata
+    finalizeMetadata(input);
 
-  return input.config;
+    if (input.runtimeOverrides.onActivationBootstrapReady !== undefined) {
+      input.runtimeOverrides.onActivationBootstrapReady(activationOperation);
+      transferred = true;
+    }
+    return input.config;
+  } finally {
+    if (!transferred) await activationOperation.dispose();
+  }
+}
+
+async function activateUnprofiledProvider(
+  finalProvider: string,
+  activationOperation: AgentActivationOperation,
+): Promise<void> {
+  try {
+    // The preflight's authMode 'none' path swallows the provider-switch error
+    // internally (safeActivateProvider does not throw) and surfaces it via
+    // result.switchError. The surrounding try/catch remains necessary because
+    // the 'none' path also calls applyRuntimeProviderOverrides (file I/O for
+    // auth-keyfile resolution) and applyModelAndParams, which can still throw.
+    // The CLI routes this declarative provider switch through the public
+    // agent-bootstrap preflight (#2378) rather than the runtime activation
+    // primitive directly.
+    const activationResult = await activationOperation.preflight({
+      provider: finalProvider,
+      authMode: 'none',
+    });
+    if (activationResult.switchError !== undefined) {
+      logger.warn(
+        () =>
+          `[bootstrap] Failed to switch active provider to ${finalProvider}: ${activationResult.switchError}`,
+      );
+    }
+  } catch (error) {
+    logger.warn(
+      () =>
+        `[bootstrap] Failed to switch active provider to ${finalProvider}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+    );
+  }
+}
+
+function requireSelectedProviderFiles(
+  value: object | undefined,
+): ProviderFileLifecycle {
+  if (!(value instanceof ProviderFileLifecycle))
+    throw new Error(
+      'CLI preflight requires the explicitly assembled provider file owner',
+    );
+  return value;
 }

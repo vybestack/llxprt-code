@@ -34,12 +34,15 @@ import {
   canonicalizeToolName,
 } from '@vybestack/llxprt-code-tools';
 import type { ChatSession } from './chatSession.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
+import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
   InvalidStreamError,
   StreamEventType,
   type StreamEvent,
 } from './chatSession.js';
 import { closeIteratorBounded } from './iteratorCleanup.js';
+import { openResponseStreamIterator } from './turnResponseStream.js';
 import {
   TurnDebugResponses,
   MAX_DEBUG_RESPONSE_CHUNKS,
@@ -195,6 +198,8 @@ export class Turn {
     private readonly prompt_id: string,
     private readonly agentId: string = DEFAULT_AGENT_ID,
     private readonly providerName: string = 'backend',
+    private readonly recordingExecution?: AgentChatRecordingExecution,
+    private readonly hookOwner?: AgentChatRecordingExecution['hookOwner'],
   ) {
     this.pendingToolCalls = [];
     this.finishReason = undefined;
@@ -364,7 +369,7 @@ export class Turn {
 
       if (text.trim() !== '') {
         const citationEvent = buildCitationEvent(
-          this.chat.getConfig(),
+          this.chat.shouldShowCitations(),
           'Response may contain information from external sources. Please verify important details independently.',
         );
         if (citationEvent) {
@@ -606,10 +611,10 @@ export class Turn {
     idleFlag: IdleFlag,
   ): TurnWatchdogBundle {
     const idleResolution = resolveStreamIdleTimeoutMsSource(
-      this.chat.getConfig(),
+      this.chat.getStreamTimeoutPolicy(),
     );
     const firstResponseResolution = resolveStreamFirstResponseTimeoutMsSource(
-      this.chat.getConfig(),
+      this.chat.getStreamTimeoutPolicy(),
     );
     const watchdog = createStreamWatchdog({
       firstResponseMs: firstResponseResolution.ms,
@@ -628,6 +633,7 @@ export class Turn {
   async *run(
     req: TurnRequest,
     signal: AbortSignal,
+    modelParameters?: AdmittedModelParameters,
   ): AsyncGenerator<ServerAgentStreamEvent> {
     const idleFlag: IdleFlag = {
       timedOut: false,
@@ -676,6 +682,7 @@ export class Turn {
           idleFlag,
           onProviderError,
           onStreamLiveness,
+          modelParameters,
         );
         streamIterator = iterator;
 
@@ -755,16 +762,22 @@ export class Turn {
     idleFlag: IdleFlag,
     onProviderError: (error: StructuredError) => void,
     onStreamLiveness: StreamLivenessListener,
+    modelParameters?: AdmittedModelParameters,
   ): Promise<{
     iterator: AsyncIterator<StreamEvent>;
     firstResult: IteratorResult<StreamEvent>;
   }> {
     if (!watchdog.isActive) {
-      const iterator = await this.openResponseStreamIterator(
+      const iterator = await openResponseStreamIterator(
+        this.chat,
+        this.prompt_id,
+        this.recordingExecution,
         req,
         timeoutSignal,
         onProviderError,
         onStreamLiveness,
+        modelParameters,
+        this.hookOwner,
       );
       try {
         const outcome = await raceReadWithAbort(iterator.next(), signal);
@@ -781,11 +794,16 @@ export class Turn {
       }
     }
 
-    const acquisitionPromise = this.openResponseStreamIterator(
+    const acquisitionPromise = openResponseStreamIterator(
+      this.chat,
+      this.prompt_id,
+      this.recordingExecution,
       req,
       timeoutSignal,
       onProviderError,
       onStreamLiveness,
+      modelParameters,
+      this.hookOwner,
     );
     const acquisition = beginWatchdogBoundedAcquisition(acquisitionPromise);
 
@@ -824,36 +842,6 @@ export class Turn {
       }
       throw error;
     }
-  }
-
-  /**
-   * Open the provider response stream and return its async iterator. Shared by
-   * both the bounded and unbounded first-response paths so the request shape is
-   * defined in exactly one place.
-   */
-  private async openResponseStreamIterator(
-    req: TurnRequest,
-    timeoutSignal: AbortSignal,
-    onProviderError: (error: StructuredError) => void,
-    onStreamLiveness?: StreamLivenessListener,
-  ): Promise<AsyncIterator<StreamEvent>> {
-    // Bridge: chatSession.sendMessageStream still expects Google-shaped
-    // SendMessageParameters (until P21). The value is structurally compatible;
-    // normalizeToolInteractionInput handles any shape at runtime.
-    const responseStream = await this.chat.sendMessageStream(
-      {
-        message: req as Parameters<
-          typeof this.chat.sendMessageStream
-        >[0]['message'],
-        config: {
-          abortSignal: timeoutSignal,
-          onProviderError,
-          ...(onStreamLiveness !== undefined ? { onStreamLiveness } : {}),
-        },
-      },
-      this.prompt_id,
-    );
-    return responseStream[Symbol.asyncIterator]();
   }
 
   private handlePendingFunctionCall(

@@ -184,6 +184,7 @@ describe('AnthropicProvider', () => {
         settingsOverrides: {
           global: {
             'auth-key': 'test-api-key',
+            streaming: 'disabled',
             'custom-headers': customHeaders,
             activeProvider: 'anthropic',
           },
@@ -240,7 +241,7 @@ describe('AnthropicProvider', () => {
         },
       ];
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
       );
 
       const chunks = [];
@@ -326,7 +327,7 @@ describe('AnthropicProvider', () => {
       ];
 
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
       );
       const collected: IContent[] = [];
       for await (const chunk of generator) {
@@ -427,15 +428,32 @@ describe('AnthropicProvider', () => {
 
       const generator = provider.generateChatCompletion(
         buildCallOptions(messages, {
-          settingsOverrides: {
-            global: {
-              'tool-output-max-tokens': 50,
-              'tool-output-truncate-mode': 'truncate',
+          ...{
+            settingsOverrides: {
+              global: {
+                'tool-output-max-tokens': 50,
+                'tool-output-truncate-mode': 'truncate',
+              },
+              provider: {
+                'tool-output-max-tokens': 50,
+                'tool-output-truncate-mode': 'truncate',
+              },
             },
-            provider: {
-              'tool-output-max-tokens': 50,
-              'tool-output-truncate-mode': 'truncate',
-            },
+          },
+          resolved: {
+            ...{
+              settingsOverrides: {
+                global: {
+                  'tool-output-max-tokens': 50,
+                  'tool-output-truncate-mode': 'truncate',
+                },
+                provider: {
+                  'tool-output-max-tokens': 50,
+                  'tool-output-truncate-mode': 'truncate',
+                },
+              },
+            }.resolved,
+            streaming: true,
           },
         }),
       );
@@ -512,7 +530,10 @@ describe('AnthropicProvider', () => {
       ];
 
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages, { tools }),
+        buildCallOptions(messages, {
+          ...{ tools },
+          resolved: { ...{ tools }.resolved, streaming: true },
+        }),
       );
 
       const chunks = [];

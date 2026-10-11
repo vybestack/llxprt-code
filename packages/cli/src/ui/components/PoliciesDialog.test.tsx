@@ -3,10 +3,14 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { PolicyControl } from '../../../../agents/src/api/control/policyControl.js';
+import { PolicyDecision, type PolicyRule } from '@vybestack/llxprt-code-policy';
 
 import { act } from 'react';
 import { renderWithProviders, waitFor } from '../../__tests__/render.js';
-import { vi, describe, it, expect, beforeEach } from 'bun:test';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 
 const realRealInkModule = {
   ...(await import('../../../test-utils/real-ink.js')),
@@ -20,18 +24,11 @@ import {
 } from './PoliciesDialog.js';
 import { MessageType } from '../types.js';
 
-const PolicyDecision = {
-  ALLOW: 'allow',
-  DENY: 'deny',
-  ASK_USER: 'ask_user',
-} as unknown as typeof import('@vybestack/llxprt-code-core').PolicyDecision;
-
 const mockListEditableRules = vi.fn();
 const mockAddEditableRule = vi.fn();
 const mockUpdateEditableRule = vi.fn();
 const mockDeleteEditableRule = vi.fn();
 const mockDuplicateEditableRule = vi.fn();
-const mockReloadUserPolicyRules = vi.fn();
 
 const actual = { ...(await import('@vybestack/llxprt-code-core')) };
 void vi.mock('@vybestack/llxprt-code-core', () => ({
@@ -43,36 +40,40 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
   updateEditableRule: mockUpdateEditableRule,
   deleteEditableRule: mockDeleteEditableRule,
   duplicateEditableRule: mockDuplicateEditableRule,
-  reloadUserPolicyRules: mockReloadUserPolicyRules,
 }));
 
 const mockAddItem = vi.fn();
 
-type MockEngineRule = {
-  toolName?: string;
-  decision: string;
-  priority?: number;
-  source?: string;
-  argsPattern?: { source: string };
-};
-
-function createMockConfig(
-  engineRules: MockEngineRule[] = [],
-): PoliciesDialogRuntime {
-  const engine = {
-    getRules: () => engineRules,
-    evaluate: () => PolicyDecision.ASK_USER,
-    getDefaultDecision: () => PolicyDecision.ASK_USER,
-    isNonInteractive: () => false,
-    replaceRules: vi.fn(),
-  };
+const ownedPolicies: RuntimePolicyOwner[] = [];
+const ownedConfigs: Config[] = [];
+function createMockConfig(engineRules: PolicyRule[] = []): {
+  config: PoliciesDialogRuntime;
+  policy: PolicyControl;
+} {
+  const config = new Config({
+    sessionId: 'dialog',
+    cwd: process.cwd(),
+    targetDir: process.cwd(),
+    model: 'test',
+    debugMode: false,
+    trustedFolder: true,
+    policyEngineConfig: { rules: engineRules },
+  });
+  const owner = new RuntimePolicyOwner(config);
+  ownedPolicies.push(owner);
+  ownedConfigs.push(config);
   return {
-    getPolicyEngine: () => engine,
-    getApprovalMode: () => 'default',
-  } as unknown as PoliciesDialogRuntime;
+    config,
+    policy: new PolicyControl({ inspection: owner.session.inspection }),
+  };
 }
 
 describe('PoliciesDialog', () => {
+  afterEach(async () => {
+    for (const owner of ownedPolicies.splice(0)) await owner.dispose();
+    for (const config of ownedConfigs.splice(0)) await config.dispose();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockListEditableRules.mockResolvedValue([]);
@@ -84,15 +85,13 @@ describe('PoliciesDialog', () => {
       decision: PolicyDecision.ALLOW,
       priority: 100,
     });
-    mockReloadUserPolicyRules.mockImplementation(async (engine) =>
-      engine.getRules(),
-    );
   });
 
-  async function renderDialog(config: ReturnType<typeof createMockConfig>) {
+  async function renderDialog(fixture: ReturnType<typeof createMockConfig>) {
     const result = renderWithProviders(
       <PoliciesDialog
-        config={config}
+        config={fixture.config}
+        policy={fixture.policy}
         addItem={mockAddItem as never}
         onExit={vi.fn()}
       />,

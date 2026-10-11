@@ -15,6 +15,9 @@ import {
 } from 'bun:test';
 import * as crypto from 'node:crypto';
 
+import type { IContent } from '../services/history/IContent.js';
+const mockReaddir = vi.fn(async (): Promise<string[]> => []);
+
 // Mock fs before importing the module under test
 const actual = { ...(await import('node:fs')) };
 void vi.mock('node:fs', () => ({
@@ -24,7 +27,7 @@ void vi.mock('node:fs', () => ({
     mkdir: vi.fn(),
     writeFile: vi.fn(),
     rename: vi.fn(),
-    readdir: vi.fn(),
+    readdir: mockReaddir,
     readFile: vi.fn(),
     access: vi.fn(),
   },
@@ -73,7 +76,13 @@ describe('SessionPersistenceService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     storage = new Storage(mockProjectRoot);
-    service = new SessionPersistenceService(storage, mockSessionId);
+    service = new SessionPersistenceService(
+      {
+        projectRoot: storage.getProjectRoot(),
+        chatsDir: storage.getProjectChatsDir(),
+      },
+      mockSessionId,
+    );
   });
 
   afterEach(() => {
@@ -94,10 +103,22 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should create unique timestamps for different instances', async () => {
-      const service1 = new SessionPersistenceService(storage, 'session1');
+      const service1 = new SessionPersistenceService(
+        {
+          projectRoot: storage.getProjectRoot(),
+          chatsDir: storage.getProjectChatsDir(),
+        },
+        'session1',
+      );
       // Small delay to ensure different timestamp
       await new Promise((resolve) => setTimeout(resolve, 10));
-      const service2 = new SessionPersistenceService(storage, 'session2');
+      const service2 = new SessionPersistenceService(
+        {
+          projectRoot: storage.getProjectRoot(),
+          chatsDir: storage.getProjectChatsDir(),
+        },
+        'session2',
+      );
 
       expect(service1.getSessionFilePath()).not.toBe(
         service2.getSessionFilePath(),
@@ -152,19 +173,13 @@ describe('SessionPersistenceService', () => {
         savedContent = content as string;
       });
 
-      const history = [
+      const history: IContent[] = [
         { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
       ];
       const metadata = { provider: 'test', model: 'test-model' };
       const uiHistory = [{ id: 1, type: 'user', text: 'hello' }];
 
-      await service.save(
-        history as unknown as Array<
-          import('../services/history/IContent.js').IContent
-        >,
-        metadata,
-        uiHistory,
-      );
+      await service.save(history, metadata, uiHistory);
 
       const parsed = JSON.parse(savedContent) as PersistedSession;
       expect(parsed.version).toBe(1);
@@ -252,9 +267,7 @@ describe('SessionPersistenceService', () => {
     it('should return null if chats directory does not exist', async () => {
       const enoentError = new Error('ENOENT') as NodeJS.ErrnoException;
       enoentError.code = 'ENOENT';
-      (
-        fs.promises.readdir as Mock<typeof fs.promises.readdir>
-      ).mockRejectedValue(enoentError);
+      mockReaddir.mockRejectedValue(enoentError);
 
       const result = await service.loadMostRecent();
 
@@ -262,9 +275,7 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should return null if no session files exist', async () => {
-      (
-        fs.promises.readdir as Mock<typeof fs.promises.readdir>
-      ).mockResolvedValue([] as unknown as []);
+      mockReaddir.mockResolvedValue([] as unknown as []);
 
       const result = await service.loadMostRecent();
 
@@ -272,9 +283,7 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should ignore non-session files', async () => {
-      (
-        fs.promises.readdir as Mock<typeof fs.promises.readdir>
-      ).mockResolvedValue([
+      mockReaddir.mockResolvedValue([
         'other-file.json',
         'persisted-session-backup.json.bak',
         'readme.md',
@@ -286,9 +295,7 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should load the most recent session file (sorted by filename)', async () => {
-      (
-        fs.promises.readdir as Mock<typeof fs.promises.readdir>
-      ).mockResolvedValue([
+      mockReaddir.mockResolvedValue([
         'persisted-session-2026-01-01T00-00-00-000Z.json',
         'persisted-session-2026-01-03T00-00-00-000Z.json', // Most recent
         'persisted-session-2026-01-02T00-00-00-000Z.json',
@@ -318,9 +325,7 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should reject session with wrong project hash', async () => {
-      (
-        fs.promises.readdir as Mock<typeof fs.promises.readdir>
-      ).mockResolvedValue([
+      mockReaddir.mockResolvedValue([
         'persisted-session-2026-01-03T00-00-00-000Z.json',
       ] as unknown as []);
 
@@ -343,9 +348,7 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should reject session with unknown version', async () => {
-      (
-        fs.promises.readdir as Mock<typeof fs.promises.readdir>
-      ).mockResolvedValue([
+      mockReaddir.mockResolvedValue([
         'persisted-session-2026-01-03T00-00-00-000Z.json',
       ] as unknown as []);
 
@@ -368,9 +371,7 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should handle corrupted JSON gracefully and backup', async () => {
-      (
-        fs.promises.readdir as Mock<typeof fs.promises.readdir>
-      ).mockResolvedValue([
+      mockReaddir.mockResolvedValue([
         'persisted-session-2026-01-03T00-00-00-000Z.json',
       ] as unknown as []);
       (
@@ -391,9 +392,7 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should return session with UI history when present', async () => {
-      (
-        fs.promises.readdir as Mock<typeof fs.promises.readdir>
-      ).mockResolvedValue([
+      mockReaddir.mockResolvedValue([
         'persisted-session-2026-01-03T00-00-00-000Z.json',
       ] as unknown as []);
 
@@ -422,9 +421,7 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should handle readdir failure gracefully', async () => {
-      (
-        fs.promises.readdir as Mock<typeof fs.promises.readdir>
-      ).mockRejectedValue(new Error('Permission denied'));
+      mockReaddir.mockRejectedValue(new Error('Permission denied'));
 
       const result = await service.loadMostRecent();
 
@@ -432,9 +429,7 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should handle readFile failure gracefully', async () => {
-      (
-        fs.promises.readdir as Mock<typeof fs.promises.readdir>
-      ).mockResolvedValue([
+      mockReaddir.mockResolvedValue([
         'persisted-session-2026-01-03T00-00-00-000Z.json',
       ] as unknown as []);
       (
@@ -500,8 +495,20 @@ describe('SessionPersistenceService', () => {
 
   describe('project hash consistency', () => {
     it('should generate consistent hash for same project', () => {
-      const service1 = new SessionPersistenceService(storage, 'session1');
-      const service2 = new SessionPersistenceService(storage, 'session2');
+      const service1 = new SessionPersistenceService(
+        {
+          projectRoot: storage.getProjectRoot(),
+          chatsDir: storage.getProjectChatsDir(),
+        },
+        'session1',
+      );
+      const service2 = new SessionPersistenceService(
+        {
+          projectRoot: storage.getProjectRoot(),
+          chatsDir: storage.getProjectChatsDir(),
+        },
+        'session2',
+      );
 
       // Access private method via any
       const hash1 = (
@@ -518,8 +525,20 @@ describe('SessionPersistenceService', () => {
       const storage1 = new Storage('/project1');
       const storage2 = new Storage('/project2');
 
-      const service1 = new SessionPersistenceService(storage1, 'session');
-      const service2 = new SessionPersistenceService(storage2, 'session');
+      const service1 = new SessionPersistenceService(
+        {
+          projectRoot: storage1.getProjectRoot(),
+          chatsDir: storage1.getProjectChatsDir(),
+        },
+        'session',
+      );
+      const service2 = new SessionPersistenceService(
+        {
+          projectRoot: storage2.getProjectRoot(),
+          chatsDir: storage2.getProjectChatsDir(),
+        },
+        'session',
+      );
 
       const hash1 = (
         service1 as unknown as { getProjectHash(): string }
@@ -590,7 +609,10 @@ describe('SessionPersistenceService', () => {
         '/path/with spaces/and-dashes/and_underscores',
       );
       const specialService = new SessionPersistenceService(
-        specialStorage,
+        {
+          projectRoot: specialStorage.getProjectRoot(),
+          chatsDir: specialStorage.getProjectChatsDir(),
+        },
         'session',
       );
 

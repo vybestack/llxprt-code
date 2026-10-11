@@ -94,7 +94,7 @@ function renderLoadProfileDialog(
     useLoadProfileDialog({
       addMessage,
       dialogs,
-      recordingIntegrationRef: { current: null },
+      recorder: null,
     }),
   );
   return { result, store, visibility, addMessage };

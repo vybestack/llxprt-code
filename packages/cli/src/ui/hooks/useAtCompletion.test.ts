@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installWorkspaceRuntimeHook } from '../../__tests__/workspace-runtime-fixture.js';
+
 import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import { act } from 'react';
@@ -16,23 +18,40 @@ import { useTestHarnessForAtCompletion } from './__tests__/useAtCompletion-test-
 
 describe('useAtCompletion', () => {
   let testRootDir: string;
+  let additionalRoots: readonly string[] = [];
+  const useFixtureRuntime = installWorkspaceRuntimeHook(
+    () => testRootDir || process.cwd(),
+    async (disposal) => {
+      if (vi.isFakeTimers()) {
+        vi.runAllTimers();
+        await Promise.resolve();
+        vi.runAllTimers();
+        vi.useRealTimers();
+      }
+      await disposal;
+    },
+    () => additionalRoots,
+  );
   let mockConfig: Config;
 
   beforeEach(() => {
+    additionalRoots = [];
     mockConfig = {
+      getMcpServers: () => undefined,
       getFileFilteringOptions: vi.fn(() => ({
         respectGitIgnore: true,
         respectLlxprtIgnore: true,
       })),
       getEnableRecursiveFileSearch: () => true,
       getFileFilteringDisableFuzzySearch: () => false,
-      getResourceRegistry: () => ({ getAllResources: () => [] }),
+      listResources: () => [],
       getSubagentManager: () => undefined,
     } as unknown as Config;
     vi.clearAllMocks();
   });
 
   afterEach(async () => {
+    await useFixtureRuntime.dispose();
     vi.useRealTimers();
 
     if (testRootDir) {
@@ -53,7 +72,12 @@ describe('useAtCompletion', () => {
       testRootDir = await createTmpDir(structure);
 
       const { result } = renderHook(() =>
-        useTestHarnessForAtCompletion(true, '', mockConfig, testRootDir),
+        useTestHarnessForAtCompletion(
+          true,
+          '',
+          useFixtureRuntime(mockConfig),
+          testRootDir,
+        ),
       );
 
       await waitFor(() => {
@@ -83,7 +107,12 @@ describe('useAtCompletion', () => {
       testRootDir = await createTmpDir(structure);
 
       const { result } = renderHook(() =>
-        useTestHarnessForAtCompletion(true, 'src/', mockConfig, testRootDir),
+        useTestHarnessForAtCompletion(
+          true,
+          'src/',
+          useFixtureRuntime(mockConfig),
+          testRootDir,
+        ),
       );
 
       await waitFor(() => {
@@ -116,7 +145,12 @@ describe('useAtCompletion', () => {
       testRootDir = await createTmpDir(structure);
 
       const { result } = renderHook(() =>
-        useTestHarnessForAtCompletion(true, '', mockConfig, testRootDir),
+        useTestHarnessForAtCompletion(
+          true,
+          '',
+          useFixtureRuntime(mockConfig),
+          testRootDir,
+        ),
       );
 
       await waitFor(() => {
@@ -138,6 +172,7 @@ describe('useAtCompletion', () => {
         useGitignore: false,
         useExtensionIgnore: false,
         cache: false,
+        cacheTtl: 0,
         enableRecursiveFileSearch: true,
         enableFuzzySearch: true,
       });
@@ -149,7 +184,7 @@ describe('useAtCompletion', () => {
         useTestHarnessForAtCompletion(
           true,
           'CrAzYCaSe',
-          mockConfig,
+          useFixtureRuntime(mockConfig),
           testRootDir,
         ),
       );
@@ -167,7 +202,12 @@ describe('useAtCompletion', () => {
     it('should be in a loading state during initial file system crawl', async () => {
       testRootDir = await createTmpDir({});
       const { result } = renderHook(() =>
-        useTestHarnessForAtCompletion(true, '', mockConfig, testRootDir),
+        useTestHarnessForAtCompletion(
+          true,
+          '',
+          useFixtureRuntime(mockConfig),
+          testRootDir,
+        ),
       );
 
       // It's initially true because the effect runs synchronously.
@@ -185,7 +225,12 @@ describe('useAtCompletion', () => {
 
       const { result, rerender } = renderHook(
         ({ pattern }) =>
-          useTestHarnessForAtCompletion(true, pattern, mockConfig, testRootDir),
+          useTestHarnessForAtCompletion(
+            true,
+            pattern,
+            useFixtureRuntime(mockConfig),
+            testRootDir,
+          ),
         { initialProps: { pattern: 'a' } },
       );
 
@@ -228,15 +273,21 @@ describe('useAtCompletion', () => {
         initialize: vi.fn().mockResolvedValue(undefined),
         search: vi
           .fn()
-          .mockImplementation(async (...args) =>
-            realFileSearch.search(...args),
+          .mockImplementation(
+            async (...args: Parameters<typeof realFileSearch.search>) =>
+              realFileSearch.search(...args),
           ),
       };
       vi.spyOn(FileSearchFactory, 'create').mockReturnValue(mockFileSearch);
 
       const { result, rerender } = renderHook(
         ({ pattern }) =>
-          useTestHarnessForAtCompletion(true, pattern, mockConfig, testRootDir),
+          useTestHarnessForAtCompletion(
+            true,
+            pattern,
+            useFixtureRuntime(mockConfig),
+            testRootDir,
+          ),
         { initialProps: { pattern: 'a' } },
       );
 
@@ -272,12 +323,24 @@ describe('useAtCompletion', () => {
       testRootDir = await createTmpDir({});
 
       const abortSpy = vi.spyOn(AbortController.prototype, 'abort');
-      const search = vi.fn().mockImplementation((pattern: string) => {
-        const delay = pattern === 'a' ? 500 : 50;
-        return new Promise((resolve) => {
-          setTimeout(() => resolve([pattern]), delay);
-        });
-      });
+      const search = vi
+        .fn()
+        .mockImplementation(
+          (pattern: string, options: { signal: AbortSignal }) => {
+            const delay = pattern === 'a' ? 500 : 50;
+            return new Promise((resolve) => {
+              const timer = setTimeout(() => resolve([pattern]), delay);
+              options.signal.addEventListener(
+                'abort',
+                () => {
+                  clearTimeout(timer);
+                  resolve([]);
+                },
+                { once: true },
+              );
+            });
+          },
+        );
       const mockFileSearch: FileSearch = {
         initialize: vi.fn().mockResolvedValue(undefined),
         search,
@@ -286,7 +349,12 @@ describe('useAtCompletion', () => {
 
       const { rerender } = renderHook(
         ({ pattern }) =>
-          useTestHarnessForAtCompletion(true, pattern, mockConfig, testRootDir),
+          useTestHarnessForAtCompletion(
+            true,
+            pattern,
+            useFixtureRuntime(mockConfig),
+            testRootDir,
+          ),
         { initialProps: { pattern: 'a' } },
       );
 
@@ -322,7 +390,12 @@ describe('useAtCompletion', () => {
 
       const { result, rerender } = renderHook(
         ({ enabled }) =>
-          useTestHarnessForAtCompletion(enabled, 'a', mockConfig, testRootDir),
+          useTestHarnessForAtCompletion(
+            enabled,
+            'a',
+            useFixtureRuntime(mockConfig),
+            testRootDir,
+          ),
         { initialProps: { enabled: true } },
       );
 
@@ -351,7 +424,12 @@ describe('useAtCompletion', () => {
 
       const { result, rerender } = renderHook(
         ({ enabled }) =>
-          useTestHarnessForAtCompletion(enabled, '', mockConfig, testRootDir),
+          useTestHarnessForAtCompletion(
+            enabled,
+            '',
+            useFixtureRuntime(mockConfig),
+            testRootDir,
+          ),
         { initialProps: { enabled: true } },
       );
 
@@ -396,7 +474,10 @@ describe('useAtCompletion', () => {
               }
               return realFileSearch.initialize();
             }),
-            search: vi.fn(async (...args) => realFileSearch.search(...args)),
+            search: vi.fn(
+              async (...args: Parameters<typeof realFileSearch.search>) =>
+                realFileSearch.search(...args),
+            ),
           };
           return fake;
         },
@@ -404,7 +485,12 @@ describe('useAtCompletion', () => {
 
       const { result, rerender } = renderHook(
         ({ cwd, pattern }) =>
-          useTestHarnessForAtCompletion(true, pattern, mockConfig, cwd),
+          useTestHarnessForAtCompletion(
+            true,
+            pattern,
+            useFixtureRuntime(mockConfig),
+            cwd,
+          ),
         {
           initialProps: {
             cwd: failedCwd,
@@ -433,15 +519,26 @@ describe('useAtCompletion', () => {
 
     it('should reset when disabled during initialization', async () => {
       testRootDir = await createTmpDir({});
+      let releaseInitialization = (): void => {
+        throw new Error('Initialization gate not installed');
+      };
+      const initializing = new Promise<void>((resolve) => {
+        releaseInitialization = resolve;
+      });
       const mockFileSearch: FileSearch = {
-        initialize: vi.fn(() => new Promise<void>(() => undefined)),
+        initialize: vi.fn(() => initializing),
         search: vi.fn(),
       };
       vi.spyOn(FileSearchFactory, 'create').mockReturnValue(mockFileSearch);
 
       const { result, rerender } = renderHook(
         ({ enabled }) =>
-          useTestHarnessForAtCompletion(enabled, '', mockConfig, testRootDir),
+          useTestHarnessForAtCompletion(
+            enabled,
+            '',
+            useFixtureRuntime(mockConfig),
+            testRootDir,
+          ),
         { initialProps: { enabled: true } },
       );
 
@@ -451,6 +548,8 @@ describe('useAtCompletion', () => {
 
       expect(result.current.isLoadingSuggestions).toBe(false);
       expect(result.current.suggestions).toStrictEqual([]);
+      releaseInitialization();
+      await initializing;
     });
 
     it('recovers from an initialization error when the completion root changes', async (): Promise<void> => {
@@ -468,6 +567,7 @@ describe('useAtCompletion', () => {
         useGitignore: false,
         useExtensionIgnore: false,
         cache: false,
+        cacheTtl: 0,
         enableRecursiveFileSearch: true,
         enableFuzzySearch: true,
       });
@@ -477,7 +577,12 @@ describe('useAtCompletion', () => {
 
       const { result, rerender } = renderHook(
         ({ cwd }: { readonly cwd: string }) =>
-          useTestHarnessForAtCompletion(true, 'recovered', mockConfig, cwd),
+          useTestHarnessForAtCompletion(
+            true,
+            'recovered',
+            useFixtureRuntime(mockConfig),
+            cwd,
+          ),
         { initialProps: { cwd: unavailableRoot } },
       );
 
@@ -510,7 +615,12 @@ describe('useAtCompletion', () => {
       testRootDir = await createTmpDir(structure);
 
       const { result } = renderHook(() =>
-        useTestHarnessForAtCompletion(true, '', mockConfig, testRootDir),
+        useTestHarnessForAtCompletion(
+          true,
+          '',
+          useFixtureRuntime(mockConfig),
+          testRootDir,
+        ),
       );
 
       await waitFor(() => {
@@ -549,10 +659,17 @@ describe('useAtCompletion', () => {
       const rootDir1 = await createTmpDir(structure1);
       const structure2: FileSystemStructure = { 'file2.txt': '' };
       const rootDir2 = await createTmpDir(structure2);
+      testRootDir = rootDir1;
+      additionalRoots = [rootDir2];
 
       const { result, rerender } = renderHook(
         ({ cwd, pattern }) =>
-          useTestHarnessForAtCompletion(true, pattern, mockConfig, cwd),
+          useTestHarnessForAtCompletion(
+            true,
+            pattern,
+            useFixtureRuntime(mockConfig),
+            cwd,
+          ),
         {
           initialProps: {
             cwd: rootDir1,
@@ -601,13 +718,14 @@ describe('useAtCompletion', () => {
       testRootDir = await createTmpDir(structure);
 
       const nonRecursiveConfig = {
+        getMcpServers: () => undefined,
         getEnableRecursiveFileSearch: () => false,
         getFileFilteringOptions: vi.fn(() => ({
           respectGitIgnore: true,
           respectLlxprtIgnore: true,
         })),
         getFileFilteringDisableFuzzySearch: () => false,
-        getResourceRegistry: () => ({ getAllResources: () => [] }),
+        listResources: () => [],
         getSubagentManager: () => undefined,
       } as unknown as Config;
 
@@ -615,7 +733,7 @@ describe('useAtCompletion', () => {
         useTestHarnessForAtCompletion(
           true,
           '',
-          nonRecursiveConfig,
+          useFixtureRuntime(nonRecursiveConfig),
           testRootDir,
         ),
       );
@@ -653,7 +771,7 @@ describe('useAtCompletion', () => {
         useTestHarnessForAtCompletion(
           true,
           '',
-          configWithGitIgnoreDisabled,
+          useFixtureRuntime(configWithGitIgnoreDisabled),
           testRootDir,
         ),
       );
@@ -673,20 +791,23 @@ describe('useAtCompletion', () => {
 
     const resourceConfig = {
       ...mockConfig,
-      getResourceRegistry: () => ({
-        getAllResources: () => [
-          {
-            serverName: 'docs',
-            uri: 'file:///docs/readme.md',
-            name: 'README',
-            discoveredAt: Date.now(),
-          },
-        ],
-      }),
+      listResources: () => [
+        {
+          serverName: 'docs',
+          uri: 'file:///docs/readme.md',
+          name: 'README',
+          discoveredAt: Date.now(),
+        },
+      ],
     } as unknown as Config;
 
     const { result } = renderHook(() =>
-      useTestHarnessForAtCompletion(true, 'docs', resourceConfig, testRootDir),
+      useTestHarnessForAtCompletion(
+        true,
+        'docs',
+        useFixtureRuntime(resourceConfig),
+        testRootDir,
+      ),
     );
 
     await waitFor(() => {

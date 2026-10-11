@@ -1,3 +1,4 @@
+import { createProviderConfigFixture } from '../runtime/__tests__/provider-config-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -23,9 +24,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { Config } from '@vybestack/llxprt-code-core';
-import { createIsolatedRuntimeContext } from '../runtime/runtimeSettings.js';
-import type { IsolatedRuntimeContextHandle } from '../runtime/runtimeSettings.js';
+import { createIsolatedRuntimeContext } from '../runtime/index.js';
+import type { IsolatedRuntimeContextHandle } from '../runtime/index.js';
 
 describe('isolated-runtime OAuthManager honors authOnly through the threaded config', () => {
   let tmpConfigHome: string;
@@ -51,6 +51,7 @@ describe('isolated-runtime OAuthManager honors authOnly through the threaded con
 
   afterEach(async () => {
     await handle?.cleanup();
+    await handle?.config.dispose();
     handle = undefined;
     if (previousConfigHome === undefined) {
       delete process.env['LLXPRT_CONFIG_HOME'];
@@ -72,18 +73,29 @@ describe('isolated-runtime OAuthManager honors authOnly through the threaded con
 
     const settingsService = new SettingsService();
 
-    handle = createIsolatedRuntimeContext({
-      runtimeId: 'oauth-authonly-isolated',
-      config: new Config({
+    handle = (() => {
+      const {
+        config: capturedConfig4,
+        settingsService: capturedConfig4SettingsService,
+        settingsOwner: capturedConfig4SettingsOwner,
+      } = createProviderConfigFixture({
         sessionId: 'oauth-authonly-isolated',
         settingsService,
         targetDir: tmpConfigHome,
         cwd: tmpConfigHome,
         model: 'auth-only-model',
         debugMode: false,
-      }),
-      prepare: async () => {},
-    });
+      });
+      return createIsolatedRuntimeContext(
+        {
+          settingsOwner: capturedConfig4SettingsOwner,
+          runtimeId: 'oauth-authonly-isolated',
+          config: capturedConfig4,
+          prepare: async () => {},
+        },
+        capturedConfig4SettingsService,
+      );
+    })();
 
     // Sanity guard against a vacuous pass: with authOnly unset the same
     // manager must report the stored key, proving the file-backed provider

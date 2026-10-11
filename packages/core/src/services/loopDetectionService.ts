@@ -1,3 +1,4 @@
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -177,6 +178,13 @@ function detectMarkdownBlockquote(content: string): boolean {
  * Service for detecting and preventing infinite loops in AI responses.
  * Monitors tool call repetitions and content sentence repetitions.
  */
+export interface LoopDetectionPolicy {
+  readonly loopDetectionEnabled?: boolean;
+  readonly maxTurnsPerPrompt?: number;
+  readonly toolCallLoopThreshold?: number;
+  readonly contentLoopThreshold?: number;
+}
+
 export class LoopDetectionService {
   private readonly config: Config;
   private promptId = '';
@@ -195,7 +203,11 @@ export class LoopDetectionService {
   // Turn tracking for potential future rule-based checks
   private turnsInCurrentPrompt = 0;
 
-  constructor(config: Config) {
+  constructor(
+    config: Config,
+    private readonly readPolicy: () => LoopDetectionPolicy,
+    private readonly readTelemetry: () => RootTelemetry,
+  ) {
     this.config = config;
   }
 
@@ -212,10 +224,7 @@ export class LoopDetectionService {
    */
   addAndCheck(event: ServerAgentStreamEvent): boolean {
     // Check if loop detection is disabled
-    const loopDetectionEnabled =
-      (this.config.getEphemeralSetting('loopDetectionEnabled') as
-        | boolean
-        | undefined) ?? true;
+    const loopDetectionEnabled = this.readPolicy().loopDetectionEnabled ?? true;
     if (!loopDetectionEnabled) {
       return false;
     }
@@ -251,10 +260,7 @@ export class LoopDetectionService {
    */
   async turnStarted(_signal: AbortSignal) {
     // Check if loop detection is disabled (master switch)
-    const loopDetectionEnabled =
-      (this.config.getEphemeralSetting('loopDetectionEnabled') as
-        | boolean
-        | undefined) ?? true;
+    const loopDetectionEnabled = this.readPolicy().loopDetectionEnabled ?? true;
     if (!loopDetectionEnabled) {
       return false;
     }
@@ -262,10 +268,7 @@ export class LoopDetectionService {
     this.turnsInCurrentPrompt++;
 
     // Check if max turns per prompt is configured and exceeded
-    const maxTurnsPerPrompt =
-      (this.config.getEphemeralSetting('maxTurnsPerPrompt') as
-        | number
-        | undefined) ?? -1;
+    const maxTurnsPerPrompt = this.readPolicy().maxTurnsPerPrompt ?? -1;
     if (
       maxTurnsPerPrompt > 0 &&
       this.turnsInCurrentPrompt >= maxTurnsPerPrompt
@@ -273,6 +276,7 @@ export class LoopDetectionService {
       logLoopDetected(
         this.config,
         new LoopDetectedEvent(LoopType.MAX_TURNS_EXCEEDED, this.promptId),
+        this.readTelemetry(),
       );
       return true;
     }
@@ -282,9 +286,8 @@ export class LoopDetectionService {
 
   private checkToolCallLoop(toolCall: { name: string; args: object }): boolean {
     const threshold =
-      (this.config.getEphemeralSetting('toolCallLoopThreshold') as
-        | number
-        | undefined) ?? DEFAULT_TOOL_CALL_LOOP_THRESHOLD;
+      this.readPolicy().toolCallLoopThreshold ??
+      DEFAULT_TOOL_CALL_LOOP_THRESHOLD;
     if (threshold === -1) {
       return false; // Disabled
     }
@@ -302,6 +305,7 @@ export class LoopDetectionService {
           LoopType.CONSECUTIVE_IDENTICAL_TOOL_CALLS,
           this.promptId,
         ),
+        this.readTelemetry(),
       );
       return true;
     }
@@ -416,6 +420,7 @@ export class LoopDetectionService {
             LoopType.CHANTING_IDENTICAL_SENTENCES,
             this.promptId,
           ),
+          this.readTelemetry(),
         );
         return true;
       }
@@ -446,9 +451,7 @@ export class LoopDetectionService {
    */
   private isLoopDetectedForChunk(chunk: string, hash: string): boolean {
     const threshold =
-      (this.config.getEphemeralSetting('contentLoopThreshold') as
-        | number
-        | undefined) ?? DEFAULT_CONTENT_LOOP_THRESHOLD;
+      this.readPolicy().contentLoopThreshold ?? DEFAULT_CONTENT_LOOP_THRESHOLD;
     if (threshold === -1) {
       return false; // Disabled
     }

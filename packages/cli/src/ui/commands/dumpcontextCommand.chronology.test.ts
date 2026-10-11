@@ -26,13 +26,6 @@ void vi.mock('@vybestack/llxprt-code-providers', () => ({
 
 import { dumpRequestContext } from '@vybestack/llxprt-code-providers';
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: vi.fn(() => ({
-    getEphemeralSetting: vi.fn(() => 'off'),
-    setEphemeralSetting: vi.fn(),
-  })),
-}));
-
 import { assertDefined } from '../../__tests__/assertions.js';
 
 const dumpcontextAction = dumpcontextCommand.action;
@@ -62,18 +55,24 @@ function contextWithTrace(): CommandContext {
     getChronologyTrace: vi.fn().mockReturnValue(TRACE),
   };
 
-  return createMockCommandContext({
+  const context = createMockCommandContext({
     services: {
-      config: {
-        getAgentClient: vi.fn().mockReturnValue({
-          getHistoryService: vi.fn().mockReturnValue(historyService),
-        }),
-        getProviderManager: vi.fn().mockReturnValue({
-          getActiveProviderName: vi.fn().mockReturnValue('anthropic'),
-        }),
-      } as unknown as CommandContext['services']['config'],
+      agent: {
+        get agentClient() {
+          return vi.fn().mockReturnValue({
+            getHistoryService: vi.fn().mockReturnValue(historyService),
+          })();
+        },
+      },
+      config: {} as unknown as CommandContext['services']['config'],
     },
   });
+  Object.defineProperty(context, 'runtimeApi', {
+    get: () => ({
+      getProviderDumpMetadata: () => ({ providerName: 'anthropic' }),
+    }),
+  });
+  return context;
 }
 
 // Declared as a const arrow (not a hoisted function declaration) so the

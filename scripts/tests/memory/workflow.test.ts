@@ -48,7 +48,12 @@ const repoRoot = resolve(scriptDir, '..', '..', '..');
 // The launcher preloads probe-preload.ts (the module with the install side
 // effect); probe.ts itself only exports logic.
 const probePath = join(repoRoot, 'scripts', 'memory', 'probe-preload.ts');
-const requestCliPath = join(repoRoot, 'scripts', 'memory', 'request-cli.ts');
+const requestCliPath = join(
+  repoRoot,
+  'scripts',
+  'memory',
+  'request-cli-entry.ts',
+);
 
 /** Polls until predicate holds or timeout; throws with context on timeout. */
 async function waitFor(
@@ -392,7 +397,7 @@ describe('memory-tool workflow — report and analyzer entry points', () => {
         ].join('\n') + '\n',
       );
       const result = await runCli([
-        join(repoRoot, 'scripts', 'memory', 'report.ts'),
+        join(repoRoot, 'scripts', 'memory', 'report-entry.ts'),
         samplesPath,
       ]);
       expect(result.code).toBe(0);
@@ -405,14 +410,14 @@ describe('memory-tool workflow — report and analyzer entry points', () => {
 
   it('rejects report CLI usage errors with exit 2 and usage, runtime errors with exit 1', async () => {
     const usageResult = await runCli([
-      join(repoRoot, 'scripts', 'memory', 'report.ts'),
+      join(repoRoot, 'scripts', 'memory', 'report-entry.ts'),
       '--nonsense',
     ]);
     expect(usageResult.code).toBe(2);
     expect(usageResult.stderr).toContain('Usage');
 
     const missingResult = await runCli([
-      join(repoRoot, 'scripts', 'memory', 'report.ts'),
+      join(repoRoot, 'scripts', 'memory', 'report-entry.ts'),
       join(tmpdir(), 'memflow-nonexistent-samples.jsonl'),
     ]);
     expect(missingResult.code).toBe(1);
@@ -451,7 +456,7 @@ describe('memory-tool workflow — report and analyzer entry points', () => {
         }),
       );
       const result = await runCli([
-        join(repoRoot, 'scripts', 'memory', 'heapanalyze.ts'),
+        join(repoRoot, 'scripts', 'memory', 'heapanalyze-entry.ts'),
         snapshotPath,
         '--min-mb',
         '0.001',
@@ -461,7 +466,7 @@ describe('memory-tool workflow — report and analyzer entry points', () => {
       expect(result.stdout.toLowerCase()).toContain('not retained size');
       // Arg errors from the CLI print usage and exit 2.
       const badArgs = await runCli([
-        join(repoRoot, 'scripts', 'memory', 'heapanalyze.ts'),
+        join(repoRoot, 'scripts', 'memory', 'heapanalyze-entry.ts'),
         '--definitely-not-a-flag',
       ]);
       expect(badArgs.code).toBe(2);

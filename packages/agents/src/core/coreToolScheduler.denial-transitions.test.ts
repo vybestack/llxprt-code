@@ -1,10 +1,12 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { createLoopSettingsFixture } from './agenticLoop/__tests__/loop-settings-fixture.js';
+import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from '@vybestack/llxprt-code-core/config/configTypes.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, expect, it } from 'bun:test';
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
@@ -26,7 +28,6 @@ import type {
   WaitingToolCall,
 } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import { createMockConfig } from './__tests__/coreToolScheduler-test-helpers.js';
 
 interface SchedulerHarness {
   readonly scheduler: CoreToolScheduler;
@@ -44,6 +45,11 @@ function createHarness(defaultDecision: PolicyDecision): SchedulerHarness {
   policyEngine.setApprovalMode(ApprovalMode.DEFAULT);
   const messageBus = new MessageBus(policyEngine, false);
   const messageBusAdapter = new CoreMessageBusAdapter(messageBus);
+  const { config, settingsOwner } = createLoopSettingsFixture({
+    interactive: true,
+    approvalMode: ApprovalMode.DEFAULT,
+    imagePayloadBudgetBytes: DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+  });
   const toolRegistry = new ToolRegistry(
     {
       getEphemeralSettings: (): Record<string, unknown> => ({}),
@@ -51,7 +57,7 @@ function createHarness(defaultDecision: PolicyDecision): SchedulerHarness {
       getExcludeTools: (): string[] => [],
     },
     messageBusAdapter,
-    new SettingsService(),
+    () => settingsOwner.readRegistryPolicy(config.getExcludeTools() ?? []),
   );
   const tool = new MockTool({
     name: 'approval_tool',
@@ -62,15 +68,17 @@ function createHarness(defaultDecision: PolicyDecision): SchedulerHarness {
 
   let latestCalls: readonly ToolCall[] = [];
   let completedCalls: readonly CompletedToolCall[] = [];
-  const config = createMockConfig({
-    getSessionId: (): string => `denial-transition-${defaultDecision}`,
-    getApprovalMode: (): ApprovalMode => ApprovalMode.DEFAULT,
-    isInteractive: (): boolean => true,
-    getToolRegistry: (): ToolRegistry => toolRegistry,
-    getPolicyEngine: (): PolicyEngine => policyEngine,
-  });
   const scheduler = new CoreToolScheduler({
+    telemetry: RootTelemetry.prepare({
+      enabled: false,
+      sessionId: 'isolated-caller-fixture',
+      maxBytes: 1024,
+      maxFiles: 1,
+    }),
     config,
+    readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+    getToolGovernance: () =>
+      settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
     messageBus,
     toolRegistry,
     onToolCallsUpdate: (calls): void => {

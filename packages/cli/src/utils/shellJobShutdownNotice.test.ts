@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { ShellJobManager, type Config } from '@vybestack/llxprt-code-core';
+import { ShellJobManager } from '@vybestack/llxprt-code-core';
 import {
   MAX_COMMAND_LENGTH,
   MAX_LISTED_JOBS,
@@ -71,6 +71,26 @@ function getBunSpawn(): BunSpawnFn {
 }
 
 const bunSpawn = getBunSpawn();
+
+async function waitForGroupAbsence(pid: number): Promise<boolean> {
+  const deadline = Date.now() + 8000;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(-pid, 0);
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && error.code === 'ESRCH') {
+        return true;
+      }
+      if (
+        !(error instanceof Error && 'code' in error && error.code === 'EPERM')
+      ) {
+        throw error;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return false;
+}
 
 describe('registerShellJobShutdownNotice', () => {
   let managers: ShellJobManager[] = [];
@@ -214,11 +234,9 @@ describe('registerShellJobShutdownNotice', () => {
     const job = manager.launch({ command: 'sleep 30', cwd: os.tmpdir() });
     const { target, fireExit } = captureExitListeners();
     spyStderrFd2();
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => manager,
-    };
+    const readRunning = () => manager.getRunningJobs();
 
-    registerShellJobShutdownNotice(host, target);
+    registerShellJobShutdownNotice(readRunning, target);
     fireExit();
 
     const output = stderrChunks.join('');
@@ -234,11 +252,9 @@ describe('registerShellJobShutdownNotice', () => {
     const job = manager.launch({ command: longCommand, cwd: os.tmpdir() });
     const { target, fireExit } = captureExitListeners();
     spyStderrFd2();
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => manager,
-    };
+    const readRunning = () => manager.getRunningJobs();
 
-    registerShellJobShutdownNotice(host, target);
+    registerShellJobShutdownNotice(readRunning, target);
     fireExit();
 
     const output = stderrChunks.join('');
@@ -263,11 +279,9 @@ describe('registerShellJobShutdownNotice', () => {
     }
     const { target, fireExit } = captureExitListeners();
     spyStderrFd2();
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => manager,
-    };
+    const readRunning = () => manager.getRunningJobs();
 
-    registerShellJobShutdownNotice(host, target);
+    registerShellJobShutdownNotice(readRunning, target);
     fireExit();
 
     const output = stderrChunks.join('');
@@ -290,12 +304,10 @@ describe('registerShellJobShutdownNotice', () => {
     manager.launch({ command: 'sleep 30', cwd: os.tmpdir() });
     const { target, fireExit } = captureExitListeners();
     spyStderrFd2();
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => manager,
-    };
+    const readRunning = () => manager.getRunningJobs();
 
-    registerShellJobShutdownNotice(host, target);
-    registerShellJobShutdownNotice(host, target);
+    registerShellJobShutdownNotice(readRunning, target);
+    registerShellJobShutdownNotice(readRunning, target);
     fireExit();
 
     // A second registration must not append another exit listener, or
@@ -303,6 +315,23 @@ describe('registerShellJobShutdownNotice', () => {
     const noticeCount =
       stderrChunks.join('').split('Shutting down with').length - 1;
     expect(noticeCount).toBe(1);
+  });
+
+  it('reads the latest Agent after replacing the listener target reader', () => {
+    const first = makeManager();
+    const second = makeManager();
+    const stale = first.launch({ command: 'sleep 30', cwd: os.tmpdir() });
+    const current = second.launch({ command: 'sleep 30', cwd: os.tmpdir() });
+    const { target, fireExit } = captureExitListeners();
+    spyStderrFd2();
+    registerShellJobShutdownNotice(() => first.getRunningJobs(), target);
+    registerShellJobShutdownNotice(() => second.getRunningJobs(), target);
+
+    fireExit();
+
+    expect(stderrChunks.join('')).toContain(current.id);
+    expect(stderrChunks.join('')).not.toContain(stale.id);
+    expect(stderrChunks.join('').split('Shutting down with')).toHaveLength(2);
   });
 
   it('a throwing fd-2 write does not escape the exit listener and a later exit listener still runs', () => {
@@ -314,11 +343,9 @@ describe('registerShellJobShutdownNotice', () => {
         code: 'EPIPE',
       }),
     });
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => manager,
-    };
+    const readRunning = () => manager.getRunningJobs();
 
-    registerShellJobShutdownNotice(host, target);
+    registerShellJobShutdownNotice(readRunning, target);
     let laterListenerRan = false;
     target.on('exit', () => {
       laterListenerRan = true;
@@ -336,13 +363,11 @@ describe('registerShellJobShutdownNotice', () => {
   it('a throwing manager read does not escape the exit listener and a later exit listener still runs', () => {
     const { target, fireExit } = captureExitListeners();
     spyStderrFd2();
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => {
-        throw new Error('manager read failed during exit');
-      },
+    const readRunning = (): never => {
+      throw new Error('manager read failed during exit');
     };
 
-    registerShellJobShutdownNotice(host, target);
+    registerShellJobShutdownNotice(readRunning, target);
     let laterListenerRan = false;
     target.on('exit', () => {
       laterListenerRan = true;
@@ -364,11 +389,9 @@ describe('registerShellJobShutdownNotice', () => {
     // First write accepts only 10 bytes; the notice must resume from byte
     // 10 rather than restart, drop, or duplicate anything.
     spyStderrFd2({ firstWriteAccepts: 10 });
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => manager,
-    };
+    const readRunning = () => manager.getRunningJobs();
 
-    registerShellJobShutdownNotice(host, target);
+    registerShellJobShutdownNotice(readRunning, target);
     fireExit();
 
     expect(stderrWriteCalls).toBeGreaterThanOrEqual(2);
@@ -385,11 +408,9 @@ describe('registerShellJobShutdownNotice', () => {
     await waitForTerminalState(manager, finished.id);
     const { target, fireExit } = captureExitListeners();
     spyStderrFd2();
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => manager,
-    };
+    const readRunning = () => manager.getRunningJobs();
 
-    registerShellJobShutdownNotice(host, target);
+    registerShellJobShutdownNotice(readRunning, target);
     fireExit();
 
     expect(stderrChunks).toStrictEqual([]);
@@ -399,34 +420,21 @@ describe('registerShellJobShutdownNotice', () => {
     const { target, fireExit } = captureExitListeners();
     spyStderrFd2();
     const mkdtemp = vi.spyOn(fs, 'mkdtempSync');
-    let creatingGetterCalls = 0;
-    // The exit path must read state without constructing anything. If it
-    // used the creating getter, this host would build a real manager — and
-    // mkdtemp its log directory — during exit on a session that never
-    // backgrounded a job.
-    const host = {
-      peekShellJobManager: (): undefined => undefined,
-      getShellJobManager: (): ShellJobManager => {
-        creatingGetterCalls++;
-        return makeManager();
-      },
-    };
+    const readRunning = (): ReadonlyArray<{
+      id: string;
+      command: string;
+    }> => [];
 
-    registerShellJobShutdownNotice(host, target);
+    registerShellJobShutdownNotice(readRunning, target);
     fireExit();
 
-    expect(creatingGetterCalls).toBe(0);
     expect(mkdtemp).not.toHaveBeenCalled();
     expect(stderrChunks).toStrictEqual([]);
   });
 
   it('registers the exit listener on the real process by default', () => {
     const before = process.listeners('exit');
-    const host: Pick<Config, 'peekShellJobManager'> = {
-      peekShellJobManager: () => undefined,
-    };
-
-    registerShellJobShutdownNotice(host);
+    registerShellJobShutdownNotice(() => []);
 
     const after = process.listeners('exit');
     expect(after.length).toBe(before.length + 1);
@@ -470,7 +478,7 @@ describe('registerShellJobShutdownNotice', () => {
       'const manager = new ShellJobManager({ baseDir });',
       'const job = manager.launch({ command: "sleep 30", cwd: baseDir });',
       'writeFileSync(baseDir + "/job.pid", String(job.pid));',
-      'registerShellJobShutdownNotice({ peekShellJobManager: () => manager });',
+      'registerShellJobShutdownNotice(() => manager.getRunningJobs());',
       'process.exit(0);',
       '',
     ].join('\n');
@@ -487,29 +495,15 @@ describe('registerShellJobShutdownNotice', () => {
     const stderr = await new Response(proc.stderr).text();
     const exitCode = await proc.exited;
 
-    try {
-      expect(exitCode).toBe(0);
-      expect(stderr).toContain(
-        'Shutting down with 1 managed background job(s) still running',
-      );
-      expect(stderr).toContain('sleep 30');
-    } finally {
-      // The child's manager is not owned by this test's afterEach, and
-      // detached jobs outlive the process that launched them, so the leaked
-      // job must be reaped explicitly. Jobs are process-group leaders, so
-      // killing -pid terminates the whole tree. A missing or unparseable
-      // pid file yields NaN and is skipped.
-      const pidPath = path.join(fixtureDir, 'job.pid');
-      const pid = fs.existsSync(pidPath)
-        ? Number.parseInt(fs.readFileSync(pidPath, 'utf8'), 10)
-        : Number.NaN;
-      if (Number.isFinite(pid) && pid > 1) {
-        try {
-          process.kill(-pid, 'SIGKILL');
-        } catch {
-          // The job may already have exited (ESRCH); nothing to reap.
-        }
-      }
-    }
+    expect(exitCode).toBe(0);
+    expect(stderr).toContain(
+      'Shutting down with 1 managed background job(s) still running',
+    );
+    expect(stderr).toContain('sleep 30');
+    const pid = Number.parseInt(
+      fs.readFileSync(path.join(fixtureDir, 'job.pid'), 'utf8'),
+      10,
+    );
+    expect(await waitForGroupAbsence(pid)).toBe(true);
   }, 30_000);
 });

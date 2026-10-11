@@ -6,7 +6,6 @@
 
 import { describe, it, expect } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { buildMessagesWithReasoning } from '../openai/OpenAIRequestBuilder.js';
 import { convertToAnthropicMessages } from '../anthropic/AnthropicMessageNormalizer.js';
@@ -107,10 +106,6 @@ function chronologyBearingHistory(): IContent[] {
   ];
 }
 
-function settingsStub(): SettingsService {
-  return { get: () => undefined } as unknown as SettingsService;
-}
-
 const CONVERTERS: ReadonlyArray<{
   readonly name: string;
   readonly convert: (history: IContent[]) => unknown;
@@ -120,7 +115,7 @@ const CONVERTERS: ReadonlyArray<{
     convert: (history) =>
       buildMessagesWithReasoning(
         history,
-        { settings: settingsStub() },
+        { invocation: { ephemerals: {} } },
         'openai',
         undefined,
       ),

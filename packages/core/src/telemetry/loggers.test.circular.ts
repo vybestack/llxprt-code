@@ -1,3 +1,4 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -88,7 +89,16 @@ describe('Circular Reference Handling', () => {
     const event = new ToolCallEvent(mockCompletedToolCall);
 
     expect(() => {
-      logToolCall(mockConfig, event);
+      logToolCall(
+        mockConfig,
+        event,
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+      );
     }).not.toThrow();
   });
 
@@ -104,7 +114,16 @@ describe('Circular Reference Handling', () => {
     const event = new ToolCallEvent(mockCompletedToolCall);
 
     expect(() => {
-      logToolCall(mockConfig, event);
+      logToolCall(
+        mockConfig,
+        event,
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+      );
     }).not.toThrow();
   });
 });

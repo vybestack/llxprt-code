@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
 /**
  * Behavioral coverage for the composition-root skill activation registrar.
@@ -20,7 +21,6 @@ import {
   type ISkillService,
   type IToolMessageBus,
   type SkillInfo,
-  type SkillManager,
 } from '@vybestack/llxprt-code-tools';
 import type { MessageBus } from '@vybestack/llxprt-code-core';
 import { registerActivateSkillTool } from './skill-tool-registrar.js';
@@ -52,13 +52,6 @@ class FakeSkillService implements ISkillService {
 
   setSkills(skills: SkillInfo[]): void {
     this.skills = skills;
-  }
-
-  getSkillManager(): SkillManager {
-    return {
-      getSkills: () => this.listSkills(),
-      getSkill: (name: string) => this.getSkill(name),
-    };
   }
 
   listSkills(): SkillInfo[] {
@@ -93,7 +86,11 @@ class FakeSkillService implements ISkillService {
 }
 
 function createRegistry(): ToolRegistry {
-  return new ToolRegistry({}, messageBus, new SettingsService());
+  return new ToolRegistry(
+    {},
+    messageBus,
+    assembleTaskSchemaPolicy(new SettingsService()),
+  );
 }
 
 function activateSkillDeclaration(registry: ToolRegistry) {

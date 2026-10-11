@@ -7,7 +7,7 @@
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
-import { createProviderKeyStorage } from '../runtime/runtimeSettings.js';
+import { createProviderKeyStorage } from '../auth/index.js';
 import {
   isResolvedSubProfile,
   type LoadBalancerSubProfile,
@@ -85,4 +85,24 @@ export async function resolveMemberAuthentication(
     ...subProfile,
     authToken: await readMemberKeyfile(name, subProfile.authKeyfile, logger),
   };
+}
+
+export async function assertMemberAuthCurrent(
+  selected: ResolvedSubProfile | LoadBalancerSubProfile,
+  authenticated: ResolvedSubProfile | LoadBalancerSubProfile,
+  logger: AuthLogger,
+): Promise<void> {
+  if (
+    !isResolvedSubProfile(selected) ||
+    selected.auth?.type === 'oauth' ||
+    (selected.authKeyName === undefined && selected.authKeyfile === undefined)
+  ) {
+    return;
+  }
+  const current = await resolveMemberAuthentication(selected, logger);
+  if (current.authToken !== authenticated.authToken) {
+    throw new Error(
+      'Admitted load-balancer member credentials changed before request dispatch',
+    );
+  }
 }

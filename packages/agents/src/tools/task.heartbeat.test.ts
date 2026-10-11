@@ -1,3 +1,4 @@
+import { createTaskPolicyFixture } from './__tests__/task-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -97,6 +98,8 @@ function buildTool(scope: PendingScope): TaskTool {
   });
   const orchestrator = { launch } as unknown as SubagentOrchestrator;
   return new TaskTool(createConfig(), {
+    ...createTaskPolicyFixture({}),
+    readMcpInstructions: () => undefined,
     messageBus: new MessageBus(),
     orchestratorFactory: () => orchestrator,
     isInteractiveEnvironment: () => true,
@@ -572,6 +575,8 @@ describe('TaskTool heartbeat integration', () => {
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(createConfig(), {
+      ...createTaskPolicyFixture({}),
+      readMcpInstructions: () => undefined,
       messageBus: new MessageBus(),
       orchestratorFactory: () => orchestrator,
       isInteractiveEnvironment: () => false,

@@ -33,11 +33,9 @@ async function* streamFromEvents(
   }
 }
 
-function createConfig(includeThinking: boolean): StreamConsumerConfig {
+function createConfig(): StreamConsumerConfig {
   return {
     getSessionId: () => 'test-session',
-    getEphemeralSetting: (key: string) =>
-      key === 'reasoning.includeInResponse' ? includeThinking : undefined,
   };
 }
 
@@ -87,7 +85,8 @@ describe('processAgentStream attempt boundaries (issue #3840)', () => {
     await processAgentStream(
       streamFromEvents(events),
       {
-        config: createConfig(overrides.includeThinking ?? true),
+        config: createConfig(),
+        includeThinking: overrides.includeThinking ?? true,
         jsonOutput: overrides.jsonOutput ?? false,
         streamJsonOutput: streamFormatter !== null,
         quiet: overrides.quiet ?? false,

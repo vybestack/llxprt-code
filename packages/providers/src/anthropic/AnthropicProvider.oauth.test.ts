@@ -143,6 +143,7 @@ describe('AnthropicProvider', () => {
 
   describe('OAuth Compatibility', () => {
     it('should prefix tool names with llxprt_ for OAuth requests', async () => {
+      settingsService.set('auth-key', 'sk-ant-oat-test-token');
       // Create provider with OAuth token
       const oauthProvider = new AnthropicProvider(
         'sk-ant-oat-test-token',
@@ -267,6 +268,7 @@ describe('AnthropicProvider', () => {
     });
 
     it('should unprefix tool names in streaming responses for OAuth', async () => {
+      settingsService.set('auth-key', 'sk-ant-oat-test-token');
       // Create provider with OAuth token
       const oauthProvider = new AnthropicProvider(
         'sk-ant-oat-test-token',
@@ -325,6 +327,7 @@ describe('AnthropicProvider', () => {
         settings: settingsService,
         runtime: runtimeContext,
         config: runtimeContext.config!,
+        resolved: { streaming: true },
       });
 
       const generator = oauthProvider.generateChatCompletion(callOptions);
@@ -348,6 +351,7 @@ describe('AnthropicProvider', () => {
     });
 
     it('should unprefix tool names in non-streaming responses for OAuth', async () => {
+      settingsService.set('auth-key', 'sk-ant-oat-test-token');
       // Create provider with OAuth token
       const oauthProvider = new AnthropicProvider(
         'sk-ant-oat-test-token',
@@ -415,6 +419,7 @@ describe('AnthropicProvider', () => {
     });
 
     it('should include User-Agent header for OAuth requests', async () => {
+      settingsService.set('auth-key', 'sk-ant-oat-test-token');
       // Create provider with OAuth token
       const oauthProvider = new AnthropicProvider(
         'sk-ant-oat-test-token',
@@ -491,6 +496,7 @@ describe('AnthropicProvider', () => {
     });
 
     it('should include both oauth-2025-04-20 AND interleaved-thinking-2025-05-14 in anthropic-beta headers for OAuth', async () => {
+      settingsService.set('auth-key', 'sk-ant-oat-test-token');
       // Create provider with OAuth token
       const oauthProvider = new AnthropicProvider(
         'sk-ant-oat-test-token',

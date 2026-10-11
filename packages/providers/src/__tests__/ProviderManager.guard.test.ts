@@ -1,838 +1,257 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { describe, expect, it } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
+import {
+  BaseProvider,
+  type NormalizedGenerateChatOptions,
+} from '../BaseProvider.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
-import { BaseProvider } from '../BaseProvider.js';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
 class HarnessProvider extends BaseProvider {
-  lastNormalizedOptions?: NormalizedGenerateChatOptions;
-
-  constructor(config: Config, settingsService: SettingsService) {
-    super({ name: 'stub-provider' }, undefined, config, settingsService);
+  lastOptions?: NormalizedGenerateChatOptions;
+  constructor(name = 'openai') {
+    super({ name, apiKey: 'fixture-key' });
   }
-
   async getModels(): Promise<never[]> {
     return [];
   }
-
   getDefaultModel(): string {
-    return 'stub-default-model';
+    return 'default-model';
   }
-
   protected supportsOAuth(): boolean {
     return false;
   }
-
-  protected generateChatCompletionWithOptions(
+  protected async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
-  ): AsyncIterableIterator<never> {
-    this.lastNormalizedOptions = options;
-    return (async function* () {})();
-  }
-}
-
-class NamedHarnessProvider extends BaseProvider {
-  constructor(name: string, config: Config, settingsService: SettingsService) {
-    super({ name }, undefined, config, settingsService);
-  }
-
-  async getModels(): Promise<never[]> {
-    return [];
-  }
-
-  getDefaultModel(): string {
-    return `${this.name}-default-model`;
-  }
-
-  protected supportsOAuth(): boolean {
-    return true;
-  }
-
-  protected generateChatCompletionWithOptions(): AsyncIterableIterator<never> {
-    return (async function* () {})();
-  }
-}
-
-const prompt = {
-  speaker: 'human' as const,
-  blocks: [] as unknown[],
-};
-
-async function collect(
-  iterator: AsyncIterableIterator<unknown>,
-): Promise<void> {
-  for await (const _chunk of iterator) {
-    // consume iterator
-  }
-}
-
-function configuredBaseUrl(key: string, baseUrl: string): string | undefined {
-  return key === 'base-url' ? baseUrl : undefined;
-}
-
-function configuredAuthKey(key: string, authKey: string): string | undefined {
-  return key === 'auth-key' ? authKey : undefined;
-}
-
-function withProviderBaseUrl(
-  current: { baseURL?: string } | undefined,
-  baseURL: string,
-): { baseURL: string } {
-  return { ...(current ?? {}), baseURL };
-}
-
-describe('ProviderManager runtime guard plumbing', () => {
-  it('injects runtime settings into BaseProvider before invocation', async () => {
-    // @plan:PLAN-20251023-STATELESS-HARDENING.P04 @requirement:REQ-SP4-004
-    const settingsService = new SettingsService();
-    const config = createRuntimeConfigStub(settingsService);
-    const runtimeContext = {
-      settingsService,
-      config,
-      runtimeId: 'guard-runtime',
+  ): AsyncIterableIterator<IContent> {
+    this.lastOptions = options;
+    yield {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: options.resolved.model }],
     };
-    const manager = new ProviderManager({
-      settingsService,
-      config,
-      runtime: runtimeContext,
-    });
-    const provider = new HarnessProvider(config, settingsService);
-    manager.registerProvider(provider);
-    settingsService.set('activeProvider', provider.name);
-    settingsService.setProviderSetting(provider.name, 'model', 'stub-model');
-    settingsService.setProviderSetting(provider.name, 'auth-key', 'stub-key');
-    settingsService.setProviderSetting(
-      provider.name,
-      'base-url',
-      'https://stub.example.com',
-    );
-    manager.setActiveProvider(provider.name);
+  }
+}
 
-    await collect(
-      manager.getActiveProvider().generateChatCompletion(
-        createProviderCallOptions({
-          providerName: provider.name,
-          contents: [prompt],
-          settings: settingsService,
-          config,
-          runtime: runtimeContext,
-        }),
-      ),
-    );
+function fixture() {
+  const settings = new SettingsService();
+  settings.setProviderSetting('openai', 'model', 'owner-model');
+  settings.setProviderSetting('openai', 'base-url', 'http://127.0.0.1:1/v1');
+  const config = createRuntimeConfigStub(settings);
+  const manager = new ProviderManager({ settingsService: settings, config });
+  const provider = new HarnessProvider();
+  manager.registerProvider(provider);
+  return { manager, provider, settings };
+}
 
-    expect(provider.lastNormalizedOptions?.settings).toBe(settingsService);
-    expect(provider.lastNormalizedOptions?.invocation).toBeDefined();
-    expect(provider.lastNormalizedOptions?.invocation.settings).toBe(
-      settingsService,
-    );
+describe('ProviderManager owner admission', () => {
+  it('captures policy and forwards no SettingsService or Config through normalized requests', async () => {
+    const { manager, provider } = fixture();
+    const options = manager.normalizeRuntimeInputs({ contents: [] }, 'openai');
+    const result = await provider.generateChatCompletion(options).next();
+    expect(result.value).toMatchObject({ blocks: [{ text: 'owner-model' }] });
+    expect(provider.lastOptions).not.toHaveProperty('settings');
+    expect(provider.lastOptions).not.toHaveProperty('config');
+    expect(provider.lastOptions?.runtime).not.toHaveProperty('settingsService');
+    expect(provider.lastOptions?.runtime).not.toHaveProperty('config');
   });
 
-  it('injects runtime config into BaseProvider before invocation', async () => {
-    // @plan:PLAN-20251023-STATELESS-HARDENING.P04 @requirement:REQ-SP4-004
-    const settingsService = new SettingsService();
-    const config = createRuntimeConfigStub(settingsService);
-    const runtimeContext = {
-      settingsService,
-      config,
-      runtimeId: 'guard-runtime',
-    };
-    const manager = new ProviderManager({
-      settingsService,
-      config,
-      runtime: runtimeContext,
-    });
-    const provider = new HarnessProvider(config, settingsService);
-    manager.registerProvider(provider);
-    settingsService.set('activeProvider', provider.name);
-    settingsService.setProviderSetting(provider.name, 'model', 'stub-model');
-    settingsService.setProviderSetting(provider.name, 'auth-key', 'stub-key');
-    settingsService.setProviderSetting(
-      provider.name,
-      'base-url',
-      'https://stub.example.com',
-    );
-    manager.setActiveProvider(provider.name);
-
-    await collect(
-      manager.getActiveProvider().generateChatCompletion(
-        createProviderCallOptions({
-          providerName: provider.name,
-          contents: [prompt],
-          settings: settingsService,
-          config,
-          runtime: runtimeContext,
-        }),
-      ),
-    );
-
-    expect(provider.lastNormalizedOptions?.config).toBe(config);
-    expect(provider.lastNormalizedOptions?.invocation).toBeDefined();
-    expect(typeof provider.lastNormalizedOptions?.invocation.runtimeId).toBe(
-      'string',
-    );
+  it('keeps an admitted policy when the owner changes and observes changes on fresh admission', () => {
+    const { manager, settings } = fixture();
+    const first = manager.normalizeRuntimeInputs({ contents: [] }, 'openai');
+    settings.setProviderSetting('openai', 'model', 'replacement-model');
+    const retained = manager.normalizeRuntimeInputs(first, 'openai');
+    const fresh = manager.normalizeRuntimeInputs({ contents: [] }, 'openai');
+    expect(retained.resolved?.model).toBe('owner-model');
+    expect(fresh.resolved?.model).toBe('replacement-model');
   });
 
-  it('captures provider-scoped ephemerals in the invocation snapshot', () => {
-    const settingsService = new SettingsService();
-    settingsService.set('streaming', 'enabled');
-    settingsService.setProviderSetting('openai', 'temperature', 0.5);
-    settingsService.setProviderSetting('openai', 'auth-key', 'test-key');
-    const config = createRuntimeConfigStub(settingsService);
-    const manager = new ProviderManager({ settingsService, config });
+  it('honors explicit admission by a different owner without recovering its services', () => {
+    const { manager } = fixture();
+    const other = new SettingsService();
+    other.setProviderSetting('openai', 'model', 'other-owner-model');
+    other.setProviderSetting('openai', 'base-url', 'http://127.0.0.1:2/v1');
+    const invocation = captureProviderInvocation(
+      { settingsService: other, runtimeId: 'same-label' },
+      'openai',
+    );
+    const options = manager.normalizeRuntimeInputs(
+      { contents: [], invocation },
+      'openai',
+    );
+    expect(options.resolved).toMatchObject({
+      model: 'other-owner-model',
+      baseURL: 'http://127.0.0.1:2/v1',
+    });
+    expect(options.runtime).not.toHaveProperty('settingsService');
+  });
 
-    const normalized = manager.normalizeRuntimeInputs(
+  it('does not apply an active provider endpoint to another provider', () => {
+    const { manager, settings } = fixture();
+    settings.set('activeProvider', 'openai');
+    settings.set('base-url', 'http://127.0.0.1:3/v1');
+    manager.registerProvider(new HarnessProvider('anthropic'));
+    const options = manager.normalizeRuntimeInputs(
+      { contents: [] },
+      'anthropic',
+    );
+    expect(options.resolved?.model).toBe('default-model');
+    expect(options.resolved?.baseURL).toBeUndefined();
+  });
+
+  for (const absent of ['', '   ']) {
+    it(`treats a ${JSON.stringify(absent)} resolved model and endpoint as absent`, () => {
+      const { manager } = fixture();
+      const options = manager.normalizeRuntimeInputs(
+        { contents: [], resolved: { model: absent, baseURL: absent } },
+        'openai',
+      );
+      expect(options.resolved).toMatchObject({
+        model: 'owner-model',
+        baseURL: 'http://127.0.0.1:1/v1',
+      });
+    });
+  }
+
+  it('retains live cancellation and merges invocation metadata', () => {
+    const { manager } = fixture();
+    const controller = new AbortController();
+    const options = manager.normalizeRuntimeInputs(
       {
-        contents: [prompt],
-        settings: settingsService,
-        config,
-        runtime: {
-          runtimeId: 'runtime-with-ephemerals',
-          settingsService,
-          config,
-        },
+        contents: [],
+        metadata: { requestId: 'request', abortSignal: controller.signal },
       },
       'openai',
     );
-
-    expect(normalized.invocation.ephemerals.streaming).toBe('enabled');
-    expect(normalized.invocation.ephemerals.openai).toMatchObject({
-      temperature: 0.5,
+    controller.abort();
+    expect(options.invocation?.signal?.aborted).toBe(true);
+    expect(options.metadata).toMatchObject({
+      requestId: 'request',
+      _normalized: true,
+      _provider: 'openai',
     });
+  });
+
+  it('fails closed when no provider is active or targeted', () => {
+    const settingsService = new SettingsService();
+    const manager = new ProviderManager({ settingsService });
+    expect(() => manager.normalizeRuntimeInputs({ contents: [] })).toThrow(
+      'No provider is active or targeted',
+    );
   });
 });
 
-describe('ProviderManager.normalizeRuntimeInputs', () => {
-  it('throws ProviderRuntimeNormalizationError when settings is missing @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002', () => {
-    // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002
-    const settingsService = new SettingsService();
-    const config = createRuntimeConfigStub(settingsService);
-    const manager = new ProviderManager({ settingsService, config });
-
-    expect(() =>
-      manager.normalizeRuntimeInputs({
-        contents: [prompt],
-        runtime: {
-          runtimeId: 'test-runtime',
-          settingsService: undefined as unknown as SettingsService,
-          config,
-        },
-      }),
-    ).toThrow(
-      expect.objectContaining({
-        requirement: 'REQ-SP4-002',
-        name: 'ProviderRuntimeNormalizationError',
-      }),
+describe('ProviderManager admission fallback and isolation', () => {
+  it('does not admit model or endpoint policy from a mismatched Config owner', () => {
+    const own = new SettingsService();
+    own.setProviderSetting('openai', 'model', 'owned-model');
+    const foreign = new SettingsService();
+    const config = createRuntimeConfigStub(foreign, {
+      getModel: () => 'foreign-model',
+      getEphemeralSetting: (key) =>
+        key === 'base-url' ? 'https://foreign.example.test/v1' : undefined,
+    });
+    const manager = new ProviderManager({ settingsService: own, config });
+    manager.registerProvider(new HarnessProvider());
+    const normalized = manager.normalizeRuntimeInputs(
+      { contents: [] },
+      'openai',
     );
+    expect(normalized.resolved?.model).toBe('owned-model');
+    expect(normalized.resolved?.baseURL).toBeUndefined();
   });
 
-  it('throws ProviderRuntimeNormalizationError when config is missing @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002', () => {
-    // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-002
-    const settingsService = new SettingsService();
-    const config = createRuntimeConfigStub(settingsService);
-    const manager = new ProviderManager({ settingsService, config });
-
-    expect(() =>
-      manager.normalizeRuntimeInputs({
-        contents: [prompt],
-        runtime: {
-          runtimeId: 'test-runtime',
-          settingsService,
-          config: undefined as unknown as Config,
-        },
-      }),
-    ).toThrow(
-      expect.objectContaining({
-        requirement: 'REQ-SP4-002',
-        name: 'ProviderRuntimeNormalizationError',
-      }),
-    );
-  });
-
-  it('throws ProviderRuntimeNormalizationError when resolved fields are incomplete @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003', () => {
-    // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
-    const settingsService = new SettingsService();
-    const config = createRuntimeConfigStub(settingsService);
-    const manager = new ProviderManager({ settingsService, config });
-
-    // Set up a provider with no model configured
-    settingsService.set('activeProvider', 'openai');
-
-    expect(() =>
-      manager.normalizeRuntimeInputs(
-        {
-          contents: [prompt],
-          settings: settingsService,
-          config,
-          runtime: {
-            runtimeId: 'test-runtime',
-            settingsService,
-            config,
-          },
-        },
+  for (const absent of [undefined, '', '   ']) {
+    it(`captures the owner Config endpoint for absent endpoint ${JSON.stringify(absent)}`, () => {
+      const settingsService = new SettingsService();
+      settingsService.set('base-url', 'https://config.example.test/v1');
+      const config = createRuntimeConfigStub(settingsService, {});
+      const manager = new ProviderManager({ settingsService, config });
+      manager.registerProvider(new HarnessProvider());
+      const normalized = manager.normalizeRuntimeInputs(
+        { contents: [], resolved: { baseURL: absent } },
         'openai',
-      ),
-    ).toThrow(
-      expect.objectContaining({
-        requirement: 'REQ-SP4-003',
-        name: 'ProviderRuntimeNormalizationError',
-      }),
-    );
+      );
+      expect(normalized.resolved?.baseURL).toBe(
+        'https://config.example.test/v1',
+      );
+      expect(normalized.runtime).not.toHaveProperty('config');
+    });
+  }
+
+  it('prefers a provider-scoped model over the applicable Config model', () => {
+    const settingsService = new SettingsService();
+    settingsService.setProviderSetting('anthropic', 'model', 'scoped-model');
+    const config = createRuntimeConfigStub(settingsService, {
+      getModel: () => 'config-model',
+    });
+    const manager = new ProviderManager({ settingsService, config });
+    manager.registerProvider(new HarnessProvider('anthropic'));
+    expect(
+      manager.normalizeRuntimeInputs({ contents: [] }, 'anthropic').resolved
+        ?.model,
+    ).toBe('scoped-model');
   });
 
-  it('successfully normalizes options with complete runtime context @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003', () => {
-    // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-003
+  it('does not inject an active provider credential into another provider request', () => {
     const settingsService = new SettingsService();
+    settingsService.set('activeProvider', 'openai');
+    settingsService.set('auth-key', 'foreground-credential');
     const config = createRuntimeConfigStub(settingsService);
     const manager = new ProviderManager({ settingsService, config });
-
-    settingsService.set('activeProvider', 'stub-provider');
-    settingsService.setProviderSetting('stub-provider', 'model', 'test-model');
-    settingsService.setProviderSetting('stub-provider', 'auth-key', 'test-key');
-    settingsService.setProviderSetting(
-      'stub-provider',
-      'base-url',
-      'https://api.test.com',
-    );
-
-    const normalized = manager.normalizeRuntimeInputs(
-      {
-        contents: [prompt],
-        settings: settingsService,
-        config,
-        runtime: {
-          runtimeId: 'test-runtime',
-          settingsService,
-          config,
-          metadata: { source: 'test' },
-        },
-      },
-      'stub-provider',
-    );
-
-    expect(normalized.settings).toBe(settingsService);
-    expect(normalized.config).toBe(config);
-    expect(normalized.resolved?.model).toBe('test-model');
-    expect(normalized.resolved?.authToken).toBe('test-key');
-    expect(normalized.resolved?.baseURL).toBe('https://api.test.com');
-    expect(normalized.metadata?._normalized).toBe(true);
+    manager.registerProvider(new HarnessProvider('anthropic'));
+    expect(
+      manager.normalizeRuntimeInputs({ contents: [] }, 'anthropic').resolved
+        ?.authToken,
+    ).toBeUndefined();
   });
 
-  it('uses config base-url fallback when provider settings omit baseURL', () => {
-    const settingsService = new SettingsService();
-    const config = createRuntimeConfigStub(settingsService, {
-      getEphemeralSetting: (key: string) =>
-        configuredBaseUrl(key, 'https://config-fallback.example.com'),
-    });
-    const manager = new ProviderManager({ settingsService, config });
-
-    settingsService.set('activeProvider', 'stub-provider');
-    settingsService.setProviderSetting('stub-provider', 'model', 'test-model');
-    settingsService.setProviderSetting('stub-provider', 'auth-key', 'test-key');
-
-    const normalized = manager.normalizeRuntimeInputs(
-      {
-        contents: [prompt],
-        settings: settingsService,
-        config,
-        runtime: {
-          runtimeId: 'runtime-config-baseurl',
-          settingsService,
-          config,
-        },
-      },
-      'stub-provider',
-    );
-
-    expect(normalized.resolved?.baseURL).toBe(
-      'https://config-fallback.example.com',
-    );
-  });
-
-  it('does not leak config base-url when runtime settings service differs', () => {
-    const foregroundSettings = new SettingsService();
-    const subagentSettings = new SettingsService();
-    subagentSettings.set('activeProvider', 'anthropic');
-    subagentSettings.setProviderSetting('anthropic', 'model', 'claude-test');
-
-    const config = createRuntimeConfigStub(foregroundSettings, {
-      getSettingsService: () => foregroundSettings,
-      getEphemeralSetting: (key: string) =>
-        configuredBaseUrl(
-          key,
-          'https://leaked-foreground.example.com/openai/v1',
-        ),
-    });
-
-    const manager = new ProviderManager({
-      settingsService: subagentSettings,
-      config,
-    });
-
-    manager.registerProvider(
-      new NamedHarnessProvider('anthropic', config, subagentSettings),
-    );
-
-    const normalized = manager.normalizeRuntimeInputs(
-      {
-        contents: [prompt],
-        settings: subagentSettings,
-        config,
-        runtime: {
-          runtimeId: 'runtime-mismatched-settings',
-          settingsService: subagentSettings,
-          config,
-        },
-      },
-      'anthropic',
-    );
-
-    expect(normalized.resolved?.baseURL).toBeUndefined();
-  });
-
-  it('does not leak config auth-key when runtime settings service differs', () => {
-    const foregroundSettings = new SettingsService();
-    const subagentSettings = new SettingsService();
-    subagentSettings.set('activeProvider', 'anthropic');
-    subagentSettings.setProviderSetting('anthropic', 'model', 'claude-test');
-
-    const config = createRuntimeConfigStub(foregroundSettings, {
-      getSettingsService: () => foregroundSettings,
-      getEphemeralSetting: (key: string) =>
-        configuredAuthKey(key, 'leaked-foreground-key'),
-    });
-
-    const manager = new ProviderManager({
-      settingsService: subagentSettings,
-      config,
-    });
-
-    manager.registerProvider(
-      new NamedHarnessProvider('anthropic', config, subagentSettings),
-    );
-
-    const normalized = manager.normalizeRuntimeInputs(
-      {
-        contents: [prompt],
-        settings: subagentSettings,
-        config,
-        runtime: {
-          runtimeId: 'runtime-mismatched-settings',
-          settingsService: subagentSettings,
-          config,
-        },
-      },
-      'anthropic',
-    );
-
-    expect(normalized.resolved?.authToken).toBeUndefined();
-  });
-
-  it('does not apply active provider base-url to other providers', () => {
-    const settingsService = new SettingsService();
-    settingsService.set('activeProvider', 'openai');
-    settingsService.setProviderSetting('anthropic', 'model', 'claude-test');
-
-    const config = createRuntimeConfigStub(settingsService, {
-      getEphemeralSetting: (key: string) =>
-        configuredBaseUrl(key, 'https://openai.example.com/openai/v1'),
-    });
-
-    const manager = new ProviderManager({ settingsService, config });
-    manager.registerProvider(
-      new NamedHarnessProvider('anthropic', config, settingsService),
-    );
-
-    const normalized = manager.normalizeRuntimeInputs(
-      {
-        contents: [prompt],
-        settings: settingsService,
-        config,
-        runtime: {
-          runtimeId: 'runtime-cross-provider-baseurl',
-          settingsService,
-          config,
-        },
-      },
-      'anthropic',
-    );
-
-    expect(normalized.resolved?.baseURL).toBeUndefined();
-  });
-
-  it('does not apply active provider auth-key to other providers', () => {
-    const settingsService = new SettingsService();
-    settingsService.set('activeProvider', 'openai');
-    settingsService.setProviderSetting('anthropic', 'model', 'claude-test');
-
-    const config = createRuntimeConfigStub(settingsService, {
-      getEphemeralSetting: (key: string) =>
-        configuredAuthKey(key, 'leaked-foreground-key'),
-    });
-
-    const manager = new ProviderManager({ settingsService, config });
-    manager.registerProvider(
-      new NamedHarnessProvider('anthropic', config, settingsService),
-    );
-
-    const normalized = manager.normalizeRuntimeInputs(
-      {
-        contents: [prompt],
-        settings: settingsService,
-        config,
-        runtime: {
-          runtimeId: 'runtime-cross-provider-authkey',
-          settingsService,
-          config,
-        },
-      },
-      'anthropic',
-    );
-
-    expect(normalized.resolved?.authToken).toBeUndefined();
-  });
-
-  it('prefers provider-scoped model over config.getModel when invoking another provider', () => {
-    const settingsService = new SettingsService();
-    settingsService.set('activeProvider', 'openai');
-    settingsService.setProviderSetting('anthropic', 'model', 'claude-test');
-
-    const config = createRuntimeConfigStub(settingsService, {
-      getModel: () => 'foreground-model',
-    });
-
-    const manager = new ProviderManager({ settingsService, config });
-    manager.registerProvider(
-      new NamedHarnessProvider('anthropic', config, settingsService),
-    );
-
-    const normalized = manager.normalizeRuntimeInputs(
-      {
-        contents: [prompt],
-        settings: settingsService,
-        config,
-        runtime: {
-          runtimeId: 'runtime-model-precedence',
-          settingsService,
-          config,
-        },
-      },
-      'anthropic',
-    );
-
-    expect(normalized.resolved?.model).toBe('claude-test');
-  });
-
-  it('derives base-url from provider configuration when settings and config lack it', () => {
-    const settingsService = new SettingsService();
-    const config = createRuntimeConfigStub(settingsService);
-    const manager = new ProviderManager({ settingsService, config });
-
-    const provider = new HarnessProvider(config, settingsService);
-    const providerConfigRef = provider as unknown as {
-      baseProviderConfig?: { baseURL?: string };
+  it('retains an explicit live credential port supplied by a different owner', () => {
+    const { manager } = fixture();
+    let revoked = false;
+    const port = {
+      provide: () => (revoked ? undefined : 'other-owner-credential'),
     };
-    providerConfigRef.baseProviderConfig = withProviderBaseUrl(
-      providerConfigRef.baseProviderConfig,
-      'https://provider-config.example.com',
+    const admitted = manager.normalizeRuntimeInputs(
+      { contents: [], resolved: { authToken: port } },
+      'openai',
     );
-    manager.registerProvider(provider);
-
-    settingsService.set('activeProvider', provider.name);
-    settingsService.setProviderSetting(provider.name, 'model', 'test-model');
-    settingsService.setProviderSetting(provider.name, 'auth-key', 'test-key');
-
-    const normalized = manager.normalizeRuntimeInputs(
-      {
-        contents: [prompt],
-        settings: settingsService,
-        config,
-        runtime: {
-          runtimeId: 'runtime-provider-baseurl',
-          settingsService,
-          config,
-        },
-      },
-      provider.name,
-    );
-
-    expect(normalized.resolved?.baseURL).toBe(
-      'https://provider-config.example.com',
-    );
+    expect(admitted.resolved?.authToken).toBe(port);
+    revoked = true;
+    expect(port.provide()).toBeUndefined();
   });
 
-  it('merges metadata from runtime context @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-005', () => {
-    // @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-005
+  it('fails closed for a truly missing model with no provider default', () => {
     const settingsService = new SettingsService();
-    const config = createRuntimeConfigStub(settingsService);
-    const manager = new ProviderManager({ settingsService, config });
-
-    settingsService.set('activeProvider', 'stub-provider');
-    settingsService.setProviderSetting('stub-provider', 'model', 'test-model');
-    settingsService.setProviderSetting('stub-provider', 'auth-key', 'test-key');
-    settingsService.setProviderSetting(
-      'stub-provider',
-      'base-url',
-      'https://api.test.com',
-    );
-
-    const normalized = manager.normalizeRuntimeInputs(
-      {
-        contents: [prompt],
-        settings: settingsService,
-        config,
-        runtime: {
-          runtimeId: 'test-runtime',
-          settingsService,
-          config,
-          metadata: { runtimeSource: 'test', injected: true },
-        },
-        metadata: { explicitField: 'value' },
-      },
-      'stub-provider',
-    );
-
-    expect(normalized.metadata?.runtimeSource).toBe('test');
-    expect(normalized.metadata?.injected).toBe(true);
-    expect(normalized.metadata?.explicitField).toBe('value');
-    expect(normalized.metadata?._normalized).toBe(true);
-    expect(normalized.metadata?._runtimeId).toBe('test-runtime');
-  });
-});
-
-describe('ProviderManager.normalizeRuntimeInputs empty/whitespace fallback semantics', () => {
-  it('treats empty-string resolved.model as absent, falls through to provider settings', () => {
-    const settingsService = new SettingsService();
-    const config = createRuntimeConfigStub(settingsService);
-    const manager = new ProviderManager({ settingsService, config });
-
-    settingsService.set('activeProvider', 'stub-provider');
-    settingsService.setProviderSetting(
-      'stub-provider',
-      'model',
-      'settings-model',
-    );
-    settingsService.setProviderSetting('stub-provider', 'auth-key', 'test-key');
-    settingsService.setProviderSetting(
-      'stub-provider',
-      'base-url',
-      'https://api.test.com',
-    );
-
-    const normalized = manager.normalizeRuntimeInputs(
-      {
-        contents: [prompt],
-        settings: settingsService,
-        config,
-        runtime: {
-          runtimeId: 'test-empty-model',
-          settingsService,
-          config,
-        },
-        resolved: { model: '' },
-      },
-      'stub-provider',
-    );
-
-    expect(normalized.resolved?.model).toBe('settings-model');
-  });
-
-  it('treats whitespace-only resolved.model as absent, falls through to provider settings', () => {
-    const settingsService = new SettingsService();
-    const config = createRuntimeConfigStub(settingsService);
-    const manager = new ProviderManager({ settingsService, config });
-
-    settingsService.set('activeProvider', 'stub-provider');
-    settingsService.setProviderSetting(
-      'stub-provider',
-      'model',
-      'settings-model',
-    );
-    settingsService.setProviderSetting('stub-provider', 'auth-key', 'test-key');
-    settingsService.setProviderSetting(
-      'stub-provider',
-      'base-url',
-      'https://api.test.com',
-    );
-
-    const normalized = manager.normalizeRuntimeInputs(
-      {
-        contents: [prompt],
-        settings: settingsService,
-        config,
-        runtime: {
-          runtimeId: 'test-ws-model',
-          settingsService,
-          config,
-        },
-        resolved: { model: '   ' },
-      },
-      'stub-provider',
-    );
-
-    expect(normalized.resolved?.model).toBe('settings-model');
-  });
-
-  it('treats empty-string resolved.baseURL as absent, falls through to config fallback', () => {
-    const settingsService = new SettingsService();
-    const config = createRuntimeConfigStub(settingsService, {
-      getEphemeralSetting: (key: string) =>
-        configuredBaseUrl(key, 'https://config-fallback.example.com'),
-    });
-    const manager = new ProviderManager({ settingsService, config });
-
-    settingsService.set('activeProvider', 'stub-provider');
-    settingsService.setProviderSetting('stub-provider', 'model', 'test-model');
-    settingsService.setProviderSetting('stub-provider', 'auth-key', 'test-key');
-
-    const normalized = manager.normalizeRuntimeInputs(
-      {
-        contents: [prompt],
-        settings: settingsService,
-        config,
-        runtime: {
-          runtimeId: 'test-empty-baseurl',
-          settingsService,
-          config,
-        },
-        resolved: { baseURL: '' },
-      },
-      'stub-provider',
-    );
-
-    expect(normalized.resolved?.baseURL).toBe(
-      'https://config-fallback.example.com',
-    );
-  });
-
-  it('treats whitespace-only resolved.baseURL as absent, falls through to config fallback', () => {
-    const settingsService = new SettingsService();
-    const config = createRuntimeConfigStub(settingsService, {
-      getEphemeralSetting: (key: string) =>
-        configuredBaseUrl(key, 'https://config-fallback.example.com'),
-    });
-    const manager = new ProviderManager({ settingsService, config });
-
-    settingsService.set('activeProvider', 'stub-provider');
-    settingsService.setProviderSetting('stub-provider', 'model', 'test-model');
-    settingsService.setProviderSetting('stub-provider', 'auth-key', 'test-key');
-
-    const normalized = manager.normalizeRuntimeInputs(
-      {
-        contents: [prompt],
-        settings: settingsService,
-        config,
-        runtime: {
-          runtimeId: 'test-ws-baseurl',
-          settingsService,
-          config,
-        },
-        resolved: { baseURL: '  \t  ' },
-      },
-      'stub-provider',
-    );
-
-    expect(normalized.resolved?.baseURL).toBe(
-      'https://config-fallback.example.com',
-    );
-  });
-
-  it('treats empty-string model as missing for validation, throws ProviderRuntimeNormalizationError', () => {
-    const settingsService = new SettingsService();
-    // Use a config with getModel returning empty string so no config-level fallback saves us
     const config = createRuntimeConfigStub(settingsService, {
       getModel: () => '',
     });
     const manager = new ProviderManager({ settingsService, config });
-
-    // Register a provider whose getDefaultModel returns empty string
-    class EmptyDefaultModelProvider extends BaseProvider {
-      constructor(cfg: Config, ss: SettingsService) {
-        super({ name: 'empty-model-provider' }, undefined, cfg, ss);
-      }
-      async getModels(): Promise<never[]> {
-        return [];
-      }
-      getDefaultModel(): string {
-        return '';
-      }
-      protected supportsOAuth(): boolean {
-        return true;
-      }
-      protected generateChatCompletionWithOptions(): AsyncIterableIterator<never> {
-        return (async function* () {})();
-      }
-    }
-    const provider = new EmptyDefaultModelProvider(config, settingsService);
-    manager.registerProvider(provider);
-
-    settingsService.set('activeProvider', 'empty-model-provider');
-    settingsService.setProviderSetting('empty-model-provider', 'model', '');
-    settingsService.setProviderSetting(
-      'empty-model-provider',
-      'auth-key',
-      'test-key',
-    );
-    settingsService.setProviderSetting(
-      'empty-model-provider',
-      'base-url',
-      'https://api.test.com',
-    );
-
     expect(() =>
       manager.normalizeRuntimeInputs(
-        {
-          contents: [prompt],
-          settings: settingsService,
-          config,
-          runtime: {
-            runtimeId: 'test-empty-model-validation',
-            settingsService,
-            config,
-          },
-        },
-        'empty-model-provider',
+        { contents: [], resolved: { model: '' } },
+        'unknown-provider',
       ),
-    ).toThrow(
-      expect.objectContaining({
-        requirement: 'REQ-SP4-003',
-        name: 'ProviderRuntimeNormalizationError',
-      }),
-    );
+    ).toThrow('Incomplete runtime resolution (model)');
   });
 
-  it('treats empty-string baseURL as missing for validation, throws ProviderRuntimeNormalizationError', () => {
+  it('fails closed for a truly missing endpoint on a provider that requires one', () => {
     const settingsService = new SettingsService();
-    const config = createRuntimeConfigStub(settingsService);
+    const config = createRuntimeConfigStub(settingsService, {
+      getModel: () => '',
+    });
     const manager = new ProviderManager({ settingsService, config });
-
-    settingsService.set('activeProvider', 'stub-provider');
-    settingsService.setProviderSetting('stub-provider', 'model', 'test-model');
-    settingsService.setProviderSetting('stub-provider', 'auth-key', 'test-key');
-    // Intentionally set base-url to empty string
-    settingsService.setProviderSetting('stub-provider', 'base-url', '');
-
     expect(() =>
       manager.normalizeRuntimeInputs(
-        {
-          contents: [prompt],
-          settings: settingsService,
-          config,
-          runtime: {
-            runtimeId: 'test-empty-baseurl-validation',
-            settingsService,
-            config,
-          },
-        },
-        'stub-provider',
+        { contents: [], resolved: { model: 'explicit-model', baseURL: '' } },
+        'unknown-provider',
       ),
-    ).toThrow(
-      expect.objectContaining({
-        requirement: 'REQ-SP4-003',
-        name: 'ProviderRuntimeNormalizationError',
-      }),
-    );
+    ).toThrow('Incomplete runtime resolution (baseURL)');
   });
 });

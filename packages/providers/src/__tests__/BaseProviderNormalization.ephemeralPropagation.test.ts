@@ -1,3 +1,5 @@
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+const fixtureOwners = installRuntimeTestOwners();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -7,12 +9,12 @@
 import { describe, expect, it } from 'bun:test';
 import { ProviderManager } from '../ProviderManager.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { IContent } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { BaseProvider } from '../BaseProvider.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 
 class HarnessProvider extends BaseProvider {
@@ -42,10 +44,7 @@ class HarnessProvider extends BaseProvider {
   }
 }
 
-const prompt = {
-  speaker: 'human' as const,
-  blocks: [] as unknown[],
-};
+const prompt: IContent = { speaker: 'human', blocks: [] };
 
 async function collect(
   iterator: AsyncIterableIterator<unknown>,
@@ -59,7 +58,9 @@ interface Harness {
   provider: HarnessProvider;
   manager: ProviderManager;
   settingsService: SettingsService;
-  runtimeContext: ReturnType<typeof createHarnessRuntimeContext>;
+  runtimeContext: ReturnType<
+    typeof createHarnessRuntimeContext
+  >['runtimeContext'];
 }
 
 function createHarnessRuntimeContext(settingsService: SettingsService) {
@@ -78,6 +79,7 @@ function createHarnessWithDumpContext(): Harness {
   const { config, runtimeContext } =
     createHarnessRuntimeContext(settingsService);
   const manager = new ProviderManager({
+    sessionSettings: fixtureOwners.adopt(config, settingsService).settingsOwner,
     settingsService,
     config,
     runtime: runtimeContext,
@@ -119,17 +121,13 @@ describe('BaseProvider ephemeral snapshot propagation into invocation', () => {
     ).toBe('on');
   });
 
-  it('merges current settings ephemerals into a provided invocation', async () => {
+  it('retains the admitted snapshot without importing later settings ephemerals', async () => {
     const { provider, manager, settingsService, runtimeContext } =
       createHarnessWithDumpContext();
 
     const staleInvocation = createRuntimeInvocationContext({
-      runtime: createProviderRuntimeContext({
-        runtimeId: 'ephemeral-provided-invocation',
-        settingsService,
-        config: runtimeContext.config,
-      }),
-      settings: settingsService,
+      runtimeId: 'ephemeral-provided-invocation',
+
       providerName: provider.name,
       ephemeralsSnapshot: {},
       fallbackRuntimeId: 'ephemeral-provided-invocation',
@@ -150,9 +148,9 @@ describe('BaseProvider ephemeral snapshot propagation into invocation', () => {
 
     const invocation = provider.lastNormalizedOptions?.invocation;
     expect(invocation).toBeDefined();
-    expect(invocation?.ephemerals.dumpcontext).toBe('on');
-    expect(invocation?.getEphemeral('dumpcontext')).toBe('on');
-    expect(invocation?.getCliSetting('dumpcontext')).toBe('on');
+    expect(invocation?.ephemerals.dumpcontext).toBeUndefined();
+    expect(invocation?.getEphemeral('dumpcontext')).toBeUndefined();
+    expect(invocation?.getCliSetting('dumpcontext')).toBeUndefined();
   });
 
   it('preserves explicit ephemerals on the provided invocation over snapshot values', async () => {
@@ -160,12 +158,8 @@ describe('BaseProvider ephemeral snapshot propagation into invocation', () => {
       createHarnessWithDumpContext();
 
     const explicitInvocation = createRuntimeInvocationContext({
-      runtime: createProviderRuntimeContext({
-        runtimeId: 'ephemeral-precedence',
-        settingsService,
-        config: runtimeContext.config,
-      }),
-      settings: settingsService,
+      runtimeId: 'ephemeral-precedence',
+
       providerName: provider.name,
       ephemeralsSnapshot: { dumpcontext: 'error' },
       fallbackRuntimeId: 'ephemeral-precedence',
@@ -190,19 +184,16 @@ describe('BaseProvider ephemeral snapshot propagation into invocation', () => {
     expect(invocation?.getEphemeral('dumpcontext')).toBe('error');
   });
 
-  it('preserves the provided invocation runtimeId over the normalized runtime id', async () => {
+  it('preserves the provided runtime and session identities through normalization', async () => {
     const { provider, manager, settingsService, runtimeContext } =
       createHarnessWithDumpContext();
 
     expect(runtimeContext.runtimeId).toBe('ephemeral-harness');
 
     const providedInvocation = createRuntimeInvocationContext({
-      runtime: createProviderRuntimeContext({
-        runtimeId: 'ephemeral-provided-runtimeId',
-        settingsService,
-        config: runtimeContext.config,
-      }),
-      settings: settingsService,
+      runtimeId: 'ephemeral-provided-runtimeId',
+      sessionId: 'separate-conversation-id',
+
       providerName: provider.name,
       ephemeralsSnapshot: {},
       fallbackRuntimeId: 'ephemeral-provided-runtimeId',
@@ -227,6 +218,7 @@ describe('BaseProvider ephemeral snapshot propagation into invocation', () => {
     // runtime's runtimeId ('ephemeral-harness').
     expect(invocation?.runtimeId).toBe('ephemeral-provided-runtimeId');
     expect(invocation?.runtimeId).not.toBe(runtimeContext.runtimeId);
+    expect(invocation?.sessionId).toBe('separate-conversation-id');
   });
 
   it('preserves provided invocation metadata, userMemory, redaction, and telemetry', async () => {
@@ -250,12 +242,8 @@ describe('BaseProvider ephemeral snapshot propagation into invocation', () => {
     };
 
     const providedInvocation = createRuntimeInvocationContext({
-      runtime: createProviderRuntimeContext({
-        runtimeId: 'ephemeral-preserve-all',
-        settingsService,
-        config: runtimeContext.config,
-      }),
-      settings: settingsService,
+      runtimeId: 'ephemeral-preserve-all',
+
       providerName: provider.name,
       ephemeralsSnapshot: {},
       metadata: providedMetadata,

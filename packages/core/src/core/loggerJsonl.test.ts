@@ -90,7 +90,10 @@ describe('Logger JSONL format', () => {
     setSystemTime(new Date('2025-01-01T12:00:00.000Z'));
     await cleanupLogFiles();
     await fs.mkdir(TEST_LLXPRT_DIR, { recursive: true });
-    logger = new Logger(testSessionId, new Storage(process.cwd()));
+    logger = new Logger(
+      testSessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
     await logger.initialize();
   });
 
@@ -119,7 +122,10 @@ describe('Logger JSONL format', () => {
     await fs.writeFile(TEST_LOG_FILE_PATH, corruptedContent);
     vi.spyOn(debugLogger, 'debug').mockImplementation(() => {});
 
-    const newLogger = new Logger(testSessionId, new Storage(process.cwd()));
+    const newLogger = new Logger(
+      testSessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
     await newLogger.initialize();
 
     const logContent = await readLogFile();
@@ -147,7 +153,10 @@ describe('Logger JSONL format', () => {
 
     // First load: total corruption is backed up and the cache is empty. The
     // active file is intentionally left in place (backup is a copy).
-    const first = new Logger(testSessionId, new Storage(process.cwd()));
+    const first = new Logger(
+      testSessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
     await first.initialize();
     expect(first['logs']).toStrictEqual([]);
     // A valid record is appended onto the still-corrupted active file.
@@ -157,7 +166,10 @@ describe('Logger JSONL format', () => {
     // Second load: the file now holds corrupted lines plus one valid line,
     // which is treated as partial corruption — the valid record survives and
     // the active file is rewritten clean.
-    const second = new Logger(testSessionId, new Storage(process.cwd()));
+    const second = new Logger(
+      testSessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
     await second.initialize();
     const healed = second['logs'];
     expect(healed).toHaveLength(1);
@@ -193,7 +205,7 @@ describe('Logger JSONL format', () => {
 
     const newLogger = new Logger(
       'partial-corruption',
-      new Storage(process.cwd()),
+      new Storage(process.cwd()).getProjectTempDir(),
     );
     await newLogger.initialize();
 
@@ -236,7 +248,7 @@ describe('Logger JSONL format', () => {
     await newLogger.close();
     const reopened = new Logger(
       'partial-corruption',
-      new Storage(process.cwd()),
+      new Storage(process.cwd()).getProjectTempDir(),
     );
     await reopened.initialize();
     const reopenedLogs = reopened['logs'];
@@ -269,7 +281,10 @@ describe('Logger JSONL format', () => {
       'utf-8',
     );
 
-    const newLogger = new Logger(currentSessionId, new Storage(process.cwd()));
+    const newLogger = new Logger(
+      currentSessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
     await newLogger.initialize();
     expect(newLogger['messageId']).toBe(2);
 
@@ -296,7 +311,10 @@ describe('Logger JSONL format', () => {
   it('should migrate the legacy empty array "[]" to JSONL during initialization', async () => {
     await fs.writeFile(TEST_LOG_FILE_PATH, '[]', 'utf-8');
 
-    const newLogger = new Logger(testSessionId, new Storage(process.cwd()));
+    const newLogger = new Logger(
+      testSessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
     await newLogger.initialize();
     expect(newLogger['messageId']).toBe(0);
 
@@ -328,7 +346,10 @@ describe('Logger JSONL format', () => {
       'utf-8',
     );
 
-    const newLogger = new Logger(testSessionId, new Storage(process.cwd()));
+    const newLogger = new Logger(
+      testSessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
     await newLogger.initialize();
     await newLogger.logMessage(MessageSenderType.USER, 'After append');
     await newLogger.close();
@@ -341,10 +362,16 @@ describe('Logger JSONL format', () => {
 
   it('keeps independent messageId counters per logger instance and appends sequentially to the same file', async () => {
     const concurrentSessionId = 'concurrent-session';
-    const logger1 = new Logger(concurrentSessionId, new Storage(process.cwd()));
+    const logger1 = new Logger(
+      concurrentSessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
     await logger1.initialize();
 
-    const logger2 = new Logger(concurrentSessionId, new Storage(process.cwd()));
+    const logger2 = new Logger(
+      concurrentSessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
     await logger2.initialize();
 
     await logger1.logMessage(MessageSenderType.USER, 'L1M1');

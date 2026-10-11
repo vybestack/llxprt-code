@@ -1,3 +1,4 @@
+import { captureResponsesTestRequest } from '../responses-request.test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -173,7 +174,10 @@ describe('OpenAIResponsesProvider Codex resumed chain @issue:3160', () => {
     try {
       await drainHarness(
         executeOpenAIResponsesRequest(
-          buildOptions(replayed.history),
+          captureResponsesTestRequest(
+            buildOptions(replayed.history),
+            buildDeps({ getWebSocketTransport: () => transport }),
+          ),
           buildDeps({ getWebSocketTransport: () => transport }),
         ),
       );
@@ -213,7 +217,10 @@ describe('OpenAIResponsesProvider Codex resumed chain @issue:3160', () => {
     try {
       await drainHarness(
         executeOpenAIResponsesRequest(
-          buildOptions(contents),
+          captureResponsesTestRequest(
+            buildOptions(contents),
+            buildDeps({ getWebSocketTransport: () => transport }),
+          ),
           buildDeps({ getWebSocketTransport: () => transport }),
         ),
       );
@@ -251,7 +258,10 @@ describe('OpenAIResponsesProvider Codex resumed chain @issue:3160', () => {
     try {
       const resumedMessages = await drainHarness(
         executeOpenAIResponsesRequest(
-          buildOptions(resumedContents),
+          captureResponsesTestRequest(
+            buildOptions(resumedContents),
+            buildDeps({ getWebSocketTransport: () => transport }),
+          ),
           buildDeps({ getWebSocketTransport: () => transport }),
         ),
       );
@@ -290,7 +300,10 @@ describe('OpenAIResponsesProvider Codex resumed chain @issue:3160', () => {
 
       await drainHarness(
         executeOpenAIResponsesRequest(
-          buildOptions(turn2Contents),
+          captureResponsesTestRequest(
+            buildOptions(turn2Contents),
+            buildDeps({ getWebSocketTransport: () => transport }),
+          ),
           buildDeps({ getWebSocketTransport: () => transport }),
         ),
       );

@@ -17,7 +17,7 @@ import type { PolicyDecision } from './types.js';
 import type { PolicyEngine } from './policy-engine.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import { MessageBusType } from '../confirmation-bus/types.js';
-import { ToolErrorType } from '../index.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 import { createErrorResponse } from '../utils/generateContentResponseUtilities.js';
 
 /**
@@ -49,7 +49,7 @@ export function getPolicyContextFromInvocation(
 export function evaluatePolicyDecision(
   invocation: AnyToolInvocation,
   request: ToolCallRequestInfo,
-  policyEngine: PolicyEngine,
+  policyEngine: Pick<PolicyEngine, 'evaluate'>,
 ): { decision: PolicyDecision; context: PolicyContext } {
   const context = getPolicyContextFromInvocation(invocation, request);
   const decision = policyEngine.evaluate(

@@ -6,6 +6,7 @@
 
 import * as fs from 'node:fs';
 import { isSubpath } from '../utils/paths.js';
+import { ContextObservers } from './context-observers.js';
 import { detectIde, IDE_DEFINITIONS, type IdeInfo } from './detect-ide.js';
 import {
   ideContext,
@@ -15,6 +16,7 @@ import {
   IdeDiffClosedNotificationSchema,
   CloseDiffResponseSchema,
   type DiffUpdateResult,
+  type IdeContext,
 } from './ideContext.js';
 import { getIdeProcessInfo } from './process-utils.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -227,6 +229,7 @@ export class IdeClient {
   private trustChangeListeners = new Set<
     (isTrusted: boolean | undefined) => void
   >();
+  private readonly contextObservers = new ContextObservers();
 
   /**
    * Monotonically increasing generation counter for collision-free attempt
@@ -259,15 +262,57 @@ export class IdeClient {
 
   private constructor() {}
 
+  private workspaceTrust: boolean | undefined;
+  private context: IdeContext | undefined;
+
+  getIdeContext(): IdeContext | undefined {
+    return this.context;
+  }
+
+  /**
+   * Subscribes to this client's own IDE context; `undefined` is delivered when
+   * it is cleared (including on disconnect). Independent of the legacy global.
+   */
+  addContextChangeListener(
+    listener: (context: IdeContext | undefined) => void,
+  ) {
+    this.contextObservers.add(listener);
+  }
+
+  removeContextChangeListener(
+    listener: (context: IdeContext | undefined) => void,
+  ) {
+    this.contextObservers.remove(listener);
+  }
+
+  /** Commits cleared trust and context, including the legacy global. */
+  private clearContextState(): void {
+    this.workspaceTrust = undefined;
+    this.context = undefined;
+    if (this.publishesLegacyContext) ideContext.clearIdeContext();
+  }
+
+  getWorkspaceTrust(): boolean | undefined {
+    return this.workspaceTrust;
+  }
+
+  static async create(): Promise<IdeClient> {
+    const client = new IdeClient();
+    client.ideProcessInfo = await getIdeProcessInfo();
+    client.connectionConfig = await client.getConnectionConfigFromFile();
+    client.currentIde = detectIde(
+      client.ideProcessInfo,
+      client.connectionConfig?.ideInfo,
+    );
+    return client;
+  }
+
+  private publishesLegacyContext = false;
+
   static async getInstance(): Promise<IdeClient> {
-    if (!IdeClient.instance) {
-      const client = new IdeClient();
-      client.ideProcessInfo = await getIdeProcessInfo();
-      client.connectionConfig = await client.getConnectionConfigFromFile();
-      client.currentIde = detectIde(
-        client.ideProcessInfo,
-        client.connectionConfig?.ideInfo,
-      );
+    if (IdeClient.instance === undefined) {
+      const client = await IdeClient.create();
+      client.publishesLegacyContext = true;
       IdeClient.instance = client;
     }
     return IdeClient.instance;
@@ -299,7 +344,19 @@ export class IdeClient {
     this.trustChangeListeners.delete(listener);
   }
 
-  async connect(): Promise<void> {
+  private readonly connections = new Set<Promise<void>>();
+
+  connect(): Promise<void> {
+    const connection = this.performConnect();
+    this.connections.add(connection);
+    void connection.then(
+      () => this.connections.delete(connection),
+      () => this.connections.delete(connection),
+    );
+    return connection;
+  }
+
+  private async performConnect(): Promise<void> {
     if (!this.currentIde) {
       this.setState(
         IDEConnectionStatus.Disconnected,
@@ -405,6 +462,12 @@ export class IdeClient {
     filePath: string,
     newContent?: string,
   ): Promise<DiffUpdateResult> {
+    if (
+      !this.publishesLegacyContext &&
+      this.state.status !== IDEConnectionStatus.Connected
+    ) {
+      throw new Error('IDE client is not connected');
+    }
     return new Promise<DiffUpdateResult>((resolve, reject) => {
       this.diffResponses.set(filePath, resolve);
       logger.debug(`openDiff -> tools/call openDiff for ${filePath}`);
@@ -476,6 +539,25 @@ export class IdeClient {
 
     const attempt = this.activeAttempt;
     this.activeAttempt = undefined;
+
+    if (!this.publishesLegacyContext) {
+      const connections = [...this.connections];
+      const ownedDiffs = [...this.diffResponses];
+      for (const [filePath, resolver] of ownedDiffs) {
+        resolver({ status: 'rejected', content: undefined });
+        if (this.diffResponses.get(filePath) === resolver) {
+          this.diffResponses.delete(filePath);
+        }
+      }
+      this.client = undefined;
+      this.setState(
+        IDEConnectionStatus.Disconnected,
+        'IDE integration disabled. To enable it again, run /ide enable.',
+      );
+      await attempt?.closeOwned();
+      await Promise.all(connections);
+      return;
+    }
 
     // Snapshot the disconnect-owned client and pending diff paths BEFORE the
     // first await. We must not iterate the live shared diffResponses Map or
@@ -625,12 +707,13 @@ export class IdeClient {
     }
 
     if (status === IDEConnectionStatus.Disconnected) {
-      ideContext.clearIdeContext();
+      this.clearContextState();
       if (!isAlreadyDisconnected) {
         for (const listener of this.trustChangeListeners) {
           listener(undefined);
         }
       }
+      this.contextObservers.notify(undefined);
     }
   }
 
@@ -846,13 +929,16 @@ export class IdeClient {
         if (!isStillActive()) {
           return;
         }
-        ideContext.setIdeContext(notification.params);
+        if (this.publishesLegacyContext)
+          ideContext.setIdeContext(notification.params);
         // Acknowledge receipt before invoking external listeners so a throwing
         // listener cannot prevent establishConnection from recognizing that
         // context was received (which would cause a spurious timeout).
         attempt.receiptDeferred.resolve();
         const isTrusted = notification.params.workspaceState?.isTrusted;
-        if (isTrusted !== undefined) {
+        this.context = notification.params;
+        this.workspaceTrust = isTrusted;
+        if (isTrusted !== undefined || !this.publishesLegacyContext) {
           for (const listener of this.trustChangeListeners) {
             try {
               listener(isTrusted);
@@ -861,6 +947,8 @@ export class IdeClient {
             }
           }
         }
+        // Last, so a throwing observer cannot block trust commit/delivery.
+        this.contextObservers.notify(notification.params);
       },
     );
     client.onerror = (_error) => {
@@ -974,9 +1062,13 @@ export class IdeClient {
       const wasActive = this.activeAttempt === attempt;
       if (wasActive) {
         this.activeAttempt = undefined;
-        ideContext.clearIdeContext();
+        this.clearContextState();
       }
-      await attempt.closeOwned();
+      try {
+        await attempt.closeOwned();
+      } finally {
+        if (wasActive) this.contextObservers.notify(undefined);
+      }
 
       if (!wasActive || !this.isLifecycleActive(epoch)) {
         return 'superseded';
@@ -1012,7 +1104,8 @@ export class IdeClient {
     const attempt = new ConnectionAttempt(generation);
     this.activeAttempt = attempt;
     this.client = attempt.client;
-    ideContext.clearIdeContext();
+    this.clearContextState();
+    this.contextObservers.notify(undefined);
     return attempt;
   }
 
@@ -1028,8 +1121,12 @@ export class IdeClient {
     }
     this.activeAttempt = undefined;
     this.client = undefined;
-    ideContext.clearIdeContext();
-    await prior.closeOwned();
+    this.clearContextState();
+    try {
+      await prior.closeOwned();
+    } finally {
+      this.contextObservers.notify(undefined);
+    }
   }
 
   private isAttemptActive(attempt: ConnectionAttempt): boolean {

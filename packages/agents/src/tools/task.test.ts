@@ -3,16 +3,28 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import { createMockOrchestrator } from './__tests__/task-orchestrator-fixture.js';
+import { taskSelection } from './__tests__/task-selection-fixture.js';
+
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
 
 /**
  * TaskTool core tests: orchestrator launch, output extraction, termination.
  * Sibling files cover max_turns, timeout, async mode, and issue-specific tests.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { taskPolicyFixture } from './__tests__/task-policy-fixture.js';
 import { TaskTool, type TaskToolParams } from './task.js';
 import { DEFAULT_TASK_TIMEOUT_SECONDS } from './taskAbortHelpers.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
@@ -22,38 +34,25 @@ import {
 
 describe('TaskTool', () => {
   let config: Config;
+  let settingsOwner: SessionSettingsOwner;
   let messageBus: MessageBus;
 
   beforeEach(() => {
-    config = {
-      getSessionId: () => 'session-123',
-    } as unknown as Config;
+    config = new Config({
+      sessionId: 'session-123',
+      model: 'task-model',
+      cwd: process.cwd(),
+      targetDir: process.cwd(),
+      debugMode: false,
+    });
+    settingsOwner = new SessionSettingsOwner(new SettingsService());
     messageBus = new MessageBus();
   });
 
-  function createMockOrchestrator(agentId: string) {
-    const dispose = vi.fn().mockResolvedValue(undefined);
-    const scope = {
-      output: {
-        emitted_vars: {},
-        terminate_reason: SubagentTerminateMode.GOAL,
-      },
-      runInteractive: vi.fn().mockResolvedValue(undefined),
-      runNonInteractive: vi.fn(),
-    };
-    const orchestrator = {
-      launch: vi.fn().mockResolvedValue({
-        agentId,
-        scope,
-        dispose,
-        prompt: {} as unknown,
-        profile: {} as unknown,
-        config: {} as unknown,
-        runtime: {} as unknown,
-      }),
-    } as unknown as SubagentOrchestrator;
-    return { orchestrator, scope };
-  }
+  afterEach(async () => {
+    await settingsOwner.dispose();
+    await config.dispose();
+  });
 
   it('launches the orchestrator and returns subagent output', async () => {
     const dispose = vi.fn().mockResolvedValue(undefined);
@@ -99,6 +98,10 @@ describe('TaskTool', () => {
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
+      ...taskPolicyFixture(settingsOwner),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       orchestratorFactory: () => orchestrator,
       messageBus,
       isInteractiveEnvironment: () => true,
@@ -160,6 +163,10 @@ describe('TaskTool', () => {
     const { orchestrator, scope } = createMockOrchestrator('agent-messagebus');
     let receivedMessageBus: MessageBus | undefined;
     const tool = new TaskTool(config, {
+      ...taskPolicyFixture(settingsOwner),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       orchestratorFactory: (coreSchedulerMessageBus) => {
         receivedMessageBus = coreSchedulerMessageBus;
         return orchestrator;
@@ -207,13 +214,12 @@ describe('TaskTool', () => {
       runtime: {} as unknown,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
-    const configWithRegistry = {
-      ...config,
-      getEphemeralSettings: () => ({
-        'tools.disabled': ['glob'],
-      }),
-      getExcludeTools: () => [],
-      getToolRegistry: () => ({
+    settingsOwner.writeUserParameter('tools.disabled', ['glob']);
+    const configWithRegistry = config;
+
+    const tool = new TaskTool(configWithRegistry, {
+      ...taskPolicyFixture(settingsOwner),
+      toolRegistry: await taskSelection({
         getEnabledTools: () => [
           { name: 'read_file' },
           { name: 'write_file' },
@@ -222,9 +228,9 @@ describe('TaskTool', () => {
           { name: 'list_subagents' },
         ],
       }),
-    } as unknown as Config;
-
-    const tool = new TaskTool(configWithRegistry, {
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       orchestratorFactory: () => orchestrator,
       messageBus,
       isInteractiveEnvironment: () => true,
@@ -267,13 +273,12 @@ describe('TaskTool', () => {
       runtime: {} as unknown,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
-    const configWithRegistry = {
-      ...config,
-      getEphemeralSettings: () => ({
-        'tools.disabled': ['glob'],
-      }),
-      getExcludeTools: () => [],
-      getToolRegistry: () => ({
+    settingsOwner.writeUserParameter('tools.disabled', ['glob']);
+    const configWithRegistry = config;
+
+    const tool = new TaskTool(configWithRegistry, {
+      ...taskPolicyFixture(settingsOwner),
+      toolRegistry: await taskSelection({
         getEnabledTools: () => [
           { name: 'read_file' },
           { name: 'write_file' },
@@ -282,9 +287,9 @@ describe('TaskTool', () => {
           { name: 'list_subagents' },
         ],
       }),
-    } as unknown as Config;
-
-    const tool = new TaskTool(configWithRegistry, {
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       orchestratorFactory: () => orchestrator,
       messageBus,
       isInteractiveEnvironment: () => true,
@@ -329,22 +334,21 @@ describe('TaskTool', () => {
       runtime: {} as unknown,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
-    const configWithRegistry = {
-      ...config,
-      getEphemeralSettings: () => ({
-        'tools.disabled': ['glob'],
-      }),
-      getExcludeTools: () => [],
-      getToolRegistry: () => ({
+    settingsOwner.writeUserParameter('tools.disabled', ['glob']);
+    const configWithRegistry = config;
+
+    const tool = new TaskTool(configWithRegistry, {
+      ...taskPolicyFixture(settingsOwner),
+      toolRegistry: await taskSelection({
         getEnabledTools: () => [
           { name: 'read_file' },
           { name: 'task' },
           { name: 'list_subagents' },
         ],
       }),
-    } as unknown as Config;
-
-    const tool = new TaskTool(configWithRegistry, {
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       orchestratorFactory: () => orchestrator,
       messageBus,
       isInteractiveEnvironment: () => true,
@@ -387,13 +391,12 @@ describe('TaskTool', () => {
       runtime: {} as unknown,
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
-    const configWithRegistry = {
-      ...config,
-      getEphemeralSettings: () => ({
-        'tools.disabled': ['glob'],
-      }),
-      getExcludeTools: () => [],
-      getToolRegistry: () => ({
+    settingsOwner.writeUserParameter('tools.disabled', ['glob']);
+    const configWithRegistry = config;
+
+    const tool = new TaskTool(configWithRegistry, {
+      ...taskPolicyFixture(settingsOwner),
+      toolRegistry: await taskSelection({
         getEnabledTools: () => [
           { name: 'read_file' },
           { name: 'write_file' },
@@ -401,9 +404,9 @@ describe('TaskTool', () => {
           { name: 'list_subagents' },
         ],
       }),
-    } as unknown as Config;
-
-    const tool = new TaskTool(configWithRegistry, {
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       orchestratorFactory: () => orchestrator,
       messageBus,
       isInteractiveEnvironment: () => true,
@@ -461,6 +464,10 @@ describe('TaskTool', () => {
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
+      ...taskPolicyFixture(settingsOwner),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       orchestratorFactory: () => orchestrator,
       messageBus,
       isInteractiveEnvironment: () => true,
@@ -512,6 +519,10 @@ describe('TaskTool', () => {
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
+      ...taskPolicyFixture(settingsOwner),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       orchestratorFactory: () => orchestrator,
       messageBus,
       isInteractiveEnvironment: () => true,
@@ -567,6 +578,10 @@ describe('TaskTool', () => {
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(configWithoutSessionId, {
+      ...taskPolicyFixture(settingsOwner),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       orchestratorFactory: () => orchestrator,
       messageBus,
       isInteractiveEnvironment: () => true,
@@ -605,6 +620,10 @@ describe('TaskTool', () => {
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
+      ...taskPolicyFixture(settingsOwner),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       orchestratorFactory: () => orchestrator,
       messageBus,
       isInteractiveEnvironment: () => false,
@@ -621,7 +640,7 @@ describe('TaskTool', () => {
     expect(dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('passes scheduler factory to runInteractive when available', async () => {
+  it('passes child display callbacks without transferring execution ownership', async () => {
     const dispose = vi.fn().mockResolvedValue(undefined);
     const scope = {
       output: {
@@ -632,9 +651,7 @@ describe('TaskTool', () => {
       runNonInteractive: vi.fn(),
       onMessage: undefined,
     };
-    const schedulerFactory = vi.fn().mockReturnValue({
-      schedule: vi.fn(),
-    });
+    const displayCallbacks = { onToolCallsUpdate: () => {} };
     const launch = vi.fn().mockResolvedValue({
       agentId: 'agent-100',
       scope,
@@ -646,10 +663,14 @@ describe('TaskTool', () => {
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
+      ...taskPolicyFixture(settingsOwner),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       orchestratorFactory: () => orchestrator,
       messageBus,
       isInteractiveEnvironment: () => true,
-      schedulerFactoryProvider: () => schedulerFactory,
+      openChildDisplay: () => displayCallbacks,
     });
     const invocation = tool.build({
       subagent_name: 'helper',
@@ -660,7 +681,7 @@ describe('TaskTool', () => {
 
     expect(scope.runInteractive).toHaveBeenCalledTimes(1);
     const [, options] = scope.runInteractive.mock.calls[0];
-    expect(options?.schedulerFactory).toBe(schedulerFactory);
+    expect(options?.displayCallbacks).toBe(displayCallbacks);
     expect(scope.runNonInteractive).not.toHaveBeenCalled();
   });
 
@@ -668,6 +689,10 @@ describe('TaskTool', () => {
     const launch = vi.fn().mockRejectedValue(new Error('subagent missing'));
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
+      ...taskPolicyFixture(settingsOwner),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       orchestratorFactory: () => orchestrator,
       messageBus,
       isInteractiveEnvironment: () => true,
@@ -712,6 +737,10 @@ describe('TaskTool', () => {
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
 
     const tool = new TaskTool(config, {
+      ...taskPolicyFixture(settingsOwner),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       orchestratorFactory: () => orchestrator,
       messageBus,
       isInteractiveEnvironment: () => false,
@@ -751,6 +780,10 @@ describe('TaskTool', () => {
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
+      ...taskPolicyFixture(settingsOwner),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       orchestratorFactory: () => orchestrator,
       messageBus,
       isInteractiveEnvironment: () => true,
@@ -819,6 +852,10 @@ describe('TaskTool', () => {
     );
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
+      ...taskPolicyFixture(settingsOwner),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       orchestratorFactory: () => orchestrator,
       messageBus,
     });

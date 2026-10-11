@@ -353,30 +353,29 @@ export async function writeImageAtomically(
   );
 
   let published = false;
-  const cleanupTemp = async (): Promise<void> => {
-    // Swallow cleanup rejections so a temp-removal failure can never mask
-    // the original write/publish error that surfaces from the try block.
-    await fs.rm(tempPath, { force: true }).catch(() => {});
-  };
-
-  const onAbort = () => {
-    // No cleanup here: deleting the temp file during publishTempToTarget
-    // (fs.link) would cause a spurious ENOENT. The finally block guarantees
-    // cleanup on all paths.
-  };
-  signal.addEventListener('abort', onAbort, { once: true });
-
+  let failed = false;
+  let primaryFailure: unknown;
   try {
     await writeBytesToTemp(bytes, tempPath, targetPath);
+    signal.throwIfAborted();
     await publishTempToTarget(tempPath, targetPath);
     published = true;
-    await cleanupTemp();
-  } finally {
-    signal.removeEventListener('abort', onAbort);
-    if (!published) {
-      await cleanupTemp();
-    }
+    signal.throwIfAborted();
+  } catch (error) {
+    failed = true;
+    primaryFailure = error;
   }
+  const cleanup = await Promise.allSettled([
+    fs.rm(tempPath, { force: true }),
+    failed && published ? fs.rm(targetPath, { force: true }) : undefined,
+  ]);
+  const failures = cleanup.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : [],
+  );
+  if (failed) failures.unshift(primaryFailure);
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1)
+    throw new AggregateError(failures, 'Image output cleanup failed');
 }
 
 /**

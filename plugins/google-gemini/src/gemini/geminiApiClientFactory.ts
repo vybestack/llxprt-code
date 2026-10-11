@@ -5,7 +5,11 @@
  */
 
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import type { LanguageModelV4Content } from '@ai-sdk/provider';
+import type {
+  LanguageModelV4CallOptions,
+  LanguageModelV4Content,
+} from '@ai-sdk/provider';
+import { createPatternPreservingFetch } from './gemini-pattern-fetch.js';
 import {
   toCallOptions,
   toFinishReason,
@@ -55,24 +59,27 @@ export async function createGeminiApiClient(
   options: GeminiApiClientOptions,
 ): Promise<GeminiApiClient> {
   const baseURL = toAiSdkBaseUrl(options.httpOptions?.baseUrl);
-  const provider = createGoogleGenerativeAI({
-    ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
-    ...(baseURL !== undefined ? { baseURL } : {}),
-    ...(options.httpOptions?.headers !== undefined
-      ? { headers: options.httpOptions.headers }
-      : {}),
-  });
-
-  const modelFor = (params: GenerateContentParameters) =>
-    provider.languageModel(params.model);
+  const modelFor = (
+    params: GenerateContentParameters,
+    tools: LanguageModelV4CallOptions['tools'],
+  ) =>
+    createGoogleGenerativeAI({
+      ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
+      ...(baseURL !== undefined ? { baseURL } : {}),
+      ...(options.httpOptions?.headers !== undefined
+        ? { headers: options.httpOptions.headers }
+        : {}),
+      fetch: createPatternPreservingFetch(tools),
+    }).languageModel(params.model);
 
   return {
     models: {
       async generateContent(
         params: GenerateContentParameters,
       ): Promise<GenerateContentResponse> {
-        const model = modelFor(params);
-        const result = await model.doGenerate(toCallOptions(params));
+        const callOptions = toCallOptions(params);
+        const model = modelFor(params, callOptions.tools);
+        const result = await model.doGenerate(callOptions);
         return toGenerateContentResponse({
           content: result.content,
           finishReason: result.finishReason,
@@ -87,8 +94,9 @@ export async function createGeminiApiClient(
       async generateContentStream(
         params: GenerateContentParameters,
       ): Promise<AsyncIterable<GenerateContentResponse>> {
-        const model = modelFor(params);
-        const { stream } = await model.doStream(toCallOptions(params));
+        const callOptions = toCallOptions(params);
+        const model = modelFor(params, callOptions.tools);
+        const { stream } = await model.doStream(callOptions);
         return streamToGeminiChunks(stream);
       },
     },

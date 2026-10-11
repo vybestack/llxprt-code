@@ -15,8 +15,6 @@
  * ephemerals — preserving the issue #2364 fix inside agent construction.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-
 const PROFILE_AUTH_EPHEMERAL_KEYS = [
   'auth-key',
   'auth-keyfile',
@@ -33,11 +31,11 @@ function isPresentEphemeral(value: unknown): boolean {
 }
 
 export function snapshotProfileAuthEphemerals(
-  config: Config,
+  values: ProfileAuthEphemeralSnapshot,
 ): ProfileAuthEphemeralSnapshot {
   const snapshot: ProfileAuthEphemeralSnapshot = {};
   for (const key of PROFILE_AUTH_EPHEMERAL_KEYS) {
-    const value = config.getEphemeralSetting(key);
+    const value = values[key];
     if (isPresentEphemeral(value)) {
       snapshot[key] = value;
     }
@@ -52,12 +50,12 @@ export function hasProfileAuthEphemerals(
 }
 
 export function reapplyProfileAuthEphemerals(
-  config: Config,
+  write: (key: keyof ProfileAuthEphemeralSnapshot, value: unknown) => void,
   snapshot: ProfileAuthEphemeralSnapshot,
 ): void {
   for (const key of PROFILE_AUTH_EPHEMERAL_KEYS) {
     if (key in snapshot) {
-      config.setEphemeralSetting(key, snapshot[key]);
+      write(key, snapshot[key]);
     }
   }
 }

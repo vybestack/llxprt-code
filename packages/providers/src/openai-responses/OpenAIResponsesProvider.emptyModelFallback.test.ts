@@ -1,3 +1,7 @@
+import {
+  captureResponsesTestRequest,
+  type ResponsesTestDeps,
+} from './responses-request.test-helpers.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -10,7 +14,7 @@
  * model (deps.getDefaultModel) — never the provider base URL.
  *
  * Exercises the real executor function with a real NormalizedGenerateChatOptions
- * and a real ResponsesExecutorDeps. Only the fetch boundary is intercepted.
+ * and a real ResponsesTestDeps. Only the fetch boundary is intercepted.
  *
  * @issue #2483, #3136
  */
@@ -18,10 +22,7 @@
 import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, beforeEach, afterEach, expect, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  executeOpenAIResponsesRequest,
-  type ResponsesExecutorDeps,
-} from './openAIResponsesExecutor.js';
+import { executeOpenAIResponsesRequest } from './openAIResponsesExecutor.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
@@ -41,8 +42,9 @@ function buildNormalizedOptions(
   });
   const config = createRuntimeConfigStub(settings, {});
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
+
     providerName: 'openai-responses',
     ephemeralsSnapshot: {},
     fallbackRuntimeId: 'test-runtime',
@@ -74,19 +76,19 @@ function buildNormalizedOptions(
 }
 
 function buildDeps(
-  overrides: Partial<ResponsesExecutorDeps> = {},
-): ResponsesExecutorDeps {
+  overrides: Partial<ResponsesTestDeps> = {},
+): ResponsesTestDeps {
   return {
     providerName: 'openai-responses',
-    logger: { debug: vi.fn() } as unknown as ResponsesExecutorDeps['logger'],
-    getProviderBaseURL: () => 'https://api.openai.com/v1',
-    getCustomHeaders: () => undefined,
+    logger: { debug: vi.fn() } as unknown as ResponsesTestDeps['logger'],
+    requestBaseURL: 'https://api.openai.com/v1',
+    requestHeaders: undefined,
     isCodexMode: () => false,
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => '',
     shouldRetryOnError: () => false,
-    getDefaultModel: () => 'o3-mini',
-    getGlobalConfig: () => undefined,
+    defaultModel: 'o3-mini',
+
     getUnallowedModelParameters: () => new Set<string>(),
     ...overrides,
   };
@@ -167,7 +169,7 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
 
   it('uses deps.getDefaultModel() as the request model when resolved model is empty', async () => {
     const deps = buildDeps({
-      getDefaultModel: () => 'o3-mini',
+      defaultModel: 'o3-mini',
       resolveAuthTokenForPrompt: async () => 'test-token',
     });
     const options = buildNormalizedOptions({
@@ -178,7 +180,10 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
       } as NormalizedGenerateChatOptions['resolved'],
     });
 
-    const iterator = executeOpenAIResponsesRequest(options, deps);
+    const iterator = executeOpenAIResponsesRequest(
+      captureResponsesTestRequest(options, deps),
+      deps,
+    );
     await iterator.next();
 
     // The fetch mock captures the serialized request body
@@ -189,8 +194,8 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
   it('does NOT pass the provider base URL as the model when resolved model is empty', async () => {
     const baseURL = 'https://api.openai.com/v1';
     const deps = buildDeps({
-      getDefaultModel: () => 'o3-mini',
-      getProviderBaseURL: () => baseURL,
+      defaultModel: 'o3-mini',
+      requestBaseURL: baseURL,
       resolveAuthTokenForPrompt: async () => 'test-token',
     });
     const options = buildNormalizedOptions({
@@ -201,7 +206,10 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
       } as NormalizedGenerateChatOptions['resolved'],
     });
 
-    const iterator = executeOpenAIResponsesRequest(options, deps);
+    const iterator = executeOpenAIResponsesRequest(
+      captureResponsesTestRequest(options, deps),
+      deps,
+    );
     await iterator.next();
 
     capturedRequest = await captureRequestModel();
@@ -211,7 +219,7 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
 
   it('passes the resolved model when it is non-empty', async () => {
     const deps = buildDeps({
-      getDefaultModel: () => 'o3-mini',
+      defaultModel: 'o3-mini',
       resolveAuthTokenForPrompt: async () => 'test-token',
     });
     const options = buildNormalizedOptions({
@@ -222,7 +230,10 @@ describe('executeOpenAIResponsesRequest empty-resolved-model fallback @issue:248
       } as NormalizedGenerateChatOptions['resolved'],
     });
 
-    const iterator = executeOpenAIResponsesRequest(options, deps);
+    const iterator = executeOpenAIResponsesRequest(
+      captureResponsesTestRequest(options, deps),
+      deps,
+    );
     await iterator.next();
 
     capturedRequest = await captureRequestModel();

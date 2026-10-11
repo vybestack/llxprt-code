@@ -416,73 +416,6 @@ export class ProfileManager {
     await this.saveProfile(profileName, profile);
   }
 
-  private convertProfileToSettingsData(profile: Profile): {
-    defaultProvider: string;
-    providers: Record<string, unknown>;
-    tools: { allowed: string[]; disabled: string[] };
-  } {
-    const allowedValue = profile.ephemeralSettings['tools.allowed'];
-    const allowedTools = stringArray(allowedValue);
-
-    const disabledValue = profile.ephemeralSettings['tools.disabled'];
-    const disabledTools: string[] = stringArray(disabledValue);
-
-    return {
-      defaultProvider: profile.provider,
-      providers: {
-        [profile.provider]: {
-          enabled: true,
-          model: profile.model,
-          temperature: profile.modelParams.temperature,
-          maxTokens: profile.modelParams.max_tokens,
-          'base-url': profile.ephemeralSettings['base-url'],
-          'auth-key': profile.ephemeralSettings['auth-key'],
-          'auth-keyfile': profile.ephemeralSettings['auth-keyfile'],
-          'prompt-caching': profile.ephemeralSettings['prompt-caching'],
-          toolFormat: profile.ephemeralSettings.toolFormat,
-        },
-      },
-      tools: {
-        allowed: allowedTools,
-        disabled: disabledTools,
-      },
-    };
-  }
-
-  private applyToolSettings(
-    settingsData: {
-      tools: { allowed: string[]; disabled: string[] };
-    },
-    settingsService: ProfileSettingsServiceLike,
-  ): void {
-    if (settingsService.set) {
-      settingsService.set('tools.allowed', settingsData.tools.allowed);
-      settingsService.set('tools.disabled', settingsData.tools.disabled);
-    }
-  }
-
-  private applyReasoningSettings(
-    profile: Profile,
-    settingsService: ProfileSettingsServiceLike,
-  ): void {
-    const reasoningKeys = [
-      'reasoning.enabled',
-      'reasoning.includeInContext',
-      'reasoning.includeInResponse',
-      'reasoning.format',
-      'reasoning.stripFromContext',
-      'reasoning.effort',
-      'reasoning.maxTokens',
-      'reasoning.fieldName',
-    ] as const;
-
-    for (const key of reasoningKeys) {
-      if (profile.ephemeralSettings[key] !== undefined && settingsService.set) {
-        settingsService.set(key, profile.ephemeralSettings[key]);
-      }
-    }
-  }
-
   async load(
     profileName: string,
     settingsService: ProfileSettingsServiceLike,
@@ -501,17 +434,7 @@ export class ProfileManager {
     profile: StandardProfile,
     settingsService: ProfileSettingsServiceLike,
   ): Promise<void> {
-    const settingsData = this.convertProfileToSettingsData(profile);
-    if (typeof settingsService.setCurrentProfileName === 'function') {
-      settingsService.setCurrentProfileName(profileName);
-    }
-
-    if (typeof settingsService.importFromProfile !== 'function') {
-      throw new Error('SettingsService does not support profile import');
-    }
-    await settingsService.importFromProfile(settingsData);
-    this.applyToolSettings(settingsData, settingsService);
-    this.applyReasoningSettings(profile, settingsService);
+    await applyProfileSettings(profileName, profile, settingsService);
   }
 }
 
@@ -521,3 +444,88 @@ export class ProfileManager {
  */
 export type { Profile as ProfileLike } from './types.js';
 export type { LoadBalancerProfile as LoadBalancerProfileLike } from './types.js';
+
+function convertProfileToSettingsData(profile: Profile): {
+  defaultProvider: string;
+  providers: Record<string, unknown>;
+  tools: { allowed: string[]; disabled: string[] };
+} {
+  const allowedValue = profile.ephemeralSettings['tools.allowed'];
+  const allowedTools = stringArray(allowedValue);
+
+  const disabledValue = profile.ephemeralSettings['tools.disabled'];
+  const disabledTools: string[] = stringArray(disabledValue);
+
+  return {
+    defaultProvider: profile.provider,
+    providers: {
+      [profile.provider]: {
+        enabled: true,
+        model: profile.model,
+        temperature: profile.modelParams.temperature,
+        maxTokens: profile.modelParams.max_tokens,
+        'base-url': profile.ephemeralSettings['base-url'],
+        'auth-key': profile.ephemeralSettings['auth-key'],
+        'auth-keyfile': profile.ephemeralSettings['auth-keyfile'],
+        'prompt-caching': profile.ephemeralSettings['prompt-caching'],
+        toolFormat: profile.ephemeralSettings.toolFormat,
+      },
+    },
+    tools: {
+      allowed: allowedTools,
+      disabled: disabledTools,
+    },
+  };
+}
+
+function applyToolSettings(
+  settingsData: {
+    tools: { allowed: string[]; disabled: string[] };
+  },
+  settingsService: ProfileSettingsServiceLike,
+): void {
+  if (settingsService.set) {
+    settingsService.set('tools.allowed', settingsData.tools.allowed);
+    settingsService.set('tools.disabled', settingsData.tools.disabled);
+  }
+}
+
+function applyReasoningSettings(
+  profile: Profile,
+  settingsService: ProfileSettingsServiceLike,
+): void {
+  const reasoningKeys = [
+    'reasoning.enabled',
+    'reasoning.includeInContext',
+    'reasoning.includeInResponse',
+    'reasoning.format',
+    'reasoning.stripFromContext',
+    'reasoning.effort',
+    'reasoning.maxTokens',
+    'reasoning.fieldName',
+  ] as const;
+
+  for (const key of reasoningKeys) {
+    if (profile.ephemeralSettings[key] !== undefined && settingsService.set) {
+      settingsService.set(key, profile.ephemeralSettings[key]);
+    }
+  }
+}
+
+export async function applyProfileSettings(
+  profileName: string,
+  profile: StandardProfile,
+  settingsService: ProfileSettingsServiceLike,
+): Promise<void> {
+  const settingsData = convertProfileToSettingsData(profile);
+  if (typeof settingsService.setCurrentProfileName === 'function') {
+    settingsService.setCurrentProfileName(profileName);
+  }
+
+  if (typeof settingsService.importFromProfile !== 'function') {
+    throw new Error('SettingsService does not support profile import');
+  }
+  await settingsService.importFromProfile(settingsData);
+  applyToolSettings(settingsData, settingsService);
+  applyReasoningSettings(profile, settingsService);
+}

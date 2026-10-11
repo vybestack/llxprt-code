@@ -39,6 +39,10 @@ function createDeps(
     shellModeActive: false,
     scheduleToolCalls: vi.fn(),
     getToolHandle: () => undefined,
+    findResource: () => undefined,
+    readResource: async () => {
+      throw new Error('No resource transport in this fixture');
+    },
     ...overrides,
   };
 }

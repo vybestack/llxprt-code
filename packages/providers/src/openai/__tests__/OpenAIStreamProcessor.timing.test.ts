@@ -1,9 +1,12 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 /**
  * Behavioral tests for issue #3473: timing stamps at raw token-bearing
  * deltas in the classic OpenAI stream path.
@@ -30,7 +33,7 @@ import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import OpenAI from 'openai';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ApiResponseEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
 import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
@@ -220,10 +223,20 @@ async function runStreamWithRecorder(
     >;
   },
 ): Promise<{ results: IContent[]; events: ApiResponseEvent[] }> {
+  const owner = new SessionSettingsOwner(new SettingsService());
+  owner.bindTelemetry(
+    new Config({
+      sessionId: 'stream-timing-owner',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
+      model: 'test-model',
+    }),
+  );
   const recorder = new AttemptRecorder({
     providerName: 'test-provider',
     defaultModelName: 'test-model',
-    config,
+    config: captureProviderRequestDiagnostics(config, owner),
     logicalRequestId: 'req-3473',
     wrapperOwned: true,
   });
@@ -231,7 +244,7 @@ async function runStreamWithRecorder(
   recorder.ensureAttemptStarted();
 
   const wrappedStream = processStreamWithRecorderGen(
-    config,
+    captureProviderRequestDiagnostics(config, owner),
     createProviderStream(chunks, delayMs, format, {
       rawStream: options?.rawStream,
       onRawTokenDelta: () => recorder.onRawTokenDelta(),
@@ -242,8 +255,12 @@ async function runStreamWithRecorder(
     ctx,
   );
 
-  const results = await collectResults(wrappedStream);
-  return { results, events: [...capturedEvents] };
+  try {
+    const results = await collectResults(wrappedStream);
+    return { results, events: [...capturedEvents] };
+  } finally {
+    await owner.dispose();
+  }
 }
 
 function eventToAttemptRecord(event: ApiResponseEvent): ApiAttemptRecord {

@@ -28,3 +28,20 @@ export {
 export { getIdeTrust } from './src/utils/ide-trust.js';
 export * from './src/utils/pathReader.js';
 export { createSessionSchedulerRegistry } from './src/session/sessionSchedulerRegistryImpl.js';
+export { WorkspaceFilesystemOwner } from './src/services/workspace-filesystem-owner.js';
+export type {
+  WorkspaceIgnoreOperations,
+  WorkspaceSearchOperations,
+} from './src/services/workspace-filesystem-owner.js';
+
+export type { RuntimePolicyOwner } from './src/policy/policy-owner.js';
+export type { WorkspaceSkillOperations } from './src/skills/workspace-skill-owner.js';
+export { parseOutputLimits } from './src/utils/toolOutputLimiter.js';
+export {
+  WorkspaceMcpCatalogOwner,
+  type WorkspacePromptSelection,
+  type WorkspaceResourceSelection,
+} from './src/services/workspace-mcp-catalog-owner.js';
+export { WorkspaceToolCatalogOwner } from './src/services/workspace-tool-catalog-owner.js';
+export { ToolDispatchAdmission } from './src/services/tool-dispatch-admission.js';
+export { SessionSettingsOwner } from './src/session/session-settings-owner.js';

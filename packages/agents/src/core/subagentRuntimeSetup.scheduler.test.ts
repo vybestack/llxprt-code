@@ -1,3 +1,4 @@
+import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -5,57 +6,35 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import {
-  createToolExecutionConfig,
-  createSchedulerConfig,
-} from './subagentRuntimeSetup.js';
-import { buildToolGovernance, isToolBlocked } from './toolGovernance.js';
+import { createToolExecutionConfig } from './subagentRuntimeSetup.js';
+import { isToolBlocked } from './toolGovernance.js';
 
 interface SchedulerFixture {
   runtimeBundle: {
-    runtimeContext: { state: { sessionId: string } };
+    runtimeContext: {
+      state: { sessionId: string };
+      readToolExecutionPolicy: ReturnType<
+        typeof createSessionPolicyFixture
+      >['readExecutionPolicy'];
+    };
   };
   toolRegistry: {
     getTool: () => undefined;
     getFunctionDeclarationsFiltered: () => never[];
   };
-  foregroundConfig: {
-    getOrCreateScheduler: () => void;
-    disposeScheduler: () => void;
-  };
 }
 
 const makeSchedulerFixture = (sessionId: string): SchedulerFixture => ({
   runtimeBundle: {
-    runtimeContext: { state: { sessionId } },
+    runtimeContext: {
+      state: { sessionId },
+      readToolExecutionPolicy: createSessionPolicyFixture().readExecutionPolicy,
+    },
   },
   toolRegistry: {
     getTool: () => undefined,
     getFunctionDeclarationsFiltered: () => [],
   },
-  foregroundConfig: {
-    getOrCreateScheduler: () => {},
-    disposeScheduler: () => {},
-  },
-});
-
-/**
- * Creates a foreground config mock with configurable allowedTools.
- */
-const makeForegroundWithDefaults = (allowedTools: string[]) => ({
-  getApprovalMode: () => 'DEFAULT' as const,
-  getPolicyEngine: () => undefined,
-  getOrCreateScheduler: () => Promise.resolve({}),
-  disposeScheduler: () => {},
-  getEphemeralSettings: () => ({}),
-  getExcludeTools: () => [],
-  getTelemetryLogPromptsEnabled: () => false,
-  getAllowedTools: () => allowedTools,
-  getEnableHooks: () => false,
-  getHooks: () => undefined,
-  getHookSystem: () => undefined,
-  getWorkingDir: () => '/tmp',
-  getTargetDir: () => '/tmp',
 });
 
 describe('createToolExecutionConfig', () => {
@@ -64,7 +43,6 @@ describe('createToolExecutionConfig', () => {
     const config = createToolExecutionConfig(
       fixture.runtimeBundle,
       fixture.toolRegistry,
-      fixture.foregroundConfig,
     );
     expect(config).toBeDefined();
     expect(config.getSessionId()).toBe('sess-123');
@@ -76,12 +54,12 @@ describe('createToolExecutionConfig', () => {
     const config = createToolExecutionConfig(
       fixture.runtimeBundle,
       fixture.toolRegistry,
-      fixture.foregroundConfig,
-      undefined,
       undefined,
       toolConfig,
     );
-    const allowed = config.getEphemeralSetting('tools.allowed');
+    const allowed = config.readGovernance().allowedExplicit
+      ? [...config.readGovernance().allowed]
+      : undefined;
     expect(Array.isArray(allowed)).toBe(true);
     expect(allowed).toContain('allowed_tool');
   });
@@ -91,9 +69,8 @@ describe('createToolExecutionConfig', () => {
     const config = createToolExecutionConfig(
       fixture.runtimeBundle,
       fixture.toolRegistry,
-      fixture.foregroundConfig,
     );
-    expect(config.getEphemeralSettings()).toBeDefined();
+    expect(config.readExecutionPolicy()).toBeDefined();
   });
 });
 
@@ -103,13 +80,19 @@ describe('createToolExecutionConfig — fail-closed empty whitelist (#2069)', ()
     const config = createToolExecutionConfig(
       fixture.runtimeBundle,
       fixture.toolRegistry,
-      fixture.foregroundConfig,
-      undefined,
       undefined,
       { tools: [] },
     );
-    expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([]);
-    expect(config.getEphemeralSettings()['tools.allowed']).toStrictEqual([]);
+    expect(
+      config.readGovernance().allowedExplicit
+        ? [...config.readGovernance().allowed]
+        : undefined,
+    ).toStrictEqual([]);
+    expect(
+      config.readGovernance().allowedExplicit
+        ? [...config.readGovernance().allowed]
+        : undefined,
+    ).toStrictEqual([]);
   });
 
   it('preserves parent explicit empty tools.allowed when intersecting with a non-empty whitelist', () => {
@@ -117,13 +100,19 @@ describe('createToolExecutionConfig — fail-closed empty whitelist (#2069)', ()
     const config = createToolExecutionConfig(
       fixture.runtimeBundle,
       fixture.toolRegistry,
-      fixture.foregroundConfig,
-      undefined,
       { tools: { allowed: [] } },
       { tools: ['read_file'] },
     );
-    expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([]);
-    expect(config.getEphemeralSettings()['tools.allowed']).toStrictEqual([]);
+    expect(
+      config.readGovernance().allowedExplicit
+        ? [...config.readGovernance().allowed]
+        : undefined,
+    ).toStrictEqual([]);
+    expect(
+      config.readGovernance().allowedExplicit
+        ? [...config.readGovernance().allowed]
+        : undefined,
+    ).toStrictEqual([]);
   });
 
   it('intersects API-qualified snapshot allowlist entries with canonical whitelist entries', () => {
@@ -135,15 +124,15 @@ describe('createToolExecutionConfig — fail-closed empty whitelist (#2069)', ()
     const config = createToolExecutionConfig(
       fixture.runtimeBundle,
       toolRegistry,
-      fixture.foregroundConfig,
-      undefined,
       { tools: { allowed: ['functions.read_file'] } },
       { tools: ['functions.read_file'] },
     );
 
-    expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([
-      'read_file',
-    ]);
+    expect(
+      config.readGovernance().allowedExplicit
+        ? [...config.readGovernance().allowed]
+        : undefined,
+    ).toStrictEqual(['read_file']);
   });
 
   it('does not set tools.allowed when toolConfig is undefined', () => {
@@ -151,13 +140,19 @@ describe('createToolExecutionConfig — fail-closed empty whitelist (#2069)', ()
     const config = createToolExecutionConfig(
       fixture.runtimeBundle,
       fixture.toolRegistry,
-      fixture.foregroundConfig,
-      undefined,
       undefined,
       undefined,
     );
-    expect(config.getEphemeralSetting('tools.allowed')).toBeUndefined();
-    expect(config.getEphemeralSettings()['tools.allowed']).toBeUndefined();
+    expect(
+      config.readGovernance().allowedExplicit
+        ? [...config.readGovernance().allowed]
+        : undefined,
+    ).toBeUndefined();
+    expect(
+      config.readGovernance().allowedExplicit
+        ? [...config.readGovernance().allowed]
+        : undefined,
+    ).toBeUndefined();
   });
 
   it('does not set tools.allowed when toolConfig is omitted', () => {
@@ -165,246 +160,13 @@ describe('createToolExecutionConfig — fail-closed empty whitelist (#2069)', ()
     const config = createToolExecutionConfig(
       fixture.runtimeBundle,
       fixture.toolRegistry,
-      fixture.foregroundConfig,
     );
-    expect(config.getEphemeralSetting('tools.allowed')).toBeUndefined();
+    expect(
+      config.readGovernance().allowedExplicit
+        ? [...config.readGovernance().allowed]
+        : undefined,
+    ).toBeUndefined();
   });
-});
-
-describe('createSchedulerConfig — fail-closed empty whitelist (#2069)', () => {
-  it('getAllowedTools() returns [] for explicit empty even when foreground returns defaults', () => {
-    const { config } =
-      observeGetAllowedToolsReturnsForExplicitEmptyEvenWhenForegroundReturnsDefaults();
-    expect(config.getAllowedTools()).toStrictEqual([]);
-  });
-
-  const observeGetAllowedToolsReturnsForExplicitEmptyEvenWhenForegroundReturnsDefaults =
-    () => {
-      const toolExecCtxWithEmpty = {
-        getToolRegistry: () => ({}),
-        getSessionId: () => 'sess-fc',
-        getEphemeralSettings: () => ({ 'tools.allowed': [] }),
-        getEphemeralSetting: (key: string) =>
-          key === 'tools.allowed' ? [] : undefined,
-        getExcludeTools: () => [],
-        getTelemetryLogPromptsEnabled: () => false,
-        getOrCreateScheduler: () => Promise.resolve({}),
-        disposeScheduler: () => {},
-      };
-      const foregroundWithDefaults = makeForegroundWithDefaults([
-        'read_file',
-        'write_file',
-      ]);
-      const config = createSchedulerConfig(
-        toolExecCtxWithEmpty,
-        foregroundWithDefaults,
-      );
-
-      return { config };
-    };
-
-  it('getAllowedTools() falls back to foreground when ephemerals omit tools.allowed', () => {
-    const toolExecCtxNoOverride = {
-      getToolRegistry: () => ({}),
-      getSessionId: () => 'sess-default',
-      getEphemeralSettings: () => ({}),
-      getEphemeralSetting: () => undefined,
-      getExcludeTools: () => [],
-      getTelemetryLogPromptsEnabled: () => false,
-      getOrCreateScheduler: () => Promise.resolve({}),
-      disposeScheduler: () => {},
-    };
-    const foregroundWithDefaults = makeForegroundWithDefaults(['read_file']);
-    const config = createSchedulerConfig(
-      toolExecCtxNoOverride,
-      foregroundWithDefaults,
-    );
-    expect(config.getAllowedTools()).toStrictEqual(['read_file']);
-  });
-});
-
-describe('createToolExecutionConfig — scheduler delegation', () => {
-  it('should forward owner, purpose, callbacks, options, and default dependencies to foregroundConfig.getOrCreateScheduler', async () => {
-    const forwarded: Record<string, unknown> = {};
-    const sentinelRegistry = { sentinel: 'subagent-registry' };
-    const sentinelMessageBus = { sentinel: 'message-bus' };
-    const owner = { label: 'scheduler-owner' };
-    const callbacks = {} as never;
-    const options = { interactiveMode: false };
-    const runtimeBundle = {
-      runtimeContext: { state: { sessionId: 'sess-fwd' } },
-    };
-    const foregroundConfig = {
-      getOrCreateScheduler: (
-        fwdOwner: unknown,
-        fwdPurpose: unknown,
-        fwdCallbacks: unknown,
-        fwdOptions: unknown,
-        fwdDeps: Record<string, unknown>,
-      ) => {
-        Object.assign(forwarded, {
-          owner: fwdOwner,
-          purpose: fwdPurpose,
-          callbacks: fwdCallbacks,
-          options: fwdOptions,
-          deps: fwdDeps,
-        });
-        return Promise.resolve({});
-      },
-      disposeScheduler: () => {},
-    };
-
-    const config = createToolExecutionConfig(
-      runtimeBundle,
-      sentinelRegistry,
-      foregroundConfig,
-      sentinelMessageBus as never,
-    );
-    await config.getOrCreateScheduler(owner, 'subagent', callbacks, options);
-
-    expect(forwarded.owner).toBe(owner);
-    expect(forwarded.purpose).toBe('subagent');
-    expect(forwarded.callbacks).toBe(callbacks);
-    expect(forwarded.options).toBe(options);
-    expect(forwarded.deps.toolRegistry).toBe(sentinelRegistry);
-    expect(forwarded.deps.messageBus).toBe(sentinelMessageBus);
-  });
-
-  it('should allow caller to override toolRegistry via dependencies', async () => {
-    const capturedDeps: Record<string, unknown> = {};
-    const defaultRegistry = { default: true };
-    const overrideRegistry = { override: true };
-    const owner = { label: 'override-owner' };
-    const runtimeBundle = {
-      runtimeContext: { state: { sessionId: 'sess-override' } },
-    };
-    const foregroundConfig = {
-      getOrCreateScheduler: (
-        _owner: object,
-        _purpose: unknown,
-        _cb: unknown,
-        _opts: unknown,
-        deps: Record<string, unknown>,
-      ) => {
-        Object.assign(capturedDeps, deps);
-        return Promise.resolve({});
-      },
-      disposeScheduler: () => {},
-    };
-
-    const config = createToolExecutionConfig(
-      runtimeBundle,
-      defaultRegistry,
-      foregroundConfig,
-    );
-    await config.getOrCreateScheduler(
-      owner,
-      'subagent',
-      {} as never,
-      undefined,
-      { toolRegistry: overrideRegistry } as never,
-    );
-
-    expect(capturedDeps.toolRegistry).toBe(overrideRegistry);
-  });
-});
-
-describe('createSchedulerConfig', () => {
-  it('should return a Config-shaped object', () => {
-    const mockToolExecCtx = makeToolExecCtx('test-session');
-    const mockForeground = makeForegroundWithDefaults([]);
-    const config = createSchedulerConfig(mockToolExecCtx, mockForeground);
-    expect(config).toBeDefined();
-    expect(typeof config.getSessionId).toBe('function');
-  });
-
-  it('should delegate getOrCreateScheduler through toolExecutorContext, not foregroundConfig', async () => {
-    const flags = { toolExecCalled: false, foregroundCalled: false };
-    const mockToolExecCtx = {
-      ...makeToolExecCtx('test-session'),
-      getOrCreateScheduler: () => {
-        flags.toolExecCalled = true;
-        return Promise.resolve({});
-      },
-    };
-    const mockForeground = {
-      ...makeForegroundWithDefaults([]),
-      getOrCreateScheduler: () => {
-        flags.foregroundCalled = true;
-        return Promise.resolve({});
-      },
-    };
-    const config = createSchedulerConfig(mockToolExecCtx, mockForeground);
-    await config.getOrCreateScheduler('test-session', {} as never);
-
-    expect(flags.toolExecCalled).toBe(true);
-    expect(flags.foregroundCalled).toBe(false);
-  });
-
-  it('should inject interactiveMode into scheduler options', async () => {
-    const mockToolExecCtx = makeToolExecCtx('test-session');
-    let capturedOptions: Record<string, unknown> = {};
-    const mockForeground = {
-      ...makeForegroundWithDefaults([]),
-      getOrCreateScheduler: () => Promise.resolve({}),
-    };
-    // Override toolExec to capture the options argument (4th of the
-    // 5-arg acquisition contract) on its way to scheduler creation.
-    const toolExecWithOptions = {
-      ...mockToolExecCtx,
-      getOrCreateScheduler: (
-        _owner: object,
-        _purpose: unknown,
-        _cb: unknown,
-        opts: Record<string, unknown>,
-      ) => {
-        capturedOptions = opts;
-        return Promise.resolve({});
-      },
-    };
-    const config = createSchedulerConfig(toolExecWithOptions, mockForeground, {
-      interactive: true,
-    });
-    await config.getOrCreateScheduler({}, 'subagent', {} as never);
-
-    expect(capturedOptions.interactiveMode).toBe(true);
-  });
-
-  it('should delegate disposeScheduler through toolExecutorContext', () => {
-    const flags = { toolExec: false, foreground: false };
-    const mockToolExecCtx = {
-      ...makeToolExecCtx('test-session'),
-      disposeScheduler: () => {
-        flags.toolExec = true;
-      },
-    };
-    const mockForeground = {
-      ...makeForegroundWithDefaults([]),
-      getOrCreateScheduler: () => Promise.resolve({}),
-      disposeScheduler: () => {
-        flags.foreground = true;
-      },
-    };
-    const config = createSchedulerConfig(mockToolExecCtx, mockForeground);
-    config.disposeScheduler('test-session');
-
-    expect(flags.toolExec).toBe(true);
-    expect(flags.foreground).toBe(false);
-  });
-});
-
-/**
- * Creates a minimal tool execution context mock for scheduler config tests.
- */
-const makeToolExecCtx = (sessionId: string) => ({
-  getToolRegistry: () => ({}),
-  getSessionId: () => sessionId,
-  getEphemeralSettings: () => ({}),
-  getEphemeralSetting: () => undefined,
-  getExcludeTools: () => [],
-  getTelemetryLogPromptsEnabled: () => false,
-  getOrCreateScheduler: () => Promise.resolve({}),
-  disposeScheduler: () => {},
 });
 
 describe('Issue #2069: scheduler governance excludes task/list_subagents', () => {
@@ -413,42 +175,20 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
     const config = createToolExecutionConfig(
       fixture.runtimeBundle,
       fixture.toolRegistry,
-      fixture.foregroundConfig,
     );
-    const excluded = config.getExcludeTools();
+    const excluded = [...config.readGovernance().excluded];
     expect(excluded).toContain('task');
     expect(excluded).toContain('list_subagents');
   });
 
-  it('createSchedulerConfig().getExcludeTools() surfaces task/list_subagents from toolExecutorContext', () => {
+  it('buildToolGovernance from child execution config marks task/list_subagents as blocked (fail-closed)', async () => {
     const fixture = makeSchedulerFixture('sess-2069');
     const toolExecConfig = createToolExecutionConfig(
       fixture.runtimeBundle,
       fixture.toolRegistry,
-      fixture.foregroundConfig,
-    );
-    const schedulerConfig = createSchedulerConfig(
-      toolExecConfig,
-      fixture.foregroundConfig,
-    );
-    const excluded = schedulerConfig.getExcludeTools();
-    expect(excluded).toContain('task');
-    expect(excluded).toContain('list_subagents');
-  });
-
-  it('buildToolGovernance from schedulerConfig marks task/list_subagents as blocked (fail-closed)', async () => {
-    const fixture = makeSchedulerFixture('sess-2069');
-    const toolExecConfig = createToolExecutionConfig(
-      fixture.runtimeBundle,
-      fixture.toolRegistry,
-      fixture.foregroundConfig,
-    );
-    const schedulerConfig = createSchedulerConfig(
-      toolExecConfig,
-      fixture.foregroundConfig,
     );
 
-    const governance = buildToolGovernance(schedulerConfig);
+    const governance = toolExecConfig.readGovernance();
     expect(isToolBlocked('task', governance)).toBe(true);
     expect(isToolBlocked('list_subagents', governance)).toBe(true);
     // Non-excluded tool should not be blocked by excluded set alone
@@ -461,12 +201,14 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
     const config = createToolExecutionConfig(
       fixture.runtimeBundle,
       fixture.toolRegistry,
-      fixture.foregroundConfig,
-      undefined,
       undefined,
       toolConfig,
     );
-    const allowed = config.getEphemeralSetting('tools.allowed') as string[];
+    const allowed = (
+      config.readGovernance().allowedExplicit
+        ? [...config.readGovernance().allowed]
+        : undefined
+    ) as string[];
     expect(Array.isArray(allowed)).toBe(true);
     expect(allowed).toContain('read_file');
     expect(allowed).not.toContain('task');
@@ -479,12 +221,14 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
     const config = createToolExecutionConfig(
       fixture.runtimeBundle,
       fixture.toolRegistry,
-      fixture.foregroundConfig,
-      undefined,
       undefined,
       toolConfig,
     );
-    const allowed = config.getEphemeralSetting('tools.allowed') as string[];
+    const allowed = (
+      config.readGovernance().allowedExplicit
+        ? [...config.readGovernance().allowed]
+        : undefined
+    ) as string[];
     expect(Array.isArray(allowed)).toBe(true);
     expect(allowed).toStrictEqual([]);
   });
@@ -498,12 +242,14 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
     const config = createToolExecutionConfig(
       fixture.runtimeBundle,
       toolRegistry,
-      fixture.foregroundConfig,
-      undefined,
       undefined,
       { tools: ['read_file'] },
     );
-    expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([]);
+    expect(
+      config.readGovernance().allowedExplicit
+        ? [...config.readGovernance().allowed]
+        : undefined,
+    ).toStrictEqual([]);
   });
 
   it('applyToolWhitelistToEphemerals removes canonical variants (TaskTool, listSubagents)', () => {
@@ -514,12 +260,14 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
     const config = createToolExecutionConfig(
       fixture.runtimeBundle,
       fixture.toolRegistry,
-      fixture.foregroundConfig,
-      undefined,
       undefined,
       toolConfig,
     );
-    const allowed = config.getEphemeralSetting('tools.allowed') as string[];
+    const allowed = (
+      config.readGovernance().allowedExplicit
+        ? [...config.readGovernance().allowed]
+        : undefined
+    ) as string[];
     expect(Array.isArray(allowed)).toBe(true);
     expect(allowed).toContain('read_file');
     expect(allowed).not.toContain('task');
@@ -535,15 +283,15 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
     const config = createToolExecutionConfig(
       fixture.runtimeBundle,
       toolRegistry,
-      fixture.foregroundConfig,
-      undefined,
       undefined,
       { tools: ['functions.tool.v1'] },
     );
 
-    expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([
-      'tool.v1',
-    ]);
+    expect(
+      config.readGovernance().allowedExplicit
+        ? [...config.readGovernance().allowed]
+        : undefined,
+    ).toStrictEqual(['tool.v1']);
   });
 
   it('applyToolWhitelistToEphemerals includes non-string declaration names in tools.allowed', () => {
@@ -555,15 +303,15 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
     const config = createToolExecutionConfig(
       fixture.runtimeBundle,
       fixture.toolRegistry,
-      fixture.foregroundConfig,
-      undefined,
       undefined,
       { tools: [customDeclaration] },
     );
 
-    expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([
-      'custom_tool',
-    ]);
+    expect(
+      config.readGovernance().allowedExplicit
+        ? [...config.readGovernance().allowed]
+        : undefined,
+    ).toStrictEqual(['custom_tool']);
   });
 
   it('applyToolWhitelistToEphemerals skips non-string declaration names absent from enabled registry', () => {
@@ -575,8 +323,6 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
     const config = createToolExecutionConfig(
       fixture.runtimeBundle,
       toolRegistry,
-      fixture.foregroundConfig,
-      undefined,
       undefined,
       {
         tools: [
@@ -586,21 +332,25 @@ describe('Issue #2069: scheduler governance excludes task/list_subagents', () =>
       },
     );
 
-    expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([
-      'read_file',
-    ]);
+    expect(
+      config.readGovernance().allowedExplicit
+        ? [...config.readGovernance().allowed]
+        : undefined,
+    ).toStrictEqual(['read_file']);
   });
   it('applyToolWhitelistToEphemerals fail-closes when only excluded non-string declarations remain', () => {
     const fixture = makeSchedulerFixture('sess-2184');
     const config = createToolExecutionConfig(
       fixture.runtimeBundle,
       fixture.toolRegistry,
-      fixture.foregroundConfig,
-      undefined,
       undefined,
       { tools: [{ name: 'functions.task', description: 'nested' }] },
     );
 
-    expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([]);
+    expect(
+      config.readGovernance().allowedExplicit
+        ? [...config.readGovernance().allowed]
+        : undefined,
+    ).toStrictEqual([]);
   });
 });

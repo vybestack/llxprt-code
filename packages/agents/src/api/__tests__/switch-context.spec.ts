@@ -43,6 +43,7 @@ import type {
 } from '@vybestack/llxprt-code-agents';
 import {
   buildAgent,
+  buildProfileAgent,
   drain,
   typesOf,
   countType,
@@ -129,7 +130,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
 
   it('T4b profiles.apply for a STANDARD profile projects provider/model/params/auth onto the live agent @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-009', async () => {
     const profile = await loadProfileFixture('profile-standard.json');
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    const { agent, cleanup } = await buildProfileAgent('plain-text.jsonl');
     try {
       const name = requireString(profile['name'], 'profile name');
 
@@ -157,7 +158,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
     const profile = await loadLoadBalancerProfileFixture(
       'profile-load-balancer.json',
     );
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    const { agent, cleanup } = await buildProfileAgent('plain-text.jsonl');
     try {
       const name = requireString(profile['name'], 'profile name');
 
@@ -249,7 +250,7 @@ describe('Switch-context @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-004 @r
     const profile = await loadLoadBalancerProfileFixture(
       'profile-load-balancer.json',
     );
-    const { agent, cleanup } = await buildAgent(
+    const { agent, cleanup } = await buildProfileAgent(
       'provider-switch-two-turn.jsonl',
     );
     try {

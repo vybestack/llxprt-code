@@ -9,12 +9,12 @@
     "directory": "packages/a2a-server"
   },
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/a2a-server/index.js",
   "bin": {
     "llxprt-code-a2a-server": "dist/a2a-server.mjs"
   },
   "scripts": {
-    "start": "node dist/src/http/server.js",
+    "start": "node dist/a2a-server/src/http/server.js",
     "build": "bun ../../scripts/build_package.ts && bun ./scripts/dist-test-artifact-guard.ts",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",

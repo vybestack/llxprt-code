@@ -4,8 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { Agent } from '@vybestack/llxprt-code-agents';
+
 import type { MessageActionReturn, OpenDialogActionReturn } from './types.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import type { RuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   getProtectedSettingKeys,
   isInternalSettingKey,
@@ -172,11 +174,13 @@ export function createLoadBalancerProfileDefinition(
 
 async function verifyBucketsExist(
   bucketArgs: readonly string[],
+  runtimeApi: RuntimeApi,
+  agent?: Pick<Agent, 'getProvider'> | null,
 ): Promise<MessageActionReturn | null> {
   try {
-    const runtime = getRuntimeApi();
-    const status = runtime.getActiveProviderStatus();
-    const provider = status.providerName;
+    const provider = agent
+      ? agent.getProvider()
+      : runtimeApi.providerStatus().providerName;
 
     if (!provider) {
       return {
@@ -226,6 +230,8 @@ function validateBucketArgs(
 
 export async function saveModelProfile(
   parts: readonly string[],
+  runtimeApi: RuntimeApi,
+  agent?: Pick<Agent, 'getProvider' | 'saveProfileSnapshot'> | null,
 ): Promise<MessageActionReturn | OpenDialogActionReturn> {
   if (parts.length < 2) {
     return {
@@ -270,14 +276,14 @@ export async function saveModelProfile(
   }
 
   if (bucketArgs.length > 0) {
-    const bucketError = await verifyBucketsExist(bucketArgs);
+    const bucketError = await verifyBucketsExist(bucketArgs, runtimeApi, agent);
     if (bucketError) {
       return bucketError;
     }
   }
 
   try {
-    const runtime = getRuntimeApi();
+    const runtime = agent ?? runtimeApi;
     const authConfig =
       bucketArgs.length > 0
         ? { auth: { type: 'oauth' as const, buckets: bucketArgs } }
@@ -312,6 +318,7 @@ function findMissingProfile(
 
 export async function saveLoadBalancerProfile(
   parts: readonly string[],
+  runtimeApi: RuntimeApi,
 ): Promise<MessageActionReturn | OpenDialogActionReturn> {
   if (parts.length < 5) {
     return {
@@ -365,7 +372,7 @@ export async function saveLoadBalancerProfile(
   }
 
   try {
-    const runtime = getRuntimeApi();
+    const runtime = runtimeApi;
     const availableProfiles = await runtime.listSavedProfiles();
 
     const missing = findMissingProfile(selectedProfiles, availableProfiles);

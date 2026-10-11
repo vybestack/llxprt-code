@@ -8,7 +8,6 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from './testSupport.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { IProviderConfig } from '@vybestack/llxprt-code-providers/types/IProviderConfig.js';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import {
   createProviderCallOptions,
@@ -20,35 +19,38 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 }));
 
 const googleGenAIState = {
-  instances: [] as Array<{ options: Record<string, unknown> }>,
+  instances: [] as Array<{ options: GeminiApiClientOptions }>,
   streamCalls: [] as Array<{ request: Record<string, unknown> }>,
   nonStreamCalls: [] as Array<{ request: Record<string, unknown> }>,
   streamPlans: [] as Array<Array<Record<string, unknown>>>,
 };
 
 import type { CreateGeminiApiClient } from '../gemini/GeminiProvider.js';
+import type {
+  GeminiApiClient,
+  GeminiApiClientOptions,
+  GenerateContentParameters,
+} from '../gemini/geminiWireTypes.js';
 // Injected into GeminiProvider rather than module-mocked. `vi.mock` registers
 // process-wide and bun hoists it ahead of the whole run, so this stub used to
 // leak into every suite loaded alongside this one.
-const injectedClientFactory = (() => {
+const injectedClientFactory: CreateGeminiApiClient = (() => {
   class FakeGoogleGenAI {
-    readonly models: {
-      generateContentStream: ReturnType<typeof vi.fn>;
-    };
+    readonly models: GeminiApiClient['models'];
 
-    constructor(opts: Record<string, unknown>) {
+    constructor(opts: GeminiApiClientOptions) {
       googleGenAIState.instances.push({ options: opts });
       this.models = {
-        generateContentStream: vi.fn(async function* (
-          request: Record<string, unknown>,
-        ) {
-          googleGenAIState.streamCalls.push({ request });
-          const plan = googleGenAIState.streamPlans.shift() ?? [];
-          for (const response of plan) {
-            yield response;
-          }
-        }),
-        generateContent: vi.fn(async (request: Record<string, unknown>) => {
+        generateContentStream: vi.fn(
+          async (request: GenerateContentParameters) => {
+            googleGenAIState.streamCalls.push({ request });
+            const plan = googleGenAIState.streamPlans.shift() ?? [];
+            return (async function* () {
+              for (const response of plan) yield response;
+            })();
+          },
+        ),
+        generateContent: vi.fn(async (request: GenerateContentParameters) => {
           googleGenAIState.nonStreamCalls.push({ request });
           return {
             candidates: [],
@@ -62,11 +64,11 @@ const injectedClientFactory = (() => {
   const Type = { OBJECT: 'OBJECT' };
 
   return {
-    createGeminiApiClient: async (opts: Record<string, unknown>) =>
+    createGeminiApiClient: async (opts: GeminiApiClientOptions) =>
       new FakeGoogleGenAI(opts),
     Type,
   };
-})().createGeminiApiClient as unknown as CreateGeminiApiClient;
+})().createGeminiApiClient;
 
 const queueGoogleStream = (responses: Array<Record<string, unknown>>): void => {
   googleGenAIState.streamPlans.push(responses);
@@ -91,16 +93,6 @@ function buildCallOptions(
 class TestGeminiProvider extends GeminiProvider {
   constructor() {
     super(undefined, undefined, undefined, injectedClientFactory);
-  }
-
-  setEphemeralSettings(settings: Record<string, unknown>): void {
-    const currentConfig = (
-      this as unknown as { providerConfig?: IProviderConfig }
-    ).providerConfig;
-    (this as unknown as { providerConfig?: IProviderConfig }).providerConfig = {
-      ...(currentConfig ?? {}),
-      getEphemeralSettings: () => settings,
-    };
   }
 }
 
@@ -190,13 +182,13 @@ describe('Gemini provider stateless contract tests', () => {
     authMock.useMode(0);
 
     const provider = new TestGeminiProvider();
-    provider.setEphemeralSettings({ streaming: 'disabled' });
     const settings = new SettingsService();
     settings.set('call-id', 'runtime-stream');
+    settings.set('streaming', 'disabled');
     const config = createRuntimeConfigStub(settings, {
       getEphemeralSettings: () => ({ streaming: 'disabled' }),
     });
-    provider.setConfig(config);
+
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-stream',
       settingsService: settings,
@@ -272,9 +264,9 @@ describe('Gemini provider stateless contract tests', () => {
     // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
     // In stateless implementation, canonical parameters are resolved directly
     // from invocation.modelParams.
-    const firstRequest = googleGenAIState.streamCalls.at(-1)?.request as
-      | { config?: Record<string, unknown> }
-      | undefined;
+    const firstRequest = googleGenAIState.streamCalls[
+      googleGenAIState.streamCalls.length - 1
+    ]?.request as { config?: Record<string, unknown> } | undefined;
     expect(firstRequest?.config?.temperature).toBe(0.21);
     expect(firstRequest?.config?.max_output_tokens).toBe(1024);
 
@@ -323,9 +315,9 @@ describe('Gemini provider stateless contract tests', () => {
     // @plan PLAN-20260126-SETTINGS-SEPARATION.P09
     // In stateless implementation, canonical parameters are resolved directly
     // from invocation.modelParams.
-    const secondRequest = googleGenAIState.streamCalls.at(-1)?.request as
-      | { config?: Record<string, unknown> }
-      | undefined;
+    const secondRequest = googleGenAIState.streamCalls[
+      googleGenAIState.streamCalls.length - 1
+    ]?.request as { config?: Record<string, unknown> } | undefined;
     expect(secondRequest?.config?.temperature).toBe(0.78);
     expect(secondRequest?.config?.max_output_tokens).toBe(256);
 
@@ -362,7 +354,7 @@ describe('Gemini provider stateless contract tests', () => {
     const settings = new SettingsService();
     settings.set('call-id', 'runtime-tools');
     const config = createRuntimeConfigStub(settings);
-    provider.setConfig(config);
+
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-tools',
       settingsService: settings,
@@ -435,8 +427,9 @@ describe('Gemini provider stateless contract tests', () => {
     ]);
     authMock.useMode(0);
     const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings,
+      runtimeId: runtime.runtimeId,
+      runtimeMetadata: runtime.metadata,
+
       providerName: 'gemini',
       ephemeralsSnapshot: {
         temperature: 0.23,
@@ -470,9 +463,9 @@ describe('Gemini provider stateless contract tests', () => {
     );
     authMock.restore();
 
-    const lastRequest = googleGenAIState.streamCalls.at(-1)?.request as
-      | { config?: Record<string, unknown> }
-      | undefined;
+    const lastRequest = googleGenAIState.streamCalls[
+      googleGenAIState.streamCalls.length - 1
+    ]?.request as { config?: Record<string, unknown> } | undefined;
     expect(lastRequest).toBeDefined();
     expect(lastRequest?.config).toMatchObject({
       temperature: 0.23,

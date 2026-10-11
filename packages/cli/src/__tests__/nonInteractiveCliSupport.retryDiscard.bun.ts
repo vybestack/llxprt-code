@@ -1,3 +1,4 @@
+import { createStreamSettingsFixture } from './stream-settings-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -79,25 +80,9 @@ function parseJsonResult(spy: StdoutSpy): Record<string, unknown> {
   return JSON.parse(jsonLine) as Record<string, unknown>;
 }
 
-let sharedConfig: Config | null = null;
-
-function getRetryDiscardConfig(): Config {
-  if (sharedConfig === null) {
-    const config = new Config({
-      sessionId: 'retry-discard-session',
-      targetDir: '/tmp/llxprt-retry-discard',
-      debugMode: false,
-      cwd: '/tmp/llxprt-retry-discard',
-      model: 'gemini-2.0-flash-exp',
-    });
-    config.setEphemeralSetting('reasoning.includeInResponse', true);
-    sharedConfig = config;
-  }
-  return sharedConfig;
-}
-
 type StreamContextShape = {
   config: Config;
+  includeThinking: boolean;
   jsonOutput: boolean;
   streamJsonOutput: boolean;
   quiet: boolean;
@@ -115,7 +100,10 @@ function createContext(overrides?: {
   const streamFormatter =
     overrides?.streamFormatter === undefined ? null : overrides.streamFormatter;
   return {
-    config: getRetryDiscardConfig(),
+    ...createStreamSettingsFixture({
+      sessionId: 'retry-discard-session',
+      includeInResponse: true,
+    }),
     jsonOutput: overrides?.jsonOutput ?? false,
     streamJsonOutput: streamFormatter !== null,
     quiet: overrides?.quiet ?? false,

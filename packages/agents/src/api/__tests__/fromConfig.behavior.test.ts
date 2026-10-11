@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { requireInstructionReads } from '../../core/chat-system-prompt.js';
+
 /**
  * @plan:PLAN-20260621-COREAPIREMED.P08
  * @requirement:REQ-001,REQ-INT-001
@@ -21,24 +23,18 @@
  * assertions pass with no rewrite.
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import {
   fromConfig,
   createAgentClient,
-  createToolScheduler,
   createTaskRegistration,
   type Agent,
   type AgentEvent,
 } from '@vybestack/llxprt-code-agents';
-import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
-import {
-  disposeCliRuntime,
-  getCliRuntimeServices,
-  runWithRuntimeScope,
-} from '@vybestack/llxprt-code-providers/runtime.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
+  requireFixturePaths,
   buildCliStyleConfig,
   buildFactoryLessConfig,
   type CallerAgentRuntimeFactories,
@@ -108,170 +104,51 @@ function captureRuntimeId(agent: Agent): unknown {
   return typeof id === 'string' ? id : undefined;
 }
 
-function createSignal(): {
-  readonly promise: Promise<void>;
-  readonly resolve: () => void;
-} {
-  let resolvePromise = (): void => {
-    throw new Error('signal initialized without a resolver');
-  };
-  const promise = new Promise<void>((resolve) => {
-    resolvePromise = resolve;
-  });
-  return { promise, resolve: () => resolvePromise() };
-}
-
-function createReadinessFactory(
-  prepareTokenizer: (providerName: string, model?: string) => Promise<void>,
-  countTokens: (providerName: string, model?: string) => number,
-): RuntimeTokenizerFactory {
-  return {
-    prepareTokenizer,
-    getTokenizer: (providerName, model) => ({
-      fallbackPolicy: 'deny',
-      countTokens: () => countTokens(providerName, model),
-    }),
-    estimatePrompt: async (request) => ({
-      count: await request.legacyEstimate(),
-      method: 'calibrated',
-      family: 'test-readiness',
-      estimatorVersion: 'test-readiness-v1',
-      assetRevision: 'none',
-      projectionRevision: request.projectionRevision,
-    }),
-  };
-}
-
-describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:REQ-3217-003', () => {
-  it('awaits post-activation provider/model preparation before returning a usable Agent', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    const preparationStarted = createSignal();
-    const releasePreparation = createSignal();
-    const events: string[] = [];
-    let prepared = false;
-    const factory = createReadinessFactory(
-      async (providerName, model) => {
-        events.push(`prepare:${providerName}:${model ?? ''}`);
-        preparationStarted.resolve();
-        await releasePreparation.promise;
-        prepared = true;
-        events.push('prepared');
-      },
-      (providerName, model) => {
-        if (!prepared) {
-          throw new Error('tokenizer used before preparation completed');
-        }
-        events.push(`tokenize:${providerName}:${model ?? ''}`);
-        return 7;
-      },
-    );
-    built.config.setTokenizerFactory(factory);
-
-    try {
-      const pendingAgent = fromConfig({
-        config: built.config,
-        activation: {
-          provider: 'fake',
-          model: 'ready-model',
-          authMode: 'auto',
-        },
-      });
-      await preparationStarted.promise;
-      let completed = false;
-      const observedAgent = pendingAgent.then((agent) => {
-        completed = true;
-        return agent;
-      });
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      expect(completed).toBe(false);
-
-      releasePreparation.resolve();
-      const agent = await observedAgent;
-      try {
-        expect(built.config.getTokenizerFactory()).toBe(factory);
-
-        const turnEvents = await drain(agent.stream('hello'));
-        expect(countType(turnEvents, 'done')).toBe(1);
-        expect(events[0]).toBe('prepare:fake:ready-model');
-        expect(events[1]).toBe('prepared');
-        expect(
-          events.some((event) => event === 'tokenize:fake:ready-model'),
-        ).toBe(true);
-      } finally {
-        await agent.dispose();
-      }
-    } finally {
-      releasePreparation.resolve();
-      await built.cleanup();
-    }
-  });
-
-  it('rejects with the causal preparation failure reached through authoritative post-activation state (not stale Config state) and removes the isolated runtime', async () => {
-    const built = await buildCliStyleConfig('plain-text.jsonl');
-    const failure = new Error('mandatory tokenizer readiness failed causally');
-    const runtimeId = 'from-config-rejected-tokenizer-readiness';
-    // Mutate the Config's provider field to stale state. The isolated runtime
-    // manager still has 'fake' active (authoritative). fromConfig must derive
-    // the readiness target from the manager, not from this stale Config field.
-    built.config.setProvider('stale-config-provider');
-    let readinessTarget:
-      | { readonly provider: string; readonly model: string }
-      | undefined;
-    built.config.setTokenizerFactory(
-      createReadinessFactory(
-        async (providerName, model) => {
-          readinessTarget = { provider: providerName, model: model ?? '' };
-          throw failure;
-        },
-        () => {
-          throw new Error('unreachable tokenizer use');
-        },
-      ),
-    );
-
-    try {
-      await expect(
-        fromConfig({ config: built.config, sessionId: runtimeId }),
-      ).rejects.toBe(failure);
-      // Authoritative post-activation manager state ('fake'/'fake-model')
-      // reached readiness — NOT the stale Config provider
-      // ('stale-config-provider').
-      expect(readinessTarget).toStrictEqual({
-        provider: 'fake',
-        model: 'fake-model',
-      });
-      expect(readinessTarget?.provider).not.toBe('stale-config-provider');
-      expect(() =>
-        runWithRuntimeScope({ runtimeId, metadata: {} }, () =>
-          getCliRuntimeServices(),
-        ),
-      ).toThrow(/runtime registration|runtime.*not/i);
-    } finally {
-      await disposeCliRuntime(runtimeId);
-      await built.cleanup();
-    }
-  });
-});
-
 describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:REQ-001 @requirement:REQ-INT-001', () => {
   it('T1 fromConfig returns an Agent whose internalConfig(agent) === the SAME caller-supplied Config (identity) @requirement:REQ-001 @scenario:adoption @given:a real CLI-style Config @when:fromConfig({ config }) @then:internalConfig(agent) is the SAME Config instance', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
       const config = built.config;
-      const agent: Agent = await fromConfig({ config });
-      expect(internalConfig(agent)).toBe(config);
+      const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        config,
+        mcpRuntime: built.mcpRuntime,
+      });
+      try {
+        expect(internalConfig(agent)).toBe(config);
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
   });
 
-  it('T1b internalConfig(agent).getSettingsService() === the caller Config getSettingsService() (identity) @requirement:REQ-001 @scenario:adoption @given:a real CLI-style Config @when:fromConfig({ config }) @then:internalConfig(agent).getSettingsService() is the SAME SettingsService instance', async () => {
+  it('uses the exact caller store for facade writes, external changes and normalization during adoption', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
       const config = built.config;
-      const expected = config.getSettingsService();
-      const agent: Agent = await fromConfig({ config });
-      expect(internalConfig(agent).getSettingsService()).toBe(expected);
+      const expected = built.settingsService;
+      const agent: Agent = await fromConfig({
+        settingsService: expected,
+        settingsOwner: built.settingsOwner,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        config,
+        mcpRuntime: built.mcpRuntime,
+      });
+      try {
+        agent.setEphemeralSetting('streaming', false);
+        expect(expected.get('streaming')).toBe('disabled');
+        expected.set('context-limit', '8192');
+        expect(agent.getEphemeralSetting('context-limit')).toBe(8192);
+        expect(expected.get('context-limit')).toBe(8192);
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
@@ -280,9 +157,21 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
   it('T1c fromConfig adopts the provider and model already on the Config (value assertions) @requirement:REQ-001 @scenario:adoption @given:a Config whose active provider=fake and model=fake-model @when:fromConfig({ config }) @then:agent.getProvider() === "fake" and agent.getModel() === "fake-model"', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({ config: built.config });
-      expect(agent.getProvider()).toBe('fake');
-      expect(agent.getModel()).toBe('fake-model');
+      const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        runtimeFactoryBindings: built.runtimeFactoryBindings,
+        config: built.config,
+        mcpRuntime: built.mcpRuntime,
+      });
+      try {
+        expect(agent.getProvider()).toBe('fake');
+        expect(agent.getModel()).toBe('fake-model');
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
@@ -296,10 +185,20 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
       const agentNamed: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        runtimeFactoryBindings: built.runtimeFactoryBindings,
         config: built.config,
+        mcpRuntime: built.mcpRuntime,
         sessionId: 'deterministic-session-42',
       });
-      expect(captureRuntimeId(agentNamed)).toBe('deterministic-session-42');
+      try {
+        expect(captureRuntimeId(agentNamed)).toBe('deterministic-session-42');
+      } finally {
+        await agentNamed.dispose();
+      }
     } finally {
       await built.cleanup();
     }
@@ -308,10 +207,22 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
   it('T1e-deriv without sessionId the runtime derives a non-empty generated id @requirement:REQ-001 @scenario:runtimeId @given:no sessionId @when:fromConfig({ config }) @then:the runtime id observable is a non-empty generated string', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({ config: built.config });
-      const id = captureRuntimeId(agent);
-      expect(typeof id).toBe('string');
-      expect((id as string).length).toBeGreaterThan(0);
+      const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        runtimeFactoryBindings: built.runtimeFactoryBindings,
+        config: built.config,
+        mcpRuntime: built.mcpRuntime,
+      });
+      try {
+        const id = captureRuntimeId(agent);
+        expect(typeof id).toBe('string');
+        expect((id as string).length).toBeGreaterThan(0);
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
@@ -321,9 +232,20 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
       const config = built.config;
-      const callerManager = config.getProviderManager();
-      const agent: Agent = await fromConfig({ config });
-      expect(captureProviderManager(agent)).toBe(callerManager);
+      const callerManager = built.providerManager;
+      const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        config,
+        mcpRuntime: built.mcpRuntime,
+      });
+      try {
+        expect(captureProviderManager(agent)).toBe(callerManager);
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
@@ -332,9 +254,21 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
   it('T6-adopted-switch a provider switch through the agent resolves the adopted runtime (value parity, no crash) @requirement:REQ-001 @scenario:provider-switch @given:a fromConfig agent over a Config with one manager @when:setProvider("fake") is invoked @then:the switch completes without throwing and the active provider reflects the adopted runtime', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({ config: built.config });
-      await agent.setProvider('fake', 'fake-model');
-      expect(agent.getProvider()).toBe('fake');
+      const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        runtimeFactoryBindings: built.runtimeFactoryBindings,
+        config: built.config,
+        mcpRuntime: built.mcpRuntime,
+      });
+      try {
+        await agent.setProvider('fake', 'fake-model');
+        expect(agent.getProvider()).toBe('fake');
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
@@ -344,12 +278,23 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
       const config = built.config;
-      const callerManager = config.getProviderManager();
-      const agent: Agent = await fromConfig({ config });
-      expect(captureProviderManager(agent)).toBe(callerManager);
-      const events: AgentEvent[] = await drain(agent.stream('hello'));
-      expect(countType(events, 'done')).toBe(1);
-      expect(captureProviderManager(agent)).toBe(callerManager);
+      const callerManager = built.providerManager;
+      const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        config,
+        mcpRuntime: built.mcpRuntime,
+      });
+      try {
+        expect(captureProviderManager(agent)).toBe(callerManager);
+        const events: AgentEvent[] = await drain(agent.stream('hello'));
+        expect(countType(events, 'done')).toBe(1);
+        expect(captureProviderManager(agent)).toBe(callerManager);
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
@@ -360,28 +305,49 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
     try {
       const callerBus: MessageBus = built.messageBus;
       const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        runtimeFactoryBindings: built.runtimeFactoryBindings,
         config: built.config,
+        mcpRuntime: built.mcpRuntime,
         messageBus: callerBus,
       });
-      expect(captureAgentMessageBus(agent)).toBe(callerBus);
+      try {
+        expect(captureAgentMessageBus(agent)).toBe(callerBus);
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
   });
 
-  it('T6d no Config.getMessageBus (CRIT-2): fromConfig({ config }) WITHOUT messageBus builds exactly one bus from config.getPolicyEngine() and never reads a bus off the Config — a turn still drives and exactly one bus governs @requirement:REQ-001 @scenario:single-bus @given:a Config with no caller-supplied messageBus and NO getMessageBus method @when:fromConfig({ config }) and a single stream turn @then:the turn drives without crashing and the runtime has exactly one non-null bus', async () => {
+  it('T6d no Config.getMessageBus (CRIT-2): fromConfig({ config, mcpRuntime: built.mcpRuntime }) WITHOUT messageBus builds exactly one bus from config.getPolicyEngine() and never reads a bus off the Config — a turn still drives and exactly one bus governs @requirement:REQ-001 @scenario:single-bus @given:a Config with no caller-supplied messageBus and NO getMessageBus method @when:fromConfig({ config }) and a single stream turn @then:the turn drives without crashing and the runtime has exactly one non-null bus', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
       const config = built.config;
       expect(
         typeof (config as unknown as { getMessageBus?: unknown }).getMessageBus,
       ).toBe('undefined');
-      const agent: Agent = await fromConfig({ config });
-      const bus = captureAgentMessageBus(agent);
-      expect(bus).toBeDefined();
-      expect(bus).not.toBeNull();
-      const events: AgentEvent[] = await drain(agent.stream('hello'));
-      expect(countType(events, 'done')).toBe(1);
+      const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        config,
+        mcpRuntime: built.mcpRuntime,
+      });
+      try {
+        const bus = captureAgentMessageBus(agent);
+        expect(bus).toBeDefined();
+        expect(bus).not.toBeNull();
+        const events: AgentEvent[] = await drain(agent.stream('hello'));
+        expect(countType(events, 'done')).toBe(1);
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
@@ -390,7 +356,15 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
   it('T7 ownership: agent.dispose() does NOT dispose a fromConfig-supplied Config — the caller Config agentClient is NOT torn down @requirement:REQ-001.3 @scenario:caller-owned-config @given:a fromConfig agent over a caller-supplied Config @when:agent.dispose() runs @then:agentClientDisposed(probe) === false (the caller retains ownership of the Config lifecycle)', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({ config: built.config });
+      const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        runtimeFactoryBindings: built.runtimeFactoryBindings,
+        config: built.config,
+        mcpRuntime: built.mcpRuntime,
+      });
       const probe: DisposalProbe = captureProbe(agent);
       expect(agentClientDisposed(probe)).toBe(false);
       await agent.dispose();
@@ -445,7 +419,13 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
       expect(before).toBeGreaterThanOrEqual(1);
 
       const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        runtimeFactoryBindings: built.runtimeFactoryBindings,
         config: built.config,
+        mcpRuntime: built.mcpRuntime,
         messageBus: callerBus,
       });
       await agent.dispose();
@@ -468,9 +448,21 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
   it('T10 smoke: a single turn via agent.stream() over the FakeProvider fixture yields exactly one done event @requirement:REQ-INT-001 @scenario:turn-drive @given:a fromConfig agent over the plain-text fixture @when:agent.stream("hello") is drained @then:exactly one done event is emitted', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({ config: built.config });
-      const events: AgentEvent[] = await drain(agent.stream('hello'));
-      expect(countType(events, 'done')).toBe(1);
+      const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        runtimeFactoryBindings: built.runtimeFactoryBindings,
+        config: built.config,
+        mcpRuntime: built.mcpRuntime,
+      });
+      try {
+        const events: AgentEvent[] = await drain(agent.stream('hello'));
+        expect(countType(events, 'done')).toBe(1);
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
@@ -486,10 +478,20 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
           const built = await buildCliStyleConfig('plain-text.jsonl');
           try {
             const agent: Agent = await fromConfig({
+              settingsOwner: built.settingsOwner,
+              settingsService: built.settingsService,
+              agentClient: built.agentClient,
+              providerManager: built.providerManager,
+              runtimeFactoryBindings: built.runtimeFactoryBindings,
               config: built.config,
+              mcpRuntime: built.mcpRuntime,
               sessionId,
             });
-            return internalConfig(agent) === built.config;
+            try {
+              return internalConfig(agent) === built.config;
+            } finally {
+              await agent.dispose();
+            }
           } finally {
             await built.cleanup();
           }
@@ -507,10 +509,20 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
           const built = await buildCliStyleConfig('plain-text.jsonl');
           try {
             const agent: Agent = await fromConfig({
+              settingsOwner: built.settingsOwner,
+              settingsService: built.settingsService,
+              agentClient: built.agentClient,
+              providerManager: built.providerManager,
+              runtimeFactoryBindings: built.runtimeFactoryBindings,
               config: built.config,
+              mcpRuntime: built.mcpRuntime,
               sessionId,
             });
-            return captureRuntimeId(agent) === sessionId;
+            try {
+              return captureRuntimeId(agent) === sessionId;
+            } finally {
+              await agent.dispose();
+            }
           } finally {
             await built.cleanup();
           }
@@ -533,7 +545,13 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
           async (subset) => {
             const built = await buildCliStyleConfig('plain-text.jsonl');
             try {
-              const opts: Record<string, unknown> = { config: built.config };
+              const opts: Record<string, unknown> = {
+                settingsService: built.settingsService,
+                config: built.config,
+                agentClient: built.agentClient,
+                providerManager: built.providerManager,
+                mcpRuntime: built.mcpRuntime,
+              };
               if (subset.withApproval) {
                 opts['onApproval'] = () => ({
                   outcome: ToolConfirmationOutcome.ProceedOnce,
@@ -548,7 +566,11 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
               const agent: Agent = await fromConfig(
                 opts as unknown as Parameters<typeof fromConfig>[0],
               );
-              return internalConfig(agent) === built.config;
+              try {
+                return internalConfig(agent) === built.config;
+              } finally {
+                await agent.dispose();
+              }
             } finally {
               await built.cleanup();
             }
@@ -571,7 +593,13 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
           async (subset) => {
             const built = await buildCliStyleConfig('plain-text.jsonl');
             try {
-              const opts: Record<string, unknown> = { config: built.config };
+              const opts: Record<string, unknown> = {
+                settingsService: built.settingsService,
+                config: built.config,
+                agentClient: built.agentClient,
+                providerManager: built.providerManager,
+                mcpRuntime: built.mcpRuntime,
+              };
               if (subset.withApproval) {
                 opts['onApproval'] = () => ({
                   outcome: ToolConfirmationOutcome.ProceedOnce,
@@ -583,8 +611,12 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
               const agent: Agent = await fromConfig(
                 opts as unknown as Parameters<typeof fromConfig>[0],
               );
-              const callerManager = built.config.getProviderManager();
-              return captureProviderManager(agent) === callerManager;
+              try {
+                const callerManager = built.providerManager;
+                return captureProviderManager(agent) === callerManager;
+              } finally {
+                await agent.dispose();
+              }
             } finally {
               await built.cleanup();
             }
@@ -604,11 +636,21 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
           try {
             const callerBus: MessageBus = built.messageBus;
             const agent: Agent = await fromConfig({
+              settingsOwner: built.settingsOwner,
+              settingsService: built.settingsService,
+              agentClient: built.agentClient,
+              providerManager: built.providerManager,
+              runtimeFactoryBindings: built.runtimeFactoryBindings,
               config: built.config,
+              mcpRuntime: built.mcpRuntime,
               messageBus: callerBus,
               sessionId,
             });
-            return captureAgentMessageBus(agent) === callerBus;
+            try {
+              return captureAgentMessageBus(agent) === callerBus;
+            } finally {
+              await agent.dispose();
+            }
           } finally {
             await built.cleanup();
           }
@@ -626,11 +668,21 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
           const built = await buildCliStyleConfig('plain-text.jsonl');
           try {
             const agent: Agent = await fromConfig({
+              settingsOwner: built.settingsOwner,
+              settingsService: built.settingsService,
+              agentClient: built.agentClient,
+              providerManager: built.providerManager,
+              runtimeFactoryBindings: built.runtimeFactoryBindings,
               config: built.config,
+              mcpRuntime: built.mcpRuntime,
               sessionId,
             });
-            const events: AgentEvent[] = await drain(agent.stream('hello'));
-            return countType(events, 'done') === 1;
+            try {
+              const events: AgentEvent[] = await drain(agent.stream('hello'));
+              return countType(events, 'done') === 1;
+            } finally {
+              await agent.dispose();
+            }
           } finally {
             await built.cleanup();
           }
@@ -649,14 +701,24 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
           try {
             const callerBus: MessageBus = built.messageBus;
             const agent: Agent = await fromConfig({
+              settingsOwner: built.settingsOwner,
+              settingsService: built.settingsService,
+              agentClient: built.agentClient,
+              providerManager: built.providerManager,
+              runtimeFactoryBindings: built.runtimeFactoryBindings,
               config: built.config,
+              mcpRuntime: built.mcpRuntime,
               messageBus: callerBus,
               sessionId,
             });
-            return (
-              internalConfig(agent) === built.config &&
-              captureAgentMessageBus(agent) === callerBus
-            );
+            try {
+              return (
+                internalConfig(agent) === built.config &&
+                captureAgentMessageBus(agent) === callerBus
+              );
+            } finally {
+              await agent.dispose();
+            }
           } finally {
             await built.cleanup();
           }
@@ -675,32 +737,22 @@ describe('fromConfig behavior @plan:PLAN-20260621-COREAPIREMED.P08 @requirement:
 // anything absent — while NEVER overriding caller-supplied factories.
 
 describe('fromConfig agent-owned assembly @plan:ISSUE-3222 @requirement:REQ-3222-AC2', () => {
-  it('T2a adopting a factory-less minimal Config yields a working agent: the client initializes, a scheduler is creatable, and the shipped task tool is registered @requirement:REQ-3222-AC2 @scenario:factory-less-adoption @given:a minimal Config carrying NO agentClientFactory, toolSchedulerFactory, or taskToolRegistration @when:fromConfig({ config, sessionId, messageBus }) @then:the Config agent client reports initialized, getOrCreateScheduler produces a scheduler, and the tool surface lists the shipped "task" tool', async () => {
+  it('T2a adopting a factory-less minimal Config yields a working Agent client and registers the shipped task tool @requirement:REQ-3222-AC2 @scenario:factory-less-adoption @given:a minimal Config carrying NO agentClientFactory, toolSchedulerFactory, or taskToolRegistration @when:fromConfig({ config, sessionId, messageBus }) @then:the Config agent client reports initialized and the tool surface lists the shipped "task" tool', async () => {
     const built = await buildFactoryLessConfig('plain-text.jsonl');
     const runtimeId = 'issue3222-fromconfig-factoryless';
     try {
       const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        runtimeFactoryBindings: built.runtimeFactoryBindings,
         config: built.config,
         sessionId: runtimeId,
         messageBus: built.messageBus,
+        policyOwner: built.policyOwner,
       });
       try {
-        const config = internalConfig(agent);
-
-        const scheduler = await config.getOrCreateScheduler(
-          agent,
-          'session',
-          {
-            outputUpdateHandler: vi.fn(),
-            onAllToolCallsComplete: vi.fn(),
-            getPreferredEditor: vi.fn(),
-            onEditorClose: vi.fn(),
-          },
-          undefined,
-          { messageBus: built.messageBus },
-        );
-        expect(scheduler).toBeDefined();
-
         const names = agent.tools.list().map((tool) => tool.name);
         expect(names).toContain('task');
 
@@ -709,22 +761,39 @@ describe('fromConfig agent-owned assembly @plan:ISSUE-3222 @requirement:REQ-3222
         // design in AgentClient (same as the CLI-style adoption path).
         const events: AgentEvent[] = await drain(agent.stream('hello'));
         expect(countType(events, 'done')).toBe(1);
-        expect(config.getAgentClient().isInitialized()).toBe(true);
+        expect(agent.agentClient.isInitialized()).toBe(true);
       } finally {
         await agent.dispose();
       }
     } finally {
-      await disposeCliRuntime(runtimeId);
       await built.cleanup();
     }
   });
 
-  it('T2b caller-supplied factories WIN: adoption keeps exactly the caller instances (identity) and the agent still drives a turn @requirement:REQ-3222-AC2 @scenario:caller-wins @given:a minimal Config carrying caller-supplied agentClientFactory, toolSchedulerFactory, and taskToolRegistration @when:fromConfig({ config, sessionId }) @then:all three Config getters return the SAME caller instances after adoption and a stream turn completes', async () => {
+  it('T2b caller-supplied factories WIN: adoption keeps exactly the caller instances (identity) and the agent still drives a turn @requirement:REQ-3222-AC2 @scenario:caller-wins @given:a minimal Config carrying caller-supplied agentClientFactory, toolSchedulerFactory, and taskToolRegistration @when:fromConfig({ config, sessionId }) @then:the initialized client comes from the caller factory and the registered task class is preserved and a stream turn completes', async () => {
     const runtimeId = 'issue3222-fromconfig-callercwins';
+    const callerClients = new Set<ReturnType<typeof createAgentClient>>();
     const callerFactories: CallerAgentRuntimeFactories = {
-      agentClientFactory: (config, runtimeState) =>
-        createAgentClient(config, runtimeState),
-      toolSchedulerFactory: (options) => createToolScheduler(options),
+      agentClientFactory: (
+        config,
+        runtimeState,
+        readMcpInstructions = () => undefined,
+        mediaStore,
+        workspacePaths,
+        instructions,
+      ) => {
+        const client = createAgentClient(
+          config,
+          runtimeState,
+          readMcpInstructions,
+          mediaStore,
+          requireFixturePaths(workspacePaths),
+          requireInstructionReads(instructions),
+        );
+        callerClients.add(client);
+        return client;
+      },
+      toolSchedulerFactory: () => ({ dispose: () => {} }),
       taskToolRegistration: createTaskRegistration(),
     };
     const built = await buildFactoryLessConfig(
@@ -733,20 +802,18 @@ describe('fromConfig agent-owned assembly @plan:ISSUE-3222 @requirement:REQ-3222
     );
     try {
       const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        runtimeFactoryBindings: built.runtimeFactoryBindings,
         config: built.config,
         sessionId: runtimeId,
+        toolSchedulerFactory: callerFactories.toolSchedulerFactory,
       });
       try {
-        const config = internalConfig(agent);
-        expect(config.getAgentClientFactory()).toBe(
-          callerFactories.agentClientFactory,
-        );
-        expect(config.getToolSchedulerFactory()).toBe(
-          callerFactories.toolSchedulerFactory,
-        );
-        expect(config.getTaskToolRegistration()).toBe(
-          callerFactories.taskToolRegistration,
-        );
+        expect(callerClients.has(agent.agentClient)).toBe(true);
+        expect(agent.tools.list().map((tool) => tool.name)).toContain('task');
 
         const events: AgentEvent[] = await drain(agent.stream('hello'));
         expect(countType(events, 'done')).toBe(1);
@@ -754,20 +821,37 @@ describe('fromConfig agent-owned assembly @plan:ISSUE-3222 @requirement:REQ-3222
         await agent.dispose();
       }
     } finally {
-      await disposeCliRuntime(runtimeId);
       await built.cleanup();
     }
   });
 
   it(
-    'T2b-PROP for any non-empty sessionId, caller-supplied factories keep their identity through adoption @requirement:REQ-3222-AC2 @scenario:caller-wins @given:any non-empty sessionId and a minimal Config with caller factories @when:fromConfig({ config, sessionId }) @then:every Config factory getter returns the caller instance',
+    'T2b-PROP for any non-empty sessionId, caller-supplied constructors produce the adopted client and task class @requirement:REQ-3222-AC2 @scenario:caller-wins @given:any non-empty sessionId and a minimal Config with caller factories @when:fromConfig({ config, sessionId }) @then:the adopted client was produced by the caller and the task class is preserved',
     async () => {
       await fc.assert(
         fc.asyncProperty(nonBlankStringArbitrary, async (sessionId) => {
+          const callerClients = new Set<ReturnType<typeof createAgentClient>>();
           const callerFactories: CallerAgentRuntimeFactories = {
-            agentClientFactory: (config, runtimeState) =>
-              createAgentClient(config, runtimeState),
-            toolSchedulerFactory: (options) => createToolScheduler(options),
+            agentClientFactory: (
+              config,
+              runtimeState,
+              readMcpInstructions = () => undefined,
+              mediaStore,
+              workspacePaths,
+              instructions,
+            ) => {
+              const client = createAgentClient(
+                config,
+                runtimeState,
+                readMcpInstructions,
+                mediaStore,
+                requireFixturePaths(workspacePaths),
+                requireInstructionReads(instructions),
+              );
+              callerClients.add(client);
+              return client;
+            },
+            toolSchedulerFactory: () => ({ dispose: () => {} }),
             taskToolRegistration: createTaskRegistration(),
           };
           const built = await buildFactoryLessConfig(
@@ -776,24 +860,24 @@ describe('fromConfig agent-owned assembly @plan:ISSUE-3222 @requirement:REQ-3222
           );
           try {
             const agent: Agent = await fromConfig({
+              settingsOwner: built.settingsOwner,
+              settingsService: built.settingsService,
+              agentClient: built.agentClient,
+              providerManager: built.providerManager,
+              runtimeFactoryBindings: built.runtimeFactoryBindings,
               config: built.config,
               sessionId,
+              toolSchedulerFactory: callerFactories.toolSchedulerFactory,
             });
             try {
-              const config = internalConfig(agent);
               return (
-                config.getAgentClientFactory() ===
-                  callerFactories.agentClientFactory &&
-                config.getToolSchedulerFactory() ===
-                  callerFactories.toolSchedulerFactory &&
-                config.getTaskToolRegistration() ===
-                  callerFactories.taskToolRegistration
+                callerClients.has(agent.agentClient) &&
+                agent.tools.list().some((tool) => tool.name === 'task')
               );
             } finally {
               await agent.dispose();
             }
           } finally {
-            await disposeCliRuntime(sessionId);
             await built.cleanup();
           }
         }),

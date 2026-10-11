@@ -32,16 +32,12 @@ import {
   type UnifiedTruncationResult,
 } from './toolResultTruncator.js';
 
-type CompletionSettingsService = { get: (key: string) => unknown };
-
 export interface ProviderContentEnforcementDeps {
   historyService: HistoryService;
+  historyOrigin?: object;
   runtimeContext: AgentRuntimeContext;
   generationConfig: ModelGenerationSettings;
-  providerRuntimeNullable:
-    | { settingsService?: CompletionSettingsService }
-    | null
-    | undefined;
+  readCompletionBudgetSetting: () => unknown;
   logger: DebugLogger;
   ensureDensityOptimized: () => Promise<void>;
   performCompression: (
@@ -660,6 +656,7 @@ export class ProviderContentEnforcer {
     await this.deps.historyService.replaceAll(
       [...snapshot.history],
       this.deps.runtimeContext.state.model,
+      { origin: this.deps.historyOrigin },
     );
     if (snapshot.cacheAnchorSeq === 0) {
       this.deps.historyService.resetCacheAnchorSeq();
@@ -708,6 +705,7 @@ export class ProviderContentEnforcer {
           await this.deps.historyService.replaceAll(
             [...invalidateResponsesStatefulChain(newHistory)],
             this.deps.runtimeContext.state.model,
+            { origin: this.deps.historyOrigin },
           );
           candidate.installed = true;
           this.deps.historyService.resetCacheAnchorSeq();
@@ -848,7 +846,7 @@ export class ProviderContentEnforcer {
       this.deps.generationConfig,
       model,
       provider,
-      this.deps.providerRuntimeNullable?.settingsService,
+      this.deps.readCompletionBudgetSetting(),
       limit,
     );
     const marginAdjustedLimit = computeMarginAdjustedLimit(limit);

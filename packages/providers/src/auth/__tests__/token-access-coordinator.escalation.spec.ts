@@ -1,3 +1,4 @@
+import { createProviderConfigFixture } from '../../runtime/__tests__/provider-config-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -7,6 +8,7 @@
 import { assertInstanceOf } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { BucketStats } from '@vybestack/llxprt-code-auth';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OAuthBucketManager } from '../OAuthBucketManager.js';
 import {
   InteractiveAuthCancelledError,
@@ -17,7 +19,6 @@ import {
 } from '../interactive-auth-coordinator.js';
 import { ProactiveRenewalManager } from '../proactive-renewal-manager.js';
 import { ProviderRegistry } from '../provider-registry.js';
-import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
 import { TokenAccessCoordinator } from '../token-access-coordinator.js';
 import type {
   AuthCompletionOptions,
@@ -27,12 +28,7 @@ import type {
   OAuthTokenRequestMetadata,
   TokenStore,
 } from '../types.js';
-import {
-  resetCliRuntimeRegistryForTesting,
-  setDefaultCliRuntimeId,
-  upsertRuntimeEntry,
-  type RuntimeKind,
-} from '../../runtime/runtimeRegistry.js';
+import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 const PROVIDER = 'codex';
 const BUCKET = 'work';
@@ -186,7 +182,22 @@ interface AuthHarness {
   readonly events: string[];
 }
 
-function createHarness(): AuthHarness {
+function createHarness(
+  timeoutMs = 5_000,
+  runtimeKind: RuntimeKind = 'subagent',
+): AuthHarness {
+  const {
+    settingsService: configSettingsService,
+    settingsOwner: configSettingsOwner,
+  } = createProviderConfigFixture({
+    sessionId: 'escalation',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    debugMode: false,
+    model: 'gpt-5',
+    settingsService: new SettingsService(),
+  });
+  configSettingsService.set('auth.interactiveTimeoutMs', timeoutMs);
   const events: string[] = [];
   const tokenStore = new InMemoryTokenStore();
   const registry = new ProviderRegistry();
@@ -211,17 +222,16 @@ function createHarness(): AuthHarness {
     renewalManager,
     bucketManager,
     facade,
+    undefined,
+    () => configSettingsService.getCurrentProfileName(),
+    () => Boolean(configSettingsOwner.readNamedParameter('auth-bucket-prompt')),
+    () => ({ runtimeKind, runtimeId: `p04-${runtimeKind}` }),
+    () => configSettingsService.get('auth.interactiveTimeoutMs'),
   );
   coordinator.setAuthenticator(facade);
   coordinator.setGetProfileBucketsDelegate(async () => [BUCKET]);
 
   return { coordinator, facade, tokenStore, events };
-}
-
-function registerRuntime(runtimeKind: RuntimeKind): void {
-  const runtimeId = `p04-${runtimeKind}`;
-  upsertRuntimeEntry(runtimeId, { runtimeKind });
-  setDefaultCliRuntimeId(runtimeId);
 }
 
 function getOnlyChallenge(
@@ -241,27 +251,16 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
   beforeEach(async () => {
     await interactiveAuthCoordinator.dispose();
     interactiveAuthCoordinator.unbindHost();
-    resetCliRuntimeRegistryForTesting();
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: () => undefined,
-      getProviderManager: () => undefined,
-      getRuntimeContext: () => undefined,
-      getCurrentProfileName: () => null,
-      getInteractiveAuthTimeoutMs: () => 5_000,
-    });
   });
 
   afterEach(async () => {
     await interactiveAuthCoordinator.dispose();
     interactiveAuthCoordinator.unbindHost();
-    resetCliRuntimeRegistryForTesting();
-    oauthRuntimeBridge.setAccessors(undefined);
   });
 
   it('escalates subagent lazy auth to the host and re-reads the persisted token before request work', async () => {
     const harness = createHarness();
     const challenges: InteractiveAuthChallenge[] = [];
-    registerRuntime('subagent');
     interactiveAuthCoordinator.bindHost(async (challenge) => {
       challenges.push(challenge);
       harness.events.push('host-challenge');
@@ -294,7 +293,6 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
   it('marks escalation after expired credential refresh failure as reauthentication', async () => {
     const harness = createHarness();
     const challenges: InteractiveAuthChallenge[] = [];
-    registerRuntime('subagent');
     await harness.tokenStore.saveToken(
       PROVIDER,
       { ...makeToken('expired-token'), expiry: 1 },
@@ -319,7 +317,6 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
 
   it('fails immediately when a subagent has no interactive host', async () => {
     const harness = createHarness();
-    registerRuntime('subagent');
 
     const auth = harness.coordinator.getToken(PROVIDER, BUCKET);
 
@@ -330,7 +327,6 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
 
   it('surfaces host cancellation as a typed host-directed error', async () => {
     const harness = createHarness();
-    registerRuntime('subagent');
     interactiveAuthCoordinator.bindHost(async () => {
       throw new DOMException('Host cancelled authentication', 'AbortError');
     });
@@ -353,7 +349,6 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
 
   it('carries a host failure message in a typed interactive authentication error', async () => {
     const harness = createHarness();
-    registerRuntime('subagent');
     interactiveAuthCoordinator.bindHost(async () => {
       throw new Error('Host authorization code was rejected');
     });
@@ -375,15 +370,7 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
   });
 
   it('surfaces host session expiry as a typed interactive authentication error', async () => {
-    const harness = createHarness();
-    registerRuntime('subagent');
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: () => undefined,
-      getProviderManager: () => undefined,
-      getRuntimeContext: () => undefined,
-      getCurrentProfileName: () => null,
-      getInteractiveAuthTimeoutMs: () => 200,
-    });
+    const harness = createHarness(200);
     interactiveAuthCoordinator.bindHost(
       () => new Promise<void>(() => undefined),
     );
@@ -404,9 +391,8 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
   });
 
   it('routes a host runtime through the coordinator when a host is bound', async () => {
-    const harness = createHarness();
+    const harness = createHarness(5_000, 'cli-interactive');
     const challenges: InteractiveAuthChallenge[] = [];
-    registerRuntime('cli-interactive');
     interactiveAuthCoordinator.bindHost(async (challenge) => {
       challenges.push(challenge);
       await harness.tokenStore.saveToken(
@@ -427,8 +413,7 @@ describe('TokenAccessCoordinator host-owned authentication escalation', () => {
   });
 
   it('preserves the legacy direct path for a host runtime without a bound host', async () => {
-    const harness = createHarness();
-    registerRuntime('cli-interactive');
+    const harness = createHarness(5_000, 'cli-interactive');
 
     const token = await harness.coordinator.getToken(PROVIDER, BUCKET);
 

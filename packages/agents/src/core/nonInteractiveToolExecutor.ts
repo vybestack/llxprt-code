@@ -1,81 +1,61 @@
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ApprovalMode } from '@vybestack/llxprt-code-core';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import type {
+  ToolExecutionPolicy,
+  ToolGovernance,
+} from '@vybestack/llxprt-code-tools';
+import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import {
   type ToolCallRequestInfo,
   DEFAULT_AGENT_ID,
 } from '@vybestack/llxprt-code-core/core/turn.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { SchedulerCallbacks } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
+import type {
+  SessionSchedulerOwner,
+  SchedulerLease,
+} from '../session/sessionSchedulerOwner.js';
 import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { SchedulerHandle } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
 import { toolFailureMarker } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { type CompletedToolCall } from './coreToolScheduler.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 
 /**
  * Configuration subset required for non-interactive tool execution.
- * Acquires and releases the session scheduler registry through
- * getOrCreateScheduler/disposeScheduler.
  */
 export type ToolExecutionConfig = Pick<
   Config,
-  | 'getToolRegistry'
-  | 'getEphemeralSettings'
-  | 'getEphemeralSetting'
-  | 'getExcludeTools'
-  | 'getSessionId'
-  | 'getTelemetryLogPromptsEnabled'
-  | 'getOrCreateScheduler'
-  | 'disposeScheduler'
+  'getExcludeTools' | 'getSessionId' | 'getTelemetryLogPromptsEnabled'
 > &
-  Partial<Pick<Config, 'getAllowedTools' | 'getApprovalMode'>>;
+  Partial<Pick<Config, 'getAllowedTools' | 'getApprovalMode'>> & {
+    telemetry: RootTelemetry;
+    readApprovalMode?: () => ApprovalMode;
+    readExecutionPolicy(): ToolExecutionPolicy;
+    readGovernance(): ToolGovernance;
+    getToolRegistry(): ToolSelection | undefined;
+  };
 
-/**
- * Executes a single tool call non-interactively by acquiring the shared
- * CoreToolScheduler from the session scheduler registry.
- *
- * This wrapper:
- * 1. Acquires the registry scheduler (via config.getOrCreateScheduler) with
- *    interactiveMode: false under the caller-supplied owner object and the
- *    'subagent' purpose
- * 2. Schedules the tool call
- * 3. Returns the completed result
- *
- * Non-interactive mode means:
- * - The scheduler uses toolContextInteractiveMode: false so tools know they're non-interactive
- * - No live output updates are provided
- *
- * Benefits of sharing one scheduler per owner:
- * - Scheduler is acquired from the per-Config registry per call and disposed when the acquisition count reaches zero, so no scheduler or subscription outlives its users
- * - Proper refcount-based lifecycle management
- * - Consistent tool governance path with interactive mode
- *
- * Note: Emoji filtering is handled by the individual tools (edit.ts, write-file.ts)
- * so it is not duplicated here.
- */
 async function createScheduler(
-  config: ToolExecutionConfig,
-  owner: object,
+  createOwner: (callbacks: SchedulerCallbacks) => SessionSchedulerOwner,
   completionResolver: ((calls: CompletedToolCall[]) => void) | null,
-  dependencies?: { messageBus?: MessageBus },
-): Promise<SchedulerHandle> {
-  return config.getOrCreateScheduler(
-    owner,
-    'subagent',
-    {
-      getPreferredEditor: () => undefined,
-      onEditorClose: () => {},
-      onAllToolCallsComplete: async (completedToolCalls) => {
-        completionResolver?.(completedToolCalls);
-      },
+): Promise<SchedulerLease> {
+  const owner = createOwner({
+    getPreferredEditor: () => undefined,
+    onEditorClose: () => {},
+    onAllToolCallsComplete: async (calls) => {
+      completionResolver?.(calls);
     },
-    { interactiveMode: false },
-    dependencies,
-  );
+  });
+  const lease = owner.acquire();
+  await lease.ready;
+  return lease;
 }
 function isBlockedByHookRestriction(request: ToolCallRequestInfo): boolean {
   const allowedTools = request.hookRestrictedAllowedTools;
@@ -87,20 +67,10 @@ function isBlockedByHookRestriction(request: ToolCallRequestInfo): boolean {
 }
 
 export async function executeToolCall(
-  config: ToolExecutionConfig,
+  createOwner: (callbacks: SchedulerCallbacks) => SessionSchedulerOwner,
   toolCallRequest: ToolCallRequestInfo,
   abortSignal?: AbortSignal,
-  dependencies?: {
-    messageBus?: MessageBus;
-    /**
-     * Registry owner for the scheduler acquisition: the object identifying
-     * the executing context (e.g. the subagent processing context). Identity,
-     * not any label string, keys the entry, and the same object must be
-     * supplied for every call of one execution so acquire and release
-     * balance.
-     */
-    owner: object;
-  },
+  hookOwner?: HookExecutionOwner,
 ): Promise<CompletedToolCall> {
   const startTime = Date.now();
 
@@ -131,25 +101,11 @@ export async function executeToolCall(
     completionResolver = resolve;
   });
 
-  // Fail fast: the owner is the registry key and only the caller knows the
-  // executing context; there is no valid derivation from the config alone.
-  const owner = dependencies?.owner;
-  if (owner === undefined) {
-    throw new Error(
-      'executeToolCall requires an owner object identifying the executing context.',
-    );
-  }
-
-  const scheduler = await createScheduler(
-    config,
-    owner,
-    completionResolver,
-    dependencies,
-  );
+  const scheduler = await createScheduler(createOwner, completionResolver);
 
   try {
     const effectiveSignal = internalAbortController.signal;
-    await scheduler.schedule([toolCallRequest], effectiveSignal);
+    await scheduler.schedule([toolCallRequest], effectiveSignal, hookOwner);
 
     const completedCalls = await completionPromise;
     if (completedCalls.length !== 1) {
@@ -177,12 +133,7 @@ export async function executeToolCall(
     if (abortSignal && parentAbortHandler) {
       abortSignal.removeEventListener('abort', parentAbortHandler);
     }
-    if (internalAbortController.signal.aborted) {
-      scheduler.cancelAll();
-    }
-    // Pass the acquired handle so a release racing a disposeAll sweep can
-    // never dispose a replacement entry it did not acquire.
-    config.disposeScheduler(owner, 'subagent', scheduler);
+    await scheduler.release();
   }
 }
 

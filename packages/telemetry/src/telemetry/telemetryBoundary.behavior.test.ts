@@ -16,12 +16,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { logApiRequest, logApiResponse } from './loggers.js';
 import { ApiRequestEvent, ApiResponseEvent } from './events/api-events.js';
-import {
-  flushTelemetry,
-  initializeTelemetry,
-  isTelemetrySdkInitialized,
-  shutdownTelemetry,
-} from './sdk.js';
+import { createRootTelemetry, type RootTelemetry } from './root-telemetry.js';
 import type { TelemetryConfig } from '../internal/interfaces.js';
 
 const SENTINEL = 'SENTINEL-PROMPT-CONTENT-3315';
@@ -73,6 +68,7 @@ function allTelemetryFiles(dir: string, outfile: string): string[] {
 
 describe('telemetry outfile boundary (REQ-3315.7)', () => {
   let outfile = '';
+  let selected: RootTelemetry | undefined;
 
   beforeEach(() => {
     const directory = mkdtempSync(join(tmpdir(), 'llxprt-tel-boundary-'));
@@ -82,9 +78,7 @@ describe('telemetry outfile boundary (REQ-3315.7)', () => {
 
   afterEach(async () => {
     try {
-      if (isTelemetrySdkInitialized()) {
-        await shutdownTelemetry(makeConfig(outfile));
-      }
+      await selected?.close();
     } finally {
       for (const directory of directories.splice(0)) {
         rmSync(directory, { recursive: true, force: true });
@@ -94,8 +88,14 @@ describe('telemetry outfile boundary (REQ-3315.7)', () => {
 
   it('bounds the outfile tree and keeps prompt content out with logPrompts:false', async () => {
     const config = makeConfig(outfile);
-    initializeTelemetry(config);
-    expect(isTelemetrySdkInitialized()).toBe(true);
+    selected = await createRootTelemetry({
+      enabled: true,
+      sessionId: config.getSessionId(),
+      outfile,
+      maxBytes: config.getTelemetryOutfileMaxBytes(),
+      maxFiles: config.getTelemetryOutfileMaxFiles(),
+    });
+    expect(selected.isEnabled()).toBe(true);
 
     for (let i = 0; i < 50; i++) {
       // Large unique body so any leak of request_text would be verbatim and huge.
@@ -106,6 +106,7 @@ describe('telemetry outfile boundary (REQ-3315.7)', () => {
           `prompt-${i}`,
           SENTINEL + '-' + 'x'.repeat(100 * 1024) + `-${i}`,
         ),
+        selected,
       );
       logApiResponse(
         config,
@@ -120,11 +121,12 @@ describe('telemetry outfile boundary (REQ-3315.7)', () => {
           },
           SENTINEL + '-RESP-' + 'y'.repeat(100 * 1024) + `-${i}`,
         ),
+        selected,
       );
     }
 
-    await flushTelemetry();
-    await shutdownTelemetry(config);
+    await selected.flush();
+    await selected.close();
 
     const files = allTelemetryFiles(dirname(outfile), outfile);
     const cap = 64 * 1024;
@@ -166,8 +168,14 @@ describe('telemetry outfile boundary (REQ-3315.7)', () => {
       getTelemetryOutfileMaxBytes: () => cap,
       getTelemetryOutfileMaxFiles: () => maxFiles,
     });
-    initializeTelemetry(config);
-    expect(isTelemetrySdkInitialized()).toBe(true);
+    selected = await createRootTelemetry({
+      enabled: true,
+      sessionId: config.getSessionId(),
+      outfile,
+      maxBytes: config.getTelemetryOutfileMaxBytes(),
+      maxFiles: config.getTelemetryOutfileMaxFiles(),
+    });
+    expect(selected.isEnabled()).toBe(true);
 
     // Redacted records are a few hundred bytes each; with a 2 KiB cap this
     // drives multiple rotations and exercises retention pruning.
@@ -179,11 +187,12 @@ describe('telemetry outfile boundary (REQ-3315.7)', () => {
           `prompt-${i}`,
           SENTINEL + '-' + 'x'.repeat(100 * 1024) + `-${i}`,
         ),
+        selected,
       );
     }
 
-    await flushTelemetry();
-    await shutdownTelemetry(config);
+    await selected.flush();
+    await selected.close();
 
     const base = basename(outfile);
     const entries = readdirSync(dirname(outfile));

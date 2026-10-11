@@ -13,8 +13,6 @@ import type { Agent, AgentConfig } from '@vybestack/llxprt-code-agents';
 import { createAgent } from '@vybestack/llxprt-code-agents';
 import { debugLogger } from '@vybestack/llxprt-code-core';
 import {
-  FileDiscoveryService,
-  loadServerHierarchicalMemory,
   LLXPRT_CONFIG_DIR,
   PLACEHOLDER_MODEL,
   UNCONFIGURED_PROVIDER,
@@ -53,10 +51,6 @@ export async function createTaskAgent(
   taskId: string,
 ): Promise<Agent> {
   const workspaceDir = process.cwd();
-  const { memoryContent, fileCount } = await loadWorkspaceMemory(
-    workspaceDir,
-    extensions,
-  );
   const agentConfig: AgentConfig = {
     provider: resolveProviderFromEnv(),
     model: PLACEHOLDER_MODEL,
@@ -65,7 +59,6 @@ export async function createTaskAgent(
     debugMode: process.env['DEBUG'] === 'true',
     coreTools: settings.coreTools,
     excludeTools: settings.excludeTools,
-    memory: memoryContent,
     approvalMode: getApprovalMode(),
     mcpServers: mergeMcpServers(settings, extensions),
     telemetry: createTelemetrySettings(settings),
@@ -82,7 +75,6 @@ export async function createTaskAgent(
       forceConfirmations: false,
     },
     settings: {
-      llxprtMdFileCount: fileCount,
       showMemoryUsage: settings.showMemoryUsage ?? false,
     },
   };
@@ -114,22 +106,6 @@ function createTelemetrySettings(settings: Settings): AgentConfig['telemetry'] {
     enabled: settings.telemetry?.enabled,
     logPrompts: settings.telemetry?.logPrompts,
   };
-}
-
-async function loadWorkspaceMemory(
-  workspaceDir: string,
-  extensions: LlxprtExtension[],
-): Promise<{ memoryContent: string; fileCount: number }> {
-  const fileService = new FileDiscoveryService(workspaceDir);
-  return loadServerHierarchicalMemory(
-    workspaceDir,
-    [workspaceDir],
-    false,
-    fileService,
-    extensions,
-    // Folder trust integration pending; using permissive default for server mode.
-    true,
-  );
 }
 
 export function mergeMcpServers(

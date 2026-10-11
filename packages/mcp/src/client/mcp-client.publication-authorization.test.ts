@@ -3,6 +3,9 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createTestOAuthBinding } from './test-support/index.js';
+
+import { unsupportedApprovalPolicy } from './test-support/approval-policy.js';
 
 import { automock } from '../../../test-utils/src/automock.js';
 import { afterEach, describe, expect, it, vi, type Mock } from 'bun:test';
@@ -153,6 +156,8 @@ function createHarness(options: {
     },
   } as Config;
   const client = new McpClient(
+    createTestOAuthBinding(),
+    unsupportedApprovalPolicy(),
     'test-server',
     { command: 'test-command' },
     toolRegistry,

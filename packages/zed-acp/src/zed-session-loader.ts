@@ -1,3 +1,4 @@
+import { mapHistoryToSessionUpdates } from './zed-session-replay.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -136,7 +137,7 @@ export async function hasRecordedSessionFile(
  * empty history, yielding an empty array (zero replay updates).
  */
 export async function readAgentHistoryAsIContent(
-  agent: Agent,
+  agent: Pick<Agent, 'getHistory'>,
 ): Promise<readonly IContent[]> {
   return [...(await agent.getHistory())];
 }
@@ -149,7 +150,7 @@ export async function readAgentHistoryAsIContent(
  * disk-resume path's error semantics.
  */
 export async function readAgentHistoryForReplay(
-  agent: Agent,
+  agent: Pick<Agent, 'getHistory'>,
   sessionId: string,
 ): Promise<readonly IContent[]> {
   try {
@@ -167,7 +168,7 @@ export async function readAgentHistoryForReplay(
  * (FINDING C3).
  */
 function chatsDirFor(config: Config): string {
-  return config.storage.getProjectChatsDir();
+  return config.projectChatsDir;
 }
 
 /**
@@ -190,4 +191,18 @@ export function toLoadRequestError(
     rawDetail ||
     (error instanceof Error ? error.constructor.name : 'unknown error');
   return acp.RequestError.internalError({ sessionId, reason: detail }, detail);
+}
+
+export async function streamZedHistory(
+  sessionId: string,
+  items: readonly IContent[],
+  send: (update: acp.SessionUpdate) => Promise<void>,
+): Promise<void> {
+  for (const update of mapHistoryToSessionUpdates(items)) {
+    try {
+      await send(update);
+    } catch (error) {
+      throw wrapReplayFailure(sessionId, error);
+    }
+  }
 }

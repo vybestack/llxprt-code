@@ -18,7 +18,7 @@ import type { SchedulerHandle } from './sessionExecutionServices.js';
 import type { SessionSchedulerRegistry } from './sessionSchedulerRegistry.js';
 import type { SchedulerPurpose } from './sessionSchedulerRegistry.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { ToolLookup } from '@vybestack/llxprt-code-tools';
 
 const debugLog = new DebugLogger('llxprt:session-scheduler-registry');
 
@@ -31,7 +31,7 @@ const debugLog = new DebugLogger('llxprt:session-scheduler-registry');
  */
 interface EntryConstructionDeps {
   messageBus?: MessageBus;
-  toolRegistry?: ToolRegistry;
+  toolRegistry?: ToolLookup;
 }
 
 type InFlightEntry = EntryConstructionDeps & {
@@ -68,7 +68,7 @@ export interface SessionSchedulerRegistryDeps {
   createScheduler(options: {
     interactiveMode?: boolean;
     messageBus?: MessageBus;
-    toolRegistry?: ToolRegistry;
+    toolRegistry?: ToolLookup;
   }): Promise<SchedulerHandle>;
 }
 
@@ -117,7 +117,7 @@ export class SessionSchedulerRegistryImpl implements SessionSchedulerRegistry {
     options?: {
       interactiveMode?: boolean;
       messageBus?: MessageBus;
-      toolRegistry?: ToolRegistry;
+      toolRegistry?: ToolLookup;
     },
   ): Promise<SchedulerHandle> {
     const interactiveMode = options?.interactiveMode ?? true;
@@ -204,7 +204,7 @@ export class SessionSchedulerRegistryImpl implements SessionSchedulerRegistry {
   private logConstructionDepMismatch(
     situation: 'reuse' | 'init-in-progress',
     entry: SchedulerEntry,
-    requested: { messageBus?: MessageBus; toolRegistry?: ToolRegistry },
+    requested: { messageBus?: MessageBus; toolRegistry?: ToolLookup },
   ): void {
     for (const dep of ['messageBus', 'toolRegistry'] as const) {
       const value = requested[dep];
@@ -225,7 +225,7 @@ export class SessionSchedulerRegistryImpl implements SessionSchedulerRegistry {
     interactiveMode: boolean,
     generation: number,
     messageBus: MessageBus | undefined,
-    toolRegistry: ToolRegistry | undefined,
+    toolRegistry: ToolLookup | undefined,
   ): Promise<SchedulerHandle> {
     const handle = await this.deps.createScheduler({
       interactiveMode,

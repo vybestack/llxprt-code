@@ -25,11 +25,8 @@ import {
   type ServerContentEvent,
   type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
-import {
-  logUserPrompt,
-  type UserPromptEvent,
-} from '@vybestack/llxprt-code-telemetry';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import { type UserPromptEvent } from '@vybestack/llxprt-code-telemetry';
+import type { StreamEventAgent } from './streamEventAgent.js';
 import { type LoadedSettings } from '../../../config/settings.js';
 import {
   type HistoryItemWithoutId,
@@ -62,9 +59,11 @@ import {
  * can be reused by both ContentEventDeps and StreamEventDeps without risk of
  * staleness (issue #2263).
  */
-function defaultGetContentPrefixIdentity(): string | null {
+function defaultGetContentPrefixIdentity(
+  agent: StreamEventAgent,
+): string | null {
   try {
-    return resolveContentPrefixIdentity(createCliModelIdentityRuntime());
+    return resolveContentPrefixIdentity(createCliModelIdentityRuntime(agent));
   } catch {
     return null;
   }
@@ -137,7 +136,7 @@ interface StreamEventHandlerDeps {
   // @plan:ISSUE-2376 — the Agent surface supplies named-tool lookup
   // (agent.tools.get) for @file processing; threaded alongside the #2384
   // StreamRuntime rather than through getToolRegistry.
-  agent: Agent;
+  agent: StreamEventAgent;
   settings: LoadedSettings;
   addItem: UseHistoryManagerReturn['addItem'];
   removeItems?: RemoveHistoryItems;
@@ -529,7 +528,10 @@ function useContextOverflowHandler(deps: StreamEventHandlerDeps) {
   return useCallback(
     (estimatedRequestTokenCount: number, remainingTokenCount: number) => {
       onCancelSubmit(true);
-      const limit = getTokenLimitForConfiguredContext(runtime);
+      const limit = getTokenLimitForConfiguredContext(
+        runtime,
+        deps.agent.getProviderContextLimit(),
+      );
       const isLessThan75Percent =
         limit > 0 && remainingTokenCount < limit * 0.75;
       let text = `Sending this message (${estimatedRequestTokenCount} tokens) might exceed the remaining context window limit (${remainingTokenCount} tokens).`;
@@ -538,7 +540,7 @@ function useContextOverflowHandler(deps: StreamEventHandlerDeps) {
           ' Please try reducing the size of your message or use the `/compress` command to compress the chat history.';
       addItem({ type: 'info', text }, Date.now());
     },
-    [addItem, runtime, onCancelSubmit],
+    [addItem, runtime, onCancelSubmit, deps.agent],
   );
 }
 
@@ -576,9 +578,11 @@ function useContentEventDeps(
       thinkingBlocksRef: deps.thinkingBlocksRef,
       turnCancelledRef: deps.turnCancelledRef,
       setPendingHistoryItem: deps.setPendingHistoryItem,
-      getContentPrefixIdentity: defaultGetContentPrefixIdentity,
+      getContentPrefixIdentity: () =>
+        defaultGetContentPrefixIdentity(deps.agent),
     }),
     [
+      deps.agent,
       deps.addItem,
       pendingResponse,
       deps.sanitizeContent,
@@ -596,15 +600,12 @@ function usePrepareQueryDeps(deps: StreamEventHandlerDeps): PrepareQueryDeps {
     () => ({
       runtime: deps.runtime,
       getToolHandle: (name: string) => deps.agent.tools.get(name),
+      findResource: (identifier: string) =>
+        deps.agent.mcp.findResource(identifier),
+      readResource: (server: string, uri: string) =>
+        deps.agent.mcp.readResource(server, uri),
       logUserPrompt: (event: UserPromptEvent) =>
-        logUserPrompt(
-          {
-            getSessionId: () => deps.runtime.session.getSessionId(),
-            getTelemetryLogPromptsEnabled: () =>
-              deps.runtime.settings.getTelemetryLogPromptsEnabled(),
-          },
-          event,
-        ),
+        deps.runtime.settings.logUserPrompt(event),
       addItem: deps.addItem,
       onDebugMessage: deps.onDebugMessage,
       handleShellCommand: deps.handleShellCommand,

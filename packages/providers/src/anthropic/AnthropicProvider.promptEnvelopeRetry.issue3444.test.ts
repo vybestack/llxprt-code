@@ -141,16 +141,6 @@ function setupProvider(): {
   );
   const { provider, runtime, settingsService: svc } = result;
   runtime.config ??= createRuntimeConfigStub(svc);
-  const ephemeralSettings: Record<string, unknown> = {
-    ...svc.getAllGlobalSettings(),
-    ...svc.getProviderSettings(provider.name),
-  };
-  runtime.config.getEphemeralSettings = () => ({ ...ephemeralSettings });
-  runtime.config.getEphemeralSetting = (key: string) => {
-    const providerValue = svc.getProviderSettings(provider.name)[key];
-    if (providerValue !== undefined) return providerValue;
-    return svc.get(key);
-  };
 
   return { provider, runtimeContext: runtime, settingsService: svc };
 }
@@ -195,6 +185,7 @@ describe('AnthropicProvider prompt-envelope retry (@issue:3444)', () => {
       runtime: runtimeContext,
       config: runtimeContext.config,
       ephemerals: { retries: 2, retrywait: 0 },
+      resolved: { streaming: true },
     } as Parameters<typeof createProviderCallOptions>[0]);
 
     // The agent seam mints the projection and hands the token to the

@@ -3,9 +3,16 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  createTestOAuthCapabilities,
+  createTestOAuthBinding,
+} from './test-support/index.js';
+
+import { unsupportedApprovalPolicy } from './test-support/approval-policy.js';
+
+import { McpOAuthOperations } from './mcp-oauth-helpers.js';
 
 import {
-  createMockAuthProvider,
   createMockTokenStorage,
   createMockedClient,
   silenceConsole,
@@ -19,17 +26,13 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Mock } from 'bun:test';
 import type { Config } from './test-support/mcpClientTestSupport.js';
-import { MCPOAuthProvider } from '../auth/oauth-provider.js';
-import { MCPOAuthTokenStorage } from '../auth/oauth-token-storage.js';
+import { MCPOAuthProvider } from '../auth/index.js';
+import type { MCPOAuthTokenStorage } from '../auth/index.js';
 import type { PromptRegistry } from './test-support/mcpClientTestSupport.js';
 import type { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
 
 import { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
-import {
-  connectToMcpServer,
-  getMCPServerStatus,
-  McpClient,
-} from './mcp-client.js';
+import { connectToMcpServer, McpClient } from './mcp-client.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -41,27 +44,12 @@ const realStdioModule = {
 const realIndexModule = {
   ...(await import('@modelcontextprotocol/sdk/client/index.js')),
 };
-const realOauthProviderModule = {
-  ...(await import('../auth/oauth-provider.js')),
-};
-const realOauthTokenStorageModule = {
-  ...(await import('../auth/oauth-token-storage.js')),
-};
-const realOauthUtilsModule = { ...(await import('../auth/oauth-utils.js')) };
-
 void vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () =>
   automock(realStdioModule),
 );
 void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
   automock(realIndexModule),
 );
-void vi.mock('../auth/oauth-provider.js', () =>
-  automock(realOauthProviderModule),
-);
-void vi.mock('../auth/oauth-token-storage.js', () =>
-  automock(realOauthTokenStorageModule),
-);
-void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
 
 const createMockResourceRegistry = (): ResourceRegistry =>
   ({
@@ -69,11 +57,9 @@ const createMockResourceRegistry = (): ResourceRegistry =>
     removeResourcesByServer: vi.fn(),
   }) as unknown as ResourceRegistry;
 import type { TransportWithInternals } from './mcpClientTestHelpers.js';
-import { registerMcpHostServices } from '../host/hostServices.js';
 
 // Exercises the real host seam instead of mocking a module (#3305).
 const mockEmitFeedback = vi.fn();
-registerMcpHostServices({ emitFeedback: mockEmitFeedback });
 
 async function expectPending(promise: Promise<unknown>): Promise<void> {
   expect(await Promise.race([promise, Promise.resolve('pending')])).toBe(
@@ -82,16 +68,17 @@ async function expectPending(promise: Promise<unknown>): Promise<void> {
 }
 
 describe('connectToMcpServer with OAuth', () => {
+  let oauthOwner: McpOAuthOperations;
   let mockedClient: ClientLib.Client;
   let workspaceContext: WorkspaceContext;
   let testWorkspace: string;
-  let mockAuthProvider: MCPOAuthProvider;
   let mockTokenStorage: MCPOAuthTokenStorage;
 
   /** Connects the suite's standard server, varying only config and signal. */
   const connectTestServer = (
     config: Parameters<typeof connectToMcpServer>[2],
     signal?: AbortSignal,
+    onRequiresOAuth?: () => void,
   ): ReturnType<typeof connectToMcpServer> =>
     connectToMcpServer(
       '0.0.1',
@@ -99,7 +86,10 @@ describe('connectToMcpServer with OAuth', () => {
       config,
       false,
       workspaceContext,
+      oauthOwner,
       signal,
+      mockEmitFeedback,
+      onRequiresOAuth,
     );
 
   beforeEach(() => {
@@ -115,19 +105,14 @@ describe('connectToMcpServer with OAuth', () => {
     silenceConsole();
 
     mockTokenStorage = createMockTokenStorage();
-    (
-      MCPOAuthTokenStorage as unknown as Mock<(...args: never[]) => unknown>
-    ).mockReturnValue(mockTokenStorage);
-    mockAuthProvider = createMockAuthProvider(mockTokenStorage);
-    (
-      MCPOAuthProvider as unknown as Mock<(...args: never[]) => unknown>
-    ).mockReturnValue(mockAuthProvider);
-
-    // Mock static methods used by connectToMcpServer's OAuth flow
     vi.spyOn(MCPOAuthProvider, 'authenticate').mockResolvedValue(undefined);
     vi.spyOn(MCPOAuthProvider, 'getValidToken').mockResolvedValue(
       'test-access-token',
     );
+    oauthOwner = new McpOAuthOperations({
+      ...createTestOAuthCapabilities(),
+      tokenStorage: mockTokenStorage,
+    });
   });
 
   afterEach(() => {
@@ -340,8 +325,6 @@ describe('connectToMcpServer with OAuth', () => {
     expect(client).toBe(mockedClient);
     // First connect rejects with 401, second connect succeeds with stored token
     expect(mockedClient.connect).toHaveBeenCalledTimes(2);
-    // With stored token available, retryWithOAuth uses stored token directly
-    expect(MCPOAuthProvider.getValidToken).toHaveBeenCalled();
 
     const authHeader =
       capturedTransport?._requestInit?.headers?.['Authorization'];
@@ -358,9 +341,13 @@ describe('connectToMcpServer with OAuth', () => {
       mockedClient.connect as Mock<typeof mockedClient.connect>
     ).mockRejectedValueOnce(new Error('401 Unauthorized'));
 
-    await expect(connectTestServer({ httpUrl: serverUrl })).rejects.toThrow(
-      /requires OAuth authentication/,
-    );
+    const requirements: boolean[] = [];
+    await expect(
+      connectTestServer({ httpUrl: serverUrl }, undefined, () => {
+        requirements.push(true);
+      }),
+    ).rejects.toThrow(/requires OAuth authentication/);
+    expect(requirements).toStrictEqual([true]);
 
     // Only initial connect is attempted
     expect(mockedClient.connect).toHaveBeenCalledTimes(1);
@@ -461,9 +448,12 @@ describe('connectToMcpServer with OAuth', () => {
         connectToMcpServer(
           '0.0.1',
           'test-server',
-          {}, // No url, httpUrl, or command
+          {},
           false,
           workspaceContext,
+          oauthOwner,
+          undefined,
+          mockEmitFeedback,
         ),
       ).rejects.toThrow(/Invalid configuration/);
     });
@@ -477,9 +467,12 @@ describe('connectToMcpServer with OAuth', () => {
         connectToMcpServer(
           '0.0.1',
           'test-server',
-          { command: 'test-command' }, // No URL transport
+          { command: 'test-command' },
           false,
           workspaceContext,
+          oauthOwner,
+          undefined,
+          mockEmitFeedback,
         ),
       ).rejects.toThrow(Error);
     });
@@ -513,6 +506,9 @@ describe('connectToMcpServer with OAuth', () => {
         { url: serverUrl },
         false,
         workspaceContext,
+        oauthOwner,
+        undefined,
+        mockEmitFeedback,
       );
 
       // Should have tried twice: HTTP first, then SSE fallback
@@ -521,6 +517,22 @@ describe('connectToMcpServer with OAuth', () => {
     });
 
     // Test 404 detection sets httpReturned404 flag
+    it('reports OAuth required from the SSE fallback to the supplied owner', async () => {
+      mockedClient.connect
+        .mockRejectedValueOnce(new Error('Connection refused'))
+        .mockRejectedValueOnce(new Error('401 Unauthorized'))
+        .mockResolvedValueOnce(undefined);
+      const requirements: boolean[] = [];
+      await connectTestServer(
+        { url: 'http://test-server.com' },
+        undefined,
+        () => {
+          requirements.push(true);
+        },
+      );
+      expect(requirements).toStrictEqual([true]);
+    });
+
     it('should set httpReturned404 flag on 404 error and prevent SSE fallback', async () => {
       const serverUrl = 'http://test-server.com/mcp';
 
@@ -573,20 +585,19 @@ describe('connectToMcpServer with OAuth', () => {
       expect(mockTransport.close).toHaveBeenCalled();
     });
 
-    // Test mcpServerRequiresOAuth NOT set on non-auth failures (negative assertion)
-    it('should not set mcpServerRequiresOAuth on non-auth connection failures', async () => {
-      (
-        mockedClient.connect as Mock<typeof mockedClient.connect>
-      ).mockRejectedValueOnce(new Error('Network timeout'));
-
+    it('does not report OAuth required on a non-auth connection failure', async () => {
+      mockedClient.connect.mockRejectedValueOnce(new Error('Network timeout'));
+      const requirements: boolean[] = [];
       await expect(
-        connectTestServer({ httpUrl: 'http://test-server.com' }),
+        connectTestServer(
+          { httpUrl: 'http://test-server.com' },
+          undefined,
+          () => {
+            requirements.push(true);
+          },
+        ),
       ).rejects.toThrow(/Network timeout/);
-
-      // Check that the OAuth flag wasn't set
-      // This is a negative assertion - we're testing what DOESN'T happen
-      const status = getMCPServerStatus('test-server');
-      expect(status).not.toBe('auth-required');
+      expect(requirements).toStrictEqual([]);
     });
 
     // Test fallback with different 404 string variants
@@ -633,9 +644,12 @@ describe('connectToMcpServer with OAuth', () => {
         connectToMcpServer(
           '0.0.1',
           'test-server',
-          { url: serverUrl, type: 'http' }, // Explicit HTTP type
+          { url: serverUrl, type: 'http' },
           false,
           workspaceContext,
+          oauthOwner,
+          undefined,
+          mockEmitFeedback,
         ),
       ).rejects.toThrow(/404/);
 
@@ -663,6 +677,9 @@ describe('connectToMcpServer with OAuth', () => {
         { url: 'http://test-server.com/mcp' },
         false,
         workspaceContext,
+        oauthOwner,
+        undefined,
+        mockEmitFeedback,
       );
 
       // Should have tried twice: HTTP first, then SSE fallback
@@ -811,6 +828,8 @@ describe('connectToMcpServer with OAuth', () => {
       );
 
       const mcpClient = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         { command: 'test', args: [] },
         {} as ToolRegistry,
@@ -820,6 +839,8 @@ describe('connectToMcpServer with OAuth', () => {
         {} as Config,
         false,
         '0.0.1',
+        undefined,
+        mockEmitFeedback,
       );
 
       await mcpClient.connect();
@@ -846,6 +867,8 @@ describe('connectToMcpServer with OAuth', () => {
       );
 
       const mcpClient = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         { command: 'test', args: [] },
         {} as ToolRegistry,
@@ -855,6 +878,8 @@ describe('connectToMcpServer with OAuth', () => {
         {} as Config,
         false,
         '0.0.1',
+        undefined,
+        mockEmitFeedback,
       );
 
       await mcpClient.connect();

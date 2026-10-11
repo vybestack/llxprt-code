@@ -8,7 +8,6 @@ import { describe, expect, it, vi } from 'bun:test';
 import type { OAuthProvider } from './types.js';
 import {
   createIssue1468Fixture,
-  mockGetCurrentProfileName,
   mockLoadProfile,
 } from './__tests__/oauth-manager.issue1468.test-helpers.js';
 
@@ -44,11 +43,11 @@ async function seedNamedToken(
 
 describe('named OAuth login runtime bucket activation', () => {
   it('activates the named bucket only for the matching active profile without persisting profile changes', async () => {
-    const { manager, tokenStore } = createIssue1468Fixture();
+    const { manager, tokenStore, settingsService } = createIssue1468Fixture();
     registerProvider(manager);
     const profile = Object.freeze({ provider: 'codex', model: 'gpt-5' });
     mockLoadProfile.mockResolvedValue(profile);
-    mockGetCurrentProfileName.mockReturnValue('work-profile');
+    settingsService.setCurrentProfileName('work-profile');
     await tokenStore.saveToken('codex', validToken('work-token'), 'work');
 
     await manager.activateNamedLoginBucket('codex', 'work');
@@ -58,7 +57,7 @@ describe('named OAuth login runtime bucket activation', () => {
     );
     expect(profile).toStrictEqual({ provider: 'codex', model: 'gpt-5' });
 
-    mockGetCurrentProfileName.mockReturnValue('other-profile');
+    settingsService.setCurrentProfileName('other-profile');
     expect(await manager.getOAuthToken('codex')).toBeNull();
     expect(
       manager.getSessionBucket('codex', {
@@ -69,9 +68,9 @@ describe('named OAuth login runtime bucket activation', () => {
   });
 
   it('preserves explicit auth bucket policy and its first-bucket precedence', async () => {
-    const { manager, tokenStore } = createIssue1468Fixture();
+    const { manager, tokenStore, settingsService } = createIssue1468Fixture();
     registerProvider(manager);
-    mockGetCurrentProfileName.mockReturnValue('explicit-profile');
+    settingsService.setCurrentProfileName('explicit-profile');
     mockLoadProfile.mockResolvedValue({
       provider: 'codex',
       auth: { type: 'oauth', buckets: ['configured', 'fallback'] },
@@ -97,9 +96,9 @@ describe('named OAuth login runtime bucket activation', () => {
   });
 
   it('does not activate a bucket when the active profile uses another provider', async () => {
-    const { manager } = createIssue1468Fixture();
+    const { manager, settingsService } = createIssue1468Fixture();
     registerProvider(manager);
-    mockGetCurrentProfileName.mockReturnValue('claude-profile');
+    settingsService.setCurrentProfileName('claude-profile');
     mockLoadProfile.mockResolvedValue({ provider: 'claudecode' });
 
     await manager.activateNamedLoginBucket('codex', 'work');
@@ -113,9 +112,9 @@ describe('named OAuth login runtime bucket activation', () => {
   });
 
   it('prefers a named profile-scoped login over existing unscoped session state', async () => {
-    const { manager, tokenStore } = createIssue1468Fixture();
+    const { manager, tokenStore, settingsService } = createIssue1468Fixture();
     registerProvider(manager);
-    mockGetCurrentProfileName.mockReturnValue('profile-b');
+    settingsService.setCurrentProfileName('profile-b');
     mockLoadProfile.mockResolvedValue({ provider: 'codex', model: 'gpt-5' });
     await tokenStore.saveToken('codex', validToken('unscoped-token'), 'legacy');
     await tokenStore.saveToken('codex', validToken('named-token'), 'named');
@@ -142,7 +141,7 @@ describe('named OAuth login runtime bucket activation', () => {
   ])(
     'authenticates an %s named bucket without writing the default bucket',
     async (_caseName, existingToken) => {
-      const { manager, tokenStore } = createIssue1468Fixture();
+      const { manager, tokenStore, settingsService } = createIssue1468Fixture();
       const replacement = validToken('replacement-token');
       const provider: OAuthProvider = {
         name: 'codex',
@@ -152,7 +151,7 @@ describe('named OAuth login runtime bucket activation', () => {
       };
       manager.registerProvider(provider);
       await manager.toggleOAuthEnabled('codex');
-      mockGetCurrentProfileName.mockReturnValue('work-profile');
+      settingsService.setCurrentProfileName('work-profile');
       mockLoadProfile.mockResolvedValue({ provider: 'codex', model: 'gpt-5' });
       await manager.activateNamedLoginBucket('codex', 'named');
       await seedNamedToken(tokenStore, existingToken);

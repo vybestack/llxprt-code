@@ -1,3 +1,4 @@
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -17,6 +18,7 @@
  * response is applied.
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   describe,
   it,
@@ -80,7 +82,7 @@ let projectDir: string;
  */
 function createMcpConfigDouble(mcpInstructions: string): Config {
   const manager = {
-    getMcpInstructions: () => mcpInstructions,
+    readInstructions: () => mcpInstructions,
   };
   return {
     getMcpClientManager: () => manager,
@@ -148,11 +150,7 @@ const noopLogger = {
 
 function createStubProviderRuntime(): ProviderRuntimeContext {
   return {
-    settingsService: {
-      get: () => undefined,
-      set: () => {},
-      getProviderSettings: () => ({}),
-    },
+    settingsService: new SettingsService(),
     config: undefined,
     runtimeId: 'test-provider-runtime',
     metadata: { source: 'test' },
@@ -169,6 +167,10 @@ function buildCompressionContext(
   const provider =
     overrides.provider ?? createOptionsCapturingProvider([], VALID_SNAPSHOT);
   const resolveProvider = (): CompressionProviderResult => ({
+    invocation: captureProviderInvocation(
+      createStubProviderRuntime(),
+      provider.name,
+    ),
     provider,
     runtime: createStubProviderRuntime(),
   });

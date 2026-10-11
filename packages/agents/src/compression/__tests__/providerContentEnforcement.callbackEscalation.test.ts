@@ -201,7 +201,8 @@ async function buildDirectHarness(options: {
     historyService,
     runtimeContext,
     generationConfig: {},
-    providerRuntimeNullable: undefined,
+    readCompletionBudgetSetting: () =>
+      runtimeContext.readCompletionBudgetSetting(),
     logger,
     ensureDensityOptimized: vi.fn().mockResolvedValue(undefined),
     performCompression: vi.fn(async () => {

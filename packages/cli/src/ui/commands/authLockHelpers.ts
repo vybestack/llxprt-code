@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { OAuthControl } from '../contexts/OAuthControlContext.js';
+type OAuthLockControl = Pick<
+  OAuthControl,
+  'inspectAuthLock' | 'forceRecoverAuthLock' | 'recoverAuthLock'
+>;
 import type {
   AuthLockStatus,
   AuthLockRecoveryResult,
@@ -162,7 +166,7 @@ export function formatRecoveryResult(
 }
 
 export async function handleLockCommand(
-  oauthManager: OAuthManager,
+  oauthManager: OAuthLockControl,
   provider: string,
   lockParts: string[],
 ): Promise<MessageActionReturn> {
@@ -210,7 +214,7 @@ export async function handleLockCommand(
 }
 
 export async function handleUnlockCommand(
-  oauthManager: OAuthManager,
+  oauthManager: OAuthLockControl,
   provider: string,
   unlockParts: string[],
 ): Promise<MessageActionReturn> {

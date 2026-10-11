@@ -102,8 +102,9 @@ describe('OpenAIResponsesProvider hooksConfig leak @issue:3218', () => {
     });
 
     const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings,
+      runtimeId: runtime.runtimeId,
+      runtimeMetadata: runtime.metadata,
+
       providerName: provider.name,
       ephemeralsSnapshot,
     });

@@ -1,3 +1,6 @@
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+import { createDialogStore } from '../stores/dialog/dialogStore.js';
 const reactStub = (() => {
   let stateCursor = 0;
   const states: unknown[] = [];
@@ -33,7 +36,11 @@ const reactStub = (() => {
       states[index] = next;
       notify(index, next);
     };
-    setters[index] = setState;
+    setters[index] = (value: unknown) => {
+      const next = typeof value === 'function' ? value(states[index]) : value;
+      states[index] = next;
+      notify(index, next);
+    };
     return [states[index] as T, setState];
   };
 
@@ -72,11 +79,23 @@ void vi.mock('react', () => ({
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { useSlashCommandProcessor } from './slashCommandProcessor.js';
+import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
+
+void vi.mock('../contexts/RuntimeContext.js', () => ({
+  useRuntimeApi: () => createMockRuntimeApi(),
+}));
+void vi.mock('../contexts/ProviderAliasRefreshContext.js', () => ({
+  useProviderAliasRefresh: () => vi.fn(async () => {}),
+}));
+void vi.mock('../contexts/OAuthControlContext.js', () => ({
+  useOAuthControl: () => ({ isAvailable: () => false }),
+}));
 import type { SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 
+const actualCore = { ...(await import('@vybestack/llxprt-code-core')) };
 const coreMocks = (() => {
   const logSlashCommand = vi.fn();
   class StubLogger {
@@ -89,7 +108,7 @@ const coreMocks = (() => {
     getLastPromptTokenCount: vi.fn(() => 0),
   };
   return {
-    Config: class {},
+    Config: actualCore.Config,
     GitService: vi.fn(),
     Logger: StubLogger,
     logSlashCommand,
@@ -124,8 +143,6 @@ const coreMocks = (() => {
         removeStatusChangeListener: vi.fn(),
       }),
     },
-    addMCPStatusChangeListener: vi.fn(),
-    removeMCPStatusChangeListener: vi.fn(),
     coreEvents: {
       on: vi.fn(),
       off: vi.fn(),
@@ -202,7 +219,6 @@ describe('useSlashCommandProcessor', () => {
   let openEditorDialog: ReturnType<typeof vi.fn>;
   let openProviderDialog: ReturnType<typeof vi.fn>;
   let openLoadProfileDialog: ReturnType<typeof vi.fn>;
-  let openToolsDialog: ReturnType<typeof vi.fn>;
   let toggleCorgiMode: ReturnType<typeof vi.fn>;
   let setQuittingMessages: ReturnType<typeof vi.fn>;
   let openPrivacyNotice: ReturnType<typeof vi.fn>;
@@ -241,11 +257,13 @@ describe('useSlashCommandProcessor', () => {
     };
 
     mockConfig = {
+      getMcpServers: () => undefined,
       getIdeClient: vi.fn().mockReturnValue(mockIdeClient),
       getProjectRoot: vi.fn().mockReturnValue('/test/project'),
       getSessionId: vi.fn().mockReturnValue('test-session-id'),
       getDebugMode: vi.fn().mockReturnValue(false),
       getTargetDir: vi.fn().mockReturnValue('/test/project'),
+      getCheckpointingEnabled: () => false,
       getUserMemory: vi.fn().mockReturnValue(''),
       setUserMemory: vi.fn(),
       getApprovalMode: vi.fn().mockReturnValue('default'),
@@ -264,7 +282,6 @@ describe('useSlashCommandProcessor', () => {
     openEditorDialog = vi.fn();
     openProviderDialog = vi.fn();
     openLoadProfileDialog = vi.fn();
-    openToolsDialog = vi.fn();
     toggleCorgiMode = vi.fn();
     setQuittingMessages = vi.fn();
     openPrivacyNotice = vi.fn();
@@ -284,27 +301,45 @@ describe('useSlashCommandProcessor', () => {
     );
 
     useSlashCommandProcessor(
-      mockConfig,
+      composeFixtureRuntime(mockConfig),
       null,
       mockSettings,
       addItem,
       clearItems,
       loadHistory,
       refreshStatic,
-      onDebugMessage,
-      openThemeDialog,
-      openAuthDialog,
-      openEditorDialog,
-      openProviderDialog,
-      openLoadProfileDialog,
-      openToolsDialog,
-      toggleCorgiMode,
-      setQuittingMessages,
-      openPrivacyNotice,
-      openSettingsDialog,
       toggleVimEnabled,
       setIsProcessing,
       setLlxprtMdFileCount,
+      {
+        openThemeDialog,
+        openAuthDialog,
+        openEditorDialog,
+        openProviderDialog,
+        openLoadProfileDialog,
+        toggleCorgiMode,
+        quit: setQuittingMessages,
+        openPrivacyNotice,
+        openSettingsDialog,
+        setDebugMessage: onDebugMessage,
+        openLoggingDialog: () => {},
+        openSubagentDialog: () => {},
+        openModelsDialog: () => {},
+        openPermissionsDialog: () => {},
+        openPoliciesDialog: () => {},
+        openCreateProfileDialog: () => {},
+        openProfileListDialog: () => {},
+        viewProfileDetail: () => {},
+        openProfileEditor: () => {},
+        toggleDebugProfiler: () => {},
+        dispatchExtensionStateUpdate: () => {},
+        addConfirmUpdateExtensionRequest: () => {},
+        openWelcomeDialog: () => {},
+        openSessionBrowserDialog: () => {},
+      },
+      createDialogStore(),
+      new Map(),
+      true,
     );
 
     await reactStub.runEffects();
@@ -324,8 +359,8 @@ describe('useSlashCommandProcessor', () => {
         kind: command.kind,
       })),
     ).toStrictEqual([
-      { name: 'subagent', kind: 'built-in' },
-      { name: 'about', kind: 'built-in' },
+      { name: 'subagent', kind: CommandKind.BUILT_IN },
+      { name: 'about', kind: CommandKind.BUILT_IN },
     ]);
   });
 });

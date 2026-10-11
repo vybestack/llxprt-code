@@ -72,7 +72,13 @@ function toToolsLookup(result: FacadeLookupResult): AsyncTaskLookupResult {
 }
 
 export class CoreAsyncTaskServiceAdapter implements IAsyncTaskService {
-  constructor(private readonly facade: AsyncWorkFacade) {}
+  constructor(private readonly boundFacade?: AsyncWorkFacade) {}
+
+  private get facade(): AsyncWorkFacade {
+    if (!this.boundFacade)
+      throw new Error('Task queries require an Agent owner');
+    return this.boundFacade;
+  }
 
   async checkAsyncTask(taskId: string): Promise<ToolsAsyncTaskStatus> {
     const task = this.facade.get(taskId);

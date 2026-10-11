@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { bindProviderFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderFiles.js';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { describe, expect, it, vi } from 'bun:test';
 import type OpenAI from 'openai';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -16,7 +18,7 @@ import { bindProviderAliasIdentity } from '../composition/aliasProviderFactory.j
 import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import { resolveRequestMedia } from '../utils/request-media-resolution.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import { upsertRuntimeEntry } from '../runtime/runtimeRegistry.js';
+import { ProviderFileLifecycle } from '../providerFilePolicy.js';
 
 function createProvider(): OpenAIProvider {
   const provider = new OpenAIProvider(
@@ -85,7 +87,7 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
     });
 
     const mediaRequest = await resolveRequestMedia(
-      undefined,
+      { requestId: 'provider-request' },
       options.contents,
       undefined,
     );
@@ -120,7 +122,16 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
       baseURL: 'https://api.kimi.com/coding/v1',
       files: { create: filesCreate },
     } as unknown as OpenAI;
-    const provider = createProvider();
+    const lifecycle = new ProviderFileLifecycle({
+      maxFiles: 10,
+      maxBytes: 1024,
+    });
+    const provider = bindProviderFiles(
+      createProvider(),
+      undefined,
+      lifecycle,
+      '/workspace/kimi-media',
+    );
     const settings = new SettingsService();
     settings.set('kimi.experimental-video', true);
     settings.set('provider-files', 'workspace');
@@ -128,12 +139,32 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
       providerName: provider.name,
       contents: createContents(),
       settings,
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'kimi-media',
+        providerName: 'kimi',
+        ephemeralsSnapshot: { ...settings.getAllGlobalSettings() },
+        providerDefaults: {
+          providerSpecific: {
+            mediaSupport: {
+              fileUpload: true,
+              videoSupport: true,
+              inlineImages: true,
+            },
+          },
+        },
+      }),
+      runtime: {
+        settingsService: settings,
+        providerFileLifecycle: new ProviderFileLifecycle({
+          maxFiles: 10,
+          maxBytes: 1024,
+        }),
+      },
       configOverrides: { getTargetDir: () => '/workspace/kimi-media' },
     });
-    upsertRuntimeEntry(options.invocation.runtimeId, {});
 
     const mediaRequest = await resolveRequestMedia(
-      undefined,
+      { requestId: 'provider-request' },
       options.contents,
       undefined,
     );

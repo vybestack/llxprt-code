@@ -24,9 +24,12 @@ import path from 'node:path';
 import process from 'node:process';
 import { randomUUID } from 'node:crypto';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { initializeTestConfig } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import {
+  initializeTestMcpRuntime,
+  type TestMcpRuntime,
+} from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
-import { loadServerHierarchicalMemory } from '@vybestack/llxprt-code-core/utils/memoryDiscovery.js';
+import { SessionInstructionOwner } from '../session/session-instruction-owner.js';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { buildSystemInstruction } from './ChatSessionFactory.js';
@@ -69,7 +72,11 @@ async function buildWorkspaceConfig(
     readonly jitContextEnabled: boolean;
     readonly settingsJitContextEnabled?: boolean;
   },
-): Promise<Config> {
+): Promise<{
+  config: Config;
+  runtime: TestMcpRuntime;
+  instructions: SessionInstructionOwner;
+}> {
   const settingsService = new SettingsService();
   if (options.settingsJitContextEnabled !== undefined) {
     // No production code writes this key. Supplying it proves the predicate
@@ -85,29 +92,17 @@ async function buildWorkspaceConfig(
     cwd: workspace.dir,
     debugMode: false,
     jitContextEnabled: options.jitContextEnabled,
-    settingsService,
+    initialSettings: settingsService.getAllGlobalSettings(),
   });
   openConfigs.push(config);
-  await initializeTestConfig(config);
-
-  if (!options.jitContextEnabled) {
-    // The production non-JIT path: eagerly load the hierarchy and push it onto
-    // Config, as environmentLoader.resolveMemoryContent and
-    // memoryCommand.refreshMemoryContent do in the CLI.
-    const eager = await loadServerHierarchicalMemory(
-      config.getWorkingDir(),
-      [],
-      config.getDebugMode(),
-      config.getFileService(),
-      config.getExtensions(),
-      true,
-    );
-    config.setUserMemory(eager.memoryContent);
-    config.setLlxprtMdFileCount(eager.fileCount);
-    config.setLlxprtMdFilePaths(eager.filePaths);
-  }
-
-  return config;
+  const runtime = await initializeTestMcpRuntime(config);
+  const instructions = new SessionInstructionOwner(
+    runtime.workspaceMemory.operations,
+    config.getProvidedInstructions(),
+    config.isJitContextEnabled(),
+    async () => {},
+  );
+  return { config, runtime, instructions };
 }
 
 interface AssembledRequest {
@@ -120,16 +115,30 @@ interface AssembledRequest {
  * Assembles the system instruction the way ChatSessionFactory.createChatSession
  * does, then splits it back into its two memory-carrying channels.
  */
-async function assembleRequest(config: Config): Promise<AssembledRequest> {
-  const envParts = await getEnvironmentContext(config);
+async function assembleRequest(
+  input: Awaited<ReturnType<typeof buildWorkspaceConfig>>,
+): Promise<AssembledRequest> {
+  const { config, runtime, instructions } = input;
+  const envParts = await getEnvironmentContext(
+    instructions.reads.snapshot().environmentMemory,
+    runtime.workspaceFilesystem.paths.directories(),
+  );
   const environmentContext = envParts.map((part) => part.text).join('\n');
   const full = await buildSystemInstruction(
     config,
+    () => undefined,
     [],
-    envParts,
+    await getEnvironmentContext(
+      '',
+      runtime.workspaceFilesystem.paths.directories(),
+    ),
     undefined,
     MODEL,
+    runtime.workspaceFilesystem.paths.directories(),
+    instructions.reads,
+    {},
   );
+  await instructions.dispose();
   return {
     environmentContext,
     promptBody: full.slice(environmentContext.length),

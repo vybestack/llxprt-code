@@ -3,6 +3,9 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createTestOAuthBinding } from './test-support/index.js';
+
+import { unsupportedApprovalPolicy } from './test-support/approval-policy.js';
 
 import { automock } from '../../../test-utils/src/automock.js';
 import { afterEach, describe, expect, it, vi, type Mock } from 'bun:test';
@@ -15,12 +18,10 @@ import type { PromptRegistry } from './test-support/mcpClientTestSupport.js';
 import { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
 import { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { registerMcpHostServices } from '../host/hostServices.js';
 import { McpClient } from './mcp-client.js';
 
 // Exercises the real host seam instead of mocking a module (#3305).
 const mockEmitFeedback = vi.fn();
-registerMcpHostServices({ emitFeedback: mockEmitFeedback });
 
 const realStdioModule = {
   ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
@@ -104,6 +105,8 @@ describe('McpClient resource refresh', () => {
     } as unknown as ToolRegistry,
   ): McpClient {
     return new McpClient(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       'test-server',
       { command: 'test-command' },
       toolRegistry,
@@ -113,6 +116,8 @@ describe('McpClient resource refresh', () => {
       config,
       false,
       '0.0.1',
+      undefined,
+      mockEmitFeedback,
     );
   }
   afterEach(() => {

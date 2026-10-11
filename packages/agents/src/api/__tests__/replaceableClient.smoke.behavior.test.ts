@@ -155,7 +155,14 @@ describe('Replaceable alternate-client smoke (issue #2204) @plan:PLAN-20260629-I
     expect(config.getProvider()).toBe('fake');
     expect(config.getModel()).toBe('fake-model');
 
-    const agent: Agent = await fromConfig({ config });
+    const agent: Agent = await fromConfig({
+      settingsOwner: built.settingsOwner,
+      settingsService: built.settingsService,
+      agentClient: built.agentClient,
+      providerManager: built.providerManager,
+      config,
+      mcpRuntime: built.mcpRuntime,
+    });
 
     // Adoption (public surface only): the Agent reports the SAME provider/model
     // the caller-owned Config was built with, proving the adopted runtime —
@@ -164,7 +171,10 @@ describe('Replaceable alternate-client smoke (issue #2204) @plan:PLAN-20260629-I
     // the public consumer contract, so it is NOT asserted here.
     let disposeError: unknown = undefined;
     try {
-      expect(agent.getProvider()).toBe(config.getProvider());
+      const configuredProvider = config.getProvider();
+      if (configuredProvider === undefined)
+        throw new Error('Missing configured provider');
+      expect(agent.getProvider()).toBe(configuredProvider);
       expect(agent.getModel()).toBe(config.getModel());
       expect(agent.getProviderStatus()).toBeDefined();
 

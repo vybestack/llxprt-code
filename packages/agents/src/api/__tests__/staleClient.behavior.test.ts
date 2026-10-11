@@ -3,6 +3,8 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createToolControlDeps } from './helpers/fakeToolControlDeps.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 
 /**
  * Behavioral tests for the stale-client rebuild guard and public
@@ -22,7 +24,6 @@ import {
   buildAgent,
   drain,
   countType,
-  internalConfig,
   type AgentEvent,
 } from './helpers/agentHarness.js';
 import { ToolControl } from '../control/toolControl.js';
@@ -70,6 +71,8 @@ function createToolControlWithRecordingClient(options: {
   } as unknown as ToolControlDeps['config'];
 
   const deps: ToolControlDeps = {
+    ...createToolControlDeps().deps,
+    describeConfiguration: () => ({ registered: [], unregistered: [] }),
     messageBus: new MessageBus(),
     config,
     editorCallbacksHolder: { editorCallbacks: {} },
@@ -87,15 +90,20 @@ function createToolControlWithRecordingClient(options: {
   };
 }
 
+const completedTool = new MockTool('list_directory');
 const SAMPLE_COMPLETED: CompletedToolCall[] = [
   {
     request: {
       callId: 'caller-call-1',
+      prompt_id: 'caller-prompt-1',
       name: 'list_directory',
       args: { path: '/tmp' },
       isClientInitiated: true,
     },
     response: {
+      callId: 'caller-call-1',
+      resultDisplay: 'file1.txt',
+      errorType: undefined,
       responseParts: [
         {
           type: 'tool_response',
@@ -107,30 +115,30 @@ const SAMPLE_COMPLETED: CompletedToolCall[] = [
       error: undefined,
     },
     status: 'success',
-  } as CompletedToolCall,
+    tool: completedTool,
+    invocation: completedTool.build({ path: '/tmp' }),
+  },
 ];
 
 describe('stale-client rebuild guard + recordCompletedToolCalls (issue #2372 Phase A changes 4 + 5)', () => {
   it('agent.stream() rebuilds the loop when the config agent client has changed (stale-client guard)', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const config = internalConfig(agent);
-
       // Drive one turn so the loop is initialized and bound to the initial client.
       const first = await drain(agent.stream('first turn'));
       expect(countType(first, 'done')).toBe(1);
 
       // Capture the clients BEFORE and AFTER refreshAuth, and spy on their
       // sendMessageStream so we can prove the second turn hit the NEW client.
-      const originalClient = config.getAgentClient();
+      const originalClient = agent.agentClient;
       const originalSendSpy = vi.spyOn(
         originalClient,
         'sendMessageStream' as keyof typeof originalClient,
       );
 
       // Simulate an external refreshAuth that replaces the client on the config.
-      await config.refreshAuth(undefined);
-      const newClient = config.getAgentClient();
+      await agent.sessionClient.refreshAuth(undefined);
+      const newClient = agent.agentClient;
       expect(newClient).not.toBe(originalClient);
 
       const newSendSpy = vi.spyOn(
@@ -155,14 +163,13 @@ describe('stale-client rebuild guard + recordCompletedToolCalls (issue #2372 Pha
   it('stale-client guard does not rebuild when the client is unchanged (no-op)', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
     try {
-      const config = internalConfig(agent);
       const first = await drain(agent.stream('first'));
       expect(countType(first, 'done')).toBe(1);
 
       // Spy on the current client's sendMessageStream before the second turn.
       // Since the client is unchanged, the stale-client guard is a no-op and
       // the SAME client must be reused.
-      const currentClient = config.getAgentClient();
+      const currentClient = agent.agentClient;
       const sendSpy = vi.spyOn(
         currentClient,
         'sendMessageStream' as keyof typeof currentClient,
@@ -257,6 +264,8 @@ describe('stale-client rebuild guard + recordCompletedToolCalls (issue #2372 Pha
     } as unknown as ToolControlDeps['config'];
 
     const deps: ToolControlDeps = {
+      ...createToolControlDeps().deps,
+      describeConfiguration: () => ({ registered: [], unregistered: [] }),
       messageBus: new MessageBus(),
       config,
       editorCallbacksHolder: { editorCallbacks: {} },

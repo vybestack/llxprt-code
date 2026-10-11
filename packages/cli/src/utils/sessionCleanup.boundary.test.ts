@@ -51,14 +51,10 @@ function createMinimalConfig(
 ): {
   getSessionId: () => string;
   getDebugMode: () => boolean;
-  getAgentClient: () => { getHistory: () => Promise<[]> };
 } {
   return {
     getSessionId: () => sessionId,
     getDebugMode: () => debugMode,
-    getAgentClient: () => ({
-      getHistory: async () => [],
-    }),
   };
 }
 

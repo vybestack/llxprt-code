@@ -1,8 +1,13 @@
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
+const modelTools = installModelToolFixture();
 
 /**
  * Issue #2150: a transient Anthropic "Connection error." that surfaces AFTER
@@ -43,7 +48,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
@@ -83,7 +88,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    config.setProviderManager(manager);
+    configureProviderRuntimeFactories(config, manager);
   });
 
   function buildChatSession(history?: HistoryService): ChatSession {
@@ -94,6 +99,8 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       sessionId: config.getSessionId(),
     });
     const view = createAgentRuntimeContext({
+      prepareProviderInvocation: (name, parameters, signal) =>
+        captureProviderInvocation(providerRuntime, name, parameters, signal),
       state: runtimeState,
       // Use the caller-supplied HistoryService when provided so tests can
       // assert on the exact instance the session records into; otherwise
@@ -109,9 +116,12 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
         },
         'reasoning.includeInContext': true,
       },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      provider: createProviderAdapterFromManager(manager),
+      telemetry: createTelemetryAdapter(
+        config,
+        createSessionSettingsFixture(config).settingsOwner.telemetry,
+      ),
+      tools: createToolRegistryViewFromRegistry(modelTools()),
       providerRuntime: { ...providerRuntime },
     });
 

@@ -2,6 +2,10 @@
  * @plan:PLAN-20260617-COREAPI.P22
  * @requirement:REQ-014
  */
+import type {
+  WorkspaceIdePort,
+  WorkspaceTrustControlPort,
+} from '@vybestack/llxprt-code-core';
 
 import type { AgentIdeControl, IdeInfo, IdeStatus } from '../agent.js';
 import type { EditorCallbacks } from '../config-types.js';
@@ -23,6 +27,8 @@ import {
  * @requirement:REQ-014
  */
 export interface IdeControlDeps {
+  readonly trust: WorkspaceTrustControlPort;
+  readonly ide: WorkspaceIdePort;
   /** True when IDE mode is enabled in the agent's Config. */
   readonly ideModeEnabled: () => boolean;
   /** Reads the current shared editor-callbacks bundle (live, not snapshotted). */
@@ -39,7 +45,35 @@ function toIdeInfo(entry: FakeIdeFixtureEntry): IdeInfo {
 }
 
 export class IdeControl implements AgentIdeControl {
-  constructor(private readonly deps?: IdeControlDeps) {}
+  constructor(private readonly deps: IdeControlDeps) {}
+
+  isTrustedFolder(): boolean {
+    return this.deps.trust.isTrustedFolder();
+  }
+  getIdeTrust(): boolean | undefined {
+    return this.deps.trust.getIdeTrust();
+  }
+  setTrustedFolderLive(trusted: boolean): Promise<void> {
+    return this.deps.trust.setTrustedFolderLive(trusted);
+  }
+  whenTrustTransitionSettled(): Promise<void> {
+    return this.deps.trust.whenSettled();
+  }
+  getIdeClient() {
+    return this.deps.ide.getClient();
+  }
+  getIdeMode(): boolean {
+    return this.deps.ide.isEnabled();
+  }
+  setIdeMode(enabled: boolean): void {
+    this.deps.ide.setEnabled(enabled);
+  }
+  async setIdeClientConnected(): Promise<void> {
+    await this.deps.ide.getClient()?.connect();
+  }
+  async setIdeClientDisconnected(): Promise<void> {
+    await this.deps.ide.getClient()?.disconnect();
+  }
 
   /**
    * Reads the fake IDE fixture when the shipped fake-IDE seam is active,
@@ -66,7 +100,7 @@ export class IdeControl implements AgentIdeControl {
     const detected = detectIdeFromEnv();
     return {
       name: detected.name,
-      trusted: false,
+      trusted: this.isTrustedFolder(),
     };
   }
 
@@ -79,7 +113,7 @@ export class IdeControl implements AgentIdeControl {
     return [
       {
         name: detected.name,
-        trusted: false,
+        trusted: this.isTrustedFolder(),
       },
     ];
   }
@@ -97,17 +131,17 @@ export class IdeControl implements AgentIdeControl {
     return {
       current: this.current(),
       detected: this.detected(),
-      modeEnabled: this.deps?.ideModeEnabled() ?? false,
+      modeEnabled: this.deps.ideModeEnabled(),
     };
   }
 
   async openEditor(): Promise<void> {
-    const callbacks = this.deps?.getEditorCallbacks();
-    callbacks?.onEditorOpen?.();
+    const callbacks = this.deps.getEditorCallbacks();
+    callbacks.onEditorOpen?.();
   }
 
   async closeEditor(): Promise<void> {
-    const callbacks = this.deps?.getEditorCallbacks();
-    callbacks?.onEditorClose?.();
+    const callbacks = this.deps.getEditorCallbacks();
+    callbacks.onEditorClose?.();
   }
 }

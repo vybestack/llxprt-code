@@ -4,11 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { resolveSeatbeltProfile } from './sandbox-seatbelt-profile.js';
+
 import { spawn, type ChildProcess } from 'node:child_process';
 import os from 'node:os';
-import path from 'node:path';
 import fs from 'node:fs';
-import { fileURLToPath } from 'node:url';
+
 import { quote } from 'shell-quote';
 import type { Config, SandboxConfig } from '@vybestack/llxprt-code-core';
 import {
@@ -16,7 +17,7 @@ import {
   getErrorMessage,
 } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { SETTINGS_DIRECTORY_NAME } from '../config/settings.js';
+
 import {
   getPassthroughEnvVars,
   isSandboxDebugModeEnabled,
@@ -28,14 +29,6 @@ import {
 } from './sandbox-network-proxy.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
 
-const BUILTIN_SEATBELT_PROFILES = [
-  'permissive-open',
-  'permissive-closed',
-  'permissive-proxied',
-  'restrictive-open',
-  'restrictive-closed',
-  'restrictive-proxied',
-];
 export function normalizeExitCode(
   code: number | null,
   signal: NodeJS.Signals | null,
@@ -58,6 +51,7 @@ export async function runSeatbeltSandbox(
   nodeArgs: string[],
   cliConfig?: Config,
   cliArgs: string[] = [],
+  directories?: () => readonly string[],
 ): Promise<number> {
   // Seatbelt path does NOT use the container credential proxy lifecycle.
   // @plan:PLAN-20250214-CREDPROXY.P34 - no container credential proxy in seatbelt flow
@@ -67,49 +61,20 @@ export async function runSeatbeltSandbox(
     );
   }
 
-  const explicitProfile = process.env.SEATBELT_PROFILE;
-  const networkMode =
-    process.env.LLXPRT_SANDBOX_NETWORK ?? process.env.SANDBOX_NETWORK;
-  let automaticProfile = 'permissive-open';
-  if (networkMode === 'off') {
-    automaticProfile = 'permissive-closed';
-  } else if (networkMode === 'proxied') {
-    automaticProfile = 'permissive-proxied';
-  }
-  const profile =
-    explicitProfile !== undefined && explicitProfile.length > 0
-      ? explicitProfile
-      : automaticProfile;
-  process.env.SEATBELT_PROFILE = profile;
-  if (
-    (profile === 'permissive-proxied' || profile === 'restrictive-proxied') &&
-    !process.env.LLXPRT_SANDBOX_PROXY_COMMAND?.trim()
-  ) {
-    throw new FatalSandboxError(
-      'Seatbelt proxied profile requires a non-empty LLXPRT_SANDBOX_PROXY_COMMAND.',
-    );
-  }
-  let profileFile = fileURLToPath(
-    new URL(`./sandbox-macos-${profile}.sb`, import.meta.url),
-  );
-  if (!BUILTIN_SEATBELT_PROFILES.includes(profile)) {
-    profileFile = path.join(
-      SETTINGS_DIRECTORY_NAME,
-      `sandbox-macos-${profile}.sb`,
-    );
-  }
-  if (!fs.existsSync(profileFile)) {
-    throw new FatalSandboxError(
-      `Missing macos seatbelt profile file '${profileFile}'`,
-    );
-  }
+  const { profile, profileFile } = resolveSeatbeltProfile();
   debugLogger.error(`using macos seatbelt (profile: ${profile}) ...`);
   const nodeOptions = [
     ...(isSandboxDebugModeEnabled(process.env.DEBUG) ? ['--inspect-brk'] : []),
     ...nodeArgs,
   ].join(' ');
 
-  const args = buildSeatbeltArgs(profileFile, nodeOptions, cliConfig, cliArgs);
+  const args = buildSeatbeltArgs(
+    profileFile,
+    nodeOptions,
+    cliConfig,
+    cliArgs,
+    directories,
+  );
   const { sandboxEnv, proxyProcess, proxyCommand } = await setupSeatbeltProxy();
   const sandboxProcess = spawnSeatbeltProcess(config, args, sandboxEnv);
   wireSeatbeltProxyCloseHandler(proxyProcess, sandboxProcess, proxyCommand);
@@ -147,6 +112,7 @@ export function buildSeatbeltArgs(
   nodeOptions: string,
   cliConfig?: Config,
   cliArgs: string[] = [],
+  directories?: () => readonly string[],
 ): string[] {
   // Resolve canonical config/data/cache/log roots via the shared path
   // resolver (Storage delegates to path-resolver.ts). These are passed as
@@ -185,8 +151,12 @@ export function buildSeatbeltArgs(
   );
   const includedDirs: string[] = [];
   if (cliConfig) {
-    const workspaceContext = cliConfig.getWorkspaceContext();
-    for (const dir of workspaceContext.getDirectories()) {
+    if (directories === undefined)
+      throw new Error(
+        'Sandbox requires explicit workspace directory operations',
+      );
+    const includedDirectories = directories();
+    for (const dir of includedDirectories) {
       const realDir = canonicalizeExistingPath(
         dir,
         'resolve a sandbox include directory',

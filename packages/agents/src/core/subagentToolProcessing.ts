@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 /**
  * @fileoverview Tool call dispatch, emit handling, and response building
  * for subagents.
@@ -48,7 +49,7 @@ import {
   type OutputObject,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { createSchedulerConfig } from './subagentRuntimeSetup.js';
+import { assembleSchedulerOwner } from '../session/assembleSchedulerOwner.js';
 import { isToolNameRestricted } from './hookToolRestrictions.js';
 import { SCOPE_LOCAL_EMIT_TOOL_NAME } from './toolGovernance.js';
 
@@ -67,6 +68,7 @@ export function isFatalToolError(
   errorType: ToolErrorType | undefined,
 ): boolean {
   return (
+    errorType === ToolErrorType.POLICY_VIOLATION ||
     errorType === ToolErrorType.TOOL_DISABLED ||
     errorType === ToolErrorType.TOOL_NOT_REGISTERED
   );
@@ -527,6 +529,7 @@ export interface ProcessFunctionCallsContext {
   toolExecutorContext: ToolExecutionConfig;
   config: Config;
   messageBus?: MessageBus;
+  readonly hookOwner?: HookExecutionOwner;
 }
 
 interface NonInteractiveToolExecutionResult {
@@ -793,19 +796,29 @@ async function executeNonInteractiveTool(
     };
   }
 
-  const schedulerConfig = createSchedulerConfig(
-    ctx.toolExecutorContext,
-    ctx.config,
-    { interactive: false },
-  );
-  // The processing context object is the stable per-run scheduler registry
-  // owner; every non-interactive tool call of one subagent run shares it so
-  // the acquisition and release balance on one entry.
+  const messageBus = ctx.messageBus;
+  const registry = ctx.toolExecutorContext.getToolRegistry();
+  if (registry === undefined) throw new Error('Missing child tool selection');
   const completed = await executeToolCall(
-    schedulerConfig,
+    (callbacks) => {
+      if (!messageBus)
+        throw new Error('Child tool execution requires its message bus');
+      return assembleSchedulerOwner(ctx.subagentId, {
+        telemetry: ctx.toolExecutorContext.telemetry,
+        config: ctx.config,
+        messageBus,
+        toolRegistry: registry,
+        readApprovalMode: ctx.toolExecutorContext.readApprovalMode,
+        getToolGovernance: () => ctx.toolExecutorContext.readGovernance(),
+        readExecutionPolicy: () =>
+          ctx.toolExecutorContext.readExecutionPolicy(),
+        toolContextInteractiveMode: false,
+        ...callbacks,
+      });
+    },
     requestInfo,
     abortController.signal,
-    { messageBus: ctx.messageBus, owner: ctx },
+    ctx.hookOwner,
   );
   return { status: completed.status, response: completed.response };
 }

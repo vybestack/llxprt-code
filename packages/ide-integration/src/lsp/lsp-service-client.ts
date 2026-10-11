@@ -27,6 +27,19 @@ export { normalizeServerStatus };
 export class LspServiceClient {
   private alive = false;
 
+  private readonly unavailableListeners = new Set<() => void>();
+
+  onUnavailable(listener: () => void): () => void {
+    this.unavailableListeners.add(listener);
+    return () => {
+      this.unavailableListeners.delete(listener);
+    };
+  }
+
+  private publishUnavailable(): void {
+    for (const listener of this.unavailableListeners) listener();
+  }
+
   private disabledPermanently = false;
 
   private unavailableReason: string | undefined;
@@ -209,6 +222,7 @@ export class LspServiceClient {
     connection.dispose();
     this.cleanupProcessState();
     this.alive = false;
+    this.publishUnavailable();
   }
 
   getMcpTransportStreams(): { readable: Readable; writable: Writable } | null {
@@ -216,8 +230,8 @@ export class LspServiceClient {
       return null;
     }
 
-    const readable = this.process.stdio[3];
-    const writable = this.process.stdio[4];
+    const readable = this.process.stdio[4];
+    const writable = this.process.stdio[3];
     if (readable === null || writable === null) {
       return null;
     }
@@ -294,12 +308,14 @@ export class LspServiceClient {
       this.alive = false;
       this.unavailableReason = error.message;
       this.cleanupProcessState();
+      this.publishUnavailable();
     });
 
     child.once('exit', (code, signal) => {
       this.alive = false;
       this.unavailableReason ??= `LSP service exited (code=${code ?? 'null'}, signal=${signal ?? 'null'})`;
       this.cleanupProcessState();
+      this.publishUnavailable();
     });
   }
 

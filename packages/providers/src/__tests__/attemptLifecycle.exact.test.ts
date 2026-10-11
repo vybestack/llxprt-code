@@ -1,9 +1,13 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+const fixtureOwners = installRuntimeTestOwners();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 /**
  * Exact lifecycle tests addressing the focused lifecycle review findings #1–#10.
  *
@@ -36,7 +40,6 @@ import { classifyTerminalStatus } from '../logging/streamProcessor.js';
 import { AttemptRecorder } from '../logging/attemptRecorder.js';
 import { ProviderPerformanceTracker } from '../logging/ProviderPerformanceTracker.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
-import * as loggers from '@vybestack/llxprt-code-core/telemetry/loggers.js';
 import * as telemetryEmitter from '../logging/telemetryEmitter.js';
 import {
   createConfig,
@@ -109,9 +112,15 @@ describe('Focused lifecycle review findings', () => {
       const config = createConfig(false);
       // Direct wrapper (no RetryOrchestrator) wrapping a provider that
       // throws synchronously from generateChatCompletion
+      const wrapperSettings1 = fixtureOwners.adopt(
+        config,
+        new SettingsService(),
+      ).settingsOwner;
       const wrapper = new LoggingProviderWrapper(
         new SyncThrowProvider(),
         config,
+        undefined,
+        () => captureProviderRequestDiagnostics(config, wrapperSettings1),
       );
       wrapper.setRuntimeContextResolver(() => ({
         runtimeId: 'test-exact',
@@ -140,7 +149,16 @@ describe('Focused lifecycle review findings', () => {
       const config = createConfig(false);
       const providerOwned = new SuccessProvider(SUCCESS_CHUNKS, 'provider');
       // Direct wrapper (no RetryOrchestrator)
-      const wrapper = new LoggingProviderWrapper(providerOwned, config);
+      const wrapperSettings2 = fixtureOwners.adopt(
+        config,
+        new SettingsService(),
+      ).settingsOwner;
+      const wrapper = new LoggingProviderWrapper(
+        providerOwned,
+        config,
+        undefined,
+        () => captureProviderRequestDiagnostics(config, wrapperSettings2),
+      );
       wrapper.setRuntimeContextResolver(() => ({
         runtimeId: 'test-exact',
         settingsService: { getConfig: () => config } as never,
@@ -271,10 +289,18 @@ describe('Focused lifecycle review findings', () => {
       // Verify the error record path populates last_token_ms and token counts
       const config = createConfig(false);
 
+      const errorEvents: unknown[] = [];
+      const diagnostics = captureProviderRequestDiagnostics(
+        config,
+        fixtureOwners.adopt(config, new SettingsService()).settingsOwner,
+      );
       const recorder = new AttemptRecorder({
         providerName: 'test',
         defaultModelName: 'model',
-        config,
+        config: {
+          ...diagnostics,
+          recordApiError: (event) => errorEvents.push(event),
+        },
         logicalRequestId: 'req1',
         wrapperOwned: true,
       });
@@ -283,14 +309,6 @@ describe('Focused lifecycle review findings', () => {
 
       // Record a token-bearing chunk so lastTokenMs is set
       recorder.recordTokenBearingChunk(attemptId, USAGE_BASIC, 'text', 'stop');
-
-      // Spy on logApiError
-      const errorEvents: unknown[] = [];
-      vi.spyOn(loggers, 'logApiError').mockImplementation(
-        (_cfg: unknown, event: unknown) => {
-          errorEvents.push(event);
-        },
-      );
 
       recorder.finalizeAttempt('error', 'model', USAGE_BASIC, 'Test error');
 

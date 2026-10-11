@@ -3,12 +3,14 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CompletedToolCall } from './coreToolScheduler.js';
+import { createSchedulerPolicyFixture } from './__tests__/scheduler-policy-fixture.js';
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from 'bun:test';
 import type { ToolCall, WaitingToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
@@ -19,10 +21,6 @@ import {
   type ToolConfirmationResponse,
 } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
-import {
-  createMockMessageBus,
-  createMockPolicyEngine,
-} from './__tests__/coreToolScheduler-test-helpers.js';
 
 describe('CoreToolScheduler policy decisions', () => {
   it('should reject tool execution when policy denies it', async () => {
@@ -46,30 +44,37 @@ describe('CoreToolScheduler policy decisions', () => {
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
-    const mockMessageBus = createMockMessageBus();
-    const mockPolicyEngine = createMockPolicyEngine();
-    mockPolicyEngine.evaluate = vi.fn().mockReturnValue(PolicyDecision.DENY);
+    let policyDecision = PolicyDecision.ALLOW;
+    policyDecision = PolicyDecision.DENY;
 
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      isInteractive: () => true,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: () => mockMessageBus,
-      getPolicyEngine: () => mockPolicyEngine,
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
+    const {
+      config: mockConfig,
+      settingsOwner,
+      messageBus: runtimeMessageBus,
+    } = createSchedulerPolicyFixture(
+      {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        isInteractive: () => true,
+        getApprovalMode: () => ApprovalMode.DEFAULT,
+
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+        getModel: () => 'gemini-2.5-pro',
+      },
+      policyDecision,
+    );
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
       config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
+      messageBus: runtimeMessageBus,
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
@@ -92,12 +97,12 @@ describe('CoreToolScheduler policy decisions', () => {
 
     expect(onAllToolCallsComplete).toHaveBeenCalled();
     const completedCallsDeny = onAllToolCallsComplete.mock
-      .calls[0][0] as ToolCall[];
+      .calls[0][0] as CompletedToolCall[];
     expect(completedCallsDeny[0].status).toBe('error');
-    expect(completedCallsDeny[0].response?.errorType).toBe(
+    expect(completedCallsDeny[0].response.errorType).toBe(
       ToolErrorType.POLICY_VIOLATION,
     );
-    expect(mockMessageBus.publish).toHaveBeenCalledWith(
+    expect(runtimeMessageBus.publish).toHaveBeenCalledWith(
       expect.objectContaining({
         type: MessageBusType.TOOL_POLICY_REJECTION,
       }),
@@ -107,7 +112,7 @@ describe('CoreToolScheduler policy decisions', () => {
   it('should publish confirmation requests when policy asks the user', async () => {
     const {
       waitingCall,
-      mockMessageBus,
+      mockMessageBus: runtimeMessageBus,
       correlationId,
       busHandler,
       completionCallCount,
@@ -116,8 +121,10 @@ describe('CoreToolScheduler policy decisions', () => {
     expect(completionCallCount).toBeGreaterThan(0);
     expect(completedStatus).toBe('success');
     expect(waitingCall.status).toBe('awaiting_approval');
+    if (!('correlationId' in waitingCall.confirmationDetails))
+      throw new Error('Expected correlation');
     expect(waitingCall.confirmationDetails.correlationId).toBeDefined();
-    expect(mockMessageBus.publish).toHaveBeenCalledWith(
+    expect(runtimeMessageBus.publish).toHaveBeenCalledWith(
       expect.objectContaining({
         type: MessageBusType.TOOL_CONFIRMATION_REQUEST,
         correlationId,
@@ -147,40 +154,38 @@ describe('CoreToolScheduler policy decisions', () => {
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
-    const mockMessageBus = createMockMessageBus();
-    const mockPolicyEngine = createMockPolicyEngine();
-    mockPolicyEngine.evaluate = vi
-      .fn()
-      .mockReturnValue(PolicyDecision.ASK_USER);
-    let busHandler: ((message: ToolConfirmationResponse) => void) | undefined;
-    mockMessageBus.subscribe.mockImplementation(
-      (type: MessageBusType, handler: unknown) => {
-        if (type === MessageBusType.TOOL_CONFIRMATION_RESPONSE) {
-          busHandler = handler as (message: ToolConfirmationResponse) => void;
-        }
-        return () => {};
-      },
-    );
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => true,
-      isInteractive: () => true,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: () => mockMessageBus,
-      getPolicyEngine: () => mockPolicyEngine,
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
-
-    const scheduler = new CoreToolScheduler({
+    let policyDecision = PolicyDecision.ALLOW;
+    policyDecision = PolicyDecision.ASK_USER;
+    const {
       config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
+      settingsOwner,
+      messageBus: runtimeMessageBus,
+    } = createSchedulerPolicyFixture(
+      {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => true,
+        isInteractive: () => true,
+        getApprovalMode: () => ApprovalMode.DEFAULT,
+
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+        getModel: () => 'gemini-2.5-pro',
+      },
+      policyDecision,
+    );
+
+    const busHandler = (message: ToolConfirmationResponse) =>
+      runtimeMessageBus.publish(message);
+    const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
+      config: mockConfig,
+      messageBus: runtimeMessageBus,
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
@@ -204,10 +209,12 @@ describe('CoreToolScheduler policy decisions', () => {
     const latestUpdate = onToolCallsUpdate.mock.calls.at(-1)?.[0] as ToolCall[];
     const waitingCall = latestUpdate[0] as WaitingToolCall;
 
+    if (!('correlationId' in waitingCall.confirmationDetails))
+      throw new Error('Expected correlation');
     const correlationId = waitingCall.confirmationDetails
       .correlationId as string;
 
-    busHandler?.({
+    busHandler({
       type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
       correlationId,
       outcome: ToolConfirmationOutcome.ProceedOnce,
@@ -227,7 +234,7 @@ describe('CoreToolScheduler policy decisions', () => {
 
     return {
       waitingCall,
-      mockMessageBus,
+      mockMessageBus: runtimeMessageBus,
       correlationId,
       busHandler,
       completionCallCount,

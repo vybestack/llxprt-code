@@ -1,3 +1,4 @@
+import { createSessionPolicyFixture } from './session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -97,6 +98,16 @@ function buildRuntimeContext(
   };
 
   return createAgentRuntimeContext({
+    ...createSessionPolicyFixture(
+      createProviderRuntimeContext({
+        runtimeId: 'test-runtime',
+        settingsService: new SettingsService(),
+      }).settingsService,
+      createProviderRuntimeContext({
+        runtimeId: 'test-runtime',
+        settingsService: new SettingsService(),
+      }).runtimeId,
+    ),
     state: runtimeState,
     history: historyService,
     settings: {

@@ -1,3 +1,4 @@
+import { CoreToolScheduler } from '../../coreToolScheduler.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -5,6 +6,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import { bindSchedulerOwner } from '../../../session/assembleSchedulerOwner.js';
 import { AgenticLoop } from '../AgenticLoop.js';
 import type { AgenticLoopEvent } from '../types.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
@@ -17,7 +19,6 @@ import type {
   ToolCall,
 } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ServerAgentStreamEvent } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   type ApprovalHandler,
@@ -83,13 +84,14 @@ describe('AgenticLoop with caller display callbacks', () => {
 
       const toolRegistry = createToolRegistryForTest([tool]);
       const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-      const config = createTestConfig({
-        messageBus,
-        toolRegistry,
-        policyEngine: createAllowPolicyEngine(),
-        interactive: false,
-        approvalMode: ApprovalMode.YOLO,
-      });
+      const { config: config, settingsOwner: configSettingsOwner } =
+        createTestConfig({
+          messageBus,
+          toolRegistry,
+          policyEngine: createAllowPolicyEngine(),
+          interactive: false,
+          approvalMode: ApprovalMode.YOLO,
+        });
 
       const displayToolUpdates: ToolCall[] = [];
       const displayOutputChunks: Array<{
@@ -106,6 +108,20 @@ describe('AgenticLoop with caller display callbacks', () => {
       ]);
 
       const loop = new AgenticLoop({
+        createSchedulerOwner: bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
         agentClient: client,
         config,
         messageBus,
@@ -185,13 +201,14 @@ describe('AgenticLoop with caller display callbacks', () => {
 
     const toolRegistry = createToolRegistryForTest([tool]);
     const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.YOLO,
+      });
 
     const { client, turnMessages } = createScriptedAgentClient([
       [toolCallRequestEvent('simple_tool', 'call-int'), finishedEvent()],
@@ -199,6 +216,20 @@ describe('AgenticLoop with caller display callbacks', () => {
     ]);
 
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
       agentClient: client,
       config,
       messageBus,
@@ -244,33 +275,36 @@ describe('AgenticLoop with caller display callbacks', () => {
     let capturedGetPreferredEditor: (() => string | undefined) | undefined;
     let capturedOnEditorOpen: (() => void) | undefined;
     let capturedOnEditorClose: (() => void) | undefined;
-    const baseConfig = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAskPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.DEFAULT,
-    });
-    const config: Config = {
-      ...baseConfig,
-      getOrCreateScheduler: async (
-        owner: object,
-        purpose: Parameters<Config['getOrCreateScheduler']>[1],
-        callbacks: Parameters<Config['getOrCreateScheduler']>[2],
-        schedulerOptions: Parameters<Config['getOrCreateScheduler']>[3],
-        deps: Parameters<Config['getOrCreateScheduler']>[4],
-      ) => {
-        capturedGetPreferredEditor = callbacks.getPreferredEditor;
-        capturedOnEditorOpen = callbacks.onEditorOpen;
-        capturedOnEditorClose = callbacks.onEditorClose;
-        return baseConfig.getOrCreateScheduler(
-          owner,
-          purpose,
-          callbacks,
-          schedulerOptions,
-          deps,
-        );
-      },
+    const { config: baseConfig, settingsOwner: baseConfigSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAskPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.DEFAULT,
+      });
+    const config = baseConfig;
+    const configSettingsOwner = baseConfigSettingsOwner;
+    const createSchedulerOwner = (
+      callbacks: Parameters<ReturnType<typeof bindSchedulerOwner>>[0],
+    ) => {
+      capturedGetPreferredEditor = callbacks.getPreferredEditor;
+      capturedOnEditorOpen = callbacks.onEditorOpen;
+      capturedOnEditorClose = callbacks.onEditorClose;
+      return bindSchedulerOwner(
+        config,
+        messageBus,
+        true,
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      )(callbacks);
     };
 
     const editorOpenCalls: string[] = [];
@@ -289,6 +323,7 @@ describe('AgenticLoop with caller display callbacks', () => {
     ]);
 
     const loop = new AgenticLoop({
+      createSchedulerOwner,
       agentClient: client,
       config,
       messageBus,
@@ -333,13 +368,14 @@ describe('AgenticLoop with caller display callbacks', () => {
 
     const toolRegistry = createToolRegistryForTest([tool]);
     const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: false,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: false,
+        approvalMode: ApprovalMode.YOLO,
+      });
 
     const { client, recordedToolCalls } = createScriptedAgentClient([
       [
@@ -357,6 +393,20 @@ describe('AgenticLoop with caller display callbacks', () => {
     let recordedCountAtCallback = -1;
 
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
       agentClient: client,
       config,
       messageBus,
@@ -404,13 +454,14 @@ describe('AgenticLoop with caller display callbacks', () => {
 
     const toolRegistry = createToolRegistryForTest([tool]);
     const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: false,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: false,
+        approvalMode: ApprovalMode.YOLO,
+      });
 
     const { client } = createScriptedAgentClient([
       [
@@ -421,6 +472,20 @@ describe('AgenticLoop with caller display callbacks', () => {
     ]);
 
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
       agentClient: client,
       config,
       messageBus,
@@ -464,13 +529,14 @@ describe('AgenticLoop with caller display callbacks', () => {
 
     const toolRegistry = createToolRegistryForTest([tool]);
     const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: false,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: false,
+        approvalMode: ApprovalMode.YOLO,
+      });
 
     const { client } = createScriptedAgentClient([
       [
@@ -481,6 +547,20 @@ describe('AgenticLoop with caller display callbacks', () => {
     ]);
 
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
       agentClient: client,
       config,
       messageBus,
@@ -545,13 +625,14 @@ describe('AgenticLoop with caller display callbacks', () => {
 
       const toolRegistry = createToolRegistryForTest([tool]);
       const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-      const config = createTestConfig({
-        messageBus,
-        toolRegistry,
-        policyEngine: createAllowPolicyEngine(),
-        interactive: false,
-        approvalMode: ApprovalMode.YOLO,
-      });
+      const { config: config, settingsOwner: configSettingsOwner } =
+        createTestConfig({
+          messageBus,
+          toolRegistry,
+          policyEngine: createAllowPolicyEngine(),
+          interactive: false,
+          approvalMode: ApprovalMode.YOLO,
+        });
 
       const toolUpdatesByStatus: ToolCall[] = [];
 
@@ -564,6 +645,20 @@ describe('AgenticLoop with caller display callbacks', () => {
       ]);
 
       const loop = new AgenticLoop({
+        createSchedulerOwner: bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
         agentClient: client,
         config,
         messageBus,

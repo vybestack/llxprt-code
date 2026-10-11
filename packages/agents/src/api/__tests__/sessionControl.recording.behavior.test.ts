@@ -175,6 +175,7 @@ describe('SessionControl continuous recording @plan:PLAN-20260617-COREAPI.P20 @r
     expect(path.length).toBeGreaterThan(0);
     expect(raw).toContain('post-resume-sentinel-gamma');
     expect(raw).toContain('a plain text reply');
+    expect(raw.match(/pre-resume base turn/g)).toHaveLength(1);
   });
 
   const observePostResumeTurnsAppendToTheResumedJSONLFile = async () =>

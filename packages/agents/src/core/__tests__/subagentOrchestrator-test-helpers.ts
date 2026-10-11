@@ -1,8 +1,18 @@
+import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
 
 /**
  * Shared helpers for subagent orchestrator test files. Extracted from the
@@ -10,8 +20,11 @@
  * max-lines disable is needed.
  */
 
-import { vi } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { afterEach, vi } from 'bun:test';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { ToolRegistry, type ToolSelection } from '@vybestack/llxprt-code-tools';
+import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import {
   SettingsService,
@@ -24,16 +37,25 @@ import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import { type SubAgentScope as SubAgentScopeInstance } from '../subagent.js';
 
-export function makeForegroundConfig(): Config {
-  const settingsService = new SettingsService();
-  return {
-    getSessionId: () => 'primary-session',
-    getProvider: () => 'gemini',
-    getContentGeneratorConfig: () => undefined,
-    getModel: () => 'gemini-1.5-flash',
-    getToolRegistry: () => undefined,
-    getSettingsService: () => settingsService,
-  } as unknown as Config;
+const foregroundConfigs: Config[] = [];
+afterEach(async () => {
+  for (const config of foregroundConfigs.splice(0)) await config.dispose();
+});
+
+export function makeForegroundConfig(
+  initialSettings: Readonly<Record<string, unknown>> = {},
+): Config {
+  const config = new Config({
+    sessionId: 'primary-session',
+    provider: 'gemini',
+    model: 'gemini-1.5-flash',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    debugMode: false,
+    initialSettings,
+  });
+  foregroundConfigs.push(config);
+  return config;
 }
 
 /**
@@ -93,10 +115,22 @@ export function createOrchestratorForTurns(options: {
   const { factory } = createScopeFactory();
   const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
 
+  const foregroundConfig1 = options.foregroundConfig ?? makeForegroundConfig();
+  const foregroundSettings1 = createSessionSettingsFixture(foregroundConfig1);
   const orchestrator = new SubagentOrchestrator({
+    workspaceTrust: foregroundSettings1.workspaceTrust,
+    createChildSettings: () =>
+      foregroundSettings1.settingsOwner.createChildStore(),
+    readRunPolicy: () =>
+      foregroundSettings1.settingsOwner.readSubagentRunPolicy(),
+
+    instructions: emptyInstructionReads,
+    toolRegistry: fixtureToolSelection(),
+    workspacePaths: fixturePaths(),
+    readMcpInstructions: () => undefined,
     subagentManager,
     profileManager,
-    foregroundConfig: options.foregroundConfig ?? makeForegroundConfig(),
+    foregroundConfig: foregroundConfig1,
     scopeFactory: factory,
     runtimeLoader,
     messageBus: new MessageBus(),
@@ -126,9 +160,12 @@ export function extractRunConfig(
 }
 
 export function createRuntimeBundle(label = 'bundle') {
-  const clearHistory = vi.fn();
-  const history = { clear: clearHistory } as unknown as {
-    clear: () => void;
+  const ownedHistory = new HistoryService();
+  const history = {
+    clear: vi.fn(() => ownedHistory.clear()),
+    setTokenizerFactory: ownedHistory.setTokenizerFactory.bind(ownedHistory),
+    setActiveTokenizationTarget:
+      ownedHistory.setActiveTokenizationTarget.bind(ownedHistory),
   };
   const runtimeContext = {
     state: { runtimeId: `${label}-runtime-id`, sessionId: `${label}-session` },
@@ -156,4 +193,12 @@ export function createRuntimeBundle(label = 'bundle') {
     },
     contentGenerator: {},
   };
+}
+
+export function fixtureToolSelection(): ToolSelection {
+  return new ToolRegistry(
+    { getCoreTools: () => [], isTrustedFolder: () => true },
+    new CoreMessageBusAdapter(new MessageBus()),
+    assembleTaskSchemaPolicy(new SettingsService()),
+  );
 }

@@ -1,3 +1,6 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { createLoopSettingsFixture } from './agenticLoop/__tests__/loop-settings-fixture.js';
+import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from '@vybestack/llxprt-code-core/config/configTypes.js';
 /**
  * @license
  * Copyright 2026 Google LLC
@@ -7,7 +10,6 @@
 import { describe, it, expect, vi } from 'bun:test';
 import type { ToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
@@ -20,7 +22,6 @@ import type { DeclarativeTool, ToolResult } from '@vybestack/llxprt-code-tools';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import {
-  createMockConfig,
   createMockMessageBus,
   createMockPolicyEngine,
 } from './__tests__/coreToolScheduler-test-helpers.js';
@@ -48,17 +49,15 @@ function makeConfig(
   policyDecision: PolicyDecision,
   toolRegistry: ToolRegistry,
   messageBus: ReturnType<typeof createMockMessageBus>,
-): Config {
+) {
   const mockPolicyEngine = createMockPolicyEngine();
   mockPolicyEngine.evaluate = vi.fn().mockReturnValue(policyDecision);
-  return createMockConfig({
-    isInteractive: () => true,
-    getApprovalMode: () => ApprovalMode.DEFAULT,
-    getToolRegistry: () => toolRegistry,
-    getMessageBus: () => messageBus,
-    getPolicyEngine: () =>
-      mockPolicyEngine as unknown as ReturnType<Config['getPolicyEngine']>,
-  } as Partial<Config>);
+  messageBus.evaluate = mockPolicyEngine.evaluate;
+  return createLoopSettingsFixture({
+    interactive: true,
+    approvalMode: ApprovalMode.DEFAULT,
+    imagePayloadBudgetBytes: DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
+  });
 }
 
 function makeScheduler(
@@ -68,8 +67,22 @@ function makeScheduler(
 ) {
   const onAllToolCallsComplete = vi.fn();
   const onToolCallsUpdate = vi.fn<(calls: ToolCall[]) => void>();
+  const { config, settingsOwner } = makeConfig(
+    policyDecision,
+    toolRegistry,
+    messageBus,
+  );
   const scheduler = new CoreToolScheduler({
-    config: makeConfig(policyDecision, toolRegistry, messageBus),
+    telemetry: RootTelemetry.prepare({
+      enabled: false,
+      sessionId: 'isolated-caller-fixture',
+      maxBytes: 1024,
+      maxFiles: 1,
+    }),
+    config,
+    readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+    getToolGovernance: () =>
+      settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
     messageBus: messageBus as unknown as MessageBus,
     toolRegistry,
     onAllToolCallsComplete,
@@ -219,6 +232,61 @@ function cancelledReason(call: ToolCall): string {
 
 describe('CoreToolScheduler approval outcomes', () => {
   describe('single-call terminal states', () => {
+    it('rejects the original approval failure and terminates without execution', async () => {
+      const failure = new Error('Approval persistence failed');
+      const executed: string[] = [];
+      const tool = new MockTool({
+        name: 'failedApproval',
+        shouldConfirmExecute: async () => ({
+          type: 'info',
+          title: 'Confirm',
+          prompt: 'Save approval',
+          onConfirm: async () => {
+            throw failure;
+          },
+        }),
+        execute: async () => {
+          executed.push('failedApproval');
+          return { llmContent: 'executed', returnDisplay: 'executed' };
+        },
+      });
+      const { scheduler, onToolCallsUpdate } = makeScheduler(
+        PolicyDecision.ASK_USER,
+        makeRegistry([tool]),
+      );
+      try {
+        await scheduler.schedule(
+          {
+            callId: 'failed-approval',
+            name: tool.name,
+            args: {},
+            isClientInitiated: false,
+            prompt_id: 'prompt-failed-approval',
+          },
+          new AbortController().signal,
+        );
+        const awaiting = await waitForCallStatus(
+          onToolCallsUpdate,
+          'failed-approval',
+          'awaiting_approval',
+        );
+        await expect(
+          confirmCall(awaiting, ToolConfirmationOutcome.ProceedAlwaysAndSave),
+        ).rejects.toBe(failure);
+        const terminal = await waitForCallStatus(
+          onToolCallsUpdate,
+          'failed-approval',
+          'error',
+        );
+        if (terminal.status !== 'error')
+          throw new Error('Expected terminal error');
+        expect(terminal.response.error).toBe(failure);
+        expect(executed).toStrictEqual([]);
+      } finally {
+        scheduler.dispose();
+      }
+    });
+
     it('ProceedOnce resolves to success with exactly one execution', async () => {
       // @plan PLAN-20260824-ISSUE2021.P01 @requirement REQ-2021.1
       const executed: string[] = [];

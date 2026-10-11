@@ -5,11 +5,7 @@
  */
 
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import {
-  getActiveProviderStatus,
-  getActiveProfileName,
-  getCliProviderManager,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 
 /**
  * Placeholder shown for a load-balancer sub-profile or model that has not yet
@@ -40,14 +36,12 @@ interface LoadBalancerStatsShape {
 }
 
 export interface ModelIdentityRuntime {
-  getActiveProviderStatus: () => {
+  providerStatus: () => {
     providerName: string | null;
     modelName: string | null;
   };
   getActiveProfileName: () => string | null;
-  getCliProviderManager: () => {
-    getProviderByName: (name: string) => unknown;
-  } | null;
+  getLoadBalancerStats: () => LoadBalancerStatsShape | undefined;
 }
 
 function cleaned(value: string | null | undefined): string | null {
@@ -107,37 +101,11 @@ export function formatModelIdentity(input: ModelIdentityInput): string {
   return cleaned(input.fallback) ?? UNKNOWN_IDENTITY;
 }
 
-function hasGetStats(value: unknown): value is { getStats: () => unknown } {
-  return (
-    value !== null &&
-    typeof value === 'object' &&
-    'getStats' in value &&
-    typeof (value as { getStats?: unknown }).getStats === 'function'
-  );
-}
-
-function asLoadBalancerStats(value: unknown): LoadBalancerStatsShape | null {
-  if (value === null || typeof value !== 'object') {
-    return null;
-  }
-  return value as LoadBalancerStatsShape;
-}
-
 function readLoadBalancerStats(
   runtime: ModelIdentityRuntime,
 ): LoadBalancerStatsShape | null {
   try {
-    const providerManager = runtime.getCliProviderManager();
-    if (providerManager === null) {
-      return null;
-    }
-    const provider = providerManager.getProviderByName(
-      LOAD_BALANCER_PROVIDER_NAME,
-    );
-    if (!hasGetStats(provider)) {
-      return null;
-    }
-    return asLoadBalancerStats(provider.getStats());
+    return runtime.getLoadBalancerStats() ?? null;
   } catch (error) {
     // Graceful degradation: the footer falls back to `none` placeholders.
     // Log (debug-only) so operators can diagnose why, instead of failing
@@ -157,7 +125,7 @@ export function resolveModelIdentity(
   runtime: ModelIdentityRuntime,
   fallback?: string,
 ): string {
-  const status = runtime.getActiveProviderStatus();
+  const status = runtime.providerStatus();
   const profileName = runtime.getActiveProfileName();
 
   if (status.providerName === LOAD_BALANCER_PROVIDER_NAME) {
@@ -180,23 +148,22 @@ export function resolveModelIdentity(
   });
 }
 
-/**
- * Build a {@link ModelIdentityRuntime} from the standalone CLI provider
- * accessors. The standalone `getActiveProviderStatus()` returns extra fields
- * (displayLabel, isPaidMode, baseURL) that are not needed for identity
- * resolution, so only the minimal shape is projected out.
- */
-export function createCliModelIdentityRuntime(): ModelIdentityRuntime {
+export function createCliModelIdentityRuntime(
+  agent: Pick<
+    Agent,
+    | 'getProvider'
+    | 'getModel'
+    | 'getCurrentSequenceModel'
+    | 'getActiveProfileName'
+  >,
+): ModelIdentityRuntime {
   return {
-    getActiveProviderStatus: () => {
-      const status = getActiveProviderStatus();
-      return {
-        providerName: status.providerName,
-        modelName: status.modelName,
-      };
-    },
-    getActiveProfileName: () => getActiveProfileName(),
-    getCliProviderManager: () => getCliProviderManager(),
+    providerStatus: () => ({
+      providerName: agent.getProvider(),
+      modelName: agent.getCurrentSequenceModel() ?? agent.getModel(),
+    }),
+    getActiveProfileName: () => agent.getActiveProfileName(),
+    getLoadBalancerStats: () => undefined,
   };
 }
 
@@ -209,7 +176,7 @@ export function createCliModelIdentityRuntime(): ModelIdentityRuntime {
 export function resolveContentPrefixIdentity(
   runtime: ModelIdentityRuntime,
 ): string | null {
-  const status = runtime.getActiveProviderStatus();
+  const status = runtime.providerStatus();
   const profileName = cleaned(runtime.getActiveProfileName());
   if (!profileName) {
     return null;

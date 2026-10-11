@@ -1,31 +1,13 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-/**
- * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P03
- *
- * AgentSkillsControl implementation. Delegates to the bound Config's
- * SkillManager so clients query/reload skills without a Config escape hatch.
- */
-
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { WorkspaceSkillOperations } from '@vybestack/llxprt-code-core/skills/workspace-skill-owner.js';
 import type { SkillDefinition } from '@vybestack/llxprt-code-core/skills/skillLoader.js';
 import type { AgentSkillsControl, SkillInfo } from '../agent.js';
 import { createControlError } from './errorUtils.js';
 
-/**
- * Deps bundle injected by AgentImpl so SkillsControl can read the live Config
- * skill surface.
- * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P03
- */
-export interface SkillsControlDeps {
-  readonly config: Config;
-}
-
-/** Projects a raw SkillDefinition onto the public SkillInfo shape. */
 function toSkillInfo(s: SkillDefinition): SkillInfo {
   return {
     name: s.name,
@@ -37,33 +19,54 @@ function toSkillInfo(s: SkillDefinition): SkillInfo {
 }
 
 export class SkillsControl implements AgentSkillsControl {
-  constructor(private readonly deps: SkillsControlDeps) {}
+  private closed = false;
+  private readonly accepted = new Set<Promise<void>>();
+  constructor(
+    private readonly operations: Pick<
+      WorkspaceSkillOperations,
+      'list' | 'find' | 'reload' | 'isAdminEnabled'
+    >,
+  ) {}
 
   list(opts?: { readonly includeDisabled?: boolean }): readonly SkillInfo[] {
-    const mgr = this.deps.config.getSkillManager();
-    const source =
-      opts?.includeDisabled === true ? mgr.getAllSkills() : mgr.getSkills();
-    return source.map(toSkillInfo);
+    return this.operations.list(opts?.includeDisabled).map(toSkillInfo);
   }
 
   get(name: string): SkillInfo | undefined {
-    const mgr = this.deps.config.getSkillManager();
-    const skill = mgr.getSkill(name);
-    if (skill === null) {
-      return undefined;
-    }
-    return toSkillInfo(skill);
+    const skill = this.operations.find(name);
+    return skill === undefined ? undefined : toSkillInfo(skill);
   }
 
   async reload(): Promise<void> {
     try {
-      await this.deps.config.reloadSkills();
+      if (this.closed) throw new Error('Skill facade is closed');
+      const operation = this.operations.reload();
+      this.accepted.add(operation);
+      try {
+        await operation;
+      } finally {
+        this.accepted.delete(operation);
+      }
     } catch (err) {
       throw createControlError('Failed to reload skills', err);
     }
   }
 
+  closeAdmission(): void {
+    this.closed = true;
+  }
+
+  async dispose(): Promise<void> {
+    this.closeAdmission();
+    const results = await Promise.allSettled([...this.accepted]);
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'Skill facade cleanup failed');
+  }
+
   isAdminEnabled(): boolean {
-    return this.deps.config.getSkillManager().isAdminEnabled();
+    return this.operations.isAdminEnabled();
   }
 }

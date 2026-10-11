@@ -5,7 +5,8 @@
  */
 
 import { vi } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core';
+import { createUiSessionOwner } from './uiSessionOwner.js';
+import { Config } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
 /**
@@ -18,8 +19,20 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
  * multi-file copy edits.
  */
 export function createMockAgent(config: Config): Agent {
+  const owner = createUiSessionOwner(
+    config instanceof Config ? config : undefined,
+  );
   return {
+    workspace: owner.workspace,
     dispose: vi.fn().mockResolvedValue(undefined),
-    getConfig: () => config,
+    hasActiveProvider: () => owner.providerManager.hasActiveProvider(),
+    getProviderContextLimit: () =>
+      owner.providerManager.getActiveProvider()?.getContextLimit?.(),
+    listAvailableModels: (provider?: string) =>
+      owner.providerManager.getAvailableModels(provider),
+    sessionClient: owner.sessionClient,
+    get agentClient() {
+      return owner.agentClient;
+    },
   } as unknown as Agent;
 }

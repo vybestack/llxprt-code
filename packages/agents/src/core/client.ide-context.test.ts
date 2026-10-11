@@ -22,7 +22,7 @@ import {
 import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
-import { ideContext } from '@vybestack/llxprt-code-ide-integration';
+import { createClientIdeFixture } from './__tests__/client-ide-fixture.js';
 import {
   setupAgentClient,
   type MockResponseShape,
@@ -171,17 +171,6 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
 void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
-const actual3 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ...actual3,
-  ideContext: {
-    ...actual3.ideContext,
-    getIdeContext: vi.fn(),
-    subscribeToIdeContext: vi.fn(),
-    setIdeContext: vi.fn(),
-    clearIdeContext: vi.fn(),
-  },
-}));
 const actual4 = {
   ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
 };
@@ -210,6 +199,7 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
 
 describe('AgentClient (client.ts)', () => {
   let client: AgentClient;
+  let ide: Awaited<ReturnType<typeof createClientIdeFixture>>;
 
   beforeEach(async () => {
     const ctx = await setupAgentClient({
@@ -218,6 +208,7 @@ describe('AgentClient (client.ts)', () => {
       mockEmbedContentFn,
     });
     client = ctx.client;
+    ide = await createClientIdeFixture(client);
 
     mockTodoStoreConstructor.mockImplementation(() => ({
       readTodos: todoStoreReadMock,
@@ -231,6 +222,7 @@ describe('AgentClient (client.ts)', () => {
 
   afterEach(async () => {
     await client.dispose();
+    await ide.dispose();
     vi.restoreAllMocks();
   });
 
@@ -238,7 +230,7 @@ describe('AgentClient (client.ts)', () => {
     describe('IDE context with pending tool calls', () => {
       let mockChat: Partial<ChatSession>;
 
-      beforeEach(() => {
+      beforeEach(async () => {
         const mockStream = (async function* () {
           yield { type: 'content', value: 'response' };
         })();
@@ -260,10 +252,8 @@ describe('AgentClient (client.ts)', () => {
         };
         client['contentGenerator'] = mockGenerator as ContentGenerator;
 
-        vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
-        (
-          ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
-        ).mockReturnValue({
+        ide.setEnabled(true);
+        await ide.update({
           workspaceState: {
             openFiles: [{ path: '/path/to/file.ts', timestamp: Date.now() }],
           },
@@ -395,9 +385,7 @@ describe('AgentClient (client.ts)', () => {
             openFiles: [{ path: '/path/to/fileA.ts', timestamp: Date.now() }],
           },
         };
-        (
-          ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
-        ).mockReturnValue(initialIdeContext);
+        await ide.update(initialIdeContext);
 
         // Act: Send the tool response
         let stream = client.sendMessageStream(
@@ -461,9 +449,7 @@ describe('AgentClient (client.ts)', () => {
             openFiles: [{ path: '/path/to/fileB.ts', timestamp: Date.now() }],
           },
         };
-        (
-          ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
-        ).mockReturnValue(newIdeContext);
+        await ide.update(newIdeContext);
 
         // Act: Send a new, regular user message
         stream = client.sendMessageStream(
@@ -509,9 +495,7 @@ describe('AgentClient (client.ts)', () => {
             ],
           },
         };
-        (
-          ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
-        ).mockReturnValue(contextA);
+        await ide.update(contextA);
 
         // Act: Send a regular message to establish the initial context
         let stream = client.sendMessageStream(
@@ -571,9 +555,7 @@ describe('AgentClient (client.ts)', () => {
             ],
           },
         };
-        (
-          ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
-        ).mockReturnValue(contextB);
+        await ide.update(contextB);
 
         // Act: Send the tool response
         stream = client.sendMessageStream(
@@ -637,9 +619,7 @@ describe('AgentClient (client.ts)', () => {
             ],
           },
         };
-        (
-          ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
-        ).mockReturnValue(contextC);
+        await ide.update(contextC);
 
         // Act: Send a new, regular user message
         stream = client.sendMessageStream(

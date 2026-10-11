@@ -11,17 +11,16 @@ import {
   resolveToolFormat,
   getToolFormatOverride,
   VALID_TOOL_FORMATS,
-  type ToolFormatSettings,
 } from './toolFormatDetection.js';
 import { detectToolFormat } from './toolFormatDetection.js';
 
 function createMockSettings(
   providerSettings: Record<string, Record<string, unknown>> = {},
-): ToolFormatSettings {
-  return {
-    getProviderSettings: (providerName: string) =>
-      providerSettings[providerName],
-  };
+  providerName = 'openai',
+): unknown {
+  return Object.entries(providerSettings).find(
+    ([name]) => name === providerName,
+  )?.[1].toolFormat;
 }
 
 describe('resolveToolFormat (issue #1943)', () => {
@@ -82,19 +81,17 @@ describe('resolveToolFormat (issue #1943)', () => {
   });
 
   it('isolates overrides per provider - openai override does not affect kimi provider lookup', () => {
-    const settings = createMockSettings({
-      openai: { toolFormat: 'openai' },
-      // kimi provider has no override
-    });
+    const settings = createMockSettings(
+      { openai: { toolFormat: 'openai' } },
+      'kimi',
+    );
     // Even though openai has override=kimi, looking up 'kimi' provider finds nothing
     const format = resolveToolFormat('moonshot-v1-kimi-k2', 'kimi', settings);
     expect(format).toBe('kimi'); // auto-detected since kimi provider has no override
   });
 
   it('falls back to detectToolFormat when settings returns undefined for provider', () => {
-    const settings: ToolFormatSettings = {
-      getProviderSettings: () => undefined,
-    };
+    const settings = undefined;
     const format = resolveToolFormat(
       'mistral-small-latest',
       'openai',
@@ -176,9 +173,7 @@ describe('getToolFormatOverride (issue #1943)', () => {
   });
 
   it('returns undefined when provider settings are undefined', () => {
-    const settings: ToolFormatSettings = {
-      getProviderSettings: () => undefined,
-    };
+    const settings = undefined;
     expect(getToolFormatOverride('openai', settings)).toBeUndefined();
   });
 

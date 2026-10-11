@@ -5,7 +5,7 @@
  */
 
 import type { GenerateContentResponse, Part } from './geminiWireTypes.js';
-import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type NormalizedGenerateChatOptions } from '@vybestack/llxprt-code-providers/BaseProvider.js';
@@ -49,7 +49,6 @@ export interface GeminiGenerationSetup {
  */
 export async function buildGenerationSetup(
   options: NormalizedGenerateChatOptions,
-  globalConfig: Config | undefined,
   resolveAuth: () => Promise<{
     authMode: GeminiAuthMode;
     token: string;
@@ -61,8 +60,7 @@ export async function buildGenerationSetup(
   const { contents: content, tools } = options;
   const { authMode, token: authToken } = await resolveAuth();
   const currentModel = options.resolved.model;
-  const configForMessages =
-    options.config ?? options.runtime?.config ?? globalConfig;
+  const configForMessages = parseOutputLimits(options.invocation.ephemerals);
   const contents = convertToGeminiContents(
     content,
     currentModel,

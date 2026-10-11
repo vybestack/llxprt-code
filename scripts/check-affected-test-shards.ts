@@ -41,10 +41,10 @@ const DEFAULT_DATA_PATH = join(__dirname, 'affected-test-shards.data.json');
 
 const PACKAGE_PREFIX = '@vybestack/llxprt-code-';
 // `test-bun/` holds Bun-native suites discovered by scripts/bun-test-roots.ts.
-// They are tests by construction but live outside `src/`, so without this they
-// would be read as production code and their imports misclassified.
+// `src/test-utils/` holds private test fixtures, including owner bindings that
+// must not be classified as runtime dependencies of the package.
 const TEST_PATH_RE =
-  /(__tests__|\.test\.|\.spec\.|\.bun\.ts$|\/tests\/|\/test-bun\/|\/integration-tests\/|\/test\/)/;
+  /(__tests__|\.test\.|\.spec\.|\.bun\.ts$|\/tests\/|\/test-bun\/|\/test-utils\/|\/integration-tests\/|\/test\/)/;
 
 export interface ObserverRule {
   readonly observingPackage: string;
@@ -155,7 +155,7 @@ function extractImportSpecifiers(
  * Reads a file and records every inter-package import edge it contains into
  * the `edgeFiles` map. Each edge is tracked as {prod, test} so an edge seen
  * in any production file is classified as production. Fail-fast: a read error
- * propagates instead of being silently skipped.
+ * for an existing file propagates instead of being silently skipped.
  */
 function recordEdgesFromFile(
   file: string,
@@ -208,7 +208,7 @@ function extractAllEdges(repoRoot: string): {
   for (const file of listTrackedFiles(repoRoot, [
     'packages/**/*.ts',
     'packages/**/*.tsx',
-  ])) {
+  ]).filter((tracked) => existsSync(join(repoRoot, tracked)))) {
     const m = file.match(/^packages\/([a-z0-9-]+)\//);
     if (!m) continue;
     const pkg = m[1];

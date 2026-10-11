@@ -1,18 +1,28 @@
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  type SessionSettingsOwner,
+  type RuntimePolicyOwner,
+  type LlxprtExtension,
+  type RuntimeProviderManager,
+  type Config,
+  OutputFormat,
+} from '@vybestack/llxprt-code-core';
 
 import { writeFileSync } from 'node:fs';
-import { type Config, OutputFormat } from '@vybestack/llxprt-code-core';
 import {
   uiTelemetryService,
   debugLogger,
 } from '@vybestack/llxprt-code-telemetry';
 import type {
   Agent,
-  ActivationPreflightToken,
+  ActivationPreflight,
   ProviderActivationIntent,
 } from '@vybestack/llxprt-code-agents';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
@@ -25,7 +35,10 @@ import { appEvents, AppEvent } from './utils/events.js';
 import type { LoadedSettings } from './config/settings.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
 import { registerDynamicToolSettings } from './cliBootstrap.js';
-import { createForegroundAgent } from './cliAgentBootstrap.js';
+import {
+  createForegroundAgent,
+  type ForegroundAgentOptions,
+} from './cliAgentBootstrap.js';
 
 /**
  * Initialize Config, showing an MCP initialization spinner when interactive and
@@ -114,8 +127,19 @@ async function renderInitializingSpinner(initialTotal: number): Promise<
  */
 export async function constructAgentWithSpinner(
   config: Config,
-  activationPreflightToken?: ActivationPreflightToken,
+  providerManager: RuntimeProviderManager,
+  settingsService: SettingsService,
+  settingsOwner: SessionSettingsOwner,
+  activationPreflight?: ActivationPreflight,
   activationPreflightIntent?: ProviderActivationIntent,
+  getMcpAuthProviderFactory?: ForegroundAgentOptions['getMcpAuthProviderFactory'],
+  onSkills?: ForegroundAgentOptions['onSkills'],
+  onExtensionRestart?: (
+    restart: (extension: LlxprtExtension) => Promise<void>,
+  ) => void,
+  policyOwner?: RuntimePolicyOwner,
+  oauthManager?: OAuthManager,
+  providerFileLifecycle?: ProviderFileLifecycle,
 ): Promise<Agent> {
   const mcpServers = config.getMcpServers();
   const mcpServersCount = mcpServers ? Object.keys(mcpServers).length : 0;
@@ -131,10 +155,26 @@ export async function constructAgentWithSpinner(
   try {
     const agent = await createForegroundAgent({
       config,
-      activationPreflightToken,
+      providerManager,
+      settingsService,
+      settingsOwner,
+      activationPreflight,
       activationPreflightIntent,
+      getMcpAuthProviderFactory,
+      onSkills,
+      onExtensionRestart,
+      policyOwner,
+      oauthManager,
+      providerFileLifecycle,
     });
-    registerDynamicToolSettings(config);
+    registerDynamicToolSettings(agent.tools);
+    registerShellJobShutdownNotice(() =>
+      agent.tasks
+        .listRunning()
+        .flatMap((task) =>
+          task.kind === 'shell' ? [{ id: task.id, command: task.command }] : [],
+        ),
+    );
     return agent;
   } finally {
     if (spinnerInstance) {
@@ -184,7 +224,7 @@ export async function prepareTerminalSession(
   settings: LoadedSettings,
   argv: ParsedCliArgs,
 ): Promise<void> {
-  registerShellJobShutdownNotice(config);
+  registerShellJobShutdownNotice(() => []);
   const wasRaw = process.stdin.isRaw;
   const stdinManager = new StdinRawModeManager({
     debug: config.getDebugMode(),

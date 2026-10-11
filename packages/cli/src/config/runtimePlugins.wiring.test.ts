@@ -30,10 +30,7 @@ import type {
   ProviderContributionRegistry,
   RuntimePluginDiscoveryDeps,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import {
-  assembleCliProviderRuntime,
-  disposeCliRuntime,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime.js';
 
 const PLUGIN_PACKAGE = 'llxprt-wiring-provider';
 const PLUGIN_PROVIDER_ID = 'wiring-provider';
@@ -133,26 +130,19 @@ function assemble(
 }
 
 describe('runtime plugin startup wiring', () => {
-  const assembledRuntimeIds: string[] = [];
+  const assembled: Array<ReturnType<typeof assembleCliProviderRuntime>> = [];
 
-  afterEach(async () => {
-    while (assembledRuntimeIds.length > 0) {
-      const id = assembledRuntimeIds.pop();
-      if (id !== undefined) {
-        await disposeCliRuntime(id);
-      }
-    }
+  afterEach(() => {
+    for (const runtime of assembled.splice(0)) runtime.registration.dispose();
   });
 
   function assembleTracked(
     registry: ProviderContributionRegistry | undefined,
     suffix: string,
   ): ReturnType<typeof assembleCliProviderRuntime> {
-    const runtimeId = `${RUNTIME_ID}-${suffix}`;
-    if (!assembledRuntimeIds.includes(runtimeId)) {
-      assembledRuntimeIds.push(runtimeId);
-    }
-    return assemble(registry, runtimeId);
+    const runtime = assemble(registry, `${RUNTIME_ID}-${suffix}`);
+    assembled.push(runtime);
+    return runtime;
   }
 
   it('discovers only the installed package that declares the plugin marker', () => {

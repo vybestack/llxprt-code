@@ -552,7 +552,8 @@ describe('Finding 2: stage-aware projection errors in ProviderContentEnforcer (I
       historyService,
       runtimeContext,
       generationConfig: {},
-      providerRuntimeNullable: undefined,
+      readCompletionBudgetSetting: () =>
+        runtimeContext.readCompletionBudgetSetting(),
       logger: makeLogger(),
       ensureDensityOptimized: vi.fn().mockResolvedValue(undefined),
       performCompression: vi.fn(),

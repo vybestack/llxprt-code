@@ -9,13 +9,15 @@
  * @requirement REQ-ASYNC-006, REQ-ASYNC-007
  */
 
+import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { TasksControl } from '../../../../agents/src/api/control/tasksControl.js';
+import { createFakeAgent } from '../hooks/agentStream/__tests__/helpers/createFakeAgent.js';
 import { taskCommand, tasksCommands } from './tasksCommand.js';
 import type { CommandContext } from './types.js';
 import {
   AsyncTaskManager,
   SubagentTerminateMode,
-  type Config,
   type Logger,
 } from '@vybestack/llxprt-code-core';
 import { MessageType } from '../types.js';
@@ -32,12 +34,15 @@ describe('tasksCommand', () => {
     addItemMock = vi.fn();
 
     context = {
+      runtimeApi: createMockRuntimeApi(),
+      refreshProviderAliases: vi.fn(async () => {}),
+      oauthControl: {} as CommandContext['oauthControl'],
       signal: new AbortController().signal,
       services: {
-        config: {
-          getAsyncTaskManager: () => asyncTaskManager,
-        } as unknown as Config,
-        agent: null,
+        config: null,
+        agent: createFakeAgent([], {
+          tasks: new TasksControl({ getManager: () => asyncTaskManager }),
+        }),
         settings: {} as unknown as LoadedSettings,
         git: undefined,
         logger: {} as unknown as Logger,
@@ -155,7 +160,7 @@ describe('tasksCommand', () => {
   });
 
   describe('/task end', () => {
-    it('should cancel task with valid ID', () => {
+    it('should cancel task with valid ID', async () => {
       asyncTaskManager.registerTask({
         id: 'task-789',
         subagentName: 'codereviewer',
@@ -166,7 +171,7 @@ describe('tasksCommand', () => {
       const endSubCommand = taskCommand.subCommands?.find(
         (c) => c.name === 'end',
       );
-      void endSubCommand?.action?.(context, 'task-789');
+      await endSubCommand?.action?.(context, 'task-789');
 
       expect(addItemMock).toHaveBeenCalledWith(
         {
@@ -177,7 +182,7 @@ describe('tasksCommand', () => {
       );
     });
 
-    it('should cancel task with prefix', () => {
+    it('should cancel task with prefix', async () => {
       asyncTaskManager.registerTask({
         id: 'task-abc123',
         subagentName: 'researcher',
@@ -188,7 +193,7 @@ describe('tasksCommand', () => {
       const endSubCommand = taskCommand.subCommands?.find(
         (c) => c.name === 'end',
       );
-      void endSubCommand?.action?.(context, 'task-abc');
+      await endSubCommand?.action?.(context, 'task-abc');
 
       expect(addItemMock).toHaveBeenCalledWith(
         {

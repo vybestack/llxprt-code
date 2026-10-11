@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * Behavioral JSONL test for LoggingProviderWrapper verifying the
  * providers → storage dependency works correctly after extraction.
@@ -24,7 +27,7 @@ import type {
   GenerateChatOptions,
   ProviderToolset,
 } from './IProvider.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService as SettingsServiceImpl } from '@vybestack/llxprt-code-settings';
@@ -63,22 +66,40 @@ class FakeProvider implements IProvider {
 }
 
 function buildConfigStub(tmpDir: string): Config {
-  return {
-    getConversationLoggingEnabled: () => true,
-    getConversationLogPath: () => tmpDir,
-    getRedactionConfig: () => ({
+  return new Config({
+    sessionId: 'wrapper-physical',
+    targetDir: process.cwd(),
+    model: 'test',
+    debugMode: false,
+    telemetry: {
+      enabled: false,
+      logConversations: true,
+      conversationLogPath: tmpDir,
+    },
+    redaction: {
       redactApiKeys: false,
       redactCredentials: false,
       redactFilePaths: false,
       redactUrls: false,
       redactEmails: false,
       redactPersonalInfo: false,
-    }),
-    getProviderManager: () => ({ accumulateSessionTokens: () => {} }),
-  } as unknown as Config;
+    },
+  });
 }
 
+const settingsRoots: SessionSettingsOwner[] = [];
 describe('LoggingProviderWrapper — behavioral JSONL output', () => {
+  afterEach(async () => {
+    const results = await Promise.allSettled(
+      settingsRoots.splice(0).map((owner) => owner.dispose()),
+    );
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'Wrapper test cleanup failed');
+  });
+
   afterEach(() => {
     resetConversationFileWriterForTesting();
   });
@@ -87,8 +108,16 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lpw-jsonl-test-'));
     const configStub = buildConfigStub(tmpDir);
     const settings = new SettingsServiceImpl();
+    const settingsOwner = new SessionSettingsOwner(settings);
+    settingsOwner.bindTelemetry(configStub);
+    settingsRoots.push(settingsOwner);
     const fake = new FakeProvider();
-    const wrapper = new LoggingProviderWrapper(fake);
+    const wrapper = new LoggingProviderWrapper(
+      fake,
+      configStub,
+      undefined,
+      () => captureProviderRequestDiagnostics(configStub, settingsOwner),
+    );
 
     const runtime: ProviderRuntimeContext = {
       settingsService: settings as unknown as SettingsService,
@@ -106,9 +135,7 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
 
     const options: GenerateChatOptions = {
       contents: inputContent,
-      settings: settings as unknown as SettingsService,
-      runtime,
-      config: configStub,
+      invocation: captureProviderInvocation(runtime, fake.name),
     };
 
     // Consume the async iterator to completion
@@ -199,6 +226,9 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
     );
     const configStub = buildConfigStub(tmpDir);
     const settings = new SettingsServiceImpl();
+    const settingsOwner = new SessionSettingsOwner(settings);
+    settingsOwner.bindTelemetry(configStub);
+    settingsRoots.push(settingsOwner);
     const throwingRedactor = {
       redactMessage: () => {
         throw new Error('redaction failed');
@@ -208,7 +238,9 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
     };
     const wrapper = new LoggingProviderWrapper(
       new FakeProvider(),
+      configStub,
       throwingRedactor,
+      () => captureProviderRequestDiagnostics(configStub, settingsOwner),
     );
     const warnSpy = vi.spyOn(DebugLogger.prototype, 'warn');
 
@@ -223,9 +255,7 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
       const chunks: IContent[] = [];
       for await (const chunk of wrapper.generateChatCompletion({
         contents: [{ speaker: 'user', blocks: [{ type: 'text', text: 'hi' }] }],
-        settings: settings as unknown as SettingsService,
-        runtime,
-        config: configStub,
+        invocation: captureProviderInvocation(runtime, 'fake'),
       })) {
         chunks.push(chunk);
       }

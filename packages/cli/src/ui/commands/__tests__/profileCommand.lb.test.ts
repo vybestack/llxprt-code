@@ -21,16 +21,12 @@ const runtimeMocks = {
   getEphemeralSettings: vi.fn(),
 };
 
-void vi.mock('../../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => runtimeMocks,
-}));
-
 describe('profileCommand - load balancer save with protected settings', () => {
   let context: CommandContext;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    context = createMockCommandContext();
+    context = createMockCommandContext({ runtimeApi: runtimeMocks });
     runtimeMocks.listSavedProfiles.mockResolvedValue([
       'profile1',
       'profile2',

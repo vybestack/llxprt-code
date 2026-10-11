@@ -11,38 +11,6 @@ import { assertTruthy } from '../../__tests__/assertions.js';
 import { MessageType } from '../types.js';
 import type { CommandContext } from './types.js';
 
-/**
- * A real class-style capability holder whose `getRunImageOperation` is a
- * prototype METHOD (not an arrow function). Invoking it detached would lose
- * `this`, so this genuinely exercises the receiver-binding contract: the
- * runtime must forward via a wrapper, and the command must invoke it as a
- * method. If `this` is lost, `#runner` is undefined and the command reports
- * unavailable instead of succeeding.
- */
-class ImageCapabilityHolder {
-  #runner:
-    | ((req: {
-        prompt: string;
-        outputPath: string;
-        inputPaths: readonly string[];
-      }) => Promise<{ absoluteOutputPath: string }>)
-    | undefined;
-
-  constructor(
-    runner?: (req: {
-      prompt: string;
-      outputPath: string;
-      inputPaths: readonly string[];
-    }) => Promise<{ absoluteOutputPath: string }>,
-  ) {
-    this.#runner = runner;
-  }
-
-  getRunImageOperation() {
-    return this.#runner;
-  }
-}
-
 function completeImageOperation(signal: AbortSignal): {
   absoluteOutputPath: string;
 } {
@@ -60,20 +28,16 @@ function makeMockContext(overrides?: {
   }) => Promise<{ absoluteOutputPath: string }>;
   signal?: AbortSignal;
 }): CommandContext {
-  const capability =
-    overrides?.runImageOperation !== undefined
-      ? new ImageCapabilityHolder(overrides.runImageOperation)
-      : new ImageCapabilityHolder();
   return {
     signal: overrides?.signal ?? new AbortController().signal,
     services: {
-      // The holder INSTANCE is the config, so `getRunImageOperation` is reached
-      // through the prototype with the instance as receiver. It is deliberately
-      // NOT pre-bound: extracting the function and calling it detached loses
-      // `this`, cannot read `#runner`, and fails — which is exactly the
-      // regression this fixture must be able to catch.
-      config: capability as never,
-      agent: null,
+      config: null,
+      agent:
+        overrides?.runImageOperation === undefined
+          ? null
+          : {
+              sessionClient: { runImageOperation: overrides.runImageOperation },
+            },
       settings: {} as never,
       git: undefined,
       logger: { log: vi.fn(), error: vi.fn(), warn: vi.fn() } as never,
@@ -335,12 +299,7 @@ describe('imageCommand', () => {
     expect(infoCall).toBeDefined();
   });
 
-  it('exercises receiver binding: a prototype-method capability works via the runtime wrapper', async () => {
-    // This test proves the receiver-binding contract is genuinely exercised.
-    // The capability is a prototype METHOD that reads `this.#runner`.
-    // If `getRunImageOperation` were copied as a bare value and invoked
-    // detached, `this` would be undefined and the runner would never resolve,
-    // causing an "unavailable" error instead of success.
+  it('executes through the explicitly assembled session image operation', async () => {
     const runner = vi.fn().mockResolvedValue({
       absoluteOutputPath: '/workspace/out.png',
     });

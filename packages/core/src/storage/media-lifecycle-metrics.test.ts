@@ -165,7 +165,10 @@ describe('MediaLifecycleMetrics', () => {
     assertDefined(admittedHistory, 'Expected admitted media history');
     recording.recordContent(admittedHistory);
     const persistence = new SessionPersistenceService(
-      new Storage(directory),
+      {
+        projectRoot: new Storage(directory).getProjectRoot(),
+        chatsDir: new Storage(directory).getProjectChatsDir(),
+      },
       'metrics-session',
       { mediaStore: store },
     );

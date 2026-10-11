@@ -19,22 +19,14 @@ import { ToolCallStatus } from '../types.js';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { AtCommandProcessResult } from './atCommandProcessorHelpers.js';
 
-export type McpClientManagerForResources =
-  | {
-      getClient?:
-        | ((
-            name: string,
-          ) => { readResource(uri: string): Promise<unknown> } | undefined)
-        | undefined;
-    }
-  | undefined;
+export type ReadMcpResource = (server: string, uri: string) => Promise<unknown>;
 
 export interface ResourceReadParams {
   resourceAttachments: DiscoveredMCPResource[];
   processedQueryParts: ContentBlock[];
   addItem: UseHistoryManagerReturn['addItem'];
   userMessageTimestamp: number;
-  mcpClientManager: McpClientManagerForResources;
+  readResource: ReadMcpResource;
 }
 
 type ResourceResponse = {
@@ -46,16 +38,12 @@ type ResourceResponse = {
   }>;
 };
 
-type ResourceClient = {
-  readResource: (uri: string) => Promise<ResourceResponse>;
-};
-
 export async function processResourceAttachments({
   resourceAttachments,
   processedQueryParts,
   addItem,
   userMessageTimestamp,
-  mcpClientManager,
+  readResource,
 }: ResourceReadParams): Promise<
   IndividualToolCallDisplay[] | AtCommandProcessResult
 > {
@@ -68,7 +56,7 @@ export async function processResourceAttachments({
     const display = await readSingleResource(
       resource,
       uri,
-      mcpClientManager,
+      readResource,
       processedQueryParts,
       index,
     );
@@ -87,14 +75,14 @@ export async function processResourceAttachments({
 async function readSingleResource(
   resource: DiscoveredMCPResource,
   uri: string,
-  mcpClientManager: McpClientManagerForResources,
+  readResource: ReadMcpResource,
   processedQueryParts: ContentBlock[],
   index: number,
 ): Promise<IndividualToolCallDisplay> {
-  const client = getResourceClient(mcpClientManager, resource.serverName);
-  if (!client) return buildMissingClientDisplay(resource, uri, index);
   try {
-    const response = await client.readResource(uri);
+    const response = normalizeResourceResponse(
+      await readResource(resource.serverName, uri),
+    );
     const contentParts = convertResourceContentsToParts(response);
     if (contentParts.length === 0) {
       return buildErrorResourceDisplay(
@@ -114,19 +102,6 @@ async function readSingleResource(
     return buildErrorResourceDisplay(resource, uri, index, error);
   }
 }
-function getResourceClient(
-  mcpClientManager: McpClientManagerForResources,
-  serverName: string,
-): ResourceClient | undefined {
-  const client = mcpClientManager?.getClient?.(serverName);
-  return client === undefined
-    ? undefined
-    : {
-        readResource: async (uri) =>
-          normalizeResourceResponse(await client.readResource(uri)),
-      };
-}
-
 function normalizeResourceResponse(value: unknown): ResourceResponse {
   if (isResourceResponse(value)) {
     return value;
@@ -170,20 +145,6 @@ function buildResourceDisplay(
     resultDisplay,
     confirmationDetails: undefined,
   };
-}
-
-function buildMissingClientDisplay(
-  resource: DiscoveredMCPResource,
-  uri: string,
-  index: number,
-): IndividualToolCallDisplay {
-  return buildResourceDisplay(
-    resource,
-    uri,
-    index,
-    ToolCallStatus.Error,
-    `Error reading resource ${uri}: MCP client for server '${resource.serverName}' is not available or not connected.`,
-  );
 }
 
 function buildSuccessResourceDisplay(

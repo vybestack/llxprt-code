@@ -1,33 +1,44 @@
+import type { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { ProviderActivationIntent } from '../../config-types.js';
+import { assembleModelSelection } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import type { ExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
+import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
+
+import { assembleProviderSwitch } from '../../providerSwitchAssembly.js';
+import type { AgentRuntimeFactoryBindings } from '../../runtimeFactories.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import type { AgentSchedulerFactory } from '../../config-types.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { SessionClientOwner } from '../../../session/session-client-owner.js';
+import { createAgentRuntimeFactoryBindings } from '../../runtimeFactories.js';
+import { NodeFileSystem } from '@vybestack/llxprt-code-providers/composition.js';
+
+import {
+  MCPOAuthTokenStorage,
+  type McpOAuthBinding,
+  type OAuthCredentials,
+} from '@vybestack/llxprt-code-mcp';
+
+import { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
+
 /**
  * @plan:PLAN-20260621-COREAPIREMED.P07
  * @requirement:REQ-INT-001,REQ-INT-002
  *
- * CANONICAL shared helper for the early CLI turn-parity slice. Builds a REAL
- * Config the way the CLI's loadCliConfig path does — a fully-wired Config
- * whose provider runtime is the real FakeProvider (via the
- * LLXPRT_FAKE_RESPONSES production seam), so that:
- *  (a) `fromConfig({ config })` can adopt it and drive a turn (REQ-INT-001),
- *  (b) `config.getAgentClient()` returns a usable AgentClientContract for the
- *      reference AgenticLoop drive (REQ-INT-002).
- *
- * The Config-build path mirrors createAgent's steps (toConfigParameters +
- * agentClientFactory + default toolSchedulerFactory + interactive:true +
- * new Config(params) + isolated runtime context + provider registration +
- * initialize + refreshAuth), but STOPS before building the Agent facade —
- * returning the Config itself for fromConfig to adopt.
- *
- * This is the CANONICAL helper; the broader P19 parity suite REUSES this
- * exact file (P19 MUST NOT duplicate it).
- *
- * Test-helper imports of agents-internal builders (the confirmation-forcing
- * seam, the scheduler factory) follow the established __tests__/helpers/
- * idiom (see agentHarness.ts, bootstrapProbe.ts, confirmationForcingProbe.ts).
+ * Shared real FakeProvider fixture for reference loops and facade adoption.
+ * The caller retains explicit Config, manager, client owner, MCP and media
+ * lifetimes. Its current-client getter follows session owner replacements.
  */
 
 import { fileURLToPath } from 'node:url';
@@ -35,26 +46,21 @@ import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { Config as ConfigType } from '@vybestack/llxprt-code-core/config/config.js';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { createIsolatedRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
-import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import {
+  createIsolatedRuntimeContext,
+  type IsolatedRuntimeContextHandle,
+} from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
 import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
 import { stripSandboxSegment } from './fixtureRoot.js';
 import {
   toConfigParameters,
   executeProviderActivation,
 } from '@vybestack/llxprt-code-agents';
-import { AgentClient } from '../../../core/client.js';
-import { CoreToolScheduler } from '../../../core/coreToolScheduler.js';
 import type { AgentEvent, DoneReason } from '@vybestack/llxprt-code-agents';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { ToolSchedulerFactory } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
-import {
-  wrapRegistryWithConfirmation,
-  injectConfirmationForcingPolicy,
-} from '../../confirmationForcing.js';
+import { injectConfirmationForcingPolicy } from '../../confirmationForcing.js';
 import type { AgentConfig } from '../../config-types.js';
 
 const HARNESS_DIR = stripSandboxSegment(
@@ -111,23 +117,43 @@ export function projectEvents(
 // ─── Config construction (mirrors createAgent's Config-build path) ──────────
 
 export interface BuiltCliConfig {
+  readonly runtime: IsolatedRuntimeContextHandle;
+  readonly settingsService: SettingsService;
+  readonly switchProvider: ReturnType<typeof assembleProviderSwitch>;
+  readonly settingsOwner: IsolatedRuntimeContextHandle['settingsOwner'];
+  readonly policyOwner: RuntimePolicyOwner;
+  readonly runtimeFactoryBindings: AgentRuntimeFactoryBindings;
+  readonly sessionClient: SessionClientOwner;
+  readonly agentClient: AgentClientContract;
+  readonly providerManager: IsolatedRuntimeContextHandle['providerManager'];
+  readonly mcpRuntime: McpRuntimeOwner;
   readonly config: ConfigType;
   readonly messageBus: MessageBus;
   readonly cleanup: () => Promise<void>;
 }
 
 /**
- * Caller-supplied agent runtime factories a non-CLI API consumer may install
- * on its own Config before adoption. Mirrors the three ConfigParameters seams
- * fromConfig installs agent-owned defaults into (issue #3222).
+ * Builds a REAL Config wired to the FakeProvider via the
+ * LLXPRT_FAKE_RESPONSES env seam. Mirrors createAgent's Config-build path
+ * (toConfigParameters + agentClientFactory + default toolSchedulerFactory +
+ * interactive:true + new Config + isolated runtime + provider registration +
+ * initialize + refreshAuth), returning the Config for fromConfig to adopt.
+ *
+ * @param fixtureRelPath  Fixture JSONL path relative to __tests__/fixtures.
  */
 export interface CallerAgentRuntimeFactories {
+  readonly toolSchedulerFactory?: AgentSchedulerFactory;
   readonly agentClientFactory?: AgentClientFactory;
-  readonly toolSchedulerFactory?: ToolSchedulerFactory;
   readonly taskToolRegistration?: TaskToolRegistration;
 }
 
 export interface BuiltFactoryLessConfig {
+  readonly settingsService: SettingsService;
+  readonly settingsOwner: SessionSettingsOwner;
+  readonly policyOwner: RuntimePolicyOwner;
+  readonly agentClient?: undefined;
+  readonly runtimeFactoryBindings: AgentRuntimeFactoryBindings;
+  readonly providerManager?: undefined;
   readonly config: ConfigType;
   readonly messageBus: MessageBus;
   readonly cleanup: () => Promise<void>;
@@ -152,9 +178,7 @@ export async function buildFactoryLessConfig(
   callerFactories: Readonly<CallerAgentRuntimeFactories> = {},
   baseConfigOverrides: Readonly<Partial<AgentConfig>> = {},
 ): Promise<BuiltFactoryLessConfig> {
-  const prev = process.env.LLXPRT_FAKE_RESPONSES;
-  const fixturePath = resolve(FIXTURES_DIR, fixtureRelPath);
-  process.env.LLXPRT_FAKE_RESPONSES = fixturePath;
+  const prev = selectFixtureResponses(fixtureRelPath);
 
   const baseConfig: AgentConfig = {
     provider: 'fake',
@@ -165,27 +189,34 @@ export async function buildFactoryLessConfig(
 
   const frozenParams = toConfigParameters(baseConfig);
   const params = { ...frozenParams };
-  if (callerFactories.agentClientFactory !== undefined) {
-    params.agentClientFactory = callerFactories.agentClientFactory;
-  }
-  if (callerFactories.toolSchedulerFactory !== undefined) {
-    params.toolSchedulerFactory = callerFactories.toolSchedulerFactory;
-  }
-  if (callerFactories.taskToolRegistration !== undefined) {
-    params.taskToolRegistration = callerFactories.taskToolRegistration;
-  }
+  const taskToolRegistration = callerFactories.taskToolRegistration;
+  const runtimeFactoryBindings = {
+    ...createAgentRuntimeFactoryBindings(),
+    ...(callerFactories.agentClientFactory
+      ? { agentClientFactory: callerFactories.agentClientFactory }
+      : {}),
+    ...(taskToolRegistration
+      ? { taskToolRegistration: () => taskToolRegistration }
+      : {}),
+  };
 
   try {
     const config = new Config(params);
-    const messageBus = new MessageBus(
-      config.getPolicyEngine(),
-      config.getDebugMode(),
+    const settingsService = seedFixtureSettings(config);
+    const settingsOwner = new SessionSettingsOwner(settingsService);
+    settingsOwner.bindTelemetry(config);
+    settingsOwner.initializeProviderSelection(
+      config.getProvider(),
+      config.getModel(),
     );
+    const policyOwner = new RuntimePolicyOwner(config);
+    const messageBus = policyOwner.session.messageBus;
     const cleanup = async (): Promise<void> => {
-      // fromConfig ADOPTS this Config (caller-owned), so agent.dispose()
-      // never tears it down — dispose it here or the initialized client
-      // leaks across tests.
+      // Factoryless fixtures own workspace state. Adopted facades close
+      // their separately constructed session resources.
       try {
+        await settingsOwner.dispose();
+        await policyOwner.dispose();
         await config.dispose();
       } finally {
         if (prev === undefined) {
@@ -195,7 +226,15 @@ export async function buildFactoryLessConfig(
         }
       }
     };
-    return { config, messageBus, cleanup };
+    return {
+      config,
+      settingsService,
+      settingsOwner,
+      policyOwner,
+      messageBus,
+      runtimeFactoryBindings,
+      cleanup,
+    };
   } catch (error) {
     if (prev === undefined) {
       delete process.env.LLXPRT_FAKE_RESPONSES;
@@ -206,117 +245,221 @@ export async function buildFactoryLessConfig(
   }
 }
 
-/**
- * The default tool-scheduler factory, mirroring createAgent's
- * createDefaultToolSchedulerFactory. Constructs a CoreToolScheduler backed by
- * the tool registry wrapped so every tool surfaces a REAL confirmation (the
- * confirmation-forcing seam). Without this, Config.getOrCreateScheduler throws
- * "toolSchedulerFactory is required".
- */
-function createDefaultToolSchedulerFactory(): ToolSchedulerFactory {
-  return (options) => {
-    const registry = wrapRegistryWithConfirmation(options.toolRegistry);
-    return new CoreToolScheduler({
-      config: options.config,
-      messageBus: options.messageBus,
-      toolRegistry: registry,
-      ...(options.outputUpdateHandler !== undefined
-        ? { outputUpdateHandler: options.outputUpdateHandler }
-        : {}),
-      ...(options.onAllToolCallsComplete !== undefined
-        ? { onAllToolCallsComplete: options.onAllToolCallsComplete }
-        : {}),
-      ...(options.onToolCallsUpdate !== undefined
-        ? { onToolCallsUpdate: options.onToolCallsUpdate }
-        : {}),
-      getPreferredEditor: options.getPreferredEditor,
-      onEditorClose: options.onEditorClose,
-      ...(options.onEditorOpen !== undefined
-        ? { onEditorOpen: options.onEditorOpen }
-        : {}),
-      ...(options.toolContextInteractiveMode !== undefined
-        ? {
-            toolContextInteractiveMode: options.toolContextInteractiveMode,
-          }
-        : {}),
-    });
-  };
+async function activateFixtureClient(
+  config: ConfigType,
+  settingsService: SettingsService,
+  handle: IsolatedRuntimeContextHandle,
+  sessionClient: SessionClientOwner,
+  intent: ProviderActivationIntent = {
+    provider: config.getProvider(),
+    model: config.getModel(),
+  },
+): Promise<void> {
+  const activation = await executeProviderActivation(
+    config,
+    intent,
+    assembleProviderSwitch(
+      config,
+      settingsService,
+      handle.providerManager,
+      handle.oauthManager,
+      () => handle.readRuntimeKind(),
+      () => sessionClient.refreshAuth(),
+      handle.settingsOwner,
+    ),
+    settingsService,
+    handle.providerManager,
+    (method) => sessionClient.refreshAuth(method),
+    assembleModelSelection(handle.settingsOwner),
+  );
+  if (activation.authFailed) {
+    throw activation.authError;
+  }
+
+  await sessionClient.initializeTools();
+  await sessionClient.getAgentClient().startChat();
 }
 
-/**
- * Builds a REAL Config wired to the FakeProvider via the
- * LLXPRT_FAKE_RESPONSES env seam. Mirrors createAgent's Config-build path
- * (toConfigParameters + agentClientFactory + default toolSchedulerFactory +
- * interactive:true + new Config + isolated runtime + provider registration +
- * initialize + refreshAuth), returning the Config for fromConfig to adopt.
- *
- * @param fixtureRelPath  Fixture JSONL path relative to __tests__/fixtures.
- */
+async function cleanupSessionFixture(
+  config: ConfigType,
+  mcp: McpRuntimeOwner,
+  sessionClient: SessionClientOwner,
+  handle: IsolatedRuntimeContextHandle,
+  media: SessionMediaOwner,
+  previous: string | undefined,
+): Promise<void> {
+  const failures: unknown[] = [];
+  for (const close of [
+    () => sessionClient.dispose(),
+    () => mcp.dispose(),
+    () => config.dispose(),
+    () => cleanupHandle(handle, previous),
+    () => media.dispose(),
+  ]) {
+    try {
+      await close();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1)
+    throw new AggregateError(failures, 'Session fixture cleanup failed');
+}
+
+function createFixtureRuntime(
+  runtimeId: string,
+  config: Config,
+  messageBus: MessageBus,
+  settingsService: SettingsService,
+): IsolatedRuntimeContextHandle {
+  return createIsolatedRuntimeContext(
+    {
+      runtimeId,
+      config,
+      messageBus,
+      prepare: (ctx) =>
+        registerProvidersOntoManager(ctx.providerManager, ctx, ctx.config),
+    },
+    settingsService,
+  );
+}
+
+async function assembleFixtureClient(
+  config: Config,
+  settings: SettingsService,
+  handle: ReturnType<typeof createFixtureRuntime>,
+  factories: AgentRuntimeFactoryBindings,
+  media: SessionMediaOwner,
+  workspace: McpRuntimeOwner,
+): Promise<SessionClientOwner> {
+  const client = await SessionClientOwner.create(
+    config,
+    assembleTaskSchemaPolicy(settings),
+    handle.providerManager,
+    factories.agentClientFactory,
+    media.store,
+    workspace.readInstructions,
+    workspace.workspacePaths,
+    handle.settingsOwner,
+    handle.contentGeneratorFactory,
+    handle.tokenizerFactory,
+  );
+  client.bindMcpRuntime(workspace);
+  client.bindProviderFiles(handle.providerFileLifecycle, (provider) =>
+    handle.oauthManager.composeRetryOperations(provider),
+  );
+  client.bindHooks();
+  return client;
+}
+
+type CliFixtureSkillSettings = Pick<
+  ConfigParameters,
+  'enableExtensionReloading' | 'storageRoot'
+>;
+
+function fixtureFactories(
+  supplied: Readonly<Partial<AgentRuntimeFactoryBindings>>,
+): AgentRuntimeFactoryBindings {
+  return { ...createAgentRuntimeFactoryBindings(), ...supplied };
+}
+
+function selectFixtureResponses(fixture: string): string | undefined {
+  const previous = process.env.LLXPRT_FAKE_RESPONSES;
+  process.env.LLXPRT_FAKE_RESPONSES = resolve(FIXTURES_DIR, fixture);
+  return previous;
+}
+
 export async function buildCliStyleConfig(
   fixtureRelPath: string,
   overrides: Readonly<Partial<AgentConfig>> = {},
+  suppliedFactories: Readonly<Partial<AgentRuntimeFactoryBindings>> = {},
+  skillSettings: CliFixtureSkillSettings = {},
+  extensionLoader?: ExtensionLoader,
+  skillOperations?: WorkspaceSkillAssemblyOperations,
 ): Promise<BuiltCliConfig> {
   const prev = process.env.LLXPRT_FAKE_RESPONSES;
   const fixturePath = resolve(FIXTURES_DIR, fixtureRelPath);
   process.env.LLXPRT_FAKE_RESPONSES = fixturePath;
 
-  const baseConfig: AgentConfig = {
-    provider: 'fake',
-    model: 'fake-model',
-    workingDir: resolve(HARNESS_DIR, '..'),
-    ...overrides,
-  };
+  const baseConfig = cliStyleAgentConfig(overrides);
   const runtimeId = `cli-config-${randomUUID()}`;
 
   // toConfigParameters + factory injection (mirrors createAgent steps 20-27).
-  const frozenParams = toConfigParameters(baseConfig);
-  const params = { ...frozenParams };
-  params.agentClientFactory = (config, runtimeState): AgentClientContract =>
-    new AgentClient(config, runtimeState);
-  params.toolSchedulerFactory = createDefaultToolSchedulerFactory();
+  const params = cliStyleConfigParameters(baseConfig, skillSettings);
+  if (overrides.hooks !== undefined) params.enableHooks = true;
   params.interactive = true;
 
   // Construct Config + ONE shared MessageBus (mirrors createAgent steps 30-38).
+  includeFixtureCwd(params, overrides);
   const config = new Config(params);
-  config.getWorkspaceContext().addDirectory(process.cwd());
-  injectConfirmationForcingPolicy(config.getPolicyEngine());
-  const messageBus = new MessageBus(
-    config.getPolicyEngine(),
-    config.getDebugMode(),
+  const mediaOwner = new SessionMediaOwner(
+    config.projectTempDir,
+    1024 * 1024 * 1024,
   );
+  const { policyOwner, messageBus, mcpRuntime } =
+    await assembleCliFixtureWorkspace(
+      config,
+      overrides,
+      extensionLoader,
+      skillOperations,
+    );
+  const settingsService = seedFixtureSettings(config);
 
   // SHARED runtime context — adopts OUR Config/MessageBus (mirrors createAgent
   // steps 41-58). The prepare callback registers providers (including
   // FakeProvider under LLXPRT_FAKE_RESPONSES) onto the isolated manager.
-  const handle: IsolatedRuntimeContextHandle = createIsolatedRuntimeContext({
+  const handle = createFixtureRuntime(
     runtimeId,
     config,
     messageBus,
-    prepare: (ctx) => {
-      registerProvidersOntoManager(ctx.providerManager, ctx, ctx.config);
-    },
-  });
+    settingsService,
+  );
 
-  try {
-    await handle.activate();
-    await config.initialize({ messageBus });
-    const activation = await executeProviderActivation(config, {
-      provider: baseConfig.provider,
-      model: baseConfig.model,
-    });
-    if (activation.authFailed) {
-      throw activation.authError;
-    }
-  } catch (error) {
-    await cleanupHandle(handle, prev);
-    throw error;
-  }
+  const runtimeFactoryBindings = fixtureFactories(suppliedFactories);
+  handle.settingsOwner.initializeProviderSelection(
+    config.getProvider(),
+    config.getModel(),
+  );
+  const sessionClient = await assembleFixtureClient(
+    config,
+    settingsService,
+    handle,
+    runtimeFactoryBindings,
+    mediaOwner,
+    mcpRuntime,
+  );
 
-  const cleanup = async (): Promise<void> => {
-    await cleanupHandle(handle, prev);
-  };
+  const cleanup = (): Promise<void> =>
+    cleanupSessionFixture(
+      config,
+      mcpRuntime,
+      sessionClient,
+      handle,
+      mediaOwner,
+      prev,
+    );
 
-  return { config, messageBus, cleanup };
+  await initializeCliFixture(
+    config,
+    settingsService,
+    handle,
+    sessionClient,
+    mcpRuntime,
+    baseConfig.activation,
+    cleanup,
+  );
+
+  return projectBuiltCliFixture(
+    config,
+    settingsService,
+    policyOwner,
+    mcpRuntime,
+    sessionClient,
+    runtimeFactoryBindings,
+    handle,
+    cleanup,
+  );
 }
 
 /** Restores the env var and disposes the runtime handle. */
@@ -355,7 +498,7 @@ function registerProvidersOntoManager(
   };
   const { manager: registered } = createProviderManager(
     context as Parameters<typeof createProviderManager>[0],
-    { config },
+    { fileSystem: new NodeFileSystem(), config },
   );
   for (const name of registered.listProviders()) {
     const provider = registered.getProviderByName(name);
@@ -385,3 +528,208 @@ export type { AgentEvent, DoneReason } from '@vybestack/llxprt-code-agents';
 // Type-only re-exports so consumer-facing specs can annotate Config/MessageBus
 // without deep core imports (helpers/ is exempt from the boundary scan).
 export type { Config, MessageBus };
+
+function createTestOAuthBinding(): McpOAuthBinding {
+  let credentials = new Map<string, OAuthCredentials>();
+  return {
+    openBrowser: async () => {
+      throw new Error('Browser was not configured for this test');
+    },
+    tokenStorage: new MCPOAuthTokenStorage({
+      getCredentials: async (name) => credentials.get(name) ?? null,
+      setCredentials: async (value) => {
+        credentials = new Map(credentials).set(value.serverName, value);
+      },
+      deleteCredentials: async (name) => {
+        credentials = new Map(
+          [...credentials].filter(([serverName]) => serverName !== name),
+        );
+      },
+      listServers: async () => [...credentials.keys()],
+      getAllCredentials: async () => new Map(credentials),
+      clearAll: async () => {
+        credentials = new Map();
+      },
+    }),
+  };
+}
+
+export async function buildTestMcpRuntime(
+  config: Config,
+  messageBus: MessageBus,
+  overrides: Readonly<Partial<AgentConfig>>,
+  extensionLoader?: ExtensionLoader,
+  policyOwner?: RuntimePolicyOwner,
+  skillOperations?: WorkspaceSkillAssemblyOperations,
+): Promise<McpRuntimeOwner> {
+  const binding = createTestOAuthBinding();
+  const lspOwnership =
+    overrides.lspOwnership ??
+    (overrides.lspOwner === undefined ? 'agent' : 'caller');
+  const filesystemOwnership =
+    overrides.filesystemOwnership ??
+    (overrides.filesystemOwner === undefined ? 'agent' : 'caller');
+  return McpRuntimeOwner.create(
+    {
+      tokenStorage: overrides.mcpTokenStorage
+        ? new MCPOAuthTokenStorage(overrides.mcpTokenStorage)
+        : binding.tokenStorage,
+      openBrowser: overrides.mcpHost?.openBrowser ?? binding.openBrowser,
+    },
+    config,
+    messageBus,
+    overrides.mcpHost,
+    undefined,
+    extensionLoader,
+    policyOwner,
+    'runtime',
+    overrides.lspOwner,
+    lspOwnership === 'agent' ? 'runtime' : 'caller',
+    overrides.filesystemOwner,
+    filesystemOwnership === 'agent' ? 'runtime' : 'caller',
+    undefined,
+    overrides.definitionOwner,
+    overrides.definitionOwnership === 'agent' ||
+      overrides.definitionOwner === undefined
+      ? 'runtime'
+      : 'caller',
+    undefined,
+    undefined,
+    undefined,
+    skillOperations,
+  );
+}
+
+function cliStyleConfigParameters(
+  config: AgentConfig,
+  settings: Pick<ConfigParameters, 'enableExtensionReloading' | 'storageRoot'>,
+): ConfigParameters {
+  return {
+    ...toConfigParameters(config),
+    ...settings,
+  };
+}
+
+function cliStyleAgentConfig(
+  overrides: Readonly<Partial<AgentConfig>>,
+): AgentConfig {
+  return {
+    provider: 'fake',
+    model: 'fake-model',
+    workingDir: resolve(HARNESS_DIR, '..'),
+    ...overrides,
+  };
+}
+
+function includeFixtureCwd(
+  params: ConfigParameters,
+  overrides: Readonly<Partial<AgentConfig>>,
+): void {
+  if (
+    overrides.filesystemOwner === undefined &&
+    (overrides.harness?.includeProcessCwd ?? true)
+  )
+    params.includeDirectories = [
+      ...(params.includeDirectories ?? []),
+      process.cwd(),
+    ];
+}
+
+function seedFixtureSettings(config: Config): SettingsService {
+  const settings = new SettingsService();
+  for (const [key, value] of Object.entries(config.getInitialSettings()))
+    settings.set(key, value);
+  return settings;
+}
+
+async function initializeCliFixture(
+  config: Config,
+  settingsService: SettingsService,
+  handle: ReturnType<typeof createFixtureRuntime>,
+  sessionClient: SessionClientOwner,
+  mcpRuntime: McpRuntimeOwner,
+  activation: AgentConfig['activation'],
+  cleanup: () => Promise<void>,
+): Promise<void> {
+  try {
+    await handle.activate();
+    await mcpRuntime.initialize();
+    await activateFixtureClient(
+      config,
+      settingsService,
+      handle,
+      sessionClient,
+      activation,
+    );
+  } catch (error) {
+    await cleanup();
+    throw error;
+  }
+}
+
+async function assembleCliFixtureWorkspace(
+  config: Config,
+  overrides: Readonly<Partial<AgentConfig>>,
+  extensionLoader: ExtensionLoader | undefined,
+  skillOperations?: WorkspaceSkillAssemblyOperations,
+) {
+  const policyOwner = new RuntimePolicyOwner(config);
+  injectConfirmationForcingPolicy(policyOwner.session.confirmation);
+  const messageBus = policyOwner.session.messageBus;
+  const mcpRuntime = await buildTestMcpRuntime(
+    config,
+    messageBus,
+    overrides,
+    extensionLoader,
+    policyOwner,
+    skillOperations,
+  );
+  return { policyOwner, messageBus, mcpRuntime };
+}
+
+function projectBuiltCliFixture(
+  config: Config,
+  settingsService: SettingsService,
+  policyOwner: RuntimePolicyOwner,
+  mcpRuntime: McpRuntimeOwner,
+  sessionClient: SessionClientOwner,
+  runtimeFactoryBindings: AgentRuntimeFactoryBindings,
+  handle: ReturnType<typeof createFixtureRuntime>,
+  cleanup: () => Promise<void>,
+): BuiltCliConfig {
+  const messageBus = policyOwner.session.messageBus;
+  return {
+    runtime: handle,
+    config,
+    settingsService,
+    policyOwner,
+    messageBus,
+    mcpRuntime,
+    sessionClient,
+    runtimeFactoryBindings,
+    get agentClient() {
+      return sessionClient.getAgentClient();
+    },
+    providerManager: handle.providerManager,
+    switchProvider: assembleProviderSwitch(
+      config,
+      settingsService,
+      handle.providerManager,
+      handle.oauthManager,
+      handle.readRuntimeKind,
+      () => sessionClient.refreshAuth(),
+      handle.settingsOwner,
+    ),
+    settingsOwner: handle.settingsOwner,
+    cleanup,
+  };
+}
+
+import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+export function requireFixturePaths(
+  paths: WorkspacePathOperations | undefined,
+): WorkspacePathOperations {
+  if (paths === undefined)
+    throw new Error('Fixture factory requires workspace paths');
+  return paths;
+}

@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createSchedulerPolicyFixture } from '../../core/__tests__/scheduler-policy-fixture.js';
 
 /**
  * Shared helpers for confirmation coordinator test files. Extracted from the
@@ -21,9 +22,9 @@ import {
   type SchedulerAccessor,
   type EditorCallbacks,
 } from '../confirmation-coordinator.js';
-import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
+
 import type { ToolCallConfirmationDetails } from '@vybestack/llxprt-code-tools';
-import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
+
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/config.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
@@ -60,6 +61,7 @@ export function makeSchedulerAccessor(
   return {
     attemptExecution: vi.fn().mockResolvedValue(undefined),
     getToolCalls: vi.fn().mockReturnValue(toolCalls),
+    getHookOwner: () => undefined,
   };
 }
 
@@ -71,52 +73,30 @@ export function makeEditorCallbacks(): EditorCallbacks {
   };
 }
 
-export function makeMessageBus() {
-  const handlers: Map<string, Array<(msg: unknown) => void>> = new Map();
-  const bus = {
-    subscribe: vi
-      .fn()
-      .mockImplementation((type: string, handler: (msg: unknown) => void) => {
-        if (!handlers.has(type)) handlers.set(type, []);
-        handlers.get(type)!.push(handler);
-        return () => {
-          const arr = handlers.get(type) ?? [];
-          const idx = arr.indexOf(handler);
-          if (idx >= 0) arr.splice(idx, 1);
-        };
-      }),
-    publish: vi.fn((msg: { type?: string; [key: string]: unknown }) => {
-      if (typeof msg.type === 'string') {
-        (handlers.get(msg.type) ?? []).forEach((handler) => handler(msg));
-      }
-    }),
-    emit: (type: string, msg: unknown) => {
-      (handlers.get(type) ?? []).forEach((h) => h(msg));
+export function makeMessageBus(
+  decision: PolicyDecision = PolicyDecision.ASK_USER,
+  config?: Config,
+) {
+  const fixture = createSchedulerPolicyFixture(
+    {
+      getApprovalMode: () => config?.getApprovalMode() ?? ApprovalMode.DEFAULT,
     },
-    respondToConfirmation: vi.fn(
-      (
-        correlationId: string,
-        outcome: ToolConfirmationOutcome,
-        payload?: unknown,
-      ) => {
-        bus.publish({
-          type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
-          correlationId,
-          outcome,
-          payload,
-        });
-      },
+    decision,
+  );
+  return Object.assign(fixture.messageBus, {
+    publish: vi.spyOn(fixture.messageBus, 'publish'),
+    subscribe: vi.spyOn(fixture.messageBus, 'subscribe'),
+    respondToConfirmation: vi.spyOn(
+      fixture.messageBus,
+      'respondToConfirmation',
     ),
-  };
-  return bus;
+  });
 }
 
 export function makeMockConfig(overrides: Partial<Config> = {}): Config {
   return {
     getSessionId: () => 'test-session-id',
-    getPolicyEngine: vi.fn().mockReturnValue({
-      evaluate: vi.fn().mockReturnValue(PolicyDecision.ASK_USER),
-    }),
+    getPolicyEngineConfig: () => ({ defaultDecision: PolicyDecision.ASK_USER }),
     getApprovalMode: vi.fn().mockReturnValue(ApprovalMode.DEFAULT),
     getAllowedTools: vi.fn().mockReturnValue([]),
     isInteractive: vi.fn().mockReturnValue(true),
@@ -200,8 +180,11 @@ export function createCoordinator(
     toolCalls?: ToolCall[];
   } = {},
 ) {
-  const messageBus = makeMessageBus();
   const config = overrides.config ?? makeMockConfig();
+  const messageBus = makeMessageBus(
+    config.getPolicyEngineConfig().defaultDecision,
+    config,
+  );
   const statusMutator = overrides.statusMutator ?? makeStatusMutator();
   const schedulerAccessor =
     overrides.schedulerAccessor ??
