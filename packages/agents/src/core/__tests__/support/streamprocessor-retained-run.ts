@@ -108,24 +108,26 @@ export async function runRetainedCensus(
 
 /**
  * One full-size warm pass at the large tail, then the measured scenario at
- * the small tail and at the large tail, all in this process. With
- * `repeatLarge`, the large tail is measured a second time so a settled-heap
- * gate can use the lower of two readings; retention proportional to context
- * is present in both readings.
+ * the small tail and again `sends` times at each of the small and large tails, all in this
+ * process. `large` is the first large send; `larges` holds every one so a
+ * settled-heap gate can use the median of several sends. Retention
+ * proportional to context is present in every send, while the collector noise
+ * of a single settled reading is not.
  */
 export async function runRetainedScaling(
   retention: RowRetention,
   small: DiskTextTail,
   large: DiskTextTail,
-  repeatLarge = false,
+  sends = 1,
 ) {
   await runCensusOnce('none', large);
-  const smallFacts = await runCensusOnce(retention, small);
-  const largeFacts = await runCensusOnce(retention, large);
-  const repeatFacts = repeatLarge
-    ? await runCensusOnce(retention, large)
-    : undefined;
-  return { small: smallFacts, large: largeFacts, repeat: repeatFacts };
+  const smalls = [];
+  for (let index = 0; index < sends; index++)
+    smalls.push(await runCensusOnce(retention, small));
+  const larges = [];
+  for (let index = 0; index < sends; index++)
+    larges.push(await runCensusOnce(retention, large));
+  return { small: smalls[0], smalls, large: larges[0], larges };
 }
 
 async function runCensusOnce(retention: RowRetention, tail: DiskTextTail) {
