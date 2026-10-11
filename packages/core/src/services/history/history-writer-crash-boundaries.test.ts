@@ -14,6 +14,7 @@ import { SessionRecordingService } from '../../recording/SessionRecordingService
 import { appendHistoryJournal } from './attachHistoryJournal.js';
 import { HistoryJournalStore } from './historyJournalStore.js';
 import type { HistoryJournalOp } from './historyJournalStore.js';
+import { HistoryDensityRows } from './historyDensityRows.js';
 import { replaceAllOps, restoreRowsOps } from './historyReplaceOps.js';
 import { planHistoryMutation, planMutation } from './planHistoryMutation.js';
 import type { HistoryMutationInput } from './historyBatchContracts.js';
@@ -80,15 +81,22 @@ const SCENARIOS: readonly Scenario[] = [
     name: 'planMutation replaceAll',
     before: OLD,
     complete: NEW,
-    write: (recorder) =>
-      applyOps(
-        recorder,
-        planMutation(OLD, {
-          ...unusedInput,
-          nextHistory: NEW,
-          options: { replaceAll: true },
-        }),
-      ),
+    write: async (recorder) => {
+      const next = new HistoryDensityRows();
+      try {
+        for (const content of NEW) next.append(content);
+        await applyOps(
+          recorder,
+          planMutation(OLD, {
+            ...unusedInput,
+            nextHistory: next,
+            options: { replaceAll: true },
+          }),
+        );
+      } finally {
+        next.close();
+      }
+    },
   },
   {
     name: 'planHistoryMutation general replacement',
@@ -184,7 +192,7 @@ describe('writers replace history as one transaction', () => {
             .slice(journal.beginIndex)
             .map((line) => (JSON.parse(line) as { type: string }).type);
           expect(types[0]).toBe('replace_begin');
-          expect(types.at(-1)).toBe('replace_commit');
+          expect(types[types.length - 1]).toBe('replace_commit');
           expect(types.slice(1, -1).every((type) => type === 'content')).toBe(
             true,
           );
