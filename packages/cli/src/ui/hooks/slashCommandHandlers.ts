@@ -80,7 +80,7 @@ export interface SlashCommandHandlerDeps {
   confirmationLogger: DebugLogger;
   slashCommandLogger: DebugLogger;
   /** Registers the action about to be awaited and returns its controller. */
-  beginSlashCommandAction: () => AbortController;
+  beginSlashCommandAction: (showProgress?: boolean) => AbortController;
   /** Deregisters an action once it has settled. */
   endSlashCommandAction: (controller: AbortController) => void;
 }
@@ -221,7 +221,9 @@ async function runCommandAction(
   parsed: ParsedCommandState,
   buildContext: (signal: AbortSignal) => CommandContext,
 ): Promise<CommandActionOutcome> {
-  const controller = deps.beginSlashCommandAction();
+  const controller = deps.beginSlashCommandAction(
+    parsed.commandToExecute?.showProgress,
+  );
   try {
     const context = buildContext(controller.signal);
     const result = await action(context, parsed.args);

@@ -145,6 +145,41 @@ describe('slashCommandHandlers', () => {
     });
   });
 
+  describe('processSlashCommand progress', () => {
+    for (const completion of ['success', 'failure', 'cancel'] as const) {
+      it(`tracks an opted-in action through ${completion}`, async () => {
+        const registry = createSlashCommandCancellation();
+        let resolve!: () => void;
+        let reject!: (error: Error) => void;
+        const operation = new Promise<void>((res, rej) => {
+          resolve = res;
+          reject = rej;
+        });
+        const deps = createDeps(vi.fn(), {
+          beginSlashCommandAction: registry.beginSlashCommandAction,
+          endSlashCommandAction: registry.endSlashCommandAction,
+        });
+        deps.commands = createCommands(() => operation).map((command) => ({
+          ...command,
+          showProgress: true,
+        }));
+        const pending = processSlashCommand(deps, '/help');
+        expect(registry.getIsSlashCommandRunning()).toBe(true);
+        if (completion === 'cancel') {
+          registry.cancelActiveSlashCommand();
+        }
+        expect(registry.getIsSlashCommandRunning()).toBe(
+          completion !== 'cancel',
+        );
+        if (completion === 'failure') reject(new Error('backend failed'));
+        else resolve();
+        await pending;
+        expect(registry.getIsSlashCommandRunning()).toBe(false);
+        expect(registry.cancelActiveSlashCommand()).toBe(false);
+      });
+    }
+  });
+
   describe('processSlashCommand cancellation', () => {
     it('hands the action the signal of the controller registered for it', async () => {
       const addItem = vi.fn();

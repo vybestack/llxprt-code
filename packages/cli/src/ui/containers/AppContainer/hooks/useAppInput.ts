@@ -15,7 +15,10 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useAgentStream } from '../../../hooks/agentStream/index.js';
 import type { OperationLifecycleRegistry } from '../../../hooks/agentStream/operationLifecycle.js';
 import { useAutoAcceptIndicator } from '../../../hooks/useAutoAcceptIndicator.js';
-import { useLoadingIndicator } from '../../../hooks/useLoadingIndicator.js';
+import {
+  getLoadingState,
+  useLoadingIndicator,
+} from '../../../hooks/useLoadingIndicator.js';
 import { useSlashCommandProcessor } from '../../../hooks/slashCommandProcessor.js';
 import { useTerminalSize } from '../../../hooks/useTerminalSize.js';
 import { useVimMode } from '../../../contexts/VimModeContext.js';
@@ -587,10 +590,12 @@ function useTurnStoreMirrors(
   mirrors: {
     elapsedTime: number;
     currentLoadingPhrase: string;
+    loadingState: StreamingState;
   },
 ) {
   const {
     setStreamingState,
+    setLoadingState,
     setThought,
     setPendingHistoryItems,
     setQuittingMessages,
@@ -603,6 +608,9 @@ function useTurnStoreMirrors(
   useEffect(() => {
     setStreamingState(stream.streamingState);
   }, [setStreamingState, stream.streamingState]);
+  useEffect(() => {
+    setLoadingState(mirrors.loadingState);
+  }, [setLoadingState, mirrors.loadingState]);
   useEffect(() => {
     setThought(stream.thought);
   }, [setThought, stream.thought]);
@@ -653,8 +661,14 @@ function useInputFinish(
     setIdePromptAnswered,
   );
   const { handleInput: vimHandleInput } = useVim(buffer, handleFinalSubmit);
-  const { elapsedTime, currentLoadingPhrase } = useLoadingIndicator(
+  // Progress is display-only: do not block the composer or change the model's
+  // stream state. Confirmation UI takes precedence over slash-command progress.
+  const loadingState = getLoadingState(
     streamingState,
+    core.isSlashCommandRunning,
+  );
+  const { elapsedTime, currentLoadingPhrase } = useLoadingIndicator(
+    loadingState,
     settings.merged.ui.wittyPhraseStyle ??
       settings.merged.wittyPhraseStyle ??
       'default',
@@ -671,7 +685,11 @@ function useInputFinish(
   useSettingsStoreMirrors(p, core, stream, showAutoAcceptIndicator);
   // Turn mirrors: the stream/exit hooks stay value-returning; these writer
   // effects project their results into the TurnStore for the layout tree.
-  useTurnStoreMirrors(p, core, stream, { elapsedTime, currentLoadingPhrase });
+  useTurnStoreMirrors(p, core, stream, {
+    elapsedTime,
+    currentLoadingPhrase,
+    loadingState,
+  });
   const handleSettingsRestart = useCallback(() => {
     void handleSlashCommand('/quit');
   }, [handleSlashCommand]);

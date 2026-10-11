@@ -336,6 +336,10 @@ export interface SlashCommand {
   // Defaults to false (undefined = false).
   autoExecute?: boolean;
 
+  // Opt in to the shared spinner and elapsed timer while this action is running.
+  // Cancellation clears progress immediately, even if the action is still unwinding.
+  showProgress?: boolean;
+
   // The action to run. Optional for parent commands that only group sub-commands.
   action?: (
     context: CommandContext,
