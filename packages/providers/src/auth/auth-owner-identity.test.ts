@@ -18,8 +18,8 @@ import {
   makeToken,
 } from './__tests__/behavioral/test-utils.js';
 import {
-  interactiveAuthCoordinator,
   InteractiveAuthUnavailableError,
+  InteractiveAuthCoordinator,
   type InteractiveAuthChallenge,
 } from './interactive-auth-coordinator.js';
 import {
@@ -59,8 +59,6 @@ describe('explicit OAuth owner identity', () => {
     return handle;
   }
   afterEach(async () => {
-    await interactiveAuthCoordinator.dispose();
-    interactiveAuthCoordinator.unbindHost();
     await Promise.all(handles.splice(0).map((handle) => handle.cleanup()));
     await Promise.all(configs.splice(0).map((config) => config.dispose()));
   });
@@ -167,9 +165,10 @@ describe('explicit OAuth owner identity', () => {
     await enable(first.oauthManager);
     await enable(second.oauthManager);
     const challenges: InteractiveAuthChallenge[] = [];
-    interactiveAuthCoordinator.bindHost(async (challenge) => {
-      challenges.push(challenge);
-    });
+    for (const manager of [first.oauthManager, second.oauthManager])
+      manager.bindInteractiveAuthHost(async (challenge) => {
+        challenges.push(challenge);
+      });
     await Promise.all([
       first.oauthManager.getToken('owner-identity', 'alpha'),
       second.oauthManager.getToken('owner-identity', 'beta'),
@@ -205,7 +204,7 @@ describe('explicit OAuth owner identity', () => {
     if (!cli.oauthManager) throw new Error('Expected assembled OAuth manager');
     await enable(cli.oauthManager);
     const challenges: InteractiveAuthChallenge[] = [];
-    interactiveAuthCoordinator.bindHost(async (challenge) => {
+    cli.oauthManager.bindInteractiveAuthHost(async (challenge) => {
       challenges.push(challenge);
     });
 
@@ -251,7 +250,7 @@ describe('explicit OAuth owner identity', () => {
     });
 
     const challenges: InteractiveAuthChallenge[] = [];
-    interactiveAuthCoordinator.bindHost(async (challenge) => {
+    adopted.oauthManager.bindInteractiveAuthHost(async (challenge) => {
       challenges.push(challenge);
     });
     await adopted.oauthManager.getToken('owner-identity', 'adopted');
@@ -261,13 +260,17 @@ describe('explicit OAuth owner identity', () => {
   });
   it('keeps undefined identity unregistered and excludes mismatched requester IDs', async () => {
     const challenges: InteractiveAuthChallenge[] = [];
-    interactiveAuthCoordinator.bindHost(async (challenge) => {
+    const coordinator = new InteractiveAuthCoordinator();
+    const host = async (challenge: InteractiveAuthChallenge): Promise<void> => {
       challenges.push(challenge);
-    });
+    };
+    coordinator.bindHost(host);
     const oauth = new OAuthManager(new MemoryTokenStore());
+    oauth.bindInteractiveAuthHost(host);
     await enable(oauth);
     await oauth.getToken('owner-identity', 'unknown');
     await requestInteractiveAuthentication(
+      coordinator,
       'owner-identity',
       'mismatch',
       'subagent',
@@ -276,6 +279,7 @@ describe('explicit OAuth owner identity', () => {
       { runtimeId: 'foreground', runtimeKind: 'cli-interactive' },
     );
     await requestInteractiveAuthentication(
+      coordinator,
       'owner-identity',
       'match',
       'agent',

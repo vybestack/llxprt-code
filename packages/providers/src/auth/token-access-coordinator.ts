@@ -12,6 +12,7 @@
  * via the injected AuthenticatorInterface to avoid a circular import cycle.
  */
 
+import type { InteractiveAuthRequestPort } from './interactive-auth-coordinator.js';
 import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
@@ -87,6 +88,7 @@ export class TokenAccessCoordinator {
     private readonly proactiveRenewalManager: ProactiveRenewalManager,
     private readonly bucketManager: OAuthBucketManager,
     private readonly facadeRef: BucketFailoverOAuthManagerLike,
+    private readonly interactiveAuth: InteractiveAuthRequestPort,
     private readonly settings?: IOAuthSettingsProvider,
     private readonly readCurrentProfileName: () => string | null = () => null,
     private readonly readBucketPrompt: () => boolean = () => false,
@@ -768,9 +770,10 @@ export class TokenAccessCoordinator {
     // @requirement REQ-2562-3
     const identity = this.readAuthIdentity?.();
     const runtimeKind = identity?.runtimeKind;
-    if (requiresInteractiveAuthentication(runtimeKind)) {
+    if (requiresInteractiveAuthentication(this.interactiveAuth, runtimeKind)) {
       const authenticatedBucket = bucketToCheck ?? 'default';
       await requestInteractiveAuthentication(
+        this.interactiveAuth,
         providerName,
         authenticatedBucket,
         runtimeKind,

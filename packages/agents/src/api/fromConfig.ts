@@ -298,6 +298,9 @@ async function initializeAdoptedClient(
     mediaOwner,
     mcpRuntime,
   );
+  client.bindInteractiveAuthRequests((prompt) =>
+    handle.oauthManager.requestInteractiveAuth(prompt),
+  );
   assembleSessionImages(
     client,
     options.config.getTargetDir(),

@@ -1,3 +1,4 @@
+import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
@@ -116,6 +117,7 @@ export interface IsolatedRuntimeActivationOptions {
  * Options for constructing an isolated CLI runtime with dedicated SettingsService/Config instances.
  */
 export interface IsolatedRuntimeContextOptions {
+  readonly requestInteractiveAuth?: InteractiveAuthPromptOperation;
   readonly borrowedTelemetry?: RootTelemetry;
   readonly profileReads?: Pick<ProfileManager, 'loadProfile'>;
   readonly tokenizerFactory?: RuntimeTokenizerFactory;
@@ -204,6 +206,7 @@ function resolveOAuthManager(
   activationState: RuntimeActivationState,
   settings: SettingsService,
   profileReads: IsolatedRuntimeContextOptions['profileReads'],
+  requestInteractiveAuth: InteractiveAuthPromptOperation | undefined,
 ): OAuthManager {
   if (optionsOAuthManager) {
     registerStandardOAuthProviders(optionsOAuthManager);
@@ -217,6 +220,7 @@ function resolveOAuthManager(
     messageBus: sessionMessageBus,
     config,
     profileReads,
+    requestInteractiveAuth,
     invalidateAuthCaches,
     readSessionAuthPolicy: () => ({
       profileName: settings.getCurrentProfileName(),
@@ -430,6 +434,7 @@ function resolveOwnerOAuthManager(
     state,
     settings,
     options.profileReads,
+    options.requestInteractiveAuth,
   );
   return {
     oauthManager,

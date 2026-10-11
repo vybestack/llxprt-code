@@ -7,13 +7,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { oauthUIBridge } from '@vybestack/llxprt-code-auth';
 import {
-  interactiveAuthCoordinator,
+  InteractiveAuthCoordinator,
   type InteractiveAuthChallenge,
 } from '@vybestack/llxprt-code-providers/auth.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { authCommand } from './authCommand.js';
-import type { CommandContext, MessageActionReturn } from './types.js';
-
-const commandContext = {} as CommandContext;
+import type { MessageActionReturn } from './types.js';
 
 function createChallenge(
   provider = 'codex',
@@ -28,13 +27,21 @@ function createChallenge(
   };
 }
 
-async function executeCancel(): Promise<MessageActionReturn> {
+async function executeCancel(
+  coordinator: InteractiveAuthCoordinator,
+): Promise<MessageActionReturn> {
   const action = authCommand.action;
   if (!action) {
     throw new Error('Expected /auth to define an action');
   }
 
-  const result = await action(commandContext, 'cancel');
+  const context = createMockCommandContext({
+    oauthControl: {
+      getInteractiveAuthSessions: () => coordinator.getActiveSessions(),
+      cancelInteractiveAuth: () => coordinator.cancelActiveSessions(),
+    },
+  });
+  const result = await action(context, 'cancel');
   if (!result || result.type !== 'message') {
     throw new Error('Expected /auth cancel to return a message');
   }
@@ -46,22 +53,24 @@ async function executeCancel(): Promise<MessageActionReturn> {
  * @requirement REQ-2562-4
  */
 describe('/auth cancel', () => {
+  let coordinator: InteractiveAuthCoordinator;
   beforeEach(async () => {
-    await interactiveAuthCoordinator.dispose();
-    interactiveAuthCoordinator.unbindHost();
+    coordinator = new InteractiveAuthCoordinator();
+    await coordinator.dispose();
+    coordinator.unbindHost();
     oauthUIBridge.clearCallback();
     oauthUIBridge.clearPending();
   });
 
   afterEach(async () => {
-    await interactiveAuthCoordinator.dispose();
-    interactiveAuthCoordinator.unbindHost();
+    await coordinator.dispose();
+    coordinator.unbindHost();
     oauthUIBridge.clearCallback();
     oauthUIBridge.clearPending();
   });
 
   it('cancels active authentication sessions and reports retry guidance', async () => {
-    interactiveAuthCoordinator.bindHost(
+    coordinator.bindHost(
       (_challenge, signal) =>
         new Promise<void>((_resolve, reject) => {
           signal.addEventListener('abort', () => reject(signal.reason), {
@@ -69,9 +78,9 @@ describe('/auth cancel', () => {
           });
         }),
     );
-    const waiter = interactiveAuthCoordinator.requestAuth(createChallenge());
+    const waiter = coordinator.requestAuth(createChallenge());
 
-    const result = await executeCancel();
+    const result = await executeCancel(coordinator);
 
     await expect(waiter).resolves.toStrictEqual({
       kind: 'cancelled',
@@ -83,11 +92,11 @@ describe('/auth cancel', () => {
       content:
         'Cancelled 1 active authentication session(s). Retry with /auth codex.',
     });
-    expect(interactiveAuthCoordinator.getActiveSessions()).toStrictEqual([]);
+    expect(coordinator.getActiveSessions()).toStrictEqual([]);
   });
 
   it('lists each cancelled provider once in retry guidance', async () => {
-    interactiveAuthCoordinator.bindHost(
+    coordinator.bindHost(
       (_challenge, signal) =>
         new Promise<void>((_resolve, reject) => {
           signal.addEventListener('abort', () => reject(signal.reason), {
@@ -96,18 +105,16 @@ describe('/auth cancel', () => {
         }),
     );
     const waiters = [
-      interactiveAuthCoordinator.requestAuth(
-        createChallenge('codex', 'cancel-codex-work'),
-      ),
-      interactiveAuthCoordinator.requestAuth(
+      coordinator.requestAuth(createChallenge('codex', 'cancel-codex-work')),
+      coordinator.requestAuth(
         createChallenge('codex', 'cancel-codex-personal'),
       ),
-      interactiveAuthCoordinator.requestAuth(
+      coordinator.requestAuth(
         createChallenge('claudecode', 'cancel-claudecode'),
       ),
     ];
 
-    const result = await executeCancel();
+    const result = await executeCancel(coordinator);
 
     await Promise.all(waiters);
     expect(result).toStrictEqual({
@@ -119,7 +126,7 @@ describe('/auth cancel', () => {
   });
 
   it('reports when there are no active authentication sessions', async () => {
-    const result = await executeCancel();
+    const result = await executeCancel(coordinator);
 
     expect(result).toStrictEqual({
       type: 'message',

@@ -1,3 +1,14 @@
+import type { InteractiveAuthRequestPort } from './interactive-auth-coordinator.js';
+import type {
+  InteractiveAuthPrompt,
+  InteractiveAuthPromptOperation,
+} from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
+import { requestInteractiveAuthentication } from './interactive-auth-request.js';
+import {
+  InteractiveAuthCoordinator,
+  type InteractiveAuthHostHandler,
+  type InteractiveAuthSessionStatus,
+} from './interactive-auth-coordinator.js';
 import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SessionAuthPolicy } from './types.js';
 /**
@@ -20,6 +31,7 @@ import {
 } from './types.js';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import {
+  OAuthUIBridge,
   type AuthLockStatus,
   type AuthLockRecoveryResult,
   type ForceRecoverOptions,
@@ -142,6 +154,11 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
   private readonly bucketManager: OAuthBucketManager;
   private proactiveRenewalManager: ProactiveRenewalManager;
   private readonly tokenAccessCoordinator: TokenAccessCoordinator;
+  private readonly parentInteractiveAuth?: InteractiveAuthPromptOperation;
+  private readonly interactiveAuthUI = new OAuthUIBridge();
+  private readonly interactiveAuth = new InteractiveAuthCoordinator((event) => {
+    this.interactiveAuthUI.emit(event);
+  });
   private readonly authFlowOrchestrator: AuthFlowOrchestrator;
   private readonly authStatusService: AuthStatusService;
   private _runtimeMessageBus: MessageBus | undefined;
@@ -178,6 +195,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     settings?: IOAuthSettingsProvider,
     runtimeDeps?: OAuthManagerRuntimeMessageBusDeps,
   ) {
+    this.parentInteractiveAuth = runtimeDeps?.requestInteractiveAuth;
     const directory = runtimeDeps?.config?.profileDirectory;
     let profiles: ReturnType<typeof createProfileManager> | undefined;
     this.profileReads = runtimeDeps?.profileReads ?? {
@@ -227,6 +245,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       this.proactiveRenewalManager,
       this.bucketManager,
       this, // facadeRef — satisfies BucketFailoverOAuthManagerLike
+      this.interactiveRequestPort(),
       settings,
       // Pass a getter so the coordinator always reads the live config value,
       // even if tests mutate manager.config after construction.
@@ -403,7 +422,64 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * Called by the owner of this manager before it releases the token store.
    */
   async dispose(): Promise<void> {
+    this.interactiveAuth.unbindHost();
+    await this.interactiveAuth.dispose();
     await this.proactiveRenewalManager.cancelAndJoin();
+  }
+
+  private interactiveRequestPort(): InteractiveAuthRequestPort {
+    if (this.parentInteractiveAuth === undefined) return this.interactiveAuth;
+    return {
+      hasHost: () => true,
+      requestAuth: async (challenge, options) => {
+        await this.requestInteractiveAuth({
+          ...challenge,
+          timeoutMs: options?.timeoutMs,
+        });
+        return { kind: 'succeeded', correlationId: challenge.correlationId };
+      },
+    };
+  }
+
+  requestInteractiveAuth(prompt: InteractiveAuthPrompt): Promise<void> {
+    if (this.parentInteractiveAuth !== undefined)
+      return this.parentInteractiveAuth(prompt);
+    const runtimeKind =
+      prompt.requester.runtimeKind === 'unregistered'
+        ? undefined
+        : prompt.requester.runtimeKind;
+    return requestInteractiveAuthentication(
+      this.interactiveAuth,
+      prompt.provider,
+      prompt.bucket,
+      runtimeKind,
+      prompt.reason,
+      prompt.timeoutMs,
+      prompt.requester.runtimeId !== undefined && runtimeKind !== undefined
+        ? { runtimeId: prompt.requester.runtimeId, runtimeKind }
+        : undefined,
+    );
+  }
+
+  attachInteractiveAuthMessages(callback: OAuthUICallback | null): void {
+    if (callback === null) this.interactiveAuthUI.clearCallback();
+    else this.interactiveAuthUI.setCallback(callback);
+  }
+
+  bindInteractiveAuthHost(handler: InteractiveAuthHostHandler): void {
+    this.interactiveAuth.bindHost(handler);
+  }
+
+  unbindInteractiveAuthHost(): void {
+    this.interactiveAuth.unbindHost();
+  }
+
+  cancelInteractiveAuth(): number {
+    return this.interactiveAuth.cancelActiveSessions();
+  }
+
+  getInteractiveAuthSessions(): readonly InteractiveAuthSessionStatus[] {
+    return this.interactiveAuth.getActiveSessions();
   }
 
   createProfileOAuthWork(signal: AbortSignal): ProfileOAuthWork {

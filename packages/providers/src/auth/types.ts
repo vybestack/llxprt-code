@@ -1,3 +1,4 @@
+import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -44,6 +45,7 @@ export interface SessionAuthPolicy {
 }
 
 export interface OAuthManagerRuntimeMessageBusDeps {
+  readonly requestInteractiveAuth?: InteractiveAuthPromptOperation;
   readonly profileReads?: Pick<ProfileManager, 'loadProfile'>;
   readSessionAuthPolicy?: () => SessionAuthPolicy;
   messageBus?: MessageBus;

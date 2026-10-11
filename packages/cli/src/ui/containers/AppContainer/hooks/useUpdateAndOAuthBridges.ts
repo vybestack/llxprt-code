@@ -15,14 +15,12 @@ import type {
 } from '../../../types.js';
 import { setUpdateHandler } from '../../../../utils/handleAutoUpdate.js';
 import {
-  oauthUIBridge,
   type OAuthUIEvent,
   type OAuthUICallback,
   type OAuthInteractiveAuthOutcomeKind,
 } from '@vybestack/llxprt-code-auth';
 import {
   InteractiveAuthHostUnavailableError,
-  interactiveAuthCoordinator,
   type InteractiveAuthChallenge,
 } from '@vybestack/llxprt-code-providers/auth.js';
 import type { OAuthControl } from '../../../contexts/OAuthControlContext.js';
@@ -36,7 +34,15 @@ type HistoryAddItem = (
 interface UseUpdateAndOAuthBridgesParams {
   addItem: HistoryAddItem;
   setUpdateInfo: Dispatch<SetStateAction<UpdateObject | null>>;
-  oauthControl: Pick<OAuthControl, 'authenticate' | 'attachProviderMessages'>;
+  oauthControl: Pick<
+    OAuthControl,
+    | 'authenticate'
+    | 'attachProviderMessages'
+    | 'attachInteractiveAuthMessages'
+    | 'bindInteractiveAuthHost'
+    | 'unbindInteractiveAuthHost'
+    | 'cancelInteractiveAuth'
+  >;
 }
 
 function formatSettledOutcome(kind: OAuthInteractiveAuthOutcomeKind): string {
@@ -187,7 +193,8 @@ export function useUpdateAndOAuthBridges({
   }, [addItem, setUpdateInfo]);
 
   useEffect(() => {
-    oauthUIBridge.setCallback((event, timestamp) =>
+    const hostControl = latest.current.oauthControl;
+    hostControl.attachInteractiveAuthMessages((event, timestamp) =>
       makeOAuthCallback(latest.current.addItem)(event, timestamp),
     );
 
@@ -196,7 +203,7 @@ export function useUpdateAndOAuthBridges({
     // Bound exactly once per mounted host: identity churn of bridge-supplied
     // functions must not cancel active authentication. The handler resolves
     // the owner control through `latest` so it always uses the mounted root.
-    interactiveAuthCoordinator.bindHost(async (challenge, signal) => {
+    hostControl.bindInteractiveAuthHost(async (challenge, signal) => {
       await authenticateChallenge(
         latest.current.oauthControl,
         challenge,
@@ -205,9 +212,9 @@ export function useUpdateAndOAuthBridges({
     });
 
     return () => {
-      interactiveAuthCoordinator.cancelActiveSessions();
-      interactiveAuthCoordinator.unbindHost();
-      oauthUIBridge.clearCallback();
+      hostControl.cancelInteractiveAuth();
+      hostControl.unbindInteractiveAuthHost();
+      hostControl.attachInteractiveAuthMessages(null);
     };
     // Bound for the host lifetime; all dependencies are read through the
     // `latest` ref, which is why this effect has an empty dependency array.

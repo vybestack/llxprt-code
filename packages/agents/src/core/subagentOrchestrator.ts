@@ -1,3 +1,4 @@
+import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
@@ -132,6 +133,7 @@ export interface SubagentLaunchResult {
 }
 
 export interface SubagentOrchestratorOptions {
+  readonly requestInteractiveAuth?: InteractiveAuthPromptOperation;
   instructions: InstructionReadOperations;
   toolRegistry?: ToolSelection;
   readMcpInstructions: () => string | undefined;
@@ -764,6 +766,19 @@ export class SubagentOrchestrator {
     return client;
   }
 
+  private populateChildSettings(
+    settings: SettingsService,
+    profile: Profile,
+    profileName: string,
+  ): void {
+    populatePostActivationSettings(
+      settings,
+      profile,
+      profileName,
+      this.defaultDisabledTools,
+    );
+  }
+
   private async createIsolatedRuntime(
     settingsService: SettingsService,
     activationProfile: Profile,
@@ -787,6 +802,7 @@ export class SubagentOrchestrator {
     const handle = createIsolatedRuntimeContext(
       {
         runtimeId: agentRuntimeId,
+        requestInteractiveAuth: this.options.requestInteractiveAuth,
         config: isolatedConfig,
         borrowedTelemetry: this.options.telemetry,
         activationBindings:
@@ -847,11 +863,10 @@ export class SubagentOrchestrator {
           assembleModelSelection(handle.settingsOwner),
         );
       }
-      populatePostActivationSettings(
+      this.populateChildSettings(
         settingsService,
         runtimeStateProfile,
         profileName,
-        this.defaultDisabledTools,
       );
       return { ...handle, mediaOwner, sessionClient: ownedSessionClient };
     } catch (error) {

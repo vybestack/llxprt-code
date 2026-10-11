@@ -17,6 +17,11 @@ import type { DiscoveredProvider } from '../commands/oauthBucketDiscovery.js';
 
 export type OAuthControl = Pick<
   OAuthManager,
+  | 'attachInteractiveAuthMessages'
+  | 'bindInteractiveAuthHost'
+  | 'unbindInteractiveAuthHost'
+  | 'cancelInteractiveAuth'
+  | 'getInteractiveAuthSessions'
   | 'getAuthStatus'
   | 'toggleOAuthEnabled'
   | 'authenticate'
