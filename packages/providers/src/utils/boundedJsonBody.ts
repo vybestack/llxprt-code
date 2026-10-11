@@ -279,6 +279,12 @@ function segmentUnits(
     : escapedStringUnits(segment.value, maxPlainUnitCodeUnits);
 }
 
+/**
+ * Chunks start small and double up to the limit so a tiny value never pins a
+ * full-size backing buffer for as long as a consumer holds its view.
+ */
+const INITIAL_CHUNK_CAPACITY_BYTES = 1024;
+
 class ChunkAccumulator {
   private chunk: Uint8Array | undefined;
   private readonly scalarScratch = new Uint8Array(4);
@@ -293,7 +299,7 @@ class ChunkAccumulator {
     let index = 0;
     while (index < value.length) {
       const chunk = this.currentChunk();
-      const available = this.maxChunkBytes - this.used;
+      const available = chunk.byteLength - this.used;
       const end = fittingUtf8End(value, index, available);
       const source = value.slice(index, end);
       this.recordEncodingInput(source.length);
@@ -301,6 +307,8 @@ class ChunkAccumulator {
       if (encoded.read > 0) {
         index += encoded.read;
         this.used += encoded.written;
+      } else if (this.used > 0 && chunk.byteLength < this.maxChunkBytes) {
+        this.grow(chunk);
       } else if (this.used > 0) {
         yield this.takeChunk();
       } else {
@@ -331,7 +339,7 @@ class ChunkAccumulator {
     while (offset < bytes.byteLength) {
       const chunk = this.currentChunk();
       const count = Math.min(
-        this.maxChunkBytes - this.used,
+        chunk.byteLength - this.used,
         bytes.byteLength - offset,
       );
       chunk.set(bytes.subarray(offset, offset + count), this.used);
@@ -342,8 +350,25 @@ class ChunkAccumulator {
   }
 
   private currentChunk(): Uint8Array {
-    this.chunk ??= new Uint8Array(this.maxChunkBytes);
-    return this.chunk;
+    const chunk = this.chunk;
+    if (chunk === undefined) {
+      this.chunk = new Uint8Array(
+        Math.min(this.maxChunkBytes, INITIAL_CHUNK_CAPACITY_BYTES),
+      );
+      return this.chunk;
+    }
+    if (this.used === chunk.byteLength && chunk.byteLength < this.maxChunkBytes)
+      return this.grow(chunk);
+    return chunk;
+  }
+
+  private grow(chunk: Uint8Array): Uint8Array {
+    const grown = new Uint8Array(
+      Math.min(this.maxChunkBytes, chunk.byteLength * 2),
+    );
+    grown.set(chunk.subarray(0, this.used));
+    this.chunk = grown;
+    return grown;
   }
 
   private takeChunk(): Uint8Array {
