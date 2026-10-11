@@ -26,6 +26,7 @@ import {
   resolveInvocationEphemerals,
 } from './responses-request-fields.js';
 import { readRequestReasoningIdTime } from '../transportAttemptBudget.js';
+import { resolveRowsMedia } from './responses-row-media.js';
 import {
   resolveResponsesRequestShape,
   resolveResponsesStatefulPlan,
@@ -142,7 +143,8 @@ function statefulAccounting(
     stateful: {
       statefulParentUsed: true,
       retainedBaselineTokens: stateful.parentRetainedTokens,
-      incrementalContents: countedRows(rows, signal, skipRows),
+      // Estimation only: the transmitted rows are resolved once, by the write.
+      incrementalContents: estimationRows(countedRows(rows, signal, skipRows)),
       ...(stateful.parentRetainedTokens === undefined
         ? {
             fullHistoryContents: estimationRows(countedRows(rows, signal)),
@@ -221,7 +223,12 @@ export async function buildDiskTextResponsesContext(
       model: prepared.request.model,
       instructions: prepared.request.instructions,
       tools: prepared.request.tools,
-      contents: countedRows(rows, signal, skipRows),
+      contents: resolveRowsMedia(
+        countedRows(rows, signal, skipRows),
+        options.runtime,
+        prepared.mediaRequest,
+        signal,
+      ),
       ...(historyDangling === undefined ? {} : { historyDangling }),
       ...('input' in overrides
         ? { inputOverride: { value: overrides['input'] } }
