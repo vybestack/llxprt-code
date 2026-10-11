@@ -21,10 +21,6 @@ import { OpenAIVercelProvider } from '@vybestack/llxprt-code-providers/openai-ve
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
-  GeminiProvider,
-  type CreateGeminiApiClient,
-} from '../../../../plugins/google-gemini/src/gemini/GeminiProvider.js';
-import {
   estimatePendingTokens,
   estimateSourcePendingTokens,
 } from '../compression/compressionBudgeting.js';
@@ -163,7 +159,7 @@ function sseResponse(): Response {
   );
 }
 
-describe('unflagged end-to-end send through real non-projecting providers', () => {
+describe('unflagged end-to-end send through non-projecting providers', () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
   });
@@ -223,26 +219,30 @@ describe('unflagged end-to-end send through real non-projecting providers', () =
     expect(fixture.state.closed).toBe(1);
   });
 
-  it('sends the Gemini plugin request from request rows', async () => {
+  it('sends a plugin-style transport request from request rows', async () => {
+    // The Gemini plugin owns its transport tests (plugins/google-gemini);
+    // this stub has the same contract: no projectPromptEnvelope, and the
+    // request body is built from `requestRows` when present.
     const fixture = await diskSource(root(), 6);
     const expectedRows = await readRows(fixture.source);
     const requests: string[] = [];
-    const client = (async () => ({
-      models: {
-        generateContentStream: async (request: { contents: unknown[] }) => {
-          requests.push(JSON.stringify(request));
-          return (async function* () {
-            yield { candidates: [{ content: { parts: [{ text: 'ok' }] } }] };
-          })();
-        },
+    const provider = {
+      name: 'gemini',
+      async *generateChatCompletion(options: {
+        requestRows?: PromptEnvelopeSource;
+        contents: AsyncIterable<IContent>;
+      }): AsyncGenerator<IContent> {
+        const iterable =
+          options.requestRows === undefined
+            ? options.contents
+            : reopenable(options.requestRows);
+        const sent: IContent[] = [];
+        for await (const row of iterable) sent.push(row);
+        requests.push(JSON.stringify({ contents: sent }));
+        yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
       },
-    })) as unknown as CreateGeminiApiClient;
-    const provider = new GeminiProvider(
-      'test-key',
-      undefined,
-      undefined,
-      client,
-    );
+    };
+    expect('projectPromptEnvelope' in provider).toBe(false);
     const base = createProviderCallOptions({
       providerName: 'gemini',
       contents: { async *[Symbol.asyncIterator]() {} },
