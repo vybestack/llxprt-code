@@ -5,7 +5,7 @@
  */
 import type { ProviderSwitcher } from '../providerSwitch.js';
 
-const PRESERVED_PROFILE_EPHEMERALS = [
+const PRESERVED_PROFILE_EPHEMERALS = Object.freeze([
   'auth-key',
   'auth-key-name',
   'auth-keyfile',
@@ -22,7 +22,7 @@ const PRESERVED_PROFILE_EPHEMERALS = [
   'shell-default-timeout-seconds',
   'shell-max-timeout-seconds',
   'shell-output-retention-max-bytes',
-];
+] as const);
 
 export async function switchProviderForProfile(
   targetProviderName: string,

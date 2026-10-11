@@ -12,7 +12,10 @@ import {
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
-import { switchActiveProvider } from './providerSwitch.js';
+import {
+  switchActiveProvider,
+  DEFAULT_PRESERVE_EPHEMERALS,
+} from './providerSwitch.js';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import {
   MemoryTokenStore,
@@ -72,6 +75,17 @@ describe('explicit provider switch ownership', () => {
       },
     };
   }
+  it('rejects external writes to the default preserved settings', () => {
+    const before = [...DEFAULT_PRESERVE_EPHEMERALS];
+    expect(Reflect.set(DEFAULT_PRESERVE_EPHEMERALS, '0', 'auth-key')).toBe(
+      false,
+    );
+    expect(Reflect.set(DEFAULT_PRESERVE_EPHEMERALS, '3', 'auth-key')).toBe(
+      false,
+    );
+    expect(DEFAULT_PRESERVE_EPHEMERALS).toStrictEqual(before);
+  });
+
   it('finishes delayed same-label owners independently outside runtime scopes', async () => {
     const first = owner();
     const second = owner();

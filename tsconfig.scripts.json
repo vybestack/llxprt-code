@@ -117,6 +117,8 @@
     "scripts/tests/runtime-service-shape-guard.test.ts",
     "scripts/tests/runtime-service-shape-test-helpers.ts",
     "scripts/tests/runtime-state-boundary.test.ts",
+    "scripts/tests/runtime-state-mutation-boundary.test.ts",
+    "scripts/tests/runtime-lookup-tables.test.ts",
     "scripts/tests/runtime-source-discovery.test.ts",
     "scripts/tests/a2a-package-entries.test.ts",
     "scripts/tests/mcp-standalone-consumer.test.ts",

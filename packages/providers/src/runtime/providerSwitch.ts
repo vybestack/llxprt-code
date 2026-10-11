@@ -36,11 +36,11 @@ function logger(): DebugLogger {
   return new DebugLogger('llxprt:runtime:settings');
 }
 
-export const DEFAULT_PRESERVE_EPHEMERALS = [
+export const DEFAULT_PRESERVE_EPHEMERALS = Object.freeze([
   'context-limit',
   'max_tokens',
   'streaming',
-] as const;
+] as const);
 
 export interface ProviderSwitchResult {
   changed: boolean;
@@ -54,7 +54,7 @@ export interface ProviderSwitchOptions {
   publication?: 'immediate' | 'deferred';
   clientReplacement?: 'immediate' | 'deferred';
   autoOAuth?: boolean;
-  preserveEphemerals?: string[];
+  preserveEphemerals?: readonly string[];
   skipModelDefaults?: boolean;
   addItem?: OAuthUICallback;
 }
