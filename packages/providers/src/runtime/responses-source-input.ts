@@ -121,6 +121,7 @@ export interface HistoryDangling {
 export class ResponsesSourceInput {
   #separator = '';
   #reasoning = 0;
+  readonly #reasoningIdTime: number;
   #pdfBytes = 0;
   #dangling: DanglingCalls | undefined;
   #pairs: ToolPairIndex | undefined;
@@ -133,6 +134,7 @@ export class ResponsesSourceInput {
     private readonly signal?: AbortSignal,
     history?: HistoryDangling,
   ) {
+    this.#reasoningIdTime = context.reasoningIdTime ?? Date.now();
     this.#dangling = history?.calls;
     this.#skipRows = history?.skipRows ?? 0;
   }
@@ -206,7 +208,7 @@ export class ResponsesSourceInput {
           !genuine &&
           this.context.serverSideParentActive !== true
         )
-          item.id = `rs_local_${this.#reasoning++}`;
+          item.id = `rs_${this.#reasoningIdTime}_${this.#reasoning++}`;
         this.item(item);
       }
     }

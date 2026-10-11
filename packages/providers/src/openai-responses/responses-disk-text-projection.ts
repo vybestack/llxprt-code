@@ -197,6 +197,7 @@ export async function buildDiskTextResponsesContext(
     );
   const ephemerals = resolveInvocationEphemerals(options);
   const signal = getRequestSignal(options);
+  const reasoningIdTime = mode.reasoningIdTime ?? Date.now();
   const { stateful, skipRows, historyDangling } = await selectRowsStateful(
     options,
     deps,
@@ -229,6 +230,7 @@ export async function buildDiskTextResponsesContext(
         ephemerals,
         deps,
         stateful.parentId !== undefined,
+        reasoningIdTime,
       ),
       signal,
     });
@@ -241,7 +243,10 @@ export async function buildDiskTextResponsesContext(
       sourcePrompt: prompt,
       statefulEnabled: stateful.enabled,
       rebuildFromRows: (rebuild) =>
-        buildDiskTextResponsesContext(options, deps, rebuild),
+        buildDiskTextResponsesContext(options, deps, {
+          ...rebuild,
+          reasoningIdTime,
+        }),
     };
   } catch (error) {
     return finishMediaRequest(prepared.mediaRequest, {

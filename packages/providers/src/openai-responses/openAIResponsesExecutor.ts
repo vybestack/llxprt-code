@@ -198,6 +198,8 @@ export interface PreparedResponsesRequestContext {
 export interface RebuildMode {
   readonly forceStateless: boolean;
   readonly forceParentless: boolean;
+  /** The request's synthesized reasoning-id time, carried across rebuilds. */
+  readonly reasoningIdTime?: number;
 }
 
 export interface RequestContext extends PreparedResponsesRequestContext {

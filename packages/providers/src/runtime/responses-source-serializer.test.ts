@@ -22,6 +22,9 @@ const context: ResponsesInputBuildContext = {
   outputLimiterConfig: { getEphemeralSettings: () => ({}) },
   debug: () => {},
   mediaPdfEnabled: true,
+  // The oracle and the source route must stamp synthesized reasoning ids with
+  // the same request time to be byte-comparable.
+  reasoningIdTime: 1700000000000,
 };
 const model = 'gpt-5.6';
 const instructions = 'Preserve "quotes", \\ and 雪\n\ud800';

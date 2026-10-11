@@ -107,6 +107,7 @@ export function responsesInputContext(
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
   serverSideParentActive: boolean = false,
+  reasoningIdTime?: number,
 ): ResponsesInputBuildContext {
   const includeReasoningInContextSetting =
     (invocationEphemerals['reasoning.includeInContext'] as
@@ -129,6 +130,7 @@ export function responsesInputContext(
     debug: (messageFactory) => deps.logger.debug(messageFactory),
     serverSideParentActive,
     mediaPdfEnabled: isResponsesPdfEnabled(options),
+    ...(reasoningIdTime === undefined ? {} : { reasoningIdTime }),
   };
 }
 
