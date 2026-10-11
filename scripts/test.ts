@@ -40,6 +40,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { propertyValue } from './utils/error-guards.ts';
+import { PARTITION_ENV_VAR } from './lib/bun-test-partition.ts';
 import {
   TEST_SHARDS,
   SCRIPTS_SHARD_NAME,
@@ -254,8 +255,9 @@ function createRunnerWithPATH(rootDir: string): CommandRunner {
 // the script harness needs. It is no longer a separate root: it is discovered
 // alongside every other scripts/tests file and receives its larger timeout via
 // a per-file timeout override on the scripts-tests root (issue #2780).
-export function scriptsRootCommand(root: string): string {
-  return `bun scripts/run_bun_tests.ts --root ${root}`;
+export function scriptsRootCommand(root: string, partition?: string): string {
+  const base = `bun scripts/run_bun_tests.ts --root ${root}`;
+  return partition === undefined ? base : `${base} --partition ${partition}`;
 }
 
 const SCRIPTS_TEST_DIRECTORY = 'scripts/tests';
@@ -284,11 +286,13 @@ function runPhase(
   command: string,
   cwd: string,
   runner: CommandRunner,
+  env?: NodeJS.ProcessEnv,
 ): TestPhaseResult {
   const start = Date.now();
   let result: { success: boolean; exitCode: number };
   try {
-    result = runner(command, cwd);
+    result =
+      env === undefined ? runner(command, cwd) : runner(command, cwd, env);
   } catch (error) {
     result = { success: false, exitCode: extractExitCode(error) };
   }
@@ -468,13 +472,20 @@ function runScriptTests(
   // Each root runs as its own invocation so a root declaring a much larger
   // budget cannot weaken the timeout that catches hangs in another root.
   // Fail-fast between roots.
+  // The CI leg's partition identity reaches the runner as an explicit flag.
+  // The variable is removed from the child environment so test files that
+  // spawn runners of their own cannot inherit and re-partition it.
+  const { [PARTITION_ENV_VAR]: partition, ...childEnv } = process.env;
+  const partitionFlag =
+    partition === undefined || partition.trim() === '' ? undefined : partition;
   for (const root of SCRIPTS_SHARD_ROOTS) {
     const result = runPhase(
       'scripts',
       'scripts',
-      scriptsRootCommand(root),
+      scriptsRootCommand(root, partitionFlag),
       rootDir,
       runner,
+      partitionFlag === undefined ? undefined : childEnv,
     );
     results.push(result);
     if (!result.success) {

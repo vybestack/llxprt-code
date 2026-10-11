@@ -27,6 +27,7 @@
  *   --junit <path>        Write a JUnit XML report to this path after the run
  *   --json-report <path>  Write a Vitest-compatible JSON report (per-test results)
  *   --dry-run             List files that would be run without executing them
+ *   --partition <NofM>    Run only the round-robin slice N of M of the files
  */
 
 import './tests/browser-launch-guard.js';
@@ -55,6 +56,11 @@ import {
   reapStaleBunTestProcesses,
   killTimedOutChild,
 } from './lib/bun-test-retry.js';
+import {
+  parsePartitionIdentity,
+  selectRootPartition,
+  type PartitionIdentity,
+} from './lib/bun-test-partition.js';
 import {
   buildSessionEnv,
   createTestSessionRoot,
@@ -174,6 +180,8 @@ interface CliOptions {
   filters: string[];
   /** Regex forwarded to Bun as `--test-name-pattern`. */
   testNamePattern: string | null;
+  /** One-based `NofM` slice of the resolved files; null runs them all. */
+  partition: PartitionIdentity | null;
 }
 
 function readOptionValue(
@@ -217,6 +225,7 @@ function parseArgs(argv: string[]): CliOptions {
     exclude: [],
     filters: [],
     testNamePattern: null,
+    partition: null,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -257,6 +266,11 @@ function parseArgs(argv: string[]): CliOptions {
         break;
       case '--testNamePattern':
         options.testNamePattern = readOptionValue(argv, i++, arg);
+        break;
+      case '--partition':
+        options.partition = parsePartitionIdentity(
+          readOptionValue(argv, i++, arg),
+        );
         break;
       default: {
         // `--exclude=<glob>` / `--testNamePattern=<regex>` (the forms the e2e
@@ -542,16 +556,10 @@ export async function runBunTests(
 ): Promise<number> {
   const options = parseArgs(argv);
   const tsconfigOverride = resolveTsconfig(options, dependencies);
-  const files = resolveSelectedFiles(options, dependencies);
+  const { all, files } = resolveSelectedFiles(options, dependencies);
 
-  if (files.length === 0) {
-    const scope = options.workspace
-      ? `workspace "${options.workspace}"`
-      : 'any workspace';
-    dependencies.stderr(`No native Bun test files found for ${scope}.`);
-    dependencies.stderr('Roots must be declared in scripts/bun-test-roots.ts.');
-    return 1;
-  }
+  if (files.length === 0)
+    return reportEmptySelection(options, dependencies, all);
 
   if (options.dryRun) {
     dependencies.stdout(`Dry run: ${files.length} files would be executed:`);
@@ -645,8 +653,11 @@ function resolveTsconfig(
 function resolveSelectedFiles(
   options: CliOptions,
   dependencies: BunTestRunnerDependencies,
-): readonly BunTestFile[] {
-  return applyFilters(
+): {
+  readonly all: readonly BunTestFile[];
+  readonly files: readonly BunTestFile[];
+} {
+  const all = applyFilters(
     applyExclusions(
       dependencies.resolveFiles(
         dependencies.repoRoot,
@@ -656,6 +667,27 @@ function resolveSelectedFiles(
     ),
     options.filters,
   );
+  return { all, files: selectRootPartition(all, options.partition) };
+}
+
+/** Exit status for a run with no files: success only when another partition owns them. */
+function reportEmptySelection(
+  options: CliOptions,
+  dependencies: BunTestRunnerDependencies,
+  all: readonly BunTestFile[],
+): number {
+  if (all.length > 0 && options.partition !== null) {
+    dependencies.stdout(
+      `Partition ${options.partition.index}of${options.partition.count} owns none of the ${all.length} native Bun test files in this root`,
+    );
+    return 0;
+  }
+  const scope = options.workspace
+    ? `workspace "${options.workspace}"`
+    : 'any workspace';
+  dependencies.stderr(`No native Bun test files found for ${scope}.`);
+  dependencies.stderr('Roots must be declared in scripts/bun-test-roots.ts.');
+  return 1;
 }
 
 interface RunAllFilesOutcome {

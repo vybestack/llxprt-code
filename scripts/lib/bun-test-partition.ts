@@ -105,3 +105,25 @@ export function selectPartition(
   }
   return selected;
 }
+
+/**
+ * Applies a partition identity to one test root's files. A root with fewer
+ * files than partitions (for example the single-file eslint-rules root) runs
+ * entirely on partition 1 and is empty elsewhere, so every file still runs
+ * exactly once across the partitions without failing the empty legs.
+ */
+export function selectRootPartition<T extends { readonly file: string }>(
+  entries: readonly T[],
+  identity: PartitionIdentity | null,
+): readonly T[] {
+  if (identity !== null && entries.length < identity.count) {
+    return identity.index === 1 ? entries : [];
+  }
+  const owned = new Set(
+    selectPartition(
+      entries.map((entry) => entry.file),
+      identity,
+    ),
+  );
+  return entries.filter((entry) => owned.has(entry.file));
+}

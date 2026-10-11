@@ -928,6 +928,7 @@ export interface MatrixRow {
 export const SHARD_PARTITION_COUNTS: Readonly<Record<string, number>> = {
   cli: 3,
   agents: 3,
+  scripts: 3,
 };
 
 /**
