@@ -26,18 +26,13 @@ const RESPONSE_TEXT = `${'assistant reply '.repeat(40)}done`;
 export type WorkloadMode = 'normal' | 'trap' | 'release-trap';
 
 /**
- * The release-trap drops everything it retained after this turn, which is
- * before the last checkpoint window opens, so only the earlier settled
- * checkpoints can see the retention.
- */
-export const RELEASE_TRAP_TURN = 380;
-
-/**
  * Deliberate retention for the trap: keeps every request row the real send
- * path reads. The normal run never constructs this class.
+ * path reads once retention is switched on, which the worker does only after
+ * the baseline is taken. The normal run never constructs this class.
  */
 class RetainingHistory extends HistoryService {
   readonly retained: IContent[] = [];
+  retaining = false;
   override async prepareCuratedForProviderSnapshot(
     pending: readonly IContent[] = [],
     options: ProviderCuratedStreamOptions = {},
@@ -49,32 +44,20 @@ class RetainingHistory extends HistoryService {
       override,
     );
     const retained = this.retained;
+    const retaining = () => this.retaining;
     return {
       count: snapshot.count,
       pending: snapshot.pending,
       isPending: (index) => snapshot.isPending(index),
       async *openReader(signal): AsyncGenerator<IContent, void, unknown> {
         for await (const row of snapshot.openReader(signal)) {
-          retained.push(row);
+          if (retaining()) retained.push(row);
           yield row;
         }
       },
       close: () => snapshot.close(),
     };
   }
-}
-
-function releaseTrapRetention(
-  mode: WorkloadMode,
-  history: HistoryService,
-  turn: number,
-): void {
-  if (
-    mode === 'release-trap' &&
-    turn === RELEASE_TRAP_TURN &&
-    history instanceof RetainingHistory
-  )
-    history.retained.length = 0;
 }
 
 /** Local server speaking the OpenAI Responses SSE protocol. */
@@ -139,6 +122,10 @@ export interface Workload {
   readonly history: HistoryService;
   readonly retainedRows: () => number;
   readonly requestCount: () => number;
+  /** Starts keeping every request row; a no-op for the normal workload. */
+  startRetaining(): void;
+  /** Stops keeping request rows and drops those held; a no-op for normal. */
+  releaseRetained(): void;
   setContextLimit(limit: number): void;
   runTurn(turn: number): Promise<void>;
   dispose(): Promise<void>;
@@ -181,6 +168,21 @@ function addToolExchange(history: HistoryService, turn: number): void {
       },
     ],
   });
+}
+
+function retentionControls(
+  history: HistoryService,
+): Pick<Workload, 'startRetaining' | 'releaseRetained'> {
+  return {
+    startRetaining() {
+      if (history instanceof RetainingHistory) history.retaining = true;
+    },
+    releaseRetained() {
+      if (!(history instanceof RetainingHistory)) return;
+      history.retaining = false;
+      history.retained.length = 0;
+    },
+  };
 }
 
 export async function createWorkload(
@@ -237,6 +239,7 @@ export async function createWorkload(
     retainedRows: () =>
       history instanceof RetainingHistory ? history.retained.length : 0,
     requestCount: http.requestCount,
+    ...retentionControls(history),
     setContextLimit(limit) {
       settings.set('context-limit', limit);
     },
@@ -249,7 +252,6 @@ export async function createWorkload(
       );
       if (output !== RESPONSE_TEXT)
         throw new Error(`Turn ${turn} returned unexpected text`);
-      releaseTrapRetention(mode, history, turn);
     },
     async dispose() {
       history.dispose();
