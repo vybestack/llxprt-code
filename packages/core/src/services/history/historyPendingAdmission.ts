@@ -14,11 +14,17 @@ export function admitHistoryPending(
   recorder: SessionRecordingService,
   op: HistoryJournalOp,
   ownership?: RowOwnership,
-): { readonly line: SessionRecordLine | null } {
+): { readonly line: SessionRecordLine } {
   const { type, payload } = opToEnvelope(op);
   for (const owner of journalPublicationOwners(op)) ownership?.retain(owner);
   try {
-    return { line: recorder.enqueue(type, payload) };
+    // The journal is authoritative: a record the recorder refuses must fail
+    // the mutation, never be published and later reported durable.
+    recorder.requireCommittable();
+    const line = recorder.enqueue(type, payload);
+    if (line === null)
+      throw new Error(`Session recording is inactive (${type})`);
+    return { line };
   } finally {
     for (const owner of journalPublicationOwners(op)) ownership?.release(owner);
   }

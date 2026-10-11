@@ -602,19 +602,15 @@ export class HistoryJournalStore {
       binding.pending.cancel(ordinal);
       throw error;
     }
-    if (line !== null) {
-      if (binding.lastSeq !== null && line.seq > binding.lastSeq + 1)
-        binding.externalBoundarySeq ??= line.seq - 1;
-      binding.lastSeq = line.seq;
-    }
+    if (binding.lastSeq !== null && line.seq > binding.lastSeq + 1)
+      binding.externalBoundarySeq ??= line.seq - 1;
+    binding.lastSeq = line.seq;
     binding.pending.publish(ordinal);
     // Admission publishes both membership and cardinality synchronously. Acks
     // only move that same membership from pending to durable, never count twice.
     binding.rowCount = nextLength;
     binding.durableTail = current.durableTail;
-    this.publicationOrdinals.admitted(
-      line?.seq ?? recorder.getLastEnqueuedSequence(),
-    );
+    this.publicationOrdinals.admitted(line.seq);
   }
 
   withPublicationOrdinals(action: () => Promise<void>): Promise<void> {
