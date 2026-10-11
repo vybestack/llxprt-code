@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { heapSize, heapStats } from 'bun:jsc';
+import { collectedWithin } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { ProviderNormalizationDisk } from '@vybestack/llxprt-code-core/services/history/provider-normalization-disk.js';
 import { NormalizedProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -65,6 +66,16 @@ export class RetainedOwnerCensus {
     this.peak.external = process.memoryUsage().external;
   }
 
+  /**
+   * Gives each observed object a bounded chance to be collected. Stops at the
+   * first object that stays alive: it is reported by survivors(), and the
+   * rest of its cohort is held by the same owner.
+   */
+  async awaitCollected(): Promise<void> {
+    for (const cohort of this.cohorts.values())
+      for (const ref of cohort.refs) if (!(await collectedWithin(ref))) return;
+  }
+
   survivors(): Partial<Record<string, { observed: number; live: number }>> {
     return Object.fromEntries(
       [...this.cohorts].map(([category, cohort]) => [
@@ -108,6 +119,36 @@ export async function retainedCheckpoint(census: RetainedOwnerCensus) {
     },
     survivors: census.survivors(),
   };
+}
+
+/** The checkpoints taken while the request is in flight, before it returns. */
+interface InFlightCheckpoints {
+  readonly first: {
+    readonly survivors: ReturnType<RetainedOwnerCensus['survivors']>;
+  };
+  readonly receiver: {
+    readonly survivors: ReturnType<RetainedOwnerCensus['survivors']>;
+  };
+  readonly last: {
+    readonly survivors: ReturnType<RetainedOwnerCensus['survivors']>;
+  };
+}
+
+/**
+ * The most objects of one category that were live, after a settled collection,
+ * at any in-flight checkpoint. A request-scoped body may be large; row
+ * objects, segments and readers held beyond the streaming window are the
+ * context-sized retention this counts.
+ */
+export function inFlightPeakLive(
+  facts: InFlightCheckpoints,
+  category: string,
+): number {
+  return Math.max(
+    ...[facts.first, facts.receiver, facts.last].map(
+      (checkpoint) => checkpoint.survivors[category]?.live ?? 0,
+    ),
+  );
 }
 
 function observeRowOwners(census: RetainedOwnerCensus): () => void {

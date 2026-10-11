@@ -107,27 +107,21 @@ export async function runRetainedCensus(
 }
 
 /**
- * One full-size warm pass at the large tail, then the measured scenario at
- * the small tail and again `sends` times at each of the small and large tails, all in this
- * process. `large` is the first large send; `larges` holds every one so a
- * settled-heap gate can use the median of several sends. Retention
- * proportional to context is present in every send, while the collector noise
- * of a single settled reading is not.
+ * One full-size warm pass at the large tail, then the measured scenario at the
+ * small tail and at the large tail, all in this process. The caller compares
+ * what each send holds live in flight by identity, so no heap reading decides
+ * the outcome.
  */
 export async function runRetainedScaling(
   retention: RowRetention,
   small: DiskTextTail,
   large: DiskTextTail,
-  sends = 1,
 ) {
   await runCensusOnce('none', large);
-  const smalls = [];
-  for (let index = 0; index < sends; index++)
-    smalls.push(await runCensusOnce(retention, small));
-  const larges = [];
-  for (let index = 0; index < sends; index++)
-    larges.push(await runCensusOnce(retention, large));
-  return { small: smalls[0], smalls, large: larges[0], larges };
+  return {
+    small: await runCensusOnce(retention, small),
+    large: await runCensusOnce(retention, large),
+  };
 }
 
 async function runCensusOnce(retention: RowRetention, tail: DiskTextTail) {
@@ -135,20 +129,12 @@ async function runCensusOnce(retention: RowRetention, tail: DiskTextTail) {
   input.census.rowRetention = retention;
   try {
     const measured = await measure(input);
+    await input.census.awaitCollected();
     const detached = await retainedCheckpoint(input.census);
     const facts = {
       ...requestFacts(input),
       ...measured,
       detached,
-      gateDelta:
-        Math.max(
-          measured.first.heap,
-          measured.receiver.heap,
-          measured.last.heap,
-          measured.final.heap,
-        ) - measured.baseline.heap,
-      settledDelta: measured.final.heap - measured.baseline.heap,
-      detachedDelta: detached.heap - measured.baseline.heap,
     };
     return facts;
   } finally {
