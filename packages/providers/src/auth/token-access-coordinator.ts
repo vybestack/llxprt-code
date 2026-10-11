@@ -202,6 +202,7 @@ export class TokenAccessCoordinator {
   async getOAuthToken(
     providerName: string,
     bucket?: string | unknown,
+    signal?: AbortSignal,
   ): Promise<OAuthToken | null> {
     logger.debug(
       () => `[FLOW] getOAuthToken() called for provider: ${providerName}`,
@@ -226,6 +227,7 @@ export class TokenAccessCoordinator {
       explicitBucket,
       bucket,
       effectiveMetadata,
+      signal,
     );
   }
 
@@ -406,17 +408,15 @@ export class TokenAccessCoordinator {
     explicitBucket: boolean,
     bucket: string | unknown,
     effectiveMetadata: OAuthTokenRequestMetadata | undefined,
+    signal?: AbortSignal,
   ): Promise<OAuthToken | null> {
     const bucketToUse = explicitBucket
       ? (bucket as string)
       : await this.resolveImplicitBucket(providerName, effectiveMetadata);
     try {
-      return await this.readAndValidateToken(providerName, bucketToUse);
+      return await this.readAndValidateToken(providerName, bucketToUse, signal);
     } catch (error) {
-      logger.debug(
-        () =>
-          `[FLOW] getOAuthToken() ERROR for ${providerName}: ${error instanceof Error ? error.message : error}`,
-      );
+      if (signal) throw error;
       if (
         error instanceof Error &&
         error.message.includes('Unknown provider')
@@ -459,6 +459,7 @@ export class TokenAccessCoordinator {
   async getToken(
     providerName: string,
     bucket?: string | unknown,
+    signal?: AbortSignal,
   ): Promise<string | null> {
     logger.debug(
       () => `[FLOW] getToken() called for provider: ${providerName}`,
@@ -499,6 +500,7 @@ export class TokenAccessCoordinator {
       explicitBucket,
       bucket,
       effectiveMetadata,
+      signal,
     );
 
     if (token) {
@@ -961,6 +963,7 @@ export class TokenAccessCoordinator {
     providerName: string,
     failedAccessToken: string,
     bucket?: string,
+    signal?: AbortSignal,
   ): Promise<OAuthToken | null> {
     if (!this.providerRegistry.getProvider(providerName)) {
       logger.debug(
@@ -1028,9 +1031,11 @@ export class TokenAccessCoordinator {
         this.tokenStore,
         this.providerRegistry,
         this.proactiveRenewalManager,
+        signal,
       );
       return refreshedToken;
     } catch (refreshError) {
+      if (signal) throw refreshError;
       rethrowIfStoreOutage(refreshError);
       logger.debug(
         () =>

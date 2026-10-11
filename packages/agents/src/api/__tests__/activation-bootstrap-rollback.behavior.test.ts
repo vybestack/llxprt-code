@@ -74,7 +74,7 @@ describe('Acquisition rollback', () => {
       expect(failure).toBeInstanceOf(AggregateError);
       if (!(failure instanceof AggregateError))
         throw new Error('Missing aggregate');
-      expect(failure.errors).toEqual([bindingError, cleanupError]);
+      expect(failure.errors).toStrictEqual([bindingError, cleanupError]);
       expect(disposals).toBe(1);
     } finally {
       gate.release();

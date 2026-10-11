@@ -122,6 +122,7 @@ export async function executeTokenRefresh(
       return null;
     }
 
+    signal?.throwIfAborted();
     const mergedToken = mergeRefreshedToken(
       (recheckToken ?? token) as OAuthTokenWithExtras,
       refreshedToken as OAuthTokenWithExtras,

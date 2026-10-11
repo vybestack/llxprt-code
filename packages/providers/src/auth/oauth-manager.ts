@@ -34,6 +34,7 @@ import type {
 import { ProactiveRenewalManager } from './proactive-renewal-manager.js';
 import { OAuthBucketManager } from './OAuthBucketManager.js';
 import { createProfileManager } from './profile-utils.js';
+import { OAuthForegroundLifetime } from './oauth-foreground-lifetime.js';
 import { TokenAccessCoordinator } from './token-access-coordinator.js';
 import { AuthFlowOrchestrator } from './auth-flow-orchestrator.js';
 import { AuthStatusService } from './auth-status-service.js';
@@ -136,6 +137,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     return this.bucketManager.checkpointFailoverHandlers();
   }
 
+  private readonly foreground = new OAuthForegroundLifetime();
   private providerRegistry: ProviderRegistry;
   private tokenStore: TokenStore;
   private settings?: IOAuthSettingsProvider;
@@ -361,7 +363,9 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     providerName: string,
     bucket?: string | unknown,
   ): Promise<string | null> {
-    return this.tokenAccessCoordinator.getToken(providerName, bucket);
+    return this.foreground.accept((signal) =>
+      this.tokenAccessCoordinator.getToken(providerName, bucket, signal),
+    );
   }
 
   /**
@@ -369,7 +373,9 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * Delegates to TokenAccessCoordinator.
    */
   async peekStoredToken(providerName: string): Promise<OAuthToken | null> {
-    return this.tokenAccessCoordinator.peekStoredToken(providerName);
+    return this.foreground.accept(() =>
+      this.tokenAccessCoordinator.peekStoredToken(providerName),
+    );
   }
 
   /**
@@ -380,7 +386,9 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     providerName: string,
     bucket?: string | unknown,
   ): Promise<OAuthToken | null> {
-    return this.tokenAccessCoordinator.getOAuthToken(providerName, bucket);
+    return this.foreground.accept((signal) =>
+      this.tokenAccessCoordinator.getOAuthToken(providerName, bucket, signal),
+    );
   }
 
   /**
@@ -403,7 +411,9 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * Called by the owner of this manager before it releases the token store.
    */
   async dispose(): Promise<void> {
-    await this.proactiveRenewalManager.cancelAndJoin();
+    await this.foreground.dispose(() =>
+      this.proactiveRenewalManager.cancelAndJoin(),
+    );
   }
 
   createProfileOAuthWork(signal: AbortSignal): ProfileOAuthWork {
@@ -417,7 +427,12 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       prepareRenewals: (profile, loadProfile) =>
         renewals.prepareProactiveRenewalsForProfile(profile, loadProfile),
       getToken: (request) =>
-        this.tokenAccessCoordinator.getProfileOAuthToken(request, renewals),
+        this.foreground.accept((signal) =>
+          this.tokenAccessCoordinator.getProfileOAuthToken(
+            { ...request, signal: AbortSignal.any([request.signal, signal]) },
+            renewals,
+          ),
+        ),
       cancelAndJoin: () => renewals.cancelAndJoin(),
     };
   }
@@ -721,10 +736,13 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     failedAccessToken: string,
     bucket?: string,
   ): Promise<OAuthToken | null> {
-    return this.tokenAccessCoordinator.forceRefreshToken(
-      providerName,
-      failedAccessToken,
-      bucket,
+    return this.foreground.accept((signal) =>
+      this.tokenAccessCoordinator.forceRefreshToken(
+        providerName,
+        failedAccessToken,
+        bucket,
+        signal,
+      ),
     );
   }
 
