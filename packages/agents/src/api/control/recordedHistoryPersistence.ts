@@ -13,6 +13,13 @@ import {
   type SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
 
+export function requireActiveRecording(
+  recording: SessionRecordingService | null,
+): SessionRecordingService {
+  if (recording?.isActive() !== true) throw new Error('No active recording');
+  return recording;
+}
+
 export function createAgentSessionPersistence(
   projectRoot: string,
   chatsDir: string,

@@ -178,8 +178,17 @@ function buildDeps(
     sessionIdentityOwnership: 'config',
     sessionId: () => sessionId,
     resolveClient: () => client,
-    assertSessionIdle: () => {},
-    startNewSessionClient: () => client.resetChat(),
+    withSessionTransition: (operation) => operation(),
+    closeSessionAdmission: () => {},
+    prepareNewSessionClient: async () => {
+      await client.resetChat();
+      return {
+        client,
+        publish: () => {},
+        retire: async () => {},
+        discard: async () => {},
+      };
+    },
     getProvider: () => 'fake',
     getModel: () => 'fake-model',
   };

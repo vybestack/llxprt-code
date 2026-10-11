@@ -18,7 +18,12 @@ import {
 import {
   SessionLockManager,
   SessionLockedError,
+  SessionRecordingService,
+  RecordingIntegration,
 } from '@vybestack/llxprt-code-core';
+import { SessionClientOwner } from '../../session/session-client-owner.js';
+import { AgentClient } from '../../core/client.js';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import {
   buildAgent,
   drain,
@@ -27,12 +32,46 @@ import {
 } from './helpers/agentHarness.js';
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 
+function clientOwner(agent: Agent): SessionClientOwner {
+  if (
+    !('deps' in agent) ||
+    typeof agent.deps !== 'object' ||
+    agent.deps === null
+  ) {
+    throw new Error('Expected an owned session client');
+  }
+  if (
+    !('sessionClient' in agent.deps) ||
+    !(agent.deps.sessionClient instanceof SessionClientOwner)
+  ) {
+    throw new Error('Expected an owned session client');
+  }
+  return agent.deps.sessionClient;
+}
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolvePromise = (): void => {
+    throw new Error('Barrier not initialized');
+  };
+  const promise = new Promise<void>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return { promise, resolve: resolvePromise };
+}
+
 function textItem(speaker: 'human' | 'ai', text: string): AgentHistoryItem {
   return { speaker, blocks: [{ type: 'text', text }] };
 }
 
 function itemText(item: AgentHistoryItem): string {
   return item.blocks.map((b) => (b.type === 'text' ? b.text : '')).join('');
+}
+
+function recordingSessionId(path: string): string {
+  return z
+    .object({ payload: z.object({ sessionId: z.string() }) })
+    .parse(JSON.parse(readFileSync(path, 'utf8').split('\n')[0])).payload
+    .sessionId;
 }
 
 function recordedLineTypes(path: string): string[] {
@@ -67,6 +106,215 @@ async function withRecordedConversation<T>(
 }
 
 describe('starting a new conversation session', () => {
+  it('rejects foreground turns and settings while recording retirement is paused', async () => {
+    await withRecordedConversation(async (agent) => {
+      const entered = deferred();
+      const release = deferred();
+      const original = SessionRecordingService.prototype.dispose;
+      const pause = spyOn(
+        SessionRecordingService.prototype,
+        'dispose',
+      ).mockImplementationOnce(async function (this: SessionRecordingService) {
+        entered.resolve();
+        await release.promise;
+        await original.call(this);
+      });
+      const switching = agent.session.startNewSession();
+      try {
+        await entered.promise;
+        await expect(
+          drain(agent.stream('must not be admitted')),
+        ).rejects.toThrow(AgentBusyError);
+        expect(() =>
+          agent.setEphemeralSetting('reasoning.includeInResponse', false),
+        ).toThrow(AgentBusyError);
+        await expect(agent.setModel('must-not-commit')).rejects.toThrow(
+          AgentBusyError,
+        );
+      } finally {
+        release.resolve();
+        await switching;
+        pause.mockRestore();
+      }
+      await drain(agent.stream('recorded after publication'));
+      await agent.session.flushRecording();
+      const path = agent.session.getRecording().path;
+      if (path === undefined)
+        throw new Error('Expected recording after publication');
+      expect(readFileSync(path, 'utf8')).toContain(
+        'recorded after publication',
+      );
+      expect(readFileSync(path, 'utf8')).not.toContain('must not be admitted');
+    });
+  });
+
+  for (const stage of [
+    'tokenizer',
+    'initialize',
+    'resetChat',
+    'recording',
+    'telemetry',
+    'integration',
+  ] as const) {
+    it(`preserves the old recorded conversation when ${stage} preparation fails`, async () => {
+      await withRecordedConversation(async (agent, oldPath) => {
+        const oldId = recordingSessionId(oldPath);
+        let candidateIds: readonly string[] = [];
+        const createLocked = SessionRecordingService.createLocked;
+        const recordingAcquisition = spyOn(
+          SessionRecordingService,
+          'createLocked',
+        ).mockImplementation(async (options) => {
+          if (stage === 'recording')
+            throw new Error('candidate preparation failed');
+          const recording = await createLocked(options);
+          candidateIds = [...candidateIds, recording.getSessionId()];
+          return recording;
+        });
+        let acquired: readonly AgentClient[] = [];
+        let disposed: readonly AgentClient[] = [];
+        const initialize = AgentClient.prototype.initialize;
+        const dispose = AgentClient.prototype.dispose;
+        const acquisition = spyOn(
+          AgentClient.prototype,
+          'initialize',
+        ).mockImplementation(async function (this: AgentClient, ...args) {
+          acquired = [...acquired, this];
+          if (stage === 'initialize')
+            throw new Error('candidate preparation failed');
+          return initialize.apply(this, args);
+        });
+        const disposal = spyOn(
+          AgentClient.prototype,
+          'dispose',
+        ).mockImplementation(async function (this: AgentClient) {
+          disposed = [...disposed, this];
+          return dispose.call(this);
+        });
+        const tokenizer = clientOwner(agent).tokenizerFactory;
+        if (tokenizer.prepareTokenizer === undefined)
+          throw new Error('Expected tokenizer readiness');
+        const injectFailure = (): { mockRestore: () => void } | undefined => {
+          switch (stage) {
+            case 'tokenizer':
+              return spyOn(tokenizer, 'prepareTokenizer').mockRejectedValueOnce(
+                new Error('candidate preparation failed'),
+              );
+            case 'integration':
+              return spyOn(
+                RecordingIntegration.prototype,
+                'subscribeToHistory',
+              ).mockImplementationOnce(() => {
+                throw new Error('candidate preparation failed');
+              });
+            case 'resetChat':
+              return spyOn(
+                AgentClient.prototype,
+                'resetChat',
+              ).mockRejectedValueOnce(
+                new Error('candidate preparation failed'),
+              );
+            case 'telemetry':
+              return spyOn(
+                RootTelemetry.prototype,
+                'prepareNewSession',
+              ).mockRejectedValueOnce(
+                new Error('candidate preparation failed'),
+              );
+            default:
+              return undefined;
+          }
+        };
+        const failure = injectFailure();
+        try {
+          await expect(agent.session.startNewSession()).rejects.toThrow(
+            'candidate preparation failed',
+          );
+          expect(agent.session.getSessionId()).toBe(oldId);
+          expect(agent.session.getRecording()).toMatchObject({
+            enabled: true,
+            path: oldPath,
+          });
+          expect((await agent.getHistory()).map(itemText)).toStrictEqual([
+            'first question',
+            'first answer',
+            'second question',
+            'second answer',
+          ]);
+          expect(disposed).toStrictEqual(acquired);
+          for (const id of candidateIds) {
+            const lock = await SessionLockManager.acquire(
+              join(oldPath, '..'),
+              id,
+            );
+            await lock.release();
+          }
+        } finally {
+          failure?.mockRestore();
+          recordingAcquisition.mockRestore();
+          acquisition.mockRestore();
+          disposal.mockRestore();
+        }
+        await drain(agent.stream('still recorded after failure'));
+        await agent.session.flushRecording();
+        expect(readFileSync(oldPath, 'utf8')).toContain(
+          'still recorded after failure',
+        );
+      });
+    });
+  }
+
+  for (const stage of ['recording', 'telemetry', 'client'] as const) {
+    it(`closes admission when ${stage} retirement fails`, async () => {
+      await withRecordedConversation(async (agent, oldPath) => {
+        const oldId = recordingSessionId(oldPath);
+        const injectFailure = (): { mockRestore: () => void } => {
+          if (stage === 'telemetry') {
+            return spyOn(
+              internalSettingsOwner(agent).telemetry,
+              'setEnabled',
+            ).mockRejectedValueOnce(new Error('retirement failed'));
+          }
+          if (stage === 'client') {
+            const previous = clientOwner(agent).getAgentClient();
+            const original = previous.dispose.bind(previous);
+            return spyOn(previous, 'dispose').mockImplementationOnce(
+              async () => {
+                await original();
+                throw new Error('retirement failed');
+              },
+            );
+          }
+          const original = SessionRecordingService.prototype.dispose;
+          return spyOn(
+            SessionRecordingService.prototype,
+            'dispose',
+          ).mockImplementationOnce(async function (
+            this: SessionRecordingService,
+          ) {
+            await original.call(this);
+            throw new Error('retirement failed');
+          });
+        };
+        const failure = injectFailure();
+        try {
+          await expect(agent.session.startNewSession()).rejects.toThrow(
+            'retirement failed',
+          );
+          expect(agent.session.getSessionId()).toBe(oldId);
+          await expect(
+            drain(agent.stream('must remain closed')),
+          ).rejects.toThrow('closed');
+          expect(() =>
+            agent.setEphemeralSetting('reasoning.includeInResponse', false),
+          ).toThrow('closed');
+        } finally {
+          failure.mockRestore();
+        }
+      });
+    });
+  }
+
   it('leaves no prior conversation turns for the next model request', async () => {
     const afterReset = await withRecordedConversation(async (agent) => {
       await agent.session.startNewSession();

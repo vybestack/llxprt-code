@@ -129,9 +129,18 @@ export class SessionSettingsOwner {
     return this.telemetryRoot;
   }
 
-  async startNewSessionTelemetry(sessionId: string): Promise<void> {
+  async prepareNewSessionTelemetry(sessionId: string): Promise<{
+    publish: () => void;
+    retire: () => Promise<void>;
+    discard: () => Promise<void>;
+  }> {
     this.assertOpen();
-    if (this.ownsTelemetry) await this.telemetry.startNewSession(sessionId);
+    if (this.ownsTelemetry) return this.telemetry.prepareNewSession(sessionId);
+    return {
+      publish: () => {},
+      retire: async () => {},
+      discard: async () => {},
+    };
   }
 
   startTelemetry(config: Config): Promise<void> {

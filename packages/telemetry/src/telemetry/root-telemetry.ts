@@ -350,6 +350,7 @@ export class RootTelemetry {
   private requestedEnabled = false;
   private revision = 0;
   private transition: Promise<void> = Promise.resolve();
+  private readAdmission = (): boolean => this.accepting;
 
   readonly events: TelemetryEventOperations = {
     record: (collect) => {
@@ -449,11 +450,42 @@ export class RootTelemetry {
     return this.accepting;
   }
 
-  async startNewSession(sessionId: string): Promise<void> {
+  async prepareNewSession(sessionId: string): Promise<{
+    publish: () => void;
+    retire: () => Promise<void>;
+    discard: () => Promise<void>;
+  }> {
+    if (this.closed) throw new Error('Telemetry root is closed');
+    await this.transition;
+    const options = Object.freeze({ ...this.options, sessionId });
+    const candidate = RootTelemetry.prepare(options, this.transports);
+    candidate.readAdmission = () => this.accepting;
     const enabled = this.requestedEnabled;
-    await this.setEnabled(false);
-    this.options = Object.freeze({ ...this.options, sessionId });
-    await this.setEnabled(enabled);
+    try {
+      await candidate.setEnabled(enabled);
+    } catch (error) {
+      try {
+        await candidate.close();
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          'Telemetry candidate preparation and cleanup failed',
+        );
+      }
+      throw error;
+    }
+    return {
+      retire: () => this.setEnabled(false),
+      publish: () => {
+        this.options = options;
+        this.lifetime = candidate.lifetime;
+        candidate.lifetime = undefined;
+        candidate.accepting = false;
+        this.requestedEnabled = enabled;
+        this.accepting = enabled;
+      },
+      discard: () => candidate.close(),
+    };
   }
 
   private requireLifetime(): ProviderLifetime {
@@ -495,7 +527,7 @@ export class RootTelemetry {
             this.lifetime = bindOperations(
               providers,
               this.options.sessionId,
-              () => this.accepting,
+              this.readAdmission,
             );
           } catch (primary) {
             const releases = await Promise.allSettled([

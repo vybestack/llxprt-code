@@ -74,12 +74,15 @@ import {
   restartRecording,
   replayOwnerRecording,
   seedOwnerRecording,
+  requireActiveRecording,
 } from './recordedHistoryPersistence.js';
 import {
   clearOwnerHistory,
   restoreOwnerTurns,
 } from './sessionControlHistoryMutation.js';
 import { warnSkippedRecordings } from './skippedRecordings.js';
+import { startNewSessionTransition } from './new-session-transition.js';
+import type { PreparedSessionClient } from '../../session/session-new-client.js';
 import type {
   AgentSessionControl,
   CheckpointInfo,
@@ -115,8 +118,13 @@ export interface SessionControlDeps {
   readonly sessionIdentityOwnership: 'config' | 'facade';
   /** The per-agent session id (AgentImpl uses deps.runtimeId). */
   readonly sessionId: () => string;
-  readonly assertSessionIdle: () => void;
-  readonly startNewSessionClient: (sessionId: string) => Promise<void>;
+  readonly withSessionTransition: (
+    operation: () => Promise<void>,
+  ) => Promise<void>;
+  readonly closeSessionAdmission: () => void;
+  readonly prepareNewSessionClient: (
+    sessionId: string,
+  ) => Promise<PreparedSessionClient>;
   /** Resolves the live AgentClient (the same contract restoreHistory uses). */
   readonly resolveClient: () => AgentClientContract;
   /** The per-agent active provider name. */
@@ -731,26 +739,21 @@ export class SessionControl implements AgentSessionControl {
 
   getSessionId = (): string => this.recordingSessionId;
 
-  async startNewSession(): Promise<void> {
-    await this.runExclusive(async () => {
-      this.deps.assertSessionIdle();
-      const ownsConfig = this.deps.sessionIdentityOwnership === 'config';
-      if (
-        ownsConfig &&
-        this.deps.config.getSessionId() !== this.recordingSessionId
-      ) {
-        throw new Error('Cannot replace a session owned by another facade');
-      }
-      const recordingEnabled = this.getRecording().enabled;
-      const nextSessionId = crypto.randomUUID();
-      await this.teardownActiveSession();
-      await this.deps.startNewSessionClient(nextSessionId);
-      if (ownsConfig) this.deps.config.adoptSessionId(nextSessionId);
-      this.recordingSessionId = nextSessionId;
-      this.adoptedPath = null;
-      if (recordingEnabled) await this.startRecording();
-    });
-  }
+  startNewSession = (): Promise<void> =>
+    this.deps.withSessionTransition(() =>
+      this.runExclusive(() =>
+        startNewSessionTransition(this.deps, {
+          owner: this,
+          retire: () => this.teardownActiveSession(),
+          publish: (id, recording, integration) => {
+            this.recordingSessionId = id;
+            this.adoptedPath = null;
+            this.recording = recording;
+            this.integration = integration;
+          },
+        }),
+      ),
+    );
 
   async clearHistory(): Promise<void> {
     await this.runExclusive(() =>
@@ -815,10 +818,7 @@ export class SessionControl implements AgentSessionControl {
   }
 
   private requireRecording(): SessionRecordingService {
-    if (this.recording?.isActive() !== true) {
-      throw new Error('No active recording');
-    }
-    return this.recording;
+    return requireActiveRecording(this.recording);
   }
 
   private async replayRecording(

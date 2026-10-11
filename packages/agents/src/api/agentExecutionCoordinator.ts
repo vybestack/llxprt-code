@@ -105,6 +105,13 @@ export class AgentExecutionCoordinator implements SchedulerBoundaryPort {
     });
   }
 
+  async withIdleBoundary(operation: () => Promise<void>): Promise<void> {
+    this.assertNoCommit();
+    if (this.run !== undefined) throw new AgentBusyError();
+    const outcome = await this.withSafeBoundary(operation);
+    if (outcome.status === 'cancelled') throw new Error('Agent is closed');
+  }
+
   executeCommand<T>(
     command: { readonly expectedRevision: number },
     readRevision: () => number,
@@ -133,12 +140,16 @@ export class AgentExecutionCoordinator implements SchedulerBoundaryPort {
     });
   }
 
-  async dispose(): Promise<void> {
+  closeAdmission(): void {
     if (!this.disposed) {
       this.disposed = true;
       this.controller.abort();
       for (const window of this.pending) window.cancel();
     }
+  }
+
+  async dispose(): Promise<void> {
+    this.closeAdmission();
     await this.committing;
   }
 

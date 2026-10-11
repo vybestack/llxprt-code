@@ -1,4 +1,9 @@
 import { OwnedClientLedger } from './session-client-cleanup.js';
+import {
+  prepareNewSessionClient,
+  prepareDetachedSessionClient,
+  type PreparedSessionClient,
+} from './session-new-client.js';
 import { SessionImageAdmission } from './session-image-admission.js';
 import {
   bindClientTokenization,
@@ -627,19 +632,35 @@ export class SessionClientOwner {
     return this.enqueue(() => this.replaceClient());
   }
 
-  startNewSession(sessionId: string): Promise<void> {
-    return this.enqueue(async () => {
-      await this.settingsOwner.startNewSessionTelemetry(sessionId);
-      await this.replaceClient(sessionId, true);
-    });
+  prepareNewSession(
+    sessionId: string,
+    onPublish: () => void,
+  ): Promise<PreparedSessionClient> {
+    return this.enqueue(() =>
+      prepareNewSessionClient(
+        this.captureRuntimeState(`${sessionId}#client`, sessionId),
+        this.tokenizerFactory,
+        this.contentGeneratorFactory,
+        this.settingsOwner,
+        this.client,
+        this.borrowedClient,
+        this.ownedClients,
+        (state) => this.acquireClient(state),
+        (client, state) => this.bindCreatedClient(client, state),
+        (client, state) => {
+          this.runtimeState = state;
+          this.client = client;
+          this.config.setFallbackMode(false);
+          onPublish();
+        },
+      ),
+    );
   }
 
-  private async replaceClient(
-    sessionId = this.runtimeState.sessionId,
-    startFresh = false,
-  ): Promise<void> {
+  private async replaceClient(): Promise<void> {
+    const sessionId = this.runtimeState.sessionId;
     const previous = this.client;
-    const canReuseBorrowed = !startFresh && previous === this.borrowedClient;
+    const canReuseBorrowed = previous === this.borrowedClient;
     if (
       canReuseBorrowed &&
       this.runtimeState.sessionId === sessionId &&
@@ -650,9 +671,10 @@ export class SessionClientOwner {
       return;
     }
     const logger = new DebugLogger('llxprt:session:refreshAuth');
-    const { history, historyService } = startFresh
-      ? { history: [], historyService: null }
-      : await extractExistingState(logger, previous);
+    const { history, historyService } = await extractExistingState(
+      logger,
+      previous,
+    );
     const prepared = buildNewContentGeneratorConfig(
       this.contentGeneratorFactory,
       this.captureRuntimeState(this.runtimeState.runtimeId, sessionId),
@@ -672,7 +694,6 @@ export class SessionClientOwner {
         prepared.contentGeneratorConfig,
         previous.getContentGeneratorConfig()?.vertexai,
       );
-      if (startFresh) await next.resetChat();
     } catch (error) {
       await this.ownedClients.releaseFailedReplacement(next, error);
     }
@@ -748,37 +769,15 @@ export class SessionClientOwner {
   createDetachedAgentClient(
     id = `${this.runtimeState.sessionId}#detached#${randomUUID()}`,
   ): Promise<AgentClientContract> {
-    return this.enqueue(async () => {
-      const selectedState = this.captureRuntimeState(
-        id,
-        this.runtimeState.sessionId,
-      );
-      await this.tokenizerFactory.prepareTokenizer?.(
-        selectedState.provider,
-        selectedState.model,
-      );
-      const client = this.createClient(selectedState);
-      try {
-        await client.initialize(
-          buildNewContentGeneratorConfig(
-            this.contentGeneratorFactory,
-            selectedState,
-          ).contentGeneratorConfig,
-        );
-        client.clearTools();
-        return client;
-      } catch (error) {
-        try {
-          await this.ownedClients.dispose(client);
-        } catch (cleanupError) {
-          throw new AggregateError(
-            [error, cleanupError],
-            'Detached client setup and cleanup failed',
-          );
-        }
-        throw error;
-      }
-    });
+    return this.enqueue(() =>
+      prepareDetachedSessionClient({
+        state: this.captureRuntimeState(id, this.runtimeState.sessionId),
+        tokenizer: this.tokenizerFactory,
+        factory: this.contentGeneratorFactory,
+        create: (state) => this.createClient(state),
+        ledger: this.ownedClients,
+      }),
+    );
   }
 
   async initializeTools(): Promise<void> {

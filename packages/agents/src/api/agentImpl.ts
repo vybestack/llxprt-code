@@ -405,14 +405,13 @@ export class AgentImpl implements Agent {
       ),
       sessionIdentityOwnership: this.deps.sessionIdentityOwnership,
       sessionId: () => this.deps.runtimeId,
-      assertSessionIdle: () => {
+      withSessionTransition: async (operation) => {
         this.assertProfileIdle();
-        if (this.activeRun !== undefined) throw new AgentBusyError();
+        await this.coordinator.withIdleBoundary(operation);
       },
-      startNewSessionClient: async (id) => {
-        await this.deps.sessionClient.startNewSession(id);
-        this.rebuild();
-      },
+      closeSessionAdmission: () => this.coordinator.closeAdmission(),
+      prepareNewSessionClient: (id) =>
+        this.deps.sessionClient.prepareNewSession(id, () => this.rebuild()),
       resolveClient: () => this.deps.resolveClient(),
       getProvider: () => this.providerState.provider,
       getModel: () => this.getModel(),

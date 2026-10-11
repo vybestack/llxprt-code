@@ -232,6 +232,81 @@ describe('private SDK root telemetry', () => {
     if (failures.length > 0)
       throw new AggregateError(failures, 'Test root cleanup failed');
   });
+  it('keeps the old telemetry identity until a prepared session is published', async () => {
+    const file = output('prepared-session');
+    const selected = await root(file);
+    const abandoned = await selected.prepareNewSession('abandoned-session');
+    await abandoned.discard();
+    selected.events.record(() => ({ body: 'after-discard' }));
+    const candidate = await selected.prepareNewSession('next-session');
+    selected.events.record(() => ({ body: 'during-preparation' }));
+    await candidate.retire();
+    candidate.publish();
+    selected.events.record(() => ({ body: 'after-publication' }));
+    await selected.flush();
+    const identities = lines(file).flatMap((item) => {
+      const parsed = logRecord.safeParse(item);
+      return parsed.success
+        ? [[parsed.data.body, parsed.data.attributes['session.id']]]
+        : [];
+    });
+    expect(identities).toStrictEqual([
+      ['after-discard', 'same-public-label'],
+      ['during-preparation', 'same-public-label'],
+      ['after-publication', 'next-session'],
+    ]);
+    const span = selected.spans.start('retired-prepared-span');
+    await selected.setEnabled(false);
+    span.setAttribute('after-disable', true);
+    span.end();
+    expect(
+      lines(file).flatMap((item) => {
+        const parsed = spanRecord.safeParse(item);
+        return parsed.success && parsed.data.name === 'retired-prepared-span'
+          ? [parsed.data.attributes]
+          : [];
+      }),
+    ).toStrictEqual([{ 'session.id': 'next-session' }]);
+  });
+
+  it('continues exporting the old session when candidate telemetry startup fails', async () => {
+    const file = output('failed-session-preparation');
+    let attempts = 0;
+    const selected = await RootTelemetry.create(
+      {
+        sessionId: 'old-session',
+        enabled: true,
+        outfile: file,
+        maxBytes: 1024 * 1024,
+        maxFiles: 2,
+      },
+      () => {
+        attempts += 1;
+        return {
+          tracer: new FileSpanExporter(file),
+          logger: new FileLogExporter(file),
+          meter:
+            attempts === 1
+              ? new FileMetricExporter(file)
+              : new BrokenMetricExporter(),
+        };
+      },
+    );
+    roots.push(selected);
+    await expect(selected.prepareNewSession('failed-session')).rejects.toThrow(
+      'Telemetry candidate preparation and cleanup failed',
+    );
+    expect(selected.isEnabled()).toBe(true);
+    selected.events.record(() => ({ body: 'still-exported' }));
+    await selected.flush();
+    expect(
+      lines(file).flatMap((item) => {
+        const parsed = logRecord.safeParse(item);
+        return parsed.success ? [parsed.data.attributes['session.id']] : [];
+      }),
+    ).toStrictEqual(['old-session']);
+  });
+
   it('keeps package SDK and metric entry points on the explicitly selected lifetime', async () => {
     const file = output('package-operations');
     const peerFile = output('package-peer');
