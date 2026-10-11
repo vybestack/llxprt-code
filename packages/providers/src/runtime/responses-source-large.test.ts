@@ -87,7 +87,7 @@ async function run(root: string, retain: boolean): Promise<Probe> {
   const child = Bun.spawn(
     [
       process.execPath,
-      join(import.meta.dir, 'responses-source-large.test-helper.ts'),
+      join(import.meta.dir, '__tests__', 'responses-source-large-probe.ts'),
       root,
     ],
     {

@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { deserialize } from 'node:v8';
 import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { serializeResponsesPromptEnvelope } from './responses-source-serializer.js';
+import { serializeResponsesPromptEnvelope } from '../responses-source-serializer.js';
 
 const root = process.argv[2];
 const deadline = setTimeout(() => {
