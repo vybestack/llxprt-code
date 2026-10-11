@@ -45,7 +45,9 @@ export class SpanWindow {
   set(spans: readonly RemovedInteriorSpan[]): void {
     this.spans =
       spans.length > SPAN_WINDOW_CAPACITY
-        ? spans.slice(spans.length - SPAN_WINDOW_CAPACITY).map((span) => ({ ...span }))
+        ? spans
+            .slice(spans.length - SPAN_WINDOW_CAPACITY)
+            .map((span) => ({ ...span }))
         : spans.map((span) => ({ ...span }));
   }
 }
