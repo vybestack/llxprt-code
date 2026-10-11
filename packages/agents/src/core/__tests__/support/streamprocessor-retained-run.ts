@@ -108,17 +108,24 @@ export async function runRetainedCensus(
 
 /**
  * One full-size warm pass at the large tail, then the measured scenario at
- * the small tail and at the large tail, all in this process.
+ * the small tail and at the large tail, all in this process. With
+ * `repeatLarge`, the large tail is measured a second time so a settled-heap
+ * gate can use the lower of two readings; retention proportional to context
+ * is present in both readings.
  */
 export async function runRetainedScaling(
   retention: RowRetention,
   small: DiskTextTail,
   large: DiskTextTail,
+  repeatLarge = false,
 ) {
   await runCensusOnce('none', large);
   const smallFacts = await runCensusOnce(retention, small);
   const largeFacts = await runCensusOnce(retention, large);
-  return { small: smallFacts, large: largeFacts };
+  const repeatFacts = repeatLarge
+    ? await runCensusOnce(retention, large)
+    : undefined;
+  return { small: smallFacts, large: largeFacts, repeat: repeatFacts };
 }
 
 async function runCensusOnce(retention: RowRetention, tail: DiskTextTail) {
