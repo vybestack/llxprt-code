@@ -10,7 +10,7 @@ import {
 } from './journal-retained-growth-workload.js';
 
 /** Turns run before the baseline window so first compression and journal are warm. */
-const WARMUP_TURNS = 40;
+const WARMUP_TURNS = 80;
 const CHECKPOINT_TURNS = [100, 200, 300, 400] as const;
 /**
  * A checkpoint is the median of settled readings taken after each of the last
@@ -20,7 +20,7 @@ const CHECKPOINT_TURNS = [100, 200, 300, 400] as const;
 const WINDOW_TURNS = 5;
 const SETTLE_ROUNDS = 6;
 
-const modeSchema = z.enum(['normal', 'trap']);
+const modeSchema = z.enum(['normal', 'trap', 'release-trap']);
 
 async function settledHeap(): Promise<number> {
   for (let round = 0; round < SETTLE_ROUNDS; round++) {
