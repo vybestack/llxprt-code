@@ -456,18 +456,18 @@ describe('AppContainer.mount', () => {
   });
 
   describe('component mounting', () => {
-    it('should mount without throwing errors', () => {
+    it('should mount without throwing errors', async () => {
       // Arrange: All dependencies mocked
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent: await createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -480,18 +480,18 @@ describe('AppContainer.mount', () => {
       }).not.toThrow();
     });
 
-    it('should render with provider contexts active', () => {
+    it('should render with provider contexts active', async () => {
       // Arrange
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent: await createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -509,18 +509,18 @@ describe('AppContainer.mount', () => {
       unmount();
     });
 
-    it('should render DefaultAppLayout', () => {
+    it('should render DefaultAppLayout', async () => {
       // Arrange
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent: await createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -537,7 +537,7 @@ describe('AppContainer.mount', () => {
   });
 
   describe('with resumed history', () => {
-    it('should mount with resumedHistory without errors', () => {
+    it('should mount with resumedHistory without errors', async () => {
       // Arrange
       const resumedHistory: IContent[] = [
         { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
@@ -546,13 +546,13 @@ describe('AppContainer.mount', () => {
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent: await createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         resumedHistory,
@@ -568,19 +568,19 @@ describe('AppContainer.mount', () => {
   });
 
   describe('with startup warnings', () => {
-    it('should mount with startupWarnings without errors', () => {
+    it('should mount with startupWarnings without errors', async () => {
       // Arrange
       const startupWarnings = ['Warning 1', 'Warning 2'];
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent: await createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         startupWarnings,
@@ -596,18 +596,18 @@ describe('AppContainer.mount', () => {
   });
 
   describe('unmount behavior', () => {
-    it('should unmount without errors', () => {
+    it('should unmount without errors', async () => {
       // Arrange
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent: await createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,

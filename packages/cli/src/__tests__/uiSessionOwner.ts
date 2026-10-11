@@ -88,14 +88,14 @@ type UiSessionOwner = Pick<
   settingsOwner: SessionSettingsOwner;
 };
 
-export function createUiSessionOwner(
+export async function createUiSessionOwner(
   suppliedConfig?: Config,
   suppliedSettings?: {
     readonly settingsService: SettingsService;
     readonly settingsOwner: SessionSettingsOwner;
   },
   mcpSettings?: WorkspaceMcpSettings,
-): UiSessionOwner {
+): Promise<UiSessionOwner> {
   const config =
     suppliedConfig ??
     new Config({
@@ -119,7 +119,11 @@ export function createUiSessionOwner(
   if (selectedMcpSettings === undefined)
     throw new Error('Missing fixture MCP settings binding');
   const subscriptions = new Set<() => void>();
-  const runtime = assembleUiInfrastructure(config, settingsService, settings);
+  const runtime = await assembleUiInfrastructure(
+    config,
+    settingsService,
+    settings,
+  );
   const hooks = createUiHookControl(
     config,
     runtime.sessionClient,
@@ -192,7 +196,7 @@ function uiWorkspace(
   };
 }
 
-function assembleUiInfrastructure(
+async function assembleUiInfrastructure(
   config: Config,
   settingsService: SettingsService,
   settings: SessionSettingsOwner,
@@ -224,7 +228,7 @@ function assembleUiInfrastructure(
     },
   );
   const factories = configureProviderRuntimeFactories(config, manager);
-  const sessionClient = SessionClientOwner.createWithBackgroundRollback(
+  const sessionClient = await SessionClientOwner.create(
     config,
     assembleTaskSchemaPolicy(settingsService),
     manager,
@@ -263,11 +267,11 @@ function projectUiSessionOwner(
   config: Config,
   settingsService: SettingsService,
   settings: SessionSettingsOwner,
-  runtime: ReturnType<typeof assembleUiInfrastructure>,
+  runtime: Awaited<ReturnType<typeof assembleUiInfrastructure>>,
   subscriptions: Set<() => void>,
   hooks: Agent['hooks'],
   mcpSettings: SessionMcpSettingsReads,
-): ReturnType<typeof createUiSessionOwner> {
+): Awaited<ReturnType<typeof createUiSessionOwner>> {
   const { sessionClient, catalogs, filesystem, manager } = runtime;
   return {
     settingsOwner: settings,

@@ -197,7 +197,7 @@ describe('CLI activation operation handoff', () => {
     const argv = await parseArguments(settings.merged);
     let captured: AgentActivationOperation | undefined;
     await expect(
-      loadCliConfig(
+      await loadCliConfig(
         settings.merged,
         [],
         new ExtensionEnablementManager(directory, []),

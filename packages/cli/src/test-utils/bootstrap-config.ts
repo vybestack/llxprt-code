@@ -19,7 +19,7 @@ export function handoffCliConfig(
   createOperation: (
     store: SettingsService,
     owner: SessionSettingsOwner,
-  ) => AgentActivationOperation,
+  ) => AgentActivationOperation | Promise<AgentActivationOperation>,
   providerManager: RuntimeProviderManager,
 ): typeof loadCliConfig {
   return async (...args) => {
@@ -32,7 +32,7 @@ export function handoffCliConfig(
     owner.assertSettingsIdentity(store);
     providerManager.setRuntimeContext({ config, settingsService: store });
     owner.initializeProviderSelection(config.getProvider(), config.getModel());
-    const operation = createOperation(store, owner);
+    const operation = await createOperation(store, owner);
     overrides.onProviderManagerReady?.(providerManager);
     overrides.onProviderSwitchReady?.(async (name) => ({
       changed: false,

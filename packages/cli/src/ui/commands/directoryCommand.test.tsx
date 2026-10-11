@@ -63,7 +63,7 @@ describe('directoryCommand', () => {
 
   assertDefined(addCommand);
   assertDefined(showCommand);
-  beforeEach(() => {
+  beforeEach(async () => {
     mockLoadServerHierarchicalMemory.mockReset();
     mockLoadServerHierarchicalMemory.mockResolvedValue({
       memoryContent: '',
@@ -105,7 +105,7 @@ describe('directoryCommand', () => {
         },
         agent: createMockCommandContext({
           services: {
-            agent: { agentClient: createUiSessionOwner().agentClient },
+            agent: { agentClient: (await createUiSessionOwner()).agentClient },
           },
         }).services.agent,
         settings: {
@@ -263,7 +263,9 @@ describe('directoryCommand', () => {
           },
           agent: createMockCommandContext({
             services: {
-              agent: { agentClient: createUiSessionOwner().agentClient },
+              agent: {
+                agentClient: (await createUiSessionOwner()).agentClient,
+              },
             },
           }).services.agent,
         },
@@ -317,7 +319,9 @@ describe('directoryCommand', () => {
           },
           agent: createMockCommandContext({
             services: {
-              agent: { agentClient: createUiSessionOwner().agentClient },
+              agent: {
+                agentClient: (await createUiSessionOwner()).agentClient,
+              },
             },
           }).services.agent,
         },
@@ -361,7 +365,9 @@ describe('directoryCommand', () => {
           },
           agent: createMockCommandContext({
             services: {
-              agent: { agentClient: createUiSessionOwner().agentClient },
+              agent: {
+                agentClient: (await createUiSessionOwner()).agentClient,
+              },
             },
           }).services.agent,
         },
@@ -411,7 +417,9 @@ describe('directoryCommand', () => {
           },
           agent: createMockCommandContext({
             services: {
-              agent: { agentClient: createUiSessionOwner().agentClient },
+              agent: {
+                agentClient: (await createUiSessionOwner()).agentClient,
+              },
             },
           }).services.agent,
         },
@@ -480,7 +488,9 @@ describe('directoryCommand', () => {
           },
           agent: createMockCommandContext({
             services: {
-              agent: { agentClient: createUiSessionOwner().agentClient },
+              agent: {
+                agentClient: (await createUiSessionOwner()).agentClient,
+              },
             },
           }).services.agent,
         },
@@ -541,7 +551,9 @@ describe('directoryCommand', () => {
           },
           agent: createMockCommandContext({
             services: {
-              agent: { agentClient: createUiSessionOwner().agentClient },
+              agent: {
+                agentClient: (await createUiSessionOwner()).agentClient,
+              },
             },
           }).services.agent,
         },

@@ -24,7 +24,7 @@ async function setup() {
   const built = await buildCliStyleConfig('plain-text.jsonl');
   const manager = built.providerManager;
 
-  const operation = assembleAgentActivationBootstrap(
+  const operation = await assembleAgentActivationBootstrap(
     built.config,
     built.settingsService,
     manager,
@@ -75,7 +75,7 @@ async function setupDelayed() {
     config: built.config,
     messageBus: built.messageBus,
   });
-  const operation = assembleAgentActivationBootstrap(
+  const operation = await assembleAgentActivationBootstrap(
     built.config,
     built.settingsService,
     manager,

@@ -280,7 +280,7 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
       };
       const manager = built.providerManager;
 
-      const operation = assembleAgentActivationBootstrap(
+      const operation = await assembleAgentActivationBootstrap(
         built.config,
         built.settingsService,
         manager,

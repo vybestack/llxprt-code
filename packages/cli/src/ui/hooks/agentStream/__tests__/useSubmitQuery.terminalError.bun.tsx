@@ -61,7 +61,7 @@ void vi.mock('../../../contexts/SessionContext.js', () => ({
   }),
 }));
 
-function createMockAgent() {
+async function createMockAgent() {
   return createFakeAgentFromMockClient({
     getCurrentSequenceModel: () => 'test-model',
   });
@@ -183,10 +183,10 @@ interface RenderOptions {
   initialStreamingState?: StreamingState;
 }
 
-function createUseSubmitQueryDeps(
+async function createUseSubmitQueryDeps(
   deps: TerminalErrorDeps,
   overrides: SubmitQueryOverrides = {},
-): (streamingState: StreamingState) => UseSubmitQueryDeps {
+): Promise<(streamingState: StreamingState) => UseSubmitQueryDeps> {
   const queuedSubmissionsRef = overrides.queuedSubmissionsRef ?? {
     current: [],
   };
@@ -196,7 +196,7 @@ function createUseSubmitQueryDeps(
     runtime:
       overrides.runtime ??
       createStreamRuntimeForTest({}, createMockOverrides()),
-    agent: createMockAgent(),
+    agent: await createMockAgent(),
     addItem: overrides.addItem ?? vi.fn().mockReturnValue(1),
     removeItems: vi.fn(),
     settings: createLoadedSettings(),
@@ -240,12 +240,12 @@ function createUseSubmitQueryDeps(
   return (streamingState) => ({ ...stableDeps, streamingState });
 }
 
-function renderUseSubmitQuery(
+async function renderUseSubmitQuery(
   deps: TerminalErrorDeps,
   overrides: SubmitQueryOverrides = {},
   options: RenderOptions = {},
 ) {
-  const getDeps = createUseSubmitQueryDeps(deps, overrides);
+  const getDeps = await createUseSubmitQueryDeps(deps, overrides);
   return renderHook(
     ({ streamingState }: { streamingState: StreamingState }) =>
       useSubmitQuery(getDeps(streamingState)),
@@ -292,7 +292,7 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
             current: vi.fn(() => turnDeferred.promise),
           },
         });
-        const { result, rerender } = renderUseSubmitQuery(deps);
+        const { result, rerender } = await renderUseSubmitQuery(deps);
 
         await startTurnAndRouteTerminalEvent(result, rerender, deps, event);
 
@@ -319,7 +319,7 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
             current: vi.fn(() => turnDeferred.promise),
           },
         });
-        const { result, rerender } = renderUseSubmitQuery(deps, {
+        const { result, rerender } = await renderUseSubmitQuery(deps, {
           handleSlashCommand,
           queuedSubmissionsRef,
           queueOperations,
@@ -359,7 +359,7 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
         const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
         const queueOperations = createQueueOperations(queuedSubmissionsRef);
         const deps = createDeps({ runStreamRef });
-        const { result, rerender } = renderUseSubmitQuery(deps, {
+        const { result, rerender } = await renderUseSubmitQuery(deps, {
           queuedSubmissionsRef,
           queueOperations,
         });
@@ -391,7 +391,7 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
             current: vi.fn(() => turnDeferred.promise),
           },
         });
-        const { result, rerender } = renderUseSubmitQuery(deps, {
+        const { result, rerender } = await renderUseSubmitQuery(deps, {
           queuedSubmissionsRef,
           queueOperations,
         });
@@ -440,7 +440,7 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
     });
     const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
     const queueOperations = createQueueOperations(queuedSubmissionsRef);
-    const { result, rerender } = renderUseSubmitQuery(deps, {
+    const { result, rerender } = await renderUseSubmitQuery(deps, {
       queuedSubmissionsRef,
       queueOperations,
     });
@@ -482,7 +482,7 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
     const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
     const queueOperations = createQueueOperations(queuedSubmissionsRef);
     const deps = createDeps({ runStreamRef });
-    const { result, rerender } = renderUseSubmitQuery(deps, {
+    const { result, rerender } = await renderUseSubmitQuery(deps, {
       queuedSubmissionsRef,
       queueOperations,
       addItem,
@@ -549,7 +549,7 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
     });
     const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
     const queueOperations = createQueueOperations(queuedSubmissionsRef);
-    const { result, rerender } = renderUseSubmitQuery(deps, {
+    const { result, rerender } = await renderUseSubmitQuery(deps, {
       queuedSubmissionsRef,
       queueOperations,
       addItem: throwingAddItem,
@@ -619,7 +619,7 @@ describe('useSubmitQuery — terminal error release (issue #2954)', () => {
     const queuedSubmissionsRef = { current: [] as QueuedSubmission[] };
     const queueOperations = createQueueOperations(queuedSubmissionsRef);
     const deps = createDeps({ runStreamRef });
-    const { result } = renderUseSubmitQuery(
+    const { result } = await renderUseSubmitQuery(
       deps,
       {
         queuedSubmissionsRef,

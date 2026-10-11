@@ -317,7 +317,7 @@ describe('public Agent workspace definition lifetime', () => {
     manager.registerProvider(
       new FakeProvider(join(fixturesDir, 'multi-turn-text.jsonl')),
     );
-    const operation = assembleAgentActivationBootstrap(
+    const operation = await assembleAgentActivationBootstrap(
       caller.config,
       caller.settingsService,
       manager,
@@ -401,7 +401,7 @@ describe('public Agent workspace definition lifetime', () => {
       definitionOwnership: 'caller',
     });
     const manager = caller.providerManager;
-    const operation = assembleAgentActivationBootstrap(
+    const operation = await assembleAgentActivationBootstrap(
       caller.config,
       caller.settingsService,
       manager,

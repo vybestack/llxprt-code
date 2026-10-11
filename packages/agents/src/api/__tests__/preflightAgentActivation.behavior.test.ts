@@ -28,7 +28,7 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
     try {
       const manager = built.providerManager;
 
-      const operation = assembleAgentActivationBootstrap(
+      const operation = await assembleAgentActivationBootstrap(
         built.config,
         built.settingsService,
         manager,
@@ -66,7 +66,7 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
     try {
       const manager = built.providerManager;
 
-      const operation = assembleAgentActivationBootstrap(
+      const operation = await assembleAgentActivationBootstrap(
         built.config,
         built.settingsService,
         manager,
@@ -98,7 +98,7 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
     try {
       const manager = built.providerManager;
 
-      const operation = assembleAgentActivationBootstrap(
+      const operation = await assembleAgentActivationBootstrap(
         built.config,
         built.settingsService,
         manager,
@@ -128,7 +128,7 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
     try {
       const manager = built.providerManager;
 
-      const operation = assembleAgentActivationBootstrap(
+      const operation = await assembleAgentActivationBootstrap(
         built.config,
         built.settingsService,
         manager,
@@ -191,7 +191,7 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
     expect(built.mcpRuntime.toolSelection.getTool('task')).toBeUndefined();
     const manager = built.providerManager;
 
-    const operation = assembleAgentActivationBootstrap(
+    const operation = await assembleAgentActivationBootstrap(
       built.config,
       built.settingsService,
       manager,
@@ -250,7 +250,7 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
     );
     const manager = built.providerManager;
 
-    const operation = assembleAgentActivationBootstrap(
+    const operation = await assembleAgentActivationBootstrap(
       built.config,
       built.settingsService,
       manager,

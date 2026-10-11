@@ -74,9 +74,10 @@ describe('recording bootstrap checkpoint resolution', () => {
       continueSession: 'duplicate-name',
     });
 
+    const owner = await createUiSessionOwner(config);
     await expect(
       createOrResumeRecording(config, PROJECT_HASH, chatsDir, {
-        getAgentClient: () => createUiSessionOwner(config).agentClient,
+        getAgentClient: () => owner.agentClient,
         workspaceDirectories: () => [root],
       }),
     ).rejects.toThrow(/Ambiguous continue target name/);

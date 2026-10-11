@@ -335,28 +335,18 @@ export class SessionClientOwner {
       try {
         owner.bindCreatedClient(owner.client, owner.runtimeState);
       } catch (error) {
-        await owner.ownedClients.disposeAfterFailure(owner.client, error);
-      }
-      owner.initialBindingComplete = true;
-    }
-    return owner;
-  }
-
-  /**
-   * Synchronous construction for the public activation bootstrap, whose
-   * signature is synchronous. A failed binding starts disposal of the acquired
-   * client in the background, so rollback is not joined and a disposal failure
-   * is only logged. Prefer {@link SessionClientOwner.create}.
-   */
-  static createWithBackgroundRollback(
-    ...args: ConstructorParameters<typeof SessionClientOwner>
-  ): SessionClientOwner {
-    const owner = new SessionClientOwner(...args);
-    if (!owner.initialBindingComplete) {
-      try {
-        owner.bindCreatedClient(owner.client, owner.runtimeState);
-      } catch (error) {
-        owner.releaseAbandonedClient(owner.client);
+        const cleanup = await Promise.allSettled([
+          owner.ownedClients.dispose(owner.client),
+          owner.network.dispose(),
+        ]);
+        const failures = cleanup.flatMap((result) =>
+          result.status === 'rejected' ? [result.reason] : [],
+        );
+        if (failures.length > 0)
+          throw new AggregateError(
+            [error, ...failures],
+            'Session client binding cleanup failed',
+          );
         throw error;
       }
       owner.initialBindingComplete = true;

@@ -17,8 +17,10 @@ void vi.mock('../../runtime/autoPromptDetachedClient.js', () => ({
 
 const { generateAutoPrompt } = await import('./autoPromptGenerator.js');
 
-function makeClient(text = 'generated prompt'): AgentClientContract {
-  const client = createUiSessionOwner().agentClient;
+async function makeClient(
+  text = 'generated prompt',
+): Promise<AgentClientContract> {
+  const client = (await createUiSessionOwner()).agentClient;
   vi.spyOn(client, 'generateDirectMessage').mockImplementation(async () => ({
     content: { speaker: 'ai', blocks: [{ type: 'text', text }] },
   }));
@@ -26,12 +28,12 @@ function makeClient(text = 'generated prompt'): AgentClientContract {
   return client;
 }
 
-function makeRuntime(
+async function makeRuntime(
   provider: string,
   client: AgentClientContract | null | undefined,
-): AutoPromptRuntime {
+): Promise<AutoPromptRuntime> {
   return {
-    sessionClient: createUiSessionOwner().sessionClient,
+    sessionClient: (await createUiSessionOwner()).sessionClient,
     getProvider: () => provider,
     agentClient: client,
   };
@@ -43,13 +45,13 @@ describe('generateAutoPrompt', () => {
   });
 
   it('disables tools when generating the subagent prompt', async () => {
-    const liveClient = makeClient('live prompt');
-    const detachedClient = makeClient('expanded system prompt');
+    const liveClient = await makeClient('live prompt');
+    const detachedClient = await makeClient('expanded system prompt');
     createDetachedAutoPromptClientMock.mockReturnValue(detachedClient);
 
     await expect(
       generateAutoPrompt(
-        makeRuntime('gemini', liveClient),
+        await makeRuntime('gemini', liveClient),
         'Review Python code',
         { model: 'auto-prompt-test' },
       ),
@@ -72,12 +74,16 @@ describe('generateAutoPrompt', () => {
   });
 
   it('uses the live client for non-Gemini providers with an initialized client', async () => {
-    const client = makeClient('anthropic prompt');
+    const client = await makeClient('anthropic prompt');
 
     await expect(
-      generateAutoPrompt(makeRuntime('anthropic', client), 'Write tests', {
-        model: 'auto-prompt-test',
-      }),
+      generateAutoPrompt(
+        await makeRuntime('anthropic', client),
+        'Write tests',
+        {
+          model: 'auto-prompt-test',
+        },
+      ),
     ).resolves.toBe('anthropic prompt');
 
     expect(createDetachedAutoPromptClientMock).not.toHaveBeenCalled();
@@ -97,9 +103,9 @@ describe('generateAutoPrompt', () => {
   });
 
   it('uses an isolated detached client for Gemini providers', async () => {
-    const liveClient = makeClient('live prompt');
-    const detachedClient = makeClient('gemini prompt');
-    const runtime = makeRuntime('gemini', liveClient);
+    const liveClient = await makeClient('live prompt');
+    const detachedClient = await makeClient('gemini prompt');
+    const runtime = await makeRuntime('gemini', liveClient);
     createDetachedAutoPromptClientMock.mockReturnValue(detachedClient);
 
     await expect(
@@ -117,8 +123,8 @@ describe('generateAutoPrompt', () => {
   });
 
   it('uses an isolated detached client when the live client is unavailable', async () => {
-    const detachedClient = makeClient('fallback prompt');
-    const runtime = makeRuntime('anthropic', null);
+    const detachedClient = await makeClient('fallback prompt');
+    const runtime = await makeRuntime('anthropic', null);
     createDetachedAutoPromptClientMock.mockReturnValue(detachedClient);
 
     await expect(
@@ -135,8 +141,8 @@ describe('generateAutoPrompt', () => {
   });
 
   it('uses an isolated detached client when the live client is undefined', async () => {
-    const detachedClient = makeClient('undefined fallback prompt');
-    const runtime = makeRuntime('anthropic', undefined);
+    const detachedClient = await makeClient('undefined fallback prompt');
+    const runtime = await makeRuntime('anthropic', undefined);
     createDetachedAutoPromptClientMock.mockReturnValue(detachedClient);
 
     await expect(
@@ -154,9 +160,13 @@ describe('generateAutoPrompt', () => {
 
   it('throws when the model returns an empty response', async () => {
     await expect(
-      generateAutoPrompt(makeRuntime('anthropic', makeClient('  ')), 'Empty', {
-        model: 'auto-prompt-test',
-      }),
+      generateAutoPrompt(
+        await makeRuntime('anthropic', await makeClient('  ')),
+        'Empty',
+        {
+          model: 'auto-prompt-test',
+        },
+      ),
     ).rejects.toThrow('Model returned empty response');
   });
 
@@ -164,7 +174,7 @@ describe('generateAutoPrompt', () => {
     createDetachedAutoPromptClientMock.mockReturnValue(undefined);
 
     await expect(
-      generateAutoPrompt(makeRuntime('gemini', null), 'No clients', {
+      generateAutoPrompt(await makeRuntime('gemini', null), 'No clients', {
         model: 'auto-prompt-test',
       }),
     ).rejects.toThrow('Unable to access the AI client');
@@ -176,14 +186,14 @@ describe('generateAutoPrompt', () => {
     });
 
     await expect(
-      generateAutoPrompt(makeRuntime('gemini', null), 'Factory failure', {
+      generateAutoPrompt(await makeRuntime('gemini', null), 'Factory failure', {
         model: 'auto-prompt-test',
       }),
     ).rejects.toThrow('factory exploded');
   });
 
   it('disposes detached clients when generation fails', async () => {
-    const detachedClient = makeClient('unused');
+    const detachedClient = await makeClient('unused');
     (
       detachedClient.generateDirectMessage as Mock<
         typeof detachedClient.generateDirectMessage
@@ -192,9 +202,13 @@ describe('generateAutoPrompt', () => {
     createDetachedAutoPromptClientMock.mockReturnValue(detachedClient);
 
     await expect(
-      generateAutoPrompt(makeRuntime('gemini', makeClient()), 'Failure', {
-        model: 'auto-prompt-test',
-      }),
+      generateAutoPrompt(
+        await makeRuntime('gemini', await makeClient()),
+        'Failure',
+        {
+          model: 'auto-prompt-test',
+        },
+      ),
     ).rejects.toThrow('network failed');
 
     expect(detachedClient.dispose).toHaveBeenCalledTimes(1);

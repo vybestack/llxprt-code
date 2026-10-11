@@ -227,18 +227,18 @@ interface RenderLayoutOptions {
   store?: DialogStore;
 }
 
-function renderDefaultAppLayout({
+async function renderDefaultAppLayout({
   settings = createSettingsStub(),
   store = createDialogStore(),
-}: RenderLayoutOptions = {}): ReturnType<typeof render> {
+}: RenderLayoutOptions = {}): Promise<ReturnType<typeof render>> {
   const config = createConfigStub() as never;
 
   const inner = (
     <DefaultAppLayout
-      uiRuntime={buildUiRuntimeFromSource(config, createUiSessionOwner())}
+      uiRuntime={buildUiRuntimeFromSource(config, await createUiSessionOwner())}
       slashCommandRuntime={buildSlashCommandRuntime(
         config,
-        createUiSessionOwner(),
+        await createUiSessionOwner(),
       )}
       settings={settings as never}
       startupWarnings={[]}
@@ -288,11 +288,11 @@ describe('DefaultAppLayout', () => {
 
   it.each(STORE_DRIVEN_DIALOG_KINDS.map((kind) => [kind] as const))(
     'renders DialogManager instead of Composer when the %s dialog is open in the DialogStore',
-    (kind) => {
+    async (kind) => {
       const store = createDialogStore();
       openStoreDialog(store, kind);
 
-      const rendered = renderDefaultAppLayout({ store });
+      const rendered = await renderDefaultAppLayout({ store });
       const frame = rendered.lastFrame();
 
       expect(frame).toContain(DIALOG_MANAGER_SENTINEL);
@@ -301,8 +301,8 @@ describe('DefaultAppLayout', () => {
     },
   );
 
-  it('renders Composer when no dialog is open', () => {
-    const rendered = renderDefaultAppLayout();
+  it('renders Composer when no dialog is open', async () => {
+    const rendered = await renderDefaultAppLayout();
     const frame = rendered.lastFrame();
 
     expect(frame).toContain(COMPOSER_SENTINEL);
@@ -310,12 +310,12 @@ describe('DefaultAppLayout', () => {
     rendered.unmount();
   });
 
-  it('renders standard and alternate buffer layout branches according to settings', () => {
-    const alternateBuffer = renderDefaultAppLayout();
+  it('renders standard and alternate buffer layout branches according to settings', async () => {
+    const alternateBuffer = await renderDefaultAppLayout();
     const alternateBufferFrame = alternateBuffer.lastFrame();
     alternateBuffer.unmount();
 
-    const standardBuffer = renderDefaultAppLayout({
+    const standardBuffer = await renderDefaultAppLayout({
       settings: createSettingsStub({ useAlternateBuffer: false }),
     });
     const standardBufferFrame = standardBuffer.lastFrame();

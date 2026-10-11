@@ -433,17 +433,17 @@ describe('AppContainer.render-budget', () => {
   });
 
   describe('callback stability', () => {
-    it('should maintain stable output across re-renders', () => {
+    it('should maintain stable output across re-renders', async () => {
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent: await createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -472,17 +472,17 @@ describe('AppContainer.render-budget', () => {
       unmount();
     });
 
-    it('should not throw on rapid re-renders', () => {
+    it('should not throw on rapid re-renders', async () => {
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent: await createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -505,17 +505,17 @@ describe('AppContainer.render-budget', () => {
   });
 
   describe('memoization', () => {
-    it('should use useMemo for computed values', () => {
+    it('should use useMemo for computed values', async () => {
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent: await createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -532,17 +532,17 @@ describe('AppContainer.render-budget', () => {
       unmount();
     });
 
-    it('should use useCallback for event handlers', () => {
+    it('should use useCallback for event handlers', async () => {
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent: await createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -565,13 +565,13 @@ describe('AppContainer.render-budget', () => {
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent: await createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -592,13 +592,13 @@ describe('AppContainer.render-budget', () => {
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent: await createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -626,17 +626,17 @@ describe('AppContainer.render-budget', () => {
   });
 
   describe('cleanup smoke test', () => {
-    it('should complete mount/unmount cycles without errors', () => {
+    it('should complete mount/unmount cycles without errors', async () => {
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent: await createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,

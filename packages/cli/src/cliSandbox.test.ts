@@ -409,9 +409,9 @@ describe('CLI sandbox', () => {
 
         // The exit sentinel throws out of the hop, which is the only way to
         // observe the call without terminating the runner.
-        await expect(maybeHopIntoSandbox(buildHopOptions())).rejects.toThrow(
-          'exit sentinel',
-        );
+        await expect(
+          await maybeHopIntoSandbox(buildHopOptions()),
+        ).rejects.toThrow('exit sentinel');
 
         expect(exitSpy.mock.calls[0]?.[0]).toBe(7);
         // The buffered marker reached the fd-direct writer, and it did so before
@@ -459,9 +459,9 @@ describe('CLI sandbox', () => {
         throw new Error('exit sentinel');
       }) as typeof process.exit);
 
-      await expect(maybeHopIntoSandbox(buildHopOptions(true))).rejects.toThrow(
-        'exit sentinel',
-      );
+      await expect(
+        await maybeHopIntoSandbox(buildHopOptions(true)),
+      ).rejects.toThrow('exit sentinel');
 
       expect(exitSpy.mock.calls[0]?.[0]).toBe(7);
       // The sandbox TUI owned the terminal for the whole hop, so the live
@@ -479,9 +479,9 @@ describe('CLI sandbox', () => {
         throw new Error('exit sentinel');
       }) as typeof process.exit);
 
-      await expect(maybeHopIntoSandbox(buildHopOptions(false))).rejects.toThrow(
-        'exit sentinel',
-      );
+      await expect(
+        await maybeHopIntoSandbox(buildHopOptions(false)),
+      ).rejects.toThrow('exit sentinel');
 
       // Default mode: the audit record still reaches stderr byte for byte,
       // during the hop and after it.
@@ -498,7 +498,7 @@ describe('CLI sandbox', () => {
       }) as typeof process.exit);
 
       await expect(
-        maybeHopIntoSandbox(buildHopOptions(true, imageModeArgv())),
+        await maybeHopIntoSandbox(buildHopOptions(true, imageModeArgv())),
       ).rejects.toThrow('exit sentinel');
 
       // Direct image mode dispatches after the hop without mounting a TUI, so
@@ -513,9 +513,9 @@ describe('CLI sandbox', () => {
         throw new Error('sandbox boom');
       });
 
-      await expect(maybeHopIntoSandbox(buildHopOptions(true))).rejects.toThrow(
-        'sandbox boom',
-      );
+      await expect(
+        await maybeHopIntoSandbox(buildHopOptions(true)),
+      ).rejects.toThrow('sandbox boom');
 
       // The claim was live right up to the failure (the INFO record produced
       // zero stderr bytes)...
@@ -542,7 +542,7 @@ describe('CLI sandbox', () => {
       let stderrAfterHop = '';
       try {
         await expect(
-          maybeHopIntoSandbox(buildHopOptions(true)),
+          await maybeHopIntoSandbox(buildHopOptions(true)),
         ).rejects.toThrow('exit sentinel');
       } finally {
         stderrAfterHop = collector.captured();

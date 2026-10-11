@@ -712,7 +712,7 @@ describe('subagentCommand', () => {
         debugMode: false,
       });
       autoConfigs.push(config);
-      const owner = createUiSessionOwner(config);
+      const owner = await createUiSessionOwner(config);
       context.services.config = composeFixtureRuntime(config);
       Object.assign(owner.agentClient, mockAgentClient);
       context.services.agent = createMockCommandContext({
@@ -832,7 +832,10 @@ describe('subagentCommand', () => {
 
       context.services.agent = createMockCommandContext({
         services: {
-          agent: { ...createUiSessionOwner(), getProvider: () => 'gemini' },
+          agent: {
+            ...(await createUiSessionOwner()),
+            getProvider: () => 'gemini',
+          },
         },
       }).services.agent;
 

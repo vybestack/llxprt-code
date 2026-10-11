@@ -94,12 +94,12 @@ function makeProviderManagerWithNoActive(): {
   managers.push(manager);
   return { providerManager: manager, settingsService };
 }
-function makeOperation(
+async function makeOperation(
   config: Config,
   manager: ProviderManager,
   settingsService: SettingsService,
 ) {
-  const operation = createProviderSessionOwner(
+  const operation = await createProviderSessionOwner(
     config,
     manager,
     settingsService,
@@ -157,7 +157,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      await makeOperation(config, providerManager, settingsService),
     );
 
     expect(failed.authFailed).toBe(false);
@@ -176,7 +176,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      await makeOperation(config, providerManager, settingsService),
     );
 
     expect(failed.authFailed).toBe(true);
@@ -193,7 +193,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      await makeOperation(config, providerManager, settingsService),
     );
 
     const intent: ProviderActivationIntent = preflightMock.mock.calls[0][0];
@@ -214,7 +214,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      await makeOperation(config, providerManager, settingsService),
     );
 
     const intent: ProviderActivationIntent = preflightMock.mock.calls[0][0];
@@ -235,7 +235,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      await makeOperation(config, providerManager, settingsService),
     );
 
     const intent: ProviderActivationIntent = preflightMock.mock.calls[0][0];
@@ -259,7 +259,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      await makeOperation(config, providerManager, settingsService),
     );
 
     const intent: ProviderActivationIntent = preflightMock.mock.calls[0][0];
@@ -287,7 +287,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      await makeOperation(config, providerManager, settingsService),
     );
 
     const intent: ProviderActivationIntent = preflightMock.mock.calls[0][0];
@@ -318,7 +318,7 @@ describe('activateConfiguredProvider (declarative, #2374 round-3 Fix 5)', () => 
       config,
       providerManager,
       makeArgs(),
-      makeOperation(config, providerManager, settingsService),
+      await makeOperation(config, providerManager, settingsService),
     );
 
     expect(failed.authFailed).toBe(true);

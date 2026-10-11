@@ -504,17 +504,17 @@ describe('AppContainer.keybindings', () => {
   });
 
   describe('keybinding behavior', () => {
-    it('should mount component with keybinding handlers active', () => {
+    it('should mount component with keybinding handlers active', async () => {
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent: await createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -529,17 +529,17 @@ describe('AppContainer.keybindings', () => {
       unmount();
     });
 
-    it('should have copy mode toggle available when using alternate buffer', () => {
+    it('should have copy mode toggle available when using alternate buffer', async () => {
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent: await createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,
@@ -555,7 +555,7 @@ describe('AppContainer.keybindings', () => {
       unmount();
     });
 
-    it('should have shell focus toggle available when interactive shell is enabled', () => {
+    it('should have shell focus toggle available when interactive shell is enabled', async () => {
       mockConfig = createMockConfig({
         getEnableInteractiveShell: vi.fn(() => true),
       });
@@ -563,13 +563,13 @@ describe('AppContainer.keybindings', () => {
       const props = {
         uiRuntime: buildUiRuntimeFromSource(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
         slashCommandRuntime: buildSlashCommandRuntime(
           mockConfig as unknown as UiRuntimeBareSource,
-          createUiSessionOwner(),
+          await createUiSessionOwner(),
         ),
-        agent: createMockAgent(mockConfig as unknown as Config),
+        agent: await createMockAgent(mockConfig as unknown as Config),
         settings: mockSettings,
         version: '1.0.0-test',
         appState: initialAppState,

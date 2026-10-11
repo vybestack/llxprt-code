@@ -33,7 +33,7 @@ import {
  * Wraps createFakeAgentFromMockClient so call sites don't repeat the
  * `as unknown as Record<string, unknown>` cast boilerplate ~15 times.
  */
-function makeFakeAgent(mockClient: Record<string, unknown>) {
+async function makeFakeAgent(mockClient: Record<string, unknown>) {
   return createFakeAgentFromMockClient(mockClient);
 }
 
@@ -140,7 +140,7 @@ describe('createToolCheckpoint', () => {
       makeRestorableTool('c1', 'replace', '/project/src/foo.ts'),
       checkpointDir,
       gitService as unknown as GitService,
-      makeFakeAgent(agentClient),
+      await makeFakeAgent(agentClient),
       mockHistory,
       onDebugMessage,
       fsOps,
@@ -171,7 +171,7 @@ describe('createToolCheckpoint', () => {
       makeRestorableTool('c1', 'write_file', '/project/file.ts'),
       '/tmp/checkpoints',
       gitService as unknown as GitService,
-      makeFakeAgent(agentClient),
+      await makeFakeAgent(agentClient),
       mockHistory,
       onDebugMessage,
       fsOps,
@@ -199,7 +199,7 @@ describe('createToolCheckpoint', () => {
       makeRestorableTool('c1', 'replace', '/project/file.ts'),
       '/tmp/checkpoints',
       gitService as unknown as GitService,
-      makeFakeAgent(agentClient),
+      await makeFakeAgent(agentClient),
       mockHistory,
       onDebugMessage,
       fsOps,
@@ -223,7 +223,7 @@ describe('createToolCheckpoint', () => {
       toolWithNoPath,
       '/tmp/checkpoints',
       gitService as unknown as GitService,
-      makeFakeAgent(makeAgentClient()),
+      await makeFakeAgent(makeAgentClient()),
       mockHistory,
       onDebugMessage,
       fsOps,
@@ -261,13 +261,13 @@ describe('useCheckpointPersistence', () => {
     ];
 
     await act(async () => {
-      renderHook(() =>
+      renderHook(async () =>
         useCheckpointPersistence(
           tools,
           config,
           gitService as unknown as GitService,
           mockHistory,
-          makeFakeAgent(agentClient),
+          await makeFakeAgent(agentClient),
           config.projectCheckpointsDir,
           onDebugMessage,
           fsOps,
@@ -286,13 +286,13 @@ describe('useCheckpointPersistence', () => {
     const fsOps = makeFsOps();
 
     await act(async () => {
-      renderHook(() =>
+      renderHook(async () =>
         useCheckpointPersistence(
           [makeRestorableTool('r1', 'replace', '/project/a.ts')],
           config,
           gitService as unknown as GitService,
           mockHistory,
-          makeFakeAgent(makeAgentClient()),
+          await makeFakeAgent(makeAgentClient()),
           config.projectCheckpointsDir,
           vi.fn(),
           fsOps,
@@ -311,13 +311,13 @@ describe('useCheckpointPersistence', () => {
     const fsOps = makeFsOps();
 
     await act(async () => {
-      renderHook(() =>
+      renderHook(async () =>
         useCheckpointPersistence(
           [makeNonRestorableTool()], // read_file — not restorable
           config,
           gitService as unknown as GitService,
           mockHistory,
-          makeFakeAgent(makeAgentClient()),
+          await makeFakeAgent(makeAgentClient()),
           config.projectCheckpointsDir,
           vi.fn(),
           fsOps,
@@ -336,13 +336,13 @@ describe('useCheckpointPersistence', () => {
     const onDebugMessage = vi.fn();
 
     await act(async () => {
-      renderHook(() =>
+      renderHook(async () =>
         useCheckpointPersistence(
           [makeRestorableTool('r1', 'replace', '/project/a.ts')],
           config,
           undefined, // no gitService
           mockHistory,
-          makeFakeAgent(makeAgentClient()),
+          await makeFakeAgent(makeAgentClient()),
           config.projectCheckpointsDir,
           onDebugMessage,
           fsOps,
@@ -369,13 +369,13 @@ describe('useCheckpointPersistence', () => {
     const onDebugMessage = vi.fn();
 
     await act(async () => {
-      renderHook(() =>
+      renderHook(async () =>
         useCheckpointPersistence(
           [makeRestorableTool('r1', 'replace', '/project/a.ts')],
           config,
           gitService as unknown as GitService,
           mockHistory,
-          makeFakeAgent(agentClient),
+          await makeFakeAgent(agentClient),
           config.projectCheckpointsDir,
           onDebugMessage,
           fsOps,
@@ -399,13 +399,13 @@ describe('useCheckpointPersistence', () => {
     const onDebugMessage = vi.fn();
 
     await act(async () => {
-      renderHook(() =>
+      renderHook(async () =>
         useCheckpointPersistence(
           [makeRestorableTool('r1', 'replace', '/project/a.ts')],
           config,
           gitService as unknown as GitService,
           mockHistory,
-          makeFakeAgent(makeAgentClient()),
+          await makeFakeAgent(makeAgentClient()),
           config.projectCheckpointsDir,
           onDebugMessage,
           fsOps,
@@ -436,13 +436,13 @@ describe('useCheckpointPersistence', () => {
     ];
 
     await act(async () => {
-      renderHook(() =>
+      renderHook(async () =>
         useCheckpointPersistence(
           tools,
           config,
           gitService as unknown as GitService,
           mockHistory,
-          makeFakeAgent(agentClient),
+          await makeFakeAgent(agentClient),
           config.projectCheckpointsDir,
           onDebugMessage,
           fsOps,
@@ -466,13 +466,13 @@ describe('useCheckpointPersistence', () => {
     const fsOps = makeFsOps();
 
     await act(async () => {
-      renderHook(() =>
+      renderHook(async () =>
         useCheckpointPersistence(
           [makeRestorableTool('r1', 'replace', '/project/a.ts')],
           config,
           makeGitService() as unknown as GitService,
           mockHistory,
-          makeFakeAgent(makeAgentClient()),
+          await makeFakeAgent(makeAgentClient()),
           config.projectCheckpointsDir,
           vi.fn(),
           fsOps,
@@ -494,13 +494,13 @@ describe('useCheckpointPersistence', () => {
     const tools = [makeRestorableTool('r1', 'replace', '/project/a.ts')];
 
     let currentTools = tools;
-    const { rerender } = renderHook(() =>
+    const { rerender } = renderHook(async () =>
       useCheckpointPersistence(
         currentTools,
         config,
         gitService as unknown as GitService,
         mockHistory,
-        makeFakeAgent(agentClient),
+        await makeFakeAgent(agentClient),
         config.projectCheckpointsDir,
         onDebugMessage,
         fsOps,
@@ -532,13 +532,13 @@ describe('useCheckpointPersistence', () => {
     const tool = makeRestorableTool('r1', 'replace', '/project/a.ts');
 
     let currentTools: TrackedToolCall[] = [tool];
-    const { rerender } = renderHook(() =>
+    const { rerender } = renderHook(async () =>
       useCheckpointPersistence(
         currentTools,
         config,
         gitService as unknown as GitService,
         mockHistory,
-        makeFakeAgent(agentClient),
+        await makeFakeAgent(agentClient),
         config.projectCheckpointsDir,
         onDebugMessage,
         fsOps,

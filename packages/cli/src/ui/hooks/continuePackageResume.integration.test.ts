@@ -335,14 +335,14 @@ function createRecordingCallbacks(
   };
 }
 
-function createHandlerDeps(
+async function createHandlerDeps(
   config: Config,
   sessionClient: SessionClientOwner,
   callbacks: RecordingSwapCallbacks,
   messages: Message[],
   persistence: CliSessionPersistence,
   settingsOwner: SessionSettingsOwner,
-): SlashCommandHandlerDeps {
+): Promise<SlashCommandHandlerDeps> {
   const commandContext = createMockCommandContext({
     services: {
       config,
@@ -360,7 +360,11 @@ function createHandlerDeps(
     commands: [continueCommand],
     config: {
       ...composeFixtureRuntime(config),
-      ...buildSettingsRuntime(config, createUiSessionOwner(), settingsOwner),
+      ...buildSettingsRuntime(
+        config,
+        await createUiSessionOwner(),
+        settingsOwner,
+      ),
     },
     sessionPersistence: persistence,
     commandContext,
@@ -433,7 +437,7 @@ describe('continue package perform_resume integration', () => {
     try {
       const sessionPackage = await createPackage(root, []);
       const result = await processSlashCommand(
-        createHandlerDeps(
+        await createHandlerDeps(
           config,
           built.sessionClient,
           createRecordingCallbacks(state, false),
@@ -518,7 +522,7 @@ describe('continue package perform_resume integration', () => {
 
     try {
       await processSlashCommand(
-        createHandlerDeps(
+        await createHandlerDeps(
           config,
           built.sessionClient,
           createRecordingCallbacks(state, true),

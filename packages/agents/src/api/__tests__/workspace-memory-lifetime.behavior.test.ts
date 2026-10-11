@@ -97,7 +97,7 @@ async function preflightWithSuppliedMemory(
   manager.registerProvider(
     new FakeProvider(join(import.meta.dir, 'fixtures/plain-text.jsonl')),
   );
-  const operation = assembleAgentActivationBootstrap(
+  const operation = await assembleAgentActivationBootstrap(
     built.config,
     built.settingsService,
     manager,
@@ -260,7 +260,7 @@ describe('supplied workspace memory lifetime through public adoption', () => {
     manager.registerProvider(
       new FakeProvider(join(import.meta.dir, 'fixtures/plain-text.jsonl')),
     );
-    const operation = assembleAgentActivationBootstrap(
+    const operation = await assembleAgentActivationBootstrap(
       built.config,
       built.settingsService,
       manager,
@@ -311,7 +311,7 @@ describe('supplied workspace memory lifetime through public adoption', () => {
     manager.registerProvider(
       new FakeProvider(join(import.meta.dir, 'fixtures/plain-text.jsonl')),
     );
-    const operation = assembleAgentActivationBootstrap(
+    const operation = await assembleAgentActivationBootstrap(
       built.config,
       built.settingsService,
       manager,

@@ -260,8 +260,13 @@ describe('cli main provider initialization', () => {
     (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
       handoffCliConfig(
         mockConfig,
-        (store, owner) => ({
-          ...bootstrapOperationCapabilities(mockConfig, manager, store, owner),
+        async (store, owner) => ({
+          ...(await bootstrapOperationCapabilities(
+            mockConfig,
+            manager,
+            store,
+            owner,
+          )),
           preflight: preflightMock,
           dispose: () => {},
         }),
@@ -361,8 +366,13 @@ describe('cli main provider initialization', () => {
     (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
       handoffCliConfig(
         config,
-        (store, owner) => ({
-          ...bootstrapOperationCapabilities(config, manager, store, owner),
+        async (store, owner) => ({
+          ...(await bootstrapOperationCapabilities(
+            config,
+            manager,
+            store,
+            owner,
+          )),
           preflight: preflightMock,
           dispose: () => {},
         }),
@@ -507,13 +517,13 @@ describe('cli main provider initialization', () => {
   }, 30000);
 });
 
-function bootstrapOperationCapabilities(
+async function bootstrapOperationCapabilities(
   config: Config,
   manager: ProviderManager,
   settingsService: SettingsService,
   owner: Parameters<typeof createProviderSessionOwner>[3],
 ) {
-  const operation = createProviderSessionOwner(
+  const operation = await createProviderSessionOwner(
     config,
     manager,
     settingsService,

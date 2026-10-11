@@ -53,7 +53,7 @@ function findSkill(
 describe('skillsCommand', () => {
   let context: CommandContext;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers();
     const skills = [
       {
@@ -71,7 +71,7 @@ describe('skillsCommand', () => {
     ];
     context = createMockCommandContext({
       services: {
-        agent: createMockAgent(
+        agent: await createMockAgent(
           new Config({
             sessionId: crypto.randomUUID(),
             targetDir: process.cwd(),

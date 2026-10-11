@@ -132,7 +132,7 @@ describe('activation media owner lifetime', () => {
       config: built.config,
       settingsService: built.settingsService,
     });
-    const operation = assembleAgentActivationBootstrap(
+    const operation = await assembleAgentActivationBootstrap(
       built.config,
       built.settingsService,
       manager,

@@ -206,8 +206,8 @@ describe('cli sandbox integration', () => {
     loadCliConfigMock.mockImplementation(
       handoffCliConfig(
         mockConfig,
-        (store, owner) => {
-          const activationOwner = assembleAgentActivationBootstrap(
+        async (store, owner) => {
+          const activationOwner = await assembleAgentActivationBootstrap(
             mockConfig,
             store,
             providerOwner,
@@ -313,8 +313,8 @@ describe('cli sandbox integration', () => {
     loadCliConfigMock.mockImplementation(
       handoffCliConfig(
         mockConfig,
-        (store, owner) => {
-          const activationOwner = assembleAgentActivationBootstrap(
+        async (store, owner) => {
+          const activationOwner = await assembleAgentActivationBootstrap(
             mockConfig,
             store,
             providerOwner,

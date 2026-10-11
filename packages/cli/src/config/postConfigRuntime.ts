@@ -660,7 +660,7 @@ export async function finalizeConfig(
   await setupRuntimeContext(input);
 
   // Steps 12-13: Apply profile + switch provider
-  const activationOperation = assembleAgentActivationBootstrap(
+  const activationOperation = await assembleAgentActivationBootstrap(
     input.config,
     getSettingsService(input),
     input.runtimeState.providerManager,

@@ -200,11 +200,11 @@ describe('useAgentStream', () => {
     setValue: vi.fn(),
   } as unknown as LoadedSettings;
 
-  const renderTestHook = (
+  const renderTestHook = async (
     initialToolCalls: TrackedToolCall[] = [],
     agentClient?: Parameters<typeof createFakeAgentFromMockClient>[0],
   ) => {
-    const client = createFakeAgentFromMockClient(
+    const client = await createFakeAgentFromMockClient(
       agentClient ?? new MockedAgentClientClass(mockConfig),
     );
 
@@ -302,7 +302,7 @@ describe('useAgentStream', () => {
 
   // Helper to render hook with default parameters - reduces boilerplate
 
-  it('should not submit tool responses if not all tool calls are completed', () => {
+  it('should not submit tool responses if not all tool calls are completed', async () => {
     const toolCalls: TrackedToolCall[] = [
       {
         request: {
@@ -358,7 +358,7 @@ describe('useAgentStream', () => {
     ];
 
     const { mockMarkToolsAsDisplayCleared, mockSendMessageStream } =
-      renderTestHook(toolCalls);
+      await renderTestHook(toolCalls);
 
     // Effect for submitting tool responses depends on toolCalls and isResponding
     // isResponding is initially false, so the effect should run.
@@ -444,9 +444,11 @@ describe('useAgentStream', () => {
       ];
     });
 
-    renderHook(() =>
+    renderHook(async () =>
       useAgentStream(
-        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
+        await createFakeAgentFromMockClient(
+          new MockedAgentClientClass(mockConfig),
+        ),
         [],
         mockAddItem,
         createStreamRuntimeForTest(mockConfig),
@@ -550,9 +552,11 @@ describe('useAgentStream', () => {
       ];
     });
 
-    renderHook(() =>
+    renderHook(async () =>
       useAgentStream(
-        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
+        await createFakeAgentFromMockClient(
+          new MockedAgentClientClass(mockConfig),
+        ),
         [],
         mockAddItem,
         createStreamRuntimeForTest(mockConfig),

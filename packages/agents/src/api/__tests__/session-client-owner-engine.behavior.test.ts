@@ -233,7 +233,7 @@ describe('Explicit session client lifetime', () => {
       built.settingsService,
     );
     await handle.activate();
-    const operation = assembleAgentActivationBootstrap(
+    const operation = await assembleAgentActivationBootstrap(
       built.config,
       handle.settingsService,
       handle.providerManager,
@@ -410,7 +410,7 @@ describe('Explicit session client lifetime', () => {
     const client = built.owner.getAgentClient();
     await client.startChat();
     const intent = { provider: 'fake', model: 'fake-model' };
-    const operation = assembleAgentActivationBootstrap(
+    const operation = await assembleAgentActivationBootstrap(
       built.config,
       built.handle.settingsService,
       built.handle.providerManager,

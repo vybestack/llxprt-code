@@ -27,7 +27,7 @@ import { McpClientManager } from '@vybestack/llxprt-code-mcp';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { assembleAgentActivationBootstrap } from '@vybestack/llxprt-code-agents';
 
-function createFailingSession(config: Config, failure: Error) {
+async function createFailingSession(config: Config, failure: Error) {
   const settingsService = new SettingsService();
   for (const [key, value] of Object.entries(config.getInitialSettings()))
     settingsService.set(key, value);
@@ -35,7 +35,7 @@ function createFailingSession(config: Config, failure: Error) {
     config,
     settingsService,
   });
-  const operation = assembleAgentActivationBootstrap(
+  const operation = await assembleAgentActivationBootstrap(
     config,
     settingsService,
     manager,
@@ -774,7 +774,7 @@ describe('Config MCP wiring on folder trust change', () => {
         await hookSystem.initialize();
         const disposeHooks = vi.spyOn(hookSystem, 'dispose');
         const agentFailure = new Error('agent dispose failed');
-        const session = createFailingSession(config, agentFailure);
+        const session = await createFailingSession(config, agentFailure);
 
         await owner.dispose();
         await expect(session.disposeSession()).resolves.toStrictEqual([
@@ -806,7 +806,7 @@ describe('Config MCP wiring on folder trust change', () => {
         const agentFailure = new Error('agent dispose failed');
         const hookFailure = new Error('hook dispose failed');
         const stopFailure = new Error('stop failed');
-        const session = createFailingSession(config, agentFailure);
+        const session = await createFailingSession(config, agentFailure);
         const hookSystem = createHookRoot(config, configTrust);
         const failedRetirement = vi
           .spyOn(hookSystem, 'dispose')

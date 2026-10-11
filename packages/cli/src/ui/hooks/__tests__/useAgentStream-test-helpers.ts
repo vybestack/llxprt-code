@@ -226,7 +226,7 @@ function createStatsControl() {
 }
 
 function createProviderReads(
-  owner: ReturnType<typeof createUiSessionOwner>,
+  owner: Awaited<ReturnType<typeof createUiSessionOwner>>,
 ): Pick<
   Agent,
   'hasActiveProvider' | 'getProviderContextLimit' | 'listAvailableModels'
@@ -240,11 +240,11 @@ function createProviderReads(
   };
 }
 
-function createBaseAgent(
+async function createBaseAgent(
   mockClient: Record<string, unknown>,
   streamFn: ReturnType<typeof createFakeStream>,
-): Agent {
-  const owner = createUiSessionOwner();
+): Promise<Agent> {
+  const owner = await createUiSessionOwner();
   return {
     async chat() {
       return { text: '', toolCalls: [], finishReason: 'stop' };
@@ -320,7 +320,9 @@ function createBaseAgent(
   } as unknown as Agent;
 }
 
-export function createFakeAgentFromMockClient(mockClient: unknown): Agent {
+export async function createFakeAgentFromMockClient(
+  mockClient: unknown,
+): Promise<Agent> {
   return createBaseAgent(
     mockClient as Record<string, unknown>,
     createFakeStream(mockClient as Record<string, unknown>),

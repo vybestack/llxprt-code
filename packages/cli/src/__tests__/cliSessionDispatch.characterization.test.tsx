@@ -92,7 +92,7 @@ const dispatchTrace: string[] = [];
 void vi.mock('../cliAgentBootstrap.js', () => ({
   createForegroundAgent: vi.fn(async () => {
     dispatchTrace.push('createForegroundAgent');
-    return { fake: true, workspace: createUiSessionOwner().workspace };
+    return { fake: true, workspace: (await createUiSessionOwner()).workspace };
   }),
 }));
 
@@ -214,9 +214,9 @@ function createMinimalSettings(options?: {
 // returning an empty output object ({} — no systemMessage/additionalContext).
 // Without it the runner throws before reaching runNonInteractive and the
 // dispatch-branch traces would never record the runner.
-function createFakeAgent(): unknown {
+async function createFakeAgent(): Promise<unknown> {
   return {
-    workspace: createUiSessionOwner().workspace,
+    workspace: (await createUiSessionOwner()).workspace,
     getMessageBus: () => ({}) as never,
     hooks: {
       triggerSessionStart: vi.fn(async () => ({})),
@@ -275,7 +275,7 @@ describe('session-dispatch characterization', () => {
       await dispatchInteractiveOrNonInteractive({
         runtimeSettings: configRoot.runtimeSettings,
         config: config as never,
-        agent: createFakeAgent() as never,
+        agent: (await createFakeAgent()) as never,
         settings: settings as never,
         workspaceRoot: '/tmp/test',
         recordingOwner: 'agent',
@@ -305,7 +305,7 @@ describe('session-dispatch characterization', () => {
         dispatchInteractiveOrNonInteractive({
           runtimeSettings: configRoot.runtimeSettings,
           config: config as never,
-          agent: createFakeAgent() as never,
+          agent: (await createFakeAgent()) as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
           recordingOwner: 'agent',
@@ -615,7 +615,7 @@ describe('session-dispatch characterization', () => {
         dispatchInteractiveOrNonInteractive({
           runtimeSettings: configRoot.runtimeSettings,
           config: config as never,
-          agent: createFakeAgent() as never,
+          agent: (await createFakeAgent()) as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
           recordingOwner: 'agent',
@@ -647,7 +647,7 @@ describe('session-dispatch characterization', () => {
         await dispatchInteractiveOrNonInteractive({
           runtimeSettings: configRoot.runtimeSettings,
           config: config as never,
-          agent: createFakeAgent() as never,
+          agent: (await createFakeAgent()) as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
           recordingOwner: 'agent',
@@ -692,7 +692,7 @@ describe('session-dispatch characterization', () => {
         dispatchInteractiveOrNonInteractive({
           runtimeSettings: configRoot.runtimeSettings,
           config: config as never,
-          agent: createFakeAgent() as never,
+          agent: (await createFakeAgent()) as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
           recordingOwner: 'agent',
@@ -745,7 +745,7 @@ describe('session-dispatch characterization', () => {
 
       await startInteractiveUI(
         config as never,
-        createFakeAgent() as never,
+        (await createFakeAgent()) as never,
         settings as never,
         [],
         '/tmp/test',
@@ -775,7 +775,7 @@ describe('session-dispatch characterization', () => {
 
       await startInteractiveUI(
         config as never,
-        createFakeAgent() as never,
+        (await createFakeAgent()) as never,
         settings as never,
         [],
         '/tmp/test',
@@ -803,7 +803,7 @@ describe('session-dispatch characterization', () => {
 
       await startInteractiveUI(
         config as never,
-        createFakeAgent() as never,
+        (await createFakeAgent()) as never,
         settings as never,
         ['startup warning'],
         '/tmp/test',
@@ -1000,7 +1000,7 @@ describe('session-dispatch characterization', () => {
     });
 
     /** Runs dispatch with the fixed recording/stdin arguments these cases share. */
-    function runDispatch(
+    async function runDispatch(
       { config, runtimeSettings }: ReturnType<typeof createMinimalConfig>,
       settings: unknown,
       recordingStartupWarnings: string[] = [],
@@ -1008,7 +1008,7 @@ describe('session-dispatch characterization', () => {
       return dispatchInteractiveOrNonInteractive({
         runtimeSettings,
         config: config as never,
-        agent: createFakeAgent() as never,
+        agent: (await createFakeAgent()) as never,
         settings: settings as never,
         workspaceRoot: '/tmp/test',
         recordingOwner: 'agent',
@@ -1077,7 +1077,7 @@ describe('session-dispatch characterization', () => {
       });
 
       await expect(
-        runDispatch(
+        await runDispatch(
           createMinimalConfig({ interactive: false, question: 'prompt' }),
           createMinimalSettings(),
         ),
@@ -1114,7 +1114,7 @@ describe('session-dispatch characterization', () => {
       });
 
       await expect(
-        runDispatch(
+        await runDispatch(
           createMinimalConfig({ interactive: false, question: 'prompt' }),
           createMinimalSettings(),
           [RESUME_WARNING, 'second'],
@@ -1130,7 +1130,7 @@ describe('session-dispatch characterization', () => {
       process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY = '1';
 
       await expect(
-        runDispatch(
+        await runDispatch(
           createMinimalConfig({
             interactive: false,
             question: 'prompt',
@@ -1148,7 +1148,7 @@ describe('session-dispatch characterization', () => {
       delete process.env.LLXPRT_SANDBOX_SSH_AGENT_EMPTY;
 
       await expect(
-        runDispatch(
+        await runDispatch(
           createMinimalConfig({ interactive: false, question: 'prompt' }),
           createMinimalSettings(),
         ),

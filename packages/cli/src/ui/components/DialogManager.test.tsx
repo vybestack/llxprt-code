@@ -329,7 +329,13 @@ const LOAD_PROFILE_MARKER = 'Select Profile (';
 const CREATE_PROFILE_MARKER = 'Create New Profile - Step 1 of 6';
 const TOOLS_MARKER = 'Select a tool to disable:';
 
-function DialogManagerHarness({ store }: { store: DialogStore }) {
+function DialogManagerHarness({
+  store,
+  owner,
+}: {
+  store: DialogStore;
+  owner: Awaited<ReturnType<typeof createUiSessionOwner>>;
+}) {
   const buffer = useTextBuffer({
     viewport: { width: 100, height: 40 },
     isValidPath: () => false,
@@ -362,7 +368,7 @@ function DialogManagerHarness({ store }: { store: DialogStore }) {
       debugMode: false,
       model: 'test',
     }),
-    createUiSessionOwner(),
+    owner,
   );
   return (
     <AppCommandsProvider value={commands}>
@@ -373,38 +379,44 @@ function DialogManagerHarness({ store }: { store: DialogStore }) {
   );
 }
 
-function renderDialogManager(requests: DialogRequest[]): string {
+async function renderDialogManager(requests: DialogRequest[]): Promise<string> {
+  const owner = await createUiSessionOwner();
   const store = createDialogStore();
   for (const request of requests) store.commands.openDialog(request);
-  const view = renderWithProviders(<DialogManagerHarness store={store} />, {
-    terminal: {
-      terminalWidth: 100,
-      terminalHeight: 40,
-      mainAreaWidth: 100,
-      constrainHeight: false,
+  const view = renderWithProviders(
+    <DialogManagerHarness store={store} owner={owner} />,
+    {
+      terminal: {
+        terminalWidth: 100,
+        terminalHeight: 40,
+        mainAreaWidth: 100,
+        constrainHeight: false,
+      },
+      settingsProfile: {
+        providerOptions: ['ollama'],
+        profiles: ['alpha', 'beta'],
+        toolsDialogTools: [
+          {
+            name: 'shell',
+            displayName: 'Shell',
+            source: 'builtin',
+            enabled: true,
+          },
+        ],
+        toolsDialogDisabledTools: [],
+      },
     },
-    settingsProfile: {
-      providerOptions: ['ollama'],
-      profiles: ['alpha', 'beta'],
-      toolsDialogTools: [
-        {
-          name: 'shell',
-          displayName: 'Shell',
-          source: 'builtin',
-          enabled: true,
-        },
-      ],
-      toolsDialogDisabledTools: [],
-    },
-  });
+  );
   const frame = view.lastFrame() ?? '';
   view.unmount();
   return frame;
 }
 
 describe('DialogManager render dispatch', () => {
-  it('renders the folder-trust dialog when only its request is open', () => {
-    const frame = renderDialogManager([{ kind: 'folderTrust', payload: {} }]);
+  it('renders the folder-trust dialog when only its request is open', async () => {
+    const frame = await renderDialogManager([
+      { kind: 'folderTrust', payload: {} },
+    ]);
     expect(frame).toContain(FOLDER_TRUST_MARKER);
     expect(frame).not.toContain(PROVIDER_MARKER);
     expect(frame).not.toContain(LOAD_PROFILE_MARKER);
@@ -412,8 +424,10 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(TOOLS_MARKER);
   });
 
-  it('renders the provider dialog when only its request is open', () => {
-    const frame = renderDialogManager([{ kind: 'provider', payload: {} }]);
+  it('renders the provider dialog when only its request is open', async () => {
+    const frame = await renderDialogManager([
+      { kind: 'provider', payload: {} },
+    ]);
     expect(frame).toContain(PROVIDER_MARKER);
     expect(frame).not.toContain(FOLDER_TRUST_MARKER);
     expect(frame).not.toContain(LOAD_PROFILE_MARKER);
@@ -421,8 +435,10 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(TOOLS_MARKER);
   });
 
-  it('renders the load-profile dialog when only its request is open', () => {
-    const frame = renderDialogManager([{ kind: 'loadProfile', payload: {} }]);
+  it('renders the load-profile dialog when only its request is open', async () => {
+    const frame = await renderDialogManager([
+      { kind: 'loadProfile', payload: {} },
+    ]);
     expect(frame).toContain(LOAD_PROFILE_MARKER);
     expect(frame).not.toContain(FOLDER_TRUST_MARKER);
     expect(frame).not.toContain(PROVIDER_MARKER);
@@ -430,8 +446,10 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(TOOLS_MARKER);
   });
 
-  it('renders the profile-create wizard when only its request is open', () => {
-    const frame = renderDialogManager([{ kind: 'createProfile', payload: {} }]);
+  it('renders the profile-create wizard when only its request is open', async () => {
+    const frame = await renderDialogManager([
+      { kind: 'createProfile', payload: {} },
+    ]);
     expect(frame).toContain(CREATE_PROFILE_MARKER);
     expect(frame).not.toContain(FOLDER_TRUST_MARKER);
     expect(frame).not.toContain(PROVIDER_MARKER);
@@ -439,8 +457,8 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(TOOLS_MARKER);
   });
 
-  it('renders the tools dialog when only its request is open', () => {
-    const frame = renderDialogManager([
+  it('renders the tools dialog when only its request is open', async () => {
+    const frame = await renderDialogManager([
       { kind: 'tools', payload: { action: 'disable' } },
     ]);
     expect(frame).toContain(TOOLS_MARKER);
@@ -450,10 +468,10 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(CREATE_PROFILE_MARKER);
   });
 
-  it('renders exactly the folder-trust dialog when early, first-half, and second-half requests are all open', () => {
+  it('renders exactly the folder-trust dialog when early, first-half, and second-half requests are all open', async () => {
     // Early dialogs win: folder trust beats provider (first half) and tools
     // (second half).
-    const frame = renderDialogManager([
+    const frame = await renderDialogManager([
       { kind: 'folderTrust', payload: {} },
       { kind: 'provider', payload: {} },
       { kind: 'tools', payload: { action: 'disable' } },
@@ -463,9 +481,9 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(TOOLS_MARKER);
   });
 
-  it('renders exactly the provider dialog when first-half and second-half requests are both open', () => {
+  it('renders exactly the provider dialog when first-half and second-half requests are both open', async () => {
     // First half beats second half: provider beats tools.
-    const frame = renderDialogManager([
+    const frame = await renderDialogManager([
       { kind: 'provider', payload: {} },
       { kind: 'tools', payload: { action: 'disable' } },
     ]);
@@ -473,9 +491,9 @@ describe('DialogManager render dispatch', () => {
     expect(frame).not.toContain(TOOLS_MARKER);
   });
 
-  it('renders exactly the load-profile dialog when both profile requests are open', () => {
+  it('renders exactly the load-profile dialog when both profile requests are open', async () => {
     // The store priority gives load precedence over create.
-    const frame = renderDialogManager([
+    const frame = await renderDialogManager([
       { kind: 'loadProfile', payload: {} },
       { kind: 'createProfile', payload: {} },
     ]);

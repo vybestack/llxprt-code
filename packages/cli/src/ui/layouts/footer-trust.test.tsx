@@ -38,7 +38,7 @@ const { createDialogOpeners } = await import(
   '../stores/dialog/dialogOpeners.js'
 );
 
-function mountFooter(trustedFolder = true) {
+async function mountFooter(trustedFolder = true) {
   const settings = createMockSettings({ folderTrust: false });
   const config = new Config({
     sessionId: 'trust-footer',
@@ -51,7 +51,7 @@ function mountFooter(trustedFolder = true) {
   const settingsStore = createSettingsProfileStore();
   const store = createDialogStore();
   const dialogs = createDialogOpeners(store);
-  const owner = createUiSessionOwner(config);
+  const owner = await createUiSessionOwner(config);
   const uiRuntime = buildUiRuntimeFromSource(config, owner);
   const slashCommandRuntime = buildSlashCommandRuntime(config, owner);
   const trustRuntime = {
@@ -97,7 +97,7 @@ function mountFooter(trustedFolder = true) {
 
 describe('idle footer trust subscription', () => {
   it('shows initial runtime distrust and skips unchanged trust events', async () => {
-    const { view, settingsStore } = mountFooter(false);
+    const { view, settingsStore } = await mountFooter(false);
     try {
       await act(async () => {});
       expect(view.lastFrame()).toContain('(untrusted)');
@@ -112,7 +112,7 @@ describe('idle footer trust subscription', () => {
   });
 
   it('updates the real warning for trust loss and gain without rerendering the owner', async () => {
-    const { view, settingsStore, getOwnerRenders } = mountFooter();
+    const { view, settingsStore, getOwnerRenders } = await mountFooter();
     try {
       await act(async () => {});
       const renders = getOwnerRenders();

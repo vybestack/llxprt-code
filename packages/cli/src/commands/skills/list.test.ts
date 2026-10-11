@@ -204,7 +204,7 @@ describe('skills list command', () => {
     it('should throw an error when listing fails', async () => {
       mockLoadCliConfig.mockRejectedValue(new Error('List failed'));
 
-      await expect(handleList()).rejects.toThrow('List failed');
+      await expect(await handleList()).rejects.toThrow('List failed');
     });
   });
 

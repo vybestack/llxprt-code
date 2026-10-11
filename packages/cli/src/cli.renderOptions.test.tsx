@@ -19,9 +19,9 @@ import { __setRenderForTesting } from './session/interactiveUI.js';
 import { LoadedSettings } from './config/settings.js';
 import { CliSessionPersistence } from './cliSessionPersistence.js';
 
-const createFakeAgent = (config: Config): Agent =>
+const createFakeAgent = async (config: Config): Promise<Agent> =>
   ({
-    workspace: createUiSessionOwner(config).workspace,
+    workspace: (await createUiSessionOwner(config)).workspace,
     dispose: vi.fn().mockResolvedValue(undefined),
     getConfig: () => config,
   }) as unknown as Agent;
@@ -129,7 +129,7 @@ describe('startInteractiveUI ink render options', () => {
 
     await startInteractiveUI(
       config,
-      createFakeAgent(config),
+      await createFakeAgent(config),
       settings,
       [],
       tempDir,
@@ -171,7 +171,7 @@ describe('startInteractiveUI ink render options', () => {
 
     await startInteractiveUI(
       config,
-      createFakeAgent(config),
+      await createFakeAgent(config),
       createLoadedSettings(),
       [],
       tempDir,

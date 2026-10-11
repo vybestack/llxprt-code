@@ -202,11 +202,11 @@ describe('useAgentStream', () => {
     setValue: vi.fn(),
   } as unknown as LoadedSettings;
 
-  const renderTestHook = (
+  const renderTestHook = async (
     initialToolCalls: TrackedToolCall[] = [],
     agentClient?: Record<string, unknown>,
   ) => {
-    const client = createFakeAgentFromMockClient(
+    const client = await createFakeAgentFromMockClient(
       agentClient ?? new MockedAgentClientClass(mockConfig),
     );
 
@@ -348,7 +348,7 @@ describe('useAgentStream', () => {
       const { stream, closeStream } = createControllableStream();
       mockSendMessageStream.mockReturnValue(stream);
 
-      const { result } = renderTestHook();
+      const { result } = await renderTestHook();
       let submission!: Promise<void>;
 
       await act(async () => {
@@ -388,9 +388,11 @@ describe('useAgentStream', () => {
       const { stream, closeStream } = createControllableStream();
       mockSendMessageStream.mockReturnValue(stream);
 
-      const { result } = renderHook(() =>
+      const { result } = renderHook(async () =>
         useAgentStream(
-          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
+          await createFakeAgentFromMockClient(
+            new MockedAgentClientClass(mockConfig),
+          ),
           [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig),
@@ -436,9 +438,11 @@ describe('useAgentStream', () => {
       const { stream, closeStream } = createControllableStream();
       mockSendMessageStream.mockReturnValue(stream);
 
-      const { result } = renderHook(() =>
+      const { result } = renderHook(async () =>
         useAgentStream(
-          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
+          await createFakeAgentFromMockClient(
+            new MockedAgentClientClass(mockConfig),
+          ),
           [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig),
@@ -477,8 +481,8 @@ describe('useAgentStream', () => {
       });
     });
 
-    it('should not do anything if escape is pressed when not responding', () => {
-      const { result } = renderTestHook();
+    it('should not do anything if escape is pressed when not responding', async () => {
+      const { result } = await renderTestHook();
 
       expect(result.current.streamingState).toBe(StreamingState.Idle);
 
@@ -507,7 +511,7 @@ describe('useAgentStream', () => {
       })();
       mockSendMessageStream.mockReturnValue(mockStream);
 
-      const { result } = renderTestHook();
+      const { result } = await renderTestHook();
       let submission!: Promise<void>;
 
       await act(async () => {
@@ -558,7 +562,7 @@ describe('useAgentStream', () => {
         } as TrackedExecutingToolCall,
       ];
 
-      const { result } = renderTestHook(toolCalls);
+      const { result } = await renderTestHook(toolCalls);
 
       // State is `Responding` because a tool is running
       expect(result.current.streamingState).toBe(StreamingState.Responding);
@@ -606,7 +610,7 @@ describe('useAgentStream', () => {
         } as TrackedWaitingToolCall,
       ];
 
-      const { result } = renderTestHook(toolCalls);
+      const { result } = await renderTestHook(toolCalls);
 
       // State is `WaitingForConfirmation` because a tool is awaiting approval
       expect(result.current.streamingState).toBe(

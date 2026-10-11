@@ -59,7 +59,9 @@ interface RuntimeFixture {
   secondaryModel: string;
   tempDir: string;
   handle: IsolatedRuntimeContextHandle;
-  sessionClient: ReturnType<typeof createProviderSessionOwner>['sessionClient'];
+  sessionClient: Awaited<
+    ReturnType<typeof createProviderSessionOwner>
+  >['sessionClient'];
 }
 
 const runtimeFixtures: RuntimeFixture[] = [];
@@ -645,11 +647,13 @@ async function bootstrapRuntimeFixture(options: {
     ...options,
     tempDir,
     handle,
-    sessionClient: createProviderSessionOwner(
-      handle.config,
-      handle.providerManager,
-      handle.settingsService,
-      handle.settingsOwner,
+    sessionClient: (
+      await createProviderSessionOwner(
+        handle.config,
+        handle.providerManager,
+        handle.settingsService,
+        handle.settingsOwner,
+      )
     ).sessionClient,
   };
   runtimeFixtures.push(fixture);

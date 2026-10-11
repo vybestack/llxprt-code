@@ -168,7 +168,7 @@ async function withLayout(
     debugMode: false,
     model: 'test-model',
   });
-  const owner = createUiSessionOwner(config);
+  const owner = await createUiSessionOwner(config);
   const rootUiRef: { current: DOMElement | null } = { current: null };
   const mainControlsRef: { current: DOMElement | null } = { current: null };
   const pendingHistoryItemRef: { current: DOMElement | null } = {

@@ -80,7 +80,7 @@ function renderInlineContent(props: InlineContentProps) {
   return rendered;
 }
 
-function createProps(): InlineContentProps {
+async function createProps(): Promise<InlineContentProps> {
   return {
     streamingState: StreamingState.Idle,
     disableLoadingPhrases: false,
@@ -104,7 +104,7 @@ function createProps(): InlineContentProps {
         debugMode: false,
         model: 'test-model',
       }),
-      createUiSessionOwner(),
+      await createUiSessionOwner(),
     ),
     showToolDescriptions: false,
     showAutoAcceptIndicator: ApprovalMode.DEFAULT,
@@ -165,14 +165,16 @@ interface ComposerOptions {
   shellModeActive?: boolean;
 }
 
-function renderComposer(
+async function renderComposer(
   options: ComposerOptions = {},
   isInputActive = true,
-): ReturnType<typeof render> {
+): Promise<ReturnType<typeof render>> {
   const settings =
-    options.vimEnabled === true ? createVimSettings() : createProps().settings;
+    options.vimEnabled === true
+      ? createVimSettings()
+      : (await createProps()).settings;
   const props = {
-    ...createProps(),
+    ...(await createProps()),
     isInputActive,
     settings,
   };
@@ -196,45 +198,47 @@ describe('InlineContent', () => {
     restoreEnv();
   });
 
-  it('does not render transient status text when no left status is visible', () => {
-    const { lastFrame } = renderInlineContent(createProps());
+  it('does not render transient status text when no left status is visible', async () => {
+    const { lastFrame } = renderInlineContent(await createProps());
 
     expect(lastFrame()).not.toMatch(/Press|⌐■_■/);
   });
 
-  it('does not add narrow-screen spacing when no status indicator is visible', () => {
-    const { lastFrame: regularFrame } = renderInlineContent(createProps());
+  it('does not add narrow-screen spacing when no status indicator is visible', async () => {
+    const { lastFrame: regularFrame } = renderInlineContent(
+      await createProps(),
+    );
     const { lastFrame: narrowFrame } = renderInlineContent({
-      ...createProps(),
+      ...(await createProps()),
       isNarrow: true,
     });
 
     expect(narrowFrame()).toBe(regularFrame());
   });
 
-  it('renders the escape prompt', () => {
-    const props = { ...createProps(), showEscapePrompt: true };
+  it('renders the escape prompt', async () => {
+    const props = { ...(await createProps()), showEscapePrompt: true };
     const { lastFrame } = renderInlineContent(props);
 
     expect(lastFrame()).toContain('Press Esc again to clear.');
   });
 
-  it('renders the Ctrl+C exit prompt', () => {
-    const props = { ...createProps(), ctrlCPressedOnce: true };
+  it('renders the Ctrl+C exit prompt', async () => {
+    const props = { ...(await createProps()), ctrlCPressedOnce: true };
     const { lastFrame } = renderInlineContent(props);
 
     expect(lastFrame()).toContain('Press Ctrl+C again to exit.');
   });
 
-  it('renders the Ctrl+D exit prompt', () => {
-    const props = { ...createProps(), ctrlDPressedOnce: true };
+  it('renders the Ctrl+D exit prompt', async () => {
+    const props = { ...(await createProps()), ctrlDPressedOnce: true };
     const { lastFrame } = renderInlineContent(props);
 
     expect(lastFrame()).toContain('Press Ctrl+D again to exit.');
   });
 
-  it('renders when the context summary is visible', () => {
-    const props = { ...createProps(), hideContextSummary: false };
+  it('renders when the context summary is visible', async () => {
+    const props = { ...(await createProps()), hideContextSummary: false };
     const { lastFrame } = renderInlineContent(props);
 
     expect(lastFrame()).toContain('context-summary-mock');
@@ -242,8 +246,8 @@ describe('InlineContent', () => {
 
   it.each(COMPOSER_MODES)(
     'renders the $mode placeholder through the composer input surface when input is active',
-    ({ composerOptions, placeholder }) => {
-      const { lastFrame } = renderComposer(composerOptions);
+    async ({ composerOptions, placeholder }) => {
+      const { lastFrame } = await renderComposer(composerOptions);
 
       expect(lastFrame()).toContain(placeholder);
     },
@@ -251,16 +255,16 @@ describe('InlineContent', () => {
 
   it.each(COMPOSER_MODES)(
     'does not render the $mode placeholder when input is inactive',
-    ({ composerOptions, placeholder }) => {
-      const { lastFrame } = renderComposer(composerOptions, false);
+    async ({ composerOptions, placeholder }) => {
+      const { lastFrame } = await renderComposer(composerOptions, false);
 
       expect(lastFrame()).not.toContain(placeholder);
     },
   );
 
-  it('renders the system-md indicator when GEMINI_SYSTEM_MD is set', () => {
+  it('renders the system-md indicator when GEMINI_SYSTEM_MD is set', async () => {
     setEnv('GEMINI_SYSTEM_MD', 'true');
-    const { lastFrame } = renderInlineContent(createProps());
+    const { lastFrame } = renderInlineContent(await createProps());
 
     expect(lastFrame()).toContain('⌐■_■');
   });

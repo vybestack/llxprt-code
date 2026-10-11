@@ -129,7 +129,7 @@ describe('startInteractiveUI', () => {
     for (const owner of startupOwners.splice(0)) await owner.dispose();
   });
   beforeEach(async () => {
-    mockAgent = createMockAgent(mockConfig);
+    mockAgent = await createMockAgent(mockConfig);
     const { __resetInteractiveUIStateForTesting } = await import(
       './session/interactiveUI.js'
     );
@@ -151,7 +151,7 @@ describe('startInteractiveUI', () => {
     model: 'test-model',
     debugMode: false,
   });
-  let mockAgent: ReturnType<typeof createMockAgent>;
+  let mockAgent: Awaited<ReturnType<typeof createMockAgent>>;
   const mockSettings = {
     merged: {
       ui: {

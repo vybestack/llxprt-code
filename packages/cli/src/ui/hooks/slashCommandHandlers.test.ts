@@ -676,7 +676,7 @@ describe('slashCommandHandlers', () => {
         directories: () => ['/tmp/project'],
         adoptSessionId: vi.fn(),
       } as never;
-      const owner = createUiSessionOwner();
+      const owner = await createUiSessionOwner();
       deps.commandContext.services.agent = createFakeAgent([], {
         workspace: owner.workspace,
         sessionClient: owner.sessionClient,

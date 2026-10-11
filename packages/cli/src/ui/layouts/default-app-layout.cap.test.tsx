@@ -206,7 +206,7 @@ async function withLayout(
     model: 'test-model',
     accessibility: { screenReader },
   });
-  const owner = createUiSessionOwner(config);
+  const owner = await createUiSessionOwner(config);
   let view: ReturnType<typeof realInk.render> | undefined;
   act(() => {
     view = realInk.render(

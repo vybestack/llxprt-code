@@ -46,7 +46,7 @@ async function failingCleanupOperation() {
   vi.spyOn(built.settingsOwner, 'dispose').mockRejectedValue(
     new Error('settings disposal failed'),
   );
-  const operation = assembleAgentActivationBootstrap(
+  const operation = await assembleAgentActivationBootstrap(
     built.config,
     built.settingsService,
     manager,

@@ -346,7 +346,7 @@ describe('providerModelPrecedenceParity: 4-level provider chain', () => {
 
   it('rejects an explicitly configured provider that was not registered', async () => {
     await expect(
-      runConfig({}, ['--provider', 'not-a-provider']),
+      await runConfig({}, ['--provider', 'not-a-provider']),
     ).rejects.toThrow(
       "Could not activate explicitly-configured provider 'not-a-provider': Provider 'not-a-provider' not found",
     );

@@ -44,7 +44,9 @@ interface RuntimeFixture {
   profileName: string;
   profile: Profile;
   handle: IsolatedRuntimeContextHandle;
-  sessionClient: ReturnType<typeof createProviderSessionOwner>['sessionClient'];
+  sessionClient: Awaited<
+    ReturnType<typeof createProviderSessionOwner>
+  >['sessionClient'];
   tempDir: string;
 }
 
@@ -229,11 +231,13 @@ async function bootstrapRuntimeFixture(options: {
     profileName: options.profileName,
     profile,
     handle,
-    sessionClient: createProviderSessionOwner(
-      handle.config,
-      handle.providerManager,
-      handle.settingsService,
-      handle.settingsOwner,
+    sessionClient: (
+      await createProviderSessionOwner(
+        handle.config,
+        handle.providerManager,
+        handle.settingsService,
+        handle.settingsOwner,
+      )
     ).sessionClient,
     tempDir,
   };

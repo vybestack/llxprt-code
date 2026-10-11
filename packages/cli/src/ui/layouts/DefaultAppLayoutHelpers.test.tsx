@@ -38,7 +38,7 @@ const config = buildSlashCommandRuntime(
     debugMode: false,
     model: 'test-model',
   }),
-  createUiSessionOwner(),
+  await createUiSessionOwner(),
 );
 
 const settings = new LoadedSettings(

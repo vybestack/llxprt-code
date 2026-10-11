@@ -84,9 +84,9 @@ describe('policiesCommand', () => {
       });
     });
 
-    it('should render the list table when the session policy is available', () => {
+    it('should render the list table when the session policy is available', async () => {
       mockContext.services.agent = {
-        ...createMockAgent(
+        ...(await createMockAgent(
           new Config({
             sessionId: 'commands',
             cwd: process.cwd(),
@@ -94,7 +94,7 @@ describe('policiesCommand', () => {
             debugMode: false,
             model: 'test',
           }),
-        ),
+        )),
         policy: makePolicy(),
       };
 
@@ -125,9 +125,9 @@ describe('policiesCommand', () => {
       });
     });
 
-    it('should render a tier-grouped table from the agent policy engine', () => {
+    it('should render a tier-grouped table from the agent policy engine', async () => {
       mockContext.services.agent = {
-        ...createMockAgent(
+        ...(await createMockAgent(
           new Config({
             sessionId: 'commands',
             cwd: process.cwd(),
@@ -135,7 +135,7 @@ describe('policiesCommand', () => {
             debugMode: false,
             model: 'test',
           }),
-        ),
+        )),
         policy: makePolicy(),
       };
 
@@ -167,9 +167,9 @@ describe('policiesCommand', () => {
       });
     });
 
-    it('should return a dialog action when the session policy is available', () => {
+    it('should return a dialog action when the session policy is available', async () => {
       mockContext.services.agent = {
-        ...createMockAgent(
+        ...(await createMockAgent(
           new Config({
             sessionId: 'commands',
             cwd: process.cwd(),
@@ -177,7 +177,7 @@ describe('policiesCommand', () => {
             debugMode: false,
             model: 'test',
           }),
-        ),
+        )),
         policy: makePolicy(),
       };
 
@@ -193,9 +193,9 @@ describe('policiesCommand', () => {
       });
     });
 
-    it('should return a dialog action when agent is available', () => {
+    it('should return a dialog action when agent is available', async () => {
       mockContext.services.agent = {
-        ...createMockAgent(
+        ...(await createMockAgent(
           new Config({
             sessionId: 'commands',
             cwd: process.cwd(),
@@ -203,7 +203,7 @@ describe('policiesCommand', () => {
             debugMode: false,
             model: 'test',
           }),
-        ),
+        )),
         policy: makePolicy(),
       };
 

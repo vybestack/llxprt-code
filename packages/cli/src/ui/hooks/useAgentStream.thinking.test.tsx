@@ -277,7 +277,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
     setValue: vi.fn(),
   } as unknown as LoadedSettings;
 
-  const renderTestHook = (
+  const renderTestHook = async (
     initialToolCalls: TrackedToolCall[] = [],
     agentClient?: Parameters<typeof createFakeAgentFromMockClient>[0],
   ) => {
@@ -297,7 +297,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       vi.fn(),
     ]);
 
-    const client = createFakeAgentFromMockClient(
+    const client = await createFakeAgentFromMockClient(
       agentClient ?? new MockedAgentClientClass(mockConfig),
     );
 
@@ -388,7 +388,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       })(),
     );
 
-    const { result } = renderTestHook();
+    const { result } = await renderTestHook();
 
     act(() => {
       void result.current.submitQuery('test query');
@@ -434,7 +434,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       })(),
     );
 
-    const { result } = renderTestHook();
+    const { result } = await renderTestHook();
 
     await act(async () => {
       await result.current.submitQuery('test query');
@@ -489,7 +489,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         })(),
       );
 
-      const { result } = renderTestHook();
+      const { result } = await renderTestHook();
 
       act(() => {
         void result.current.submitQuery('test query');
@@ -544,7 +544,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       })(),
     );
 
-    const { result } = renderTestHook();
+    const { result } = await renderTestHook();
 
     await act(async () => {
       await result.current.submitQuery('test query');
@@ -599,7 +599,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       })(),
     );
 
-    const { result } = renderTestHook();
+    const { result } = await renderTestHook();
 
     await act(async () => {
       await result.current.submitQuery('test query');
@@ -656,9 +656,11 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       })(),
     );
 
-    const { result } = renderHook(() =>
+    const { result } = renderHook(async () =>
       useAgentStream(
-        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
+        await createFakeAgentFromMockClient(
+          new MockedAgentClientClass(mockConfig),
+        ),
         [],
         mockAddItem,
         createStreamRuntimeForTest(mockConfig),
@@ -713,7 +715,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         })(),
       );
 
-      const { result } = renderTestHook();
+      const { result } = await renderTestHook();
 
       act(() => {
         void result.current.submitQuery('first prompt');

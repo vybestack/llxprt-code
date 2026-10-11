@@ -112,8 +112,8 @@ describe('real startup activation owner cleanup', () => {
     const assemble = assembleAgentActivationBootstrap;
     restore.push(
       spyOn(agents, 'assembleAgentActivationBootstrap').mockImplementation(
-        (...args) => {
-          const operation = assemble(...args);
+        async (...args) => {
+          const operation = await assemble(...args);
           const observation: ObservedBootstrap = {
             config: args[0],
             settingsService: args[1],
@@ -215,7 +215,7 @@ describe('real startup activation owner cleanup', () => {
   }
 
   async function expectClosedAtExit(code: number): Promise<void> {
-    await expect(main()).rejects.toMatchObject({ code });
+    await expect(await main()).rejects.toMatchObject({ code });
     expect(observed.length).toBeGreaterThan(0);
     if (probeReceipts) expect(exitReceiptChecks.length).toBeGreaterThan(0);
     for (const check of exitReceiptChecks) {
@@ -255,7 +255,7 @@ describe('real startup activation owner cleanup', () => {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
     await expect(
-      loadCliConfig(
+      await loadCliConfig(
         settings.merged,
         [],
         new ExtensionEnablementManager(directory, []),
@@ -363,7 +363,7 @@ describe('real startup activation owner cleanup', () => {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
     await expect(
-      loadCliConfig(
+      await loadCliConfig(
         settings.merged,
         [],
         new ExtensionEnablementManager(directory, []),
@@ -384,7 +384,7 @@ describe('real startup activation owner cleanup', () => {
         new Error('sandbox spawn failed'),
       ),
     );
-    await expect(main()).rejects.toThrow('sandbox spawn failed');
+    await expect(await main()).rejects.toThrow('sandbox spawn failed');
     expect(observed).toHaveLength(2);
     for (const owner of observed) {
       expectNoForeground(owner.config);
@@ -535,7 +535,7 @@ describe('real startup activation owner cleanup', () => {
           throw new StartupExit(code);
         }),
       );
-      await expect(main()).rejects.toMatchObject({
+      await expect(await main()).rejects.toMatchObject({
         code: caseName === 'delete-failure' ? 1 : 0,
       });
       const expectedOutput: Record<string, string> = {
@@ -586,7 +586,7 @@ describe('real startup activation owner cleanup', () => {
           ? ['--list-sessions']
           : ['--delete-session', '1']),
       );
-      await expect(main()).rejects.toMatchObject({
+      await expect(await main()).rejects.toMatchObject({
         code: action === 'list' ? 0 : 1,
       });
       expect(output.join('')).toContain(
@@ -627,7 +627,7 @@ describe('real startup activation owner cleanup', () => {
           throw new StartupExit(code);
         }),
       );
-      await expect(main()).rejects.toMatchObject({ code: 0 });
+      await expect(await main()).rejects.toMatchObject({ code: 0 });
       expect(output.join('')).toContain(
         action === 'list'
           ? 'Sessions for this project (1):'
@@ -692,7 +692,7 @@ describe('real startup activation owner cleanup', () => {
       }),
     );
     try {
-      await expect(main()).rejects.toMatchObject({ code: 0 });
+      await expect(await main()).rejects.toMatchObject({ code: 0 });
       const events = [];
       for await (const event of sibling.stream('sibling-turn')) {
         events.push(event);
@@ -732,7 +732,7 @@ describe('real startup activation owner cleanup', () => {
       }),
     );
     try {
-      await expect(main()).rejects.toMatchObject({ code: 0 });
+      await expect(await main()).rejects.toMatchObject({ code: 0 });
       await siblingManager.setActiveProvider('fake');
       expect(siblingManager.getActiveProviderName()).toBe('fake');
       expect(sibling.getSessionId()).toBe('standalone-sibling');

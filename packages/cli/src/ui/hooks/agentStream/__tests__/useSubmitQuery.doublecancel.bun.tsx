@@ -76,7 +76,7 @@ void vi.mock('../streamUtils.js', () => ({
   processSlashCommandResult: vi.fn(),
 }));
 
-function createMockAgent() {
+async function createMockAgent() {
   return createFakeAgentFromMockClient({
     getCurrentSequenceModel: () => 'test-model',
   });
@@ -147,10 +147,10 @@ interface RenderSubmitQueryOptions {
   wrapper?: React.ComponentType<{ children: React.ReactNode }>;
 }
 
-function createUseSubmitQueryDeps(
+async function createUseSubmitQueryDeps(
   deps: DoubleCancelDeps,
   overrides: SubmitQueryOverrides = {},
-): (streamingState: StreamingState) => UseSubmitQueryDeps {
+): Promise<(streamingState: StreamingState) => UseSubmitQueryDeps> {
   const queuedSubmissionsRef = overrides.queuedSubmissionsRef ?? {
     current: [],
   };
@@ -160,7 +160,7 @@ function createUseSubmitQueryDeps(
     runtime:
       overrides.runtime ??
       createStreamRuntimeForTest({}, createMockOverrides()),
-    agent: overrides.agent ?? createMockAgent(),
+    agent: overrides.agent ?? (await createMockAgent()),
     addItem: overrides.addItem ?? vi.fn().mockReturnValue(1),
     removeItems: vi.fn(),
     settings: createLoadedSettings(),
@@ -203,12 +203,12 @@ function createUseSubmitQueryDeps(
   return (streamingState) => ({ ...stableDeps, streamingState });
 }
 
-function renderUseSubmitQuery(
+async function renderUseSubmitQuery(
   deps: DoubleCancelDeps,
   overrides: SubmitQueryOverrides = {},
   options: RenderSubmitQueryOptions = {},
 ) {
-  const getDeps = createUseSubmitQueryDeps(deps, overrides);
+  const getDeps = await createUseSubmitQueryDeps(deps, overrides);
   return renderHook(
     ({ streamingState }: { streamingState: StreamingState }) =>
       useSubmitQuery(getDeps(streamingState)),
@@ -221,14 +221,14 @@ function renderUseSubmitQuery(
   );
 }
 
-function renderUseSubmitQueryWithCancellation(
+async function renderUseSubmitQueryWithCancellation(
   deps: DoubleCancelDeps,
   overrides: SubmitQueryOverrides,
   options: RenderSubmitQueryOptions,
 ) {
   const turnCancelledRef = overrides.turnCancelledRef ?? { current: false };
   const drainSuppressedRef = overrides.drainSuppressedRef ?? { current: false };
-  const getDeps = createUseSubmitQueryDeps(deps, {
+  const getDeps = await createUseSubmitQueryDeps(deps, {
     ...overrides,
     turnCancelledRef,
     drainSuppressedRef,
@@ -284,7 +284,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       .spyOn(recordingIntegration, 'flushAtTurnBoundary')
       .mockResolvedValue(undefined);
     const turnCancelledRef = { current: false };
-    const { result, rerender } = renderUseSubmitQueryWithCancellation(
+    const { result, rerender } = await renderUseSubmitQueryWithCancellation(
       deps,
       {
         turnCancelledRef,
@@ -337,7 +337,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const deps = createDeps({
       runStreamRef: { current: vi.fn(() => turnDeferred.promise) },
     });
-    const { result, rerender } = renderUseSubmitQueryWithCancellation(
+    const { result, rerender } = await renderUseSubmitQueryWithCancellation(
       deps,
       { turnCancelledRef: { current: false } },
       { wrapper: KeypressTestWrapper },
@@ -366,10 +366,10 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     expect(handleSubmissionErrorMock).not.toHaveBeenCalled();
   });
 
-  it('keeps submission callbacks and event subscriptions stable across rerenders', () => {
+  it('keeps submission callbacks and event subscriptions stable across rerenders', async () => {
     const unsubscribeMcp = vi.fn();
     const onMcpClientUpdate = vi.fn(() => unsubscribeMcp);
-    const agent = createMockAgent();
+    const agent = await createMockAgent();
     const subscribeNotifications = vi.spyOn(
       agent.tasks,
       'subscribeNotifications',
@@ -381,7 +381,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       },
     );
     const deps = createDeps();
-    const { result, rerender, unmount } = renderUseSubmitQuery(deps, {
+    const { result, rerender, unmount } = await renderUseSubmitQuery(deps, {
       runtime,
       agent,
     });
@@ -408,7 +408,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const submitQueryRef: React.MutableRefObject<SubmissionExecutor | null> = {
       current: null,
     };
-    const rendered = renderUseSubmitQuery(
+    const rendered = await renderUseSubmitQuery(
       createDeps(),
       {
         queuedSubmissionsRef,
@@ -458,7 +458,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       current: null,
     };
     const processedQueries: string[] = [];
-    const rendered = renderUseSubmitQuery(
+    const rendered = await renderUseSubmitQuery(
       createDeps(),
       {
         queuedSubmissionsRef,
@@ -519,7 +519,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
   it('rejects the public submission when query preparation fails', async () => {
     const preparationError = new Error('query preparation failed');
     prepareQueryForAgentMock.mockRejectedValueOnce(preparationError);
-    const { result, unmount } = renderUseSubmitQuery(createDeps());
+    const { result, unmount } = await renderUseSubmitQuery(createDeps());
 
     try {
       await act(async () => {
@@ -552,7 +552,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const queueOperations = createQueueOperations(queuedSubmissionsRef);
     const addItem = vi.fn().mockReturnValue(1);
     const drainReserved = { current: false };
-    const { result, unmount } = renderUseSubmitQuery(deps, {
+    const { result, unmount } = await renderUseSubmitQuery(deps, {
       runtime,
       queuedSubmissionsRef,
       queueOperations,
@@ -590,7 +590,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const queueOperations = createQueueOperations(queuedSubmissionsRef);
     const drainReserved = { current: false };
     let releases = 0;
-    const { unmount } = renderUseSubmitQuery(deps, {
+    const { unmount } = await renderUseSubmitQuery(deps, {
       queuedSubmissionsRef,
       queueOperations,
       tryReserveDrain: () => reserveDrain(drainReserved),
@@ -631,7 +631,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const releaseDrain = vi.fn();
     const turnCancelledRef = { current: false };
 
-    const { result, rerender } = renderUseSubmitQueryWithCancellation(
+    const { result, rerender } = await renderUseSubmitQueryWithCancellation(
       deps,
       {
         queuedSubmissionsRef,
@@ -687,7 +687,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
       },
     });
 
-    const { result } = renderUseSubmitQuery(deps);
+    const { result } = await renderUseSubmitQuery(deps);
 
     let turnPromise!: Promise<void>;
     await act(async () => {
@@ -735,7 +735,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     const releaseDrain = vi.fn();
     const turnCancelledRef = { current: false };
 
-    const { result, rerender } = renderUseSubmitQueryWithCancellation(
+    const { result, rerender } = await renderUseSubmitQueryWithCancellation(
       deps,
       {
         queuedSubmissionsRef,
@@ -850,7 +850,7 @@ describe('useSubmitQuery — double-cancel guard (issue #2259)', () => {
     });
     const queueOperations = createQueueOperations(queuedSubmissionsRef);
 
-    const { result, rerender } = renderUseSubmitQuery(deps, {
+    const { result, rerender } = await renderUseSubmitQuery(deps, {
       queuedSubmissionsRef,
       queueOperations,
       tryReserveDrain,

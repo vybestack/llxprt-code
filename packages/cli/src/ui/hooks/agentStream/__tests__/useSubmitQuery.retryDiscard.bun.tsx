@@ -52,7 +52,7 @@ void vi.mock('../../../contexts/SessionContext.js', () => ({
   }),
 }));
 
-function createMockAgent() {
+async function createMockAgent() {
   return createFakeAgentFromMockClient({
     getCurrentSequenceModel: () => 'test-model',
   });
@@ -202,7 +202,7 @@ function createMockSetState(
   };
 }
 
-function buildUseSubmitQueryDeps(
+async function buildUseSubmitQueryDeps(
   deps: RetryDiscardDeps,
   overrides: {
     runtime?: StreamRuntime;
@@ -212,7 +212,7 @@ function buildUseSubmitQueryDeps(
      */
     removeItems?: (ids: readonly number[]) => void;
   } = {},
-): (streamingState: StreamingState) => UseSubmitQueryDeps {
+): Promise<(streamingState: StreamingState) => UseSubmitQueryDeps> {
   const queueOperations = createQueueOperations(deps.queuedSubmissionsRef);
   const flushPendingHistoryItem = (timestamp: number) => {
     deps.flushCalls.push(timestamp);
@@ -225,7 +225,7 @@ function buildUseSubmitQueryDeps(
     runtime:
       overrides.runtime ??
       createStreamRuntimeForTest({}, createMockOverrides()),
-    agent: createMockAgent(),
+    agent: await createMockAgent(),
     addItem: deps.addItemRecorder.addItem,
     removeItems,
     settings: createLoadedSettings(),
@@ -268,7 +268,7 @@ function buildUseSubmitQueryDeps(
   return (streamingState) => ({ ...stableDeps, streamingState });
 }
 
-function renderUseSubmitQuery(
+async function renderUseSubmitQuery(
   deps: RetryDiscardDeps,
   overrides: {
     runtime?: StreamRuntime;
@@ -276,7 +276,7 @@ function renderUseSubmitQuery(
     removeItems?: (ids: readonly number[]) => void;
   } = {},
 ) {
-  const getDeps = buildUseSubmitQueryDeps(deps, overrides);
+  const getDeps = await buildUseSubmitQueryDeps(deps, overrides);
   return renderHook(
     ({ streamingState }: { streamingState: StreamingState }) =>
       useSubmitQuery(getDeps(streamingState)),
@@ -363,7 +363,7 @@ const THINKING_EVENT: AgentEvent = {
 describe('useSubmitQuery — discard-and-restart (issue #3048, REQ-3048-008)', () => {
   it('renders only the successful attempt text after a retry', async () => {
     const deps = createRetryDiscardDeps();
-    const { result, rerender } = renderUseSubmitQuery(deps);
+    const { result, rerender } = await renderUseSubmitQuery(deps);
 
     const signal = await startActiveTurn(result, rerender, deps);
 
@@ -380,7 +380,7 @@ describe('useSubmitQuery — discard-and-restart (issue #3048, REQ-3048-008)', (
     readonly abandonedCommits: ReadonlyArray<AddItemRecorder['calls'][number]>;
   }> => {
     const deps = createRetryDiscardDeps();
-    const { result, rerender } = renderUseSubmitQuery(deps);
+    const { result, rerender } = await renderUseSubmitQuery(deps);
 
     const signal = await startActiveTurn(result, rerender, deps);
 
@@ -404,7 +404,7 @@ describe('useSubmitQuery — discard-and-restart (issue #3048, REQ-3048-008)', (
 
   it('resets the pending response buffer', async () => {
     const deps = createRetryDiscardDeps();
-    const { result, rerender } = renderUseSubmitQuery(deps);
+    const { result, rerender } = await renderUseSubmitQuery(deps);
 
     const signal = await startActiveTurn(result, rerender, deps);
 
@@ -419,7 +419,7 @@ describe('useSubmitQuery — discard-and-restart (issue #3048, REQ-3048-008)', (
 
   it('clears thinking state produced by the abandoned attempt', async () => {
     const deps = createRetryDiscardDeps();
-    const { result, rerender } = renderUseSubmitQuery(deps);
+    const { result, rerender } = await renderUseSubmitQuery(deps);
 
     const signal = await startActiveTurn(result, rerender, deps);
 
@@ -441,7 +441,7 @@ describe('useSubmitQuery — discard-and-restart (issue #3048, REQ-3048-008)', (
     const deps = createRetryDiscardDeps({
       pendingHistoryItemRef: { current: toolGroupItem },
     });
-    const { result, rerender } = renderUseSubmitQuery(deps);
+    const { result, rerender } = await renderUseSubmitQuery(deps);
 
     const signal = await startActiveTurn(result, rerender, deps);
 
@@ -452,7 +452,7 @@ describe('useSubmitQuery — discard-and-restart (issue #3048, REQ-3048-008)', (
 
   it('does not release the turn or clear the submission queue', async () => {
     const deps = createRetryDiscardDeps();
-    const { result, rerender } = renderUseSubmitQuery(deps);
+    const { result, rerender } = await renderUseSubmitQuery(deps);
 
     const signal = await startActiveTurn(result, rerender, deps);
     const respondingCallsBefore = [...deps.setIsRespondingCalls];
@@ -465,7 +465,7 @@ describe('useSubmitQuery — discard-and-restart (issue #3048, REQ-3048-008)', (
 
   it('returns the dispatcher buffer as an empty string for retry', async () => {
     const deps = createRetryDiscardDeps();
-    const { result, rerender } = renderUseSubmitQuery(deps);
+    const { result, rerender } = await renderUseSubmitQuery(deps);
 
     const signal = await startActiveTurn(result, rerender, deps);
 
@@ -482,7 +482,7 @@ describe('useSubmitQuery — discard-and-restart (issue #3048, REQ-3048-008)', (
 describe('useSubmitQuery — committed segment retraction (issue #3048, REQ-3048-009)', () => {
   it('retracts stable segments committed by the abandoned attempt', async () => {
     const deps = createRetryDiscardDeps();
-    const { result, rerender } = renderUseSubmitQuery(deps);
+    const { result, rerender } = await renderUseSubmitQuery(deps);
 
     const signal = await startActiveTurn(result, rerender, deps);
 
@@ -510,7 +510,7 @@ describe('useSubmitQuery — committed segment retraction (issue #3048, REQ-3048
 
   it('preserves items from before the assistant message', async () => {
     const deps = createRetryDiscardDeps();
-    const { result, rerender } = renderUseSubmitQuery(deps);
+    const { result, rerender } = await renderUseSubmitQuery(deps);
 
     const signal = await startActiveTurn(result, rerender, deps);
 
@@ -535,7 +535,7 @@ describe('useSubmitQuery — committed segment retraction (issue #3048, REQ-3048
 
   it('drains nothing on a second retry', async () => {
     const deps = createRetryDiscardDeps();
-    const { result, rerender } = renderUseSubmitQuery(deps);
+    const { result, rerender } = await renderUseSubmitQuery(deps);
 
     const signal = await startActiveTurn(result, rerender, deps);
 
@@ -552,7 +552,7 @@ describe('useSubmitQuery — committed segment retraction (issue #3048, REQ-3048
 
   it('fails fast without losing ledger ids when retraction is unwired', async () => {
     const deps = createRetryDiscardDeps();
-    const { result, rerender } = renderUseSubmitQuery(deps, {
+    const { result, rerender } = await renderUseSubmitQuery(deps, {
       removeItems: undefined,
     });
 
@@ -667,7 +667,7 @@ describe('useSubmitQuery — committed segment retraction (issue #3048, REQ-3048
   describe('useSubmitQuery — committed segment ledger lifecycle across turns (issue #3048 review)', () => {
     it('preserves a completed turn history when a later turn retries before content', async () => {
       const deps = createRetryDiscardDeps();
-      const { result, rerender } = renderUseSubmitQuery(deps);
+      const { result, rerender } = await renderUseSubmitQuery(deps);
 
       // Turn A: commits a stable paragraph segment, then completes.
       await runTurnToCompletion(result, rerender, deps, [

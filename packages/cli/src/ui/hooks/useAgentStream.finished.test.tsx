@@ -219,9 +219,11 @@ describe('useAgentStream', () => {
       onAuthError = () => {},
     } = options;
 
-    return renderHook(() =>
+    return renderHook(async () =>
       useAgentStream(
-        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
+        await createFakeAgentFromMockClient(
+          new MockedAgentClientClass(mockConfig),
+        ),
         [],
         mockAddItem,
         createStreamRuntimeForTest(mockConfig, {
@@ -262,9 +264,11 @@ describe('useAgentStream', () => {
         })(),
       );
 
-      const { result } = renderHook(() =>
+      const { result } = renderHook(async () =>
         useAgentStream(
-          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
+          await createFakeAgentFromMockClient(
+            new MockedAgentClientClass(mockConfig),
+          ),
           [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig, {
@@ -462,9 +466,11 @@ describe('useAgentStream', () => {
         })(),
       );
 
-      const { result } = renderHook(() =>
+      const { result } = renderHook(async () =>
         useAgentStream(
-          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
+          await createFakeAgentFromMockClient(
+            new MockedAgentClientClass(mockConfig),
+          ),
           [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig, {
@@ -696,9 +702,11 @@ describe('useAgentStream', () => {
       ];
     });
 
-    const { result } = renderHook(() =>
+    const { result } = renderHook(async () =>
       useAgentStream(
-        createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
+        await createFakeAgentFromMockClient(
+          new MockedAgentClientClass(mockConfig),
+        ),
         [],
         mockAddItem,
         createStreamRuntimeForTest(mockConfig, {

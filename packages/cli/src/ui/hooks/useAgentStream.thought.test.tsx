@@ -224,9 +224,11 @@ describe('useAgentStream', () => {
         })(),
       );
 
-      const { result } = renderHook(() =>
+      const { result } = renderHook(async () =>
         useAgentStream(
-          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
+          await createFakeAgentFromMockClient(
+            new MockedAgentClientClass(mockConfig),
+          ),
           [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig),
@@ -307,9 +309,11 @@ describe('useAgentStream', () => {
         vi.fn(),
       ]);
 
-      const { result, rerender } = renderHook(() =>
+      const { result, rerender } = renderHook(async () =>
         useAgentStream(
-          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
+          await createFakeAgentFromMockClient(
+            new MockedAgentClientClass(mockConfig),
+          ),
           [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig),
@@ -396,9 +400,11 @@ describe('useAgentStream', () => {
         vi.fn(),
       ]);
 
-      const { result } = renderHook(() =>
+      const { result } = renderHook(async () =>
         useAgentStream(
-          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
+          await createFakeAgentFromMockClient(
+            new MockedAgentClientClass(mockConfig),
+          ),
           [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig),
@@ -444,9 +450,11 @@ describe('useAgentStream', () => {
         })(),
       );
 
-      const { result } = renderHook(() =>
+      const { result } = renderHook(async () =>
         useAgentStream(
-          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
+          await createFakeAgentFromMockClient(
+            new MockedAgentClientClass(mockConfig),
+          ),
           [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig),
@@ -500,9 +508,11 @@ describe('useAgentStream', () => {
         })(),
       );
 
-      const { result } = renderHook(() =>
+      const { result } = renderHook(async () =>
         useAgentStream(
-          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
+          await createFakeAgentFromMockClient(
+            new MockedAgentClientClass(mockConfig),
+          ),
           [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig),

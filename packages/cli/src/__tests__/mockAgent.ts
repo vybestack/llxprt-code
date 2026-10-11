@@ -18,8 +18,8 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
  * ongoing Agent-prop migration (#1595) from turning future contract tweaks into
  * multi-file copy edits.
  */
-export function createMockAgent(config: Config): Agent {
-  const owner = createUiSessionOwner(
+export async function createMockAgent(config: Config): Promise<Agent> {
+  const owner = await createUiSessionOwner(
     config instanceof Config ? config : undefined,
   );
   return {

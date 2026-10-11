@@ -214,7 +214,7 @@ function bindActivationWorkspace(
   }
 }
 
-export function assembleAgentActivationBootstrap(
+export async function assembleAgentActivationBootstrap(
   config: Config,
   settings: SettingsService,
   manager: RuntimeProviderManager,
@@ -233,7 +233,7 @@ export function assembleAgentActivationBootstrap(
   providerFileLifecycle?: ProviderFileLifecycle,
   messageBus?: ConstructorParameters<typeof SessionClientOwner>[11],
   memoryOwnership: 'borrowed' | 'transferred' = 'borrowed',
-): AgentActivationOperation {
+): Promise<AgentActivationOperation> {
   const {
     ownedTrust,
     workspaceTrust,
@@ -254,7 +254,7 @@ export function assembleAgentActivationBootstrap(
     settings,
     suppliedSettingsOwner,
   );
-  const sessionClient = createActivationClient(
+  const sessionClient = await createActivationClient(
     config,
     settings,
     manager,
@@ -458,7 +458,7 @@ function resolveActivationTrust(
   return { ownedTrust, workspaceTrust };
 }
 
-function createActivationClient(
+async function createActivationClient(
   config: Config,
   settings: SettingsService,
   manager: RuntimeProviderManager,
@@ -476,12 +476,12 @@ function createActivationClient(
   oauth: OAuthManager | null,
   workspaceDefinitions: WorkspaceDefinitionOwner,
   workspaceMemory: WorkspaceMemoryOwner,
-): SessionClientOwner {
+): Promise<SessionClientOwner> {
   const factories = configureProviderRuntimeFactories(config, manager, {
     tokenizerFactory,
     contentGeneratorFactory,
   });
-  const client = SessionClientOwner.createWithBackgroundRollback(
+  const client = await SessionClientOwner.create(
     config,
     assembleTaskSchemaPolicy(settings),
     manager,
@@ -495,21 +495,33 @@ function createActivationClient(
     agentClient,
     messageBus,
   );
-  assembleSessionImages(
-    client,
-    config.getTargetDir(),
-    manager,
-    oauth ?? undefined,
-    settings,
-  );
-  bindActivationCapabilities(
-    client,
-    providerFileLifecycle,
-    oauth,
-    workspaceDefinitions,
-    workspaceMemory,
-    mcpRuntime,
-  );
+  try {
+    assembleSessionImages(
+      client,
+      config.getTargetDir(),
+      manager,
+      oauth ?? undefined,
+      settings,
+    );
+    bindActivationCapabilities(
+      client,
+      providerFileLifecycle,
+      oauth,
+      workspaceDefinitions,
+      workspaceMemory,
+      mcpRuntime,
+    );
+  } catch (error) {
+    try {
+      await client.dispose();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        'Activation client binding cleanup failed',
+      );
+    }
+    throw error;
+  }
   return client;
 }
 

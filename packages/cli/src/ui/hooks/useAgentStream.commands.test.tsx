@@ -196,11 +196,11 @@ describe('useAgentStream', () => {
     setValue: vi.fn(),
   } as unknown as LoadedSettings;
 
-  const renderTestHook = (
+  const renderTestHook = async (
     initialToolCalls: TrackedToolCall[] = [],
     agentClient?: Parameters<typeof createFakeAgentFromMockClient>[0],
   ) => {
-    const client = createFakeAgentFromMockClient(
+    const client = await createFakeAgentFromMockClient(
       agentClient ?? new MockedAgentClientClass(mockConfig),
     );
 
@@ -307,7 +307,7 @@ describe('useAgentStream', () => {
       };
       mockHandleSlashCommand.mockResolvedValue(clientToolRequest);
 
-      const { result } = renderTestHook();
+      const { result } = await renderTestHook();
 
       await act(async () => {
         await result.current.submitQuery('/memory add "test fact"');
@@ -334,7 +334,7 @@ describe('useAgentStream', () => {
       };
       mockHandleSlashCommand.mockResolvedValue(uiOnlyCommandResult);
 
-      const { result } = renderTestHook();
+      const { result } = await renderTestHook();
 
       await act(async () => {
         await result.current.submitQuery('/help');
@@ -355,7 +355,7 @@ describe('useAgentStream', () => {
       mockHandleSlashCommand.mockResolvedValue(customCommandResult);
 
       const { result, mockSendMessageStream: localMockSendMessageStream } =
-        renderTestHook();
+        await renderTestHook();
 
       await act(async () => {
         await result.current.submitQuery('/my-custom-command');
@@ -390,7 +390,7 @@ describe('useAgentStream', () => {
       mockHandleSlashCommand.mockResolvedValue(emptyPromptResult);
 
       const { result, mockSendMessageStream: localMockSendMessageStream } =
-        renderTestHook();
+        await renderTestHook();
 
       await act(async () => {
         await result.current.submitQuery('/emptycmd');
@@ -408,7 +408,7 @@ describe('useAgentStream', () => {
 
     it('should not call handleSlashCommand for line comments', async () => {
       const { result, mockSendMessageStream: localMockSendMessageStream } =
-        renderTestHook();
+        await renderTestHook();
 
       await act(async () => {
         await result.current.submitQuery('// This is a line comment');
@@ -426,7 +426,7 @@ describe('useAgentStream', () => {
 
     it('should not call handleSlashCommand for block comments', async () => {
       const { result, mockSendMessageStream: localMockSendMessageStream } =
-        renderTestHook();
+        await renderTestHook();
 
       await act(async () => {
         await result.current.submitQuery('/* This is a block comment */');
@@ -443,9 +443,11 @@ describe('useAgentStream', () => {
     });
 
     it('should not call handleSlashCommand is shell mode is active', async () => {
-      const { result } = renderHook(() =>
+      const { result } = renderHook(async () =>
         useAgentStream(
-          createFakeAgentFromMockClient(new MockedAgentClientClass(mockConfig)),
+          await createFakeAgentFromMockClient(
+            new MockedAgentClientClass(mockConfig),
+          ),
           [],
           mockAddItem,
           createStreamRuntimeForTest(mockConfig),
@@ -490,9 +492,11 @@ describe('useAgentStream', () => {
         getModel: vi.fn(() => 'gemini-2.5-pro'),
       } as unknown as Config;
 
-      const { result } = renderHook(() =>
+      const { result } = renderHook(async () =>
         useAgentStream(
-          createFakeAgentFromMockClient(new MockedAgentClientClass(testConfig)),
+          await createFakeAgentFromMockClient(
+            new MockedAgentClientClass(testConfig),
+          ),
           [],
           mockAddItem,
           createStreamRuntimeForTest(testConfig),

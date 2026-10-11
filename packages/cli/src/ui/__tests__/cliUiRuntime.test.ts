@@ -38,23 +38,29 @@ function createProxySource(
 }
 
 describe('buildSlashCommandRuntime', () => {
-  it('breaks identity: the adapter is not the same object as the source', () => {
+  it('breaks identity: the adapter is not the same object as the source', async () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntime(source, createUiSessionOwner());
+    const adapter = buildSlashCommandRuntime(
+      source,
+      await createUiSessionOwner(),
+    );
 
     expect(adapter).not.toBe(source);
   });
 
-  it('produces a plain object (not a Config subclass instance)', () => {
+  it('produces a plain object (not a Config subclass instance)', async () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntime(source, createUiSessionOwner());
+    const adapter = buildSlashCommandRuntime(
+      source,
+      await createUiSessionOwner(),
+    );
 
     expect(Object.getPrototypeOf(adapter)).toBe(Object.prototype);
   });
 
-  it('delegates method calls through to the source across capability slices', () => {
+  it('delegates method calls through to the source across capability slices', async () => {
     const source = createProxySource();
-    const owner = createUiSessionOwner();
+    const owner = await createUiSessionOwner();
     const adapter = buildSlashCommandRuntime(source, owner);
 
     expect((adapter.getSessionId as () => string)()).toBe(
@@ -82,7 +88,7 @@ describe('buildSlashCommandRuntime', () => {
       debugMode: false,
       model: 'test',
     });
-    const owner = createUiSessionOwner(config);
+    const owner = await createUiSessionOwner(config);
     const adapter = buildSlashCommandRuntime(config, owner);
     const logger = new Logger(adapter.getSessionId(), adapter.projectTempDir);
     try {
@@ -96,9 +102,12 @@ describe('buildSlashCommandRuntime', () => {
     expect('storage' in adapter).toBe(false);
   });
 
-  it('preserves the extensionEnablementManager property reference', () => {
+  it('preserves the extensionEnablementManager property reference', async () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntime(source, createUiSessionOwner());
+    const adapter = buildSlashCommandRuntime(
+      source,
+      await createUiSessionOwner(),
+    );
 
     expect(
       (adapter as unknown as Record<string, unknown>)
@@ -106,27 +115,33 @@ describe('buildSlashCommandRuntime', () => {
     ).toStrictEqual({ id: 'mock-eem' });
   });
 
-  it('does not expose a client factory from workspace capabilities', () => {
+  it('does not expose a client factory from workspace capabilities', async () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntime(source, createUiSessionOwner());
+    const adapter = buildSlashCommandRuntime(
+      source,
+      await createUiSessionOwner(),
+    );
 
     expect('getAgentClientFactory' in adapter).toBe(false);
   });
 });
 
 describe('buildSlashCommandRuntime image authority', () => {
-  it('does not publish executable image capability on the flattened configuration runtime', () => {
+  it('does not publish executable image capability on the flattened configuration runtime', async () => {
     const source = createProxySource();
-    const adapter = buildSlashCommandRuntime(source, createUiSessionOwner());
+    const adapter = buildSlashCommandRuntime(
+      source,
+      await createUiSessionOwner(),
+    );
     expect('getRunImageOperation' in adapter).toBe(false);
     expect('imageBackendResolver' in adapter).toBe(false);
   });
 });
 
 describe('buildUiRuntimeFromSource', () => {
-  it('subscribes to the retained MCP facade and does not listen to the application singleton', () => {
+  it('subscribes to the retained MCP facade and does not listen to the application singleton', async () => {
     const source = createProxySource();
-    const owner = createUiSessionOwner();
+    const owner = await createUiSessionOwner();
     const listeners = new Set<() => void>();
     owner.mcp.subscribeStatus = (listener) => {
       listeners.add(listener);
