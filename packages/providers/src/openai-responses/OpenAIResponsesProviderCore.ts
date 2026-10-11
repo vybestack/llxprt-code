@@ -294,10 +294,18 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       );
       const token = Object.freeze({});
       this.preparedPromptEnvelopes.set(token, prepared);
-      return diskTextProjection(prepared, token, async () => {
-        if (!this.preparedPromptEnvelopes.delete(token)) return;
-        await prepared.mediaRequest.release();
-      });
+      try {
+        return diskTextProjection(prepared, token, async () => {
+          if (!this.preparedPromptEnvelopes.delete(token)) return;
+          await prepared.mediaRequest.release();
+        });
+      } catch (error) {
+        this.preparedPromptEnvelopes.delete(token);
+        return finishMediaRequest(prepared.mediaRequest, {
+          status: 'failed',
+          error,
+        });
+      }
     }
     const requestContents = normalized.requestContents;
     let prepared:

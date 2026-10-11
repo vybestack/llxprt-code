@@ -1,10 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { readFileSync } from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type {
   PromptEnvelopeAccountingProjection,
   PromptEnvelopeEstimationProjection,
   PromptEnvelopeProjection,
+  UnsupportedMediaEntry,
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
@@ -281,6 +283,19 @@ function accountingOf(
   };
 }
 
+/** The ledger holds one small line per placeholder-replaced media block. */
+function unsupportedMediaOf(
+  prompt: ResponsesSourcePrompt,
+): readonly UnsupportedMediaEntry[] {
+  const ledger = readFileSync(prompt.unsupportedMediaSource.path, 'utf8');
+  return ledger === ''
+    ? []
+    : ledger
+        .trimEnd()
+        .split('\n')
+        .map((line) => JSON.parse(line) as UnsupportedMediaEntry);
+}
+
 export function diskTextProjection(
   prepared: PreparedResponsesRequestContext,
   token: object,
@@ -293,7 +308,7 @@ export function diskTextProjection(
     protocol: prompt.protocol,
     method: prompt.method,
     projectionRevision: prompt.projectionRevision,
-    unsupportedMedia: [],
+    unsupportedMedia: unsupportedMediaOf(prompt),
     transportToken: token,
     ...estimationProjectionOf(prompt),
     ...(prompt.accounting === undefined
