@@ -551,7 +551,7 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
   beforeEach(() => setupPagerFixture());
   afterEach(() => cleanupPagerFixture());
 
-  it('stops pageBack at the clear boundary so cleared history never resurrects', async () => {
+  it('applies a suffix rewind: removed rows never resurrect and the surviving prefix pages back', async () => {
     for (let seq = 1; seq <= 4; seq += 1) {
       await fixture.addUser(seq);
     }
@@ -568,7 +568,8 @@ describe('ScrollbackPagerStore @plan:PLAN-20260917-ISSUE854.P02c @requirement:G1
     const state = store.getState();
     expect(state.atVisibilityFloor).toBe(true);
     const texts = rowTexts(store);
-    for (let seq = 1; seq <= 4; seq += 1) {
+    expect(texts).toContain('r-1');
+    for (let seq = 2; seq <= 4; seq += 1) {
       expect(texts).not.toContain(`r-${seq}`);
     }
     for (let seq = 6; seq <= 9; seq += 1) {

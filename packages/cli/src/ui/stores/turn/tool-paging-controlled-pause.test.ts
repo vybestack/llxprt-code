@@ -490,7 +490,10 @@ async function verifyYieldAndPendingRead(): Promise<void> {
         () => true,
       );
       await entered;
-      expect(released).toBe(2053);
+      // Open decodes the 1026 journal rows. The append extends only from the
+      // tail group's opener: 1025 group rows plus the new tail row, without
+      // re-decoding the leading human row.
+      expect(released).toBe(2052);
       assertBound(ownership);
       await recordPause(ownership.snapshot(), released);
       await cursor.close();

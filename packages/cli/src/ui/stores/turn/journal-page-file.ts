@@ -20,6 +20,8 @@ export type DisplayJournalEntry =
       readonly offset: number;
       readonly length: number;
       readonly seq: number | null;
+      /** Journal rows this page accounts for; continuation pages carry 0. */
+      readonly rows: number;
       readonly item: HistoryItem;
     };
 
@@ -37,6 +39,8 @@ export class JournalPageFile {
   private bytes = 0;
   private count = 0;
   private closed = false;
+  private entryReads = 0;
+  private entryWrites = 0;
   private readonly buffer = Buffer.alloc(WIDTH);
 
   constructor(temporaryRoot = getScratchRoot()) {
@@ -67,6 +71,25 @@ export class JournalPageFile {
       throw new Error('Short journal page index write');
     this.bytes += text.length;
     this.count += 1;
+    this.entryWrites += 1;
+  }
+
+  /** Entry reads/writes since open; lets callers prove their work bounds. */
+  stats(): { reads: number; writes: number } {
+    return { reads: this.entryReads, writes: this.entryWrites };
+  }
+
+  /** Drops every entry at index `count` and above. */
+  truncate(count: number): void {
+    if (this.closed || count < 0) throw new RangeError('Invalid truncation');
+    if (count >= this.count) return;
+    if (readSync(this.offsets, this.buffer, 0, WIDTH, count * WIDTH) !== WIDTH)
+      throw new Error('Truncated journal page index');
+    const bytes = this.buffer.readDoubleLE(0);
+    ftruncateSync(this.data, bytes);
+    ftruncateSync(this.offsets, count * WIDTH);
+    this.bytes = bytes;
+    this.count = count;
   }
 
   get(index: number): DisplayJournalEntry {
@@ -85,6 +108,7 @@ export class JournalPageFile {
       ) !== bytes.length
     )
       throw new Error('Truncated journal page');
+    this.entryReads += 1;
     return storedEntry.parse(JSON.parse(bytes.toString('utf8')));
   }
 

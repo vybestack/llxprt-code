@@ -1,5 +1,4 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { createReadStream } from 'node:fs';
 import { open, stat, type FileHandle } from 'node:fs/promises';
 import type {
   IContent,
@@ -8,6 +7,14 @@ import type {
 import type { HistoryItem } from '../../types.js';
 import { rowIdentity, rowIdentityKey } from '../../utils/rowIdentity.js';
 import { HistoryProjection } from '../../utils/historyProjection.js';
+import {
+  frameRecords,
+  openFileChunks,
+  type FramingMetrics,
+  type FramingSource,
+  type OversizedLine,
+  type RecordLine,
+} from './projected-journal-records.js';
 import {
   JournalPageFile,
   type DisplayJournalEntry,
@@ -25,13 +32,6 @@ export interface ProjectedJournalOptions {
     endExclusive: number,
   ) => AsyncIterable<string>;
 }
-interface RecordLine {
-  readonly offset: number;
-  readonly length: number;
-  readonly seq: number;
-  readonly type: string;
-  readonly payload: Record<string, unknown>;
-}
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -41,32 +41,6 @@ function isContent(value: unknown): value is IContent {
     ['human', 'ai', 'tool'].includes(String(value.speaker)) &&
     Array.isArray(value.blocks)
   );
-}
-function parseLine(
-  text: string,
-  offset: number,
-  length: number,
-): RecordLine | undefined {
-  let value: unknown;
-  try {
-    value = JSON.parse(text.replace(/^\uFEFF/, ''));
-  } catch {
-    return undefined;
-  }
-  if (
-    !isRecord(value) ||
-    typeof value.seq !== 'number' ||
-    typeof value.type !== 'string' ||
-    !isRecord(value.payload)
-  )
-    return undefined;
-  return {
-    offset,
-    length,
-    seq: value.seq,
-    type: value.type,
-    payload: value.payload,
-  };
 }
 async function readBlock(
   file: FileHandle,
@@ -112,66 +86,58 @@ async function completePrefix(
     await file.close();
   }
 }
-async function* readChunks(
+function framingSource(
   filePath: string,
   options: ProjectedJournalOptions,
-  endExclusive: number,
-): AsyncIterable<string> {
+  from: number,
+  endExclusive: number | null,
+): FramingSource {
   const signal = options.signal ?? new AbortController().signal;
-  if (options.read) {
-    yield* options.read(filePath, signal);
-    return;
-  }
-  if (endExclusive === 0) return;
-  if (options.readBounded) {
-    yield* options.readBounded(filePath, signal, endExclusive);
-    return;
-  }
-  const stream = createReadStream(filePath, {
-    encoding: 'utf8',
-    highWaterMark: options.chunkBytes ?? 65536,
-    end: endExclusive - 1,
+  if (options.read)
+    return {
+      chunks: options.read(filePath, signal),
+      startOffset: from,
+      endExclusive: null,
+      skipBytes: from,
+      signal,
+    };
+  if (endExclusive === null)
+    throw new Error('A bounded journal read needs a complete-prefix end');
+  if (options.readBounded)
+    return {
+      chunks:
+        endExclusive === 0
+          ? emptyChunks()
+          : options.readBounded(filePath, signal, endExclusive),
+      startOffset: from,
+      endExclusive,
+      skipBytes: from,
+      signal,
+    };
+  return {
+    chunks: openFileChunks(
+      filePath,
+      options.chunkBytes ?? 65536,
+      from,
+      endExclusive,
+      signal,
+    ),
+    startOffset: from,
+    endExclusive,
+    skipBytes: 0,
     signal,
-  });
-  try {
-    yield* stream;
-  } finally {
-    stream.destroy();
-  }
+  };
 }
-async function* records(
-  filePath: string,
-  options: ProjectedJournalOptions,
-  endExclusive: number,
-): AsyncIterable<RecordLine> {
-  let text = '';
-  let offset = 0;
-  let readBytes = 0;
-  for await (const chunk of readChunks(filePath, options, endExclusive)) {
-    options.signal?.throwIfAborted();
-    if (!options.read && readBytes === endExclusive) break;
-    const remaining = endExclusive - readBytes;
-    const length = Buffer.byteLength(chunk);
-    const bounded =
-      !options.read && length > remaining
-        ? Buffer.from(chunk).subarray(0, remaining).toString('utf8')
-        : chunk;
-    readBytes += Buffer.byteLength(bounded);
-    text += bounded;
-    let newline = text.indexOf('\n');
-    while (newline !== -1) {
-      const line = text.slice(0, newline + 1);
-      const length = Buffer.byteLength(line);
-      const record = parseLine(line, offset, length);
-      if (record) yield record;
-      offset += length;
-      text = text.slice(newline + 1);
-      newline = text.indexOf('\n');
-    }
-  }
-  options.signal?.throwIfAborted();
-  if (!options.read && readBytes !== endExclusive)
-    throw new Error('Truncated journal while reading complete prefix');
+async function* emptyChunks(): AsyncIterable<string> {
+  // An empty complete prefix has nothing to read.
+}
+
+function entryKey(entry: DisplayJournalEntry): string | undefined {
+  const identity =
+    entry.kind === 'projected'
+      ? entry.item.rowIdentity
+      : rowIdentity({ kind: 'journal', offset: entry.offset }, 'summaryRow');
+  return identity ? rowIdentityKey(identity) : undefined;
 }
 
 export class ProjectedJournalCursor {
@@ -185,6 +151,26 @@ export class ProjectedJournalCursor {
   private seq = 0;
   private retainedPage: HistoryItem[] = [];
   private readSettled: Promise<void> = Promise.resolve();
+  private readonly framing: FramingMetrics = {
+    maxAssembledBytes: 0,
+    completeThrough: 0,
+  };
+  private oversizedRecords = 0;
+  private oversizedThrough = 0;
+  /** Journal rows accepted into the group that is still open. */
+  private groupRows = 0;
+  private clearOffset: number | null = null;
+  /** Byte offset of the newest record that opened a not-yet-closed group. */
+  private groupOffset: number | null = null;
+  /**
+   * The projected final group, re-read from its opener on the next extension
+   * because later appends can add responses to it. Bounded by one group.
+   */
+  private tailGroup: { offset: number; pageStart: number } | null = null;
+  /** Lowest page index invalidated by the current extension. */
+  private lowWater = 0;
+  /** Resident page ordinals by row key; bounded by the window. */
+  private readonly ordinals = new Map<string, number>();
   private readonly options: ProjectedJournalOptions;
 
   private constructor(
@@ -206,7 +192,7 @@ export class ProjectedJournalCursor {
   ): Promise<ProjectedJournalCursor> {
     const cursor = new ProjectedJournalCursor(filePath, options);
     try {
-      await cursor.rebuild();
+      await cursor.extend();
       cursor.start = cursor.pages.length;
       cursor.end = cursor.pages.length;
       return cursor;
@@ -217,6 +203,7 @@ export class ProjectedJournalCursor {
   }
 
   private append(items: Iterable<HistoryItem>, end: number): void {
+    let rows = this.groupRows;
     for (const item of items) {
       this.options.signal?.throwIfAborted();
       const identity = item.rowIdentity;
@@ -229,8 +216,10 @@ export class ProjectedJournalCursor {
         offset: identity.offset,
         length: end - identity.offset,
         seq: seq ?? this.seq,
+        rows,
         item,
       });
+      rows = 0;
     }
   }
 
@@ -254,9 +243,16 @@ export class ProjectedJournalCursor {
       } finally {
         this.options.counters?.rowReleased();
       }
-      if (content.speaker !== 'tool') this.seq = record.seq;
-    } else if (record.type === 'rewind' || record.type === 'compressed') {
-      this.append(projection.flush(), previousEnd);
+      this.groupRows = content.speaker === 'tool' ? this.groupRows + 1 : 1;
+      if (content.speaker !== 'tool') {
+        this.groupOffset = record.offset;
+        this.seq = record.seq;
+      }
+    } else if (record.type === 'rewind') {
+      this.closeGroup(projection, previousEnd);
+      this.applyRewind(record);
+    } else if (record.type === 'compressed') {
+      this.closeGroup(projection, previousEnd);
       this.pages.push({
         kind: 'boundary',
         offset: record.offset,
@@ -273,45 +269,208 @@ export class ProjectedJournalCursor {
     }
   }
 
-  private rebuild(): Promise<void> {
-    const read = this.buildPages();
-    this.readSettled = read.then(
+  private closeGroup(projection: HistoryProjection, end: number): void {
+    this.append(projection.flush(), end);
+    this.groupRows = 0;
+    this.groupOffset = null;
+  }
+
+  /**
+   * Applies a rewind's membership to the projected transcript: pages for the
+   * removed suffix are dropped, the surviving prefix stays pageable. A cut
+   * that leaves nothing is a full clear and is remembered as the floor.
+   */
+  private applyRewind(record: RecordLine): void {
+    const cut = this.rewindCut(record.payload);
+    this.pages.truncate(cut);
+    this.lowWater = Math.min(this.lowWater, cut);
+    if (cut === 0) this.clearOffset = record.offset;
+  }
+
+  /**
+   * First page index the rewind removes. cutSeq names the first removed
+   * chronology marker; without a usable one the count of removed journal rows
+   * decides, as in replay. A rewind with no readable count cannot be
+   * placed and is treated as a full clear.
+   */
+  private rewindCut(payload: Record<string, unknown>): number {
+    const count = payload.itemsRemoved;
+    if (typeof count !== 'number' || !(count >= 0)) return 0;
+    const cutSeq = payload.cutSeq;
+    if (Number.isSafeInteger(cutSeq) && (cutSeq as number) >= 0) {
+      const cut = this.firstPageFromSeq(cutSeq as number);
+      if (cut < this.pages.length) return cut;
+    }
+    return this.firstPageByCount(Math.ceil(count));
+  }
+
+  private firstPageFromSeq(cutSeq: number): number {
+    let index = this.pages.length;
+    while (index > 0 && !this.survivesCut(this.pages.get(index - 1), cutSeq))
+      index -= 1;
+    return index;
+  }
+
+  /** Compression summaries and rows before the cut marker stay. */
+  private survivesCut(entry: DisplayJournalEntry, cutSeq: number): boolean {
+    return (
+      entry.kind === 'boundary' || (entry.seq !== null && entry.seq < cutSeq)
+    );
+  }
+
+  private firstPageByCount(count: number): number {
+    let index = this.pages.length;
+    let remaining = count;
+    while (index > 0 && remaining > 0) {
+      const entry = this.pages.get(index - 1);
+      if (entry.kind === 'boundary') break;
+      remaining -= entry.rows;
+      index -= 1;
+    }
+    return index;
+  }
+
+  /** Start of the newest full clear, or null when none cut the whole transcript. */
+  clearBoundaryOffset(): number | null {
+    return this.clearOffset;
+  }
+
+  /** Offset of the oldest surviving display row, or null when none survive. */
+  firstDisplayOffset(): number | null {
+    return this.pages.length === 0 ? null : this.pages.get(0).offset;
+  }
+
+  /** Oversized lines are diagnosed by offset and length and never displayed. */
+  private noteOversized(line: OversizedLine, from: number): void {
+    if (line.offset >= from && line.offset >= this.oversizedThrough) {
+      this.oversizedRecords += 1;
+      this.oversizedThrough = line.offset + line.length;
+    }
+  }
+
+  metrics(): {
+    maxAssembledRecordBytes: number;
+    oversizedRecords: number;
+    pageReads: number;
+    pageWrites: number;
+  } {
+    const { reads, writes } = this.pages.stats();
+    return {
+      maxAssembledRecordBytes: this.framing.maxAssembledBytes,
+      oversizedRecords: this.oversizedRecords,
+      pageReads: reads,
+      pageWrites: writes,
+    };
+  }
+
+  private extend(): Promise<void> {
+    const run = this.extendPages();
+    this.readSettled = run.then(
       () => undefined,
       () => undefined,
     );
-    return read;
+    return run;
   }
 
-  private async buildPages(): Promise<void> {
+  /**
+   * Extends the projection from the pinned complete-tail offset: only bytes
+   * appended since the last extension are read, plus the final group, which
+   * is re-projected from its opener because responses may have joined it.
+   */
+  private async extendPages(): Promise<void> {
     this.options.signal?.throwIfAborted();
-    this.pages.clear();
-    const snapshot = this.options.read
-      ? { fileBytes: (await stat(this.filePath)).size, endExclusive: 0 }
+    const snapshot: { fileBytes: number; endExclusive: number | null } = this
+      .options.read
+      ? { fileBytes: (await stat(this.filePath)).size, endExclusive: null }
       : await completePrefix(this.filePath, this.options.signal);
     this.fileBytes = snapshot.fileBytes;
+    if (snapshot.endExclusive === this.completeBytes) {
+      this.observedCompleteBytes = this.completeBytes;
+      return;
+    }
+    this.lowWater = this.pages.length;
+    try {
+      await this.projectFrom(this.resumePoint(), snapshot.endExclusive);
+    } catch (error) {
+      this.discardProjection();
+      throw error;
+    }
+    this.start = Math.min(this.start, this.pages.length);
+    this.end = Math.min(this.end, Math.max(this.start, this.lowWater));
+  }
+
+  private tailPage(): DisplayJournalEntry {
+    return this.pages.get(this.pages.length - 1);
+  }
+
+  private resumePoint(): number {
+    const group = this.tailGroup;
+    this.tailGroup = null;
+    if (!group) return this.completeBytes;
+    // Only a tool group can grow when the file does; any other re-projected
+    // tail row is identical to the one already served and must not be
+    // handed out again.
+    const tail = this.pages.length > group.pageStart ? this.tailPage() : null;
+    const grows = tail?.kind === 'projected' && tail.item.type === 'tool_group';
+    const served = this.pages.length;
+    this.pages.truncate(group.pageStart);
+    this.lowWater = grows ? group.pageStart : served;
+    return group.offset;
+  }
+
+  private async projectFrom(
+    from: number,
+    endExclusive: number | null,
+  ): Promise<void> {
+    this.framing.completeThrough = from;
+    this.groupOffset = null;
+    this.groupRows = 0;
     const projection = new HistoryProjection(
       undefined,
       this.options.counters?.ownership,
       this.options.temporaryRoot,
       this.options.signal,
     );
-    let previousEnd = 0;
+    let previousEnd = from;
     try {
-      for await (const record of records(
-        this.filePath,
-        this.options,
-        snapshot.endExclusive,
-      )) {
-        this.acceptRecord(projection, record, previousEnd);
+      const framed = frameRecords(
+        framingSource(this.filePath, this.options, from, endExclusive),
+        this.framing,
+      );
+      for await (const record of framed) {
+        if (record.kind === 'record')
+          this.acceptRecord(projection, record, previousEnd);
+        else this.noteOversized(record, from);
         previousEnd = record.offset + record.length;
       }
       this.options.signal?.throwIfAborted();
+      const pageStart = this.pages.length;
       this.append(projection.flush(), previousEnd);
-      this.completeBytes = previousEnd;
-      this.observedCompleteBytes = previousEnd;
+      this.tailGroup = this.openGroup(pageStart);
+      this.completeBytes = this.framing.completeThrough;
+      this.observedCompleteBytes = this.completeBytes;
     } finally {
       projection.close();
     }
+  }
+
+  private openGroup(
+    pageStart: number,
+  ): { offset: number; pageStart: number } | null {
+    const offset = this.groupOffset;
+    return offset === null ? null : { offset, pageStart };
+  }
+
+  /** A failed extension leaves no half-applied state: the next one rebuilds. */
+  private discardProjection(): void {
+    this.pages.clear();
+    this.ordinals.clear();
+    this.tailGroup = null;
+    this.clearOffset = null;
+    this.completeBytes = 0;
+    this.observedCompleteBytes = 0;
+    this.start = 0;
+    this.end = 0;
   }
 
   async refreshFileEnd(): Promise<void> {
@@ -333,6 +492,8 @@ export class ProjectedJournalCursor {
 
   private readPageEntry(index: number): DisplayJournalEntry {
     const entry = this.pages.get(index);
+    const key = entryKey(entry);
+    if (key !== undefined) this.ordinals.set(key, index);
     if (entry.kind === 'projected') {
       this.options.counters?.ownership?.retain(entry.item);
       this.retainedPage.push(entry.item);
@@ -351,19 +512,8 @@ export class ProjectedJournalCursor {
   ): Promise<{ entries: DisplayJournalEntry[] }> {
     this.releasePage();
     this.options.signal?.throwIfAborted();
-    if ((await stat(this.filePath)).size !== this.fileBytes) {
-      let refresh = this.pages.length;
-      const tail = refresh > 0 ? this.pages.get(refresh - 1) : undefined;
-      if (tail?.kind === 'projected' && tail.item.type === 'tool_group') {
-        while (
-          refresh > 0 &&
-          this.pages.get(refresh - 1).offset === tail.offset
-        )
-          refresh -= 1;
-      }
-      await this.rebuild();
-      this.end = Math.min(this.end, Math.max(this.start, refresh));
-    }
+    if ((await stat(this.filePath)).size !== this.fileBytes)
+      await this.extend();
     return this.readPage(count, false);
   }
 
@@ -398,25 +548,20 @@ export class ProjectedJournalCursor {
     if (first === undefined || last === undefined) {
       if (direction === 'older') this.start = this.end;
       else this.end = this.start;
+      this.pruneOrdinals();
       return;
     }
-    for (let index = 0; index < this.pages.length; index += 1) {
-      const entry = this.pages.get(index);
-      const identity =
-        entry.kind === 'projected'
-          ? entry.item.rowIdentity
-          : rowIdentity(
-              { kind: 'journal', offset: entry.offset },
-              'summaryRow',
-            );
-      if (!identity) continue;
-      const key = rowIdentityKey(identity);
-      if (key === first) this.start = index;
-      if (key === last) {
-        this.end = index + 1;
-        return;
-      }
-    }
+    const firstOrdinal = this.ordinals.get(first);
+    const lastOrdinal = this.ordinals.get(last);
+    if (firstOrdinal !== undefined) this.start = firstOrdinal;
+    if (lastOrdinal !== undefined) this.end = lastOrdinal + 1;
+    this.pruneOrdinals();
+  }
+
+  private pruneOrdinals(): void {
+    for (const [key, ordinal] of this.ordinals)
+      if (ordinal < this.start || ordinal >= this.end)
+        this.ordinals.delete(key);
   }
 
   atStart(): boolean {
