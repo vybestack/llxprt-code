@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { readdirSync } from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
@@ -227,6 +227,9 @@ describe('Responses source route covers non-text features', () => {
     for (const withTools of [false, true]) {
       it(`matches the array route bytes for ${name}${withTools ? ' with tools' : ''}, including a 503 replay`, async () => {
         const before = tmpPromptDirs();
+        // Synthesized reasoning ids carry the request time, and the array and
+        // source sends are separate requests, so both read one fixed clock.
+        const clock = spyOn(Date, 'now').mockReturnValue(1700000000000);
         const http = captureServer(true);
         const setup = await projectionRuntime(
           `http://127.0.0.1:${http.server.port}/v1`,
@@ -249,6 +252,7 @@ describe('Responses source route covers non-text features', () => {
             [...tmpPromptDirs()].filter((entry) => !before.has(entry)),
           ).toHaveLength(0);
         } finally {
+          clock.mockRestore();
           await http.server.stop(true);
           await setup.config.dispose();
         }

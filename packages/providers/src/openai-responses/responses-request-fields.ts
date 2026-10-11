@@ -13,6 +13,7 @@ import {
   applyOpenAIResponsesReasoning,
   type AppliedOpenAIResponsesReasoning,
 } from './openai-responses-reasoning.js';
+import { readRequestReasoningIdTime } from '../transportAttemptBudget.js';
 import { sanitizePromptCacheKey } from './sanitizePromptCacheKey.js';
 import type {
   OpenAIResponsesRequest,
@@ -124,13 +125,17 @@ export function responsesInputContext(
     ({
       getEphemeralSettings: () => ({}),
     } satisfies ToolOutputSettingsProvider);
+  const requestReasoningIdTime =
+    reasoningIdTime ?? readRequestReasoningIdTime(options);
   return {
     includeReasoningInContext: includeReasoningInContextSetting !== false,
     outputLimiterConfig,
     debug: (messageFactory) => deps.logger.debug(messageFactory),
     serverSideParentActive,
     mediaPdfEnabled: isResponsesPdfEnabled(options),
-    ...(reasoningIdTime === undefined ? {} : { reasoningIdTime }),
+    ...(requestReasoningIdTime === undefined
+      ? {}
+      : { reasoningIdTime: requestReasoningIdTime }),
   };
 }
 

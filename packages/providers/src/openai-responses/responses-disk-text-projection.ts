@@ -25,6 +25,7 @@ import {
   responsesInputContext,
   resolveInvocationEphemerals,
 } from './responses-request-fields.js';
+import { readRequestReasoningIdTime } from '../transportAttemptBudget.js';
 import {
   resolveResponsesRequestShape,
   resolveResponsesStatefulPlan,
@@ -197,7 +198,8 @@ export async function buildDiskTextResponsesContext(
     );
   const ephemerals = resolveInvocationEphemerals(options);
   const signal = getRequestSignal(options);
-  const reasoningIdTime = mode.reasoningIdTime ?? Date.now();
+  const reasoningIdTime =
+    mode.reasoningIdTime ?? readRequestReasoningIdTime(options) ?? Date.now();
   const { stateful, skipRows, historyDangling } = await selectRowsStateful(
     options,
     deps,
