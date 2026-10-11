@@ -247,7 +247,7 @@ describe('Responses disk unsupported-media enforcement', () => {
     ).toBeGreaterThan(0);
   });
   it.each(['audio/wav', 'application/pdf'])(
-    'rejects unsupported %s conversion instead of dropping the disk metadata',
+    'records the unsupported %s ledger and estimates its text placeholder',
     async (mimeType) => {
       const prompt = await serializeResponsesPromptEnvelope({
         model: 'gpt-5.6-sol',
@@ -262,8 +262,8 @@ describe('Responses disk unsupported-media enforcement', () => {
         expect(
           readFileSync(prompt.unsupportedMediaSource.path, 'utf8'),
         ).toContain('unsupported');
-        expect(() => prompt.toEstimatorProjection()).toThrow(
-          'unsupported media',
+        expect(prompt.toEstimatorProjection().promptSegments).toStrictEqual(
+          prompt.projection.promptSegments,
         );
       } finally {
         await prompt.dispose();

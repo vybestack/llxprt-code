@@ -51,6 +51,12 @@ export interface ResponsesInputBuildContext {
    */
   serverSideParentActive?: boolean;
   mediaPdfEnabled: boolean;
+  /**
+   * Time component of synthesized reasoning ids (`rs_<time>_<n>`). The request
+   * owner mints it once so retries and rebuilds of one request write the same
+   * bytes; when absent each id reads the clock, as the array route always did.
+   */
+  reasoningIdTime?: number;
 }
 
 const OPENAI_RESPONSES_REASONING_ID_KEY = 'openai.responses.reasoningId';
@@ -61,11 +67,8 @@ export function buildOpenAIResponsesInput(
 ): ResponsesInputItem[] {
   const input: ResponsesInputItem[] = [];
   let reasoningIdCounter = 0;
-  // Issue #854 P05b4: synthesized ids must be byte-stable across retry
-  // rebuilds of the same history, so no wall-clock component is allowed;
-  // only the `rs_` prefix matters to the API-side format check.
   const nextReasoningId = () => {
-    const id = `rs_local_${reasoningIdCounter}`;
+    const id = `rs_${context.reasoningIdTime ?? Date.now()}_${reasoningIdCounter}`;
     reasoningIdCounter += 1;
     return id;
   };

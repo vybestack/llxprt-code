@@ -1,12 +1,22 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { readFileSync } from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import type {
+  PromptEnvelopeAccountingProjection,
+  PromptEnvelopeEstimationProjection,
+  PromptEnvelopeProjection,
+  UnsupportedMediaEntry,
+} from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 import { finishMediaRequest } from '../utils/request-media-resolution.js';
-import { serializeResponsesPromptEnvelope } from '../runtime/responses-source-serializer.js';
+import {
+  serializeResponsesPromptEnvelope,
+  type ResponsesSourceOptions,
+  type ResponsesSourcePrompt,
+} from '../runtime/responses-source-serializer.js';
 import {
   findDanglingCalls,
   type HistoryDangling,
@@ -15,6 +25,8 @@ import {
   responsesInputContext,
   resolveInvocationEphemerals,
 } from './responses-request-fields.js';
+import { readRequestReasoningIdTime } from '../transportAttemptBudget.js';
+import { resolveRowsMedia } from './responses-row-media.js';
 import {
   resolveResponsesRequestShape,
   resolveResponsesStatefulPlan,
@@ -119,6 +131,29 @@ async function* estimationRows(
   for await (const row of rows) yield* toEstimationContents([row]);
 }
 
+/** Incremental and full-history passes the estimator needs for a stored parent. */
+function statefulAccounting(
+  rows: ProviderRequestRows,
+  stateful: StatefulConversation,
+  signal: AbortSignal | undefined,
+  skipRows: number,
+): Pick<ResponsesSourceOptions, 'stateful'> {
+  if (stateful.parentId === undefined) return {};
+  return {
+    stateful: {
+      statefulParentUsed: true,
+      retainedBaselineTokens: stateful.parentRetainedTokens,
+      // Estimation only: the transmitted rows are resolved once, by the write.
+      incrementalContents: estimationRows(countedRows(rows, signal, skipRows)),
+      ...(stateful.parentRetainedTokens === undefined
+        ? {
+            fullHistoryContents: estimationRows(countedRows(rows, signal)),
+          }
+        : {}),
+    },
+  };
+}
+
 export function assertDiskTextShape(
   options: NormalizedGenerateChatOptions,
   deps: ResponsesExecutorDeps,
@@ -165,6 +200,8 @@ export async function buildDiskTextResponsesContext(
     );
   const ephemerals = resolveInvocationEphemerals(options);
   const signal = getRequestSignal(options);
+  const reasoningIdTime =
+    mode.reasoningIdTime ?? readRequestReasoningIdTime(options) ?? Date.now();
   const { stateful, skipRows, historyDangling } = await selectRowsStateful(
     options,
     deps,
@@ -186,28 +223,24 @@ export async function buildDiskTextResponsesContext(
       model: prepared.request.model,
       instructions: prepared.request.instructions,
       tools: prepared.request.tools,
-      contents: countedRows(rows, signal, skipRows),
+      contents: resolveRowsMedia(
+        countedRows(rows, signal, skipRows),
+        options.runtime,
+        prepared.mediaRequest,
+        signal,
+      ),
       ...(historyDangling === undefined ? {} : { historyDangling }),
       ...('input' in overrides
         ? { inputOverride: { value: overrides['input'] } }
         : {}),
-      ...(stateful.parentId === undefined
-        ? {}
-        : {
-            stateful: {
-              statefulParentUsed: true,
-              retainedBaselineTokens: stateful.parentRetainedTokens,
-              incrementalContents: countedRows(rows, signal, skipRows),
-              ...(stateful.parentRetainedTokens === undefined
-                ? {
-                    fullHistoryContents: estimationRows(
-                      countedRows(rows, signal),
-                    ),
-                  }
-                : {}),
-            },
-          }),
-      context: responsesInputContext(options, ephemerals, deps),
+      ...statefulAccounting(rows, stateful, signal, skipRows),
+      context: responsesInputContext(
+        options,
+        ephemerals,
+        deps,
+        stateful.parentId !== undefined,
+        reasoningIdTime,
+      ),
       signal,
     });
     prepared.mediaRequest.registerCleanup(() => prompt.dispose());
@@ -219,7 +252,10 @@ export async function buildDiskTextResponsesContext(
       sourcePrompt: prompt,
       statefulEnabled: stateful.enabled,
       rebuildFromRows: (rebuild) =>
-        buildDiskTextResponsesContext(options, deps, rebuild),
+        buildDiskTextResponsesContext(options, deps, {
+          ...rebuild,
+          reasoningIdTime,
+        }),
     };
   } catch (error) {
     return finishMediaRequest(prepared.mediaRequest, {
@@ -227,6 +263,51 @@ export async function buildDiskTextResponsesContext(
       error,
     });
   }
+}
+
+const pinnedSourceEstimatorOnly = (): Promise<number> =>
+  Promise.reject(
+    new Error('Disk text projection requires the pinned source estimator'),
+  );
+
+function estimationProjectionOf(
+  prompt: ResponsesSourcePrompt,
+): PromptEnvelopeEstimationProjection {
+  return {
+    finalizedProjection: prompt.toEstimatorProjection(),
+    legacyEstimate: pinnedSourceEstimatorOnly,
+  };
+}
+
+/** Shares the retained, incremental and full-history prompts' ownership with the base prompt. */
+function accountingOf(
+  accounting: NonNullable<ResponsesSourcePrompt['accounting']>,
+): PromptEnvelopeAccountingProjection {
+  return {
+    statefulParentUsed: accounting.statefulParentUsed,
+    ...(accounting.retainedBaselineTokens === undefined
+      ? {}
+      : { retainedBaselineTokens: accounting.retainedBaselineTokens }),
+    ...(accounting.incremental === undefined
+      ? {}
+      : { incremental: estimationProjectionOf(accounting.incremental) }),
+    ...(accounting.fullHistory === undefined
+      ? {}
+      : { fullHistory: estimationProjectionOf(accounting.fullHistory) }),
+  };
+}
+
+/** The ledger holds one small line per placeholder-replaced media block. */
+function unsupportedMediaOf(
+  prompt: ResponsesSourcePrompt,
+): readonly UnsupportedMediaEntry[] {
+  const ledger = readFileSync(prompt.unsupportedMediaSource.path, 'utf8');
+  return ledger === ''
+    ? []
+    : ledger
+        .trimEnd()
+        .split('\n')
+        .map((line) => JSON.parse(line) as UnsupportedMediaEntry);
 }
 
 export function diskTextProjection(
@@ -241,13 +322,12 @@ export function diskTextProjection(
     protocol: prompt.protocol,
     method: prompt.method,
     projectionRevision: prompt.projectionRevision,
-    unsupportedMedia: [],
+    unsupportedMedia: unsupportedMediaOf(prompt),
     transportToken: token,
-    finalizedProjection: prompt.toEstimatorProjection(),
-    legacyEstimate: () =>
-      Promise.reject(
-        new Error('Disk text projection requires the pinned source estimator'),
-      ),
+    ...estimationProjectionOf(prompt),
+    ...(prompt.accounting === undefined
+      ? {}
+      : { accounting: accountingOf(prompt.accounting) }),
     releaseIfUnsent,
   };
 }

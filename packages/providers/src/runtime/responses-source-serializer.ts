@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { rmSync, statSync, writeFileSync } from 'node:fs';
+import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResponsesInputBuildContext } from '../openai-responses/OpenAIResponsesInputBuilder.js';
@@ -194,8 +194,6 @@ async function prompt(
         model: options.model,
       },
     });
-    const unsupported =
-      statSync(join(root, 'unsupported-media.jsonl')).size !== 0;
     return Object.freeze({
       model: options.model,
       protocol: 'openai-responses',
@@ -207,13 +205,9 @@ async function prompt(
         acquire: () => projection.acquire(),
         dispose: () => projection.dispose(),
       }),
-      toEstimatorProjection: (): Gpt56SourceProjection => {
-        if (unsupported)
-          throw new Error(
-            'Source estimator cannot enforce disk unsupported media',
-          );
-        return projection;
-      },
+      // Unsupported media is already a text placeholder in the written
+      // segments, so the projection estimates what is actually sent.
+      toEstimatorProjection: (): Gpt56SourceProjection => projection,
       imageCostsSource: Object.freeze({ path: costs, encoding: 'utf8' }),
       unsupportedMediaSource: Object.freeze({
         path: join(root, 'unsupported-media.jsonl'),

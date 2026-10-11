@@ -16,6 +16,7 @@ import type {
  */
 export const RETRY_REQUEST_CONTEXT_KEY = '_retryRequestContext';
 const TRANSPORT_ATTEMPT_BUDGET_KEY = 'transportAttemptBudget';
+const REASONING_ID_TIME_KEY = 'reasoningIdTime';
 
 export interface TransportAttemptBudget {
   readonly limit: number;
@@ -112,6 +113,9 @@ export function attachTransportAttemptBudget(
   const requestContext = {
     ...existingContext,
     [TRANSPORT_ATTEMPT_BUDGET_KEY]: budget,
+    // Minted once per logical request so every attempt and rebuild stamps the
+    // same time into synthesized `rs_<time>_<n>` reasoning ids.
+    [REASONING_ID_TIME_KEY]: Date.now(),
   };
   return {
     options: {
@@ -124,6 +128,17 @@ export function attachTransportAttemptBudget(
     budget,
     release: releaseBudgetLifecycle(budget),
   };
+}
+
+/**
+ * The time component the request owner minted for synthesized reasoning ids,
+ * or `undefined` for a direct provider call that has no request owner.
+ */
+export function readRequestReasoningIdTime(
+  options: MetadataBearingOptions,
+): number | undefined {
+  const value = getRequestContext(options)?.[REASONING_ID_TIME_KEY];
+  return typeof value === 'number' ? value : undefined;
 }
 
 /**
