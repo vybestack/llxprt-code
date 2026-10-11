@@ -13,6 +13,9 @@ const HISTORY_EVENTS = new Set([
   'synthetic_insert',
   'compression_detail',
   'chronology_bind',
+  'replace_begin',
+  'replace_commit',
+  'replace_abort',
 ]);
 
 async function copyBytes(

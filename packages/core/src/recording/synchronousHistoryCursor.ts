@@ -10,6 +10,10 @@ import {
   type PinnedFile,
 } from './durableRowFold.js';
 import { applyPending, pendingContent } from './pendingRowFold.js';
+import {
+  directoryRowStore,
+  ReplaceTransactionFold,
+} from './replaceTransaction.js';
 
 import { MutableRowDirectory, type NumericRow } from './mutableRowDirectory.js';
 import { ResolverDiskIndex } from './resolverDiskIndex.js';
@@ -31,6 +35,7 @@ function scanPrefix(
   staged: ResolverDiskIndex,
   density: DurableDensityIndex,
   projection: boolean,
+  tx: ReplaceTransactionFold,
   signal?: AbortSignal,
 ): void {
   if (pinned.size < end)
@@ -55,6 +60,7 @@ function scanPrefix(
         line,
         staged,
         density,
+        tx,
         projection ? 'projection' : 'durable',
       );
   }
@@ -64,6 +70,7 @@ function scanPrefix(
       line,
       staged,
       density,
+      tx,
       projection ? 'projection' : 'durable',
     );
   signal?.throwIfAborted();
@@ -76,6 +83,7 @@ function foldSnapshot(
   density: DurableDensityIndex,
   signal?: AbortSignal,
 ): void {
+  const tx = new ReplaceTransactionFold();
   if (snapshot.durableTail > 0) {
     const journal = snapshot.pinnedJournal;
     if (journal === null)
@@ -93,8 +101,10 @@ function foldSnapshot(
         staged,
         density,
         projection !== null,
+        tx,
         signal,
       );
+      tx.abandon(directoryRowStore(directory));
       directory.transform((row) => ({ ...row, invalidateResponses: true }));
     }
     scanPrefix(
@@ -105,13 +115,15 @@ function foldSnapshot(
       staged,
       density,
       false,
+      tx,
       signal,
     );
   }
   for (let slot = 0; slot < snapshot.pendingLength; slot++) {
     signal?.throwIfAborted();
-    applyPending(directory, snapshot.pending.read(slot).op, slot);
+    applyPending(directory, snapshot.pending.read(slot).op, slot, tx);
   }
+  tx.abandon(directoryRowStore(directory));
 }
 
 function readRow(snapshot: PendingFoldSnapshot, row: NumericRow): IContent {

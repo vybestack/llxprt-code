@@ -7,6 +7,13 @@ import {
 } from '../services/history/IContent.js';
 import type { JournalReadCounters } from './journalCounters.js';
 import { ResolverDiskIndex, type IndexedRow } from './resolverDiskIndex.js';
+import {
+  applyReplaceRecord,
+  diskIndexRowStore,
+  enterHistoryRecord,
+  HISTORY_RECORD_TYPES,
+  ReplaceTransactionFold,
+} from './replaceTransaction.js';
 import { ResolverIntervalIndex } from './resolverIntervalIndex.js';
 import { field, validSeq, validRow, chronology } from './resolverProjection.js';
 import {
@@ -121,6 +128,7 @@ function chronologyFields(
 export class JournalResolver {
   private handle: ResolverFileHandle | null;
   private readonly units: ResolverDiskIndex;
+  private readonly transaction = new ReplaceTransactionFold();
   private activeInterval: ResolverIntervalIndex | null = null;
   private skippedRecordCount = 0;
   private prepassDone = false;
@@ -297,6 +305,7 @@ export class JournalResolver {
         this.absorb(line, staged);
       }
       if (lastInvalid) this.skippedRecordCount -= 1;
+      this.transaction.abandon(diskIndexRowStore(this.units));
       this.prepassDone = true;
     } finally {
       staged.close();
@@ -335,6 +344,8 @@ export class JournalResolver {
     line: ProjectedLine,
     staged: ResolverDiskIndex,
   ): boolean {
+    if (typeof type === 'string' && this.foldTransaction(type, payload))
+      return true;
     switch (type) {
       case 'chronology_bind': {
         const binding = parseChronologyBinding(payload);
@@ -405,6 +416,15 @@ export class JournalResolver {
       default:
         return true;
     }
+  }
+
+  /** True when the record was a replace record and is fully handled. */
+  private foldTransaction(type: string, payload: object): boolean {
+    const store = diskIndexRowStore(this.units);
+    if (applyReplaceRecord(this.transaction, type, payload, store)) return true;
+    if (HISTORY_RECORD_TYPES.has(type))
+      enterHistoryRecord(this.transaction, type, payload, store);
+    return false;
   }
 
   private rewind(payload: object): boolean {

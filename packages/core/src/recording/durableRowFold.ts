@@ -29,6 +29,14 @@ import {
   type ProjectedLine,
 } from './resolverScan.js';
 import type { ResolverFileHandle } from './journalResolver.js';
+import {
+  applyReplaceRecord,
+  directoryRowStore,
+  enterHistoryRecord,
+  HISTORY_RECORD_TYPES,
+  ReplaceTransactionFold,
+  type OpenReplaceTransaction,
+} from './replaceTransaction.js';
 import type {
   CheckpointSource,
   DurableFoldCheckpoint,
@@ -104,6 +112,11 @@ export interface DurableRowFoldOptions {
   /** Standing state that lets a pinned fold scan only the appended tail. */
   readonly checkpoint?: DurableFoldCheckpoint;
   readonly signal?: AbortSignal;
+  /**
+   * Leave a transaction that is still open at the watermark un-abandoned, with
+   * its rows in the directory, for a caller that folds pending records next.
+   */
+  readonly keepOpenTransaction?: boolean;
 }
 
 function isContent(value: unknown): value is IContent {
@@ -252,6 +265,7 @@ export function foldLine(
   line: ProjectedLine,
   staged: ResolverDiskIndex,
   density: DurableDensityIndex,
+  tx: ReplaceTransactionFold,
   source: RowSource = 'durable',
 ): void {
   if (line.invalid || line.blank || line.parsed === null) return;
@@ -263,6 +277,10 @@ export function foldLine(
   const type = field(line.parsed, 'type');
   if (typeof type !== 'string') return;
   const payload = field(line.parsed, 'payload');
+  if (applyReplaceRecord(tx, type, payload, directoryRowStore(directory)))
+    return;
+  if (HISTORY_RECORD_TYPES.has(type))
+    enterHistoryRecord(tx, type, payload, directoryRowStore(directory));
   switch (type) {
     case 'content':
     case 'compressed': {
@@ -343,6 +361,7 @@ export class DurableRowFold {
     private readonly densityMetrics: ReturnType<DurableDensityIndex['metrics']>,
     private readonly projectionHandle?: ResolverFileHandle,
     projectionBytes = 0,
+    readonly openTransaction: OpenReplaceTransaction | null = null,
   ) {
     this.reader = new ResolverRowReader(handle, chunkBytes, maxBytes);
     if (projectionHandle)
@@ -424,6 +443,7 @@ async function scanRestoredPrefix(
   if (boundary === 0) return;
   const prefix = projection ?? journal;
   const prefixBytes = projection ? projectionBytes : boundary;
+  const tx = new ReplaceTransactionFold();
   for await (const line of scanResolverLines(
     prefix,
     chunkBytes,
@@ -439,8 +459,10 @@ async function scanRestoredPrefix(
       line,
       staged,
       density,
+      tx,
       projection ? 'projection' : 'durable',
     );
+  tx.abandon(directoryRowStore(directory));
   directory.transform((row) => ({ ...row, invalidateResponses: true }));
 }
 
@@ -555,6 +577,7 @@ async function buildFold(
       chunkBytes,
       options.signal,
     );
+  const tx = new ReplaceTransactionFold();
   for await (const line of scanResolverLines(
     journal,
     chunkBytes,
@@ -565,9 +588,14 @@ async function buildFold(
     resumed?.watermark ?? boundary,
     options.signal,
   ))
-    foldLine(directory, line, staged, density);
-  if (resumed?.watermark !== options.maxBytes)
+    foldLine(directory, line, staged, density, tx);
+  // A checkpoint resumes mid-file without the open transaction, so it is only
+  // saved when no transaction is open at the watermark.
+  const openTransaction = tx.open;
+  if (resumed?.watermark !== options.maxBytes && openTransaction === null)
     await bound?.checkpoint.save(bound.source, options.maxBytes, directory);
+  if (options.keepOpenTransaction !== true)
+    tx.abandon(directoryRowStore(directory));
   const densityMetrics = density.metrics();
   staged.close();
   density.close();
@@ -579,6 +607,7 @@ async function buildFold(
     densityMetrics,
     projection,
     projectionBytes,
+    openTransaction,
   );
 }
 

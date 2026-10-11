@@ -119,6 +119,9 @@ function retain(
     'chronology',
     'invalidateResponses',
     'toSeq',
+    'tx',
+    'txId',
+    'rowCount',
   ].includes(String(keys[1]));
 }
 

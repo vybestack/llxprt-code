@@ -14,7 +14,20 @@ export function opToEnvelope(op: HistoryJournalOp): {
         type: 'content',
         payload: {
           content: sanitizeProviderContentForSerialization(op.content),
+          ...(op.tx === undefined ? {} : { tx: op.tx }),
         },
+      };
+    case 'replaceBegin':
+      return { type: 'replace_begin', payload: { txId: op.txId } };
+    case 'replaceCommit':
+      return {
+        type: 'replace_commit',
+        payload: { txId: op.txId, rowCount: op.rowCount },
+      };
+    case 'replaceAbort':
+      return {
+        type: 'replace_abort',
+        payload: { txId: op.txId, rowCount: op.rowCount },
       };
     case 'rewind':
       return op.cutSeq === undefined

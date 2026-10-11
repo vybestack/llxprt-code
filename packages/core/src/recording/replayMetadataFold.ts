@@ -352,6 +352,9 @@ function dispatchEvent(
     case 'synthetic_insert':
     case 'chronology_bind':
     case 'compression_detail':
+    case 'replace_begin':
+    case 'replace_commit':
+    case 'replace_abort':
       return undefined;
     case 'session_start':
       return handleSessionStart(payload, acc, lineNumber, expectedProjectHash);
