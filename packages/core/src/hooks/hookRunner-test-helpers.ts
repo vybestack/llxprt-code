@@ -1,9 +1,16 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { tmpdir } from 'node:os';
 import { vi, describe, it, expect } from 'bun:test';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { Readable, Writable } from 'node:stream';
 import type { Config } from '../config/config.js';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import {
+  mkdtempSync,
+  realpathSync,
+  writeFileSync,
+  readFileSync,
+  existsSync,
+} from 'node:fs';
 import type { HookRunner } from './hookRunner.js';
 import { join } from 'node:path';
 import {
@@ -76,11 +83,27 @@ export const rich: IContent = {
   },
 };
 
-export function command(script: string): HookConfig {
+function operand(
+  arg: string,
+  shell: ReturnType<typeof getShellConfiguration>['shell'],
+): string {
+  if (arg !== '') return escapeShellArg(arg, shell);
+  return shell === 'cmd' ? '""' : "''";
+}
+
+/**
+ * Builds a node hook command. Variable data reaches the script as operands
+ * (`process.argv.slice(1)`), never by interpolation into the script text.
+ */
+export function command(
+  script: string,
+  args: readonly string[] = [],
+): HookConfig {
   const shell = getShellConfiguration().shell;
+  const operands = args.map((arg) => ` ${operand(arg, shell)}`).join('');
   return {
     type: HookType.Command,
-    command: `exec ${escapeShellArg('node', shell)} -e ${escapeShellArg(script, shell)}`,
+    command: `exec ${escapeShellArg('node', shell)} -e ${escapeShellArg(script, shell)}${args.length > 0 ? ' --' : ''}${operands}`,
     timeout: 10000,
   };
 }
@@ -93,7 +116,7 @@ export async function fixture(
     root: string,
   ) => Promise<void>,
 ): Promise<void> {
-  const root = mkdtempSync(join(process.cwd(), 'tmp/hook-source-'));
+  const root = mkdtempSync(join(realpathSync(tmpdir()), 'hook-source-'));
   const disk = new ProviderNormalizationDisk(root);
   const owners = new RowOwnership();
   for (const row of rows) disk.append('ordered', row);
