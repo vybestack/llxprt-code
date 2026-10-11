@@ -27,6 +27,7 @@ export function withGpt56DiskSources(
           request,
           request.finalizedProjection,
           factory,
+          workspaceDirectory,
           combined,
         );
       return estimateGpt56PromptFromSources(request, {
