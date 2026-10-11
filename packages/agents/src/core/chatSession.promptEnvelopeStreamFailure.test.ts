@@ -1,3 +1,5 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -26,7 +28,7 @@ import {
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -77,6 +79,9 @@ function createMidStreamFailingProvider(): IProvider {
 }
 
 interface TestFixture {
+  providerManager: ReturnType<
+    typeof createChatSessionRuntime
+  >['providerManager'];
   mockConfig: Config;
   runtimeState: AgentRuntimeState;
   providerRuntimeSnapshot: ProviderRuntimeContext;
@@ -104,7 +109,6 @@ function createTestFixture(provider: IProvider): TestFixture {
       setQuotaErrorOccurred: vi.fn(),
       getEphemeralSettings: vi.fn().mockReturnValue({}),
       getEphemeralSetting: vi.fn().mockReturnValue(undefined),
-      getProviderManager: vi.fn().mockReturnValue(providerManager),
     },
   });
 
@@ -119,6 +123,7 @@ function createTestFixture(provider: IProvider): TestFixture {
   };
 
   return {
+    providerManager: runtimeSetup.providerManager,
     mockConfig,
     runtimeState: createAgentRuntimeState({
       runtimeId: runtimeSetup.runtime.runtimeId,
@@ -139,6 +144,10 @@ function createTestFixture(provider: IProvider): TestFixture {
 
 function buildChatSession(fixture: TestFixture): ChatSession {
   const view = createAgentRuntimeContext({
+    ...createSessionPolicyFixture(
+      fixture.providerRuntimeSnapshot.settingsService,
+      fixture.providerRuntimeSnapshot.runtimeId,
+    ),
     state: fixture.runtimeState,
     history: fixture.historyService,
     settings: {
@@ -147,12 +156,28 @@ function buildChatSession(fixture: TestFixture): ChatSession {
       preserveThreshold: 0.2,
       telemetry: { enabled: false, target: null },
     },
-    provider: createProviderAdapterFromManager(
-      fixture.mockConfig.getProviderManager(),
+    provider: createProviderAdapterFromManager(fixture.providerManager),
+    telemetry: createTelemetryAdapter(
+      fixture.mockConfig,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'prompt-envelope-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
     ),
-    telemetry: createTelemetryAdapterFromConfig(fixture.mockConfig),
     tools: createToolRegistryViewFromRegistry(),
     providerRuntime: fixture.providerRuntimeSnapshot,
+    promptEstimator: {
+      estimatePrompt: async (request) => ({
+        count: await request.legacyEstimate(),
+        method: 'calibrated',
+        family: 'legacy-unregistered',
+        estimatorVersion: 'core-estimate-tokens-v1',
+        assetRevision: 'none',
+        projectionRevision: request.projectionRevision,
+      }),
+    },
   });
 
   return new ChatSession(view, fixture.mockContentGenerator, {}, []);

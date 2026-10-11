@@ -4,11 +4,23 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  enforcePendingPersistenceBytes,
+  preflightPersistenceRequest,
+  backupCorruptedPersistence,
+  pendingPersistenceAccounting,
+  savedPersistenceSummary,
+  collectPersistenceCleanupFailure,
+} from './session-persistence-helpers.js';
+import {
+  hydrateRecordedMedia,
+  publishRecordedFile,
+  stageRecordedMedia,
+} from './recorded-media-transfer.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
 import { type IContent } from '../services/history/IContent.js';
-import type { Storage } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '../debug/index.js';
 import type { LocalMediaStore } from './local-media-store.js';
 import {
@@ -22,7 +34,6 @@ import {
 import {
   containsMediaDiagnostic,
   errorCode,
-  persistenceRequestLowerBound,
 } from './session-persistence-helpers.js';
 import {
   type ToolResultDisplay,
@@ -138,6 +149,7 @@ interface PendingPersistenceSave {
 }
 
 interface PreparedSaveState {
+  durableMedia?: Awaited<ReturnType<typeof stageRecordedMedia>>;
   accountedBytes: number;
   admittedHistory: readonly IContent[] | undefined;
   reservedContentIds: readonly string[];
@@ -159,7 +171,7 @@ type PersistenceSaveOutcome =
  * Enables the --continue flag to resume previous sessions.
  */
 export class SessionPersistenceService {
-  private readonly storage: Storage;
+  private readonly projectRoot: string;
   private readonly sessionId: string;
   private readonly chatsDir: string;
   private readonly sessionFilePath: string;
@@ -173,7 +185,7 @@ export class SessionPersistenceService {
   private readonly saveQueue: PendingPersistenceSave[] = [];
 
   constructor(
-    storage: Storage,
+    paths: { readonly projectRoot: string; readonly chatsDir: string },
     sessionId: string,
     options: SessionPersistenceServiceOptions = {},
   ) {
@@ -183,17 +195,17 @@ export class SessionPersistenceService {
         'Session persistence queue byte limit must be a non-negative safe integer',
       );
     }
-    this.storage = storage;
+    this.projectRoot = paths.projectRoot;
     this.sessionId = sessionId;
     this.mediaStore = options.mediaStore;
     this.maxQueueBytes = maxQueueBytes;
-    this.chatsDir = path.join(storage.getProjectTempDir(), 'chats');
+    this.chatsDir = paths.chatsDir;
 
-    // Use timestamp-based filename for easy "most recent" lookup
+    // Keep timestamp ordering while separating independently owned journals.
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     this.sessionFilePath = path.join(
       this.chatsDir,
-      `${PERSISTED_SESSION_PREFIX}${timestamp}.json`,
+      `${PERSISTED_SESSION_PREFIX}${timestamp}-${crypto.randomUUID()}.json`,
     );
   }
 
@@ -202,16 +214,13 @@ export class SessionPersistenceService {
     metadata: PersistedSession['metadata'] | undefined,
     uiHistory: readonly PersistedUIHistoryItem[] | undefined,
   ): void {
-    const lowerBound = persistenceRequestLowerBound(
+    preflightPersistenceRequest(
       history,
       metadata,
       uiHistory,
+      this.maxQueueBytes,
+      this.pendingBytes,
     );
-    if (lowerBound > this.maxQueueBytes - this.pendingBytes) {
-      throw new Error(
-        `Session persistence queue byte limit exceeded: ${this.pendingBytes} + at least ${lowerBound} > ${this.maxQueueBytes}`,
-      );
-    }
   }
 
   private async releaseAdmission(
@@ -232,11 +241,11 @@ export class SessionPersistenceService {
     ownerId: string,
   ): Promise<void> {
     const failures: unknown[] = [];
-    await this.collectCleanupFailure(failures, () =>
+    await collectPersistenceCleanupFailure(failures, () =>
       this.releaseMedia(reservedContentIds, ownerId),
     );
     if (admissionHistory !== undefined) {
-      await this.collectCleanupFailure(failures, () =>
+      await collectPersistenceCleanupFailure(failures, () =>
         this.releaseAdmission(admissionHistory, admissionContext),
       );
     }
@@ -341,7 +350,11 @@ export class SessionPersistenceService {
       JSON.stringify(queuedSession, null, 2),
       'utf8',
     );
-    this.enforcePendingByteIncrease(accountedBytes);
+    enforcePendingPersistenceBytes(
+      accountedBytes,
+      this.maxQueueBytes,
+      this.pendingBytes,
+    );
     this.pendingBytes += accountedBytes;
     return new Promise<void>((resolve, reject) => {
       this.saveQueue.push({
@@ -459,7 +472,11 @@ export class SessionPersistenceService {
         ),
         'utf8',
       );
-      this.enforcePendingByteIncrease(accountedBytes);
+      enforcePendingPersistenceBytes(
+        accountedBytes,
+        this.maxQueueBytes,
+        this.pendingBytes,
+      );
       state = {
         accountedBytes,
         admittedHistory: undefined,
@@ -487,14 +504,6 @@ export class SessionPersistenceService {
     } catch (error: unknown) {
       this.finishPreparedSave(state);
       throw error;
-    }
-  }
-
-  private enforcePendingByteIncrease(bytes: number): void {
-    if (bytes > this.maxQueueBytes - this.pendingBytes) {
-      throw new Error(
-        `Session persistence queue byte limit exceeded: ${this.pendingBytes} + ${bytes} > ${this.maxQueueBytes}`,
-      );
     }
   }
 
@@ -531,7 +540,11 @@ export class SessionPersistenceService {
       );
       const serializedBytes = Buffer.byteLength(serialized, 'utf8');
       const accountingDelta = serializedBytes - state.accountedBytes;
-      this.enforcePendingByteIncrease(accountingDelta);
+      enforcePendingPersistenceBytes(
+        accountingDelta,
+        this.maxQueueBytes,
+        this.pendingBytes,
+      );
       state.accountedBytes = serializedBytes;
       this.pendingBytes += accountingDelta;
       state.reservedContentIds = await this.reserveMedia(
@@ -543,11 +556,11 @@ export class SessionPersistenceService {
       await fs.promises.writeFile(state.tempPath, serialized, 'utf-8');
     } catch (error: unknown) {
       const failures: unknown[] = [error];
-      await this.collectCleanupFailure(failures, () =>
+      await collectPersistenceCleanupFailure(failures, () =>
         fs.promises.rm(state.tempPath, { force: true }),
       );
       if (state.ownershipPending) {
-        const released = await this.collectCleanupFailure(failures, () =>
+        const released = await collectPersistenceCleanupFailure(failures, () =>
           this.releasePreparedOwnership(state),
         );
         if (released) state.ownershipPending = false;
@@ -585,8 +598,13 @@ export class SessionPersistenceService {
     if (state.settled || state.published) {
       throw new Error('Persistence save was already published or settled');
     }
+    state.durableMedia = await stageRecordedMedia(
+      this.mediaStore,
+      state.admittedHistory,
+    );
     await fs.promises.rename(state.tempPath, this.sessionFilePath);
     state.published = true;
+    await state.durableMedia.finalize();
     await this.releasePreparedOwnership(state);
     state.ownershipPending = false;
     state.reservedContentIds = [];
@@ -595,13 +613,13 @@ export class SessionPersistenceService {
   private async rollbackPreparedSave(state: PreparedSaveState): Promise<void> {
     if (state.settled) return;
     const failures: unknown[] = [];
-    await this.collectCleanupFailure(failures, () =>
+    await collectPersistenceCleanupFailure(failures, () =>
       state.published
         ? this.restorePersistenceTarget(state.previousContents ?? null)
         : fs.promises.rm(state.tempPath, { force: true }),
     );
     if (state.ownershipPending) {
-      const released = await this.collectCleanupFailure(failures, () =>
+      const released = await collectPersistenceCleanupFailure(failures, () =>
         this.releasePreparedOwnership(state),
       );
       if (released) {
@@ -609,6 +627,9 @@ export class SessionPersistenceService {
         state.reservedContentIds = [];
       }
     }
+    await collectPersistenceCleanupFailure(failures, async () => {
+      await state.durableMedia?.rollback();
+    });
     this.finishPreparedSave(state);
     if (failures.length === 1) throw failures[0];
     if (failures.length > 1) {
@@ -631,6 +652,7 @@ export class SessionPersistenceService {
     if (!state.published) {
       throw new Error('Cannot finalize an unpublished persistence save');
     }
+    state.durableMedia?.commit();
     this.finishPreparedSave(state);
   }
 
@@ -643,19 +665,6 @@ export class SessionPersistenceService {
     this.transactionActive = false;
     this.startNextSave();
     this.notifyIdleWaiters();
-  }
-
-  private async collectCleanupFailure(
-    failures: unknown[],
-    cleanup: () => Promise<void>,
-  ): Promise<boolean> {
-    try {
-      await cleanup();
-      return true;
-    } catch (error: unknown) {
-      failures.push(error);
-      return false;
-    }
   }
 
   private async executeSave(pending: PendingPersistenceSave): Promise<void> {
@@ -690,21 +699,27 @@ export class SessionPersistenceService {
         pending.updatedAt,
       );
       const serialized = JSON.stringify(session, null, 2);
-      const serializedBytes = Buffer.byteLength(serialized, 'utf8');
-      const accountingDelta = serializedBytes - pending.accountedBytes;
-      this.enforcePendingByteIncrease(accountingDelta);
+      const { serializedBytes, accountingDelta } = pendingPersistenceAccounting(
+        serialized,
+        pending.accountedBytes,
+        this.maxQueueBytes,
+        this.pendingBytes,
+      );
       pending.accountedBytes = serializedBytes;
       this.pendingBytes += accountingDelta;
       reservedContentIds = await this.reserveMedia(admittedHistory, ownerId);
       await fs.promises.mkdir(this.chatsDir, { recursive: true });
       await fs.promises.writeFile(tempPath, serialized, 'utf-8');
-      await fs.promises.rename(tempPath, this.sessionFilePath);
-      logger.debug('Session saved:', {
-        path: this.sessionFilePath,
-        historyLength: admittedHistory.length,
-        generation: pending.generation,
-        metadata: pending.metadata,
-      });
+      await publishRecordedFile(
+        this.mediaStore,
+        { admittedHistory, tempPath },
+        this.sessionFilePath,
+        fs.promises.rename,
+      );
+      logger.debug(
+        'Session saved:',
+        savedPersistenceSummary(this.sessionFilePath, admittedHistory, pending),
+      );
     } catch (error: unknown) {
       logger.error('Failed to save session:', error);
       failures.push(error);
@@ -766,6 +781,7 @@ export class SessionPersistenceService {
     };
     let admittedHistory: IContent[] | undefined;
     try {
+      await hydrateRecordedMedia(this.mediaStore, session.history);
       admittedHistory =
         this.mediaStore === undefined
           ? session.history
@@ -892,7 +908,7 @@ export class SessionPersistenceService {
    * Get project hash for validation
    */
   private getProjectHash(): string {
-    const projectRoot = this.storage.getProjectRoot();
+    const projectRoot = this.projectRoot;
     return crypto.createHash('sha256').update(projectRoot).digest('hex');
   }
 
@@ -908,24 +924,7 @@ export class SessionPersistenceService {
   /**
    * Back up corrupted session file
    */
-  private async backupCorruptedSession(): Promise<void> {
-    try {
-      const files = await fs.promises.readdir(this.chatsDir);
-      const sessionFiles = files
-        .filter(
-          (f) => f.startsWith(PERSISTED_SESSION_PREFIX) && f.endsWith('.json'),
-        )
-        .sort()
-        .reverse();
-
-      if (sessionFiles.length > 0) {
-        const corruptedFile = path.join(this.chatsDir, sessionFiles[0]);
-        const backupFile = `${corruptedFile}.corrupted-${Date.now()}`;
-        await fs.promises.rename(corruptedFile, backupFile);
-        logger.warn('Backed up corrupted session to:', backupFile);
-      }
-    } catch (backupError) {
-      logger.error('Failed to backup corrupted session:', backupError);
-    }
+  private backupCorruptedSession(): Promise<void> {
+    return backupCorruptedPersistence(this.chatsDir);
   }
 }

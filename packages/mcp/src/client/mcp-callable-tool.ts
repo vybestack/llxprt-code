@@ -40,7 +40,10 @@ export class McpCallableTool implements CallableTool {
     ];
   }
 
-  async callTool(functionCalls: FunctionCall[]): Promise<Part[]> {
+  async callTool(
+    functionCalls: FunctionCall[],
+    signal?: AbortSignal,
+  ): Promise<Part[]> {
     // We only expect one function call at a time for MCP tools in this context
     if (functionCalls.length !== 1) {
       throw new Error('McpCallableTool only supports single function call');
@@ -60,7 +63,7 @@ export class McpCallableTool implements CallableTool {
           arguments: call.args ?? {},
         },
         undefined,
-        { timeout: this.timeout },
+        { timeout: this.timeout, signal },
       );
       if (!this.isAuthorized()) {
         throw new Error(MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE);

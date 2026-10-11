@@ -173,7 +173,7 @@ describe('AnthropicProvider tool payload handling', () => {
       ];
 
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
       );
 
       const chunks = [];
@@ -238,7 +238,7 @@ describe('AnthropicProvider tool payload handling', () => {
       ];
 
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
       );
 
       for await (const _chunk of generator) {
@@ -302,7 +302,7 @@ describe('AnthropicProvider tool payload handling', () => {
       ];
 
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
       );
 
       const chunks = [];
@@ -375,7 +375,7 @@ describe('AnthropicProvider tool payload handling', () => {
         },
       ];
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
       );
 
       const chunks = [];
@@ -423,7 +423,7 @@ describe('AnthropicProvider tool payload handling', () => {
         },
       ];
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
       );
 
       const chunks = [];
@@ -475,7 +475,7 @@ describe('AnthropicProvider tool payload handling', () => {
         },
       ];
       const generator = provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
       );
 
       const chunks = [];

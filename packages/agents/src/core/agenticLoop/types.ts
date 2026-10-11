@@ -26,13 +26,8 @@ import {
 import type { ToolConfirmationRequest } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { SchedulerHandle } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
-import type { SchedulerPurpose } from '@vybestack/llxprt-code-core/session/sessionSchedulerRegistry.js';
-import type {
-  SchedulerCallbacks,
-  SchedulerOptions,
-} from '@vybestack/llxprt-code-core/config/config.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { SchedulerCallbacks } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
+import type { SessionSchedulerOwner } from '../../session/sessionSchedulerOwner.js';
 
 /**
  * @requirement REQ-LOOP-001
@@ -118,26 +113,6 @@ export interface AgenticLoopRuntime {
   getSessionId(): string;
   getModel(): string;
   getImagePayloadBudgetBytes(): number;
-  /**
-   * Releases the loop's scheduler acquisition. Callers holding their
-   * acquired scheduler handle should pass it so a stale release cannot
-   * dispose a replacement entry installed under the same owner/purpose.
-   */
-  disposeScheduler(
-    owner: object,
-    purpose: SchedulerPurpose,
-    handle?: object,
-  ): void;
-  getOrCreateScheduler(
-    owner: object,
-    purpose: SchedulerPurpose,
-    callbacks: SchedulerCallbacks,
-    options?: SchedulerOptions,
-    dependencies?: {
-      messageBus?: MessageBus;
-      toolRegistry?: ToolRegistry;
-    },
-  ): Promise<SchedulerHandle>;
 }
 
 /**
@@ -145,7 +120,7 @@ export interface AgenticLoopRuntime {
  * Construction options for {@link AgenticLoop}.
  *
  * Three injection points:
- *  - **Runtime**: `config` carries scheduler/session/model access. Pure engine
+ *  - **Runtime**: `config` carries session/model access. Pure engine
  *    logic — never touches UI.
  *  - **Approval**: the optional `approvalHandler`, invoked only on `ASK_USER`.
  *  - **Display**: the optional {@link DisplayCallbacks}, forwarded to the
@@ -154,9 +129,12 @@ export interface AgenticLoopRuntime {
  *    completion ownership.
  */
 export interface AgenticLoopOptions {
+  createSchedulerOwner: (
+    callbacks: SchedulerCallbacks,
+  ) => SessionSchedulerOwner;
   /** Single-turn turn primitive (`sendMessageStream`) and history sink. */
   agentClient: AgentClientContract;
-  /** Carries scheduler singleton, session id, and current model identity. */
+  /** Carries session id and current model identity. */
   config: AgenticLoopRuntime;
   /** Confirmation bus the scheduler's ConfirmationCoordinator publishes to. */
   messageBus: MessageBus;

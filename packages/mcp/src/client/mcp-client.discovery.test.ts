@@ -3,6 +3,9 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createTestOAuthBinding } from './test-support/index.js';
+
+import { unsupportedApprovalPolicy } from './test-support/approval-policy.js';
 
 import { automock } from '../../../test-utils/src/automock.js';
 import { waitFor } from '../../../test-utils/src/wait-for.js';
@@ -27,11 +30,9 @@ import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { registerMcpHostServices } from '../host/hostServices.js';
 
 // Exercises the real host seam instead of mocking a module (#3305).
 const mockEmitFeedback = vi.fn();
-registerMcpHostServices({ emitFeedback: mockEmitFeedback });
 
 const realStdioModule = {
   ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
@@ -125,6 +126,8 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         {
           command: 'test-command',
@@ -136,6 +139,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        mockEmitFeedback,
       );
       await client.connect();
       await client.discover(createTrustedConfig());
@@ -172,6 +177,8 @@ describe('mcp-client', () => {
         {} as SdkClientStdioLib.StdioClientTransport,
       );
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         { command: 'test-command' },
         {
@@ -184,6 +191,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        mockEmitFeedback,
       );
       await client.connect();
       const discovery = client.discover(createTrustedConfig());
@@ -246,6 +255,8 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         {
           command: 'test-command',
@@ -257,6 +268,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        mockEmitFeedback,
       );
       await client.connect();
       await client.discover(createTrustedConfig());
@@ -289,6 +302,8 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         {
           command: 'test-command',
@@ -300,6 +315,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        mockEmitFeedback,
       );
       await client.connect();
       await expect(client.discover(createTrustedConfig())).rejects.toThrow(
@@ -333,6 +350,8 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         {
           command: 'test-command',
@@ -344,6 +363,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        mockEmitFeedback,
       );
       await client.connect();
       await expect(client.discover(createTrustedConfig())).rejects.toThrow(
@@ -384,6 +405,8 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         {
           command: 'test-command',
@@ -395,6 +418,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        mockEmitFeedback,
       );
       await client.connect();
       await client.discover(createTrustedConfig());
@@ -449,6 +474,8 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         {
           command: 'test-command',
@@ -460,6 +487,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        mockEmitFeedback,
       );
       await client.connect();
       await client.discover(createTrustedConfig());

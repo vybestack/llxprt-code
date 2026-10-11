@@ -21,9 +21,7 @@ import {
   type SlashCommand,
   CommandKind,
 } from './types.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { fetchAllQuotaInfo } from './statsQuota.js';
-import { discoverProviderBuckets } from './oauthBucketDiscovery.js';
 import { formatSessionSection } from './formatSessionSection.js';
 import type { SessionRecordingMetadata } from '../types/SessionRecordingMetadata.js';
 
@@ -51,8 +49,8 @@ async function defaultSessionView(context: CommandContext): Promise<void> {
   const wallDuration = now.getTime() - rawStartTime.getTime();
 
   // Fetch quota information
-  const runtimeApi = getRuntimeApi();
-  const quotaLines = await fetchAllQuotaInfo(runtimeApi);
+  const runtimeApi = context.runtimeApi;
+  const quotaLines = await fetchAllQuotaInfo(runtimeApi, context.oauthControl);
 
   const statsItem: HistoryItemStats = {
     type: MessageType.STATS,
@@ -69,10 +67,13 @@ async function defaultSessionView(context: CommandContext): Promise<void> {
 }
 
 async function quotaSubcommandAction(context: CommandContext): Promise<void> {
-  const runtimeApi = getRuntimeApi();
+  const runtimeApi = context.runtimeApi;
 
   try {
-    const quotaLines = await fetchAllQuotaInfo(runtimeApi);
+    const quotaLines = await fetchAllQuotaInfo(
+      runtimeApi,
+      context.oauthControl,
+    );
 
     if (quotaLines.length === 0) {
       context.ui.addItem(
@@ -167,10 +168,9 @@ async function bucketsSubcommandAction(
   context: CommandContext,
   _args: string,
 ): Promise<void> {
-  const runtimeApi = getRuntimeApi();
-  const oauthManager = runtimeApi.maybeGetCliOAuthManager();
+  const oauthControl = context.oauthControl;
 
-  if (!oauthManager) {
+  if (!oauthControl.isAvailable()) {
     context.ui.addItem(
       {
         type: MessageType.INFO,
@@ -182,7 +182,7 @@ async function bucketsSubcommandAction(
   }
 
   try {
-    const discovered = await discoverProviderBuckets(oauthManager, logger);
+    const discovered = await oauthControl.discoverBuckets(logger);
 
     if (discovered.length === 0) {
       context.ui.addItem(

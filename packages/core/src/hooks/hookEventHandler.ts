@@ -12,13 +12,16 @@
  * @pseudocode:analysis/pseudocode/02-hook-event-handler-flow.md
  */
 
-import type { Config } from '../config/config.js';
+import type { HookSessionRuntime } from './hook-configuration.js';
 import type { HookRegistry } from './hookRegistry.js';
 import type { HookPlanner } from './hookPlanner.js';
 import type { HookRunner } from './hookRunner.js';
 import type { HookAggregator, AggregatedHookResult } from './hookAggregator.js';
 import type {
   HookInput,
+  BeforeToolSelectionHookOutput,
+  AfterModelHookOutput,
+  BeforeModelHookOutput,
   DefaultHookOutput,
   SessionStartSource,
   SessionEndReason,
@@ -42,7 +45,6 @@ import {
   validateNotificationInput,
 } from './hookValidators.js';
 import { coreEvents } from '../utils/events.js';
-import { logHookCall } from '../telemetry/loggers.js';
 import { HookCallEvent } from '../telemetry/types.js';
 import { MessageBusType } from '../confirmation-bus/types.js';
 import type { HookExecutionResponse } from './hookBusContracts.js';
@@ -126,8 +128,71 @@ const EMPTY_SUCCESS_RESULT: AggregatedHookResult = {
  * @requirement:HOOK-146 - Logs telemetry at debug level for every event fire
  * @requirement:HOOK-147 - Wraps fire*Event body in try/catch, never propagates exceptions
  */
+export interface HookExecutionOwner {
+  readonly sessionId: () => string;
+  readonly transcriptPath: () => string | undefined;
+  readonly signal?: AbortSignal;
+  readonly beforeTool?: (
+    name: string,
+    input: Record<string, unknown>,
+    context?: McpContext,
+    signal?: AbortSignal,
+  ) => Promise<DefaultHookOutput | undefined>;
+  readonly afterTool?: (
+    name: string,
+    input: Record<string, unknown>,
+    response: Record<string, unknown>,
+    context?: McpContext,
+    signal?: AbortSignal,
+  ) => Promise<DefaultHookOutput | undefined>;
+  readonly beforeModel?: (
+    request: Omit<HookLLMRequest, 'version'>,
+    signal?: AbortSignal,
+  ) => Promise<BeforeModelHookOutput | undefined>;
+  readonly afterModel?: (
+    request: Omit<HookLLMRequest, 'version'>,
+    response: Omit<HookLLMResponse, 'version'>,
+    signal?: AbortSignal,
+  ) => Promise<AfterModelHookOutput | undefined>;
+  readonly beforeToolSelection?: (
+    request: Omit<HookLLMRequest, 'version'>,
+    signal?: AbortSignal,
+  ) => Promise<BeforeToolSelectionHookOutput | undefined>;
+  readonly beforeAgent?: (
+    prompt: string,
+    signal?: AbortSignal,
+  ) => Promise<AggregatedHookResult | undefined>;
+  readonly afterAgent?: (
+    prompt: string,
+    response: string,
+    stop: boolean,
+    signal?: AbortSignal,
+  ) => Promise<AggregatedHookResult | undefined>;
+  readonly sessionStart?: (
+    source: SessionStartSource,
+    signal?: AbortSignal,
+  ) => Promise<AggregatedHookResult | undefined>;
+  readonly sessionEnd?: (
+    reason: SessionEndReason,
+    signal?: AbortSignal,
+  ) => Promise<AggregatedHookResult | undefined>;
+  readonly preCompress?: (
+    trigger: PreCompressTrigger,
+    signal?: AbortSignal,
+  ) => Promise<AggregatedHookResult | undefined>;
+  readonly notification?: (
+    type: NotificationType,
+    message: string,
+    details: Record<string, unknown>,
+    signal?: AbortSignal,
+  ) => Promise<AggregatedHookResult | undefined>;
+}
+
 export class HookEventHandler {
-  private readonly config: Config;
+  private readonly session: Pick<
+    HookSessionRuntime,
+    'cwd' | 'sessionId' | 'transcriptPath' | 'logCall'
+  >;
   private readonly planner: HookPlanner;
   private readonly runner: HookRunner;
   private readonly aggregator: HookAggregator;
@@ -137,7 +202,9 @@ export class HookEventHandler {
    * @plan PLAN-20250218-HOOKSYSTEM.P03
    * @requirement DELTA-HSYS-001
    */
-  private readonly messageBus: MessageBus | undefined;
+  private readonly messageBus:
+    | Pick<MessageBus, 'subscribe' | 'publish'>
+    | undefined;
 
   /**
    * @plan PLAN-20250218-HOOKSYSTEM.P03
@@ -150,6 +217,9 @@ export class HookEventHandler {
    * @requirement DELTA-HEVT-004
    */
   private disposed = false;
+  private readonly lifetime = new AbortController();
+  private readonly accepted = new Set<Promise<AggregatedHookResult>>();
+  private disposal: Promise<void> | undefined;
 
   /**
    * @plan PLAN-20250218-HOOKSYSTEM.P03
@@ -164,15 +234,18 @@ export class HookEventHandler {
    * @pseudocode message-bus-integration.md lines 50-56
    */
   constructor(
-    config: Config,
+    session: Pick<
+      HookSessionRuntime,
+      'cwd' | 'sessionId' | 'transcriptPath' | 'logCall'
+    >,
     _registry: HookRegistry, // Retained for future use, planner already has reference
     planner: HookPlanner,
     runner: HookRunner,
     aggregator: HookAggregator,
-    messageBus?: MessageBus,
+    messageBus?: Pick<MessageBus, 'subscribe' | 'publish'>,
     injectedDebugLogger?: DebugLogger,
   ) {
-    this.config = config;
+    this.session = session;
     this.planner = planner;
     this.runner = runner;
     this.aggregator = aggregator;
@@ -200,17 +273,17 @@ export class HookEventHandler {
    * @plan PLAN-20250219-GMERGE022.B2
    * @requirement R2
    */
-  private buildBaseInput(eventName: string): HookInput {
-    // Get transcript path from SessionRecordingService if available
-    const recordingService = this.config.getSessionRecordingService();
-    const transcriptPath = recordingService?.getFilePath() ?? '';
-
+  private buildBaseInput(
+    eventName: string,
+    owner: HookExecutionOwner | undefined,
+  ): HookInput {
+    const path = owner?.transcriptPath() ?? this.session.transcriptPath() ?? '';
     return {
-      session_id: this.config.getSessionId(),
-      cwd: this.config.getTargetDir(),
+      session_id: owner?.sessionId() ?? this.session.sessionId(),
+      cwd: this.session.cwd,
       timestamp: new Date().toISOString(),
       hook_event_name: eventName,
-      transcript_path: transcriptPath,
+      transcript_path: path,
     };
   }
 
@@ -222,12 +295,17 @@ export class HookEventHandler {
     toolName: string,
     toolInput: Record<string, unknown>,
     mcpContext?: McpContext,
+    owner?: HookExecutionOwner,
   ): Promise<DefaultHookOutput | undefined> {
-    return this.executeEvent(HookEventName.BeforeTool, {
-      tool_name: toolName,
-      tool_input: toolInput,
-      ...(mcpContext && { mcp_context: mcpContext }),
-    });
+    return this.executeEvent(
+      HookEventName.BeforeTool,
+      {
+        tool_name: toolName,
+        tool_input: toolInput,
+        ...(mcpContext && { mcp_context: mcpContext }),
+      },
+      owner,
+    );
   }
 
   /**
@@ -239,13 +317,18 @@ export class HookEventHandler {
     toolInput: Record<string, unknown>,
     toolResponse: Record<string, unknown>,
     mcpContext?: McpContext,
+    owner?: HookExecutionOwner,
   ): Promise<DefaultHookOutput | undefined> {
-    return this.executeEvent(HookEventName.AfterTool, {
-      tool_name: toolName,
-      tool_input: toolInput,
-      tool_response: toolResponse,
-      ...(mcpContext && { mcp_context: mcpContext }),
-    });
+    return this.executeEvent(
+      HookEventName.AfterTool,
+      {
+        tool_name: toolName,
+        tool_input: toolInput,
+        tool_response: toolResponse,
+        ...(mcpContext && { mcp_context: mcpContext }),
+      },
+      owner,
+    );
   }
 
   /**
@@ -256,12 +339,17 @@ export class HookEventHandler {
    */
   async fireBeforeModelEvent(
     request: Omit<HookLLMRequest, 'version'>,
+    owner?: HookExecutionOwner,
   ): Promise<AggregatedHookResult> {
     try {
       // version is stamped centrally so no call site can forget it
-      return await this.executeEventWithFullResult(HookEventName.BeforeModel, {
-        llm_request: { ...request, version: 2 },
-      });
+      return await this.executeEventWithFullResult(
+        HookEventName.BeforeModel,
+        {
+          llm_request: { ...request, version: 2 },
+        },
+        owner,
+      );
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireBeforeModelEvent', {
         eventName: HookEventName.BeforeModel,
@@ -278,12 +366,17 @@ export class HookEventHandler {
   async fireAfterModelEvent(
     request: Omit<HookLLMRequest, 'version'>,
     response: Omit<HookLLMResponse, 'version'>,
+    owner?: HookExecutionOwner,
   ): Promise<AggregatedHookResult> {
     try {
-      return await this.executeEventWithFullResult(HookEventName.AfterModel, {
-        llm_request: { ...request, version: 2 },
-        llm_response: { ...response, version: 2 },
-      });
+      return await this.executeEventWithFullResult(
+        HookEventName.AfterModel,
+        {
+          llm_request: { ...request, version: 2 },
+          llm_response: { ...response, version: 2 },
+        },
+        owner,
+      );
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireAfterModelEvent', {
         eventName: HookEventName.AfterModel,
@@ -299,11 +392,13 @@ export class HookEventHandler {
    */
   async fireBeforeToolSelectionEvent(
     request: Omit<HookLLMRequest, 'version'>,
+    owner?: HookExecutionOwner,
   ): Promise<AggregatedHookResult> {
     try {
       return await this.executeEventWithFullResult(
         HookEventName.BeforeToolSelection,
         { llm_request: { ...request, version: 2 } },
+        owner,
       );
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireBeforeToolSelectionEvent', {
@@ -319,13 +414,15 @@ export class HookEventHandler {
    * @requirement DELTA-HPAY-006, DELTA-HFAIL-001
    * @requirement:HOOK-143
    */
-  async fireSessionStartEvent(context: {
-    source: SessionStartSource;
-  }): Promise<AggregatedHookResult> {
+  async fireSessionStartEvent(
+    context: { source: SessionStartSource },
+    owner?: HookExecutionOwner,
+  ): Promise<AggregatedHookResult> {
     try {
       return await this.executeEventWithFullResult(
         HookEventName.SessionStart,
         context,
+        owner,
       );
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireSessionStartEvent', {
@@ -341,13 +438,15 @@ export class HookEventHandler {
    * @requirement DELTA-HPAY-006, DELTA-HFAIL-001
    * @requirement:HOOK-143
    */
-  async fireSessionEndEvent(context: {
-    reason: SessionEndReason;
-  }): Promise<AggregatedHookResult> {
+  async fireSessionEndEvent(
+    context: { reason: SessionEndReason },
+    owner?: HookExecutionOwner,
+  ): Promise<AggregatedHookResult> {
     try {
       return await this.executeEventWithFullResult(
         HookEventName.SessionEnd,
         context,
+        owner,
       );
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireSessionEndEvent', {
@@ -362,13 +461,17 @@ export class HookEventHandler {
    * @plan PLAN-20250219-GMERGE021.R4.P01
    * @requirement REQ-P01-1
    */
-  async firePreCompressEvent(context: {
-    trigger: PreCompressTrigger;
-  }): Promise<AggregatedHookResult> {
+  async firePreCompressEvent(
+    context: {
+      trigger: PreCompressTrigger;
+    },
+    owner?: HookExecutionOwner,
+  ): Promise<AggregatedHookResult> {
     try {
       return await this.executeEventWithFullResult(
         HookEventName.PreCompress,
         context,
+        owner,
       );
     } catch (error) {
       return this.buildFailureEnvelope(error, 'firePreCompressEvent', {
@@ -383,13 +486,17 @@ export class HookEventHandler {
    * @plan PLAN-20250218-HOOKSYSTEM.P12
    * @requirement DELTA-HFAIL-001
    */
-  async fireBeforeAgentEvent(context: {
-    prompt: string;
-  }): Promise<AggregatedHookResult> {
+  async fireBeforeAgentEvent(
+    context: {
+      prompt: string;
+    },
+    owner?: HookExecutionOwner,
+  ): Promise<AggregatedHookResult> {
     try {
       return await this.executeEventWithFullResult(
         HookEventName.BeforeAgent,
         context,
+        owner,
       );
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireBeforeAgentEvent', {
@@ -404,15 +511,19 @@ export class HookEventHandler {
    * @plan PLAN-20250218-HOOKSYSTEM.P12
    * @requirement DELTA-HFAIL-001
    */
-  async fireAfterAgentEvent(context: {
-    prompt: string;
-    prompt_response: string;
-    stop_hook_active: boolean;
-  }): Promise<AggregatedHookResult> {
+  async fireAfterAgentEvent(
+    context: {
+      prompt: string;
+      prompt_response: string;
+      stop_hook_active: boolean;
+    },
+    owner?: HookExecutionOwner,
+  ): Promise<AggregatedHookResult> {
     try {
       return await this.executeEventWithFullResult(
         HookEventName.AfterAgent,
         context,
+        owner,
       );
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireAfterAgentEvent', {
@@ -431,13 +542,18 @@ export class HookEventHandler {
     type: NotificationType,
     message: string,
     details: Record<string, unknown>,
+    owner?: HookExecutionOwner,
   ): Promise<AggregatedHookResult> {
     try {
-      return await this.executeEventWithFullResult(HookEventName.Notification, {
-        notification_type: type,
-        message,
-        details,
-      });
+      return await this.executeEventWithFullResult(
+        HookEventName.Notification,
+        {
+          notification_type: type,
+          message,
+          details,
+        },
+        owner,
+      );
     } catch (error) {
       return this.buildFailureEnvelope(error, 'fireNotificationEvent', {
         eventName: HookEventName.Notification,
@@ -452,9 +568,14 @@ export class HookEventHandler {
   private async executeEvent(
     eventName: HookEventName,
     context: Record<string, unknown>,
+    owner?: HookExecutionOwner,
   ): Promise<DefaultHookOutput | undefined> {
     try {
-      const result = await this.executeEventWithFullResult(eventName, context);
+      const result = await this.executeEventWithFullResult(
+        eventName,
+        context,
+        owner,
+      );
       return result.finalOutput;
     } catch (error) {
       this.debugLogger.warn(`${eventName} hook error (non-fatal): ${error}`);
@@ -469,9 +590,34 @@ export class HookEventHandler {
    * @plan PLAN-20250218-HOOKSYSTEM.P03
    * @requirement DELTA-HFAIL-005
    */
-  private async executeEventWithFullResult<T extends Record<string, unknown>>(
+  private executeEventWithFullResult<T extends Record<string, unknown>>(
     eventName: HookEventName,
     context: T,
+    owner?: HookExecutionOwner,
+  ): Promise<AggregatedHookResult> {
+    if (this.disposed) return Promise.reject(this.lifetime.signal.reason);
+    const signal =
+      owner?.signal === undefined
+        ? this.lifetime.signal
+        : AbortSignal.any([owner.signal, this.lifetime.signal]);
+    const execution = {
+      sessionId: owner?.sessionId ?? this.session.sessionId,
+      transcriptPath: owner?.transcriptPath ?? this.session.transcriptPath,
+      signal,
+    };
+    const pending = this.executeAdmittedEvent(eventName, context, execution);
+    this.accepted.add(pending);
+    void pending.then(
+      () => this.accepted.delete(pending),
+      () => this.accepted.delete(pending),
+    );
+    return pending;
+  }
+
+  private async executeAdmittedEvent<T extends Record<string, unknown>>(
+    eventName: HookEventName,
+    context: T,
+    owner?: HookExecutionOwner,
   ): Promise<AggregatedHookResult> {
     const startTime = Date.now();
 
@@ -505,7 +651,7 @@ export class HookEventHandler {
     }
 
     // Build input payload
-    const baseInput = this.buildBaseInput(eventName);
+    const baseInput = this.buildBaseInput(eventName, owner);
     const input = { ...baseInput, ...context } as HookInput;
 
     // Execute hooks
@@ -514,11 +660,13 @@ export class HookEventHandler {
           plan.hookConfigs,
           eventName,
           input,
+          owner?.signal,
         )
       : await this.runner.executeHooksParallel(
           plan.hookConfigs,
           eventName,
           input,
+          owner?.signal,
         );
 
     // Aggregate results
@@ -675,10 +823,7 @@ export class HookEventHandler {
     for (const result of hookResults) {
       if (hookInput) {
         try {
-          logHookCall(
-            this.config,
-            new HookCallEvent(eventName, hookInput, result),
-          );
+          this.session.logCall(new HookCallEvent(eventName, hookInput, result));
         } catch (error) {
           this.debugLogger.warn(
             `Failed to emit hook telemetry for ${eventName}: ${
@@ -994,12 +1139,23 @@ export class HookEventHandler {
    * @requirement DELTA-HEVT-004
    * @pseudocode message-bus-integration.md lines 130-136
    */
-  dispose(): void {
-    // Line 131: SET this.isDisposed = true (idempotent)
-    if (this.disposed) return;
+  dispose(): Promise<void> {
+    if (this.disposal !== undefined) return this.disposal;
     this.disposed = true;
-    // Lines 132-134: IF subscription exists → unsubscribe
+    this.lifetime.abort(new Error('Hook event handler has been disposed.'));
     this.subscriptionHandle?.unsubscribe();
     this.subscriptionHandle = undefined;
+    this.disposal = Promise.allSettled([...this.accepted]).then((results) => {
+      const failures = results.flatMap((result) =>
+        result.status === 'rejected' &&
+        result.reason !== this.lifetime.signal.reason
+          ? [result.reason]
+          : [],
+      );
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1)
+        throw new AggregateError(failures, 'Hook event shutdown failed');
+    });
+    return this.disposal;
   }
 }

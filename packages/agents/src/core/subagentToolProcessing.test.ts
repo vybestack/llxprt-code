@@ -430,14 +430,14 @@ describe('subagentToolProcessing', () => {
         subagentId: 'emit-agent',
         logger: new DebugLogger('issue3540-test'),
         toolExecutorContext: {
-          getToolRegistry: () => ({}) as never,
+          getToolRegistry: () => {
+            throw new Error('Restricted calls must not access execution tools');
+          },
           getEphemeralSettings: () => ({}),
           getEphemeralSetting: () => undefined,
           getExcludeTools: () => [],
           getSessionId: () => 'test-session',
           getTelemetryLogPromptsEnabled: () => false,
-          getOrCreateScheduler: vi.fn(),
-          disposeScheduler: vi.fn(),
         },
         // Test-only partial stub; the emit branch only reads the budget.
         config: {
@@ -828,14 +828,14 @@ describe('subagentToolProcessing', () => {
         subagentId: 'test-agent',
         logger: new DebugLogger('test'),
         toolExecutorContext: {
-          getToolRegistry: () => ({}) as never,
+          getToolRegistry: () => {
+            throw new Error('Restricted calls must not access execution tools');
+          },
           getEphemeralSettings: () => ({}),
           getEphemeralSetting: () => undefined,
           getExcludeTools: () => [],
           getSessionId: () => 'test-session',
           getTelemetryLogPromptsEnabled: () => false,
-          getOrCreateScheduler: vi.fn(),
-          disposeScheduler: vi.fn(),
         },
         config: {
           getImagePayloadBudgetBytes: () => DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
@@ -870,9 +870,6 @@ describe('subagentToolProcessing', () => {
       );
 
       expect(ctx.output.emitted_vars['result']).toBe('allowed');
-      expect(
-        ctx.toolExecutorContext.getOrCreateScheduler,
-      ).not.toHaveBeenCalled();
       expect(JSON.stringify(content)).not.toContain('run_shell_command');
       expect(JSON.stringify(content)).not.toContain('blocked-call');
     });
@@ -895,9 +892,6 @@ describe('subagentToolProcessing', () => {
       );
 
       expect(content).toStrictEqual([]);
-      expect(
-        ctx.toolExecutorContext.getOrCreateScheduler,
-      ).not.toHaveBeenCalled();
     });
   });
 });

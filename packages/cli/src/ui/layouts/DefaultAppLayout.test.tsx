@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 
 import { render } from 'ink-testing-library';
 import { describe, it, expect, vi } from 'bun:test';
@@ -121,14 +122,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
     value: rawValue,
   })),
   applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
-  getCliRuntimeContext: () => ({
-    messageBus: {
-      subscribe: vi.fn(),
-      publish: vi.fn(),
-      unsubscribe: vi.fn(),
-      requestBucketAuthConfirmation: vi.fn(),
-    },
-  }),
 }));
 
 function createConfigStub() {
@@ -242,8 +235,11 @@ function renderDefaultAppLayout({
 
   const inner = (
     <DefaultAppLayout
-      uiRuntime={buildUiRuntimeFromSource(config)}
-      slashCommandRuntime={buildSlashCommandRuntime(config)}
+      uiRuntime={buildUiRuntimeFromSource(config, createUiSessionOwner())}
+      slashCommandRuntime={buildSlashCommandRuntime(
+        config,
+        createUiSessionOwner(),
+      )}
       settings={settings as never}
       startupWarnings={[]}
       version={'0.0.0-test'}

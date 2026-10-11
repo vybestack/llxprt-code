@@ -1,3 +1,4 @@
+import { resolveActiveProviderForAlias } from '../../runtime/providerInspection.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -57,7 +58,6 @@ const mocks = (() => {
   };
   return {
     getProviderManagerMock: vi.fn(),
-    refreshAliasProvidersMock: vi.fn(),
     runtimeApi,
     getRuntimeApiMock: vi.fn(() => runtimeApi),
     agent,
@@ -70,8 +70,6 @@ const mocks = (() => {
 void vi.mock('@vybestack/llxprt-code-providers/composition.js', () => {
   const real = realProviderAliasesModule;
   return {
-    getProviderManager: mocks.getProviderManagerMock,
-    refreshAliasProviders: mocks.refreshAliasProvidersMock,
     writeProviderAliasConfig: real.writeProviderAliasConfig,
     loadProviderAliasEntries: real.loadProviderAliasEntries,
     getUserAliasDir: real.getUserAliasDir,
@@ -81,15 +79,8 @@ void vi.mock('@vybestack/llxprt-code-providers/composition.js', () => {
 
 void vi.mock(
   '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js',
-  () => ({
-    getProviderManager: mocks.getProviderManagerMock,
-    refreshAliasProviders: mocks.refreshAliasProvidersMock,
-  }),
+  () => ({}),
 );
-
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: mocks.getRuntimeApiMock,
-}));
 
 // Import after mocks are set up
 import { providerCommand } from './providerCommand.js';
@@ -152,7 +143,7 @@ describe('providerCommand /provider save', () => {
     }
   });
 
-  it('saves provider alias configuration and refreshes aliases', async () => {
+  it('saves provider alias configuration', async () => {
     const baseUrl = 'https://myotherprovider.com:123/v1/';
     const defaultModel = 'my-test-model';
 
@@ -170,7 +161,6 @@ describe('providerCommand /provider save', () => {
     };
 
     mocks.getProviderManagerMock.mockReturnValue(providerManager);
-    mocks.refreshAliasProvidersMock.mockImplementation(() => {});
 
     const configMock = {
       getEphemeralSetting: vi
@@ -179,6 +169,16 @@ describe('providerCommand /provider save', () => {
     };
 
     const context = createMockCommandContext({
+      runtimeApi: {
+        ...mocks.runtimeApi,
+        getActiveProviderAliasConfig: () =>
+          resolveActiveProviderForAlias(
+            mocks.getProviderManagerMock(),
+            typeof configMock.getEphemeralSetting('base-url') === 'string'
+              ? configMock.getEphemeralSetting('base-url')
+              : undefined,
+          ),
+      },
       services: {
         config: configMock,
       },
@@ -208,8 +208,6 @@ describe('providerCommand /provider save', () => {
       'base-url': baseUrl,
       defaultModel,
     });
-
-    expect(mocks.refreshAliasProvidersMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -235,6 +233,14 @@ describe('providerCommand /provider switch', () => {
     mocks.getProviderManagerMock.mockReturnValue(providerManager);
 
     const context = createMockCommandContext({
+      runtimeApi: {
+        ...mocks.runtimeApi,
+        getActiveProviderAliasConfig: () =>
+          resolveActiveProviderForAlias(
+            mocks.getProviderManagerMock(),
+            undefined,
+          ),
+      },
       services: {
         agent: mocks.agent as unknown as Agent,
       },
@@ -274,6 +280,14 @@ describe('providerCommand /provider switch', () => {
     mocks.agent.setProvider.mockRejectedValueOnce(error);
 
     const context = createMockCommandContext({
+      runtimeApi: {
+        ...mocks.runtimeApi,
+        getActiveProviderAliasConfig: () =>
+          resolveActiveProviderForAlias(
+            mocks.getProviderManagerMock(),
+            undefined,
+          ),
+      },
       services: {
         agent: mocks.agent as unknown as Agent,
       },
@@ -333,6 +347,14 @@ describe('providerCommand /provider switch', () => {
       },
     );
     const context = createMockCommandContext({
+      runtimeApi: {
+        ...mocks.runtimeApi,
+        getActiveProviderAliasConfig: () =>
+          resolveActiveProviderForAlias(
+            mocks.getProviderManagerMock(),
+            undefined,
+          ),
+      },
       services: {
         agent: mocks.agent as unknown as Agent,
       },
@@ -361,6 +383,14 @@ describe('providerCommand /provider switch', () => {
 
   it('rejects reserved sentinel alias name "unconfigured" (#2481)', async () => {
     const context = createMockCommandContext({
+      runtimeApi: {
+        ...mocks.runtimeApi,
+        getActiveProviderAliasConfig: () =>
+          resolveActiveProviderForAlias(
+            mocks.getProviderManagerMock(),
+            undefined,
+          ),
+      },
       services: {
         config: { getEphemeralSetting: vi.fn(() => undefined) },
       },

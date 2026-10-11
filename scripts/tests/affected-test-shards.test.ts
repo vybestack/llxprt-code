@@ -620,11 +620,50 @@ describe('affected-test-shards selector — data graph integrity', () => {
     expect(coreDeps).not.toContain('lsp');
   });
 
-  it('the graph encodes the real providers→telemetry edge', () => {
-    const data = JSON.parse(readFileSync(DATA_PATH, 'utf8')) as {
-      importEdges: Record<string, readonly string[]>;
-    };
-    expect(data.importEdges['providers']).toContain('telemetry');
+  it('the graph classifies providers settings and telemetry as production', async () => {
+    const { loadData } = await import('../affected-test-shards.ts');
+    const data = loadData(DATA_PATH);
+    expect(data.importEdges.providers).toContain('settings');
+    expect(data.testOnlyEdges.providers).not.toContain('settings');
+    expect(data.testOnlyEdges.providers).not.toContain('telemetry');
+    expect(data.importEdges.providers).toContain('telemetry');
+  });
+
+  it('validates production/test-only classification and selection controls', async () => {
+    const { observeProviderGraphControls } = await import(
+      './fixtures/provider-graph-fixture.ts'
+    );
+    const { checks, selections } = observeProviderGraphControls(REPO_ROOT);
+    expect(checks.map((check) => check.error)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(checks.map((check) => check.signal)).toEqual([
+      null,
+      null,
+      null,
+      null,
+    ]);
+    expect(checks.map((check) => check.status)).toEqual([0, 1, 1, 0]);
+    const success = 'checked-in graph matches real imports';
+    expect(checks[0].stdout.toString()).toContain(success);
+    expect(checks[1].stderr.toString()).toContain(
+      "imports 'telemetry' only from test files",
+    );
+    expect(checks[2].stderr.toString()).toContain(
+      "has a production import of 'telemetry'",
+    );
+    expect(checks[3].stdout.toString()).toContain(success);
+    expect(selections).toEqual([
+      ['providers', 'rest'],
+      ['rest'],
+      ['providers', 'rest'],
+      ['providers', 'rest'],
+      ['rest'],
+      ['providers', 'rest'],
+    ]);
   });
 });
 

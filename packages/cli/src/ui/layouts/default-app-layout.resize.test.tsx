@@ -21,13 +21,14 @@ void vi.mock('../contexts/RuntimeContext.js', () => ({
   ...runtimeContext,
   useRuntimeApi: () => ({
     getEphemeralSetting: () => undefined,
-    getCliRuntimeServices: () => ({
-      config: { getWorkspaceContext: () => ({ getDirectories: () => [] }) },
-    }),
+    getWorkspaceDirectories: () => [],
   }),
 }));
 
 const { Config } = await import('@vybestack/llxprt-code-core');
+const { createUiSessionOwner } = await import(
+  '../../__tests__/uiSessionOwner.js'
+);
 const { wrapWithProviders, createMockSettings } = await import(
   '../../__tests__/render.js'
 );
@@ -167,6 +168,7 @@ async function withLayout(
     debugMode: false,
     model: 'test-model',
   });
+  const owner = createUiSessionOwner(config);
   const rootUiRef: { current: DOMElement | null } = { current: null };
   const mainControlsRef: { current: DOMElement | null } = { current: null };
   const pendingHistoryItemRef: { current: DOMElement | null } = {
@@ -177,8 +179,8 @@ async function withLayout(
       <TerminalProvider store={terminal}>
         <TurnProvider store={turn}>
           <DefaultAppLayout
-            uiRuntime={buildUiRuntimeFromSource(config)}
-            slashCommandRuntime={buildSlashCommandRuntime(config)}
+            uiRuntime={buildUiRuntimeFromSource(config, owner)}
+            slashCommandRuntime={buildSlashCommandRuntime(config, owner)}
             settings={settings}
             startupWarnings={[]}
             version="test"

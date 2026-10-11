@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { retryOperationFixture } from './retry-operation-fixture.js';
 import { describe, it, expect } from 'bun:test';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
@@ -191,14 +192,15 @@ describe('RetryOrchestrator', () => {
         initialDelayMs: 10,
       });
 
-      const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-        runtime: {
-          config: {
-            getBucketFailoverHandler: () => failoverHandler,
-          } as unknown as GenerateChatOptions['runtime'],
-        } as unknown as GenerateChatOptions['runtime'],
-      };
+      const options: GenerateChatOptions = retryOperationFixture(
+        {
+          contents: [
+            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+        },
+        undefined,
+        failoverHandler,
+      );
 
       const result = await consumeStream(
         orchestrator.generateChatCompletion(options),
@@ -227,14 +229,15 @@ describe('RetryOrchestrator', () => {
         initialDelayMs: 10,
       });
 
-      const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-        runtime: {
-          config: {
-            getBucketFailoverHandler: () => failoverHandler,
-          } as unknown as GenerateChatOptions['runtime'],
-        } as unknown as GenerateChatOptions['runtime'],
-      };
+      const options: GenerateChatOptions = retryOperationFixture(
+        {
+          contents: [
+            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+        },
+        undefined,
+        failoverHandler,
+      );
 
       const result = await consumeStream(
         orchestrator.generateChatCompletion(options),
@@ -266,14 +269,15 @@ describe('RetryOrchestrator', () => {
         initialDelayMs: 10,
       });
 
-      const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-        runtime: {
-          config: {
-            getBucketFailoverHandler: () => failoverHandler,
-          } as unknown as GenerateChatOptions['runtime'],
-        } as unknown as GenerateChatOptions['runtime'],
-      };
+      const options: GenerateChatOptions = retryOperationFixture(
+        {
+          contents: [
+            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+        },
+        undefined,
+        failoverHandler,
+      );
 
       const result = await consumeStream(
         orchestrator.generateChatCompletion(options),
@@ -282,7 +286,7 @@ describe('RetryOrchestrator', () => {
       expect(result).toHaveLength(1);
     });
 
-    it('should failover on 401/403 after one retry', async () => {
+    it('should failover on 401/403 without resending an unrecovered credential', async () => {
       const authError = createAuthError(401);
       const buckets = ['bucket1', 'bucket2'];
       const bucketState: BucketFailoverState = {
@@ -291,11 +295,7 @@ describe('RetryOrchestrator', () => {
       };
 
       const provider = createTestProvider({
-        responses: [
-          { error: authError },
-          { error: authError }, // Second 401 triggers failover
-          'success',
-        ],
+        responses: [{ error: authError }, 'success'],
       });
 
       const failoverHandler = createBucketFailoverHandler(buckets, bucketState);
@@ -305,14 +305,15 @@ describe('RetryOrchestrator', () => {
         initialDelayMs: 10,
       });
 
-      const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-        runtime: {
-          config: {
-            getBucketFailoverHandler: () => failoverHandler,
-          } as unknown as GenerateChatOptions['runtime'],
-        } as unknown as GenerateChatOptions['runtime'],
-      };
+      const options: GenerateChatOptions = retryOperationFixture(
+        {
+          contents: [
+            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+        },
+        undefined,
+        failoverHandler,
+      );
 
       const result = await consumeStream(
         orchestrator.generateChatCompletion(options),
@@ -325,30 +326,29 @@ describe('RetryOrchestrator', () => {
     // issue1123 / SB-06: the sibling "401/403" test only constructs a 401;
     // this real-403 case protects the preserved second-403 bucket-failover
     // after issue #2917 made 403 non-retryable by status.
-    it('should failover on a genuine 403 after one retry', async () => {
+    it('should failover on a genuine 403 without resending an unrecovered credential', async () => {
       const buckets = ['bucket1', 'bucket2'];
       const bucketState: BucketFailoverState = {
         currentBucket: 'bucket1',
         bucketIndex: 0,
       };
       const provider = createTestProvider({
-        responses: [
-          { error: createAuthError(403) },
-          { error: createAuthError(403) },
-          'success',
-        ],
+        responses: [{ error: createAuthError(403) }, 'success'],
       });
       const failoverHandler = createBucketFailoverHandler(buckets, bucketState);
       const orchestrator = new RetryOrchestrator(provider, {
         maxAttempts: 5,
         initialDelayMs: 10,
       });
-      const options = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-        runtime: {
-          config: { getBucketFailoverHandler: () => failoverHandler },
+      const options = retryOperationFixture(
+        {
+          contents: [
+            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+          ],
         },
-      } as unknown as GenerateChatOptions;
+        undefined,
+        failoverHandler,
+      ) as unknown as GenerateChatOptions;
       const result = await consumeStream(
         orchestrator.generateChatCompletion(options),
       );
@@ -381,14 +381,15 @@ describe('RetryOrchestrator', () => {
         initialDelayMs: 10,
       });
 
-      const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-        runtime: {
-          config: {
-            getBucketFailoverHandler: () => failoverHandler,
-          } as unknown as GenerateChatOptions['runtime'],
-        } as unknown as GenerateChatOptions['runtime'],
-      };
+      const options: GenerateChatOptions = retryOperationFixture(
+        {
+          contents: [
+            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+        },
+        undefined,
+        failoverHandler,
+      );
 
       const result = await consumeStream(
         orchestrator.generateChatCompletion(options),
@@ -423,14 +424,15 @@ describe('RetryOrchestrator', () => {
         initialDelayMs: 10,
       });
 
-      const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-        runtime: {
-          config: {
-            getBucketFailoverHandler: () => failoverHandler,
-          } as unknown as GenerateChatOptions['runtime'],
-        } as unknown as GenerateChatOptions['runtime'],
-      };
+      const options: GenerateChatOptions = retryOperationFixture(
+        {
+          contents: [
+            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+        },
+        undefined,
+        failoverHandler,
+      );
 
       await expect(
         consumeStream(orchestrator.generateChatCompletion(options)),
@@ -467,14 +469,15 @@ describe('RetryOrchestrator', () => {
         initialDelayMs: 10,
       });
 
-      const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-        runtime: {
-          config: {
-            getBucketFailoverHandler: () => failoverHandler,
-          } as unknown as GenerateChatOptions['runtime'],
-        } as unknown as GenerateChatOptions['runtime'],
-      };
+      const options: GenerateChatOptions = retryOperationFixture(
+        {
+          contents: [
+            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+        },
+        undefined,
+        failoverHandler,
+      );
 
       await consumeStream(orchestrator.generateChatCompletion(options));
 
@@ -511,14 +514,15 @@ describe('RetryOrchestrator', () => {
         initialDelayMs: 10,
       });
 
-      const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-        runtime: {
-          config: {
-            getBucketFailoverHandler: () => failoverHandler,
-          } as unknown as GenerateChatOptions['runtime'],
-        } as unknown as GenerateChatOptions['runtime'],
-      };
+      const options: GenerateChatOptions = retryOperationFixture(
+        {
+          contents: [
+            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+        },
+        undefined,
+        failoverHandler,
+      );
 
       await consumeStream(orchestrator.generateChatCompletion(options));
 
@@ -550,14 +554,15 @@ describe('RetryOrchestrator', () => {
         initialDelayMs: 10,
       });
 
-      const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-        runtime: {
-          config: {
-            getBucketFailoverHandler: () => failoverHandler,
-          } as unknown as GenerateChatOptions['runtime'],
-        } as unknown as GenerateChatOptions['runtime'],
-      };
+      const options: GenerateChatOptions = retryOperationFixture(
+        {
+          contents: [
+            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+        },
+        undefined,
+        failoverHandler,
+      );
 
       const result = await consumeStream(
         orchestrator.generateChatCompletion(options),
@@ -585,13 +590,17 @@ describe('RetryOrchestrator', () => {
         initialDelayMs: 10,
       });
 
-      const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-        config: {
-          getBucketFailoverHandler: () => failoverHandler,
-        } as unknown as GenerateChatOptions['config'],
-        // No runtime.config set
-      };
+      const options: GenerateChatOptions = retryOperationFixture(
+        {
+          contents: [
+            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+
+          // No runtime.config set
+        },
+        undefined,
+        failoverHandler,
+      );
 
       const result = await consumeStream(
         orchestrator.generateChatCompletion(options),
@@ -624,14 +633,15 @@ describe('RetryOrchestrator', () => {
         initialDelayMs: 10,
       });
 
-      const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-        runtime: {
-          config: {
-            getBucketFailoverHandler: () => failoverHandler,
-          } as unknown as GenerateChatOptions['runtime'],
-        } as unknown as GenerateChatOptions['runtime'],
-      };
+      const options: GenerateChatOptions = retryOperationFixture(
+        {
+          contents: [
+            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+        },
+        undefined,
+        failoverHandler,
+      );
 
       const result = await consumeStream(
         orchestrator.generateChatCompletion(options),
@@ -667,14 +677,15 @@ describe('RetryOrchestrator', () => {
         initialDelayMs: 10,
       });
 
-      const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-        runtime: {
-          config: {
-            getBucketFailoverHandler: () => failoverHandler,
-          } as unknown as GenerateChatOptions['runtime'],
-        } as unknown as GenerateChatOptions['runtime'],
-      };
+      const options: GenerateChatOptions = retryOperationFixture(
+        {
+          contents: [
+            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+        },
+        undefined,
+        failoverHandler,
+      );
 
       const result = await consumeStream(
         orchestrator.generateChatCompletion(options),
@@ -711,14 +722,15 @@ describe('RetryOrchestrator', () => {
         initialDelayMs: 10,
       });
 
-      const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-        runtime: {
-          config: {
-            getBucketFailoverHandler: () => failoverHandler,
-          } as unknown as GenerateChatOptions['runtime'],
-        } as unknown as GenerateChatOptions['runtime'],
-      };
+      const options: GenerateChatOptions = retryOperationFixture(
+        {
+          contents: [
+            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+        },
+        undefined,
+        failoverHandler,
+      );
 
       await consumeStream(orchestrator.generateChatCompletion(options));
 
@@ -756,14 +768,15 @@ describe('RetryOrchestrator', () => {
         initialDelayMs: 10,
       });
 
-      const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-        runtime: {
-          config: {
-            getBucketFailoverHandler: () => failoverHandler,
-          } as unknown as GenerateChatOptions['runtime'],
-        } as unknown as GenerateChatOptions['runtime'],
-      };
+      const options: GenerateChatOptions = retryOperationFixture(
+        {
+          contents: [
+            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+        },
+        undefined,
+        failoverHandler,
+      );
 
       await expect(
         consumeStream(orchestrator.generateChatCompletion(options)),
@@ -800,14 +813,15 @@ describe('RetryOrchestrator', () => {
         initialDelayMs: 10,
       });
 
-      const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-        runtime: {
-          config: {
-            getBucketFailoverHandler: () => failoverHandler,
-          } as unknown as GenerateChatOptions['runtime'],
-        } as unknown as GenerateChatOptions['runtime'],
-      };
+      const options: GenerateChatOptions = retryOperationFixture(
+        {
+          contents: [
+            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+        },
+        undefined,
+        failoverHandler,
+      );
 
       const result = await consumeStream(
         orchestrator.generateChatCompletion(options),
@@ -864,14 +878,15 @@ describe('RetryOrchestrator', () => {
         initialDelayMs: 10,
       });
 
-      const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-        runtime: {
-          config: {
-            getBucketFailoverHandler: () => failoverHandler,
-          } as unknown as GenerateChatOptions['runtime'],
-        } as unknown as GenerateChatOptions['runtime'],
-      };
+      const options: GenerateChatOptions = retryOperationFixture(
+        {
+          contents: [
+            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+        },
+        undefined,
+        failoverHandler,
+      );
 
       // Each successful request should call resetSession once
       await consumeStream(orchestrator.generateChatCompletion(options));
@@ -907,14 +922,15 @@ describe('RetryOrchestrator', () => {
         initialDelayMs: 1,
       });
 
-      const options: GenerateChatOptions = {
-        contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-        runtime: {
-          config: {
-            getBucketFailoverHandler: () => failoverHandler,
-          } as unknown as GenerateChatOptions['runtime'],
-        } as unknown as GenerateChatOptions['runtime'],
-      };
+      const options: GenerateChatOptions = retryOperationFixture(
+        {
+          contents: [
+            { role: 'user', blocks: [{ type: 'text', text: 'test' }] },
+          ],
+        },
+        undefined,
+        failoverHandler,
+      );
 
       await expect(
         consumeStream(orchestrator.generateChatCompletion(options)),

@@ -13,10 +13,8 @@ import { createMockSettings, renderHook } from '../../__tests__/render.js';
 import { createFakeAgent } from './agentStream/__tests__/helpers/createFakeAgent.js';
 
 interface RuntimeStub {
-  getCliProviderManager: () => {
-    listProviders: () => string[];
-    getActiveProviderName: () => string | null;
-  };
+  listProviders: () => string[];
+  providerStatus: () => { providerName: string | null };
   listAvailableModels: (provider?: string) => Promise<unknown[]>;
   setActiveModel: (modelId: string) => Promise<void>;
   listSavedProfiles: () => Promise<string[]>;
@@ -26,10 +24,8 @@ interface RuntimeStub {
 }
 
 const defaultRuntime: RuntimeStub = {
-  getCliProviderManager: () => ({
-    listProviders: () => [],
-    getActiveProviderName: () => null,
-  }),
+  listProviders: () => [],
+  providerStatus: () => ({ providerName: null }),
   listAvailableModels: async () => [],
   setActiveModel: async () => {},
   listSavedProfiles: async () => [],
@@ -45,6 +41,9 @@ const defaultRuntime: RuntimeStub = {
 let currentRuntime: RuntimeStub = defaultRuntime;
 void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => currentRuntime,
+}));
+void vi.mock('../contexts/OAuthControlContext.js', () => ({
+  useOAuthControl: () => ({ authenticate: async () => {} }),
 }));
 
 import { useWelcomeOnboarding } from './useWelcomeOnboarding.js';

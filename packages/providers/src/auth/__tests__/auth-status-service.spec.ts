@@ -4,43 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 
 // ---------------------------------------------------------------------------
 // Hoist mock factories so they're available before vi.mock() runs
 // ---------------------------------------------------------------------------
-const realLlxprtCodeAuthModule = {
-  ...(await import('@vybestack/llxprt-code-auth')),
+const providerRef = {
+  current: undefined as { name: string } | undefined,
 };
 
-const { flushMockRef, providerManagerRef, providerRef } = {
-  flushMockRef: {
-    current: undefined as ReturnType<typeof vi.fn> | undefined,
-  },
-  providerManagerRef: {
-    current: undefined as
-      | { getProviderByName: ReturnType<typeof vi.fn> }
-      | undefined,
-  },
-  providerRef: {
-    current: undefined as unknown,
-  },
-};
-
-void vi.mock('@vybestack/llxprt-code-auth', () => {
-  const actual = realLlxprtCodeAuthModule;
-  const flushMock = vi.fn(() => ({
-    runtimeId: 'test-runtime',
-    revokedTokens: [],
-  }));
-  flushMockRef.current = flushMock;
-  return {
-    ...actual,
-    flushRuntimeAuthScope: flushMock,
-  };
-});
-
-import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
+import { invalidateOwnerAuthCaches } from '../owner-cache-invalidation.js';
 
 import { AuthStatusService } from '../auth-status-service.js';
 import type { OAuthProvider } from '../types.js';
@@ -189,6 +162,7 @@ function makeService(
     proactiveRenewalManager,
     bucketManager,
     tokenAccessCoordinator,
+    () => invalidateOwnerAuthCaches(providerRef.current),
   );
 }
 
@@ -198,27 +172,7 @@ function makeService(
 
 describe('AuthStatusService.isAuthenticated', () => {
   beforeEach(() => {
-    flushMockRef.current?.mockClear();
-    providerManagerRef.current?.getProviderByName.mockReset();
-
-    // Register runtime accessors via the bridge
-    const managerMock = {
-      getProviderByName: vi.fn(() => providerRef.current),
-    };
-    providerManagerRef.current = managerMock;
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: () => undefined,
-      getProviderManager: () => managerMock,
-      getRuntimeContext: () => ({
-        runtimeId: 'test-runtime',
-        metadata: {},
-      }),
-      getCurrentProfileName: () => null,
-    });
-  });
-
-  afterEach(() => {
-    oauthRuntimeBridge.setAccessors(undefined);
+    providerRef.current = undefined;
   });
 
   it('returns false for invalid providerName', async () => {
@@ -331,23 +285,7 @@ describe('AuthStatusService.isAuthenticated', () => {
 
 describe('AuthStatusService.logout', () => {
   beforeEach(() => {
-    flushMockRef.current?.mockClear();
-    providerManagerRef.current?.getProviderByName.mockReset();
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: () => undefined,
-      getProviderManager: () => ({
-        getProviderByName: vi.fn(() => undefined),
-      }),
-      getRuntimeContext: () => ({
-        runtimeId: 'test-runtime',
-        metadata: {},
-      }),
-      getCurrentProfileName: () => null,
-    });
-  });
-
-  afterEach(() => {
-    oauthRuntimeBridge.setAccessors(undefined);
+    providerRef.current = undefined;
   });
 
   it('throws on invalid providerName', async () => {
@@ -451,17 +389,6 @@ describe('AuthStatusService.logout', () => {
       >,
     ).toHaveBeenCalledWith('device-code-test', 'bucket-a');
   });
-
-  it('flushes runtime auth scope after logout', async () => {
-    const provider = makeProvider('device-code-test');
-    const tokenStore = makeTokenStore();
-    const service = makeService({ tokenStore, providers: [provider] });
-
-    await service.logout('device-code-test');
-
-    expect(flushMockRef.current).toBeDefined();
-    expect(flushMockRef.current).toHaveBeenCalled();
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -470,27 +397,7 @@ describe('AuthStatusService.logout', () => {
 
 describe('AuthStatusService.clearProviderAuthCaches (via logout)', () => {
   beforeEach(() => {
-    flushMockRef.current?.mockClear();
-    providerManagerRef.current?.getProviderByName.mockReset();
-
-    // Register runtime accessors via the bridge
-    const managerMock = {
-      getProviderByName: vi.fn(() => providerRef.current),
-    };
-    providerManagerRef.current = managerMock;
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: () => undefined,
-      getProviderManager: () => managerMock,
-      getRuntimeContext: () => ({
-        runtimeId: 'test-runtime',
-        metadata: {},
-      }),
-      getCurrentProfileName: () => null,
-    });
-  });
-
-  afterEach(() => {
-    oauthRuntimeBridge.setAccessors(undefined);
+    providerRef.current = undefined;
   });
 
   it('calls clearAuth generically for non-gemini provider', async () => {
@@ -501,7 +408,6 @@ describe('AuthStatusService.clearProviderAuthCaches (via logout)', () => {
       clearState: vi.fn(),
     };
     providerRef.current = coreProvider;
-    providerManagerRef.current?.getProviderByName.mockReturnValue(coreProvider);
 
     const provider = makeProvider('device-code-test');
     const tokenStore = makeTokenStore();
@@ -515,7 +421,7 @@ describe('AuthStatusService.clearProviderAuthCaches (via logout)', () => {
     expect(coreProvider.clearState).toHaveBeenCalled();
   });
 
-  it('isolated failures in clearProviderAuthCaches do not prevent flushRuntimeAuthScope', async () => {
+  it('isolated failures in clearProviderAuthCaches do not stop the remaining cache clears', async () => {
     const coreProvider = {
       name: 'device-code-test',
       clearAuthCache: vi.fn().mockImplementation(() => {
@@ -529,7 +435,6 @@ describe('AuthStatusService.clearProviderAuthCaches (via logout)', () => {
       }),
     };
     providerRef.current = coreProvider;
-    providerManagerRef.current?.getProviderByName.mockReturnValue(coreProvider);
 
     const provider = makeProvider('device-code-test');
     const tokenStore = makeTokenStore();
@@ -538,9 +443,10 @@ describe('AuthStatusService.clearProviderAuthCaches (via logout)', () => {
     // Should not throw even though all cache clearing fails
     await service.logout('device-code-test');
 
-    // flush must still execute despite all failures
-    expect(flushMockRef.current).toBeDefined();
-    expect(flushMockRef.current).toHaveBeenCalled();
+    // every cache clear must still be attempted despite earlier failures
+    expect(coreProvider.clearAuthCache).toHaveBeenCalled();
+    expect(coreProvider.clearAuth).toHaveBeenCalled();
+    expect(coreProvider.clearState).toHaveBeenCalled();
   });
 
   it('no provider-name-specific branching for gemini in clearProviderAuthCaches (G3)', async () => {
@@ -552,9 +458,6 @@ describe('AuthStatusService.clearProviderAuthCaches (via logout)', () => {
       clearState: vi.fn(),
     };
     providerRef.current = geminiCoreProvider;
-    providerManagerRef.current?.getProviderByName.mockReturnValue(
-      geminiCoreProvider,
-    );
 
     const provider = makeProvider('gemini');
     const tokenStore = makeTokenStore();
@@ -771,9 +674,7 @@ describe('AuthStatusService.getAuthStatusWithBuckets', () => {
 // ---------------------------------------------------------------------------
 
 describe('AuthStatusService.logout session-bucket clear', () => {
-  beforeEach(() => {
-    flushMockRef.current?.mockClear();
-  });
+  beforeEach(() => {});
 
   it('clears metadata-scoped and unscoped session buckets when current session bucket matches bucketToUse', async () => {
     const sessionMetadata = {

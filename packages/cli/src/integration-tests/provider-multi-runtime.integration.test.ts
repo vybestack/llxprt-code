@@ -1,8 +1,13 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import { createProviderSessionOwner } from './__tests__/session-client-owner-fixture.js';
+import { providerSwitchInputs } from '../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
@@ -24,8 +29,6 @@ import type { IProvider } from '@vybestack/llxprt-code-providers';
 import {
   activateIsolatedRuntimeContext,
   createIsolatedRuntimeContext,
-  getCliProviderManager,
-  resetCliProviderInfrastructure,
   switchActiveProvider,
   type IsolatedRuntimeActivationOptions,
   type IsolatedRuntimeContextHandle,
@@ -41,6 +44,7 @@ interface RuntimeFixture {
   profileName: string;
   profile: Profile;
   handle: IsolatedRuntimeContextHandle;
+  sessionClient: ReturnType<typeof createProviderSessionOwner>['sessionClient'];
   tempDir: string;
 }
 
@@ -48,7 +52,6 @@ const runtimeFixtures: RuntimeFixture[] = [];
 
 describe('provider multi-runtime guardrails', () => {
   afterEach(async () => {
-    resetCliProviderInfrastructure();
     while (runtimeFixtures.length > 0) {
       const runtime = runtimeFixtures.pop();
       if (runtime) {
@@ -83,7 +86,8 @@ describe('provider multi-runtime guardrails', () => {
       metadata: { source: 'multi-runtime-guardrail:runtime-a' },
     });
 
-    const managerForRuntimeA = getCliProviderManager();
+    const managerForRuntimeA = runtimeA.handle.providerManager;
+    expect(managerForRuntimeA).toBeDefined();
 
     // Guardrail: runtime A should surface its own provider manager reference.
     expect(managerForRuntimeA.getActiveProviderName()).toBe(
@@ -119,7 +123,15 @@ describe('provider multi-runtime guardrails', () => {
 
     // Guardrail: switching providers should succeed for runtime A without touching runtime B.
     await expect(
-      switchActiveProvider(runtimeA.profile.provider),
+      switchActiveProvider(
+        runtimeA.profile.provider,
+        {},
+        ...(await providerSwitchInputs(
+          runtimeA.handle,
+          runtimeA.handle.providerManager,
+          () => runtimeA.sessionClient.refreshAuth(),
+        )),
+      ),
     ).resolves.toMatchObject({ nextProvider: runtimeA.profile.provider });
   });
 });
@@ -153,64 +165,76 @@ async function bootstrapRuntimeFixture(options: {
   await createTempProfile(tempDir, options.profileName, profile);
 
   let providersRegistered = false;
-  const handle = createIsolatedRuntimeContext({
-    runtimeId: options.runtimeId,
-    // The caller supplies the Config (issue #3222): providers no longer
-    // constructs one for isolated runtimes.
-    config: new Config({
+  const handle = (() => {
+    const capturedConfig2 = new Config({
       sessionId: options.runtimeId,
       targetDir: tempDir,
       cwd: tempDir,
       model: options.model,
       debugMode: false,
-    }),
-    metadata: {
-      profileName: options.profileName,
-      providerName: options.providerName,
-    }, // Step 3 (multi-runtime-baseline.md line 4) captures fixture metadata per runtime instance.
-    prepare: async ({ config, settingsService, providerManager }) => {
-      if (!providersRegistered) {
-        providerManager.registerProvider(
-          createStubProvider(options.providerName, options.model),
-        );
-        providersRegistered = true;
-      }
+    });
+    const settingsService = new SettingsService();
+    const settingsOwner = new SessionSettingsOwner(settingsService);
+    return createIsolatedRuntimeContext(
+      {
+        settingsOwner,
+        runtimeId: options.runtimeId,
+        // The caller supplies the Config (issue #3222): providers no longer
+        // constructs one for isolated runtimes.
+        config: capturedConfig2,
+        metadata: {
+          profileName: options.profileName,
+          providerName: options.providerName,
+        }, // Step 3 (multi-runtime-baseline.md line 4) captures fixture metadata per runtime instance.
+        prepare: async ({ settingsService, providerManager }) => {
+          if (!providersRegistered) {
+            providerManager.registerProvider(
+              createStubProvider(options.providerName, options.model),
+            );
+            providersRegistered = true;
+          }
 
-      // Step 4 (multi-runtime-baseline.md line 5) ensures the scoped ProviderManager uses fixture services.
-      void providerManager.setActiveProvider(options.providerName);
-      settingsService.set('activeProvider', options.providerName);
-      settingsService.setProviderSetting(
-        options.providerName,
-        'model',
-        options.model,
-      );
+          // Step 4 (multi-runtime-baseline.md line 5) ensures the scoped ProviderManager uses fixture services.
+          void providerManager.setActiveProvider(options.providerName);
+          settingsService.set('activeProvider', options.providerName);
+          settingsService.setProviderSetting(
+            options.providerName,
+            'model',
+            options.model,
+          );
 
-      const baseUrl = profile.ephemeralSettings['base-url'];
-      settingsService.setProviderSetting(
-        options.providerName,
-        'base-url',
-        baseUrl,
-      );
-      if (baseUrl) {
-        config.setEphemeralSetting('base-url', baseUrl);
-      } else {
-        config.setEphemeralSetting('base-url', undefined);
-      }
-
-      config.setProvider(options.providerName);
-      config.setModel(options.model);
-    },
-    onCleanup: async () => {
-      // Step 7 (multi-runtime-baseline.md line 8) handles per-runtime cleanup.
-      await cleanupTempDirectory(tempDir);
-    },
-  });
+          const baseUrl = profile.ephemeralSettings['base-url'];
+          settingsService.setProviderSetting(
+            options.providerName,
+            'base-url',
+            baseUrl,
+          );
+          if (baseUrl) {
+            settingsOwner.writeUserParameter('base-url', baseUrl);
+          } else {
+            settingsOwner.writeUserParameter('base-url', undefined);
+          }
+        },
+        onCleanup: async () => {
+          // Step 7 (multi-runtime-baseline.md line 8) handles per-runtime cleanup.
+          await cleanupTempDirectory(tempDir);
+        },
+      },
+      settingsService,
+    );
+  })();
 
   const runtime: RuntimeFixture = {
     runtimeId: options.runtimeId,
     profileName: options.profileName,
     profile,
     handle,
+    sessionClient: createProviderSessionOwner(
+      handle.config,
+      handle.providerManager,
+      handle.settingsService,
+      handle.settingsOwner,
+    ).sessionClient,
     tempDir,
   };
 

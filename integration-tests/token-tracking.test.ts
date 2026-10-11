@@ -147,7 +147,6 @@ function useProviderManager(suite: string): {
     });
     providerManager = new ProviderManager(testRuntime);
     providerManager.setConfig(providerConfig);
-    providerConfig.setProviderManager(providerManager);
   });
 
   return {

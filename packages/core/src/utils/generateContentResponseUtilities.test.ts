@@ -256,7 +256,7 @@ describe('generateContentResponseUtilities', () => {
 
   describe('formatting helper characterization', () => {
     const configWithTruncation = {
-      getEphemeralSettings: () => ({
+      readExecutionPolicy: () => ({
         'tool-output-max-tokens': 50,
         'tool-output-truncate-mode': 'warn',
       }),

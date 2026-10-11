@@ -52,16 +52,19 @@ function createOptions(fixture: GeminiFixture): NormalizedGenerateChatOptions {
     settingsService: settings,
   });
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
+
     providerName: 'gemini',
-    ephemeralsSnapshot,
+    ephemeralsSnapshot:
+      fixture.rawModelBehavior === undefined ? ephemeralsSnapshot : {},
   });
   const effectiveInvocation =
     fixture.rawModelBehavior === undefined
       ? invocation
       : {
           ...invocation,
+          ephemerals: ephemeralsSnapshot,
           modelBehavior: fixture.rawModelBehavior,
         };
 
@@ -69,7 +72,6 @@ function createOptions(fixture: GeminiFixture): NormalizedGenerateChatOptions {
     contents: [],
     tools: undefined,
     metadata: {},
-    settings,
     invocation: effectiveInvocation,
     systemInstruction: 'test system prompt',
     resolved: {

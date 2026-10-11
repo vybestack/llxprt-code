@@ -9,6 +9,8 @@
  * @requirement:REQ-003
  */
 
+import type { TaskLaunchOwner } from '../../session/task-launch-owner.js';
+import type { ShellJobOwner } from '../../session/shell-job-owner.js';
 import type {
   AgentTasksControl,
   AgentTaskInfo,
@@ -27,7 +29,13 @@ import type {
  * @requirement:REQ-003
  */
 export interface TasksControlDeps {
-  readonly getManager: () => AsyncTaskManager | undefined;
+  readonly subscribeNotifications?: AgentTasksControl['subscribeNotifications'];
+  readonly getManager: () =>
+    | Pick<
+        AsyncTaskManager,
+        'getAllTasks' | 'getRunningTasks' | 'getTask' | 'cancelTask'
+      >
+    | undefined;
   readonly getShellJobManager?: () => ShellJobManager | undefined;
 }
 
@@ -37,6 +45,15 @@ export interface TasksControlDeps {
  */
 export class TasksControl implements AgentTasksControl {
   constructor(private readonly deps: TasksControlDeps) {}
+
+  subscribeNotifications(
+    isBusy: () => boolean,
+    deliver: (message: string) => Promise<void>,
+  ): ReturnType<AgentTasksControl['subscribeNotifications']> {
+    if (!this.deps.subscribeNotifications)
+      throw new Error('Task notifications require an Agent owner');
+    return this.deps.subscribeNotifications(isBusy, deliver);
+  }
 
   /** @requirement:REQ-003 @pseudocode lines 1-13 */
   private project(task: AsyncTaskInfo): AgentSubagentTaskInfo {
@@ -163,4 +180,16 @@ export class TasksControl implements AgentTasksControl {
     }
     return count;
   }
+}
+
+export function createTasksControl(
+  owner: TaskLaunchOwner,
+  shellOwner: ShellJobOwner,
+): TasksControl {
+  return new TasksControl({
+    getManager: () => owner,
+    getShellJobManager: () => shellOwner.current(),
+    subscribeNotifications: (isBusy, deliver) =>
+      owner.subscribeNotifications(isBusy, deliver, shellOwner),
+  });
 }

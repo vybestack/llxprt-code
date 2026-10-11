@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { physicalFiles } from './helpers/physical-files.js';
+
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -59,7 +61,10 @@ function createToolHost(
     getApprovalMode: () => 'auto',
     setApprovalMode: () => {},
     isInteractive: () => false,
-    hasFeatureFlag: () => false,
+    runSearch: <T>(
+      _directories: readonly string[],
+      operation: () => Promise<T>,
+    ): Promise<T> => operation(),
     getFileService: () => ({
       shouldGitIgnoreFile: () => false,
       shouldLlxprtIgnoreFile: () => false,
@@ -75,9 +80,13 @@ function createToolHost(
     getFileFilteringRespectLlxprtIgnore: () => true,
     getLlxprtIgnoreFilePath: () => null,
     recordFileRead: () => {},
-    getFileSystemService: () => undefined,
+    ...physicalFiles,
     getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ephemeral,
+    readExecutionPolicy: () => ({
+      'tool-output-max-items': ephemeral['tool-output-max-items'],
+      'tool-output-max-tokens': ephemeral['tool-output-max-tokens'],
+      'tool-output-item-size-limit': ephemeral['tool-output-item-size-limit'],
+    }),
     getDebugMode: () => false,
   };
 }

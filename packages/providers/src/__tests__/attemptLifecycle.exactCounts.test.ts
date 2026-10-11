@@ -1,3 +1,7 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+const fixtureOwners = installRuntimeTestOwners();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -48,9 +52,15 @@ describe('#10 exact counts for all scenarios', () => {
 
   it('direct success emits exactly 1 request, 0 errors', async () => {
     const config = createConfig(false);
+    const wrapperSettings1 = fixtureOwners.adopt(
+      config,
+      new SettingsService(),
+    ).settingsOwner;
     const wrapper = new LoggingProviderWrapper(
       new SuccessProvider(SUCCESS_CHUNKS),
       config,
+      undefined,
+      () => captureProviderRequestDiagnostics(config, wrapperSettings1),
     );
     wrapper.setRuntimeContextResolver(() => ({
       runtimeId: 'test',
@@ -68,7 +78,16 @@ describe('#10 exact counts for all scenarios', () => {
 
   it('direct sync throw emits exactly 1 request, 1 error', async () => {
     const config = createConfig(false);
-    const wrapper = new LoggingProviderWrapper(new SyncThrowProvider(), config);
+    const wrapperSettings2 = fixtureOwners.adopt(
+      config,
+      new SettingsService(),
+    ).settingsOwner;
+    const wrapper = new LoggingProviderWrapper(
+      new SyncThrowProvider(),
+      config,
+      undefined,
+      () => captureProviderRequestDiagnostics(config, wrapperSettings2),
+    );
     wrapper.setRuntimeContextResolver(() => ({
       runtimeId: 'test',
       settingsService: { getConfig: () => config } as never,
@@ -93,7 +112,16 @@ describe('#10 exact counts for all scenarios', () => {
         blocks: [{ type: 'text', text: 'chunk1' }],
       } as IContent,
     ]);
-    const wrapper = new LoggingProviderWrapper(provider, config);
+    const wrapperSettings3 = fixtureOwners.adopt(
+      config,
+      new SettingsService(),
+    ).settingsOwner;
+    const wrapper = new LoggingProviderWrapper(
+      provider,
+      config,
+      undefined,
+      () => captureProviderRequestDiagnostics(config, wrapperSettings3),
+    );
     wrapper.setRuntimeContextResolver(() => ({
       runtimeId: 'test',
       settingsService: { getConfig: () => config } as never,
@@ -215,7 +243,16 @@ describe('LoggingProviderWrapper sync invocation timing (finding #5)', () => {
 
   it('sync throw records a finite non-negative monotonic elapsed duration', async () => {
     const config = createConfig(false);
-    const wrapper = new LoggingProviderWrapper(new SyncThrowProvider(), config);
+    const wrapperSettings4 = fixtureOwners.adopt(
+      config,
+      new SettingsService(),
+    ).settingsOwner;
+    const wrapper = new LoggingProviderWrapper(
+      new SyncThrowProvider(),
+      config,
+      undefined,
+      () => captureProviderRequestDiagnostics(config, wrapperSettings4),
+    );
     wrapper.setRuntimeContextResolver(() => ({
       runtimeId: 'test',
       settingsService: { getConfig: () => config } as never,
@@ -247,7 +284,16 @@ describe('LoggingProviderWrapper sync invocation timing (finding #5)', () => {
     // Provider that advances the mocked performance.now by 5ms before
     // throwing synchronously, simulating real elapsed work.
     const provider = new SyncThrowProvider();
-    const wrapper = new LoggingProviderWrapper(provider, config);
+    const wrapperSettings5 = fixtureOwners.adopt(
+      config,
+      new SettingsService(),
+    ).settingsOwner;
+    const wrapper = new LoggingProviderWrapper(
+      provider,
+      config,
+      undefined,
+      () => captureProviderRequestDiagnostics(config, wrapperSettings5),
+    );
     wrapper.setRuntimeContextResolver(() => ({
       runtimeId: 'test',
       settingsService: { getConfig: () => config } as never,

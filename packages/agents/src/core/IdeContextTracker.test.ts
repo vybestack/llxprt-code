@@ -59,9 +59,7 @@ describe('IdeContextTracker', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    tracker = new IdeContextTracker(
-      makeConfig() as ConstructorParameters<typeof IdeContextTracker>[0],
-    );
+    tracker = new IdeContextTracker(makeConfig(), mockGetIdeContext);
   });
 
   describe('buildFullContext', () => {

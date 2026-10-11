@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { SessionSettingsOwner } from '../session/session-settings-owner.js';
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { createAgentRuntimeContext } from './createAgentRuntimeContext.js';
@@ -81,12 +82,14 @@ describe('createAgentRuntimeContext', () => {
   describe('ephemerals.semanticMediaPurge()', () => {
     it('keeps missing and explicit off settings behaviorally identical', () => {
       const liveSettings = new SettingsService();
+      const owner = new SessionSettingsOwner(liveSettings);
       const context = createAgentRuntimeContext({
         state: mockState,
         settings,
         provider: mockProviderAdapter,
         telemetry: mockTelemetryAdapter,
         tools: mockToolsView,
+        readRuntimeSettings: () => owner.readRuntimePolicy(),
         providerRuntime: {
           ...mockProviderRuntime,
           settingsService: liveSettings,
@@ -101,24 +104,27 @@ describe('createAgentRuntimeContext', () => {
       expect(resolvedModes).toStrictEqual(['off', 'off']);
     });
 
-    it('rejects malformed live profile values before request construction', () => {
+    it('rejects malformed live profile values before request construction', async () => {
       const liveSettings = new SettingsService();
+      const owner = new SessionSettingsOwner(liveSettings);
       liveSettings.set('media.semantic-purge', 'REMOVE');
-      const context = createAgentRuntimeContext({
-        state: mockState,
-        settings,
-        provider: mockProviderAdapter,
-        telemetry: mockTelemetryAdapter,
-        tools: mockToolsView,
-        providerRuntime: {
-          ...mockProviderRuntime,
-          settingsService: liveSettings,
-        },
-      });
-
-      expect(() => context.ephemerals.semanticMediaPurge()).toThrow(
+      expect(() => {
+        createAgentRuntimeContext({
+          state: mockState,
+          settings,
+          provider: mockProviderAdapter,
+          telemetry: mockTelemetryAdapter,
+          tools: mockToolsView,
+          readRuntimeSettings: () => owner.readRuntimePolicy(),
+          providerRuntime: {
+            ...mockProviderRuntime,
+            settingsService: liveSettings,
+          },
+        });
+      }).toThrow(
         "Invalid media.semantic-purge setting: expected 'off', 'remove', or 'summary'",
       );
+      await owner.dispose();
     });
   });
 

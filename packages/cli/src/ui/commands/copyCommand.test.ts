@@ -17,9 +17,9 @@ void vi.mock('../utils/commandUtils.js', () => ({
 
 describe('copyCommand', () => {
   let mockContext: CommandContext;
-  let mockCopyToClipboard: Mock<(...args: never[]) => unknown>;
-  let mockGetChat: Mock<(...args: never[]) => unknown>;
-  let mockGetHistory: Mock<(...args: never[]) => unknown>;
+  let mockCopyToClipboard: Mock<typeof copyToClipboard>;
+  let mockGetChat: Mock<() => { getHistory: () => unknown }>;
+  let mockGetHistory: Mock<() => unknown>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -30,13 +30,14 @@ describe('copyCommand', () => {
 
     mockContext = createMockCommandContext({
       services: {
-        config: {
-          getAgentClient: () => ({
+        agent: {
+          agentClient: {
             getChat: mockGetChat,
             hasChatInitialized: vi.fn().mockReturnValue(true),
             getHistory: vi.fn().mockResolvedValue([]),
-          }),
+          },
         },
+        config: {},
       },
     });
 
@@ -49,13 +50,14 @@ describe('copyCommand', () => {
     // Mock no chat initialized
     mockContext = createMockCommandContext({
       services: {
-        config: {
-          getAgentClient: () => ({
+        agent: {
+          agentClient: {
             getChat: mockGetChat,
             hasChatInitialized: vi.fn().mockReturnValue(false),
             getHistory: vi.fn().mockResolvedValue([]),
-          }),
+          },
         },
+        config: {},
       },
     });
 

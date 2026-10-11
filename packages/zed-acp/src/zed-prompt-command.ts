@@ -5,7 +5,7 @@
  */
 
 import * as acp from '@agentclientprotocol/sdk';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { ZedCommandAgent } from './zed-command-registry.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import {
   executeZedCommand,
@@ -46,7 +46,7 @@ export function extractPromptText(
  */
 export async function tryHandleZedCommand(
   prompt: readonly acp.ContentBlock[],
-  agent: Agent,
+  agent: ZedCommandAgent,
   sendUpdate: (update: acp.SessionUpdate) => Promise<void>,
 ): Promise<{ response: acp.PromptResponse } | null> {
   const text = extractPromptText(prompt);

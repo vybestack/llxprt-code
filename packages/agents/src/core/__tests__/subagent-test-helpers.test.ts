@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { unsupportedApprovalPolicy } from '@vybestack/llxprt-code-mcp/test-support/approval-policy.js';
 
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -33,12 +34,15 @@ describe('createMockConfig MCP lifecycle', () => {
   });
 
   it('keeps complete lazy-MCP registry behavior while scheduled refreshes complete', async () => {
-    const { created, config } =
+    const { created } =
       await observeKeepsCompleteLazyMCPRegistryBehaviorWhileScheduledRefreshesComplete();
-    expect(created.toolRegistry.listDeferredMcpServers()).toStrictEqual([
-      'scheduled-server',
-    ]);
-    expect(config.getToolRegistry()).toBe(created.toolRegistry);
+    expect(
+      created.toolRegistry
+        .getAllTools()
+        .filter((tool) => 'serverName' in tool)
+        .map((tool) => Reflect.get(tool, 'serverName')),
+    ).toContain('scheduled-server');
+    expect(created.mcpRuntime.toolSelection).toBe(created.toolRegistry);
     expect(
       created.toolRegistry
         .getAllTools()
@@ -57,22 +61,31 @@ describe('createMockConfig MCP lifecycle', () => {
       const refreshStarted = new Promise<void>((resolve) => {
         markRefreshStarted = resolve;
       });
-      vi.spyOn(Config.prototype, 'refreshMemory').mockImplementation(
-        async () => {
-          markRefreshStarted?.();
-          await refreshGate;
-          return { memoryContent: '', fileCount: 0, filePaths: [] };
-        },
-      );
 
       try {
-        const created = await createMockConfig({ getTool: () => undefined });
+        const created = await createMockConfig(
+          { getTool: () => undefined },
+          { 'mcp.lazy': true },
+        );
         config = created.config;
+        const scan = created.mcpRuntime.workspaceFilesystem.scans.run;
+        vi.spyOn(
+          created.mcpRuntime.workspaceFilesystem.scans,
+          'run',
+        ).mockImplementation((directories, operation) =>
+          scan(directories, async () => {
+            markRefreshStarted?.();
+            await refreshGate;
+            return operation();
+          }),
+        );
+        const refreshing =
+          created.mcpRuntime.workspaceMemory.operations.refresh();
         await refreshStarted;
 
-        config.setEphemeralSetting('mcp.lazy', true);
-        created.toolRegistry.registerTool(
+        created.mcpRuntime.toolPublication.registerTool(
           new DiscoveredMCPTool(
+            unsupportedApprovalPolicy(),
             createCallableTool(),
             'scheduled-server',
             'fixture-tool',
@@ -82,7 +95,8 @@ describe('createMockConfig MCP lifecycle', () => {
         );
 
         releaseRefresh?.();
-        await config.refreshMcpContext();
+        await refreshing;
+        await created.mcpRuntime.refreshContext();
 
         return { created, config };
       } finally {

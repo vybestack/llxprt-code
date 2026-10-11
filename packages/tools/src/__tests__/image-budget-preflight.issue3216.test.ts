@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { physicalFiles } from './helpers/physical-files.js';
+
 /**
  * Issue #3216 — Behavioral integration tests proving the hard image budget
  * preflight runs at the output boundary of every built-in image-producing
@@ -58,9 +60,10 @@ describe('Image budget preflight', () => {
     });
     return {
       ...baseHost,
-      getEphemeralSettings: () => ({
-        ...baseHost.getEphemeralSettings(),
-        ...budget,
+      readExecutionPolicy: () => ({
+        ...baseHost.readExecutionPolicy(),
+        'max-image-dimension': budget['max-image-dimension'],
+        'max-image-pixels': budget['max-image-pixels'],
       }),
     };
   }
@@ -95,7 +98,10 @@ describe('Image budget preflight', () => {
       getApprovalMode: () => 'auto',
       setApprovalMode: () => {},
       isInteractive: () => false,
-      hasFeatureFlag: () => false,
+      runSearch: <T>(
+        _directories: readonly string[],
+        operation: () => Promise<T>,
+      ): Promise<T> => operation(),
       getFileService: () => ({
         shouldGitIgnoreFile: () => false,
         shouldLlxprtIgnoreFile: () => false,
@@ -111,9 +117,15 @@ describe('Image budget preflight', () => {
       getFileFilteringRespectLlxprtIgnore: () => true,
       getLlxprtIgnoreFilePath: () => null,
       recordFileRead: () => {},
-      getFileSystemService: () => undefined,
+      ...physicalFiles,
       getLlxprtIgnorePatterns: () => [],
-      getEphemeralSettings: () => ephemeralSettings,
+      readExecutionPolicy: () => ({
+        'max-image-dimension': ephemeralSettings['max-image-dimension'],
+        'max-image-pixels': ephemeralSettings['max-image-pixels'],
+        'tool-output-max-tokens': ephemeralSettings['tool-output-max-tokens'],
+        'tool-output-truncate-mode':
+          ephemeralSettings['tool-output-truncate-mode'],
+      }),
       getDebugMode: () => false,
     };
   }

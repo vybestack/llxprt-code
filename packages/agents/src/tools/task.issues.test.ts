@@ -1,8 +1,12 @@
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { taskSelection } from './__tests__/task-selection-fixture.js';
+
+import { TaskLaunchOwner } from '../session/task-launch-owner.js';
 
 /**
  * TaskTool issue-specific tests: XML wrapping (#727), toolConfig omission (#2069).
@@ -10,9 +14,15 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import {
+  installTaskIssueConfigFixture,
+  taskIssueInstructionDependencies,
+  taskIssueSettingsDependencies,
+  qualifiedTaskInvocationFixture,
+} from './__tests__/task-issue-config-fixture.js';
 import { TaskTool, type TaskToolParams } from './task.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import {
@@ -23,21 +33,21 @@ import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTask
 import type { LiveOutputUpdate } from '@vybestack/llxprt-code-core/utils/terminalSerializer.js';
 
 describe('TaskTool', () => {
+  const fixturePaths = installTestWorkspacePaths({
+    targetDir: process.cwd(),
+    isTrusted: () => true,
+  });
+  const createConfig = installTaskIssueConfigFixture();
   let config: Config;
 
   beforeEach(() => {
-    // #2534 D4: async gating reads config.getSettingsService() without
-    // fallback probing; the double provides a real (empty) settings service.
-    config = {
-      getSessionId: () => 'session-123',
-      getSettingsService: () => new SettingsService(),
-    } as unknown as Config;
+    config = createConfig('session-123');
   });
 
   describe('Subagent XML wrapping (Issue #727)', () => {
     it('should wrap non-interactive output with XML tags', async () => {
       const dispose = vi.fn().mockResolvedValue(undefined);
-      const updateOutput = vi.fn();
+      const updateOutput = vi.fn<(update: LiveOutputUpdate) => void>();
       const scope: {
         output: {
           emitted_vars: Record<string, string>;
@@ -70,7 +80,13 @@ describe('TaskTool', () => {
         runtime: {} as unknown,
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const { settingsOwner } = createSessionSettingsFixture(config);
       const tool = new TaskTool(config, {
+        ...taskIssueSettingsDependencies(
+          settingsOwner,
+          config.getExcludeTools() ?? [],
+        ),
+        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => false,
@@ -107,7 +123,7 @@ describe('TaskTool', () => {
 
     it('should wrap interactive output with XML tags', async () => {
       const dispose = vi.fn().mockResolvedValue(undefined);
-      const updateOutput = vi.fn();
+      const updateOutput = vi.fn<(update: LiveOutputUpdate) => void>();
       const scope: {
         output: {
           emitted_vars: Record<string, string>;
@@ -139,7 +155,13 @@ describe('TaskTool', () => {
         runtime: {} as unknown,
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const { settingsOwner } = createSessionSettingsFixture(config);
       const tool = new TaskTool(config, {
+        ...taskIssueSettingsDependencies(
+          settingsOwner,
+          config.getExcludeTools() ?? [],
+        ),
+        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => true,
@@ -167,7 +189,7 @@ describe('TaskTool', () => {
 
     it('should send closing XML tag even when subagent errors', async () => {
       const dispose = vi.fn().mockResolvedValue(undefined);
-      const updateOutput = vi.fn();
+      const updateOutput = vi.fn<(update: LiveOutputUpdate) => void>();
       const scope = {
         output: {
           emitted_vars: {},
@@ -187,7 +209,13 @@ describe('TaskTool', () => {
         runtime: {} as unknown,
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const { settingsOwner } = createSessionSettingsFixture(config);
       const tool = new TaskTool(config, {
+        ...taskIssueSettingsDependencies(
+          settingsOwner,
+          config.getExcludeTools() ?? [],
+        ),
+        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => false,
@@ -213,7 +241,7 @@ describe('TaskTool', () => {
 
     it('should send XML tags even when subagent produces no output', async () => {
       const dispose = vi.fn().mockResolvedValue(undefined);
-      const updateOutput = vi.fn();
+      const updateOutput = vi.fn<(update: LiveOutputUpdate) => void>();
       const scope = {
         output: {
           emitted_vars: {},
@@ -233,7 +261,13 @@ describe('TaskTool', () => {
         runtime: {} as unknown,
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const { settingsOwner } = createSessionSettingsFixture(config);
       const tool = new TaskTool(config, {
+        ...taskIssueSettingsDependencies(
+          settingsOwner,
+          config.getExcludeTools() ?? [],
+        ),
+        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => false,
@@ -273,7 +307,7 @@ describe('TaskTool', () => {
         completeTask: completeTaskMock,
         failTask: vi.fn(),
       };
-      const updateOutput = vi.fn();
+      const updateOutput = vi.fn<(update: LiveOutputUpdate) => void>();
       const launchMock = vi.fn().mockResolvedValue({
         agentId: 'async-xml-agent',
         scope: {
@@ -285,12 +319,19 @@ describe('TaskTool', () => {
         },
         dispose: vi.fn().mockResolvedValue(undefined),
       });
+      const { settingsOwner } = createSessionSettingsFixture(config);
       const tool = new TaskTool(config, {
+        ...taskIssueSettingsDependencies(
+          settingsOwner,
+          config.getExcludeTools() ?? [],
+        ),
+        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
-        getAsyncTaskManager: () =>
+        taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
+        ),
         isInteractiveEnvironment: () => false,
       });
       const params: TaskToolParams = {
@@ -320,7 +361,7 @@ describe('TaskTool', () => {
   describe('Issue #2008: subagent streaming text should flow, not one word per line', () => {
     it('accumulates word-by-word tokens as flowing text without forced newlines', async () => {
       const dispose = vi.fn().mockResolvedValue(undefined);
-      const updateOutput = vi.fn();
+      const updateOutput = vi.fn<(update: LiveOutputUpdate) => void>();
       const scope: {
         output: {
           emitted_vars: Record<string, string>;
@@ -365,7 +406,13 @@ describe('TaskTool', () => {
         runtime: {} as unknown,
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const { settingsOwner } = createSessionSettingsFixture(config);
       const tool = new TaskTool(config, {
+        ...taskIssueSettingsDependencies(
+          settingsOwner,
+          config.getExcludeTools() ?? [],
+        ),
+        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => false,
@@ -377,8 +424,8 @@ describe('TaskTool', () => {
 
       await invocation.execute(new AbortController().signal, updateOutput);
 
-      const calls = updateOutput.mock.calls.map(
-        (c) => (c[0] as LiveOutputUpdate).data as string,
+      const calls = updateOutput.mock.calls.map(([update]) =>
+        update.mode === 'status' ? '' : update.data,
       );
       // Slice off opening tag (first) and closing tag (last)
       const textChunks = calls.slice(1, -1);
@@ -393,7 +440,7 @@ describe('TaskTool', () => {
 
     it('preserves newlines the LLM includes in its own tokens', async () => {
       const dispose = vi.fn().mockResolvedValue(undefined);
-      const updateOutput = vi.fn();
+      const updateOutput = vi.fn<(update: LiveOutputUpdate) => void>();
       const scope: {
         output: {
           emitted_vars: Record<string, string>;
@@ -427,7 +474,13 @@ describe('TaskTool', () => {
         runtime: {} as unknown,
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
+      const { settingsOwner } = createSessionSettingsFixture(config);
       const tool = new TaskTool(config, {
+        ...taskIssueSettingsDependencies(
+          settingsOwner,
+          config.getExcludeTools() ?? [],
+        ),
+        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => false,
@@ -439,8 +492,8 @@ describe('TaskTool', () => {
 
       await invocation.execute(new AbortController().signal, updateOutput);
 
-      const calls = updateOutput.mock.calls.map(
-        (c) => (c[0] as LiveOutputUpdate).data as string,
+      const calls = updateOutput.mock.calls.map(([update]) =>
+        update.mode === 'status' ? '' : update.data,
       );
       const textChunks = calls.slice(1, -1);
       const accumulated = textChunks.join('');
@@ -473,11 +526,15 @@ describe('TaskTool', () => {
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       // Config WITHOUT getToolRegistry — simulates registry unavailable
-      const configNoRegistry = {
-        getSessionId: () => 'session-2069',
-      } as unknown as Config;
+      const configNoRegistry = createConfig('session-2069');
 
+      const ownedSettings1 = createSessionSettingsFixture(configNoRegistry);
       const tool = new TaskTool(configNoRegistry, {
+        ...taskIssueSettingsDependencies(
+          ownedSettings1.settingsOwner,
+          configNoRegistry.getExcludeTools() ?? [],
+        ),
+        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => true,
@@ -522,11 +579,15 @@ describe('TaskTool', () => {
         runtime: {} as unknown,
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
-      const configWithRegistry = {
-        getSessionId: () => 'session-2069',
-        getEphemeralSettings: () => ({}),
-        getExcludeTools: () => [],
-        getToolRegistry: () => ({
+      const configWithRegistry = createConfig('session-2069');
+
+      const ownedSettings2 = createSessionSettingsFixture(configWithRegistry);
+      const tool = new TaskTool(configWithRegistry, {
+        ...taskIssueSettingsDependencies(
+          ownedSettings2.settingsOwner,
+          configWithRegistry.getExcludeTools() ?? [],
+        ),
+        toolRegistry: await taskSelection({
           getEnabledTools: () => [
             { name: 'read_file' },
             { name: 'write_file' },
@@ -534,9 +595,7 @@ describe('TaskTool', () => {
             { name: 'list_subagents' },
           ],
         }),
-      } as unknown as Config;
-
-      const tool = new TaskTool(configWithRegistry, {
+        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => true,
@@ -585,11 +644,15 @@ describe('TaskTool', () => {
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       // Config WITHOUT getToolRegistry — simulates registry unavailable
-      const configNoRegistry = {
-        getSessionId: () => 'session-2069',
-      } as unknown as Config;
+      const configNoRegistry = createConfig('session-2069');
 
+      const ownedSettings3 = createSessionSettingsFixture(configNoRegistry);
       const tool = new TaskTool(configNoRegistry, {
+        ...taskIssueSettingsDependencies(
+          ownedSettings3.settingsOwner,
+          configNoRegistry.getExcludeTools() ?? [],
+        ),
+        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => true,
@@ -634,11 +697,15 @@ describe('TaskTool', () => {
         runtime: {} as unknown,
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
-      const configNoRegistry = {
-        getSessionId: () => 'session-2069',
-      } as unknown as Config;
+      const configNoRegistry = createConfig('session-2069');
 
+      const ownedSettings4 = createSessionSettingsFixture(configNoRegistry);
       const tool = new TaskTool(configNoRegistry, {
+        ...taskIssueSettingsDependencies(
+          ownedSettings4.settingsOwner,
+          configNoRegistry.getExcludeTools() ?? [],
+        ),
+        ...taskIssueInstructionDependencies(fixturePaths()),
         messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => true,
@@ -665,71 +732,10 @@ describe('TaskTool', () => {
   // must resolve to the registry tool name. Unknown qualified names must
   // remain fail-closed. Qualified excluded tools must still be stripped.
   describe('Issue #2184: API-qualified tool name resolution', () => {
-    type LaunchRequest = {
-      toolConfig?: { tools?: string[] };
-      outputConfig?: unknown;
-    };
-
-    function createIssue2184Harness(
-      registryTools: string[],
-      ephemerals: Record<string, unknown> = {},
-    ) {
-      const dispose = vi.fn().mockResolvedValue(undefined);
-      const scope = {
-        output: {
-          emitted_vars: {},
-          terminate_reason: SubagentTerminateMode.GOAL,
-        },
-        runInteractive: vi.fn().mockResolvedValue(undefined),
-        // Required by SubAgentScope; these tests exercise the interactive path.
-        runNonInteractive: vi.fn(),
-        onMessage: undefined,
-      };
-      const launch = vi.fn().mockResolvedValue({
-        agentId: 'agent-2184',
-        scope,
-        dispose,
-        prompt: {} as unknown,
-        profile: {} as unknown,
-        config: {} as unknown,
-        runtime: {} as unknown,
-      });
-      const orchestrator = { launch } as unknown as SubagentOrchestrator;
-      const configWithRegistry = {
-        getSessionId: () => 'session-2184',
-        getEphemeralSettings: () => ephemerals,
-        getExcludeTools: () => [],
-        getToolRegistry: () => ({
-          getEnabledTools: () => registryTools.map((name) => ({ name })),
-        }),
-      } as unknown as Config;
-      const tool = new TaskTool(configWithRegistry, {
-        messageBus: new MessageBus(),
-        orchestratorFactory: () => orchestrator,
-        isInteractiveEnvironment: () => true,
-      });
-      return { launch, tool };
-    }
-
-    async function executeIssue2184Invocation(
-      params: Pick<TaskToolParams, 'tool_whitelist' | 'expected_outputs'>,
-      registryTools = ['run_shell_command'],
-      ephemerals: Record<string, unknown> = {},
-    ): Promise<LaunchRequest | undefined> {
-      const { launch, tool } = createIssue2184Harness(
-        registryTools,
-        ephemerals,
-      );
-      const invocation = tool.build({
-        subagent_name: 'helper',
-        goal_prompt: 'Do work',
-        ...params,
-      });
-
-      await invocation.execute(new AbortController().signal, undefined);
-
-      return launch.mock.calls[0]?.[0] as LaunchRequest | undefined;
-    }
+    const executeIssue2184Invocation = qualifiedTaskInvocationFixture(
+      createConfig,
+      fixturePaths(),
+    );
 
     it("resolves functions.run_shell_command to 'run_shell_command' via the registry", async () => {
       const launchRequest = await executeIssue2184Invocation({

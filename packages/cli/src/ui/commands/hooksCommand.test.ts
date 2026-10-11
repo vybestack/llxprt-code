@@ -1,16 +1,25 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { hooksCommand } from './hooksCommand.js';
 import { MessageType } from '../types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { CommandContext } from './types.js';
-import type { Config, HookRegistryEntry } from '@vybestack/llxprt-code-core';
-import { assertDefined } from '../../__tests__/assertions.js';
+import type { HookRegistryEntry } from '@vybestack/llxprt-code-core';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import {
+  readHookDefinitions,
+  hookSessionRuntime,
+} from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
+import { SessionStartSource } from '@vybestack/llxprt-code-core/hooks/types.js';
 import {
   HookType,
   HookEventName,
@@ -20,14 +29,87 @@ import {
 describe('hooksCommand', () => {
   let context: CommandContext;
   let mockHooks: HookRegistryEntry[];
-  let mockGetDisabledHooks: ReturnType<typeof vi.fn>;
-  let mockSetDisabledHooks: ReturnType<typeof vi.fn>;
-  let mockSetHookEnabled: ReturnType<typeof vi.fn>;
-  let mockGetHookName: ReturnType<typeof vi.fn>;
+  const owners: Array<{ root: SessionHookOwner; config: Config }> = [];
+  let root: SessionHookOwner;
+  const makeContext = async (
+    entries: HookRegistryEntry[],
+  ): Promise<CommandContext> => {
+    const definitions = Object.fromEntries(
+      Object.values(HookEventName).map((event) => [
+        event,
+        entries
+          .filter((entry) => entry.eventName === event)
+          .map((entry) => ({ hooks: [entry.config] })),
+      ]),
+    );
+    const config = new Config({
+      sessionId: 'cli-hook-admin',
+      cwd: process.cwd(),
+      targetDir: process.cwd(),
+      model: 'model',
+      debugMode: false,
+      enableHooks: true,
+      hooks: definitions,
+      disabledHooks: entries
+        .filter((entry) => !entry.enabled)
+        .map((entry) => entry.config.name ?? entry.config.command),
+    });
+    const bus = new MessageBus();
+    root = new SessionHookOwner(
+      readHookDefinitions(config),
+      hookSessionRuntime(
+        config,
+        new WorkspaceTrustLifecycle({
+          localTrust: config.initialWorkspaceTrust,
+        }),
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: config.getSessionId(),
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+      ),
+      true,
+      bus,
+    );
+    const current = root;
+    const control = {
+      listHooks: () => current.listHooks(),
+      getDisabledHooks: () => current.getDisabledHooks(),
+      setDisabledHooks: (names: readonly string[]) =>
+        current.setDisabledHooks(names),
+      enable: (name: string) =>
+        current.setDisabledHooks(
+          current.getDisabledHooks().filter((disabled) => disabled !== name),
+        ),
+      disable: (name: string) =>
+        current.setDisabledHooks([...current.getDisabledHooks(), name]),
+    };
+    owners.push({ root, config });
+    await root
+      .execution({
+        sessionId: () => config.getSessionId(),
+        transcriptPath: () => undefined,
+      })
+      .sessionStart?.(SessionStartSource.Startup);
+    return createMockCommandContext({
+      services: { config, agent: { hooks: control } },
+    });
+  };
+  const projected = (): HookRegistryEntry[] =>
+    root.listHooks().map((hook) => {
+      const original = mockHooks.find(
+        (entry) => entry.config.name === hook.name,
+      );
+      if (original === undefined) throw new Error('Unexpected hook projection');
+      return {
+        ...original,
+        config: { type: HookType.Command, name: hook.name, command: '' },
+        enabled: hook.enabled,
+      };
+    });
 
-  beforeEach(() => {
-    vi.useFakeTimers();
-
+  beforeEach(async () => {
     mockHooks = [
       {
         eventName: HookEventName.BeforeTool,
@@ -61,40 +143,23 @@ describe('hooksCommand', () => {
       },
     ];
 
-    mockGetDisabledHooks = vi.fn().mockReturnValue(['hook3']);
-    mockSetDisabledHooks = vi.fn();
-    mockSetHookEnabled = vi.fn();
-    mockGetHookName = vi.fn().mockImplementation((entry: HookRegistryEntry) => {
-      const hookName = entry.config.name;
-      assertDefined(hookName);
-      return hookName;
-    });
-
-    const mockRegistry = {
-      getAllHooks: vi.fn().mockReturnValue(mockHooks),
-      setHookEnabled: mockSetHookEnabled,
-      getHookName: mockGetHookName,
-    };
-
-    const mockHookSystem = {
-      initialize: vi.fn().mockResolvedValue(undefined),
-      getRegistry: vi.fn().mockReturnValue(mockRegistry),
-    };
-
-    context = createMockCommandContext({
-      services: {
-        config: {
-          getHookSystem: vi.fn().mockReturnValue(mockHookSystem),
-          getDisabledHooks: mockGetDisabledHooks,
-          setDisabledHooks: mockSetDisabledHooks,
-        } as unknown as Config,
-      },
-    });
+    context = await makeContext(mockHooks);
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
+  afterEach(async () => {
+    const resources = owners.splice(0);
+    const retired = await Promise.allSettled(
+      resources.map(async ({ root, config }) => {
+        await root.dispose();
+        await config.dispose();
+      }),
+    );
     vi.restoreAllMocks();
+    const failures = retired.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'CLI hook fixture retirement failed');
   });
 
   describe('list command', () => {
@@ -105,7 +170,7 @@ describe('hooksCommand', () => {
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.HOOKS_LIST,
-          hooks: mockHooks,
+          hooks: projected(),
         }),
       );
     });
@@ -131,11 +196,7 @@ describe('hooksCommand', () => {
 
     it('should show info if hook system is not enabled', async () => {
       const contextNoHooks = createMockCommandContext({
-        services: {
-          config: {
-            getHookSystem: vi.fn().mockReturnValue(null),
-          } as unknown as Config,
-        },
+        services: { agent: null },
       });
 
       const listCmd = hooksCommand.subCommands!.find((s) => s.name === 'list')!;
@@ -144,7 +205,7 @@ describe('hooksCommand', () => {
       expect(contextNoHooks.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
-          text: 'Hooks system is not enabled. Enable it in settings with hooksConfig.enabled.',
+          text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
         }),
         expect.any(Number),
       );
@@ -158,8 +219,10 @@ describe('hooksCommand', () => {
       )!;
       await enableCmd.action!(context, 'hook3');
 
-      expect(mockSetDisabledHooks).toHaveBeenCalledWith([]);
-      expect(mockSetHookEnabled).toHaveBeenCalledWith('hook3', true);
+      expect(root.getDisabledHooks()).toStrictEqual([]);
+      expect(
+        root.listHooks().find((hook) => hook.name === 'hook3')?.enabled,
+      ).toBe(true);
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
@@ -207,8 +270,10 @@ describe('hooksCommand', () => {
       )!;
       await disableCmd.action!(context, 'hook1');
 
-      expect(mockSetDisabledHooks).toHaveBeenCalledWith(['hook3', 'hook1']);
-      expect(mockSetHookEnabled).toHaveBeenCalledWith('hook1', false);
+      expect(root.getDisabledHooks()).toStrictEqual(['hook3', 'hook1']);
+      expect(
+        root.listHooks().find((hook) => hook.name === 'hook1')?.enabled,
+      ).toBe(false);
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
@@ -256,10 +321,16 @@ describe('hooksCommand', () => {
       )!;
       await enableAllCmd.action!(context, '');
 
-      expect(mockSetDisabledHooks).toHaveBeenCalledWith([]);
-      expect(mockSetHookEnabled).toHaveBeenCalledWith('hook1', true);
-      expect(mockSetHookEnabled).toHaveBeenCalledWith('hook2', true);
-      expect(mockSetHookEnabled).toHaveBeenCalledWith('hook3', true);
+      expect(root.getDisabledHooks()).toStrictEqual([]);
+      expect(
+        root.listHooks().find((hook) => hook.name === 'hook1')?.enabled,
+      ).toBe(true);
+      expect(
+        root.listHooks().find((hook) => hook.name === 'hook2')?.enabled,
+      ).toBe(true);
+      expect(
+        root.listHooks().find((hook) => hook.name === 'hook3')?.enabled,
+      ).toBe(true);
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
@@ -270,32 +341,13 @@ describe('hooksCommand', () => {
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.HOOKS_LIST,
-          hooks: mockHooks,
+          hooks: projected(),
         }),
       );
     });
 
     it('should show info if no hooks registered', async () => {
-      const mockRegistryEmpty = {
-        getAllHooks: vi.fn().mockReturnValue([]),
-        setHookEnabled: mockSetHookEnabled,
-        getHookName: mockGetHookName,
-      };
-
-      const mockHookSystemEmpty = {
-        initialize: vi.fn().mockResolvedValue(undefined),
-        getRegistry: vi.fn().mockReturnValue(mockRegistryEmpty),
-      };
-
-      const contextEmpty = createMockCommandContext({
-        services: {
-          config: {
-            getHookSystem: vi.fn().mockReturnValue(mockHookSystemEmpty),
-            getDisabledHooks: mockGetDisabledHooks,
-            setDisabledHooks: mockSetDisabledHooks,
-          } as unknown as Config,
-        },
-      });
+      const contextEmpty = await makeContext([]);
 
       const enableAllCmd = hooksCommand.subCommands!.find(
         (s) => s.name === 'enable-all',
@@ -332,13 +384,9 @@ describe('hooksCommand', () => {
       );
     });
 
-    it('should show error if hook system is not enabled', async () => {
+    it('should explain when executable hook ownership is absent', async () => {
       const contextNoHooks = createMockCommandContext({
-        services: {
-          config: {
-            getHookSystem: vi.fn().mockReturnValue(null),
-          } as unknown as Config,
-        },
+        services: { agent: null },
       });
 
       const enableAllCmd = hooksCommand.subCommands!.find(
@@ -348,8 +396,8 @@ describe('hooksCommand', () => {
 
       expect(contextNoHooks.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: MessageType.ERROR,
-          text: 'Hooks system is not enabled.',
+          type: MessageType.INFO,
+          text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
         }),
         expect.any(Number),
       );
@@ -363,14 +411,20 @@ describe('hooksCommand', () => {
       )!;
       await disableAllCmd.action!(context, '');
 
-      expect(mockSetDisabledHooks).toHaveBeenCalledWith([
+      expect(root.getDisabledHooks()).toStrictEqual([
         'hook1',
         'hook2',
         'hook3',
       ]);
-      expect(mockSetHookEnabled).toHaveBeenCalledWith('hook1', false);
-      expect(mockSetHookEnabled).toHaveBeenCalledWith('hook2', false);
-      expect(mockSetHookEnabled).toHaveBeenCalledWith('hook3', false);
+      expect(
+        root.listHooks().find((hook) => hook.name === 'hook1')?.enabled,
+      ).toBe(false);
+      expect(
+        root.listHooks().find((hook) => hook.name === 'hook2')?.enabled,
+      ).toBe(false);
+      expect(
+        root.listHooks().find((hook) => hook.name === 'hook3')?.enabled,
+      ).toBe(false);
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.INFO,
@@ -381,32 +435,13 @@ describe('hooksCommand', () => {
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.HOOKS_LIST,
-          hooks: mockHooks,
+          hooks: projected(),
         }),
       );
     });
 
     it('should show info if no hooks registered', async () => {
-      const mockRegistryEmpty = {
-        getAllHooks: vi.fn().mockReturnValue([]),
-        setHookEnabled: mockSetHookEnabled,
-        getHookName: mockGetHookName,
-      };
-
-      const mockHookSystemEmpty = {
-        initialize: vi.fn().mockResolvedValue(undefined),
-        getRegistry: vi.fn().mockReturnValue(mockRegistryEmpty),
-      };
-
-      const contextEmpty = createMockCommandContext({
-        services: {
-          config: {
-            getHookSystem: vi.fn().mockReturnValue(mockHookSystemEmpty),
-            getDisabledHooks: mockGetDisabledHooks,
-            setDisabledHooks: mockSetDisabledHooks,
-          } as unknown as Config,
-        },
-      });
+      const contextEmpty = await makeContext([]);
 
       const disableAllCmd = hooksCommand.subCommands!.find(
         (s) => s.name === 'disable-all',
@@ -443,13 +478,9 @@ describe('hooksCommand', () => {
       );
     });
 
-    it('should show error if hook system is not enabled', async () => {
+    it('should explain when executable hook ownership is absent', async () => {
       const contextNoHooks = createMockCommandContext({
-        services: {
-          config: {
-            getHookSystem: vi.fn().mockReturnValue(null),
-          } as unknown as Config,
-        },
+        services: { agent: null },
       });
 
       const disableAllCmd = hooksCommand.subCommands!.find(
@@ -459,8 +490,8 @@ describe('hooksCommand', () => {
 
       expect(contextNoHooks.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: MessageType.ERROR,
-          text: 'Hooks system is not enabled.',
+          type: MessageType.INFO,
+          text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
         }),
         expect.any(Number),
       );
@@ -512,7 +543,7 @@ describe('hooksCommand', () => {
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.HOOKS_LIST,
-          hooks: mockHooks,
+          hooks: projected(),
         }),
       );
     });
@@ -523,7 +554,7 @@ describe('hooksCommand', () => {
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
           type: MessageType.HOOKS_LIST,
-          hooks: mockHooks,
+          hooks: projected(),
         }),
       );
     });

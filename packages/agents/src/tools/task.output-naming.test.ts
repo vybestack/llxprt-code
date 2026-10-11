@@ -1,3 +1,4 @@
+import { createTaskPolicyFixture } from './__tests__/task-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -51,6 +52,8 @@ describe('Issue #2533: TaskTool single parameter vocabulary', () => {
     orchestrator: SubagentOrchestrator = {} as unknown as SubagentOrchestrator,
   ): TaskTool {
     return new TaskTool(config, {
+      ...createTaskPolicyFixture({}),
+      readMcpInstructions: () => undefined,
       messageBus: new MessageBus(),
       orchestratorFactory: () => orchestrator,
     });
@@ -154,6 +157,7 @@ describe('Issue #2533: TaskTool single parameter vocabulary', () => {
       'rejects legacy %s before validating values',
       (legacyName, canonicalName) => {
         const tool = new ValueValidatingTaskTool(config, {
+          readMcpInstructions: () => undefined,
           messageBus: new MessageBus(),
         });
         const params = {
@@ -404,6 +408,8 @@ describe('Issue #2533: TaskTool single parameter vocabulary', () => {
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
+        ...createTaskPolicyFixture({}),
+        readMcpInstructions: () => undefined,
         messageBus: new MessageBus(),
         orchestratorFactory: () => orchestrator,
         isInteractiveEnvironment: () => true,

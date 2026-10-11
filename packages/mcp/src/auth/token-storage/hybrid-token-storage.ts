@@ -9,6 +9,8 @@ import { FileTokenStorage } from './file-token-storage.js';
 import type { TokenStorage, OAuthCredentials } from './types.js';
 import { TokenStorageType } from './types.js';
 
+import type { HostFeedbackSink } from '../../host/hostServices.js';
+
 const FORCE_FILE_STORAGE_ENV_VAR = 'LLXPRT_FORCE_FILE_STORAGE';
 
 export class HybridTokenStorage extends BaseTokenStorage {
@@ -16,7 +18,10 @@ export class HybridTokenStorage extends BaseTokenStorage {
   private storageType: TokenStorageType | null = null;
   private storageInitPromise: Promise<TokenStorage> | null = null;
 
-  constructor(serviceName: string) {
+  constructor(
+    serviceName: string,
+    private readonly feedback?: HostFeedbackSink,
+  ) {
     super(serviceName);
   }
 
@@ -28,7 +33,10 @@ export class HybridTokenStorage extends BaseTokenStorage {
         const { KeychainTokenStorage } = await import(
           './keychain-token-storage.js'
         );
-        const keychainStorage = new KeychainTokenStorage(this.serviceName);
+        const keychainStorage = new KeychainTokenStorage(
+          this.serviceName,
+          this.feedback,
+        );
 
         const isAvailable = await keychainStorage.isAvailable();
         if (isAvailable) {

@@ -8,52 +8,35 @@ import { Box } from 'ink';
 
 import { MultiProviderPrivacyNotice } from './MultiProviderPrivacyNotice.js';
 import { UnconfiguredPrivacyNotice } from './UnconfiguredPrivacyNotice.js';
-import type { ModelState } from '../cliUiRuntime.js';
 import { getBorderStyle } from '../contexts/UnicodeRenderingContext.js';
 
 interface PrivacyNoticeProps {
   onExit: () => void;
-  config: ModelState;
+  provider: string | null | undefined;
 }
 
 /**
  * Privacy notice component that shows appropriate notice based on active provider.
  */
 const PrivacyNoticeText = ({
-  config,
+  provider,
   onExit,
 }: {
-  config: ModelState;
+  provider: string | null | undefined;
   onExit: () => void;
 }) => {
-  // Check active provider to determine which privacy notice to show
-  const providerManager = config.getProviderManager();
-  let activeProvider:
-    | ReturnType<NonNullable<typeof providerManager>['getActiveProvider']>
-    | undefined;
-  if (providerManager) {
-    try {
-      activeProvider = providerManager.getActiveProvider();
-    } catch {
-      activeProvider = undefined;
-    }
-  }
-
-  // No active provider: show neutral setup notice
-  if (!activeProvider) {
+  const providerName = provider;
+  if (!providerName || providerName === 'unconfigured') {
     return <UnconfiguredPrivacyNotice onExit={onExit} />;
   }
 
   return (
-    <MultiProviderPrivacyNotice
-      providerName={activeProvider.name}
-      onExit={onExit}
-    />
+    <MultiProviderPrivacyNotice providerName={providerName} onExit={onExit} />
   );
 };
 
-export const PrivacyNotice = ({ onExit, config }: PrivacyNoticeProps) => (
+export const PrivacyNotice = ({ onExit, provider }: PrivacyNoticeProps) => (
   <Box borderStyle={getBorderStyle('round')} padding={1} flexDirection="column">
-    <PrivacyNoticeText config={config} onExit={onExit} />
+    <PrivacyNoticeText provider={provider} onExit={onExit} />
   </Box>
 );

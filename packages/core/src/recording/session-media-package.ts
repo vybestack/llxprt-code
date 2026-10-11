@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  hydrateRecordedMedia,
+  stageRecordedMedia,
+} from '../storage/recorded-media-transfer.js';
 import { randomUUID } from 'node:crypto';
 import { readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
@@ -258,6 +262,7 @@ async function readPersistedState(
   stateIndex: number,
   admission: MediaAdmissionService,
   reservations: ExportReservation[],
+  mediaStore: LocalMediaStore,
 ): Promise<PortablePersistedState | undefined> {
   if (!entry.startsWith(PERSISTED_SESSION_PREFIX) || !entry.endsWith('.json')) {
     return undefined;
@@ -295,6 +300,7 @@ async function readPersistedState(
     turnId: `session-package-persisted-${stateIndex}`,
     source: 'session-package-export',
   };
+  await hydrateRecordedMedia(mediaStore, history);
   const admitted = await admission.admitContents(history, admissionContext);
   reservations.push({
     contents: admitted,
@@ -314,6 +320,7 @@ async function readPersistedStates(
   projectHash: string,
   admission: MediaAdmissionService,
   reservations: ExportReservation[],
+  mediaStore: LocalMediaStore,
 ): Promise<readonly PortablePersistedState[]> {
   const entries = (await readdir(dirname(recordingPath)))
     .filter(
@@ -349,6 +356,7 @@ async function readPersistedStates(
       states.length,
       admission,
       reservations,
+      mediaStore,
     );
     if (state !== undefined) states.push(state);
   }
@@ -403,6 +411,14 @@ async function writeSessionMediaPackage(
     MAX_RECORDING_BYTES,
     'Session recording',
   );
+  await hydrateRecordedMedia(
+    mediaStore,
+    sourceBytes
+      .toString('utf8')
+      .trimEnd()
+      .split('\n')
+      .map((line): unknown => JSON.parse(line)),
+  );
   const recording = await portableRecording(
     sourceBytes,
     mediaStore,
@@ -417,6 +433,7 @@ async function writeSessionMediaPackage(
     projectHash,
     admission,
     reservations,
+    mediaStore,
   );
   const replayHistory = await replayPortableRecording(
     recordingPath,
@@ -624,6 +641,22 @@ export async function importSessionMediaPackage<T>(
     typeof packageSource === 'string'
       ? await validateSessionMediaPackage(packageSource)
       : packageSource;
+  return importValidatedSessionMediaPackage(
+    validated,
+    destinationChatsDirectory,
+    projectHash,
+    mediaStore,
+    activate,
+  );
+}
+
+async function importValidatedSessionMediaPackage<T>(
+  validated: ValidatedSessionMediaPackage,
+  destinationChatsDirectory: string,
+  projectHash: string,
+  mediaStore: LocalMediaStore,
+  activate: ((imported: ImportedSessionMediaPackage) => Promise<T>) | undefined,
+): Promise<T | ImportedSessionMediaPackage> {
   await mediaStore.preflightObjects(validated.objects);
   const importedSessionId = randomUUID();
   const portable = await portableRecording(
@@ -647,18 +680,62 @@ export async function importSessionMediaPackage<T>(
     contentIds: validated.objects.map((object) => object.contentId),
   };
   const stagedMedia = await mediaStore.stageObjectFiles(validated.blobs);
+  let durableMedia: Awaited<ReturnType<typeof stageRecordedMedia>> | undefined;
+  try {
+    durableMedia = await stageRecordedMedia(mediaStore, validated.references);
+    const result = await activateImportedPackage(
+      imported,
+      destinationChatsDirectory,
+      portable.bytes,
+      persistedStates,
+      validated.references,
+      stagedMedia,
+      mediaStore,
+      activate,
+    );
+    stagedMedia.commit();
+    durableMedia.commit();
+    await durableMedia.finalize();
+    return result;
+  } catch (error) {
+    const cleanup = await Promise.allSettled([
+      stagedMedia.rollback(),
+      durableMedia?.rollback(),
+    ]);
+    const failures = cleanup.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(
+        [error, ...failures],
+        'Imported media cleanup failed',
+      );
+    throw error;
+  }
+}
+
+async function activateImportedPackage<T>(
+  imported: ImportedSessionMediaPackage,
+  destinationChatsDirectory: string,
+  recordingBytes: Uint8Array,
+  persistedStates: ReturnType<typeof rewrittenPersistedStates>,
+  references: readonly MediaReferenceBlock[],
+  stagedMedia: Awaited<ReturnType<LocalMediaStore['stageObjectFiles']>>,
+  mediaStore: LocalMediaStore,
+  activate: ((imported: ImportedSessionMediaPackage) => Promise<T>) | undefined,
+): Promise<T | ImportedSessionMediaPackage> {
   const reservations: ImportReservation[] = [];
   let published: PublishedImportedSession | undefined;
   try {
-    for (const [index, reference] of validated.references.entries()) {
-      const ownerId = `session-package-import:${importedSessionId}:${index}`;
+    for (const [index, reference] of references.entries()) {
+      const ownerId = `session-package-import:${imported.sessionId}:${index}`;
       await mediaStore.reserve(reference, ownerId);
       reservations.push({ contentId: reference.contentId, ownerId });
     }
     published = await publishImportedSession({
       destinationChatsDirectory,
-      recordingPath,
-      recordingBytes: portable.bytes,
+      recordingPath: imported.recordingPath,
+      recordingBytes,
       persistedStates,
     });
     const releaseFailures = await releaseImportReservations(
@@ -687,6 +764,5 @@ export async function importSessionMediaPackage<T>(
       reservations,
     );
   }
-  stagedMedia.commit();
   return result;
 }

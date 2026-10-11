@@ -24,7 +24,7 @@ const mockedUseStdout = useStdout as Mock<typeof useStdout>;
 
 describe('useFocus', () => {
   let stdin: EventEmitter;
-  let stdout: { write: vi.Func };
+  let stdout: { write: Mock<(value: string) => boolean> };
 
   beforeEach(() => {
     stdin = new EventEmitter();

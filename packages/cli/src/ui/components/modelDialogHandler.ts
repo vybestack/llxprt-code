@@ -8,12 +8,18 @@ import { useCallback } from 'react';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
-import { recordProviderSwitchReportingFailure } from '../utils/recordActiveProviderSwitch.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import {
+  agentProviderSwitchRecorder,
+  recordProviderSwitchReportingFailure,
+} from '../utils/recordActiveProviderSwitch.js';
 
 interface ModelDialogCommandContext {
   recordingIntegration?: {
     recordProviderSwitch(provider: string, model: string): void;
   };
+  recordingOwner?: 'agent';
+  services?: { agent: Agent | null };
 }
 
 /** The part of the runtime API a model selection uses. */
@@ -26,7 +32,7 @@ interface ModelSwitchRuntime {
     nextModel: string;
     providerName: string;
   }>;
-  getActiveProviderStatus(): { providerName: string | null };
+  providerStatus(): { providerName: string | null };
 }
 
 function buildCrossProviderMessages(
@@ -78,6 +84,24 @@ function addErrorItem(
   }
 }
 
+/** A status or history failure must not mask the original switch error. */
+function reportSwitchFailure(
+  readProviderName: () => string | null,
+  addItem: UseHistoryManagerReturn['addItem'],
+  error: unknown,
+): void {
+  let providerName: string | null | undefined;
+  try {
+    providerName = readProviderName();
+  } catch {
+    // Runtime status read failure must not mask the original error
+  }
+  addErrorItem(
+    addItem,
+    `Failed to switch model for provider '${providerName ?? 'unknown'}': ${error instanceof Error ? error.message : String(error)}`,
+  );
+}
+
 /**
  * Handler invoked when a user selects a model in the ModelsDialog browser.
  * Performs the provider/model switch, records it, and opens the
@@ -98,7 +122,22 @@ export function useModelDialogHandler(
         let switchSucceeded = false;
         try {
           const selectedProvider = model.provider;
-          const recordingIntegration = commandContext.recordingIntegration;
+          if (
+            commandContext.recordingOwner === 'agent' &&
+            !commandContext.services?.agent
+          ) {
+            throw new Error('Session agent is unavailable');
+          }
+          // The Agent session owner is the single recording writer in owner
+          // mode; otherwise the raw integration records.
+          const recorder =
+            commandContext.recordingOwner === 'agent'
+              ? agentProviderSwitchRecorder((event) =>
+                  commandContext.services?.agent?.session.recordRecordingEvent(
+                    event,
+                  ),
+                )
+              : commandContext.recordingIntegration;
           if (selectedProvider !== currentProvider) {
             const switchResult = await runtime.setProvider(selectedProvider);
             await runtime.setActiveModel(model.id);
@@ -111,8 +150,8 @@ export function useModelDialogHandler(
             )) {
               addInfoItem(addItem, message);
             }
-            recordProviderSwitchReportingFailure(
-              recordingIntegration,
+            await recordProviderSwitchReportingFailure(
+              recorder,
               () => ({ provider: selectedProvider, model: model.id }),
               (text) => addErrorItem(addItem, text),
             );
@@ -123,8 +162,8 @@ export function useModelDialogHandler(
               addItem,
               `Active model is '${result.nextModel}' for provider '${result.providerName}'.`,
             );
-            recordProviderSwitchReportingFailure(
-              recordingIntegration,
+            await recordProviderSwitchReportingFailure(
+              recorder,
               () => ({
                 provider: result.providerName,
                 model: result.nextModel,
@@ -133,20 +172,11 @@ export function useModelDialogHandler(
             );
           }
         } catch (e) {
-          let providerName: string | null | undefined;
-          try {
-            providerName = runtime.getActiveProviderStatus().providerName;
-          } catch {
-            // Runtime status read failure must not mask the original error
-          }
-          try {
-            addItem({
-              type: 'error',
-              text: `Failed to switch model for provider '${providerName ?? 'unknown'}': ${e instanceof Error ? e.message : String(e)}`,
-            });
-          } catch {
-            // addItem failure must not prevent dialog cleanup
-          }
+          reportSwitchFailure(
+            () => runtime.providerStatus().providerName,
+            addItem,
+            e,
+          );
         }
         store.commands.closeDialog('models');
         if (switchSucceeded) {

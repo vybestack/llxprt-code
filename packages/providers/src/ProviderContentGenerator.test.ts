@@ -6,17 +6,10 @@
 
 import { describe, it, expect } from 'bun:test';
 import { ProviderContentGenerator } from './ProviderContentGenerator.js';
-import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-
-const dummyConfig: ContentGeneratorConfig = { model: 'test' };
 
 describe('ProviderContentGenerator', () => {
-  const providerManager = {
-    getActiveProvider: () => ({ name: 'test-provider' }),
-  };
-
   it('countTokens estimates from text blocks (~4 chars/token)', async () => {
-    const gen = new ProviderContentGenerator(providerManager, dummyConfig);
+    const gen = new ProviderContentGenerator();
     const result = await gen.countTokens({
       contents: [
         {
@@ -30,7 +23,7 @@ describe('ProviderContentGenerator', () => {
   });
 
   it('countTokens concatenates text from multiple blocks', async () => {
-    const gen = new ProviderContentGenerator(providerManager, dummyConfig);
+    const gen = new ProviderContentGenerator();
     const result = await gen.countTokens({
       contents: [
         {
@@ -51,7 +44,7 @@ describe('ProviderContentGenerator', () => {
   });
 
   it('countTokens ignores non-text blocks', async () => {
-    const gen = new ProviderContentGenerator(providerManager, dummyConfig);
+    const gen = new ProviderContentGenerator();
     const result = await gen.countTokens({
       contents: [
         {
@@ -69,7 +62,7 @@ describe('ProviderContentGenerator', () => {
   });
 
   it('countTokens returns 0 for empty contents', async () => {
-    const gen = new ProviderContentGenerator(providerManager, dummyConfig);
+    const gen = new ProviderContentGenerator();
     const result = await gen.countTokens({
       contents: [],
     });
@@ -77,21 +70,21 @@ describe('ProviderContentGenerator', () => {
   });
 
   it('generateContent throws unsupported error', async () => {
-    const gen = new ProviderContentGenerator(providerManager, dummyConfig);
+    const gen = new ProviderContentGenerator();
     await expect(gen.generateContent({ contents: [] }, 'id')).rejects.toThrow(
       'IContent pipeline',
     );
   });
 
   it('generateContentStream throws unsupported error', async () => {
-    const gen = new ProviderContentGenerator(providerManager, dummyConfig);
+    const gen = new ProviderContentGenerator();
     await expect(
       gen.generateContentStream({ contents: [] }, 'id'),
     ).rejects.toThrow('IContent pipeline');
   });
 
   it('embedContent throws unsupported error', async () => {
-    const gen = new ProviderContentGenerator(providerManager, dummyConfig);
+    const gen = new ProviderContentGenerator();
     await expect(gen.embedContent({ texts: ['hi'] })).rejects.toThrow(
       'Embeddings not supported',
     );

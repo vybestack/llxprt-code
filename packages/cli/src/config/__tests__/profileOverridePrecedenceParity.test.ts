@@ -3,6 +3,11 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+const retainedActivationOperations: Array<{ dispose(): void | Promise<void> }> =
+  [];
+
+const retainedSettingsOwners: SessionSettingsOwner[] = [];
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P13
@@ -35,12 +40,19 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ProviderManager } from '@vybestack/llxprt-code-providers';
+import {
+  ProviderManager,
+  type IProvider,
+} from '@vybestack/llxprt-code-providers';
 import { loadCliConfig } from '../config.js';
 import { parseArguments } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
 import { ExtensionStorage } from '../extension.js';
 import { ExtensionEnablementManager } from '../extensions/extensionEnablement.js';
+import {
+  loadPrecedenceProviderContributions,
+  registerPrecedenceProviders,
+} from './precedenceProviderContributions.js';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -73,7 +85,9 @@ void vi.mock('fs', () => {
     ...actualFs,
     mkdirSync: vi.fn(),
     writeFileSync: vi.fn(),
-    existsSync: vi.fn((p) => mockPaths.has(p.toString())),
+    existsSync: vi.fn(
+      (p) => mockPaths.has(p.toString()) || actualFs.existsSync(p),
+    ),
     statSync: vi.fn((p) => {
       if (mockPaths.has(p.toString()))
         return { isDirectory: () => true } as unknown as import('fs').Stats;
@@ -101,26 +115,31 @@ void vi.mock('../profileBootstrap.js', () => {
   const { SettingsService: RealSettingsService } = realLlxprtCodeSettingsModule;
   return {
     ...actual,
-    prepareRuntimeForProfile: vi.fn(async () => ({
-      runtime: {
-        settingsService: new RealSettingsService(),
-        config: null,
-        runtimeId: 'mock-runtime',
-        metadata: {},
-      },
-      runtimeMessageBus: undefined,
-      providerManager: {
-        listProviders: vi.fn(() => []),
-        getActiveProviderName: vi.fn(() => null),
-        setActiveProvider: vi.fn(),
-        getActiveProvider: vi.fn(() => undefined),
-        getAvailableModels: vi.fn(async () => []),
-        getProviderByName: vi.fn(() => ({
-          getDefaultModel: () => 'gemini-2.5-pro',
-        })),
-      },
-      oauthManager: undefined,
-    })),
+    prepareRuntimeForProfile: vi.fn(async () => {
+      const settingsService = new RealSettingsService();
+      const providerManager = new ProviderManager({ settingsService });
+      const provider: IProvider = {
+        name: 'openai',
+        getDefaultModel: () => 'mock-default-model',
+        getModels: async () => [],
+        async *generateChatCompletion() {
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ready' }] };
+        },
+      };
+      providerManager.registerProvider(provider);
+      runtimeSettingsState.providerManager = providerManager;
+      return {
+        runtime: {
+          settingsService,
+          config: null,
+          runtimeId: 'mock-runtime',
+          metadata: {},
+        },
+        runtimeMessageBus: undefined,
+        providerManager,
+        oauthManager: null,
+      };
+    }),
   };
 });
 
@@ -175,7 +194,6 @@ void vi.mock(
   }),
 );
 
-// config.ts: import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js'
 const runtimeSettingsState = {
   context: null as {
     settingsService: SettingsService;
@@ -186,79 +204,6 @@ const runtimeSettingsState = {
   providerManager: null as ProviderManager | null,
   oauthManager: null as unknown,
 };
-
-void vi.mock(
-  '@vybestack/llxprt-code-providers/runtime/runtimeLifecycle.js',
-  () => ({
-    resetCliProviderInfrastructure: vi.fn(),
-    setCliRuntimeContext: vi.fn(
-      (
-        svc: SettingsService,
-        cfg?: ServerConfig.Config,
-        opts: { metadata?: Record<string, unknown>; runtimeId?: string } = {},
-      ) => {
-        runtimeSettingsState.context = {
-          settingsService: svc,
-          config: cfg ?? null,
-          runtimeId: opts.runtimeId ?? 'mock-runtime',
-          metadata: opts.metadata ?? {},
-        };
-      },
-    ),
-    registerCliProviderInfrastructure: vi.fn(
-      (
-        mgr: ProviderManager,
-        oauth: unknown,
-        _options?: {
-          messageBus?: unknown;
-          runtimeId?: string;
-          metadata?: Record<string, unknown>;
-        },
-      ) => {
-        runtimeSettingsState.providerManager = mgr;
-        runtimeSettingsState.oauthManager = oauth ?? null;
-      },
-    ),
-  }),
-);
-
-// config.ts: import { getCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeAccessors.js'
-void vi.mock(
-  '@vybestack/llxprt-code-providers/runtime/runtimeAccessors.js',
-  () => ({
-    getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
-    getCliRuntimeConfig: vi.fn(
-      () => runtimeSettingsState.context?.config ?? null,
-    ),
-    getCliRuntimeServices: vi.fn(() => ({
-      config: runtimeSettingsState.context?.config ?? null,
-      settingsService:
-        runtimeSettingsState.context?.settingsService ?? new SettingsService(),
-      providerManager:
-        runtimeSettingsState.providerManager ??
-        ({
-          listProviders: vi.fn(() => []),
-          getActiveProviderName: vi.fn(() => null),
-          setActiveProvider: vi.fn(),
-          getActiveProvider: vi.fn(() => undefined),
-          getAvailableModels: vi.fn(async () => []),
-        } as unknown as ProviderManager),
-    })),
-    getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
-    getCliOAuthManager: vi.fn(() => {
-      if (runtimeSettingsState.oauthManager === null) {
-        throw new Error('OAuthManager missing from runtime registration');
-      }
-      return runtimeSettingsState.oauthManager;
-    }),
-    getActiveProviderStatus: vi.fn(() => ({ name: null })),
-    listProviders: vi.fn(() => []),
-    getActiveProviderName: vi.fn(() => null),
-    getActiveModelName: vi.fn(() => null),
-    getEphemeralSettings: vi.fn(() => ({})),
-    getEphemeralSetting: vi.fn(() => undefined),
-  }),
-);
 
 void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   const getProviderManager = () =>
@@ -298,21 +243,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
         };
       },
     ),
-    getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
-    setCliRuntimeContext: vi.fn(
-      (
-        svc: SettingsService,
-        cfg?: ServerConfig.Config,
-        opts: { metadata?: Record<string, unknown>; runtimeId?: string } = {},
-      ) => {
-        runtimeSettingsState.context = {
-          settingsService: svc,
-          config: cfg ?? null,
-          runtimeId: opts.runtimeId ?? 'mock-runtime',
-          metadata: opts.metadata ?? {},
-        };
-      },
-    ),
     switchActiveProvider: vi.fn(async (providerName: string) => {
       switchProviderCalls.push(providerName);
       return {
@@ -322,38 +252,15 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
         infoMessages: [],
       };
     }),
-    registerCliProviderInfrastructure: vi.fn(
-      (
-        mgr: ProviderManager,
-        oauth: unknown,
-        _options?: {
-          messageBus?: unknown;
-          runtimeId?: string;
-          metadata?: Record<string, unknown>;
-        },
-      ) => {
-        runtimeSettingsState.providerManager = mgr;
-        runtimeSettingsState.oauthManager = oauth ?? null;
-      },
-    ),
     applyCliArgumentOverrides: vi.fn(async () => {}),
-    getCliRuntimeConfig: vi.fn(
-      () => runtimeSettingsState.context?.config ?? null,
-    ),
-    getCliRuntimeServices: vi.fn(() => ({
-      config: runtimeSettingsState.context?.config ?? null,
-      settingsService:
-        runtimeSettingsState.context?.settingsService ?? new SettingsService(),
-      providerManager: getProviderManager(),
-    })),
-    getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
-    getCliOAuthManager: vi.fn(() => {
+    providerManager: vi.fn(() => runtimeSettingsState.providerManager),
+    oauthManager: vi.fn(() => {
       if (runtimeSettingsState.oauthManager === null) {
         throw new Error('OAuthManager missing from runtime registration');
       }
       return runtimeSettingsState.oauthManager;
     }),
-    getActiveProviderStatus: vi.fn(() => ({ name: null })),
+    providerStatus: vi.fn(() => ({ name: null })),
     listProviders: vi.fn(() => []),
     getActiveProviderName: vi.fn(() => null),
     setActiveModel: vi.fn(async () => ({
@@ -378,8 +285,10 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
     listSavedProfiles: vi.fn(() => []),
     getProfileByName: vi.fn(() => undefined),
     setDefaultProfileName: vi.fn(),
-    updateActiveProviderBaseUrl: vi.fn(async () => undefined),
-    updateActiveProviderApiKey: vi.fn(async () => undefined),
+    updateActiveProviderBaseUrl: vi.fn(async () => ({
+      message: 'Base URL updated',
+    })),
+    updateActiveProviderApiKey: vi.fn(async () => ({ message: 'Key updated' })),
     getRuntimeDiagnosticsSnapshot: vi.fn(() => ({})),
     getActiveToolFormatState: vi.fn(() => ({})),
     setActiveToolFormatOverride: vi.fn(),
@@ -400,7 +309,7 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
         },
         runtimeMessageBus: { kind: 'session-bus' },
         providerManager: getProviderManager(),
-        oauthManager: { id: 'oauth-manager' },
+        oauthManager: null,
       }),
     ),
   };
@@ -459,20 +368,48 @@ async function runConfig(settings: Settings, argv: string[] = []) {
   process.argv = ['node', 'script.js', ...argv];
   const parsedArgv = await parseArguments(settings);
   const runtimeSettingsService = new SettingsService();
-  return loadCliConfig(
+  const settingsOwner = new SessionSettingsOwner(runtimeSettingsService);
+  retainedSettingsOwners.push(settingsOwner);
+  const config = await loadCliConfig(
     settings,
     [],
     makeExtMgr(),
     'test-session',
     parsedArgv,
     undefined,
-    { settingsService: runtimeSettingsService },
+    {
+      settingsService: runtimeSettingsService,
+      sessionSettingsOwner: settingsOwner,
+      onActivationBootstrapReady: (operation) => {
+        operation.takeSettingsOwner(runtimeSettingsService);
+        retainedActivationOperations.push(operation);
+      },
+      providerContributions: await loadPrecedenceProviderContributions(),
+      onProviderManagerReady: registerPrecedenceProviders,
+    },
   );
+  return { config, settingsOwner };
 }
 
 // ─── Suite ────────────────────────────────────────────────────────────────────
 
 describe('profileOverridePrecedenceParity: synthetic profile for CLI auth', () => {
+  afterEach(async () => {
+    const results = await Promise.allSettled(
+      retainedActivationOperations
+        .splice(0)
+        .map(async (operation) => operation.dispose()),
+    );
+    const errors = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (errors.length > 0)
+      throw new AggregateError(errors, 'Activation fixture cleanup');
+  });
+  afterEach(async () => {
+    for (const owner of retainedSettingsOwners.splice(0)) await owner.dispose();
+  });
+
   const originalArgv = process.argv;
 
   beforeEach(() => {
@@ -502,26 +439,27 @@ describe('profileOverridePrecedenceParity: synthetic profile for CLI auth', () =
     vi.restoreAllMocks();
   });
 
-  it('--provider with --key creates synthetic profile (applyProfileSnapshot called)', async () => {
-    await runConfig({}, ['--provider', 'openai', '--key', 'sk-test-key']);
-    const syntheticCall = profileSnapshotCalls.find(
-      (c) => c.profileName === 'cli-args',
+  it('--provider with --key applies the CLI credential to the selected provider', async () => {
+    const { config: config, settingsOwner: configSettingsOwner } =
+      await runConfig({}, ['--provider', 'openai', '--key', 'sk-test-key']);
+    expect(config.getProvider()).toBe('openai');
+    expect(configSettingsOwner.readNamedParameter('auth-key')).toBe(
+      'sk-test-key',
     );
-    expect(syntheticCall).toBeDefined();
-    expect(syntheticCall?.provider).toBe('openai');
   });
 
-  it('--provider with --baseurl creates synthetic profile', async () => {
-    await runConfig({}, [
-      '--provider',
-      'openai',
-      '--baseurl',
+  it('--provider with --baseurl applies the CLI endpoint to the selected provider', async () => {
+    const { config: config, settingsOwner: configSettingsOwner } =
+      await runConfig({}, [
+        '--provider',
+        'openai',
+        '--baseurl',
+        'https://custom.api.com',
+      ]);
+    expect(config.getProvider()).toBe('openai');
+    expect(configSettingsOwner.readNamedParameter('base-url')).toBe(
       'https://custom.api.com',
-    ]);
-    const syntheticCall = profileSnapshotCalls.find(
-      (c) => c.profileName === 'cli-args',
     );
-    expect(syntheticCall).toBeDefined();
   });
 
   it('--provider alone (no key/keyfile/baseurl) does NOT create synthetic profile', async () => {
@@ -534,6 +472,22 @@ describe('profileOverridePrecedenceParity: synthetic profile for CLI auth', () =
 });
 
 describe('profileOverridePrecedenceParity: --provider skips profile ephemeral settings', () => {
+  afterEach(async () => {
+    const results = await Promise.allSettled(
+      retainedActivationOperations
+        .splice(0)
+        .map(async (operation) => operation.dispose()),
+    );
+    const errors = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (errors.length > 0)
+      throw new AggregateError(errors, 'Activation fixture cleanup');
+  });
+  afterEach(async () => {
+    for (const owner of retainedSettingsOwners.splice(0)) await owner.dispose();
+  });
+
   const originalArgv = process.argv;
 
   beforeEach(() => {
@@ -565,14 +519,14 @@ describe('profileOverridePrecedenceParity: --provider skips profile ephemeral se
 
   it('with --provider, profile from LLXPRT_PROFILE env is skipped (no crash)', async () => {
     setEnv('LLXPRT_PROFILE', 'nonexistent-profile');
-    const config = await runConfig({}, ['--provider', 'gemini']);
+    const { config: config } = await runConfig({}, ['--provider', 'gemini']);
     expect(config).toBeDefined();
     expect(config.getProvider()).toBe('gemini');
   });
 
   it('without --provider, settings.defaultProfile is attempted (non-crash on not-found)', async () => {
     const settings: Settings = { defaultProfile: 'nonexistent-default' };
-    const config = await runConfig(settings);
+    const { config: config } = await runConfig(settings);
     expect(config).toBeDefined();
   });
 
@@ -606,9 +560,14 @@ describe('profileOverridePrecedenceParity: --provider skips profile ephemeral se
       },
     };
 
-    const config = await runConfig({}, ['--profile', JSON.stringify(profile)]);
+    const { settingsOwner: configSettingsOwner } = await runConfig({}, [
+      '--profile',
+      JSON.stringify(profile),
+    ]);
 
-    expect(config.getEphemeralSetting('socket-timeout')).toBe(300000);
+    expect(configSettingsOwner.readNamedParameter('socket-timeout')).toBe(
+      300000,
+    );
   });
 
   it('skips profile socket-timeout when --provider is explicit', async () => {
@@ -621,19 +580,38 @@ describe('profileOverridePrecedenceParity: --provider skips profile ephemeral se
       },
     };
 
-    const config = await runConfig({}, [
-      '--profile',
-      JSON.stringify(profile),
-      '--provider',
-      'gemini',
-    ]);
+    const { config: config, settingsOwner: configSettingsOwner } =
+      await runConfig({}, [
+        '--profile',
+        JSON.stringify(profile),
+        '--provider',
+        'gemini',
+      ]);
 
     expect(config.getProvider()).toBe('gemini');
-    expect(config.getEphemeralSetting('socket-timeout')).toBeUndefined();
+    expect(
+      configSettingsOwner.readNamedParameter('socket-timeout'),
+    ).toBeUndefined();
   });
 });
 
 describe('profileOverridePrecedenceParity: CLI model override after provider switch', () => {
+  afterEach(async () => {
+    const results = await Promise.allSettled(
+      retainedActivationOperations
+        .splice(0)
+        .map(async (operation) => operation.dispose()),
+    );
+    const errors = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (errors.length > 0)
+      throw new AggregateError(errors, 'Activation fixture cleanup');
+  });
+  afterEach(async () => {
+    for (const owner of retainedSettingsOwners.splice(0)) await owner.dispose();
+  });
+
   const originalArgv = process.argv;
 
   beforeEach(() => {
@@ -664,12 +642,15 @@ describe('profileOverridePrecedenceParity: CLI model override after provider swi
   });
 
   it('--model override is reflected in final config model', async () => {
-    const config = await runConfig({}, ['--model', 'my-custom-model']);
+    const { config: config } = await runConfig({}, [
+      '--model',
+      'my-custom-model',
+    ]);
     expect(config.getModel()).toBe('my-custom-model');
   });
 
   it('--model combined with --provider: model set on final config', async () => {
-    const config = await runConfig({}, [
+    const { config: config } = await runConfig({}, [
       '--provider',
       'openai',
       '--model',

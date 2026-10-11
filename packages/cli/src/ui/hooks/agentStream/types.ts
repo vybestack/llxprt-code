@@ -22,4 +22,5 @@ export interface QueuedSubmission {
   options?: { isContinuation: boolean };
   promptId?: string;
   readonly queueId?: number;
+  readonly onConsumed?: () => void;
 }

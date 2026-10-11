@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { parseOutputLimits } from '@vybestack/llxprt-code-core';
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
  * @requirement:REQ-API-001
@@ -16,9 +17,8 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import { getHistoryServiceFromConfig as getHistoryService } from './historyServiceAccess.js';
+import { getHistoryServiceFromAgent as getHistoryService } from './historyServiceAccess.js';
 import type { CommandArgumentSchema } from './schema/types.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import type { DumpMode } from '@vybestack/llxprt-code-providers';
 import {
   buildProviderDumpBody,
@@ -28,26 +28,6 @@ import type { IContent } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import * as path from 'node:path';
 
-type ActiveProviderDumpView = {
-  getCurrentModel?: () => string | undefined;
-  baseURL?: string;
-  /**
-   * Optional plugin-owned dump conversion. The Gemini provider (contributed by
-   * @vybestack/llxprt-plugin-google-gemini) exposes it; the base
-   * buildProviderDumpBody dispatcher does not know Gemini wire shapes (#2763).
-   */
-  buildContextDumpBody?: (
-    history: IContent[],
-    model?: string,
-    config?: unknown,
-  ) => Record<string, unknown>;
-};
-
-type ProviderManagerWithActive = {
-  getActiveProviderName?: () => string | undefined;
-  getActiveProvider?: () => ActiveProviderDumpView | undefined;
-};
-
 const historyUnavailableMessage =
   'History is not available. Start a conversation first before dumping context.';
 
@@ -55,34 +35,6 @@ const validModes: DumpMode[] = ['now', 'status', 'on', 'error', 'off'];
 
 function isValidMode(mode: string): mode is DumpMode {
   return validModes.includes(mode as DumpMode);
-}
-
-function getProviderDumpMetadata(
-  config: NonNullable<CommandContext['services']['config']>,
-): {
-  providerName: string;
-  activeProvider: ActiveProviderDumpView | undefined;
-  activeModel: string | undefined;
-  activeBaseURL: string | undefined;
-} {
-  const providerManager = config.getProviderManager() as
-    | ProviderManagerWithActive
-    | undefined;
-  if (!providerManager) {
-    return {
-      providerName: 'backend',
-      activeProvider: undefined,
-      activeModel: undefined,
-      activeBaseURL: undefined,
-    };
-  }
-  const activeProvider = providerManager.getActiveProvider?.();
-  return {
-    providerName: providerManager.getActiveProviderName?.() ?? 'backend',
-    activeProvider,
-    activeModel: activeProvider?.getCurrentModel?.(),
-    activeBaseURL: activeProvider?.baseURL,
-  };
 }
 
 function isGeminiFamilyProviderName(providerName: string): boolean {
@@ -94,7 +46,7 @@ async function dumpImmediateContext(
   context: CommandContext,
 ): Promise<MessageActionReturn> {
   const config = context.services.config;
-  const historyService = getHistoryService(config);
+  const historyService = getHistoryService(context.services.agent);
   if (!config || !historyService) {
     return {
       type: 'message',
@@ -103,14 +55,14 @@ async function dumpImmediateContext(
     };
   }
   const history = historyService.getAll() as IContent[];
-  const { providerName, activeProvider, activeModel, activeBaseURL } =
-    getProviderDumpMetadata(config);
+  const { providerName, buildContextDumpBody, activeModel, activeBaseURL } =
+    context.runtimeApi.getProviderDumpMetadata();
 
   let body: Record<string, unknown>;
-  if (typeof activeProvider?.buildContextDumpBody === 'function') {
+  if (typeof buildContextDumpBody === 'function') {
     // Plugin-owned providers (Gemini) build their own wire body at runtime;
     // the base package never imports plugin code.
-    body = activeProvider.buildContextDumpBody(history, activeModel, config);
+    body = buildContextDumpBody(history, activeModel, config);
   } else {
     if (isGeminiFamilyProviderName(providerName)) {
       return {
@@ -123,11 +75,12 @@ async function dumpImmediateContext(
           'provider) and retry.',
       };
     }
+    const policy = config.getEphemeralSettings();
     body = buildProviderDumpBody({
       providerName,
       history,
-      settings: context.services.settings,
-      config,
+      policy,
+      config: parseOutputLimits(policy),
       model: activeModel,
       baseURL: activeBaseURL,
     });
@@ -195,7 +148,7 @@ export const dumpcontextCommand: SlashCommand = {
     args: string,
   ): Promise<MessageActionReturn> => {
     try {
-      const runtime = getRuntimeApi();
+      const runtime = context.runtimeApi;
       const mode = args.trim().toLowerCase() || 'status';
 
       if (!isValidMode(mode)) {

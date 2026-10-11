@@ -176,6 +176,24 @@ describe('Hooks @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-015 @requiremen
     }
   });
 
+  it('publishes one final lifecycle observer event when shutdown is requested concurrently', async () => {
+    const handle = createHookControlDeps();
+    const events: HookEventName[] = [];
+    const unsub = handle.control.onHookExecution((request) =>
+      events.push(request.event),
+    );
+    try {
+      await Promise.all([
+        handle.control.finishSessionEnd(),
+        handle.control.finishSessionEnd(),
+      ]);
+      expect(events).toStrictEqual([HookEventName.SessionEnd]);
+    } finally {
+      unsub();
+      handle.control.detach();
+    }
+  });
+
   describe('HookControl unit @plan:PLAN-20260617-COREAPI.P23 @requirement:REQ-015', () => {
     interface CapturedPair {
       readonly event: HookEventName;

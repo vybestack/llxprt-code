@@ -5,21 +5,24 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { recordActiveProviderSwitch } from './recordActiveProviderSwitch.js';
+import {
+  dialogProviderSwitchRecorder,
+  recordActiveProviderSwitch,
+} from './recordActiveProviderSwitch.js';
 
 describe('recordActiveProviderSwitch', () => {
-  it('records the active provider and model from the runtime status', () => {
+  it('records the active provider and model from the runtime status', async () => {
     const recorded: Array<[string, string]> = [];
     const failures: string[] = [];
 
-    recordActiveProviderSwitch(
+    await recordActiveProviderSwitch(
       {
         recordProviderSwitch: (provider, model) => {
           recorded.push([provider, model]);
         },
       },
       {
-        getActiveProviderStatus: () => ({
+        providerStatus: () => ({
           providerName: 'codex',
           modelName: 'gpt-6-luna',
           displayLabel: 'codex',
@@ -32,18 +35,18 @@ describe('recordActiveProviderSwitch', () => {
     expect(failures).toStrictEqual([]);
   });
 
-  it('reports a status read failure through reportFailure and records nothing', () => {
+  it('reports a status read failure through reportFailure and records nothing', async () => {
     const recorded: Array<[string, string]> = [];
     const failures: string[] = [];
 
-    recordActiveProviderSwitch(
+    await recordActiveProviderSwitch(
       {
         recordProviderSwitch: (provider, model) => {
           recorded.push([provider, model]);
         },
       },
       {
-        getActiveProviderStatus: () => {
+        providerStatus: () => {
           throw new Error('provider status unavailable');
         },
       },
@@ -56,13 +59,13 @@ describe('recordActiveProviderSwitch', () => {
     ]);
   });
 
-  it('does not read the runtime status when there is no recorder', () => {
+  it('does not read the runtime status when there is no recorder', async () => {
     let statusReads = 0;
 
-    recordActiveProviderSwitch(
+    await recordActiveProviderSwitch(
       null,
       {
-        getActiveProviderStatus: () => {
+        providerStatus: () => {
           statusReads += 1;
           return {
             providerName: 'codex',
@@ -75,5 +78,72 @@ describe('recordActiveProviderSwitch', () => {
     );
 
     expect(statusReads).toBe(0);
+  });
+});
+
+describe('dialogProviderSwitchRecorder', () => {
+  it('records through the Agent session owner in owner mode and ignores the raw integration', async () => {
+    const events: unknown[] = [];
+    const rawSwitches: Array<[string, string]> = [];
+    const recorder = dialogProviderSwitchRecorder(
+      'agent',
+      (event) => {
+        events.push(event);
+      },
+      {
+        current: {
+          recordProviderSwitch: (provider, model) => {
+            rawSwitches.push([provider, model]);
+          },
+        },
+      },
+    );
+
+    await recorder.recordProviderSwitch('codex', 'gpt-6-luna');
+
+    expect({ events, rawSwitches }).toStrictEqual({
+      events: [
+        { type: 'provider_switch', provider: 'codex', model: 'gpt-6-luna' },
+      ],
+      rawSwitches: [],
+    });
+  });
+
+  it('reads the raw integration at record time, so a swapped integration records the switch', async () => {
+    const ownerEvents: unknown[] = [];
+    const firstSwitches: Array<[string, string]> = [];
+    const resumedSwitches: Array<[string, string]> = [];
+    const integrationRef: {
+      current: {
+        recordProviderSwitch(provider: string, model: string): void;
+      } | null;
+    } = { current: null };
+    const recorder = dialogProviderSwitchRecorder(
+      undefined,
+      (event) => {
+        ownerEvents.push(event);
+      },
+      integrationRef,
+    );
+
+    await recorder.recordProviderSwitch('codex', 'before-any-integration');
+    integrationRef.current = {
+      recordProviderSwitch: (provider, model) => {
+        firstSwitches.push([provider, model]);
+      },
+    };
+    await recorder.recordProviderSwitch('codex', 'gpt-6-luna');
+    integrationRef.current = {
+      recordProviderSwitch: (provider, model) => {
+        resumedSwitches.push([provider, model]);
+      },
+    };
+    await recorder.recordProviderSwitch('anthropic', 'claude');
+
+    expect({ ownerEvents, firstSwitches, resumedSwitches }).toStrictEqual({
+      ownerEvents: [],
+      firstSwitches: [['codex', 'gpt-6-luna']],
+      resumedSwitches: [['anthropic', 'claude']],
+    });
   });
 });

@@ -43,7 +43,6 @@ import { McpControl } from '../control/mcpControl.js';
 import {
   createFakeMcpDeps,
   fakeServerConfig,
-  setServerStatus,
   MCPServerStatus,
   MCPDiscoveryState,
 } from './helpers/fakeMcpManager.js';
@@ -335,13 +334,13 @@ describe('McpControl projection @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ
     manager.setDiscoveryState(MCPDiscoveryState.COMPLETED);
 
     // a failure with NO connected server → 'failed'
-    setServerStatus('alpha', MCPServerStatus.DISCONNECTED);
-    setServerStatus('beta', MCPServerStatus.DISCONNECTED);
+    manager.setServerStatus('alpha', MCPServerStatus.DISCONNECTED);
+    manager.setServerStatus('beta', MCPServerStatus.DISCONNECTED);
     manager.setFailure('alpha', 'connection refused');
     expect(control.discoveryState()).toBe('failed');
 
     // the SAME failure alongside a connected sibling → 'partial'
-    setServerStatus('beta', MCPServerStatus.CONNECTED);
+    manager.setServerStatus('beta', MCPServerStatus.CONNECTED);
     expect(control.discoveryState()).toBe('partial');
   });
 
@@ -357,10 +356,10 @@ describe('McpControl projection @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ
     const control = new McpControl(deps);
     manager.setDiscoveryState(MCPDiscoveryState.COMPLETED);
 
-    setServerStatus('conn', MCPServerStatus.CONNECTED);
-    setServerStatus('connecting', MCPServerStatus.CONNECTING);
-    setServerStatus('down', MCPServerStatus.DISCONNECTED);
-    setServerStatus('broken', MCPServerStatus.CONNECTED);
+    manager.setServerStatus('conn', MCPServerStatus.CONNECTED);
+    manager.setServerStatus('connecting', MCPServerStatus.CONNECTING);
+    manager.setServerStatus('down', MCPServerStatus.DISCONNECTED);
+    manager.setServerStatus('broken', MCPServerStatus.CONNECTED);
     manager.setFailure('broken', 'boom');
 
     const servers = control.listServers();
@@ -386,8 +385,8 @@ describe('McpControl projection @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ
     });
     const control = new McpControl(deps);
     manager.setDiscoveryState(MCPDiscoveryState.COMPLETED);
-    setServerStatus('withtools', MCPServerStatus.CONNECTED);
-    setServerStatus('empty', MCPServerStatus.CONNECTED);
+    manager.setServerStatus('withtools', MCPServerStatus.CONNECTED);
+    manager.setServerStatus('empty', MCPServerStatus.CONNECTED);
 
     const servers = control.listServers();
     const withtools = servers.find((s) => s.name === 'withtools');
@@ -440,7 +439,7 @@ describe('McpControl projection @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ
     const control = new McpControl(deps);
     manager.setDiscoveryState(MCPDiscoveryState.COMPLETED);
     manager.clearFailures();
-    setServerStatus('only', MCPServerStatus.CONNECTED);
+    manager.setServerStatus('only', MCPServerStatus.CONNECTED);
 
     const status = control.status();
     expect(status.discoveryState).toBe('ready');

@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
+
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 
 /**
@@ -30,20 +32,26 @@ export interface PromptMemoryInputs {
  * memory) plus the JIT subdirectory memory for the configured working
  * directory, joined with the existing two-newline separator. JIT disabled:
  * user memory is `getUserMemory()` unchanged. Core memory comes from
- * `getCoreMemory()` and MCP instructions from `getMcpInstructions()`, each
+ * `getCoreMemory()` and MCP instructions from the owner instruction reader, each
  * through its own channel.
  */
 export async function resolvePromptMemory(
-  config: Config,
+  config: Pick<Config, 'getWorkingDir' | 'isJitContextEnabled'>,
+  readMcpInstructions: () => string | undefined,
+  _directories: readonly string[],
+  instructions: InstructionReadOperations,
 ): Promise<PromptMemoryInputs> {
-  let userMemory = config.isJitContextEnabled()
-    ? config.getGlobalMemory()
-    : config.getUserMemory();
+  const snapshot = instructions.snapshot();
+  let userMemory: string;
   // Core memory is captured before the JIT await to match the pre-extraction
   // main-builder ordering: under a concurrent core-memory refresh, reading it
   // after the await would change main-agent prompt bytes (issue #3173).
-  const coreMemory = config.getCoreMemory();
-  const jitMemory = await config.getJitMemoryForPath(config.getWorkingDir());
+  const coreMemory = snapshot.coreMemory;
+  const jitMemory = await instructions.jit(config.getWorkingDir());
+  const current = instructions.snapshot();
+  userMemory = config.isJitContextEnabled()
+    ? current.globalMemory
+    : current.memoryContent;
   if (jitMemory) {
     userMemory = userMemory ? `${userMemory}\n\n${jitMemory}` : jitMemory;
   }
@@ -52,6 +60,6 @@ export async function resolvePromptMemory(
     coreMemory,
     // MCP instructions remain acquired after the JIT await, preserving the
     // original main-agent access ordering.
-    mcpInstructions: config.getMcpInstructions(),
+    mcpInstructions: readMcpInstructions(),
   };
 }

@@ -362,7 +362,7 @@ interface PaidModeDisplayProps {
 const PaidModeDisplay = React.memo(
   ({ isPaidMode, showModelName, runtime }: PaidModeDisplayProps) => {
     if (isPaidMode === undefined) return null;
-    const status = runtime.getActiveProviderStatus();
+    const status = runtime.providerStatus();
     if (status.providerName !== 'gemini') return null;
     return (
       <>

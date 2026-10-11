@@ -71,6 +71,13 @@ async function collectReplayText(provider: FakeProvider): Promise<string> {
  */
 function createTestConfig(settingsService: SettingsService) {
   return {
+    onEphemeralSettingChange: () => () => {},
+    onTelemetrySettingsChange: () => () => {},
+
+    getTargetDir: () => process.cwd(),
+    getTokenizerFactory: () => undefined,
+    getConversationLogPath: () => '',
+
     getConversationLoggingEnabled: () => false,
     setConversationLoggingEnabled: () => {},
     getTelemetryLogPromptsEnabled: () => false,
@@ -102,7 +109,6 @@ function createTestConfig(settingsService: SettingsService) {
     getFeatures: () => ({}),
     setFeatures: () => {},
     getRedactionConfig: () => ({ replacements: [] }),
-    setProviderManager: () => {},
     getEphemeralSettings: () => ({}),
     getModel: () => 'fake-model',
   } as unknown as Config;
@@ -510,6 +516,7 @@ describe('Provider error hierarchy behavioral tests', () => {
       ['bucket1', 'bucket2'],
       new Error('last error'),
       reasons,
+      undefined,
     );
     expect(error.attemptedBuckets).toStrictEqual(['bucket1', 'bucket2']);
     expect(error.bucketFailureReasons).toStrictEqual(reasons);

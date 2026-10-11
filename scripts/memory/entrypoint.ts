@@ -9,16 +9,13 @@ import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const INSTALLED_ENTRY_MARKER = Symbol.for(
-  'llxprt.memprofile.installed-entry-loading',
-);
-
-export function markInstalledEntryLoading(): void {
-  Reflect.set(globalThis, INSTALLED_ENTRY_MARKER, true);
-}
-
-export function clearInstalledEntryLoading(): void {
-  Reflect.deleteProperty(globalThis, INSTALLED_ENTRY_MARKER);
+export async function runMemoryEntrypoint(
+  isMain: boolean,
+  main: () => void | Promise<void>,
+): Promise<void> {
+  if (isMain) {
+    await main();
+  }
 }
 
 function normalizeEntrypointPath(
@@ -44,12 +41,4 @@ export function entryPathsMatch(
     platform,
   );
   return argvEntry !== undefined && argvEntry === expectedEntry;
-}
-
-export function isSourceMemoryEntrypoint(entryUrl: string): boolean {
-  return (
-    Reflect.get(globalThis, INSTALLED_ENTRY_MARKER) !== true &&
-    process.argv[1] !== undefined &&
-    entryPathsMatch(process.argv[1], entryUrl)
-  );
 }

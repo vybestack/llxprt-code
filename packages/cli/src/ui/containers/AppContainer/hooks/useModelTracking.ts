@@ -54,49 +54,14 @@ export function useModelTracking({
   // Update currentModel when settings change - get it from the SAME place as diagnostics
   useEffect(() => {
     let disposed = false;
-    let requestSeq = 0;
-    const settingsService = config.getSettingsService();
-
-    const isCurrentRequest = (seq: number) => !disposed && seq === requestSeq;
-
-    const updateModel = async () => {
-      requestSeq += 1;
-      const seq = requestSeq;
-
-      // Try to get from SettingsService first (same as diagnostics does)
-      try {
-        const diagnosticsData = await settingsService.getDiagnosticsData();
-        if (!isCurrentRequest(seq)) {
-          return;
-        }
-
-        const model = diagnosticsData.model;
-        if (typeof model === 'string' && model !== '') {
-          settingsStore.commands.setCurrentModel(model);
-          return;
-        }
-      } catch {
-        // Fall through to config
-      }
-
-      // Otherwise use config (which is what diagnostics falls back to)
-      if (isCurrentRequest(seq)) {
-        settingsStore.commands.setCurrentModel(config.getModel());
-      }
+    const updateModel = (): void => {
+      if (!disposed) settingsStore.commands.setCurrentModel(config.getModel());
     };
-
-    const handleSettingsChanged = () => {
-      void updateModel();
-    };
-
-    // Update immediately
-    void updateModel();
-
-    // Also listen for settings changes.
-    settingsService.on('settings-changed', handleSettingsChanged);
+    updateModel();
+    const stop = config.subscribeModelSelection(updateModel);
     return () => {
       disposed = true;
-      settingsService.off('settings-changed', handleSettingsChanged);
+      stop();
     };
   }, [config, settingsStore]);
 

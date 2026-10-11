@@ -15,23 +15,7 @@ import type { CommandContext, SlashCommand } from './types.js';
 import { CommandKind } from './types.js';
 import process from 'node:process';
 import { MessageType, type HistoryItemAbout } from '../types.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-
-type ProviderWithBaseURL = {
-  getBaseURL?: () => string | undefined;
-};
-
-type WrappedProvider = {
-  wrappedProvider?: unknown;
-};
-
-type RuntimeProviderManager = ReturnType<
-  ReturnType<typeof getRuntimeApi>['getCliProviderManager']
->;
-
-type RuntimeActiveProvider = ReturnType<
-  RuntimeProviderManager['getActiveProvider']
->;
+import type { RuntimeApi } from '../contexts/RuntimeContext.js';
 
 function getSandboxEnv(): string {
   if (process.env.SANDBOX && process.env.SANDBOX !== 'sandbox-exec') {
@@ -45,33 +29,6 @@ function getSandboxEnv(): string {
   return 'no sandbox';
 }
 
-function getRuntimeApiOrNull(): ReturnType<typeof getRuntimeApi> | null {
-  try {
-    return getRuntimeApi();
-  } catch {
-    return null;
-  }
-}
-
-function getProviderBaseURL(provider: unknown): string {
-  const providerWithGetBaseURL = provider as ProviderWithBaseURL;
-  if (typeof providerWithGetBaseURL.getBaseURL === 'function') {
-    return providerWithGetBaseURL.getBaseURL() ?? '';
-  }
-
-  return '';
-}
-
-function getActiveProviderOrNull(
-  providerManager: RuntimeProviderManager,
-): RuntimeActiveProvider | null {
-  try {
-    return providerManager.getActiveProvider();
-  } catch {
-    return null;
-  }
-}
-
 function shouldRenderRuntimeModelLabel(
   activeProviderName: string,
   modelName: string | null,
@@ -82,9 +39,7 @@ function shouldRenderRuntimeModelLabel(
   );
 }
 
-function getProviderDetailsFromRuntime(
-  runtimeApi: ReturnType<typeof getRuntimeApi>,
-): {
+function getProviderDetailsFromRuntime(runtimeApi: RuntimeApi): {
   modelVersion: string;
   provider: string;
   baseURL: string;
@@ -106,13 +61,10 @@ function getProviderDetailsFromRuntime(
     resolvedModelVersion = `${activeProviderName}:${snapshot.modelName}`;
   }
 
-  const providerManager = runtimeApi.getCliProviderManager();
-  const activeProvider = getActiveProviderOrNull(providerManager);
-  if (activeProvider) {
-    provider = activeProvider.name;
-    const wrappedProvider = (activeProvider as WrappedProvider).wrappedProvider;
-    const finalProvider = wrappedProvider ?? activeProvider;
-    baseURL = getProviderBaseURL(finalProvider);
+  const details = runtimeApi.getActiveProviderDetails();
+  if (details) {
+    provider = details.name;
+    baseURL = details.baseURL;
   }
 
   if (baseURL === '') {
@@ -153,12 +105,8 @@ function getIdeClientDisplayName(context: CommandContext): string {
 
 async function getKeyfilePath(context: CommandContext): Promise<string> {
   try {
-    const { getProviderManager } = await import(
-      '@vybestack/llxprt-code-providers/composition.js'
-    );
-    const providerManager = getProviderManager();
-    const providerName = providerManager.getActiveProviderName();
-    if (providerName !== undefined && providerName !== '') {
+    const providerName = context.runtimeApi.providerStatus().providerName;
+    if (providerName !== null && providerName !== '') {
       return context.services.settings.getProviderKeyfile(providerName) ?? '';
     }
   } catch {
@@ -180,18 +128,14 @@ export const aboutCommand: SlashCommand = {
     let modelVersion = 'Unknown';
     let provider = 'Unknown';
     let baseURL = '';
-    const runtimeApi = getRuntimeApiOrNull();
+    const runtimeApi = context.runtimeApi;
 
-    if (runtimeApi !== null) {
-      try {
-        const runtimeDetails = getProviderDetailsFromRuntime(runtimeApi);
-        modelVersion = runtimeDetails.modelVersion;
-        provider = runtimeDetails.provider;
-        baseURL = runtimeDetails.baseURL;
-      } catch {
-        modelVersion = getConfigModel(context) ?? modelVersion;
-      }
-    } else {
+    try {
+      const runtimeDetails = getProviderDetailsFromRuntime(runtimeApi);
+      modelVersion = runtimeDetails.modelVersion;
+      provider = runtimeDetails.provider;
+      baseURL = runtimeDetails.baseURL;
+    } catch {
       modelVersion = getConfigModel(context) ?? modelVersion;
     }
 

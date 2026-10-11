@@ -13,20 +13,26 @@
  * @pseudocode analysis/pseudocode/002-token-sanitization-merge.md
  */
 
-import type { z } from 'zod';
 import { OAuthTokenSchema, type OAuthToken } from './types.js';
+
+export interface SanitizedOAuthToken {
+  access_token: string;
+  expiry: number;
+  scope?: string | null;
+  token_type: 'Bearer' | 'bearer';
+  resource_url?: string;
+  [key: string]: unknown;
+}
 
 /**
  * Sanitized OAuth token schema: validates the supported OAuth fields while
  * preserving provider-specific extension fields before the refresh_token is stripped.
  */
 export const SanitizedOAuthTokenSchema =
-  OAuthTokenSchema.passthrough().transform((token) => {
+  OAuthTokenSchema.passthrough().transform((token): SanitizedOAuthToken => {
     const { refresh_token: _refresh_token, ...rest } = token;
     return rest;
   });
-
-export type SanitizedOAuthToken = z.infer<typeof SanitizedOAuthTokenSchema>;
 
 export function sanitizeTokenForProxy(token: OAuthToken): SanitizedOAuthToken {
   return SanitizedOAuthTokenSchema.parse(token);

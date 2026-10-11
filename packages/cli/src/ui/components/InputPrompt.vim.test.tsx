@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import { renderWithProviders } from '../../__tests__/render.js';
 import { waitFor } from '../../__tests__/async.js';
@@ -193,6 +196,7 @@ describe('InputPrompt', () => {
     mockedUseShellHistory.mockReturnValue(mockShellHistory);
 
     mockCommandCompletion = {
+      activeHint: '',
       suggestions: [],
       activeSuggestionIndex: -1,
       isLoadingSuggestions: false,
@@ -246,14 +250,12 @@ describe('InputPrompt', () => {
       onSubmit: vi.fn(),
       userMessages: [],
       onClearScreen: vi.fn(),
-      config: {
+      config: composeFixtureRuntime({
+        getMcpServers: () => undefined,
         getProjectRoot: () => path.join('test', 'project'),
         getTargetDir: () => path.join('test', 'project', 'src'),
         getVimMode: () => false,
-        getWorkspaceContext: () => ({
-          getDirectories: () => ['/test/project/src'],
-        }),
-      } as unknown as Config,
+      } as unknown as Config),
       slashCommands: mockSlashCommands,
       commandContext: mockCommandContext,
       shellModeActive: false,
@@ -404,34 +406,51 @@ describe('InputPrompt', () => {
     // User-visible behavior tests
     it.todo(
       'should show path suggestions when typing a tilde path in shell mode',
+      () => {},
     );
-    it.todo('should accept path suggestion on Tab in shell mode');
+    it.todo('should accept path suggestion on Tab in shell mode', () => {});
     it.todo(
       'should navigate path suggestions with Up/Down when suggestions are visible',
+      () => {},
     );
     it.todo(
       'should navigate shell history with Up/Down when NO suggestions are visible',
+      () => {},
     );
-    it.todo('should clear path suggestions when exiting shell mode via Escape');
-    it.todo('should not show path suggestions when reverse search is active');
-    it.todo('should not interfere with @ completion in normal mode');
+    it.todo(
+      'should clear path suggestions when exiting shell mode via Escape',
+      () => {},
+    );
+    it.todo(
+      'should not show path suggestions when reverse search is active',
+      () => {},
+    );
+    it.todo('should not interfere with @ completion in normal mode', () => {});
     it.todo(
       'should not show path suggestions for non-path tokens in shell mode',
+      () => {},
     );
 
     // Key precedence matrix tests
     it.todo(
       'Tab in shell mode with path suggestions: accepts suggestion (not submit)',
+      () => {},
     );
     it.todo(
       'Enter in shell mode with path suggestions: submits command (not accept suggestion)',
+      () => {},
     );
     it.todo(
       'Up/Down in shell mode with path suggestions: navigates suggestions (not history)',
+      () => {},
     );
     it.todo(
       'Up/Down in shell mode without suggestions: navigates shell history',
+      () => {},
     );
-    it.todo('Escape in shell mode with path suggestions: exits shell mode');
+    it.todo(
+      'Escape in shell mode with path suggestions: exits shell mode',
+      () => {},
+    );
   });
 });

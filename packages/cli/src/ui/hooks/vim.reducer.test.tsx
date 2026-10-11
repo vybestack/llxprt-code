@@ -9,14 +9,22 @@ import type React from 'react';
 import { act } from 'react';
 import { renderHook } from '../../__tests__/render.js';
 import { useVim } from './vim.js';
-import type { TextBuffer } from '../components/shared/buffer-types.js';
+import type {
+  TextBuffer,
+  TextBufferState,
+} from '../components/shared/buffer-types.js';
 import { textBufferReducer } from '../components/shared/buffer-reducer.js';
 import { calculateTransformations } from '../components/shared/transformations.js';
 
 // Mock the VimModeContext
-const mockVimContext = {
+const mockVimContext: {
+  vimEnabled: boolean;
+  vimMode: ReturnType<typeof useVim>['mode'];
+  toggleVimEnabled: Mock<() => void>;
+  setVimMode: Mock<(mode: ReturnType<typeof useVim>['mode']) => void>;
+} = {
   vimEnabled: true,
-  vimMode: 'NORMAL' as const,
+  vimMode: 'NORMAL' satisfies ReturnType<typeof useVim>['mode'],
   toggleVimEnabled: vi.fn(),
   setVimMode: vi.fn(),
 };
@@ -33,7 +41,7 @@ function createReducerState(
   lines: string[],
   cursorRow: number,
   cursorCol: number,
-) {
+): TextBufferState {
   return {
     lines,
     cursorRow,
@@ -47,10 +55,12 @@ function createReducerState(
     viewportWidth: 80,
     viewportHeight: 24,
     visualLayout: {
-      allVisualLines: lines,
-      viewportVisualLines: lines,
-      visualCursor: [cursorRow, cursorCol],
-      visualScrollRow: 0,
+      visualLines: lines,
+      logicalToVisualMap: lines.map((_, row) => [[row, 0]]),
+      transformedToLogicalMaps: lines.map((line) =>
+        Array.from({ length: line.length + 1 }, (_, col) => col),
+      ),
+
       visualToLogicalMap: lines.map((_, i) => [i, 0] as [number, number]),
       visualToTransformedMap: lines.map(() => 0),
     },
@@ -59,7 +69,7 @@ function createReducerState(
 
 describe('useVim hook', () => {
   let mockBuffer: Partial<TextBuffer>;
-  let mockHandleFinalSubmit: Mock<(...args: never[]) => unknown>;
+  let mockHandleFinalSubmit: Mock<(value: string) => void>;
 
   const createMockBuffer = (
     text = 'hello world',
@@ -79,7 +89,7 @@ describe('useVim hook', () => {
       text,
       move: vi.fn().mockImplementation((direction: string) => {
         let [row, col] = cursorState.pos;
-        const _line = lines[row] || '';
+        const line = lines[row] || '';
         if (direction === 'left') {
           col = Math.max(0, col - 1);
         } else if (direction === 'right') {
@@ -122,7 +132,6 @@ describe('useVim hook', () => {
       vimAppendAtCursor: vi.fn().mockImplementation(() => {
         // Append moves cursor right (vim 'a' behavior - position after current char)
         const [row, col] = cursorState.pos;
-        const _line = lines[row] || '';
         // In vim, 'a' moves cursor to position after current character
         // This allows inserting at the end of the line
         cursorState.pos = [row, col + 1];
@@ -154,7 +163,7 @@ describe('useVim hook', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockHandleFinalSubmit = vi.fn();
+    mockHandleFinalSubmit = vi.fn<(value: string) => void>();
     mockBuffer = createMockBuffer();
     // Reset mock context to default state
     mockVimContext.vimEnabled = true;
@@ -168,7 +177,13 @@ describe('useVim hook', () => {
       mockVimContext.vimMode = 'INSERT';
       const { result } = renderVimHook();
 
-      const handled = result.current.handleInput({ name: 'r', ctrl: true });
+      const handled = result.current.handleInput({
+        sequence: '',
+        meta: false,
+        shift: false,
+        name: 'r',
+        ctrl: true,
+      });
 
       expect(handled).toBe(false);
     });
@@ -178,7 +193,13 @@ describe('useVim hook', () => {
       const emptyBuffer = createMockBuffer('');
       const { result } = renderVimHook(emptyBuffer);
 
-      const handled = result.current.handleInput({ sequence: '!' });
+      const handled = result.current.handleInput({
+        name: '',
+        ctrl: false,
+        meta: false,
+        shift: false,
+        sequence: '!',
+      });
 
       expect(handled).toBe(false);
     });
@@ -187,7 +208,13 @@ describe('useVim hook', () => {
       mockVimContext.vimMode = 'INSERT';
       const nonEmptyBuffer = createMockBuffer('not empty');
       const { result } = renderVimHook(nonEmptyBuffer);
-      const key = { sequence: '!', name: '!' };
+      const key = {
+        ctrl: false,
+        meta: false,
+        shift: false,
+        sequence: '!',
+        name: '!',
+      };
 
       act(() => {
         result.current.handleInput(key);

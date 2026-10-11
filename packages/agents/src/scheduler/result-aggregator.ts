@@ -1,3 +1,5 @@
+import { parseToolOutputMaxTokens } from '@vybestack/llxprt-code-tools/utils/toolOutputMaxTokens.js';
+import type { ToolExecutionPolicy } from '@vybestack/llxprt-code-tools';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -19,17 +21,14 @@
 import type { ToolCallResponseInfo } from '../core/turn.js';
 import type { ToolResult } from '@vybestack/llxprt-code-tools';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
-import { DEFAULT_AGENT_ID } from '../core/turn.js';
+import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
   convertToFunctionResponse,
   extractAgentIdFromMetadata,
   createErrorResponse,
   extractModelFacingErrorText,
 } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
-import {
-  DEFAULT_MAX_TOKENS,
-  type ToolOutputSettingsProvider,
-} from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import { type ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ScheduledToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 
@@ -66,7 +65,7 @@ interface BufferedEntry {
 }
 
 // ---- ResultAggregator -------------------------------------------------------
-function hasTruthyTruncateMode(ephemeral: Record<string, unknown>): boolean {
+function hasTruthyTruncateMode(ephemeral: ToolExecutionPolicy): boolean {
   const value = ephemeral['tool-output-truncate-mode'];
   if (typeof value === 'number') {
     return value !== 0 && !Number.isNaN(value);
@@ -403,14 +402,15 @@ export class ResultAggregator {
 
     try {
       const fallback = this.callbacks.getFallbackOutputConfig();
-      const ephemeral =
-        typeof fallback.getEphemeralSettings === 'function'
-          ? fallback.getEphemeralSettings()
-          : {};
-
-      const maxBatchTokens =
-        (ephemeral['tool-output-max-tokens'] as number | undefined) ??
-        DEFAULT_MAX_TOKENS;
+      const ephemeral = fallback.readExecutionPolicy();
+      const limit = parseToolOutputMaxTokens(
+        ephemeral['tool-output-max-tokens'],
+      );
+      if (limit.kind === 'disabled') {
+        this.batchOutputConfig = undefined;
+        return;
+      }
+      const maxBatchTokens = limit.maxTokens;
 
       const perToolBudget = Math.max(
         1000,
@@ -426,7 +426,7 @@ export class ResultAggregator {
       }
 
       this.batchOutputConfig = {
-        getEphemeralSettings: () => ({
+        readExecutionPolicy: () => ({
           ...ephemeral,
           'tool-output-max-tokens': perToolBudget,
           ...(hasTruthyTruncateMode(ephemeral)

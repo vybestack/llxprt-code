@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { logApiRequest } from '@vybestack/llxprt-code-core/telemetry/loggers.js';
+import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import { ApiRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -17,7 +16,7 @@ import { sanitizeDiagnosticData } from '../utils/mediaDiagnostics.js';
  * never prevent provider invocation.
  */
 export function logApiRequestTelemetry(
-  activeConfig: Config,
+  activeConfig: ProviderRequestDiagnostics,
   normalizedOptions: GenerateChatOptions,
   promptId: string,
   defaultModelName: string,
@@ -35,8 +34,7 @@ export function logApiRequestTelemetry(
     debug.log(
       () => `Logging API request: model=${modelName}, promptId=${promptId}`,
     );
-    logApiRequest(
-      activeConfig,
+    activeConfig.recordApiRequest(
       new ApiRequestEvent(modelName, promptId, requestText),
     );
     debug.log(

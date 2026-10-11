@@ -22,6 +22,7 @@
  * - Respects ephemeral settings (retries, retrywait)
  */
 
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 import {
   type IProvider,
   type GenerateChatOptions,
@@ -30,7 +31,7 @@ import {
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IModel } from './IModel.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { BucketFailoverHandler } from '@vybestack/llxprt-code-core/config/config.js';
+
 import { AllBucketsExhaustedError } from './errors.js';
 import type { StructuredErrorCategory } from '@vybestack/llxprt-code-core/core/turn.js';
 import {
@@ -96,13 +97,20 @@ import type {
 } from './logging/attemptLifecycle.js';
 import { AttemptNotificationContext } from './retryAttemptNotifier.js';
 import type { AttemptFailureReport } from './retryLifecycleNotifier.js';
-import {
-  getBucketFailoverHandlerFromOptions,
-  getOnAuthErrorHandlerFromOptions,
-  hasAuthRecoveryHandler,
-} from './retryConfigHandlers.js';
+
 import { resolveAuthTokenFromOptions } from './retryAuthTokenResolver.js';
 import { randomUUID } from 'node:crypto';
+
+function selectBucketRetryOperations(
+  operations: ProviderRetryOperations,
+): ProviderRetryOperations {
+  return {
+    tryBucketFailover: operations.tryBucketFailover,
+    readFailoverBuckets: operations.readFailoverBuckets,
+    readFailoverReasons: operations.readFailoverReasons,
+    resetBucketSession: operations.resetBucketSession,
+  };
+}
 
 function extractSignal(options: GenerateChatOptions): AbortSignal | undefined {
   return getRequestSignal(options);
@@ -314,8 +322,7 @@ export class RetryOrchestrator implements IProvider {
   ): AsyncIterableIterator<IContent> {
     const { maxAttempts, initialDelayMs, authRetryTimeoutMs, budget } = request;
     const requestOptions = request.options;
-    const bucketFailoverHandler =
-      getBucketFailoverHandlerFromOptions(requestOptions);
+    const bucketFailoverHandler = selectBucketRetryOperations(requestOptions);
     const lifecycleObserver = getAttemptLifecycleObserver(
       requestOptions.metadata,
     );
@@ -327,6 +334,7 @@ export class RetryOrchestrator implements IProvider {
     const envelopeRefresh = new RetryPromptEnvelopeRefresh(budget.used);
     while (envelopeRefresh.canRetry(budget)) {
       if (isSignalAborted(signal)) throw createAbortError(signal?.reason);
+      requestOptions.modelParameters?.route?.assertCurrent?.();
       request.recordTarget(this.name);
       const usedBefore = budget.used;
       const linked = createLinkedAbortController(signal);
@@ -401,7 +409,7 @@ export class RetryOrchestrator implements IProvider {
       consecutiveNetworkErrors: number;
       consecutiveServerErrors: number;
     },
-    bucketFailoverHandler: BucketFailoverHandler | undefined,
+    bucketFailoverHandler: ProviderRetryOperations,
   ): AsyncIterableIterator<IContent> {
     const { budget } = request;
     const attemptOptions = await envelopeRefresh.prepare(
@@ -412,6 +420,7 @@ export class RetryOrchestrator implements IProvider {
     if (linked.controller.signal.aborted) {
       throw createAbortError(linked.controller.signal.reason);
     }
+    attemptOptions.modelParameters?.route?.assertCurrent?.();
     beginProviderTransportAttempt(
       providerOwnsTransportAttempts(this.wrappedProvider),
       attemptOptions,
@@ -434,7 +443,7 @@ export class RetryOrchestrator implements IProvider {
       budget.limit,
     );
     resetRetryErrorCounters(retryState);
-    bucketFailoverHandler?.resetSession?.();
+    bucketFailoverHandler.resetBucketSession?.();
   }
 
   /**
@@ -616,7 +625,7 @@ export class RetryOrchestrator implements IProvider {
     maxAttempts: number,
     initialDelayMs: number,
     failoverThreshold: number,
-    bucketFailoverHandler: BucketFailoverHandler | undefined,
+    bucketFailoverHandler: ProviderRetryOperations,
     authRetryTimeoutMs: number,
     recoveryAttempt: number,
   ): Promise<{ type: 'throw'; error: unknown } | { type: 'continue' }> {
@@ -630,11 +639,7 @@ export class RetryOrchestrator implements IProvider {
     const classification = classifyRetryError(error);
     const { status: errorStatus, category, ...f } = classification;
     this.observeProviderError(options, error, errorStatus, category);
-    this.logger.debug(
-      () =>
-        `[attempt ${state.attempt}/${maxAttempts}] Error: status=${errorStatus}, is429=${f.is429}, is402=${f.is402}, isAuth=${f.isAuthError}, isNetwork=${f.isNetworkError}, is5xx=${f.is5xxServerError}`,
-    );
-    updateRetryErrorCounters(state, classification);
+    this.recordRetryClassification(classification, state, maxAttempts);
 
     const shouldAttemptRefreshRetry = await this.maybeRefreshAuth(
       f.isAuthError,
@@ -647,6 +652,12 @@ export class RetryOrchestrator implements IProvider {
       signal,
     );
 
+    this.advanceUnrecoveredAuth(
+      state,
+      f.isAuthError,
+      shouldAttemptRefreshRetry,
+      options,
+    );
     const shouldAttemptFailover = shouldFailoverNow(
       state,
       maxAttempts,
@@ -655,7 +666,7 @@ export class RetryOrchestrator implements IProvider {
       failoverThreshold,
     );
 
-    if (shouldAttemptFailover && bucketFailoverHandler) {
+    if (shouldAttemptFailover) {
       return this.handleFailoverDecision(
         errorStatus,
         f.is429,
@@ -698,7 +709,7 @@ export class RetryOrchestrator implements IProvider {
       currentDelay: number;
     },
     initialDelayMs: number,
-    bucketFailoverHandler: BucketFailoverHandler,
+    bucketFailoverHandler: ProviderRetryOperations,
     error: unknown,
     authRetryTimeoutMs: number,
     signal: AbortSignal | undefined,
@@ -727,8 +738,33 @@ export class RetryOrchestrator implements IProvider {
       error: this.createAllBucketsExhaustedError(
         bucketFailoverHandler,
         error as Error,
+        request.options.runtimeKind,
       ),
     };
+  }
+
+  private recordRetryClassification(
+    classification: ReturnType<typeof classifyRetryError>,
+    state: ReturnType<typeof createInitialRetryState>,
+    maxAttempts: number,
+  ): void {
+    const { status: errorStatus, ...f } = classification;
+    this.logger.debug(
+      () =>
+        `[attempt ${state.attempt}/${maxAttempts}] Error: status=${errorStatus}, is429=${f.is429}, is402=${f.is402}, isAuth=${f.isAuthError}, isNetwork=${f.isNetworkError}, is5xx=${f.is5xxServerError}`,
+    );
+    updateRetryErrorCounters(state, classification);
+  }
+
+  private advanceUnrecoveredAuth(
+    state: { consecutiveAuthErrors: number },
+    isAuthError: boolean,
+    recovered: boolean,
+    options: GenerateChatOptions,
+  ): void {
+    if (isAuthError && !recovered && options.tryBucketFailover) {
+      state.consecutiveAuthErrors = Math.max(2, state.consecutiveAuthErrors);
+    }
   }
 
   private async decideRetryOrThrow(
@@ -745,8 +781,13 @@ export class RetryOrchestrator implements IProvider {
     status: number | undefined,
     request: RetryRequestContext,
   ): Promise<{ type: 'throw'; error: unknown } | { type: 'continue' }> {
-    const shouldRetry = shouldRetryError(error);
-    if (!shouldRetry && !shouldAttemptRefreshRetry) {
+    const shouldRetry =
+      category !== 'authentication' && shouldRetryError(error);
+    if (
+      !shouldRetry &&
+      !shouldAttemptRefreshRetry &&
+      category !== 'authentication'
+    ) {
       return { type: 'throw', error };
     }
     if (state.attempt >= maxAttempts) {
@@ -759,6 +800,10 @@ export class RetryOrchestrator implements IProvider {
           status,
         ),
       };
+    }
+
+    if (!shouldRetry && !shouldAttemptRefreshRetry) {
+      return { type: 'throw', error };
     }
 
     const delayMs = getDelayDuration(error, state.currentDelay);
@@ -802,9 +847,8 @@ export class RetryOrchestrator implements IProvider {
   ): Promise<boolean> {
     if (!(isAuthError && consecutiveAuthErrors === 1 && attempt < maxAttempts))
       return false;
-    if (!hasAuthRecoveryHandler(options)) return false;
-    await this.invokeAuthErrorHandler(error, options, errorStatus, signal);
-    return true;
+    if (!options.handleAuthError) return false;
+    return this.invokeAuthErrorHandler(error, options, errorStatus, signal);
   }
 
   /**
@@ -815,9 +859,9 @@ export class RetryOrchestrator implements IProvider {
     options: GenerateChatOptions,
     errorStatus: number | undefined,
     signal: AbortSignal | undefined,
-  ): Promise<void> {
-    const authErrorHandler = getOnAuthErrorHandlerFromOptions(options);
-    if (authErrorHandler) {
+  ): Promise<boolean> {
+    const handleAuthError = options.handleAuthError;
+    if (handleAuthError) {
       try {
         const failedAccessToken = await raceWithAbort(
           resolveAuthTokenFromOptions(options),
@@ -825,13 +869,21 @@ export class RetryOrchestrator implements IProvider {
         );
         const providerId = this.name;
         await raceWithAbort(
-          authErrorHandler.handleAuthError({
+          handleAuthError({
             failedAccessToken,
             providerId,
             errorStatus: errorStatus ?? 401,
             signal,
           }),
           signal,
+        );
+        const refreshedAccessToken = await raceWithAbort(
+          resolveAuthTokenFromOptions(options),
+          signal,
+        );
+        return (
+          refreshedAccessToken.length > 0 &&
+          refreshedAccessToken !== failedAccessToken
         );
       } catch (handlerError) {
         if (signal?.aborted === true) throw handlerError;
@@ -841,6 +893,7 @@ export class RetryOrchestrator implements IProvider {
         );
       }
     }
+    return false;
   }
 
   /**
@@ -849,15 +902,22 @@ export class RetryOrchestrator implements IProvider {
    * @requirement REQ-1598-IC09
    */
   private createAllBucketsExhaustedError(
-    handler: BucketFailoverHandler,
+    handler: ProviderRetryOperations,
     lastError: Error,
+    runtimeKind: GenerateChatOptions['runtimeKind'],
   ): AllBucketsExhaustedError {
-    const buckets = handler.getBuckets();
+    const buckets = handler.readFailoverBuckets?.() ?? [];
 
     // Get failure reasons if available
-    const reasons = handler.getLastFailoverReasons?.() ?? {};
+    const reasons = handler.readFailoverReasons?.() ?? {};
 
-    return new AllBucketsExhaustedError(this.name, buckets, lastError, reasons);
+    return new AllBucketsExhaustedError(
+      this.name,
+      buckets,
+      lastError,
+      reasons,
+      runtimeKind,
+    );
   }
 }
 function resolveAttemptErrorMessage(

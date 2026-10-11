@@ -139,7 +139,10 @@ describe('Logger inter-process locking', () => {
     vi.resetAllMocks();
     await cleanupLogFiles();
     await fs.mkdir(TEST_LLXPRT_DIR, { recursive: true });
-    logger = new Logger(testSessionId, new Storage(process.cwd()));
+    logger = new Logger(
+      testSessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
     await logger.initialize();
   });
 
@@ -219,7 +222,10 @@ describe('Logger inter-process locking', () => {
       'utf-8',
     );
 
-    const fresh = new Logger(testSessionId, new Storage(process.cwd()));
+    const fresh = new Logger(
+      testSessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
     const init = fresh.initialize();
     expect(await settledWithin(init, 150)).toBe(false);
 
@@ -302,7 +308,10 @@ describe('Logger inter-process locking', () => {
       );
       debugSpy.mockRestore();
 
-      const fresh = new Logger(testSessionId, new Storage(process.cwd()));
+      const fresh = new Logger(
+        testSessionId,
+        new Storage(process.cwd()).getProjectTempDir(),
+      );
       await fresh.initialize();
       expect(fresh['initialized']).toBe(false);
       await fresh.close();
@@ -363,7 +372,10 @@ describe('Logger inter-process locking', () => {
         Object.assign(new Error('injected backup failure'), { code: 'EACCES' }),
       );
 
-    const victim = new Logger(sessionId, new Storage(process.cwd()));
+    const victim = new Logger(
+      sessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
     try {
       await victim.initialize();
       copySpy.mockRestore();
@@ -417,7 +429,10 @@ describe('Logger inter-process locking', () => {
       'utf-8',
     );
     process.env['LLXPRT_LOG_LOCK_TIMEOUT_MS'] = '250';
-    const fresh = new Logger(testSessionId, new Storage(process.cwd()));
+    const fresh = new Logger(
+      testSessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
     try {
       await fresh.initialize();
       expect(fresh['initialized']).toBe(false);
@@ -453,7 +468,10 @@ describe('Logger inter-process locking', () => {
 
     // A fresh instance runs the full initialize path, including the prune
     // pass (the suite logger is already initialized and would early-return).
-    const pruner = new Logger(testSessionId, new Storage(process.cwd()));
+    const pruner = new Logger(
+      testSessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
     await pruner.initialize();
     await pruner.logMessage(MessageSenderType.USER, 'prune-check');
     await pruner.close();
@@ -489,7 +507,10 @@ describe('Logger inter-process locking', () => {
       'utf-8',
     );
 
-    const racer = new Logger(testSessionId, new Storage(process.cwd()));
+    const racer = new Logger(
+      testSessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
     const initPromise = racer.initialize();
     // Let initialize() reach its acquire loop before closing.
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -514,8 +535,14 @@ describe('Logger inter-process locking', () => {
     await logger.logMessage(MessageSenderType.USER, 'm1');
     await logger.close();
 
-    const l1 = new Logger(testSessionId, new Storage(process.cwd()));
-    const l2 = new Logger(testSessionId, new Storage(process.cwd()));
+    const l1 = new Logger(
+      testSessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
+    const l2 = new Logger(
+      testSessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
 
     await l1.initialize();
     await l2.initialize();
@@ -633,7 +660,10 @@ describe('Logger inter-process locking', () => {
     await fs.mkdir(DRIVER_DIR, { recursive: true });
     await fs.writeFile(driverPath, CHILD_DRIVER_SOURCE, 'utf-8');
 
-    const parent = new Logger(sessionId, new Storage(process.cwd()));
+    const parent = new Logger(
+      sessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
     try {
       // Children go first so all three processes contend on the still-legacy file:
       // each child runs initialize → migrate-or-load → 3 appends, while the
@@ -708,7 +738,7 @@ import { Storage } from '@vybestack/llxprt-code-settings';
 async function main(): Promise<void> {
   const sessionId = process.env['LLXPRT_LOCK_E2E_SESSION'] ?? 'e2e-session';
   const tag = process.env['LLXPRT_LOCK_E2E_TAG'] ?? 'child';
-  const logger = new Logger(sessionId, new Storage(process.cwd()));
+  const logger = new Logger(sessionId, new Storage(process.cwd()).getProjectTempDir());
   await logger.initialize();
   for (let i = 0; i < 3; i++) {
     await logger.logMessage(MessageSenderType.USER, tag + '-' + i);

@@ -17,7 +17,7 @@ export class RetainedHistoryAdmissions {
   private retained: readonly RetainedHistoryAdmission[] = [];
   private sequence = 0;
 
-  constructor(private readonly getStore: () => LocalMediaStore) {}
+  constructor(private readonly mediaStore: LocalMediaStore) {}
 
   get all(): readonly RetainedHistoryAdmission[] {
     return this.retained;
@@ -35,7 +35,7 @@ export class RetainedHistoryAdmissions {
       source: admissionScope,
       reservationOwnerScope: `retained-history:${admissionScope}`,
     };
-    const admission = new MediaAdmissionService(this.getStore());
+    const admission = new MediaAdmissionService(this.mediaStore);
     const admitted = await admission.admitContents(history, context);
     return this.register({
       history: admitted,

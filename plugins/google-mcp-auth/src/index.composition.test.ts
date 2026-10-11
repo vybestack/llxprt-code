@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import { AuthProviderType } from '@vybestack/llxprt-code-auth/mcp-auth-provider-type.js';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-mcp/config/mcpServerConfig.js';
 
@@ -26,11 +26,10 @@ void vi.mock('google-auth-library', () => ({
 }));
 
 import {
+  buildMcpAuthFactoryRegistry,
   createTransport,
-  getRegisteredMcpAuthFactoryRegistry,
-  registerMcpAuthFactories,
 } from '@vybestack/llxprt-code-mcp';
-import { resetRegisteredMcpAuthFactories } from '@vybestack/llxprt-code-mcp/auth/mcp-auth-factory.js';
+import { createTestOAuthBinding } from '@vybestack/llxprt-code-mcp/test-support/oauth.js';
 import {
   buildProviderContributionRegistry,
   parseRuntimePluginManifest,
@@ -52,10 +51,6 @@ function transportHeaders(transport: unknown): Record<string, string> {
   );
 }
 
-afterEach(() => {
-  resetRegisteredMcpAuthFactories();
-});
-
 describe('google-mcp-auth host composition', () => {
   it('threads the plugin manifest into the MCP factory registry used by createTransport', async () => {
     const manifest = parseRuntimePluginManifest(
@@ -75,10 +70,8 @@ describe('google-mcp-auth host composition', () => {
       AuthProviderType.SERVICE_ACCOUNT_IMPERSONATION,
     ]);
 
-    registerMcpAuthFactories(contributions);
-    expect(
-      getRegisteredMcpAuthFactoryRegistry().listAuthProviderTypes(),
-    ).toStrictEqual([
+    const authFactories = buildMcpAuthFactoryRegistry(contributions);
+    expect(authFactories.listAuthProviderTypes()).toStrictEqual([
       AuthProviderType.GOOGLE_CREDENTIALS,
       AuthProviderType.SERVICE_ACCOUNT_IMPERSONATION,
     ]);
@@ -92,13 +85,21 @@ describe('google-mcp-auth host composition', () => {
     };
     mockGetClient.mockResolvedValue(mockClient);
 
-    const config = {
+    const config: MCPServerConfig = {
       url: 'https://example.com/mcp',
       authProviderType: AuthProviderType.GOOGLE_CREDENTIALS,
       oauth: { scopes: ['scope1'] },
-    } as MCPServerConfig;
+    };
 
-    const transport = await createTransport('google-server', config, false);
+    const binding = createTestOAuthBinding();
+    const transport = await createTransport(
+      binding.tokenStorage,
+      'google-server',
+      config,
+      false,
+      undefined,
+      (type) => authFactories.getAuthProviderFactory(type),
+    );
     expect(transportAuthProvider(transport)).toBeInstanceOf(
       GoogleCredentialProvider,
     );

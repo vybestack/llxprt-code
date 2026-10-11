@@ -134,6 +134,17 @@ describe('tool governance blocking', () => {
     expect(isToolBlocked('api.v1.run_shell_command', governance)).toBe(true);
   });
 
+  it('does not block unrelated tools that share a suffix with a disabled dotted tool', () => {
+    const governance: ToolGovernance = {
+      allowed: new Set<string>(),
+      allowedExplicit: false,
+      disabled: new Set(['tool.v1']),
+      excluded: new Set(),
+    };
+
+    expect(isToolBlocked('other.v1', governance)).toBe(false);
+  });
+
   it('does not over-match GitHub namespaces to unqualified registry names', () => {
     const governance = createUnrestrictedGovernance(['read_file', 'repo']);
 

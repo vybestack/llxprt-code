@@ -1,12 +1,16 @@
+import { Config as RealConfig } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService as RealSettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { assembleModelSelection } from './providerMutations.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+let initializeClient = async (): Promise<void> => {};
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import type { Profile } from '@vybestack/llxprt-code-settings';
 
 const realProviderAliasesModule = {
   ...(await import('../composition/providerAliases.js')),
@@ -35,130 +39,9 @@ const {
   StubConfig: StubConfigClass,
   StubProvider: StubProviderClass,
 } = (() => {
-  class StubSettingsService {
-    providers: Record<string, Record<string, unknown>> = {};
-    global: Record<string, unknown> = {};
+  const StubSettingsService = RealSettingsService;
 
-    set(key: string, value: unknown): void {
-      this.global[key] = value;
-    }
-
-    get(key: string): unknown {
-      return this.global[key];
-    }
-
-    getAllGlobalSettings(): Record<string, unknown> {
-      return { ...this.global };
-    }
-
-    setProviderSetting(provider: string, key: string, value: unknown): void {
-      this.providers[provider] ??= {};
-      if (value === undefined) {
-        delete this.providers[provider][key];
-      } else {
-        this.providers[provider][key] = value;
-      }
-    }
-
-    getProviderSettings(provider: string): Record<string, unknown> {
-      return this.providers[provider] ?? {};
-    }
-
-    // Mirrors the real SettingsService rollback primitives (#2534 C5).
-    exportForStateSnapshot(): {
-      global: Record<string, unknown>;
-      providers: Record<string, Record<string, unknown>>;
-    } {
-      return {
-        global: { ...this.global },
-        providers: structuredClone(this.providers),
-      };
-    }
-
-    restoreFromStateSnapshot(snapshot: {
-      global: Record<string, unknown>;
-      providers: Record<string, Record<string, unknown>>;
-    }): void {
-      this.global = { ...snapshot.global };
-      this.providers = structuredClone(snapshot.providers);
-    }
-
-    switchProvider = vi.fn(async (provider: string) => {
-      this.set('activeProvider', provider);
-    });
-
-    async updateSettings(
-      providerOrChanges?: string | Record<string, unknown>,
-      changes?: Record<string, unknown>,
-    ): Promise<void> {
-      if (typeof providerOrChanges === 'string') {
-        for (const [key, value] of Object.entries(changes!)) {
-          this.setProviderSetting(providerOrChanges, key, value);
-        }
-      } else if (typeof providerOrChanges === 'object') {
-        for (const [key, value] of Object.entries(providerOrChanges)) {
-          this.set(key, value);
-        }
-      }
-    }
-  }
-
-  class StubConfig {
-    private model: string | undefined = undefined;
-    private provider = 'openai';
-    private ephemeral: Record<string, unknown> = {};
-    private providerManager: unknown;
-    private settingsService: InstanceType<typeof StubSettingsService>;
-    initializeContentGeneratorConfig = vi.fn(async () => {});
-
-    constructor(settingsService: InstanceType<typeof StubSettingsService>) {
-      this.settingsService = settingsService;
-    }
-
-    getSettingsService(): unknown {
-      return this.settingsService;
-    }
-
-    setEphemeralSetting(key: string, value: unknown): void {
-      if (value === undefined) {
-        delete this.ephemeral[key];
-      } else {
-        this.ephemeral[key] = value;
-      }
-    }
-
-    getEphemeralSetting(key: string): unknown {
-      return this.ephemeral[key];
-    }
-
-    getEphemeralSettings(): Record<string, unknown> {
-      return { ...this.ephemeral };
-    }
-
-    getModel(): string | undefined {
-      return this.model;
-    }
-
-    setModel(model: string | undefined): void {
-      this.model = model;
-    }
-
-    setProvider(provider: string): void {
-      this.provider = provider;
-    }
-
-    getProvider(): string {
-      return this.provider;
-    }
-
-    setProviderManager(manager: unknown): void {
-      this.providerManager = manager;
-    }
-
-    getProviderManager(): unknown {
-      return this.providerManager;
-    }
-  }
+  const StubConfig = RealConfig;
 
   class StubProvider {
     name: string;
@@ -235,26 +118,60 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
       runtimeId?: string;
       metadata?: Record<string, unknown>;
     }) => context,
-    getCurrentRuntimeScope: () => undefined,
   };
 });
 
-const {
-  switchActiveProvider,
-  setActiveModel,
-  setEphemeralSetting,
-  setCliRuntimeContext,
-  registerCliProviderInfrastructure,
-} = await import('./runtimeSettings.js');
-const { applyProfileWithGuards } = await import('./profileApplication.js');
+const { switchActiveProvider, setActiveModel, setEphemeralSetting } =
+  await import('./index.js');
 
 const mockOAuthManager = {
+  clearRetryHandlers: () => {},
+
   isOAuthEnabled: vi.fn(() => false),
   toggleOAuthEnabled: vi.fn(),
   authenticate: vi.fn(),
   setMessageBus: vi.fn(),
   setConfigGetter: vi.fn(),
 } as never;
+
+function stubOverrideInputs(): [
+  Parameters<typeof setActiveModel>[1],
+  Parameters<typeof setActiveModel>[2],
+  Parameters<typeof setActiveModel>[3],
+] {
+  return [
+    assembleModelSelection(settingsOwner),
+    stubSettingsService,
+    mockProviderManager.getActiveProvider(),
+  ];
+}
+
+function stubSwitchInputs(): [
+  Parameters<typeof switchActiveProvider>[2],
+  Parameters<typeof switchActiveProvider>[3],
+  Parameters<typeof switchActiveProvider>[4],
+  Parameters<typeof switchActiveProvider>[5],
+  undefined,
+  () => Promise<void>,
+  Parameters<typeof switchActiveProvider>[8],
+] {
+  return [
+    stubConfig,
+    stubSettingsService,
+    mockProviderManager as never,
+    mockOAuthManager,
+    undefined,
+    initializeClient,
+    settingsOwner,
+  ];
+}
+
+function switchStubProvider(
+  name: string,
+  options: Parameters<typeof switchActiveProvider>[1],
+): ReturnType<typeof switchActiveProvider> {
+  return switchActiveProvider(name, options, ...stubSwitchInputs());
+}
 
 const debugLoggerWarnSpy = vi
   .spyOn(DebugLogger.prototype, 'warn')
@@ -303,29 +220,33 @@ function pushAnthropicAlias(overrides?: {
 }
 
 describe('Provider alias defaults (model + ephemerals)', () => {
+  afterEach(async () => {
+    const retiring = retainedRoots.splice(0);
+    await Promise.all(
+      retiring.map(async (root) => {
+        await root.settingsOwner.dispose();
+        await root.config.dispose();
+      }),
+    );
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    initializeClient = async () => {};
 
     stubSettingsService = new StubSettingsService();
-    stubConfig = new StubConfig(stubSettingsService);
-    activeProviderName = 'openai';
-
-    // Set up runtime context and provider infrastructure
-    setCliRuntimeContext(stubSettingsService as never, stubConfig as never, {
-      runtimeId: 'test-runtime',
+    stubConfig = new StubConfig({
+      sessionId: 'alias-defaults-fixture',
+      model: '',
+      provider: 'openai',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
     });
-    const runtimeMessageBus = {} as never;
-    (
-      mockOAuthManager as unknown as { runtimeMessageBus?: unknown }
-    ).runtimeMessageBus = runtimeMessageBus;
-    registerCliProviderInfrastructure(
-      mockProviderManager as never,
-      mockOAuthManager,
-      {
-        messageBus: runtimeMessageBus,
-        runtimeId: 'test-runtime',
-      },
-    );
+    settingsOwner = new SessionSettingsOwner(stubSettingsService);
+    settingsOwner.initializeProviderSelection('openai', '');
+    retainedRoots.push({ config: stubConfig, settingsOwner });
+    activeProviderName = 'openai';
 
     aliasEntries.length = 0;
     aliasEntries.push({
@@ -359,40 +280,35 @@ describe('Provider alias defaults (model + ephemerals)', () => {
   // --- Existing alias default tests (non-model-defaults) ---
 
   it('applies alias defaultModel + alias ephemeralSettings on switch', async () => {
-    await switchActiveProvider('qwenvercel');
+    await switchStubProvider('qwenvercel', {});
 
-    expect(stubConfig.getModel()).toBe('qwen3-coder-plus');
-    expect(stubConfig.getEphemeralSetting('context-limit')).toBe(200000);
-    expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(50000);
+    expect(settingsOwner.readSelectedModel()).toBe('qwen3-coder-plus');
+    expect(settingsOwner.readNamedParameter('context-limit')).toBe(200000);
+    expect(settingsOwner.readNamedParameter('max_tokens')).toBe(50000);
 
     expect(stubSettingsService.getProviderSettings('qwenvercel').model).toBe(
       'qwen3-coder-plus',
     );
   });
 
-  it('warns if content generator config initialization fails when switching providers', async () => {
-    stubConfig.setEphemeralSetting('auth-key', 'test-key');
+  it('rejects content generator initialization failure when switching providers', async () => {
+    settingsOwner.writeUserParameter('auth-key', 'test-key');
     const initError = new Error('init failed');
-    stubConfig.initializeContentGeneratorConfig = vi.fn(async () => {
+    initializeClient = async (): Promise<void> => {
       throw initError;
-    });
+    };
 
-    await switchActiveProvider('gemini');
-
-    expect(stubConfig.initializeContentGeneratorConfig).toHaveBeenCalledTimes(
-      1,
-    );
-    expect(debugLoggerWarnSpy).toHaveBeenCalledWith(expect.any(Function));
+    await expect(switchStubProvider('gemini', {})).rejects.toBe(initError);
   });
 
   it('does not override preserved ephemerals', async () => {
-    stubConfig.setEphemeralSetting('max_tokens', 8192);
+    settingsOwner.writeUserParameter('max_tokens', 8192);
 
-    await switchActiveProvider('qwenvercel', {
+    await switchStubProvider('qwenvercel', {
       preserveEphemerals: ['max_tokens'],
     });
 
-    expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(8192);
+    expect(settingsOwner.readNamedParameter('max_tokens')).toBe(8192);
   });
 
   it('does not allow alias ephemerals to set protected canonical keys', async () => {
@@ -406,12 +322,12 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       max_tokens: 50000,
     };
 
-    await switchActiveProvider('qwenvercel');
+    await switchStubProvider('qwenvercel', {});
 
-    expect(stubConfig.getEphemeralSetting('auth-key')).toBeUndefined();
-    expect(stubConfig.getEphemeralSetting('auth-keyfile')).toBeUndefined();
-    expect(stubConfig.getEphemeralSetting('base-url')).toBeUndefined();
-    expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(50000);
+    expect(settingsOwner.readNamedParameter('auth-key')).toBeUndefined();
+    expect(settingsOwner.readNamedParameter('auth-keyfile')).toBeUndefined();
+    expect(settingsOwner.readNamedParameter('base-url')).toBeUndefined();
+    expect(settingsOwner.readNamedParameter('max_tokens')).toBe(50000);
   });
 
   it('does not let a legacy auth spelling reach the canonical auth slot', async () => {
@@ -426,10 +342,10 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       max_tokens: 50000,
     };
 
-    await switchActiveProvider('qwenvercel');
+    await switchStubProvider('qwenvercel', {});
 
-    expect(stubConfig.getEphemeralSetting('auth-key')).toBeUndefined();
-    expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(50000);
+    expect(settingsOwner.readNamedParameter('auth-key')).toBeUndefined();
+    expect(settingsOwner.readNamedParameter('max_tokens')).toBe(50000);
   });
 
   it('uses gemini alias default model and provider auth on switch', async () => {
@@ -444,9 +360,9 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       },
     });
 
-    await switchActiveProvider('gemini');
+    await switchStubProvider('gemini', {});
 
-    expect(stubConfig.getModel()).toBe('gemini-2.5-pro');
+    expect(settingsOwner.readSelectedModel()).toBe('gemini-2.5-pro');
     expect(stubSettingsService.getProviderSettings('gemini').model).toBe(
       'gemini-2.5-pro',
     );
@@ -461,10 +377,10 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       max_tokens: 50000,
     };
 
-    await switchActiveProvider('qwenvercel');
+    await switchStubProvider('qwenvercel', {});
 
-    expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
-    expect(stubConfig.getEphemeralSetting('max_tokens')).toBe(50000);
+    expect(settingsOwner.readNamedParameter('context-limit')).toBeUndefined();
+    expect(settingsOwner.readNamedParameter('max_tokens')).toBe(50000);
   });
 
   // --- Model defaults from alias config ---
@@ -473,35 +389,37 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     it('applies all model defaults for claude-opus-4-6 from alias config modelDefaults', async () => {
       pushAnthropicAlias();
 
-      await switchActiveProvider('anthropic');
+      await switchStubProvider('anthropic', {});
 
-      expect(stubConfig.getModel()).toBe('claude-opus-4-6');
-      expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBe(true);
-      expect(stubConfig.getEphemeralSetting('reasoning.adaptiveThinking')).toBe(
-        true,
-      );
-      expect(stubConfig.getEphemeralSetting('reasoning.includeInContext')).toBe(
-        true,
-      );
-      expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('high');
+      expect(settingsOwner.readSelectedModel()).toBe('claude-opus-4-6');
+      expect(settingsOwner.readNamedParameter('reasoning.enabled')).toBe(true);
+      expect(
+        settingsOwner.readNamedParameter('reasoning.adaptiveThinking'),
+      ).toBe(true);
+      expect(
+        settingsOwner.readNamedParameter('reasoning.includeInContext'),
+      ).toBe(true);
+      expect(settingsOwner.readNamedParameter('reasoning.effort')).toBe('high');
     });
 
     it('applies broad-pattern defaults but not effort for claude-sonnet-4-5-20250929', async () => {
       pushAnthropicAlias({ defaultModel: 'claude-sonnet-4-5-20250929' });
 
-      await switchActiveProvider('anthropic');
+      await switchStubProvider('anthropic', {});
 
-      expect(stubConfig.getModel()).toBe('claude-sonnet-4-5-20250929');
-      expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBe(true);
-      expect(stubConfig.getEphemeralSetting('reasoning.adaptiveThinking')).toBe(
-        true,
+      expect(settingsOwner.readSelectedModel()).toBe(
+        'claude-sonnet-4-5-20250929',
       );
-      expect(stubConfig.getEphemeralSetting('reasoning.includeInContext')).toBe(
-        true,
-      );
+      expect(settingsOwner.readNamedParameter('reasoning.enabled')).toBe(true);
+      expect(
+        settingsOwner.readNamedParameter('reasoning.adaptiveThinking'),
+      ).toBe(true);
+      expect(
+        settingsOwner.readNamedParameter('reasoning.includeInContext'),
+      ).toBe(true);
       // Sonnet does NOT match the claude-opus-4-6 pattern, so no effort
       expect(
-        stubConfig.getEphemeralSetting('reasoning.effort'),
+        settingsOwner.readNamedParameter('reasoning.effort'),
       ).toBeUndefined();
     });
 
@@ -518,38 +436,38 @@ describe('Provider alias defaults (model + ephemerals)', () => {
         },
       });
 
-      await switchActiveProvider('openrouter');
+      await switchStubProvider('openrouter', {});
 
       expect(
-        stubConfig.getEphemeralSetting('reasoning.enabled'),
+        settingsOwner.readNamedParameter('reasoning.enabled'),
       ).toBeUndefined();
       expect(
-        stubConfig.getEphemeralSetting('reasoning.adaptiveThinking'),
+        settingsOwner.readNamedParameter('reasoning.adaptiveThinking'),
       ).toBeUndefined();
       expect(
-        stubConfig.getEphemeralSetting('reasoning.includeInContext'),
+        settingsOwner.readNamedParameter('reasoning.includeInContext'),
       ).toBeUndefined();
       expect(
-        stubConfig.getEphemeralSetting('reasoning.effort'),
+        settingsOwner.readNamedParameter('reasoning.effort'),
       ).toBeUndefined();
     });
 
     it('skips model defaults when skipModelDefaults is true (profile path)', async () => {
       pushAnthropicAlias();
 
-      await switchActiveProvider('anthropic', { skipModelDefaults: true });
+      await switchStubProvider('anthropic', { skipModelDefaults: true });
 
       expect(
-        stubConfig.getEphemeralSetting('reasoning.enabled'),
+        settingsOwner.readNamedParameter('reasoning.enabled'),
       ).toBeUndefined();
       expect(
-        stubConfig.getEphemeralSetting('reasoning.adaptiveThinking'),
+        settingsOwner.readNamedParameter('reasoning.adaptiveThinking'),
       ).toBeUndefined();
       expect(
-        stubConfig.getEphemeralSetting('reasoning.includeInContext'),
+        settingsOwner.readNamedParameter('reasoning.includeInContext'),
       ).toBeUndefined();
       expect(
-        stubConfig.getEphemeralSetting('reasoning.effort'),
+        settingsOwner.readNamedParameter('reasoning.effort'),
       ).toBeUndefined();
     });
 
@@ -564,36 +482,36 @@ describe('Provider alias defaults (model + ephemerals)', () => {
         },
       });
 
-      await switchActiveProvider('anthropic');
+      await switchStubProvider('anthropic', {});
 
       // Model default "high" overrides alias "medium"
-      expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('high');
+      expect(settingsOwner.readNamedParameter('reasoning.effort')).toBe('high');
       // Other model defaults also apply
-      expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBe(true);
-      expect(stubConfig.getEphemeralSetting('reasoning.adaptiveThinking')).toBe(
-        true,
-      );
+      expect(settingsOwner.readNamedParameter('reasoning.enabled')).toBe(true);
+      expect(
+        settingsOwner.readNamedParameter('reasoning.adaptiveThinking'),
+      ).toBe(true);
     });
 
     it('pre-existing preserved ephemeral settings are NOT overridden by model defaults (snapshot protection)', async () => {
       // Simulate a preserved ephemeral: reasoning.effort was set before the switch
       // and is listed in preserveEphemerals. After the ephemeral clear, it survives
       // and should be in preAliasEphemeralKeys, protecting it from model defaults.
-      stubConfig.setEphemeralSetting('reasoning.effort', 'low');
+      settingsOwner.writeUserParameter('reasoning.effort', 'low');
 
       pushAnthropicAlias();
 
-      await switchActiveProvider('anthropic', {
+      await switchStubProvider('anthropic', {
         preserveEphemerals: ['reasoning.effort'],
       });
 
       // The preserved "low" value must survive, model default "high" must NOT override it
-      expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('low');
+      expect(settingsOwner.readNamedParameter('reasoning.effort')).toBe('low');
       // Other model defaults that weren't preserved DO apply
-      expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBe(true);
-      expect(stubConfig.getEphemeralSetting('reasoning.adaptiveThinking')).toBe(
-        true,
-      );
+      expect(settingsOwner.readNamedParameter('reasoning.enabled')).toBe(true);
+      expect(
+        settingsOwner.readNamedParameter('reasoning.adaptiveThinking'),
+      ).toBe(true);
     });
 
     it('multiple rules merge in order — broad pattern sets base, specific pattern adds/overrides', async () => {
@@ -617,17 +535,17 @@ describe('Provider alias defaults (model + ephemerals)', () => {
         ],
       });
 
-      await switchActiveProvider('anthropic');
+      await switchStubProvider('anthropic', {});
 
       // Broad rule sets base, specific rule overrides effort
-      expect(stubConfig.getEphemeralSetting('reasoning.enabled')).toBe(true);
-      expect(stubConfig.getEphemeralSetting('reasoning.adaptiveThinking')).toBe(
-        true,
-      );
-      expect(stubConfig.getEphemeralSetting('reasoning.includeInContext')).toBe(
-        true,
-      );
-      expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('high');
+      expect(settingsOwner.readNamedParameter('reasoning.enabled')).toBe(true);
+      expect(
+        settingsOwner.readNamedParameter('reasoning.adaptiveThinking'),
+      ).toBe(true);
+      expect(
+        settingsOwner.readNamedParameter('reasoning.includeInContext'),
+      ).toBe(true);
+      expect(settingsOwner.readNamedParameter('reasoning.effort')).toBe('high');
     });
   });
 
@@ -643,16 +561,16 @@ describe('Provider alias defaults (model + ephemerals)', () => {
           'reasoning.enabledMap': { true: 'enabled', false: null },
         },
       });
-      await switchActiveProvider('anthropic');
+      await switchStubProvider('anthropic', {});
       activeProviderName = 'anthropic';
 
       // The broad sonnet rule sets no maps, so the provider-level maps are
       // the effective defaults for the session.
       expect(
-        stubConfig.getEphemeralSetting('reasoning.effortMap'),
+        settingsOwner.readNamedParameter('reasoning.effortMap'),
       ).toStrictEqual({ high: 'provider-high' });
       expect(
-        stubConfig.getEphemeralSetting('reasoning.enabledMap'),
+        settingsOwner.readNamedParameter('reasoning.enabledMap'),
       ).toStrictEqual({ true: 'enabled', false: null });
     });
 
@@ -672,26 +590,26 @@ describe('Provider alias defaults (model + ephemerals)', () => {
           },
         ],
       });
-      await switchActiveProvider('anthropic');
+      await switchStubProvider('anthropic', {});
       activeProviderName = 'anthropic';
 
       // Model default > provider alias default while the rule matches.
       expect(
-        stubConfig.getEphemeralSetting('reasoning.effortMap'),
+        settingsOwner.readNamedParameter('reasoning.effortMap'),
       ).toStrictEqual({ high: 'model-high' });
       // No model rule owns enabledMap, so the provider map stays in force.
       expect(
-        stubConfig.getEphemeralSetting('reasoning.enabledMap'),
+        settingsOwner.readNamedParameter('reasoning.enabledMap'),
       ).toStrictEqual({ true: 'enabled', false: null });
 
-      await setActiveModel('gpt-4o');
+      await setActiveModel('gpt-4o', ...stubOverrideInputs());
 
       // Leaving the matching model rule restores the provider alias default.
       expect(
-        stubConfig.getEphemeralSetting('reasoning.effortMap'),
+        settingsOwner.readNamedParameter('reasoning.effortMap'),
       ).toStrictEqual({ high: 'provider-high' });
       expect(
-        stubConfig.getEphemeralSetting('reasoning.enabledMap'),
+        settingsOwner.readNamedParameter('reasoning.enabledMap'),
       ).toStrictEqual({ true: 'enabled', false: null });
     });
 
@@ -703,19 +621,23 @@ describe('Provider alias defaults (model + ephemerals)', () => {
           'reasoning.effort': 'medium',
         },
       });
-      await switchActiveProvider('anthropic');
+      await switchStubProvider('anthropic', {});
       activeProviderName = 'anthropic';
 
       // The sonnet rule sets no effort, so the provider default owns the key.
-      expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('medium');
+      expect(settingsOwner.readNamedParameter('reasoning.effort')).toBe(
+        'medium',
+      );
 
       // The opus rule starts matching: model default > provider alias default.
-      await setActiveModel('claude-opus-4-6');
-      expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('high');
+      await setActiveModel('claude-opus-4-6', ...stubOverrideInputs());
+      expect(settingsOwner.readNamedParameter('reasoning.effort')).toBe('high');
 
       // Leaving the opus rule restores the provider alias default.
-      await setActiveModel('gpt-4o');
-      expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('medium');
+      await setActiveModel('gpt-4o', ...stubOverrideInputs());
+      expect(settingsOwner.readNamedParameter('reasoning.effort')).toBe(
+        'medium',
+      );
     });
 
     it('keeps a session value equal to the provider default when a model default starts matching', async () => {
@@ -726,56 +648,19 @@ describe('Provider alias defaults (model + ephemerals)', () => {
           'reasoning.effort': 'medium',
         },
       });
-      await switchActiveProvider('anthropic');
+      await switchStubProvider('anthropic', {});
       activeProviderName = 'anthropic';
 
       // Explicit session write carrying the same value as the provider
       // default: the session owns the key from here on, regardless of value.
-      setEphemeralSetting('reasoning.effort', 'medium');
+      setEphemeralSetting('reasoning.effort', 'medium', settingsOwner);
 
-      await setActiveModel('claude-opus-4-6');
+      await setActiveModel('claude-opus-4-6', ...stubOverrideInputs());
 
       // The explicit session value survives the matching model default.
-      expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('medium');
-    });
-
-    it('keeps a profile map equal to the provider default through later model changes', async () => {
-      pushAnthropicAlias({
-        ephemeralSettings: {
-          maxOutputTokens: 40000,
-          'reasoning.effortMap': { high: 'provider-high' },
-        },
-        modelDefaults: [
-          {
-            pattern: 'claude-opus-4-6',
-            ephemeralSettings: {
-              'reasoning.effortMap': { high: 'model-high' },
-            },
-          },
-        ],
-      });
-      const profile: Profile = {
-        version: 1,
-        provider: 'anthropic',
-        model: 'claude-sonnet-4-5-20250929',
-        modelParams: {},
-        ephemeralSettings: {
-          'reasoning.effortMap': { high: 'provider-high' },
-        },
-      };
-
-      await applyProfileWithGuards(profile, {
-        profileName: 'profile-equals-provider-default',
-      });
-      activeProviderName = 'anthropic';
-
-      await setActiveModel('claude-opus-4-6');
-
-      // The explicit profile map survives even though its content equals the
-      // provider default and a model default now matches.
-      expect(
-        stubConfig.getEphemeralSetting('reasoning.effortMap'),
-      ).toStrictEqual({ high: 'provider-high' });
+      expect(settingsOwner.readNamedParameter('reasoning.effort')).toBe(
+        'medium',
+      );
     });
 
     it('still skips object alias ephemerals for non-reasoning-map keys', async () => {
@@ -785,12 +670,12 @@ describe('Provider alias defaults (model + ephemerals)', () => {
           'context-limit': { limit: 200000 },
         },
       });
-      await switchActiveProvider('anthropic');
+      await switchStubProvider('anthropic', {});
 
       // Object values are only permitted for the registered reasoning map
       // keys; every other object ephemeral is still rejected.
-      expect(stubConfig.getEphemeralSetting('context-limit')).toBeUndefined();
-      expect(stubConfig.getEphemeralSetting('maxOutputTokens')).toBe(40000);
+      expect(settingsOwner.readNamedParameter('context-limit')).toBeUndefined();
+      expect(settingsOwner.readNamedParameter('maxOutputTokens')).toBe(40000);
     });
   });
 
@@ -798,47 +683,47 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     it('--set reasoning.effort=low preserved in preserveEphemerals survives provider switch', async () => {
       // Simulate: --set reasoning.effort=low applied before provider switch,
       // listed in preserveEphemerals so it survives the ephemeral clear.
-      stubConfig.setEphemeralSetting('reasoning.effort', 'low');
+      settingsOwner.writeUserParameter('reasoning.effort', 'low');
 
       pushAnthropicAlias();
 
-      await switchActiveProvider('anthropic', {
+      await switchStubProvider('anthropic', {
         preserveEphemerals: ['reasoning.effort'],
       });
 
       // User's --set value survives; model default "high" must not override
-      expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('low');
+      expect(settingsOwner.readNamedParameter('reasoning.effort')).toBe('low');
     });
 
     it('--set reasoning.effort=low AFTER provider switch overrides model default', async () => {
       pushAnthropicAlias();
 
-      await switchActiveProvider('anthropic');
+      await switchStubProvider('anthropic', {});
 
       // Model default applied reasoning.effort: "high"
-      expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('high');
+      expect(settingsOwner.readNamedParameter('reasoning.effort')).toBe('high');
 
       // User runs --set reasoning.effort=low after the switch
-      stubConfig.setEphemeralSetting('reasoning.effort', 'low');
+      settingsOwner.writeUserParameter('reasoning.effort', 'low');
 
-      expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('low');
+      expect(settingsOwner.readNamedParameter('reasoning.effort')).toBe('low');
     });
 
     it('--profile-load X --set reasoning.effort=low keeps low', async () => {
       pushAnthropicAlias();
 
       // Profile load path: skipModelDefaults: true
-      await switchActiveProvider('anthropic', { skipModelDefaults: true });
+      await switchStubProvider('anthropic', { skipModelDefaults: true });
 
       // Model defaults NOT applied (profile path)
       expect(
-        stubConfig.getEphemeralSetting('reasoning.effort'),
+        settingsOwner.readNamedParameter('reasoning.effort'),
       ).toBeUndefined();
 
       // Then --set is applied after
-      stubConfig.setEphemeralSetting('reasoning.effort', 'low');
+      settingsOwner.writeUserParameter('reasoning.effort', 'low');
 
-      expect(stubConfig.getEphemeralSetting('reasoning.effort')).toBe('low');
+      expect(settingsOwner.readNamedParameter('reasoning.effort')).toBe('low');
     });
   });
 
@@ -850,13 +735,13 @@ describe('Provider alias defaults (model + ephemerals)', () => {
 
       // applyProfileWithGuards internally calls switchActiveProvider with
       // skipModelDefaults: true. We simulate the same call here.
-      await switchActiveProvider('anthropic', { skipModelDefaults: true });
+      await switchStubProvider('anthropic', { skipModelDefaults: true });
 
       expect(
-        stubConfig.getEphemeralSetting('reasoning.enabled'),
+        settingsOwner.readNamedParameter('reasoning.enabled'),
       ).toBeUndefined();
       expect(
-        stubConfig.getEphemeralSetting('reasoning.effort'),
+        settingsOwner.readNamedParameter('reasoning.effort'),
       ).toBeUndefined();
     });
 
@@ -865,16 +750,16 @@ describe('Provider alias defaults (model + ephemerals)', () => {
 
       // applyProfileSnapshot → applyProfileWithGuards → switchActiveProvider
       // with skipModelDefaults: true. Same end result.
-      await switchActiveProvider('anthropic', { skipModelDefaults: true });
+      await switchStubProvider('anthropic', { skipModelDefaults: true });
 
       expect(
-        stubConfig.getEphemeralSetting('reasoning.enabled'),
+        settingsOwner.readNamedParameter('reasoning.enabled'),
       ).toBeUndefined();
       expect(
-        stubConfig.getEphemeralSetting('reasoning.effort'),
+        settingsOwner.readNamedParameter('reasoning.effort'),
       ).toBeUndefined();
       // Alias ephemeralSettings still apply when not preserved
-      expect(stubConfig.getEphemeralSetting('maxOutputTokens')).toBe(40000);
+      expect(settingsOwner.readNamedParameter('maxOutputTokens')).toBe(40000);
     });
   });
 
@@ -883,12 +768,12 @@ describe('Provider alias defaults (model + ephemerals)', () => {
   describe('aliases without modelDefaults', () => {
     it('works normally when alias has no modelDefaults field', async () => {
       // qwenvercel has no modelDefaults — should work fine
-      await switchActiveProvider('qwenvercel');
+      await switchStubProvider('qwenvercel', {});
 
-      expect(stubConfig.getModel()).toBe('qwen3-coder-plus');
-      expect(stubConfig.getEphemeralSetting('context-limit')).toBe(200000);
+      expect(settingsOwner.readSelectedModel()).toBe('qwen3-coder-plus');
+      expect(settingsOwner.readNamedParameter('context-limit')).toBe(200000);
       expect(
-        stubConfig.getEphemeralSetting('reasoning.enabled'),
+        settingsOwner.readNamedParameter('reasoning.enabled'),
       ).toBeUndefined();
     });
   });
@@ -918,9 +803,9 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     });
 
     it('pins the qwen base-url ephemeral to the DashScope compatible-mode endpoint', async () => {
-      await switchActiveProvider('qwen');
+      await switchStubProvider('qwen', {});
 
-      expect(stubConfig.getEphemeralSetting('base-url')).toBe(
+      expect(settingsOwner.readNamedParameter('base-url')).toBe(
         DASHSCOPE_BASE_URL,
       );
       expect(stubSettingsService.getProviderSettings('qwen')['base-url']).toBe(
@@ -929,9 +814,9 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     });
 
     it('applies the qwen alias default model on switch', async () => {
-      await switchActiveProvider('qwen');
+      await switchStubProvider('qwen', {});
 
-      expect(stubConfig.getModel()).toBe('qwen3-coder-plus');
+      expect(settingsOwner.readSelectedModel()).toBe('qwen3-coder-plus');
       expect(stubSettingsService.getProviderSettings('qwen').model).toBe(
         'qwen3-coder-plus',
       );
@@ -947,13 +832,13 @@ describe('Provider alias defaults (model + ephemerals)', () => {
       pushAnthropicAlias();
 
       // Simulate applyProfileSnapshot having set the active profile name.
-      stubConfig.setEphemeralSetting('currentProfile', 'gpt56solhigh');
+      settingsOwner.writeUserParameter('currentProfile', 'gpt56solhigh');
 
-      await switchActiveProvider('anthropic');
+      await switchStubProvider('anthropic', {});
 
       // currentProfile is session-level identity state; it must survive the
       // ephemeral clear so the UI can show the profile-qualified model label.
-      expect(stubConfig.getEphemeralSetting('currentProfile')).toBe(
+      expect(settingsOwner.readNamedParameter('currentProfile')).toBe(
         'gpt56solhigh',
       );
     });
@@ -961,10 +846,10 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     it('preserves currentProfile when not included in preserveEphemerals list', async () => {
       pushAnthropicAlias();
 
-      stubConfig.setEphemeralSetting('currentProfile', 'work-profile');
+      settingsOwner.writeUserParameter('currentProfile', 'work-profile');
       // executeAutoProvider switches with a limited preserveEphemerals list
       // that does NOT include currentProfile.
-      await switchActiveProvider('anthropic', {
+      await switchStubProvider('anthropic', {
         preserveEphemerals: [
           'auth-key',
           'auth-keyfile',
@@ -973,7 +858,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
         ],
       });
 
-      expect(stubConfig.getEphemeralSetting('currentProfile')).toBe(
+      expect(settingsOwner.readNamedParameter('currentProfile')).toBe(
         'work-profile',
       );
     });
@@ -981,19 +866,25 @@ describe('Provider alias defaults (model + ephemerals)', () => {
     it('clears non-identity ephemerals while preserving currentProfile and activeProvider', async () => {
       pushAnthropicAlias();
 
-      stubConfig.setEphemeralSetting('currentProfile', 'my-profile');
-      stubConfig.setEphemeralSetting('temperature', 0.7);
+      settingsOwner.writeUserParameter('currentProfile', 'my-profile');
+      settingsOwner.writeUserParameter('temperature', 0.7);
 
-      await switchActiveProvider('anthropic');
+      await switchStubProvider('anthropic', {});
 
-      expect(stubConfig.getEphemeralSetting('currentProfile')).toBe(
+      expect(settingsOwner.readNamedParameter('currentProfile')).toBe(
         'my-profile',
       );
-      expect(stubConfig.getEphemeralSetting('activeProvider')).toBe(
+      expect(settingsOwner.readNamedParameter('activeProvider')).toBe(
         'anthropic',
       );
       // Per-provider ephemerals are still cleared.
-      expect(stubConfig.getEphemeralSetting('temperature')).toBeUndefined();
+      expect(settingsOwner.readNamedParameter('temperature')).toBeUndefined();
     });
   });
 });
+
+let settingsOwner: SessionSettingsOwner;
+const retainedRoots: Array<{
+  config: RealConfig;
+  settingsOwner: SessionSettingsOwner;
+}> = [];

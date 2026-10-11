@@ -3,15 +3,25 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
 
 /**
  * TaskTool max_turns handling and validation tests.
  * Sibling to task.test.ts (split to avoid file-level max-lines disable).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { taskPolicyFixture } from './__tests__/task-policy-fixture.js';
 import { TaskTool } from './task.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SubagentOrchestrator } from '../core/subagentOrchestrator.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
@@ -21,13 +31,24 @@ import {
 
 describe('TaskTool', () => {
   let config: Config;
+  let settingsOwner: SessionSettingsOwner;
   let messageBus: MessageBus;
 
   beforeEach(() => {
-    config = {
-      getSessionId: () => 'session-123',
-    } as unknown as Config;
+    config = new Config({
+      sessionId: 'session-123',
+      model: 'task-model',
+      cwd: process.cwd(),
+      targetDir: process.cwd(),
+      debugMode: false,
+    });
+    settingsOwner = new SessionSettingsOwner(new SettingsService());
     messageBus = new MessageBus();
+  });
+
+  afterEach(async () => {
+    await settingsOwner.dispose();
+    await config.dispose();
   });
 
   async function streamSubagentDeltas(
@@ -63,6 +84,10 @@ describe('TaskTool', () => {
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
+      ...taskPolicyFixture(settingsOwner),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       orchestratorFactory: () => orchestrator,
       messageBus,
       isInteractiveEnvironment: () => true,
@@ -103,6 +128,10 @@ describe('TaskTool', () => {
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
+        ...taskPolicyFixture(settingsOwner),
+        workspacePaths: fixturePaths(),
+        readMcpInstructions: () => undefined,
+        instructions: emptyInstructionReads,
         orchestratorFactory: () => orchestrator,
         messageBus,
         isInteractiveEnvironment: () => true,
@@ -147,14 +176,14 @@ describe('TaskTool', () => {
         runtime: {} as unknown,
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
-      const configWithTimeout = {
-        ...config,
-        getEphemeralSettings: () => ({
-          'task-default-timeout-seconds': 60,
-          'task-max-timeout-seconds': 120,
-        }),
-      } as unknown as Config;
+      settingsOwner.writeUserParameter('task-default-timeout-seconds', 60);
+      settingsOwner.writeUserParameter('task-max-timeout-seconds', 120);
+      const configWithTimeout = config;
       const tool = new TaskTool(configWithTimeout, {
+        ...taskPolicyFixture(settingsOwner),
+        workspacePaths: fixturePaths(),
+        readMcpInstructions: () => undefined,
+        instructions: emptyInstructionReads,
         orchestratorFactory: () => orchestrator,
         messageBus,
         isInteractiveEnvironment: () => true,
@@ -201,6 +230,10 @@ describe('TaskTool', () => {
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
+        ...taskPolicyFixture(settingsOwner),
+        workspacePaths: fixturePaths(),
+        readMcpInstructions: () => undefined,
+        instructions: emptyInstructionReads,
         orchestratorFactory: () => orchestrator,
         messageBus,
         isInteractiveEnvironment: () => true,
@@ -230,6 +263,10 @@ describe('TaskTool', () => {
   describe('max_turns validation', () => {
     const createTool = () =>
       new TaskTool(config, {
+        ...taskPolicyFixture(settingsOwner),
+        workspacePaths: fixturePaths(),
+        readMcpInstructions: () => undefined,
+        instructions: emptyInstructionReads,
         orchestratorFactory: () => {
           throw new Error('should not be called');
         },
@@ -294,6 +331,10 @@ describe('TaskTool', () => {
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
+        ...taskPolicyFixture(settingsOwner),
+        workspacePaths: fixturePaths(),
+        readMcpInstructions: () => undefined,
+        instructions: emptyInstructionReads,
         orchestratorFactory: () => orchestrator,
         messageBus,
         isInteractiveEnvironment: () => true,
@@ -339,6 +380,10 @@ describe('TaskTool', () => {
       });
       const orchestrator = { launch } as unknown as SubagentOrchestrator;
       const tool = new TaskTool(config, {
+        ...taskPolicyFixture(settingsOwner),
+        workspacePaths: fixturePaths(),
+        readMcpInstructions: () => undefined,
+        instructions: emptyInstructionReads,
         orchestratorFactory: () => orchestrator,
         messageBus,
         isInteractiveEnvironment: () => true,
@@ -399,6 +444,10 @@ describe('TaskTool', () => {
     });
     const orchestrator = { launch } as unknown as SubagentOrchestrator;
     const tool = new TaskTool(config, {
+      ...taskPolicyFixture(settingsOwner),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       orchestratorFactory: () => orchestrator,
       messageBus,
       isInteractiveEnvironment: () => true,

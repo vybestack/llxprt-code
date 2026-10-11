@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
 /**
  * @plan PLAN-20260211-COMPRESSION.P04
  * @requirement REQ-CS-004.1, REQ-CS-004.2, REQ-CS-004.3, REQ-CS-004.4
@@ -41,7 +42,7 @@ import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/r
  */
 import { classifyMediaBlock } from '@vybestack/llxprt-code-tools/utils/mediaUtils.js';
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { buildCompressionChatOptions } from './compressionSystemPrompt.js';
@@ -253,41 +254,24 @@ export async function runVerificationPass(
   provider: IProvider,
   initialSummary: string,
   context: CompressionContext,
-  resolvedRuntime?: ProviderRuntimeContext,
+  resolvedRuntime?: ProviderRequestCollaborators,
   resolvedConfig?: Config,
   resolvedOptions?: RuntimeGenerateChatOptions['resolved'],
   invocation?: RuntimeGenerateChatOptions['invocation'],
 ): Promise<string> {
-  const verificationRequest: IContent[] = [
-    COMPRESSION_SECURITY_PREAMBLE,
-    {
-      speaker: 'human',
-      blocks: [
-        {
-          type: 'text',
-          text: 'Review the following conversation summary for omissions. If any important details are missing, produce an improved <state_snapshot>. If the summary is complete, respond with exactly: VERIFIED',
-        },
-      ],
-    },
-    {
-      speaker: 'ai',
-      blocks: [{ type: 'text', text: initialSummary }],
-    },
-    {
-      speaker: 'human',
-      blocks: [
-        {
-          type: 'text',
-          text: 'Check for omissions. If missing details exist, produce improved <state_snapshot>. Otherwise respond VERIFIED.',
-        },
-      ],
-    },
-  ];
+  const verificationRequest = verificationMessages(initialSummary);
 
   try {
     const providerRuntime =
       resolvedRuntime ?? context.runtimeContext.providerRuntime;
-    const stream = provider.generateChatCompletion(
+    const stream = bindCompressionProvider(
+      provider,
+      providerRuntime.mediaResolver,
+      providerRuntime.requestMediaBudgetBytes,
+      providerRuntime.providerFileBindings,
+      providerRuntime.providerFileLifecycle,
+      providerRuntime.config?.getTargetDir(),
+    ).generateChatCompletion(
       await buildCompressionChatOptions({
         contents: verificationRequest,
         providerRuntime,
@@ -298,6 +282,7 @@ export async function runVerificationPass(
         fallbackModel: context.runtimeState.model,
         runtimeState: context.runtimeState,
         provider,
+        modelParameters: context.modelParameters,
         source: 'runVerificationPass',
       }),
     );
@@ -429,4 +414,50 @@ export function sanitizeHistoryForCompression(
     const speaker = msg.speaker === 'tool' ? ('human' as const) : msg.speaker;
     return { ...msg, speaker, blocks: sanitizedBlocks };
   });
+}
+
+export function bindCompressionProvider(
+  provider: IProvider,
+  mediaResolver: ProviderRequestCollaborators['mediaResolver'],
+  budgetBytes: number | undefined,
+  bindings: ProviderRequestCollaborators['providerFileBindings'],
+  lifecycle: object | undefined,
+  workspaceDirectory: string | undefined,
+): IProvider {
+  return bindProviderMediaAndFiles(
+    provider,
+    mediaResolver,
+    budgetBytes,
+    bindings,
+    lifecycle,
+    workspaceDirectory,
+  );
+}
+
+function verificationMessages(initialSummary: string): IContent[] {
+  return [
+    COMPRESSION_SECURITY_PREAMBLE,
+    {
+      speaker: 'human',
+      blocks: [
+        {
+          type: 'text',
+          text: 'Review the following conversation summary for omissions. If any important details are missing, produce an improved <state_snapshot>. If the summary is complete, respond with exactly: VERIFIED',
+        },
+      ],
+    },
+    {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: initialSummary }],
+    },
+    {
+      speaker: 'human',
+      blocks: [
+        {
+          type: 'text',
+          text: 'Check for omissions. If missing details exist, produce improved <state_snapshot>. Otherwise respond VERIFIED.',
+        },
+      ],
+    },
+  ];
 }

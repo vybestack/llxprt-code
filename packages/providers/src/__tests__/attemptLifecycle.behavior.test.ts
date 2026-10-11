@@ -1,3 +1,7 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+const fixtureOwners = installRuntimeTestOwners();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -23,7 +27,7 @@ import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry/telemetry/uiTelemetry.js';
 import * as sdk from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
 
@@ -256,23 +260,14 @@ function makeOptions(
 }
 
 function createConfig(loggingEnabled = false): Config {
-  return {
-    getConversationLoggingEnabled: () => loggingEnabled,
-    getConversationLogPath: () => '/tmp/test',
-    getRedactionConfig: () => ({
-      redactApiKeys: false,
-      redactCredentials: false,
-      redactFilePaths: false,
-      redactUrls: false,
-      redactEmails: false,
-      redactPersonalInfo: false,
-    }),
-    getProviderManager: () => ({
-      accumulateSessionTokens: vi.fn(),
-    }),
-    getSessionId: () => 'test-session',
-    getTelemetryLogPromptsEnabled: () => false,
-  } as unknown as Config;
+  return new Config({
+    sessionId: 'test-session',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    debugMode: false,
+    model: 'test-model',
+    telemetry: { enabled: false, logConversations: loggingEnabled },
+  });
 }
 
 /**
@@ -291,7 +286,13 @@ function buildStack(
     initialDelayMs: retryConfig?.initialDelayMs ?? 1,
     maxDelayMs: 10,
   });
-  const wrapper = new LoggingProviderWrapper(retry, config);
+  const wrapperSettings1 = fixtureOwners.adopt(
+    config,
+    new SettingsService(),
+  ).settingsOwner;
+  const wrapper = new LoggingProviderWrapper(retry, config, undefined, () =>
+    captureProviderRequestDiagnostics(config, wrapperSettings1),
+  );
   wrapper.setRuntimeContextResolver(() => ({
     runtimeId: 'test',
     settingsService: { getConfig: () => config } as never,

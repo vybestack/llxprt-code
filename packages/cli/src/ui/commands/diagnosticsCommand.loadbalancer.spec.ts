@@ -18,10 +18,6 @@ const runtimeMocks = {
   getRuntimeApiMock: vi.fn(),
 };
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: runtimeMocks.getRuntimeApiMock,
-}));
-
 function makeLbStats(
   overrides: Partial<ExtendedLoadBalancerStats>,
 ): ExtendedLoadBalancerStats {
@@ -43,10 +39,6 @@ function setupLoadBalancerRuntime(options: {
   runtimeProfileName: string | null;
   lbStats: ExtendedLoadBalancerStats;
 }) {
-  const lbProvider = {
-    getStats: vi.fn(() => options.lbStats),
-  };
-
   runtimeMocks.getRuntimeApiMock.mockReturnValue({
     getRuntimeDiagnosticsSnapshot: vi.fn(() => ({
       providerName: 'load-balancer',
@@ -55,16 +47,12 @@ function setupLoadBalancerRuntime(options: {
       modelParams: {},
       ephemeralSettings: {},
     })),
-    getActiveProviderStatus: vi.fn(() => ({
+    providerStatus: vi.fn(() => ({
       providerName: 'load-balancer',
       modelName: options.lbStats.profileName,
     })),
-    getCliProviderManager: vi.fn(() => ({
-      getProviderByName: vi.fn((name: string) =>
-        name === 'load-balancer' ? lbProvider : null,
-      ),
-    })),
-    maybeGetCliOAuthManager: vi.fn(() => null),
+    getLoadBalancerStats: () => options.lbStats,
+    getLoadBalancerTokenAccounting: () => undefined,
   });
 }
 
@@ -74,6 +62,9 @@ describe('diagnosticsCommand load-balancer identity (issue #2193)', () => {
 
   beforeEach(() => {
     setup = setupDiagnosticsTest();
+    Object.defineProperty(setup.mockContext, 'runtimeApi', {
+      get: () => runtimeMocks.getRuntimeApiMock(),
+    });
     mockContext = setup.mockContext;
   });
 

@@ -43,13 +43,10 @@ export type {
   ShellResult,
 } from './IShellExecutionService.js';
 export type {
-  ISubagentService,
-  SubagentExecutionOptions,
-  SubagentRequest,
-  SubagentResult,
+  ISubagentCatalog,
   SubagentInfo,
   SubagentConfig,
-} from './ISubagentService.js';
+} from './ISubagentCatalog.js';
 export type {
   IAsyncTaskService,
   AsyncTaskStatus,
@@ -64,7 +61,6 @@ export type {
 export type {
   ISkillService,
   SkillActivationResult,
-  SkillManager,
   SkillInfo,
 } from './ISkillService.js';
 export type {
@@ -109,13 +105,5 @@ export type {
   PromptRegistry,
   Prompt,
 } from './IPromptRegistryService.js';
-export type {
-  HostWorkspaceContextCap,
-  HostIdeCap,
-  HostLspCap,
-} from './host-capabilities.js';
-export {
-  hasWorkspaceContextCap,
-  hasIdeCap,
-  hasLspCap,
-} from './host-capabilities.js';
+export type { HostIdeCap, HostLspCap } from './host-capabilities.js';
+export { hasIdeCap, hasLspCap } from './host-capabilities.js';

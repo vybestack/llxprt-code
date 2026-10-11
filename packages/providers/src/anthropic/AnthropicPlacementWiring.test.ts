@@ -103,9 +103,7 @@ const OAUTH_TOKEN = 'sk-ant-oat01-example-oauth';
 
 class PlacementTestProvider extends AnthropicProvider {
   constructor() {
-    super(undefined, 'https://api.anthropic.com', {
-      getEphemeralSettings: () => ({}),
-    });
+    super(undefined, 'https://api.anthropic.com', {});
   }
 
   protected override async getAuthTokenForPrompt(): Promise<string> {

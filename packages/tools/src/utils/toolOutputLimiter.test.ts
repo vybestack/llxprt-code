@@ -17,7 +17,7 @@ describe('limitOutputTokens', () => {
     (raw) => {
       const content = 'word '.repeat(40000);
       const config = {
-        getEphemeralSettings: () => ({ 'tool-output-max-tokens': raw }),
+        readExecutionPolicy: () => ({ 'tool-output-max-tokens': raw }),
       };
       expect(estimateTokens(content)).toBeGreaterThan(DEFAULT_MAX_TOKENS);
 
@@ -30,7 +30,7 @@ describe('limitOutputTokens', () => {
   it('warns when content exceeds the effective numeric limit', () => {
     const content = 'x'.repeat(300);
     const config = {
-      getEphemeralSettings: () => ({
+      readExecutionPolicy: () => ({
         'tool-output-max-tokens': 100,
         'tool-output-truncate-mode': 'warn',
       }),

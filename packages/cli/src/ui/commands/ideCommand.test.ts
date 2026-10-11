@@ -9,8 +9,9 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { Mock } from 'bun:test';
 import { ideCommand } from './ideCommand.js';
 import { type CommandContext } from './types.js';
-import { type Config, IDE_DEFINITIONS } from '@vybestack/llxprt-code-core';
+import { IDE_DEFINITIONS } from '@vybestack/llxprt-code-core';
 import * as core from '@vybestack/llxprt-code-core';
+import type { IdeState } from '../cliUiRuntime.js';
 
 const realChildProcessModule = { ...(await import('child_process')) };
 const realGlobModule = { ...(await import('glob')) };
@@ -25,14 +26,14 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
 
 function commandSubcommands(
   command: ReturnType<typeof ideCommand>,
-): NonNullable<ReturnType<typeof ideCommand>>['subCommands'] {
+): NonNullable<NonNullable<ReturnType<typeof ideCommand>>['subCommands']> {
   return command?.subCommands ?? [];
 }
 
 describe('ideCommand', () => {
   let mockContext: CommandContext;
-  let mockConfig: Config;
-  let platformSpy: Mock<(...args: never[]) => unknown>;
+  let mockConfig: IdeState;
+  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
 
   beforeEach(() => {
     mockContext = {
@@ -51,12 +52,13 @@ describe('ideCommand', () => {
       getIdeClient: vi.fn(),
       setIdeMode: vi.fn(),
       setIdeClientDisconnected: vi.fn(),
-    } as unknown as Config;
-
-    platformSpy = vi.spyOn(process, 'platform', 'get');
+    } as unknown as IdeState;
   });
 
   afterEach(() => {
+    if (originalPlatform === undefined)
+      throw new Error('Missing OS platform descriptor');
+    Object.defineProperty(process, 'platform', originalPlatform);
     vi.restoreAllMocks();
   });
 
@@ -77,7 +79,7 @@ describe('ideCommand', () => {
       getConnectionStatus: () => ({
         status: core.IDEConnectionStatus.Disconnected,
       }),
-    } as ReturnType<Config['getIdeClient']>);
+    } as ReturnType<IdeState['getIdeClient']>);
     const command = ideCommand(mockConfig);
     expect(command).not.toBeNull();
     expect(command?.name).toBe('ide');
@@ -99,7 +101,7 @@ describe('ideCommand', () => {
       getConnectionStatus: () => ({
         status: core.IDEConnectionStatus.Disconnected,
       }),
-    } as ReturnType<Config['getIdeClient']>);
+    } as ReturnType<IdeState['getIdeClient']>);
     const command = ideCommand(mockConfig);
     for (const subcommand of commandSubcommands(command)) {
       expect(subcommand.autoExecute).toBe(true);
@@ -118,7 +120,7 @@ describe('ideCommand', () => {
       getConnectionStatus: () => ({
         status: core.IDEConnectionStatus.Connected,
       }),
-    } as ReturnType<Config['getIdeClient']>);
+    } as ReturnType<IdeState['getIdeClient']>);
     const command = ideCommand(mockConfig);
     for (const subcommand of commandSubcommands(command)) {
       expect(subcommand.autoExecute).toBe(true);
@@ -137,7 +139,7 @@ describe('ideCommand', () => {
       getConnectionStatus: () => ({
         status: core.IDEConnectionStatus.Connected,
       }),
-    } as ReturnType<Config['getIdeClient']>);
+    } as ReturnType<IdeState['getIdeClient']>);
     const command = ideCommand(mockConfig);
     expect(command).not.toBeNull();
     const subCommandNames = command?.subCommands?.map((cmd) => cmd.name);
@@ -154,7 +156,38 @@ describe('ideCommand', () => {
         getConnectionStatus: mockGetConnectionStatus,
         getCurrentIde: () => IDE_DEFINITIONS.vscode,
         getDetectedIdeDisplayName: () => 'VS Code',
-      } as unknown as ReturnType<Config['getIdeClient']>);
+        getIdeContext: () => undefined,
+      } as unknown as ReturnType<IdeState['getIdeClient']>);
+    });
+
+    it('should list open files from the connected owner client context rather than a global context', async () => {
+      core.ideContext.clearIdeContext();
+      (
+        mockConfig.getIdeClient as Mock<typeof mockConfig.getIdeClient>
+      ).mockReturnValue({
+        getConnectionStatus: () => ({
+          status: core.IDEConnectionStatus.Connected,
+        }),
+        getCurrentIde: () => IDE_DEFINITIONS.vscode,
+        getDetectedIdeDisplayName: () => 'VS Code',
+        getIdeContext: () => ({
+          workspaceState: {
+            openFiles: [
+              { path: '/work/src/app.ts', timestamp: 1, isActive: true },
+            ],
+          },
+        }),
+      } as unknown as ReturnType<IdeState['getIdeClient']>);
+      const command = ideCommand(mockConfig);
+      const result = await command!.subCommands!.find(
+        (c) => c.name === 'status',
+      )!.action!(mockContext, '');
+      expect(result).toMatchObject({
+        type: 'message',
+        messageType: 'info',
+        content: expect.stringContaining('  - app.ts (active)'),
+      });
+      expect(core.ideContext.getIdeContext()).toBeUndefined();
     });
 
     it('should show connected status', async () => {
@@ -238,14 +271,16 @@ describe('ideCommand', () => {
         }),
         getDetectedIdeDisplayName: () => 'VS Code',
         connect: vi.fn(),
-      } as unknown as ReturnType<Config['getIdeClient']>);
+      } as unknown as ReturnType<IdeState['getIdeClient']>);
       (
         core.getIdeInstaller as Mock<typeof core.getIdeInstaller>
       ).mockReturnValue({
         install: mockInstall,
-        isInstalled: vi.fn(),
       });
-      platformSpy.mockReturnValue('linux');
+      Object.defineProperty(process, 'platform', {
+        value: 'linux',
+        configurable: true,
+      });
     });
 
     it('should install the extension', async () => {

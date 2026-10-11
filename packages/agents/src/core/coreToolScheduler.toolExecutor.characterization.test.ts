@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createSchedulerPolicyFixture } from './__tests__/scheduler-policy-fixture.js';
 
 /**
  * @plan PLAN-20260302-TOOLSCHEDULER.P03
@@ -12,7 +13,6 @@
  * These tests document EXISTING behavior prior to ToolExecutor extraction.
  */
 
-import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, type Mock } from 'bun:test';
 import type { ToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
@@ -21,25 +21,6 @@ import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 
 // Helper function to create a mock MessageBus
-function createMockMessageBus() {
-  return {
-    subscribe: vi.fn().mockReturnValue(() => {}),
-    publish: vi.fn(),
-    respondToConfirmation: vi.fn(),
-    requestConfirmation: vi.fn().mockResolvedValue(true),
-    removeAllListeners: vi.fn(),
-    listenerCount: vi.fn().mockReturnValue(0),
-  };
-}
-
-// Helper function to create a mock PolicyEngine
-function createMockPolicyEngine() {
-  return {
-    evaluate: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
-    checkDecision: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
-  };
-}
-
 function createMockToolRegistry(tool: MockTool) {
   return {
     getTool: () => tool,
@@ -59,38 +40,47 @@ function createMockToolRegistry(tool: MockTool) {
 
 function createMockConfig(
   mockToolRegistry: ToolRegistry,
-  mockPolicyEngine: ReturnType<typeof createMockPolicyEngine>,
-  mockMessageBus?: ReturnType<typeof createMockMessageBus>,
+  policyDecision: PolicyDecision,
 ) {
-  const messageBus = mockMessageBus ?? createMockMessageBus();
-  return {
-    getSessionId: () => 'test-session-id',
-    getUsageStatisticsEnabled: () => true,
-    getDebugMode: () => false,
-    isInteractive: () => true,
-    getApprovalMode: () => ApprovalMode.DEFAULT,
-    getEphemeralSettings: () => ({}),
-    getAllowedTools: () => [],
-    getContentGeneratorConfig: () => ({
-      model: 'test-model',
-    }),
-    getToolRegistry: () => mockToolRegistry,
-    getMessageBus: () => messageBus,
-    getEnableHooks: () => false,
-    getPolicyEngine: () => mockPolicyEngine,
-    getModel: () => 'gemini-2.5-pro',
-  } as unknown as Config;
+  return createSchedulerPolicyFixture(
+    {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => true,
+      getDebugMode: () => false,
+      isInteractive: () => true,
+      getApprovalMode: () => ApprovalMode.DEFAULT,
+
+      getAllowedTools: () => [],
+      getContentGeneratorConfig: () => ({
+        model: 'test-model',
+      }),
+      getEnableHooks: () => false,
+      getModel: () => 'gemini-2.5-pro',
+    },
+    policyDecision,
+  );
 }
 
 function createScheduler(
   mockConfig: Config,
-  onAllToolCallsComplete: Mock,
-  onToolCallsUpdate: Mock,
+  settingsOwner: ReturnType<
+    typeof createSchedulerPolicyFixture
+  >['settingsOwner'],
+  mockToolRegistry: ToolRegistry,
+  runtimeMessageBus: ReturnType<
+    typeof createSchedulerPolicyFixture
+  >['messageBus'],
+  onAllToolCallsComplete: Mock<(...args: unknown[]) => Promise<void>>,
+  onToolCallsUpdate: Mock<(...args: unknown[]) => unknown>,
 ) {
   return new CoreToolScheduler({
+    telemetry: settingsOwner.telemetry,
+    readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+    getToolGovernance: () =>
+      settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
     config: mockConfig,
-    messageBus: mockConfig.getMessageBus(),
-    toolRegistry: mockConfig.getToolRegistry(),
+    messageBus: runtimeMessageBus,
+    toolRegistry: mockToolRegistry,
     onAllToolCallsComplete,
     onToolCallsUpdate,
     getPreferredEditor: () => 'vscode',
@@ -98,39 +88,25 @@ function createScheduler(
   });
 }
 
-async function _waitForStatus(
-  onToolCallsUpdate: Mock,
-  status: ToolCall['status'],
-): Promise<ToolCall | undefined> {
-  let matchingCall: ToolCall | undefined;
-  await waitFor(() => {
-    const latestCalls = onToolCallsUpdate.mock.calls.at(-1)?.[0] as
-      | ToolCall[]
-      | undefined;
-    matchingCall = latestCalls?.find((call) => call.status === status);
-    if (!matchingCall) {
-      throw new Error(
-        `Waiting for status "${status}", latest statuses: ${
-          latestCalls?.map((call) => call.status).join(', ') ?? 'none'
-        }`,
-      );
-    }
-  });
-  return matchingCall;
-}
-
 describe('CoreToolScheduler - Tool Execution Characterization', () => {
   describe('TS-EXEC-001: Successful tool execution', () => {
     it('should transition tool through validating → scheduled → executing → success', async () => {
       const mockTool = new MockTool('mockTool');
       const mockToolRegistry = createMockToolRegistry(mockTool);
-      const mockPolicyEngine = createMockPolicyEngine();
-      const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
+      const policyDecision = PolicyDecision.ALLOW;
+      const {
+        config: mockConfig,
+        settingsOwner,
+        messageBus: runtimeMessageBus,
+      } = createMockConfig(mockToolRegistry, policyDecision);
 
       const onAllToolCallsComplete = vi.fn();
       const onToolCallsUpdate = vi.fn();
       const scheduler = createScheduler(
         mockConfig,
+        settingsOwner,
+        mockToolRegistry,
+        runtimeMessageBus,
         onAllToolCallsComplete,
         onToolCallsUpdate,
       );
@@ -166,13 +142,20 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
         },
       });
       const mockToolRegistry = createMockToolRegistry(mockTool);
-      const mockPolicyEngine = createMockPolicyEngine();
-      const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
+      const policyDecision = PolicyDecision.ALLOW;
+      const {
+        config: mockConfig,
+        settingsOwner,
+        messageBus: runtimeMessageBus,
+      } = createMockConfig(mockToolRegistry, policyDecision);
 
       const onAllToolCallsComplete = vi.fn();
       const onToolCallsUpdate = vi.fn();
       const scheduler = createScheduler(
         mockConfig,
+        settingsOwner,
+        mockToolRegistry,
+        runtimeMessageBus,
         onAllToolCallsComplete,
         onToolCallsUpdate,
       );
@@ -204,16 +187,21 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
       const mockTool = new MockTool('mockTool');
       mockTool.shouldConfirm = true;
       const mockToolRegistry = createMockToolRegistry(mockTool);
-      const mockPolicyEngine = createMockPolicyEngine();
-      mockPolicyEngine.evaluate = vi
-        .fn()
-        .mockReturnValue(PolicyDecision.ASK_USER);
-      const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
+      let policyDecision = PolicyDecision.ALLOW;
+      policyDecision = PolicyDecision.ASK_USER;
+      const {
+        config: mockConfig,
+        settingsOwner,
+        messageBus: runtimeMessageBus,
+      } = createMockConfig(mockToolRegistry, policyDecision);
 
       const onAllToolCallsComplete = vi.fn();
       const onToolCallsUpdate = vi.fn();
       const scheduler = createScheduler(
         mockConfig,
+        settingsOwner,
+        mockToolRegistry,
+        runtimeMessageBus,
         onAllToolCallsComplete,
         onToolCallsUpdate,
       );
@@ -245,13 +233,20 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
     it('should schedule and execute multiple tools', async () => {
       const mockTool = new MockTool('mockTool');
       const mockToolRegistry = createMockToolRegistry(mockTool);
-      const mockPolicyEngine = createMockPolicyEngine();
-      const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
+      const policyDecision = PolicyDecision.ALLOW;
+      const {
+        config: mockConfig,
+        settingsOwner,
+        messageBus: runtimeMessageBus,
+      } = createMockConfig(mockToolRegistry, policyDecision);
 
       const onAllToolCallsComplete = vi.fn();
       const onToolCallsUpdate = vi.fn();
       const scheduler = createScheduler(
         mockConfig,
+        settingsOwner,
+        mockToolRegistry,
+        runtimeMessageBus,
         onAllToolCallsComplete,
         onToolCallsUpdate,
       );
@@ -289,13 +284,20 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
     it('should include llmContent in successful tool result', async () => {
       const mockTool = new MockTool('mockTool');
       const mockToolRegistry = createMockToolRegistry(mockTool);
-      const mockPolicyEngine = createMockPolicyEngine();
-      const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
+      const policyDecision = PolicyDecision.ALLOW;
+      const {
+        config: mockConfig,
+        settingsOwner,
+        messageBus: runtimeMessageBus,
+      } = createMockConfig(mockToolRegistry, policyDecision);
 
       const onAllToolCallsComplete = vi.fn();
       const onToolCallsUpdate = vi.fn();
       const scheduler = createScheduler(
         mockConfig,
+        settingsOwner,
+        mockToolRegistry,
+        runtimeMessageBus,
         onAllToolCallsComplete,
         onToolCallsUpdate,
       );
@@ -329,15 +331,22 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
       const mockTool = new MockTool('mockTool');
       mockTool.shouldConfirm = true;
       const mockToolRegistry = createMockToolRegistry(mockTool);
-      const mockPolicyEngine = createMockPolicyEngine();
+      let policyDecision = PolicyDecision.ALLOW;
       // Policy ALLOW means no confirmation dialog
-      mockPolicyEngine.evaluate = vi.fn().mockReturnValue(PolicyDecision.ALLOW);
-      const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
+      policyDecision = PolicyDecision.ALLOW;
+      const {
+        config: mockConfig,
+        settingsOwner,
+        messageBus: runtimeMessageBus,
+      } = createMockConfig(mockToolRegistry, policyDecision);
 
       const onAllToolCallsComplete = vi.fn();
       const onToolCallsUpdate = vi.fn();
       const scheduler = createScheduler(
         mockConfig,
+        settingsOwner,
+        mockToolRegistry,
+        runtimeMessageBus,
         onAllToolCallsComplete,
         onToolCallsUpdate,
       );
@@ -367,13 +376,20 @@ describe('CoreToolScheduler - Tool Execution Characterization', () => {
     it('should not re-execute a tool with the same callId', async () => {
       const mockTool = new MockTool('mockTool');
       const mockToolRegistry = createMockToolRegistry(mockTool);
-      const mockPolicyEngine = createMockPolicyEngine();
-      const mockConfig = createMockConfig(mockToolRegistry, mockPolicyEngine);
+      const policyDecision = PolicyDecision.ALLOW;
+      const {
+        config: mockConfig,
+        settingsOwner,
+        messageBus: runtimeMessageBus,
+      } = createMockConfig(mockToolRegistry, policyDecision);
 
       const onAllToolCallsComplete = vi.fn();
       const onToolCallsUpdate = vi.fn();
       const scheduler = createScheduler(
         mockConfig,
+        settingsOwner,
+        mockToolRegistry,
+        runtimeMessageBus,
         onAllToolCallsComplete,
         onToolCallsUpdate,
       );

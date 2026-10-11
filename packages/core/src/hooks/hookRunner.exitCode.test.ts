@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { fixtureHookRuntime } from './__tests__/hook-runtime-fixture.js';
 import { describe, expect, it } from 'bun:test';
 import { HookRunner } from './hookRunner.js';
 import {
@@ -24,9 +25,15 @@ const input: HookInput = {
 };
 
 async function execute(command: string) {
-  const runner = new HookRunner({
-    getSanitizationConfig: () => undefined,
-  } as Config);
+  const runner = new HookRunner(
+    fixtureHookRuntime({
+      getSanitizationConfig: () => undefined,
+    } as Config).process,
+    fixtureHookRuntime({
+      getSanitizationConfig: () => undefined,
+    } as Config).isTrustedFolder,
+    () => new AbortController().signal,
+  );
   return runner.executeHook(
     { type: HookType.Command, command },
     HookEventName.BeforeTool,

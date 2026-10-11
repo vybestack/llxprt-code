@@ -1,18 +1,17 @@
+import { SessionSettingsOwner } from '../session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import type { ConfigParameters } from './config.js';
 import { Config } from './config.js';
 import { DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES } from './configTypes.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { initializeTestConfig } from '../__tests__/config-test-helpers.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeSettingsService } from '../runtime/settingsRuntimeAdapter.js';
 
-import { ShellTool, ReadFileTool } from '@vybestack/llxprt-code-tools';
 import {
   buildFsMockBody,
   buildToolsMockBody,
@@ -27,7 +26,6 @@ import {
   createSettingsServiceMock,
   resetAgentClientMock,
   type HoistedConfigMocks,
-  type SettingsServiceMock,
 } from './__tests__/configTestHarness.js';
 
 // Hoisted mocks referenced by mock factories below (vitest hoist-safe).
@@ -206,7 +204,7 @@ describe('Server Config (config.ts)', () => {
       expect(resolved.outfileMaxFiles).toBe(1);
     });
 
-    it('updateTelemetrySettings merges the new fields', () => {
+    it('updateTelemetrySettings merges the new fields', async () => {
       const config = new Config({
         ...baseParams,
         telemetry: {
@@ -215,208 +213,92 @@ describe('Server Config (config.ts)', () => {
           outfileMaxBytes: 104857600,
         },
       });
-      config.updateTelemetrySettings({
+      const selected = new SessionSettingsOwner(new SettingsService());
+      selected.bindTelemetry(config);
+      await selected.updateTelemetrySettings({
         logApiBodies: true,
         logApiBodyMaxChars: 500,
         outfileMaxBytes: 1000,
         outfileMaxFiles: 2,
       });
-      expect(config.getTelemetryLogApiBodiesEnabled()).toBe(true);
-      expect(config.getTelemetryLogApiBodyMaxChars()).toBe(500);
-      expect(config.getTelemetryOutfileMaxBytes()).toBe(1000);
-      expect(config.getTelemetryOutfileMaxFiles()).toBe(2);
+      expect(selected.readTelemetrySettings().logApiBodies).toBe(true);
+      expect(selected.readTelemetrySettings().logApiBodyMaxChars).toBe(500);
+      expect(selected.readTelemetrySettings().outfileMaxBytes).toBe(1000);
+      expect(selected.readTelemetrySettings().outfileMaxFiles).toBe(2);
       // Defaults still apply for untouched values.
-      expect(config.getTelemetryLogPromptsEnabled()).toBe(true);
+      expect(selected.readTelemetrySettings().logPrompts).toBe(true);
+      await selected.dispose();
     });
   });
 
-  describe('Ephemeral Settings with SettingsService Integration', () => {
-    let mockSettingsService: SettingsServiceMock;
-
-    /**
-     * Wire mockSettingsService.get/set to a local Map so tests can verify
-     * set→get round trips through Config without the mock returning
-     * independently of writes.
-     */
-    function wireMapStore(): Map<string, unknown> {
-      const store = new Map<string, unknown>();
-      mockSettingsService.get.mockImplementation((key: string) =>
-        store.get(key),
-      );
-      mockSettingsService.set.mockImplementation(
-        (key: string, value: unknown) => {
-          store.set(key, value);
-        },
-      );
-      return store;
-    }
-
+  describe('Session settings ownership separate from Config construction', () => {
+    let store: SettingsService;
+    let owner: SessionSettingsOwner;
     beforeEach(() => {
-      mockSettingsService = settingsServiceMock;
-      vi.clearAllMocks();
+      store = new SettingsService();
+      owner = new SessionSettingsOwner(store);
     });
+    afterEach(() => owner.dispose());
 
-    /**
-     * @requirement REQ-002.1
-     * @scenario Config delegates ephemeral get
-     * @given SettingsService has 'model' = 'gpt-4'
-     * @when config.getEphemeralSetting('model') called
-     * @then Returns 'gpt-4' from SettingsService
-     * @and No local storage accessed
-     */
-    it('should delegate getEphemeralSetting to SettingsService', () => {
-      const config = new Config(baseParams);
-
-      // Reset mock after construction to isolate test
-      vi.clearAllMocks();
-      // Key-derived store: the value Config returns can only be right if the
-      // exact key was forwarded to the SettingsService.
-      mockSettingsService.get.mockImplementation(
-        (key: string) => `stored-value-for-${key}`,
+    it('reads distinct named settings from the exact adopted store', () => {
+      store.set('model', 'stored-value-for-model');
+      store.set('viewModel', 'stored-value-for-viewModel');
+      expect(owner.readNamedParameter('model')).toBe('stored-value-for-model');
+      expect(owner.readNamedParameter('viewModel')).toBe(
+        'stored-value-for-viewModel',
       );
-
-      const result = config.getEphemeralSetting('model');
-      const otherKey = config.getEphemeralSetting('viewModel');
-
-      expect(result).toBe('stored-value-for-model');
-      expect(otherKey).toBe('stored-value-for-viewModel');
     });
-
-    /**
-     * @requirement REQ-002.1
-     * @scenario Config delegates ephemeral set
-     * @given SettingsService is available
-     * @when config.setEphemeralSetting('temperature', 0.8) called
-     * @then SettingsService.set called with 'temperature', 0.8
-     * @and No local storage occurs
-     */
-    it('should delegate setEphemeralSetting to SettingsService', () => {
-      const config = new Config(baseParams);
-
-      config.setEphemeralSetting('temperature', 0.8);
-
-      expect(mockSettingsService.set).toHaveBeenCalledWith('temperature', 0.8);
-      expect(mockSettingsService.set).toHaveBeenCalledTimes(1);
+    it('persists a parameter without creating unrelated store keys', () => {
+      owner.writeUserParameter('temperature', 0.8);
+      expect(store.get('temperature')).toBe(0.8);
+      expect(Object.keys(store.getAllGlobalSettings())).toStrictEqual([
+        'temperature',
+      ]);
     });
-
-    /**
-     * @requirement REQ-002.3
-     * @scenario Config has no local ephemeral storage
-     * @given Config instance created
-     * @when ephemeral setting is set
-     * @then No local ephemeralSettings property exists
-     */
-    it('should not maintain local ephemeral storage', () => {
+    it('keeps runtime settings outside the immutable Config declaration', () => {
       const config = new Config(baseParams);
-
-      config.setEphemeralSetting('test', 'value');
-
-      // Verify no local storage property exists
-      expect(
-        (config as unknown as { ephemeralSettings?: unknown })
-          .ephemeralSettings,
-      ).toBeUndefined();
-    });
-
-    /**
-     * @requirement REQ-002.4
-     * @scenario Config operations are synchronous
-     * @given Config instance available
-     * @when setEphemeralSetting and getEphemeralSetting called
-     * @then Operations complete synchronously without await
-     */
-    it('should complete operations synchronously', () => {
-      const config = new Config(baseParams);
-      wireMapStore();
-
-      // No await needed - operations must be synchronous
-      config.setEphemeralSetting('instant', 'written-before-read');
-      const result = config.getEphemeralSetting('instant');
-
-      // Round trip through Config: the value written via setEphemeralSetting
-      // is the one read back, proving synchronous set→get ordering.
-      expect(result).toBe('written-before-read');
-    });
-
-    /**
-     * @requirement REQ-002.4
-     * @scenario Multiple settings operations are synchronous
-     * @given Config instance available
-     * @when multiple ephemeral settings are modified
-     * @then All operations complete synchronously
-     */
-    it('should handle multiple synchronous operations', () => {
-      const config = new Config(baseParams);
-      wireMapStore();
-
-      // All operations should be synchronous — no await needed.
-      config.setEphemeralSetting('provider', 'provider1');
-      config.setEphemeralSetting('model', 'model1');
-      config.setEphemeralSetting('temperature', 0.7);
-
-      // Round trip through Config: each value written via
-      // setEphemeralSetting is the one read back for the same key, proving
-      // all three writes landed and there is no cross-key confusion.
-      expect(config.getEphemeralSetting('provider')).toBe('provider1');
-      expect(config.getEphemeralSetting('model')).toBe('model1');
-      expect(config.getEphemeralSetting('temperature')).toBe(0.7);
-    });
-
-    /**
-     * @requirement REQ-002.1
-     * @scenario Config delegates get with various data types
-     * @given SettingsService returns different types
-     * @when getEphemeralSetting called for different keys
-     * @then Correct values returned for each type
-     */
-    it('should delegate get operations for various data types', () => {
-      const config = new Config(baseParams);
-
-      // Reset mock after construction to isolate test
-      vi.clearAllMocks();
-      mockSettingsService.get.mockImplementation((key: string) =>
-        defaultGetResponseForKey(key),
+      owner.writeUserParameter('test', 'value');
+      expect(Object.getOwnPropertyNames(config)).not.toContain(
+        'ephemeralSettings',
       );
-
-      expect(config.getEphemeralSetting('stringValue')).toBe('test string');
-      expect(config.getEphemeralSetting('numberValue')).toBe(42);
-      expect(config.getEphemeralSetting('booleanValue')).toBe(true);
-      expect(config.getEphemeralSetting('objectValue')).toStrictEqual({
+      expect(config.getInitialSettings()).not.toHaveProperty('test');
+    });
+    it('completes write then read synchronously', () => {
+      owner.writeUserParameter('instant', 'written-before-read');
+      expect(owner.readNamedParameter('instant')).toBe('written-before-read');
+    });
+    it('keeps multiple synchronous writes separate', () => {
+      owner.writeUserParameter('provider', 'provider1');
+      owner.writeUserParameter('model', 'model1');
+      owner.writeUserParameter('temperature', 0.7);
+      expect(owner.readNamedParameter('provider')).toBe('provider1');
+      expect(owner.readNamedParameter('model')).toBe('model1');
+      expect(owner.readNamedParameter('temperature')).toBe(0.7);
+    });
+    it('reads typed values without conflating absent keys', () => {
+      store.set('stringValue', 'test string');
+      store.set('numberValue', 42);
+      store.set('booleanValue', true);
+      store.set('objectValue', { nested: 'object' });
+      store.set('arrayValue', [1, 2, 3]);
+      expect(owner.readNamedParameter('stringValue')).toBe('test string');
+      expect(owner.readNamedParameter('numberValue')).toBe(42);
+      expect(owner.readNamedParameter('booleanValue')).toBe(true);
+      expect(owner.readNamedParameter('objectValue')).toStrictEqual({
         nested: 'object',
       });
-      expect(config.getEphemeralSetting('arrayValue')).toStrictEqual([1, 2, 3]);
-      expect(config.getEphemeralSetting('undefinedValue')).toBeUndefined();
-
-      expect(mockSettingsService.get).toHaveBeenCalledTimes(6);
+      expect(owner.readNamedParameter('arrayValue')).toStrictEqual([1, 2, 3]);
+      expect(owner.readNamedParameter('undefinedValue')).toBeUndefined();
+      expect(Object.keys(store.getAllGlobalSettings())).toHaveLength(5);
     });
-
-    it('should coerce numeric string context-limit values when reading', () => {
-      const config = new Config(baseParams);
-
-      vi.clearAllMocks();
-      mockSettingsService.get.mockImplementation((key: string) =>
-        contextLimitOrUndefined(key),
-      );
-
-      expect(config.getEphemeralSetting('context-limit')).toBe(190000);
-      expect(mockSettingsService.get).toHaveBeenCalledWith('context-limit');
-      expect(mockSettingsService.set).toHaveBeenCalledWith(
-        'context-limit',
-        190000,
-      );
+    it('normalizes persisted numeric string context limits while reading', () => {
+      store.set('context-limit', '190000');
+      expect(owner.readRuntimePolicy().contextLimit).toBe(190000);
+      expect(store.get('context-limit')).toBe(190000);
+      expect(typeof store.get('context-limit')).toBe('number');
     });
-
-    /**
-     * @requirement REQ-002.1
-     * @scenario Config delegates set with various data types
-     * @given Config instance available
-     * @when setEphemeralSetting called with different types
-     * @then All values properly delegated to SettingsService
-     */
-    it('should delegate set operations for various data types', () => {
-      const config = new Config(baseParams);
-
-      const testValues = {
+    it('persists typed values through owner operations', () => {
+      const values = {
         stringValue: 'test string',
         numberValue: 42,
         booleanValue: true,
@@ -424,59 +306,29 @@ describe('Server Config (config.ts)', () => {
         arrayValue: [1, 2, 3],
         nullValue: null,
       };
-
-      Object.entries(testValues).forEach(([key, value]) => {
-        config.setEphemeralSetting(key, value);
-        expect(mockSettingsService.set).toHaveBeenCalledWith(key, value);
-      });
-
-      expect(mockSettingsService.set).toHaveBeenCalledTimes(6);
+      for (const [key, value] of Object.entries(values)) {
+        owner.writeUserParameter(key, value);
+        expect(store.get(key)).toStrictEqual(value);
+      }
+      expect(Object.keys(store.getAllGlobalSettings())).toHaveLength(6);
     });
-
-    it('should normalize context-limit inputs before persisting', () => {
-      const config = new Config(baseParams);
-
-      vi.clearAllMocks();
-      config.setEphemeralSetting('context-limit', '190000');
-
-      expect(mockSettingsService.set).toHaveBeenCalledWith(
-        'context-limit',
-        190000,
+    it('normalizes numeric string context limits before persisting', () => {
+      owner.writeUserParameter('context-limit', '190000');
+      expect(store.get('context-limit')).toBe(190000);
+    });
+    it('observes clearing performed by the borrowed store owner', () => {
+      owner.writeUserParameter('temperature', 0.8);
+      store.clear();
+      expect(owner.captureNamedParameters()).toStrictEqual({});
+    });
+    it('adopts only the original settings identity without taking its lifetime', async () => {
+      expect(() => owner.assertSettingsIdentity(store)).not.toThrow();
+      expect(() => owner.assertSettingsIdentity(new SettingsService())).toThrow(
+        'original store',
       );
-    });
-
-    /**
-     * @requirement REQ-001.3
-     * @scenario Return to SettingsService clear functionality
-     * @given Config instance exists
-     * @when clear ephemeral settings is needed
-     * @then SettingsService clear is called
-     */
-    it('should use SettingsService for clearing operations', () => {
-      const config = new Config(baseParams);
-      const settingsService = config.getSettingsService();
-
-      // Call clear on the settings service directly
-      settingsService.clear();
-
-      expect(mockSettingsService.clear).toHaveBeenCalledTimes(1);
-    });
-
-    /**
-     * @requirement REQ-002.1
-     * @scenario Config accesses SettingsService correctly
-     * @given Config instance exists
-     * @when getSettingsService is called
-     * @then Same instance is returned
-     */
-    it('should provide access to SettingsService instance', () => {
-      const config = new Config(baseParams);
-
-      const settingsService1 = config.getSettingsService();
-      const settingsService2 = config.getSettingsService();
-
-      expect(settingsService1).toBe(settingsService2);
-      expect(settingsService1).toBe(mockSettingsService);
+      await owner.dispose();
+      store.set('temperature', 0.4);
+      expect(store.get('temperature')).toBe(0.4);
     });
   });
 
@@ -529,11 +381,14 @@ describe('Server Config (config.ts)', () => {
 
     it('reads persisted media budgets from the shared settings path', () => {
       const settingsService = createRuntimeSettingsService();
-      const config = new Config({ ...baseParams, settingsService });
       settingsService.set('image-payload-budget-bytes', 12_000_000);
       settingsService.set('media-store-quota-bytes', 3_000_000_000);
       settingsService.set('session-recording-queue-max-bytes', 8_000_000);
       settingsService.set('session-persistence-queue-max-bytes', 7_000_000);
+      const config = new Config({
+        ...baseParams,
+        initialSettings: settingsService.getAllGlobalSettings(),
+      });
 
       expect(config.getImagePayloadBudgetBytes()).toBe(12_000_000);
       expect(config.getMediaStoreQuotaByteLimit()).toBe(3_000_000_000);
@@ -547,7 +402,10 @@ describe('Server Config (config.ts)', () => {
       settingsService.set('media-store-quota-bytes', 0);
       settingsService.set('session-recording-queue-max-bytes', 0);
       settingsService.set('session-persistence-queue-max-bytes', 0);
-      const disabled = new Config({ ...baseParams, settingsService });
+      const disabled = new Config({
+        ...baseParams,
+        initialSettings: settingsService.getAllGlobalSettings(),
+      });
 
       expect({
         media: defaults.getMediaStoreQuotaByteLimit(),
@@ -627,37 +485,6 @@ describe('Server Config (config.ts)', () => {
     });
   });
 
-  describe('createToolRegistry', () => {
-    it('should register a tool if coreTools contains an argument-specific pattern', async () => {
-      const params: ConfigParameters = {
-        ...baseParams,
-        coreTools: ['ShellTool(git status)'],
-      };
-      const config = new Config(params);
-      await initializeTestConfig(config);
-
-      // The ToolRegistry class is mocked, so inspect the created instance method.
-      const registerToolMock = config.getToolRegistry()
-        .registerTool as unknown as Mock<(...args: never[]) => unknown>;
-
-      // Check that registerTool was called for ShellTool
-      const wasShellToolRegistered = registerToolMock.mock.calls.some(
-        (call) =>
-          call[0] instanceof
-          (ShellTool as unknown as Mock<(...args: never[]) => unknown>),
-      );
-      expect(wasShellToolRegistered).toBe(true);
-
-      // Check that registerTool was NOT called for ReadFileTool
-      const wasReadFileToolRegistered = registerToolMock.mock.calls.some(
-        (call) =>
-          call[0] instanceof
-          (ReadFileTool as unknown as Mock<(...args: never[]) => unknown>),
-      );
-      expect(wasReadFileToolRegistered).toBe(false);
-    });
-  });
-
   describe('Proxy Configuration Error Handling', () => {
     beforeEach(() => {
       vi.clearAllMocks();
@@ -715,26 +542,3 @@ describe('Server Config (config.ts)', () => {
     });
   });
 });
-
-function defaultGetResponseForKey(key: string): unknown {
-  switch (key) {
-    case 'stringValue':
-      return 'test string';
-    case 'numberValue':
-      return 42;
-    case 'booleanValue':
-      return true;
-    case 'objectValue':
-      return { nested: 'object' };
-    case 'arrayValue':
-      return [1, 2, 3];
-    case 'undefinedValue':
-      return undefined;
-    default:
-      return null;
-  }
-}
-
-function contextLimitOrUndefined(key: string): string | undefined {
-  return key === 'context-limit' ? '190000' : undefined;
-}

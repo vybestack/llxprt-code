@@ -3,6 +3,11 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  initializeTestMcpRuntime,
+  type TestMcpRuntime,
+} from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { afterEach } from 'bun:test';
 
 /**
  * Issue #3176, finding D7/C — real auxiliary-path test proving the
@@ -33,6 +38,7 @@ import { generateJson } from './clientLlmUtilities.js';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
 import type { BaseLLMClient } from './baseLlmClient.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
@@ -71,6 +77,20 @@ describe('Auxiliary core-memory snapshot cache (issue #3176, D7)', () => {
   let originalPromptsDir: string | undefined;
   let coreMemoryPath: string;
 
+  const roots: TestMcpRuntime[] = [];
+  let owners: readonly SessionSettingsOwner[] = [];
+  afterEach(async () => {
+    for (const owner of owners) await owner.dispose();
+    owners = [];
+    const results = await Promise.allSettled(
+      roots.splice(0).map((root) => root.dispose()),
+    );
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'Instruction fixture cleanup failed');
+  });
   beforeAll(async () => {
     originalCwd = process.cwd();
     originalPromptsDir = process.env.LLXPRT_PROMPTS_DIR;
@@ -105,14 +125,23 @@ describe('Auxiliary core-memory snapshot cache (issue #3176, D7)', () => {
     }
   });
 
-  it('caches the first disk snapshot so the second call does not re-read', async () => {
+  it('retains the workspace snapshot until explicit refresh', async () => {
     const settings = new SettingsService();
     settings.set('model', TEST_MODEL);
-    const config = new Config(createConfigParams(settings));
+    const owner = new SessionSettingsOwner(settings);
+    owners = [...owners, owner];
+    const promptPolicy = owner.readRuntimePolicy().promptPolicy;
+    if (promptPolicy === undefined)
+      throw new Error('Expected owner prompt policy');
+    const config = new Config({
+      ...createConfigParams(settings),
+      targetDir: tempCwd,
+    });
 
     // With JIT disabled, getCoreMemory() returns undefined, so the
     // auxiliary path must fall back to the disk snapshot cache.
-    expect(config.getCoreMemory()).toBeUndefined();
+    const root = await initializeTestMcpRuntime(config);
+    roots.push(root);
 
     const captured: string[] = [];
     const baseLlmClient = createCapturingBaseLlmClient(captured);
@@ -120,6 +149,7 @@ describe('Auxiliary core-memory snapshot cache (issue #3176, D7)', () => {
     // First call — reads disk, caches snapshot containing FIRST_SENTINEL.
     await generateJson(
       config,
+      () => undefined,
       {} as ContentGenerator,
       baseLlmClient,
       [createTextContent('next_speaker check')],
@@ -128,6 +158,10 @@ describe('Auxiliary core-memory snapshot cache (issue #3176, D7)', () => {
       TEST_MODEL,
       {},
       'core-memory-cache-test',
+      undefined,
+      [],
+      root.workspaceMemory.operations,
+      promptPolicy,
     );
     expect(captured).toHaveLength(1);
     expect(captured[0]).toContain(FIRST_SENTINEL);
@@ -139,6 +173,7 @@ describe('Auxiliary core-memory snapshot cache (issue #3176, D7)', () => {
     // new disk content (SECOND_SENTINEL).
     await generateJson(
       config,
+      () => undefined,
       {} as ContentGenerator,
       baseLlmClient,
       [createTextContent('next_speaker check')],
@@ -147,20 +182,33 @@ describe('Auxiliary core-memory snapshot cache (issue #3176, D7)', () => {
       TEST_MODEL,
       {},
       'core-memory-cache-test',
+      undefined,
+      [],
+      root.workspaceMemory.operations,
+      promptPolicy,
     );
     expect(captured).toHaveLength(2);
     expect(captured[1]).toContain(FIRST_SENTINEL);
     expect(captured[1]).not.toContain(SECOND_SENTINEL);
   });
 
-  it('caches the empty string when no .LLXPRT_SYSTEM exists on disk', async () => {
+  it('retains the empty workspace snapshot until explicit refresh', async () => {
     // Remove the disk fixture entirely.
     fs.unlinkSync(coreMemoryPath);
 
     const settings = new SettingsService();
     settings.set('model', TEST_MODEL);
-    const config = new Config(createConfigParams(settings));
-    expect(config.getCoreMemory()).toBeUndefined();
+    const owner = new SessionSettingsOwner(settings);
+    owners = [...owners, owner];
+    const promptPolicy = owner.readRuntimePolicy().promptPolicy;
+    if (promptPolicy === undefined)
+      throw new Error('Expected owner prompt policy');
+    const config = new Config({
+      ...createConfigParams(settings),
+      targetDir: tempCwd,
+    });
+    const root = await initializeTestMcpRuntime(config);
+    roots.push(root);
 
     const captured: string[] = [];
     const baseLlmClient = createCapturingBaseLlmClient(captured);
@@ -168,6 +216,7 @@ describe('Auxiliary core-memory snapshot cache (issue #3176, D7)', () => {
     // First call — disk is empty, snapshot is ''.
     await generateJson(
       config,
+      () => undefined,
       {} as ContentGenerator,
       baseLlmClient,
       [createTextContent('next_speaker check')],
@@ -176,6 +225,10 @@ describe('Auxiliary core-memory snapshot cache (issue #3176, D7)', () => {
       TEST_MODEL,
       {},
       'core-memory-cache-test',
+      undefined,
+      [],
+      root.workspaceMemory.operations,
+      promptPolicy,
     );
     expect(captured).toHaveLength(1);
 
@@ -186,6 +239,7 @@ describe('Auxiliary core-memory snapshot cache (issue #3176, D7)', () => {
     // newly-written sentinel.
     await generateJson(
       config,
+      () => undefined,
       {} as ContentGenerator,
       baseLlmClient,
       [createTextContent('next_speaker check')],
@@ -194,6 +248,10 @@ describe('Auxiliary core-memory snapshot cache (issue #3176, D7)', () => {
       TEST_MODEL,
       {},
       'core-memory-cache-test',
+      undefined,
+      [],
+      root.workspaceMemory.operations,
+      promptPolicy,
     );
     expect(captured).toHaveLength(2);
     expect(captured[1]).not.toContain(SECOND_SENTINEL);

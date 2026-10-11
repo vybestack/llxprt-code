@@ -13,6 +13,10 @@ import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
+import {
+  withBundleBuildFixture,
+  producerBundleHashes,
+} from './bundle-build-fixture.js';
 
 const thisFile = fileURLToPath(import.meta.url);
 const repoRoot = resolve(thisFile, '..', '..', '..');
@@ -138,12 +142,14 @@ function packCliWorkspace(): string {
     '--pack-destination',
     sharedCacheDir,
   ]);
-  const result = spawnSync(command, args, {
-    cwd: repoRoot,
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
-    timeout: 120_000,
-  });
+  const result = withBundleBuildFixture(repoRoot, (root) =>
+    spawnSync(command, args, {
+      cwd: root,
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+      timeout: 120_000,
+    }),
+  );
   if (result.error) {
     throw new Error(`npm pack -w spawn failed: ${result.error.message}`);
   }
@@ -181,7 +187,13 @@ describe.skipIf(IS_WINDOWS)(
   'CLI workspace tarball contents (actual release artifact)',
   () => {
     it('includes the POSIX launcher at bin/llxprt', () => {
+      const producerHashes = producerBundleHashes(repoRoot);
       const tarball = packCliWorkspace();
+      expect(
+        producerBundleHashes(repoRoot).filter(
+          (hash, index) => hash !== producerHashes[index],
+        ),
+      ).toEqual([]);
       expect(existsSync(tarball)).toBe(true);
       const { stdout } = spawnTarList(tarball);
       // Use /\r?\n/ (not '\n') so Windows tar (bsdtar) CRLF output parses the

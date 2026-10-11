@@ -13,7 +13,6 @@ import { CommandKind } from './types.js';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { homedir } from 'os';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 
 /**
  * Searches for a keyfile for the given provider.
@@ -54,8 +53,8 @@ export const keyfileCommand: SlashCommand = {
     args: string,
   ): Promise<MessageActionReturn> => {
     const filePath = args.trim();
-    const runtime = getRuntimeApi();
-    const status = runtime.getActiveProviderStatus();
+    const runtime = context.runtimeApi;
+    const status = runtime.providerStatus();
     const providerName = status.providerName;
 
     if (!providerName) {

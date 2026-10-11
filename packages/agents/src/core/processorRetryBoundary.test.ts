@@ -1,9 +1,11 @@
+import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, expect, it } from 'bun:test';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
@@ -36,6 +38,7 @@ describe('agent processor retry boundaries', () => {
         clearProviderCompressionCallback: () => undefined,
       },
       runtimeContext: {
+        ...createSessionPolicyFixture(),
         state: { model: 'test-model' },
         providerRuntime: {},
         telemetry: {
@@ -48,7 +51,7 @@ describe('agent processor retry boundaries', () => {
       },
       providerRuntimeBuilder: () => ({
         config: undefined,
-        settingsService: {},
+        settingsService: new SettingsService(),
         metadata: {},
       }),
       resolveProviderBaseUrl: () => undefined,

@@ -95,19 +95,6 @@ export function setupAnthropicProvider(): AnthropicTestSetup {
 
   const { provider, runtime: runtimeContext, settingsService } = result;
   runtimeContext.config ??= createRuntimeConfigStub(settingsService);
-  runtimeContext.config.getEphemeralSettings = () => ({
-    ...settingsService.getAllGlobalSettings(),
-    ...settingsService.getProviderSettings(provider.name),
-  });
-  runtimeContext.config.getEphemeralSetting = (key: string) => {
-    const providerValue = settingsService.getProviderSettings(provider.name)[
-      key
-    ];
-    if (providerValue !== undefined) {
-      return providerValue;
-    }
-    return settingsService.get(key);
-  };
 
   // Issue #2616: the runtime context is handed to the provider explicitly via
   // buildCallOptions; no ambient context is installed.

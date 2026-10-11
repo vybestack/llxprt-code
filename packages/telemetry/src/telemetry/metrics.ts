@@ -4,29 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  metrics,
-  type Attributes,
-  ValueType,
-  type Meter,
-  type Counter,
-  type Histogram,
-} from '@opentelemetry/api';
-import {
-  SERVICE_NAME,
-  METRIC_TOOL_CALL_COUNT,
-  METRIC_TOOL_CALL_LATENCY,
-  METRIC_API_REQUEST_COUNT,
-  METRIC_API_REQUEST_LATENCY,
-  METRIC_TOKEN_USAGE,
-  METRIC_SESSION_COUNT,
-  METRIC_FILE_OPERATION_COUNT,
-} from './constants.js';
+import type { DiffStat } from '../internal/interfaces.js';
 import type {
-  DiffStat,
-  SessionConfig as ISessionConfig,
-  TelemetryConfig,
-} from '../internal/interfaces.js';
+  RootTelemetry,
+  TelemetryMeasurementOperations,
+} from './root-telemetry.js';
 
 export enum FileOperation {
   CREATE = 'create',
@@ -34,205 +16,89 @@ export enum FileOperation {
   UPDATE = 'update',
 }
 
-let cliMeter: Meter | undefined;
-let toolCallCounter: Counter | undefined;
-let toolCallLatencyHistogram: Histogram | undefined;
-let apiRequestCounter: Counter | undefined;
-let apiRequestLatencyHistogram: Histogram | undefined;
-let tokenUsageCounter: Counter | undefined;
-let fileOperationCounter: Counter | undefined;
-let isMetricsInitialized = false;
-
-function getCommonAttributes(config: ISessionConfig): Attributes {
-  return {
-    'session.id': config.getSessionId(),
-  };
+export function getMeter(root: RootTelemetry): TelemetryMeasurementOperations {
+  return root.measurements;
 }
 
-export function getMeter(): Meter | undefined {
-  cliMeter ??= metrics.getMeter(SERVICE_NAME);
-  return cliMeter;
+export function initializeMetrics(root: RootTelemetry): Promise<void> {
+  return root.setEnabled(true);
 }
 
-export function initializeMetrics(config: TelemetryConfig): void {
-  if (isMetricsInitialized) return;
-
-  const meter = getMeter();
-  if (!meter) return;
-
-  toolCallCounter = meter.createCounter(METRIC_TOOL_CALL_COUNT, {
-    description: 'Counts tool calls, tagged by function name and success.',
-    valueType: ValueType.INT,
-  });
-  toolCallLatencyHistogram = meter.createHistogram(METRIC_TOOL_CALL_LATENCY, {
-    description: 'Latency of tool calls in milliseconds.',
-    unit: 'ms',
-    valueType: ValueType.DOUBLE,
-  });
-  apiRequestCounter = meter.createCounter(METRIC_API_REQUEST_COUNT, {
-    description: 'Counts API requests, tagged by model and status.',
-    valueType: ValueType.INT,
-  });
-  apiRequestLatencyHistogram = meter.createHistogram(
-    METRIC_API_REQUEST_LATENCY,
-    {
-      description: 'Latency of API requests in milliseconds.',
-      unit: 'ms',
-      valueType: ValueType.DOUBLE,
-    },
-  );
-  tokenUsageCounter = meter.createCounter(METRIC_TOKEN_USAGE, {
-    description: 'Counts the total number of tokens used.',
-    valueType: ValueType.INT,
-  });
-  fileOperationCounter = meter.createCounter(METRIC_FILE_OPERATION_COUNT, {
-    description: 'Counts file operations (create, read, update).',
-    valueType: ValueType.INT,
-  });
-  const sessionCounter = meter.createCounter(METRIC_SESSION_COUNT, {
-    description: 'Count of CLI sessions started.',
-    valueType: ValueType.INT,
-  });
-  sessionCounter.add(1, getCommonAttributes(config));
-  isMetricsInitialized = true;
+export function resetMetricsState(root: RootTelemetry): Promise<void> {
+  return root.setEnabled(false);
 }
 
 export function recordToolCallMetrics(
-  config: ISessionConfig,
+  root: RootTelemetry,
   functionName: string,
   durationMs: number,
   success: boolean,
   decision?: 'accept' | 'reject' | 'modify' | 'auto_accept',
-  tool_type?: 'native' | 'mcp',
+  toolType?: 'native' | 'mcp',
 ): void {
-  if (!toolCallCounter || !toolCallLatencyHistogram || !isMetricsInitialized)
-    return;
-
-  const metricAttributes: Attributes = {
-    ...getCommonAttributes(config),
-    function_name: functionName,
-    success,
+  root.measurements.toolCall(functionName, durationMs, success, {
     decision,
-    tool_type,
-  };
-  toolCallCounter.add(1, metricAttributes);
-  toolCallLatencyHistogram.record(durationMs, {
-    ...getCommonAttributes(config),
-    function_name: functionName,
+    tool_type: toolType,
   });
 }
 
 export function recordTokenUsageMetrics(
-  config: TelemetryConfig,
+  root: RootTelemetry,
   model: string,
   tokenCount: number,
   type: 'input' | 'output' | 'thought' | 'cache' | 'tool',
 ): void {
-  if (!tokenUsageCounter || !isMetricsInitialized) return;
-  tokenUsageCounter.add(tokenCount, {
-    ...getCommonAttributes(config),
-    model,
-    type,
-  });
+  root.measurements.tokenUsage(model, tokenCount, type);
 }
 
 export function recordApiResponseMetrics(
-  config: TelemetryConfig,
+  root: RootTelemetry,
   model: string,
   durationMs: number,
   statusCode?: number | string,
   error?: string,
 ): void {
-  if (
-    !apiRequestCounter ||
-    !apiRequestLatencyHistogram ||
-    !isMetricsInitialized
-  )
-    return;
-  const metricAttributes: Attributes = {
-    ...getCommonAttributes(config),
+  root.measurements.modelResponse(
     model,
-    status_code: statusCode ?? (error ? 'error' : 'ok'),
-  };
-  apiRequestCounter.add(1, metricAttributes);
-  apiRequestLatencyHistogram.record(durationMs, {
-    ...getCommonAttributes(config),
-    model,
-  });
+    durationMs,
+    statusCode ?? (error ? 'error' : 'ok'),
+  );
 }
 
 export function recordApiErrorMetrics(
-  config: TelemetryConfig,
+  root: RootTelemetry,
   model: string,
   durationMs: number,
   statusCode?: number | string,
   errorType?: string,
 ): void {
-  if (
-    !apiRequestCounter ||
-    !apiRequestLatencyHistogram ||
-    !isMetricsInitialized
-  )
-    return;
-  const metricAttributes: Attributes = {
-    ...getCommonAttributes(config),
-    model,
-    status_code: statusCode ?? 'error',
+  root.measurements.modelResponse(model, durationMs, statusCode ?? 'error', {
     error_type: errorType ?? 'unknown',
-  };
-  apiRequestCounter.add(1, metricAttributes);
-  apiRequestLatencyHistogram.record(durationMs, {
-    ...getCommonAttributes(config),
-    model,
   });
 }
 
 export function recordFileOperationMetric(
-  config: ISessionConfig,
+  root: RootTelemetry,
   operation: FileOperation,
   lines?: number,
   mimetype?: string,
   extension?: string,
   diffStat?: DiffStat,
 ): void {
-  if (!fileOperationCounter || !isMetricsInitialized) return;
-  const attributes: Attributes = {
-    ...getCommonAttributes(config),
+  root.measurements.fileOperation({
     operation,
-  };
-  if (lines !== undefined) attributes.lines = lines;
-  if (mimetype !== undefined) attributes.mimetype = mimetype;
-  if (extension !== undefined) attributes.extension = extension;
-  if (diffStat !== undefined) {
-    attributes.ai_added_lines = diffStat.ai_added_lines;
-    attributes.ai_removed_lines = diffStat.ai_removed_lines;
-    attributes.user_added_lines = diffStat.user_added_lines;
-    attributes.user_removed_lines = diffStat.user_removed_lines;
-  }
-  fileOperationCounter.add(1, attributes);
+    ...(lines === undefined ? {} : { lines }),
+    ...(mimetype === undefined ? {} : { mimetype }),
+    ...(extension === undefined ? {} : { extension }),
+    ...diffStat,
+  });
 }
 
 export function recordModelRoutingMetrics(
-  _config: TelemetryConfig,
-  _event: { model: string; source: string; fallback?: boolean },
+  root: RootTelemetry,
+  event: { model: string; source: string; fallback?: boolean },
 ): void {
-  // Placeholder implementation for model routing metrics
-  // This would record metrics about model selection and routing decisions
-}
-
-/**
- * Resets all module-level metric state. Called from `shutdownTelemetry` so
- * that a subsequent re-initialization creates fresh instruments on a
- * replacement provider. Also used between tests under Bun's single-module
- * process model (Vitest used vi.resetModules() instead).
- */
-export function resetMetricsState(): void {
-  cliMeter = undefined;
-  toolCallCounter = undefined;
-  toolCallLatencyHistogram = undefined;
-  apiRequestCounter = undefined;
-  apiRequestLatencyHistogram = undefined;
-  tokenUsageCounter = undefined;
-  fileOperationCounter = undefined;
-  isMetricsInitialized = false;
+  root.events.record(() => ({
+    attributes: { 'event.name': 'llxprt_code.model_routing', ...event },
+  }));
 }

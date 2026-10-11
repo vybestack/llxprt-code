@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { resolveRuntimeAuthToken } from '../utils/authToken.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -159,14 +161,12 @@ class ProxyAwareProvider extends BaseProvider {
     return false;
   }
 
-  protected generateChatCompletionWithOptions(
+  protected async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
     this.capturedAuthToken =
-      typeof options.resolved.authToken === 'string'
-        ? options.resolved.authToken
-        : '';
-    return (async function* () {})();
+      (await resolveRuntimeAuthToken(options.resolved.authToken)) ?? '';
+    yield { speaker: 'ai', blocks: [] };
   }
 }
 
@@ -177,7 +177,10 @@ function buildChatOptions(settings: SettingsService) {
     settingsService: settings,
     config,
   });
-  return { contents: [userMessage('hi')], settings, config, runtime };
+  return {
+    contents: [userMessage('hi')],
+    invocation: captureProviderInvocation(runtime, 'proxy-aware'),
+  };
 }
 
 const PROXY_SERVED_KEY = 'proxy-served-secret-key-2946';

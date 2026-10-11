@@ -1,3 +1,5 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -21,7 +23,19 @@
  *    (2 tests, AC1/AC2 and the throw-fallback AC3).
  */
 
-import { describe, it, expect } from 'bun:test';
+import { afterEach, describe, it, expect } from 'bun:test';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+
+const ownedRoots: Array<{
+  readonly config: Config;
+  readonly owner: SessionSettingsOwner;
+}> = [];
+afterEach(async () => {
+  for (const { config, owner } of ownedRoots.splice(0)) {
+    owner.dispose();
+    await config.dispose();
+  }
+});
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -37,7 +51,7 @@ import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/c
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { emptyModelOutput } from '@vybestack/llxprt-code-core/llm-types/modelEnvelope.js';
@@ -71,6 +85,8 @@ function buildConversationManager(
 } {
   const settingsService = new SettingsService();
   const config = new Config(createConfigParams(settingsService));
+  const owner = new SessionSettingsOwner(settingsService);
+  ownedRoots.push({ config, owner });
 
   settingsService.set('providers.stub.base-url', 'https://stub.example.com');
   settingsService.set('providers.stub.auth-key', 'stub-api-key');
@@ -85,7 +101,7 @@ function buildConversationManager(
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  config.setProviderManager(manager);
+  configureProviderRuntimeFactories(config, manager);
 
   const provider: IProvider = {
     name: 'stub',
@@ -123,10 +139,26 @@ function buildConversationManager(
       // attachment that the fix stamps.
       'reasoning.includeInContext': true,
     },
-    provider: createProviderAdapterFromManager(config.getProviderManager()),
-    telemetry: createTelemetryAdapterFromConfig(config),
-    tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+    provider: createProviderAdapterFromManager(manager),
+    telemetry: createTelemetryAdapter(
+      config,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'model-stamp-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    ),
+    tools: createToolRegistryViewFromRegistry(undefined),
     providerRuntime: { ...providerRuntime },
+    readRuntimeSettings: () => owner.readRuntimePolicy(),
+    prepareProviderInvocation: (name, parameters, signal) =>
+      owner.prepareProviderInvocation(
+        runtimeState.runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
   });
 
   const conversationManager = new ConversationManager(
@@ -216,6 +248,8 @@ function buildChatSessionWithLiveProvider(
 } {
   const settingsService = new SettingsService();
   const config = new Config(createConfigParams(settingsService));
+  const owner = new SessionSettingsOwner(settingsService);
+  ownedRoots.push({ config, owner });
 
   settingsService.set('providers.stub.base-url', 'https://stub.example.com');
   settingsService.set('providers.stub.auth-key', 'stub-api-key');
@@ -230,7 +264,7 @@ function buildChatSessionWithLiveProvider(
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  config.setProviderManager(manager);
+  configureProviderRuntimeFactories(config, manager);
 
   const provider: IProvider = {
     name: 'stub',
@@ -273,10 +307,26 @@ function buildChatSessionWithLiveProvider(
       preserveThreshold: 0.2,
       telemetry: { enabled: true, target: null },
     },
-    provider: createProviderAdapterFromManager(config.getProviderManager()),
-    telemetry: createTelemetryAdapterFromConfig(config),
-    tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+    provider: createProviderAdapterFromManager(manager),
+    telemetry: createTelemetryAdapter(
+      config,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'model-stamp-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    ),
+    tools: createToolRegistryViewFromRegistry(undefined),
     providerRuntime: { ...providerRuntime },
+    readRuntimeSettings: () => owner.readRuntimePolicy(),
+    prepareProviderInvocation: (name, parameters, signal) =>
+      owner.prepareProviderInvocation(
+        runtimeState.runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
   });
 
   const chat = new ChatSession(

@@ -6,6 +6,7 @@
  * MCPOAuthProvider token, PKCE, URL, and discovery tests.
  * Split from oauth-provider.test.ts during #2092 lint hardening.
  */
+import { createTestOAuthBinding } from '../client/test-support/index.js';
 
 import { automock } from '../../../test-utils/src/automock.js';
 import { vi, type Mock } from 'bun:test';
@@ -15,7 +16,7 @@ const realNodeCryptoModule = { ...(await import('node:crypto')) };
 const mockOpenBrowserSecurely = vi.fn();
 const mockHttpServer = {
   listen: vi.fn(),
-  close: vi.fn(),
+  close: vi.fn((callback?: (error?: Error) => void) => callback?.()),
   on: vi.fn(),
   address: vi.fn(() => ({ address: 'localhost', family: 'IPv4', port: 7777 })),
 };
@@ -42,10 +43,8 @@ import {
   mockTokenResponse,
   setupOAuthTestSpies,
 } from './__tests__/oauthProviderTestSetup.js';
-import { registerMcpHostServices } from '../host/hostServices.js';
 
 // Exercises the real host seam instead of mocking a module (#3305).
-registerMcpHostServices({ openBrowser: mockOpenBrowserSecurely });
 
 function createIssuerMetadataDiscovery(
   matchingIssuer: string,
@@ -59,9 +58,15 @@ describe('MCPOAuthProvider', () => {
   let getCredentialsSpy: ReturnType<typeof vi.spyOn>;
   let deleteCredentialsSpy: ReturnType<typeof vi.spyOn>;
   let isTokenExpiredSpy: ReturnType<typeof vi.spyOn>;
+  let tokenStorage: Parameters<typeof MCPOAuthProvider.getValidToken>[0];
 
   beforeEach(() => {
     const spies = setupOAuthTestSpies(mockOpenBrowserSecurely);
+    tokenStorage = {
+      getCredentials: spies.getCredentialsSpy,
+      saveToken: spies.saveTokenSpy,
+      deleteCredentials: spies.deleteCredentialsSpy,
+    };
     saveTokenSpy = spies.saveTokenSpy;
     getCredentialsSpy = spies.getCredentialsSpy;
     deleteCredentialsSpy = spies.deleteCredentialsSpy;
@@ -166,6 +171,7 @@ describe('MCPOAuthProvider', () => {
       isTokenExpiredSpy.mockReturnValue(false);
 
       const result = await MCPOAuthProvider.getValidToken(
+        tokenStorage,
         'test-server',
         mockConfig,
       );
@@ -202,6 +208,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       const result = await MCPOAuthProvider.getValidToken(
+        tokenStorage,
         'test-server',
         mockConfig,
       );
@@ -220,6 +227,7 @@ describe('MCPOAuthProvider', () => {
       getCredentialsSpy.mockResolvedValue(null);
 
       const result = await MCPOAuthProvider.getValidToken(
+        tokenStorage,
         'test-server',
         mockConfig,
       );
@@ -250,6 +258,7 @@ describe('MCPOAuthProvider', () => {
       );
 
       const result = await MCPOAuthProvider.getValidToken(
+        tokenStorage,
         'test-server',
         mockConfig,
       );
@@ -278,6 +287,7 @@ describe('MCPOAuthProvider', () => {
       isTokenExpiredSpy.mockReturnValue(true);
 
       const result = await MCPOAuthProvider.getValidToken(
+        tokenStorage,
         'test-server',
         mockConfig,
       );
@@ -324,7 +334,17 @@ describe('MCPOAuthProvider', () => {
         }),
       );
 
-      await MCPOAuthProvider.authenticate('test-server', mockConfig);
+      await MCPOAuthProvider.authenticate(
+        {
+          tokenStorage: createTestOAuthBinding().tokenStorage,
+          openBrowser: mockOpenBrowserSecurely,
+        },
+        'test-server',
+        mockConfig,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       expect(crypto.randomBytes).toHaveBeenCalledWith(64); // code verifier
       expect(crypto.randomBytes).toHaveBeenCalledWith(16); // state
@@ -376,9 +396,15 @@ describe('MCPOAuthProvider', () => {
       );
 
       await MCPOAuthProvider.authenticate(
+        {
+          tokenStorage: createTestOAuthBinding().tokenStorage,
+          openBrowser: mockOpenBrowserSecurely,
+        },
         'test-server',
         mockConfig,
         'https://auth.example.com',
+        undefined,
+        undefined,
       );
 
       expect(capturedUrl).toBeDefined();
@@ -438,7 +464,17 @@ describe('MCPOAuthProvider', () => {
         authorizationUrl: 'https://auth.example.com/authorize?audience=1234',
       };
 
-      await MCPOAuthProvider.authenticate('test-server', configWithParamsInUrl);
+      await MCPOAuthProvider.authenticate(
+        {
+          tokenStorage: createTestOAuthBinding().tokenStorage,
+          openBrowser: mockOpenBrowserSecurely,
+        },
+        'test-server',
+        configWithParamsInUrl,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       const url = new URL(capturedUrl!);
       expect(url.searchParams.get('audience')).toBe('1234');
@@ -493,7 +529,17 @@ describe('MCPOAuthProvider', () => {
         authorizationUrl: 'https://auth.example.com/authorize#login',
       };
 
-      await MCPOAuthProvider.authenticate('test-server', configWithFragment);
+      await MCPOAuthProvider.authenticate(
+        {
+          tokenStorage: createTestOAuthBinding().tokenStorage,
+          openBrowser: mockOpenBrowserSecurely,
+        },
+        'test-server',
+        configWithFragment,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       const url = new URL(capturedUrl!);
       expect(url.searchParams.get('client_id')).toBe('test-client-id');
@@ -581,9 +627,15 @@ describe('MCPOAuthProvider', () => {
       );
 
       await MCPOAuthProvider.authenticate(
+        {
+          tokenStorage: createTestOAuthBinding().tokenStorage,
+          openBrowser: mockOpenBrowserSecurely,
+        },
         'test-server',
         configWithUserScopes,
         'https://api.example.com',
+        undefined,
+        undefined,
       );
 
       expect(capturedUrl).toBeDefined();
@@ -671,9 +723,15 @@ describe('MCPOAuthProvider', () => {
       );
 
       await MCPOAuthProvider.authenticate(
+        {
+          tokenStorage: createTestOAuthBinding().tokenStorage,
+          openBrowser: mockOpenBrowserSecurely,
+        },
         'test-server',
         configWithoutScopes,
         'https://api.example.com',
+        undefined,
+        undefined,
       );
 
       expect(capturedUrl).toBeDefined();
@@ -696,43 +754,44 @@ describe('MCPOAuthProvider', () => {
     };
 
     it('falls back to path-based issuer when origin discovery fails', async () => {
-      // Access the static private method on the class itself
-      const providerWithAccess = MCPOAuthProvider as unknown as {
-        discoverAuthServerMetadataForRegistration: (
-          authorizationUrl: string,
-        ) => Promise<{
-          issuerUrl: string;
-          metadata: OAuthAuthorizationServerMetadata;
-        }>;
-      };
-
-      vi.spyOn(
-        OAuthUtils,
-        'discoverAuthorizationServerMetadata',
-      ).mockImplementation(
-        createIssuerMetadataDiscovery(
-          'http://localhost:8888/realms/my-realm',
-          registrationMetadata,
-        ),
+      mockHttpServer.listen.mockImplementation((_port, callback) =>
+        callback?.(),
       );
+      let paths: readonly string[] = [];
+      mockFetch.mockImplementation(async (input: string) => {
+        const path = new URL(input).pathname;
+        paths = [...paths, path];
+        if (input === registrationMetadata.registration_endpoint) {
+          return new Response('registration reached', { status: 503 });
+        }
+        return path ===
+          '/.well-known/oauth-authorization-server/realms/my-realm'
+          ? Response.json(registrationMetadata)
+          : new Response(null, { status: 404 });
+      });
 
-      const result =
-        await providerWithAccess.discoverAuthServerMetadataForRegistration(
-          'http://localhost:8888/realms/my-realm/protocol/openid-connect/auth',
-        );
-
-      expect(
-        (
-          OAuthUtils.discoverAuthorizationServerMetadata as Mock<
-            typeof OAuthUtils.discoverAuthorizationServerMetadata
-          >
-        ).mock.calls,
-      ).toStrictEqual([
-        ['http://localhost:8888'],
-        ['http://localhost:8888/realms/my-realm'],
+      await expect(
+        MCPOAuthProvider.authenticate(
+          {
+            tokenStorage: createTestOAuthBinding().tokenStorage,
+            openBrowser: mockOpenBrowserSecurely,
+          },
+          'issuer-fallback',
+          {
+            authorizationUrl: registrationMetadata.authorization_endpoint,
+            tokenUrl: registrationMetadata.token_endpoint,
+          },
+          undefined,
+          undefined,
+          undefined,
+        ),
+      ).rejects.toThrow('registration reached');
+      expect(paths).toStrictEqual([
+        '/.well-known/oauth-authorization-server',
+        '/.well-known/openid-configuration',
+        '/.well-known/oauth-authorization-server/realms/my-realm',
+        '/realms/my-realm/clients-registrations/openid-connect',
       ]);
-      expect(result.issuerUrl).toBe('http://localhost:8888/realms/my-realm');
-      expect(result.metadata).toBe(registrationMetadata);
     });
 
     it('trims versioned segments from authorization endpoints', async () => {

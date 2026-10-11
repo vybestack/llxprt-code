@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 /**
  * Behavioral coverage for the Gemini-owned context-dump conversion (#2763).
  *
@@ -125,7 +126,7 @@ describe('buildGeminiDumpContents', () => {
       // Gemini-3 models carry follow-up media inside functionResponse.parts;
       // older models put them in sibling parts.
       'gemini-3-pro',
-      config,
+      parseOutputLimits(config.getEphemeralSettings()),
     ) as Array<{ parts: Array<Record<string, unknown>> }>;
 
     const functionResponse = contents[0].parts[0].functionResponse as Record<

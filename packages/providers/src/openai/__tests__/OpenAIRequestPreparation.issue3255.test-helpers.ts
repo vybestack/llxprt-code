@@ -106,8 +106,8 @@ function createInvocation(
   }
 
   const invocation = createRuntimeInvocationContext({
-    runtime: { settingsService: settings, runtimeId: 'issue3255-test' },
-    settings,
+    runtimeId: 'issue3255-test',
+
     providerName,
     ephemeralsSnapshot: {
       ...modelBehavior,
@@ -141,8 +141,7 @@ function createOptions(
     contents: [],
     tools: undefined,
     metadata: {},
-    settings,
-    config: undefined,
+
     invocation,
     systemInstruction: 'test system prompt',
     resolved: {

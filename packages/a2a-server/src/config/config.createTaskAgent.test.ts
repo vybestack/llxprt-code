@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, afterEach, afterAll } from 'bun:test';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { ApprovalMode } from '@vybestack/llxprt-code-agents';
@@ -164,6 +164,28 @@ describe('config', () => {
         if (v === undefined) delete process.env[k];
         else process.env[k] = v;
       }
+    });
+
+    it('withdraws earlier physical memory after workspace refresh instead of retaining it as static instructions', async () => {
+      await runWithEnv(activateFakeProvider, async () => {
+        mkdirSync(join(WORKSPACE, '.git'), { recursive: true });
+        const file = join(WORKSPACE, 'LLXPRT.md');
+        writeFileSync(file, 'Physical instructions version one.');
+        const agent = await buildAgent({ folderTrust: true });
+        try {
+          writeFileSync(file, 'Physical instructions version two.');
+          await agent.memory.refresh();
+          expect(agent.memory.getMemory()).toContain(
+            'Physical instructions version two.',
+          );
+          expect(agent.memory.getMemory()).not.toContain(
+            'Physical instructions version one.',
+          );
+        } finally {
+          await agent.dispose();
+          rmSync(file);
+        }
+      });
     });
 
     it('no env signals -> provider-neutral agent, working FakeProvider stream turn, clean disposal', async () => {

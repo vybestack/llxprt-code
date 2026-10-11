@@ -3,13 +3,14 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createTestOAuthBinding } from './test-support/index.js';
 
 import { automock } from '../../../test-utils/src/automock.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import * as SdkClientStdioLib from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { OAuthClientMetadata } from '@modelcontextprotocol/sdk/shared/auth.js';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { AuthProviderType } from '@vybestack/llxprt-code-auth/mcp-auth-provider-type.js';
 
 import {
@@ -21,18 +22,12 @@ import {
   getTransportAuthProvider,
   getTransportHeaders,
 } from './mcpClientTestHelpers.js';
-import { registerMcpHostServices } from '../host/hostServices.js';
 import type { McpAuthProvider } from '../auth/auth-provider.js';
 import type { MCPServerConfig } from '../config/mcpServerConfig.js';
-import {
-  registerMcpAuthFactories,
-  resetRegisteredMcpAuthFactories,
-} from '../auth/mcp-auth-factory.js';
+import { buildMcpAuthFactoryRegistry } from '../auth/mcp-auth-factory.js';
 import { MCPOAuthProvider } from '../auth/oauth-provider.js';
 
-// Exercises the real host seam instead of mocking a module (#3305).
-const mockEmitFeedback = vi.fn();
-registerMcpHostServices({ emitFeedback: mockEmitFeedback });
+let registry = buildMcpAuthFactoryRegistry([]);
 
 const realStdioModule = {
   ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
@@ -40,13 +35,6 @@ const realStdioModule = {
 const realIndexModule = {
   ...(await import('@modelcontextprotocol/sdk/client/index.js')),
 };
-const realOauthProviderModule = {
-  ...(await import('../auth/oauth-provider.js')),
-};
-const realOauthTokenStorageModule = {
-  ...(await import('../auth/oauth-token-storage.js')),
-};
-const realOauthUtilsModule = { ...(await import('../auth/oauth-utils.js')) };
 
 void vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () =>
   automock(realStdioModule),
@@ -54,13 +42,6 @@ void vi.mock('@modelcontextprotocol/sdk/client/stdio.js', () =>
 void vi.mock('@modelcontextprotocol/sdk/client/index.js', () =>
   automock(realIndexModule),
 );
-void vi.mock('../auth/oauth-provider.js', () =>
-  automock(realOauthProviderModule),
-);
-void vi.mock('../auth/oauth-token-storage.js', () =>
-  automock(realOauthTokenStorageModule),
-);
-void vi.mock('../auth/oauth-utils.js', () => automock(realOauthUtilsModule));
 
 const CUSTOM_AUTH_TYPE = 'custom_auth';
 
@@ -100,11 +81,14 @@ describe('mcp-client', () => {
     describe('should connect via httpUrl', () => {
       it('without headers', async () => {
         const transport = await createTransport(
+          createTestOAuthBinding().tokenStorage,
           'test-server',
           {
             httpUrl: 'http://test-server',
           },
           false,
+          undefined,
+          (type) => registry.getAuthProviderFactory(type),
         );
 
         expect(transport).toBeInstanceOf(StreamableHTTPClientTransport);
@@ -112,12 +96,15 @@ describe('mcp-client', () => {
 
       it('with headers', async () => {
         const transport = await createTransport(
+          createTestOAuthBinding().tokenStorage,
           'test-server',
           {
             httpUrl: 'http://test-server',
             headers: { Authorization: 'derp' },
           },
           false,
+          undefined,
+          (type) => registry.getAuthProviderFactory(type),
         );
 
         expect(transport).toBeInstanceOf(StreamableHTTPClientTransport);
@@ -127,23 +114,29 @@ describe('mcp-client', () => {
     describe('should connect via url', () => {
       it('without headers defaults to HTTP transport', async () => {
         const transport = await createTransport(
+          createTestOAuthBinding().tokenStorage,
           'test-server',
           {
             url: 'http://test-server',
           },
           false,
+          undefined,
+          (type) => registry.getAuthProviderFactory(type),
         );
         expect(transport).toBeInstanceOf(StreamableHTTPClientTransport);
       });
 
       it('with headers defaults to HTTP transport', async () => {
         const transport = await createTransport(
+          createTestOAuthBinding().tokenStorage,
           'test-server',
           {
             url: 'http://test-server',
             headers: { Authorization: 'derp' },
           },
           false,
+          undefined,
+          (type) => registry.getAuthProviderFactory(type),
         );
 
         expect(transport).toBeInstanceOf(StreamableHTTPClientTransport);
@@ -151,36 +144,45 @@ describe('mcp-client', () => {
 
       it('with type sse uses SSE transport', async () => {
         const transport = await createTransport(
+          createTestOAuthBinding().tokenStorage,
           'test-server',
           {
             url: 'http://test-server',
             type: 'sse',
           },
           false,
+          undefined,
+          (type) => registry.getAuthProviderFactory(type),
         );
         expect(transport).toBeInstanceOf(SSEClientTransport);
       });
 
       it('with type http uses HTTP transport', async () => {
         const transport = await createTransport(
+          createTestOAuthBinding().tokenStorage,
           'test-server',
           {
             url: 'http://test-server',
             type: 'http',
           },
           false,
+          undefined,
+          (type) => registry.getAuthProviderFactory(type),
         );
         expect(transport).toBeInstanceOf(StreamableHTTPClientTransport);
       });
 
       it('with type streamable-http uses HTTP transport (alias for http)', async () => {
         const transport = await createTransport(
+          createTestOAuthBinding().tokenStorage,
           'test-server',
           {
             url: 'http://test-server',
             type: 'streamable-http',
           },
           false,
+          undefined,
+          (type) => registry.getAuthProviderFactory(type),
         );
         expect(transport).toBeInstanceOf(StreamableHTTPClientTransport);
       });
@@ -192,6 +194,7 @@ describe('mcp-client', () => {
         .mockReturnValue({} as SdkClientStdioLib.StdioClientTransport);
 
       await createTransport(
+        createTestOAuthBinding().tokenStorage,
         'test-server',
         {
           command: 'test-command',
@@ -200,6 +203,8 @@ describe('mcp-client', () => {
           cwd: 'test/cwd',
         },
         false,
+        undefined,
+        (type) => registry.getAuthProviderFactory(type),
       );
 
       expect(mockedTransport).toHaveBeenCalledWith({
@@ -213,14 +218,11 @@ describe('mcp-client', () => {
 
     describe('custom authProviderType dispatch', () => {
       beforeEach(() => {
-        resetRegisteredMcpAuthFactories();
-      });
-      afterEach(() => {
-        resetRegisteredMcpAuthFactories();
+        registry = buildMcpAuthFactoryRegistry([]);
       });
 
       it('uses the registered factory auth provider when one matches', async () => {
-        registerMcpAuthFactories([
+        registry = buildMcpAuthFactoryRegistry([
           {
             authProviderType: CUSTOM_AUTH_TYPE,
             createAuthProvider: (config) => new FakeAuthProvider(config),
@@ -228,12 +230,15 @@ describe('mcp-client', () => {
         ]);
 
         const transport = await createTransport(
+          createTestOAuthBinding().tokenStorage,
           'test-server',
           {
             httpUrl: 'http://test-server',
             authProviderType: CUSTOM_AUTH_TYPE,
           },
           false,
+          undefined,
+          (type) => registry.getAuthProviderFactory(type),
         );
 
         expect(transport).toBeInstanceOf(StreamableHTTPClientTransport);
@@ -242,7 +247,7 @@ describe('mcp-client', () => {
       });
 
       it('uses headers from the factory auth provider', async () => {
-        registerMcpAuthFactories([
+        registry = buildMcpAuthFactoryRegistry([
           {
             authProviderType: CUSTOM_AUTH_TYPE,
             createAuthProvider: (config) => new FakeAuthProvider(config),
@@ -250,12 +255,15 @@ describe('mcp-client', () => {
         ]);
 
         const transport = await createTransport(
+          createTestOAuthBinding().tokenStorage,
           'test-server',
           {
             httpUrl: 'http://test-server',
             authProviderType: CUSTOM_AUTH_TYPE,
           },
           false,
+          undefined,
+          (type) => registry.getAuthProviderFactory(type),
         );
 
         expect(transport).toBeInstanceOf(StreamableHTTPClientTransport);
@@ -264,7 +272,7 @@ describe('mcp-client', () => {
       });
 
       it('prioritizes factory provider headers over config headers', async () => {
-        registerMcpAuthFactories([
+        registry = buildMcpAuthFactoryRegistry([
           {
             authProviderType: CUSTOM_AUTH_TYPE,
             createAuthProvider: (config) => new FakeAuthProvider(config),
@@ -272,6 +280,7 @@ describe('mcp-client', () => {
         ]);
 
         const transport = await createTransport(
+          createTestOAuthBinding().tokenStorage,
           'test-server',
           {
             httpUrl: 'http://test-server',
@@ -281,6 +290,8 @@ describe('mcp-client', () => {
             },
           },
           false,
+          undefined,
+          (type) => registry.getAuthProviderFactory(type),
         );
 
         expect(transport).toBeInstanceOf(StreamableHTTPClientTransport);
@@ -289,7 +300,7 @@ describe('mcp-client', () => {
       });
 
       it('uses the factory auth provider with SSE transport', async () => {
-        registerMcpAuthFactories([
+        registry = buildMcpAuthFactoryRegistry([
           {
             authProviderType: CUSTOM_AUTH_TYPE,
             createAuthProvider: (config) => new FakeAuthProvider(config),
@@ -297,6 +308,7 @@ describe('mcp-client', () => {
         ]);
 
         const transport = await createTransport(
+          createTestOAuthBinding().tokenStorage,
           'test-server',
           {
             url: 'http://test-server',
@@ -304,6 +316,8 @@ describe('mcp-client', () => {
             authProviderType: CUSTOM_AUTH_TYPE,
           },
           false,
+          undefined,
+          (type) => registry.getAuthProviderFactory(type),
         );
 
         expect(transport).toBeInstanceOf(SSEClientTransport);
@@ -314,12 +328,15 @@ describe('mcp-client', () => {
       it('throws a terminal error naming the server and type for an unknown custom type', async () => {
         await expect(
           createTransport(
+            createTestOAuthBinding().tokenStorage,
             'test-server',
             {
               httpUrl: 'http://test-server',
               authProviderType: CUSTOM_AUTH_TYPE,
             },
             false,
+            undefined,
+            (type) => registry.getAuthProviderFactory(type),
           ),
         ).rejects.toThrow(/test-server.*custom_auth.*no auth provider/i);
       });
@@ -328,6 +345,7 @@ describe('mcp-client', () => {
         // oauth.enabled would previously route to the standard OAuth path;
         // the unknown custom type must remain terminal either way.
         const error = await createTransport(
+          createTestOAuthBinding().tokenStorage,
           'test-server',
           {
             httpUrl: 'http://test-server',
@@ -335,6 +353,8 @@ describe('mcp-client', () => {
             oauth: { enabled: true } as MCPServerConfig['oauth'],
           },
           false,
+          undefined,
+          (type) => registry.getAuthProviderFactory(type),
         ).then(
           () => undefined,
           (e: unknown) => e,
@@ -349,6 +369,7 @@ describe('mcp-client', () => {
       it('throws a terminal error naming the google plugin for google_credentials without a factory', async () => {
         await expect(
           createTransport(
+            createTestOAuthBinding().tokenStorage,
             'test-server',
             {
               httpUrl: 'http://test.googleapis.com',
@@ -358,6 +379,8 @@ describe('mcp-client', () => {
               },
             },
             false,
+            undefined,
+            (type) => registry.getAuthProviderFactory(type),
           ),
         ).rejects.toThrow(/google-mcp-auth/i);
       });
@@ -365,6 +388,7 @@ describe('mcp-client', () => {
       it('throws a terminal error naming the google plugin for service_account_impersonation without a factory', async () => {
         await expect(
           createTransport(
+            createTestOAuthBinding().tokenStorage,
             'test-server',
             {
               url: 'http://test.googleapis.com',
@@ -373,13 +397,15 @@ describe('mcp-client', () => {
               targetServiceAccount: 'sa@project.iam.gserviceaccount.com',
             },
             false,
+            undefined,
+            (type) => registry.getAuthProviderFactory(type),
           ),
         ).rejects.toThrow(/google-mcp-auth/i);
       });
 
       it('propagates a factory failure as a terminal error carrying the cause', async () => {
         const factoryError = new Error('factory exploded');
-        registerMcpAuthFactories([
+        registry = buildMcpAuthFactoryRegistry([
           {
             authProviderType: CUSTOM_AUTH_TYPE,
             createAuthProvider: () => {
@@ -389,12 +415,15 @@ describe('mcp-client', () => {
         ]);
 
         const error = await createTransport(
+          createTestOAuthBinding().tokenStorage,
           'test-server',
           {
             httpUrl: 'http://test-server',
             authProviderType: CUSTOM_AUTH_TYPE,
           },
           false,
+          undefined,
+          (type) => registry.getAuthProviderFactory(type),
         ).then(
           () => undefined,
           (e: unknown) => e,
@@ -412,7 +441,7 @@ describe('mcp-client', () => {
         const getValidToken = vi
           .spyOn(MCPOAuthProvider, 'getValidToken')
           .mockResolvedValue('oauth-token-must-not-resolve');
-        registerMcpAuthFactories([
+        registry = buildMcpAuthFactoryRegistry([
           {
             authProviderType: CUSTOM_AUTH_TYPE,
             createAuthProvider: () => undefined as unknown as McpAuthProvider,
@@ -420,6 +449,7 @@ describe('mcp-client', () => {
         ]);
 
         const error = await createTransport(
+          createTestOAuthBinding().tokenStorage,
           'test-server',
           {
             httpUrl: 'http://test-server',
@@ -427,6 +457,8 @@ describe('mcp-client', () => {
             oauth: { enabled: true } as MCPServerConfig['oauth'],
           },
           false,
+          undefined,
+          (type) => registry.getAuthProviderFactory(type),
         ).then(
           () => undefined,
           (e: unknown) => e,
@@ -444,7 +476,7 @@ describe('mcp-client', () => {
         const getValidToken = vi
           .spyOn(MCPOAuthProvider, 'getValidToken')
           .mockResolvedValue('oauth-token-must-not-resolve');
-        registerMcpAuthFactories([
+        registry = buildMcpAuthFactoryRegistry([
           {
             authProviderType: CUSTOM_AUTH_TYPE,
             createAuthProvider: () =>
@@ -453,6 +485,7 @@ describe('mcp-client', () => {
         ]);
 
         const error = await createTransport(
+          createTestOAuthBinding().tokenStorage,
           'test-server',
           {
             httpUrl: 'http://test-server',
@@ -460,6 +493,8 @@ describe('mcp-client', () => {
             oauth: { enabled: true } as MCPServerConfig['oauth'],
           },
           false,
+          undefined,
+          (type) => registry.getAuthProviderFactory(type),
         ).then(
           () => undefined,
           (e: unknown) => e,
@@ -476,6 +511,7 @@ describe('mcp-client', () => {
       it('throws the Google Credentials missing-URL error without a factory', async () => {
         await expect(
           createTransport(
+            createTestOAuthBinding().tokenStorage,
             'test-server',
             {
               authProviderType: AuthProviderType.GOOGLE_CREDENTIALS,
@@ -484,6 +520,8 @@ describe('mcp-client', () => {
               },
             },
             false,
+            undefined,
+            (type) => registry.getAuthProviderFactory(type),
           ),
         ).rejects.toThrow(
           'URL must be provided in the config for Google Credentials provider',
@@ -493,11 +531,14 @@ describe('mcp-client', () => {
       it('throws the ServiceAccountImpersonation missing-URL error without a factory', async () => {
         await expect(
           createTransport(
+            createTestOAuthBinding().tokenStorage,
             'test-server',
             {
               authProviderType: AuthProviderType.SERVICE_ACCOUNT_IMPERSONATION,
             },
             false,
+            undefined,
+            (type) => registry.getAuthProviderFactory(type),
           ),
         ).rejects.toThrow(
           'No URL configured for ServiceAccountImpersonation MCP Server',
@@ -507,11 +548,14 @@ describe('mcp-client', () => {
       it('throws a generic missing-URL error for other custom types', async () => {
         await expect(
           createTransport(
+            createTestOAuthBinding().tokenStorage,
             'test-server',
             {
               authProviderType: CUSTOM_AUTH_TYPE,
             },
             false,
+            undefined,
+            (type) => registry.getAuthProviderFactory(type),
           ),
         ).rejects.toThrow(/URL must be provided.*custom_auth/);
       });

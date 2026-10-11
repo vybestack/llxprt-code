@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { physicalFiles } from './helpers/physical-files.js';
+
 import type {
   IToolHost,
   ITodoService,
@@ -16,12 +18,17 @@ import type { Todo } from '../types/todo-schemas.js';
  */
 export function createToolHostWithEmojiMode(mode: string): IToolHost {
   return {
+    ...physicalFiles,
     getTargetDir: () => '/tmp',
     getWorkspaceRoots: () => [],
     getApprovalMode: () => 'default' as const,
     setApprovalMode: () => {},
     isInteractive: () => false,
-    hasFeatureFlag: () => false,
+
+    runSearch: <T>(
+      _directories: readonly string[],
+      operation: () => Promise<T>,
+    ): Promise<T> => operation(),
     getFileService: () => ({
       shouldGitIgnoreFile: () => false,
       shouldLlxprtIgnoreFile: () => false,
@@ -38,14 +45,14 @@ export function createToolHostWithEmojiMode(mode: string): IToolHost {
     getLlxprtIgnoreFilePath: () => null,
     recordFileRead: () => {},
     getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({ emojifilter: mode }),
+    readExecutionPolicy: () => ({ emojifilter: mode }),
     getDebugMode: () => false,
   };
 }
 
 export function createToolHostWithEmptySettings(): IToolHost {
   const host = createToolHostWithEmojiMode('');
-  host.getEphemeralSettings = () => ({});
+  host.readExecutionPolicy = () => ({});
   return host;
 }
 

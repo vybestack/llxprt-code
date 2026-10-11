@@ -59,7 +59,6 @@ function createConfig(
   excludeTools: string[] = [],
 ): ShellPermissionConfig {
   return {
-    getEphemeralSetting: () => mode,
     getShellReplacement: () => mode,
     getExcludeTools: () => excludeTools,
     getCoreTools: () => coreTools,

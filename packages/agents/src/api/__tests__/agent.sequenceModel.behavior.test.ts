@@ -1,8 +1,12 @@
+import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { ShellJobOwner } from '../../session/shell-job-owner.js';
+import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
+import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 
 /**
  * @plan:PLAN-20260621-COREAPIREMED.P13
@@ -98,12 +102,25 @@ function assembleDeps(
     configOwnership: 'caller',
   });
   return {
+    sessionClient: built.sessionClient,
+    settingsOwner: built.settingsOwner,
+    workspaceSkills: built.mcpRuntime.workspaceSkills.operations,
+    taskLaunchOwner: new TaskLaunchOwner(new AsyncTaskManager()),
+    shellOwner: new ShellJobOwner(() =>
+      resolveShellJobSettings(built.settingsService),
+    ),
+    mediaStore: built.agentClient.mediaStore,
     config,
+    sessionIdentityOwnership: 'facade',
+    mcpOperations: built.mcpRuntime,
+    switchProvider: async () => {
+      throw new Error('Unexpected provider switch in sequence-model test');
+    },
     // Config exposes the runtime-adopted ProviderManager (configBaseCore.ts:265).
-    providerManager: config.getProviderManager()!,
+    providerManager: built.providerManager,
     // getCurrentSequenceModel never reads oauthManager; structural stand-in keeps the cast localized.
     oauthManager: {} as unknown as AgentDeps['oauthManager'],
-    settingsService: config.getSettingsService(),
+    settingsService: built.settingsService,
     runtimeId: 'seq-test',
     runtimeHandle: { cleanup: () => undefined },
     messageBus: built.messageBus,
@@ -265,7 +282,13 @@ describe('getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P1
   it('T9b-real fromConfig-built agent over the fake seam returns null (genuine null contract, real client) @requirement:REQ-003 @scenario:null-contract-real @given:a real agent built via fromConfig over the fake-provider seam @when:agent.getCurrentSequenceModel() @then:returns null (the real fake-provider client reports no sequence model)', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({ config: built.config });
+      const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        providerManager: built.providerManager,
+        config: built.config,
+        mcpRuntime: built.mcpRuntime,
+      });
       try {
         expect(agent.getCurrentSequenceModel()).toBeNull();
       } finally {

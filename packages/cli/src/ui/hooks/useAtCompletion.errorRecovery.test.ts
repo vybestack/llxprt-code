@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installWorkspaceRuntimeHook } from '../../__tests__/workspace-runtime-fixture.js';
+
 import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import { act } from 'react';
@@ -21,17 +23,21 @@ import { useTestHarnessForAtCompletion } from './__tests__/useAtCompletion-test-
  */
 describe('useAtCompletion', () => {
   let testRootDir: string;
+  const useFixtureRuntime = installWorkspaceRuntimeHook(
+    () => testRootDir || process.cwd(),
+  );
   let mockConfig: Config;
 
   beforeEach(() => {
     mockConfig = {
+      getMcpServers: () => undefined,
       getFileFilteringOptions: vi.fn(() => ({
         respectGitIgnore: true,
         respectLlxprtIgnore: true,
       })),
       getEnableRecursiveFileSearch: () => true,
       getFileFilteringDisableFuzzySearch: () => false,
-      getResourceRegistry: () => ({ getAllResources: () => [] }),
+      listResources: () => [],
       getSubagentManager: () => undefined,
     } as unknown as Config;
     vi.clearAllMocks();
@@ -75,7 +81,12 @@ describe('useAtCompletion', () => {
 
       const { result, rerender } = renderHook(
         ({ pattern }: { pattern: string }) =>
-          useTestHarnessForAtCompletion(true, pattern, mockConfig, testRootDir),
+          useTestHarnessForAtCompletion(
+            true,
+            pattern,
+            useFixtureRuntime(mockConfig),
+            testRootDir,
+          ),
         { initialProps: { pattern: 'alp' } },
       );
 
@@ -133,7 +144,12 @@ describe('useAtCompletion', () => {
 
       const { result, rerender } = renderHook(
         ({ pattern }: { pattern: string }) =>
-          useTestHarnessForAtCompletion(true, pattern, mockConfig, testRootDir),
+          useTestHarnessForAtCompletion(
+            true,
+            pattern,
+            useFixtureRuntime(mockConfig),
+            testRootDir,
+          ),
         { initialProps: { pattern: 'alp' } },
       );
 
@@ -192,7 +208,12 @@ describe('useAtCompletion', () => {
 
       const { result, rerender } = renderHook(
         ({ pattern }: { pattern: string }) =>
-          useTestHarnessForAtCompletion(true, pattern, mockConfig, testRootDir),
+          useTestHarnessForAtCompletion(
+            true,
+            pattern,
+            useFixtureRuntime(mockConfig),
+            testRootDir,
+          ),
         { initialProps: { pattern: 'alp' } },
       );
 
@@ -229,7 +250,12 @@ describe('useAtCompletion', () => {
 
       const { result, rerender } = renderHook(
         ({ pattern }: { pattern: string }) =>
-          useTestHarnessForAtCompletion(true, pattern, mockConfig, testRootDir),
+          useTestHarnessForAtCompletion(
+            true,
+            pattern,
+            useFixtureRuntime(mockConfig),
+            testRootDir,
+          ),
         { initialProps: { pattern: 'alp' } },
       );
 
@@ -272,7 +298,12 @@ describe('useAtCompletion', () => {
 
       const { result, rerender } = renderHook(
         ({ pattern }: { pattern: string }) =>
-          useTestHarnessForAtCompletion(true, pattern, mockConfig, testRootDir),
+          useTestHarnessForAtCompletion(
+            true,
+            pattern,
+            useFixtureRuntime(mockConfig),
+            testRootDir,
+          ),
         { initialProps: { pattern: 'alp' } },
       );
 
@@ -335,7 +366,12 @@ describe('useAtCompletion', () => {
 
       const { result, rerender } = renderHook(
         ({ pattern }: { pattern: string }) =>
-          useTestHarnessForAtCompletion(true, pattern, mockConfig, testRootDir),
+          useTestHarnessForAtCompletion(
+            true,
+            pattern,
+            useFixtureRuntime(mockConfig),
+            testRootDir,
+          ),
         { initialProps: { pattern: 'alp' } },
       );
 

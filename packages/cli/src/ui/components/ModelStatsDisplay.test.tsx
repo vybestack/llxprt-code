@@ -44,6 +44,7 @@ const renderWithMockedStats = (metrics: TestMetricsInput) => {
       promptCount: 5,
     },
 
+    updateHistoryTokenCount: vi.fn(),
     getPromptCount: () => 5,
     startNewPrompt: vi.fn(),
   });

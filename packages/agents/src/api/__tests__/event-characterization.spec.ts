@@ -31,6 +31,7 @@ import {
   streamNotice,
   streamCompressed,
   streamRetry,
+  streamAttemptBoundary,
   streamInvalid,
   streamIdleTimeout,
   streamError,
@@ -64,6 +65,7 @@ import {
   isCompressionEvent,
   isContextWarningEvent,
   isRetryEvent,
+  isAttemptBoundaryEvent,
   isCitationEvent,
   isLoopDetectedEvent,
   isIdleTimeoutEvent,
@@ -183,6 +185,21 @@ describe('Event characterization — adapter-characterization @plan:PLAN-2026061
   it('Retry → retry [adapter-characterization] @plan:PLAN-20260617-COREAPI.P10 @requirement:REQ-003', async () => {
     const events = await runAdapterStatic([wrapStream(streamRetry())]);
     expect(events.filter(isRetryEvent)).toHaveLength(1);
+  });
+
+  it('AttemptBoundary → attempt-boundary [adapter-characterization] @issue:3840', async () => {
+    const events = await runAdapterStatic([
+      wrapStream(streamContent('attempt1')),
+      wrapStream(streamAttemptBoundary()),
+      wrapStream(streamContent('attempt2')),
+    ]);
+    expect(events.map((e) => e.type)).toStrictEqual([
+      'text',
+      'attempt-boundary',
+      'text',
+      'done',
+    ]);
+    expect(events.filter(isAttemptBoundaryEvent)).toHaveLength(1);
   });
 
   it('InvalidStream → invalid-stream [adapter-characterization] @plan:PLAN-20260617-COREAPI.P10 @requirement:REQ-003', async () => {
@@ -554,6 +571,7 @@ describe('Event characterization — invariant/decision-table @plan:PLAN-2026061
     'compression',
     'context-warning',
     'retry',
+    'attempt-boundary',
     'citation',
     'loop-detected',
     'idle-timeout',

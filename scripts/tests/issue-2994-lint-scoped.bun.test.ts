@@ -374,8 +374,11 @@ describe('issue-2994 changed-files mode (real hermetic temporary git repos)', ()
     // reverseClosure('core') = {a2a-server, agents, auth, cli, mcp,
     // providers, test-utils, tools, zed-acp}: auth/mcp/tools join via their
     // test-only imports of test-utils (which itself imports core), and
-    // test-utils imports core directly.
-    expect(extractScopedTargets(result.stdout)).toEqual([
+    // test-utils imports core directly. ide-integration and
+    // vscode-ide-companion are absent: ide-integration's test files import
+    // no workspace package other than telemetry, so it is not downstream of
+    // core.
+    expect(extractScopedTargets(result.stdout)).toStrictEqual([
       'integration-tests',
       'packages/a2a-server',
       'packages/agents',

@@ -19,6 +19,7 @@ import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime
 import type { ProviderManager } from '../ProviderManager.js';
 import type { OAuthManager } from '../auth/index.js';
 import { createProviderManager } from './providerManagerInstance.js';
+import { NodeFileSystem, type IFileSystem } from './IFileSystem.js';
 
 /**
  * Options for constructing a headless provider manager.
@@ -26,6 +27,7 @@ import { createProviderManager } from './providerManagerInstance.js';
 export interface HeadlessProviderManagerOptions {
   /** Provider name to activate (e.g. 'openai', 'anthropic', 'gemini'). */
   provider: string;
+  fileSystem?: IFileSystem;
   /** API key to apply to the active provider's scoped settings. */
   apiKey?: string;
   /** Base URL to apply to the active provider's scoped settings. */
@@ -60,7 +62,9 @@ export function createHeadlessProviderManager(
     metadata: { stage: 'headless' },
   };
 
-  const { manager, oauthManager } = createProviderManager(context, {});
+  const { manager, oauthManager } = createProviderManager(context, {
+    fileSystem: options.fileSystem ?? new NodeFileSystem(),
+  });
 
   if (options.apiKey !== undefined) {
     settingsService.setProviderSetting(

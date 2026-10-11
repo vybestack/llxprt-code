@@ -40,9 +40,9 @@ type IgnoredReason = 'git' | 'llxprt' | 'both';
 
 type IgnoredByReason = Record<IgnoredReason, string[]>;
 
-type ResourceRegistry = {
-  findResourceByUri: (identifier: string) => DiscoveredMCPResource | undefined;
-};
+export type FindMcpResource = (
+  identifier: string,
+) => DiscoveredMCPResource | undefined;
 
 type MaybeToolHandle = AgentToolHandle | undefined;
 
@@ -53,8 +53,9 @@ type MaybeToolHandle = AgentToolHandle | undefined;
 export type AtCommandHelperRuntime = Pick<
   FileWorkspaceState,
   | 'getFileFilteringOptions'
-  | 'getWorkspaceContext'
-  | 'getFileService'
+  | 'directories'
+  | 'contains'
+  | 'ignore'
   | 'getEnableRecursiveFileSearch'
 >;
 
@@ -76,7 +77,7 @@ interface ResolveCommandsResult extends ResolutionState {
 interface ResolveCommandsParams {
   atPathCommandParts: AtCommandPart[];
   config: AtCommandHelperRuntime;
-  resourceRegistry: ResourceRegistry;
+  findResource: FindMcpResource;
   globTool: MaybeToolHandle;
   signal: AbortSignal;
   onDebugMessage: (message: string) => void;
@@ -155,7 +156,7 @@ async function resolveSingleAtCommand({
   originalAtPath,
   state,
   config,
-  resourceRegistry,
+  findResource,
   globTool,
   signal,
   onDebugMessage,
@@ -172,10 +173,13 @@ async function resolveSingleAtCommand({
     return `Error: Invalid @ command '${originalAtPath}'. No path specified.`;
   if (recordSubagentMatch(subagentNames, state, originalAtPath, pathName))
     return undefined;
-  if (recordResourceMatch(resourceRegistry, state, originalAtPath, pathName))
+  if (recordResourceMatch(findResource, state, originalAtPath, pathName))
     return undefined;
   const pathError = validatePathWithinWorkspace(
-    config.getWorkspaceContext(),
+    {
+      getDirectories: () => [...config.directories()],
+      isPathWithinWorkspace: (filePath) => config.contains(filePath),
+    },
     pathName,
   );
   if (pathError) {
@@ -207,12 +211,12 @@ function recordSubagentMatch(
 }
 
 function recordResourceMatch(
-  resourceRegistry: ResourceRegistry,
+  findResource: FindMcpResource,
   state: ResolutionState,
   originalAtPath: string,
   pathName: string,
 ): boolean {
-  const resourceMatch = resourceRegistry.findResourceByUri(pathName);
+  const resourceMatch = findResource(pathName);
   if (!resourceMatch) return false;
   state.resourceAttachments.push(resourceMatch);
   state.atPathToResolvedSpecMap.set(originalAtPath, pathName);
@@ -225,7 +229,7 @@ function recordIgnoredPath(
   pathName: string,
   onDebugMessage: (message: string) => void,
 ): boolean {
-  const fileDiscovery = config.getFileService();
+  const fileDiscovery = config.ignore;
   const respectFileIgnore = config.getFileFilteringOptions();
   if (!fileDiscovery.shouldIgnoreFile(pathName, respectFileIgnore))
     return false;
@@ -268,7 +272,7 @@ async function resolveFilePath(
   originalAtPath: string,
   pathName: string,
 ): Promise<void> {
-  for (const dir of params.config.getWorkspaceContext().getDirectories()) {
+  for (const dir of params.config.directories()) {
     const resolution = await tryResolveInDirectory(
       params,
       dir,
@@ -747,7 +751,7 @@ function resolveDisplayPath(
 ): string {
   const mappedPath = absoluteToRelativePathMap.get(filePathSpecInContent);
   if (mappedPath) return mappedPath;
-  for (const dir of config.getWorkspaceContext().getDirectories()) {
+  for (const dir of config.directories()) {
     if (filePathSpecInContent.startsWith(dir))
       return path.relative(dir, filePathSpecInContent);
   }

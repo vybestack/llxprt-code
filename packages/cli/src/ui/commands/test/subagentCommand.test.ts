@@ -1,3 +1,5 @@
+import { installWorkspaceRuntimeFixture } from '../../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
 import {
   vi,
   describe,
@@ -54,11 +56,14 @@ void vi.mock('../../utils/autoPromptGenerator.js', () => {
  *
  * See: project-plans/subagentconfig/analysis/findings.md for Phase 01 results
  */
+import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
+import { createUiSessionOwner } from '../../../__tests__/uiSessionOwner.js';
+import { createMockRuntimeApi } from '../../components/__tests__/StatsDisplay.testHelpers.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import type { Logger, SessionMetrics } from '@vybestack/llxprt-code-core';
-import { SubagentManager } from '@vybestack/llxprt-code-core';
+import { Config, SubagentManager } from '@vybestack/llxprt-code-core';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { SubagentView } from '../../components/SubagentManagement/types.js';
 import { MessageType } from '../../types.js';
@@ -171,6 +176,9 @@ const createTestContext = ({
   };
 
   return {
+    runtimeApi: createMockRuntimeApi(),
+    refreshProviderAliases: vi.fn(async () => {}),
+    oauthControl: {} as CommandContext['oauthControl'],
     signal: new AbortController().signal,
     invocation: {
       raw: '',
@@ -660,6 +668,7 @@ describe('subagentCommand', () => {
       generateDirectMessage: ReturnType<typeof vi.fn>;
     };
 
+    const autoConfigs: Config[] = [];
     beforeEach(async () => {
       // Create temp directories for a realistic test environment
       tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'subagent-auto-test-'));
@@ -695,16 +704,24 @@ describe('subagentCommand', () => {
         }),
       };
 
-      // Add to context in a way that avoids TypeScript errors
-      (
-        context as unknown as { services: { config: unknown } }
-      ).services.config = {
-        getAgentClient: vi.fn(() => mockAgentClient),
-        getProvider: vi.fn(() => 'openai'),
-      };
+      const config = new Config({
+        sessionId: crypto.randomUUID(),
+        cwd: tempDir,
+        targetDir: tempDir,
+        model: 'test-model',
+        debugMode: false,
+      });
+      autoConfigs.push(config);
+      const owner = createUiSessionOwner(config);
+      context.services.config = composeFixtureRuntime(config);
+      Object.assign(owner.agentClient, mockAgentClient);
+      context.services.agent = createMockCommandContext({
+        services: { agent: { ...owner, getProvider: () => 'openai' } },
+      }).services.agent;
     });
 
     afterEach(async () => {
+      await autoConfigs.pop()?.dispose();
       await fs.rm(tempDir, { recursive: true, force: true });
       generateAutoPromptOverride = null;
     });
@@ -813,12 +830,11 @@ describe('subagentCommand', () => {
       const generatedText =
         'You are an expert prompt engineer specializing in prompt creation.';
 
-      (
-        context as unknown as { services: { config: unknown } }
-      ).services.config = {
-        getAgentClient: vi.fn(() => null),
-        getProvider: vi.fn(() => 'gemini'),
-      };
+      context.services.agent = createMockCommandContext({
+        services: {
+          agent: { ...createUiSessionOwner(), getProvider: () => 'gemini' },
+        },
+      }).services.agent;
 
       generateAutoPromptOverride = vi.fn().mockResolvedValue(generatedText);
 
@@ -832,6 +848,7 @@ describe('subagentCommand', () => {
           getProvider: expect.any(Function),
         }),
         'expert prompt',
+        context.services.config?.getContentGeneratorConfig(),
       );
       expect(saveSpy).toHaveBeenCalledWith(
         'testagent',

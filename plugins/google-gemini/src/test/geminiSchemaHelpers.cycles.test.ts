@@ -17,8 +17,12 @@ import * as fc from 'fast-check';
 import { cleanGeminiSchema } from '../gemini/geminiSchemaHelpers.js';
 import { sortedJson } from './helpers/sortedJson.js';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
-  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+  if (isRecord(value)) {
     return value;
   }
   return {};
@@ -157,12 +161,16 @@ describe('cleanGeminiSchema — non-mutation (REQ-011.1)', () => {
   });
 
   it('returns primitives unchanged (non-object)', () => {
-    expect(cleanGeminiSchema(false)).toBe(false);
-    expect(cleanGeminiSchema(true)).toBe(true);
+    const falseResult: unknown = cleanGeminiSchema(false);
+    expect(falseResult).toBe(false);
+    const trueResult: unknown = cleanGeminiSchema(true);
+    expect(trueResult).toBe(true);
     expect(cleanGeminiSchema(undefined)).toBeUndefined();
     expect(cleanGeminiSchema(null)).toBeNull();
-    expect(cleanGeminiSchema('hello')).toBe('hello');
-    expect(cleanGeminiSchema(42)).toBe(42);
+    const stringResult: unknown = cleanGeminiSchema('hello');
+    expect(stringResult).toBe('hello');
+    const numberResult: unknown = cleanGeminiSchema(42);
+    expect(numberResult).toBe(42);
   });
 });
 

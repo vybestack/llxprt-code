@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 
 /**
  * @plan:PLAN-20260320-ISSUE1575.P03
@@ -10,10 +11,9 @@
  * Handles CLI argument resolution into runtime overrides.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { EphemeralSettingTarget } from './cliEphemeralSettings.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { applyCliSetArguments } from './cliEphemeralSettings.js';
-import { getCliRuntimeServices } from './runtimeAccessors.js';
 import { updateActiveProviderBaseUrl } from './providerMutations.js';
 import {
   resolveFromKeyArg,
@@ -51,18 +51,27 @@ export async function applyCliArgumentOverrides(
     baseurl?: string;
     set?: string[];
   },
-  bootstrapArgs?: {
-    keyOverride?: string | null;
-    keyNameOverride?: string | null;
-    keyfileOverride?: string | null;
-    baseurlOverride?: string | null;
-    setOverrides?: string[] | null;
-  },
+  bootstrapArgs:
+    | {
+        keyOverride?: string | null;
+        keyNameOverride?: string | null;
+        keyfileOverride?: string | null;
+        baseurlOverride?: string | null;
+        setOverrides?: string[] | null;
+      }
+    | undefined,
+  config: EphemeralSettingTarget,
+  settingsService: SettingsService,
+  provider: ReturnType<RuntimeProviderManager['getActiveProvider']>,
 ): Promise<void> {
-  const { config, settingsService } = getCliRuntimeServices();
-
   // Resolve and apply API key (4-step precedence chain)
-  await resolveAndApplyApiKey(argv, bootstrapArgs, config, settingsService);
+  await resolveAndApplyApiKey(
+    argv,
+    bootstrapArgs,
+    config,
+    settingsService,
+    provider,
+  );
 
   // Apply --set arguments
   const setArgsToUse = bootstrapArgs?.setOverrides ?? argv.set;
@@ -73,7 +82,7 @@ export async function applyCliArgumentOverrides(
   // Apply --baseurl
   const baseurlToUse = bootstrapArgs?.baseurlOverride ?? argv.baseurl;
   if (baseurlToUse) {
-    await applyBaseUrlOverride(baseurlToUse, config);
+    await applyBaseUrlOverride(baseurlToUse, config, settingsService, provider);
   }
 }
 
@@ -89,39 +98,47 @@ async function resolveAndApplyApiKey(
         keyfileOverride?: string | null;
       }
     | undefined,
-  config: Config,
+  config: EphemeralSettingTarget,
   settingsService: SettingsService,
+  provider: ReturnType<RuntimeProviderManager['getActiveProvider']>,
 ): Promise<void> {
-  const providerName =
-    (settingsService.get('activeProvider') as string | undefined) ??
-    config.getProvider();
+  const providerName = provider?.name;
   if (!providerName) {
     return;
   }
 
   // 1. --key (bootstrap override takes precedence, then argv)
   const keyToUse = bootstrapArgs?.keyOverride ?? argv.key;
-  if (await resolveFromKeyArg(keyToUse, config)) {
+  if (await resolveFromKeyArg(keyToUse, config, settingsService, provider)) {
     return;
   }
 
   // 2. --key-name (CLI flag, named key from keyring)
   const keyNameToUse = bootstrapArgs?.keyNameOverride ?? null;
-  if (await resolveFromKeyName(keyNameToUse, config)) {
+  if (
+    await resolveFromKeyName(keyNameToUse, config, settingsService, provider)
+  ) {
     return;
   }
 
   // 3. auth-key-name from profile ephemeral settings
-  const profileKeyName = config.getEphemeralSetting('auth-key-name') as
+  const profileKeyName = settingsService.get('auth-key-name') as
     | string
     | undefined;
-  if (await resolveFromProfileKeyName(profileKeyName, config)) {
+  if (
+    await resolveFromProfileKeyName(
+      profileKeyName,
+      config,
+      settingsService,
+      provider,
+    )
+  ) {
     return;
   }
 
   // 4. --keyfile (only if no higher-precedence key resolved)
   const keyfileToUse = bootstrapArgs?.keyfileOverride ?? argv.keyfile;
-  await resolveFromKeyfile(keyfileToUse, config);
+  await resolveFromKeyfile(keyfileToUse, config, settingsService, provider);
 }
 
 /**
@@ -129,13 +146,20 @@ async function resolveAndApplyApiKey(
  */
 async function applyBaseUrlOverride(
   baseurl: string,
-  config: Config,
+  config: EphemeralSettingTarget,
+  settingsService: SettingsService,
+  provider: ReturnType<RuntimeProviderManager['getActiveProvider']>,
 ): Promise<void> {
   const trimmed = baseurl.trim();
   if (!trimmed) {
     return;
   }
 
-  await updateActiveProviderBaseUrl(trimmed);
+  await updateActiveProviderBaseUrl(
+    trimmed,
+    config,
+    settingsService,
+    provider?.name,
+  );
   config.setEphemeralSetting('base-url', trimmed);
 }

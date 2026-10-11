@@ -26,28 +26,11 @@ import {
   AfterAgentHookOutput,
 } from '../hooks/types.js';
 import { DebugLogger } from '../debug/index.js';
-import type { HookSystem } from '../hooks/hookSystem.js';
-import type { HookConfigBoundary } from './hookConfigBoundary.js';
+import type { HookExecutionOwner } from '../hooks/hookEventHandler.js';
 
 const debugLogger = DebugLogger.getLogger(
   'llxprt:core:hook-triggers:lifecycle',
 );
-
-/**
- * Returns the active HookSystem (or null) when hooks are enabled.
- * Handles config test doubles that may not implement hook accessors.
- */
-function getEnabledHookSystem(config: HookConfigBoundary): HookSystem | null {
-  const enabled = config.getEnableHooks?.();
-  if (enabled !== true) {
-    return null;
-  }
-  const hookSystem = config.getHookSystem?.();
-  if (hookSystem === undefined) {
-    return null;
-  }
-  return hookSystem;
-}
 
 /**
  * Trigger SessionStart hook when a new session begins
@@ -57,26 +40,25 @@ function getEnabledHookSystem(config: HookConfigBoundary): HookSystem | null {
  * @returns SessionStartHookOutput if hooks execute, undefined otherwise
  */
 export async function triggerSessionStartHook(
-  config: HookConfigBoundary,
   source: SessionStartSource,
+  owner?: HookExecutionOwner,
 ): Promise<SessionStartHookOutput | undefined> {
   // Get the HookSystem singleton (null when hooks disabled or unavailable)
-  const hookSystem = getEnabledHookSystem(config);
-  if (!hookSystem) {
+  if (owner === undefined) {
     return undefined;
   }
 
+  owner.signal?.throwIfAborted();
   try {
     // Initialize hook system if needed
-    await hookSystem.initialize();
 
     // Fire the event using HookSystem facade
-    const result = await hookSystem.fireSessionStartEvent({ source });
+    const result = await owner.sessionStart?.(source, owner.signal);
 
     debugLogger.debug('SessionStart hook executed', { source });
 
     // Return SessionStartHookOutput from aggregated result
-    if (result.finalOutput) {
+    if (result?.finalOutput) {
       return new SessionStartHookOutput(result.finalOutput);
     }
 
@@ -96,26 +78,25 @@ export async function triggerSessionStartHook(
  * @returns SessionEndHookOutput if hooks execute, undefined otherwise
  */
 export async function triggerSessionEndHook(
-  config: HookConfigBoundary,
   reason: SessionEndReason,
+  owner?: HookExecutionOwner,
 ): Promise<SessionEndHookOutput | undefined> {
   // Get the HookSystem singleton (null when hooks disabled or unavailable)
-  const hookSystem = getEnabledHookSystem(config);
-  if (!hookSystem) {
+  if (owner === undefined) {
     return undefined;
   }
 
+  owner.signal?.throwIfAborted();
   try {
     // Initialize hook system if needed
-    await hookSystem.initialize();
 
     // Fire the event using HookSystem facade
-    const result = await hookSystem.fireSessionEndEvent({ reason });
+    const result = await owner.sessionEnd?.(reason, owner.signal);
 
     debugLogger.debug('SessionEnd hook executed', { reason });
 
     // Return SessionEndHookOutput from aggregated result
-    if (result.finalOutput) {
+    if (result?.finalOutput) {
       return new SessionEndHookOutput(result.finalOutput);
     }
 
@@ -135,31 +116,32 @@ export async function triggerSessionEndHook(
  * @returns BeforeAgentHookOutput if hooks execute, undefined otherwise
  */
 export async function triggerBeforeAgentHook(
-  config: HookConfigBoundary,
   prompt: string,
+  owner?: HookExecutionOwner,
 ): Promise<BeforeAgentHookOutput | undefined> {
   // Get the HookSystem singleton (null when hooks disabled or unavailable)
-  const hookSystem = getEnabledHookSystem(config);
-  if (!hookSystem) {
+  if (owner === undefined) {
     return undefined;
   }
 
+  owner.signal?.throwIfAborted();
   try {
     // Initialize hook system if needed
-    await hookSystem.initialize();
 
     // Fire the event using HookSystem facade
-    const result = await hookSystem.fireBeforeAgentEvent({ prompt });
+    const result = await owner.beforeAgent?.(prompt, owner.signal);
+    owner.signal?.throwIfAborted();
 
     debugLogger.debug('BeforeAgent hook executed');
 
     // Return BeforeAgentHookOutput from aggregated result
-    if (result.finalOutput) {
+    if (result?.finalOutput) {
       return new BeforeAgentHookOutput(result.finalOutput);
     }
 
     return undefined;
   } catch (error) {
+    owner.signal?.throwIfAborted();
     // Hook failures must NOT block agent execution
     debugLogger.debug('BeforeAgent hook failed (non-blocking):', error);
     return undefined;
@@ -176,32 +158,37 @@ export async function triggerBeforeAgentHook(
  * @returns AfterAgentHookOutput if hooks execute, undefined otherwise
  */
 export async function triggerAfterAgentHook(
-  config: HookConfigBoundary,
   prompt: string,
   promptResponse: string,
   stopHookActive: boolean,
+  owner?: HookExecutionOwner,
 ): Promise<AfterAgentHookOutput | undefined> {
   // Get the HookSystem singleton (null when hooks disabled or unavailable)
-  const hookSystem = getEnabledHookSystem(config);
-  if (!hookSystem) {
+  if (owner === undefined) {
     return undefined;
   }
 
+  owner.signal?.throwIfAborted();
   try {
     // Initialize hook system if needed
-    await hookSystem.initialize();
 
     // Fire the event using HookSystem facade
-    const result = await hookSystem.fireAfterAgentEvent({
+    const context = {
       prompt,
       prompt_response: promptResponse,
       stop_hook_active: stopHookActive,
-    });
+    };
+    const result = await owner.afterAgent?.(
+      context.prompt,
+      context.prompt_response,
+      context.stop_hook_active,
+      owner.signal,
+    );
 
     debugLogger.debug('AfterAgent hook executed');
 
     // Return AfterAgentHookOutput from aggregated result
-    if (result.finalOutput) {
+    if (result?.finalOutput) {
       return new AfterAgentHookOutput(result.finalOutput);
     }
 
@@ -224,26 +211,25 @@ export async function triggerAfterAgentHook(
  * @returns PreCompressOutput if hooks execute, undefined otherwise
  */
 export async function triggerPreCompressHook(
-  config: HookConfigBoundary,
   trigger: PreCompressTrigger,
+  owner?: HookExecutionOwner,
 ): Promise<PreCompressOutput | undefined> {
   // Get the HookSystem singleton (null when hooks disabled or unavailable)
-  const hookSystem = getEnabledHookSystem(config);
-  if (!hookSystem) {
+  if (owner === undefined) {
     return undefined;
   }
 
+  owner.signal?.throwIfAborted();
   try {
     // Initialize hook system if needed
-    await hookSystem.initialize();
 
     // Fire the event using HookSystem facade
-    const result = await hookSystem.firePreCompressEvent({ trigger });
+    const result = await owner.preCompress?.(trigger, owner.signal);
 
     debugLogger.debug('PreCompress hook executed', { trigger });
 
     // Return PreCompressOutput from aggregated result
-    if (result.finalOutput) {
+    if (result?.finalOutput) {
       return result.finalOutput as PreCompressOutput;
     }
 

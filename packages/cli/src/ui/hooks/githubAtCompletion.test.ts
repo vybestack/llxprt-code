@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
+import type { GitHubCompletionReads } from './githubAtCompletion.js';
 import {
   GITHUB_SUGGESTION_LIMIT,
   fetchGitHubSuggestions,
@@ -25,11 +25,11 @@ import {
 
 function stubClient(
   data: Record<string, unknown>,
-): GitHubBrokerClient & { calls: Array<[string, Record<string, unknown>]> } {
+): GitHubCompletionReads & { calls: Array<[string, Record<string, unknown>]> } {
   const calls: Array<[string, Record<string, unknown>]> = [];
   return {
     calls,
-    async runOperation(op, params) {
+    async readReport(op, params) {
       calls.push([op, params]);
       return data;
     },
@@ -163,8 +163,8 @@ describe('fetching suggestions', () => {
    * @requirement REQ-014
    */
   it('degrades to no suggestions when the broker fails', async () => {
-    const failing: GitHubBrokerClient = {
-      async runOperation() {
+    const failing: GitHubCompletionReads = {
+      async readReport() {
         throw new Error('HOST_AUTH_REQUIRED');
       },
     };

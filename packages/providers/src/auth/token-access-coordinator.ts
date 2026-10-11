@@ -12,29 +12,25 @@
  * via the injected AuthenticatorInterface to avoid a circular import cycle.
  */
 
+import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   OAuthToken,
   TokenStore,
   AuthenticatorInterface,
   BucketFailoverOAuthManagerLike,
+  ProfileOAuthRequest,
 } from './types.js';
+
 import {
-  ensureFailoverHandler,
-  ensureOnAuthErrorHandler,
-} from './token-bucket-failover-helper.js';
-import {
-  handleRefreshLockMiss,
-  executeTokenRefresh,
+  refreshTokenUnderLock,
   performDiskCheckUnderLock,
 } from './token-refresh-helper.js';
 import {
   resolveForceRefreshBaseline,
   loadTokenForForceRefresh,
   refreshStoredToken,
-  invalidateRuntimeCacheAfterRefresh,
 } from './token-force-refresh-helper.js';
 import {
   resolveProfileBuckets,
@@ -48,14 +44,13 @@ import { rethrowIfStoreOutage } from './token-store-outage.js';
 import {
   classifyInteractiveAuthReason,
   requestInteractiveAuthentication,
+  requiresInteractiveAuthentication,
 } from './interactive-auth-request.js';
-import { interactiveAuthCoordinator } from './interactive-auth-coordinator.js';
 import {
   extractRequestMetadata,
-  readAuthBucketPromptSetting,
   resolveImplicitBucketToCheck,
 } from './token-request-args.js';
-import { getActiveRuntimeKind } from '../runtime/active-runtime-identity.js';
+import type { OAuthManagerRuntimeMessageBusDeps } from './types.js';
 
 const logger = new DebugLogger('llxprt:oauth:token');
 
@@ -69,6 +64,8 @@ const logger = new DebugLogger('llxprt:oauth:token');
  * - TOCTOU double-check pattern around refresh
  * - Delegates auth flows to injected AuthenticatorInterface
  */
+
+type OAuthProfileReads = Pick<ProfileManager, 'loadProfile'>;
 
 export class TokenAccessCoordinator {
   private bucketResolutionLocks: Map<string, Promise<void>> = new Map();
@@ -91,12 +88,12 @@ export class TokenAccessCoordinator {
     private readonly bucketManager: OAuthBucketManager,
     private readonly facadeRef: BucketFailoverOAuthManagerLike,
     private readonly settings?: IOAuthSettingsProvider,
-    /**
-     * Config accessor function rather than a snapshot so that callers
-     * (e.g., tests that mutate manager.config after construction) always
-     * see the current Config instance.
-     */
-    private readonly getConfigFn: () => Config | undefined = () => undefined,
+    private readonly readCurrentProfileName: () => string | null = () => null,
+    private readonly readBucketPrompt: () => boolean = () => false,
+    private readonly readAuthIdentity?: OAuthManagerRuntimeMessageBusDeps['readAuthIdentity'],
+    private readonly readInteractiveAuthTimeout: () => unknown = () =>
+      undefined,
+    private readonly profiles?: OAuthProfileReads,
   ) {}
 
   // --------------------------------------------------------------------------
@@ -236,14 +233,33 @@ export class TokenAccessCoordinator {
    * Read a token from the store and either return it (if valid), refresh it
    * (if expired), or return null (if absent).
    */
+  async getProfileOAuthToken(
+    request: ProfileOAuthRequest,
+    renewals: ProactiveRenewalManager,
+  ): Promise<OAuthToken | null> {
+    const { providerName, profileName, signal } = request;
+    signal.throwIfAborted();
+    if (!this.providerRegistry.getProvider(providerName))
+      throw new Error(`Unknown provider: ${providerName}`);
+    const metadata = { providerId: providerName, profileId: profileName };
+    const bucket = await this.withBucketResolutionLock(providerName, () =>
+      this.resolveBucketWithFailover(providerName, metadata, request),
+    );
+    return this.readAndValidateToken(providerName, bucket, signal, renewals);
+  }
+
   private async readAndValidateToken(
     providerName: string,
     bucketToUse: string | undefined,
+    signal?: AbortSignal,
+    renewals: ProactiveRenewalManager = this.proactiveRenewalManager,
   ): Promise<OAuthToken | null> {
     logger.debug(
       () => `[FLOW] Reading token from tokenStore for ${providerName}...`,
     );
+    signal?.throwIfAborted();
     const token = await this.tokenStore.getToken(providerName, bucketToUse);
+    signal?.throwIfAborted();
     if (!token) {
       logger.debug(() => `[FLOW] No token in tokenStore for ${providerName}`);
       return null;
@@ -266,15 +282,13 @@ export class TokenAccessCoordinator {
         bucketToUse,
         token,
         thirtySecondsFromNow,
+        signal,
+        renewals,
       );
     }
 
     logger.debug(() => `[FLOW] Returning valid token for ${providerName}`);
-    this.proactiveRenewalManager.scheduleProactiveRenewal(
-      providerName,
-      bucketToUse,
-      token,
-    );
+    renewals.scheduleProactiveRenewal(providerName, bucketToUse, token);
     return token;
   }
 
@@ -304,7 +318,9 @@ export class TokenAccessCoordinator {
   private async resolveBucketWithFailover(
     providerName: string,
     requestMetadata: OAuthTokenRequestMetadata | undefined,
+    request?: ProfileOAuthRequest,
   ): Promise<string | undefined> {
+    request?.signal.throwIfAborted();
     let bucketToUse: string | undefined;
 
     const sessionBucket = this.facadeRef.getSessionBucket(
@@ -315,28 +331,20 @@ export class TokenAccessCoordinator {
       bucketToUse = sessionBucket;
     }
 
-    const profileBuckets = await this.getProfileBuckets(
-      providerName,
-      requestMetadata,
-    );
+    const profileBuckets = request
+      ? [...request.buckets]
+      : await this.getProfileBuckets(providerName, requestMetadata);
+    request?.signal.throwIfAborted();
 
-    const config = this.getConfigFn();
-    logger.debug(
-      () =>
-        `[issue1029] getOAuthToken: provider=${providerName}, buckets=${JSON.stringify(profileBuckets)}, hasConfig=${!!config}`,
-    );
-
-    // @fix issue1861: Ensure OnAuthErrorHandler is configured for auth error handling
-    ensureOnAuthErrorHandler(providerName, config, this.facadeRef);
-
-    const failoverHandler = ensureFailoverHandler(
-      providerName,
-      profileBuckets,
-      requestMetadata,
-      config,
-      this.bucketManager,
-      this.facadeRef,
-    );
+    const failoverHandler =
+      profileBuckets.length === 0
+        ? this.bucketManager.readFailoverHandler(providerName, requestMetadata)
+        : this.bucketManager.ensureFailoverHandler(
+            providerName,
+            profileBuckets,
+            this.facadeRef,
+            requestMetadata,
+          );
 
     if (!bucketToUse) {
       const handlerBucket = failoverHandler?.getCurrentBucket();
@@ -368,40 +376,19 @@ export class TokenAccessCoordinator {
     bucketToUse: string | undefined,
     token: OAuthToken,
     thirtySecondsFromNow: number,
+    signal?: AbortSignal,
+    renewals: ProactiveRenewalManager = this.proactiveRenewalManager,
   ): Promise<OAuthToken | null> {
-    logger.debug(
-      () =>
-        `[FLOW] Token expired or expiring soon for ${providerName}, attempting refresh with lock...`,
-    );
-
-    const lockAcquired = await this.tokenStore.acquireRefreshLock(
+    return refreshTokenUnderLock(
       providerName,
-      { waitMs: 10000, bucket: bucketToUse },
+      bucketToUse,
+      token,
+      thirtySecondsFromNow,
+      this.tokenStore,
+      this.providerRegistry,
+      renewals,
+      signal,
     );
-
-    if (!lockAcquired) {
-      return handleRefreshLockMiss(
-        providerName,
-        bucketToUse,
-        thirtySecondsFromNow,
-        this.tokenStore,
-        this.proactiveRenewalManager,
-      );
-    }
-
-    try {
-      return await executeTokenRefresh(
-        providerName,
-        bucketToUse,
-        token,
-        thirtySecondsFromNow,
-        this.tokenStore,
-        this.providerRegistry,
-        this.proactiveRenewalManager,
-      );
-    } finally {
-      await this.tokenStore.releaseRefreshLock(providerName, bucketToUse);
-    }
   }
 
   private async resolveEffectiveMetadata(
@@ -777,19 +764,19 @@ export class TokenAccessCoordinator {
     explicitBucket: boolean,
     reason: 'authentication-required' | 'reauthentication-required',
   ): Promise<string | null> {
-    const showPrompt = readAuthBucketPromptSetting();
-
     // @plan PLAN-20260827-ISSUE2562.P04
     // @requirement REQ-2562-3
-    const runtimeKind = getActiveRuntimeKind();
-    const requiresHost = runtimeKind === 'agent' || runtimeKind === 'subagent';
-    if (requiresHost || interactiveAuthCoordinator.hasHost()) {
+    const identity = this.readAuthIdentity?.();
+    const runtimeKind = identity?.runtimeKind;
+    if (requiresInteractiveAuthentication(runtimeKind)) {
       const authenticatedBucket = bucketToCheck ?? 'default';
       await requestInteractiveAuthentication(
         providerName,
         authenticatedBucket,
         runtimeKind,
         reason,
+        this.readInteractiveAuthTimeout(),
+        identity,
       );
       this.facadeRef.setSessionBucket(
         providerName,
@@ -802,7 +789,8 @@ export class TokenAccessCoordinator {
       // intercept them (preserving the pre-refactor behaviour).
       this.requireAuthenticator();
 
-      if (showPrompt) {
+      const prompt = this.readBucketPrompt();
+      if (prompt) {
         const effectiveBuckets = bucketToCheck ? [bucketToCheck] : ['default'];
         logger.debug(
           `Single-bucket auth with prompt mode for ${providerName}, bucket: ${effectiveBuckets[0]}`,
@@ -844,10 +832,16 @@ export class TokenAccessCoordinator {
   // Profile resolution helpers
   // --------------------------------------------------------------------------
 
+  private readonly readProfileName = (): string | null =>
+    this.readCurrentProfileName();
+
   async getCurrentProfileSessionMetadata(
     providerName: string,
   ): Promise<OAuthTokenRequestMetadata | undefined> {
-    return resolveCurrentProfileSessionMetadata(providerName);
+    return resolveCurrentProfileSessionMetadata(
+      providerName,
+      this.readProfileName(),
+    );
   }
 
   async getCurrentProfileSessionBucket(
@@ -893,7 +887,12 @@ export class TokenAccessCoordinator {
     providerName: string,
     metadata?: OAuthTokenRequestMetadata,
   ): Promise<string[]> {
-    return resolveProfileBuckets(providerName, metadata);
+    return resolveProfileBuckets(
+      providerName,
+      this.readProfileName,
+      metadata,
+      this.profiles,
+    );
   }
 
   // --------------------------------------------------------------------------
@@ -1016,19 +1015,12 @@ export class TokenAccessCoordinator {
         effectiveBucket,
         this.tokenStore,
       );
-      // @fix issue2035: if another process already refreshed the disk token,
-      // invalidate the stale in-memory cache before returning so the retry
-      // resolves the fresh token. If there is no stored token, do NOT
-      // invalidate (nothing fresh to switch to).
       if (!storedToken) {
         return null;
       }
       if (storedToken.access_token !== effectiveFailedToken) {
-        invalidateRuntimeCacheAfterRefresh(providerName);
         return storedToken;
       }
-      // @fix issue2035: after a successful local refresh, invalidate the
-      // stale in-memory cache so retries resolve the fresh disk token.
       const refreshedToken = await refreshStoredToken(
         providerName,
         storedToken,
@@ -1037,9 +1029,6 @@ export class TokenAccessCoordinator {
         this.providerRegistry,
         this.proactiveRenewalManager,
       );
-      if (refreshedToken) {
-        invalidateRuntimeCacheAfterRefresh(providerName);
-      }
       return refreshedToken;
     } catch (refreshError) {
       rethrowIfStoreOutage(refreshError);

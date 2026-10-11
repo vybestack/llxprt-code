@@ -3,6 +3,12 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type {
+  WorkspacePathOperations,
+  WorkspaceTextOperations,
+  WorkspaceScanOperations,
+  WorkspaceIgnoreOperations,
+} from '../services/workspace-filesystem-owner.js';
 
 /**
  * Shared configuration types extracted from config.ts.
@@ -20,28 +26,22 @@ import type { SkillDefinition } from '../skills/skillManager.js';
  * instead of providers package.
  */
 import type { BucketFailureReason } from '../runtime/contracts/BucketFailureReason.js';
-import type { MCPOAuthConfig } from '@vybestack/llxprt-code-mcp';
+import type {
+  McpApprovalPolicy,
+  MCPOAuthConfig,
+} from '@vybestack/llxprt-code-mcp';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-mcp/config/mcpServerConfig.js';
 import type { OutputFormat } from '../utils/output-format.js';
 import type { FileFilteringOptions } from './constants.js';
-import type { EventEmitter } from 'node:events';
-import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
-import type { ExtensionLoader } from '../utils/extensionLoader.js';
 import type { EnvironmentSanitizationConfig } from '../services/environmentSanitization.js';
 import type { PolicyEngineConfig } from '../policy/types.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
-import type { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import type {
   AnyToolInvocation,
-  GitHubBrokerClient,
   ISkillService,
-  ToolRegistry,
+  ToolPublication,
+  ILspService,
 } from '@vybestack/llxprt-code-tools';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
-import type { AgentClientFactory } from '../core/clientContract.js';
-import type { ToolSchedulerFactory } from '../core/toolSchedulerContract.js';
-import type { TaskToolRegistration } from './toolRegistryFactory.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 
 export type {
@@ -54,8 +54,8 @@ export type {
 /**
  * Registration hook for post-skill-discovery tool registration.
  *
- * Core calls this after every skill discovery, during initialize() and again
- * on reloadSkills(), passing core-owned dependencies. The composition root
+ * The workspace skill owner calls this after discovery and reload, passing
+ * core-owned dependencies. The composition root
  * (CLI) supplies a callback that constructs and registers the concrete
  * ActivateSkillTool from the tools package, eliminating the inverted
  * core->tools dependency.
@@ -66,7 +66,7 @@ export type {
  * (issue #3379).
  */
 export type PostSkillDiscoveryToolRegistrar = (
-  toolRegistry: ToolRegistry,
+  toolRegistry: ToolPublication,
   skillService: ISkillService,
   messageBus: MessageBus,
 ) => void;
@@ -340,32 +340,27 @@ export interface BucketFailoverHandler {
    * No-op for single-bucket profiles.
    */
   ensureBucketsAuthenticated?(): Promise<void>;
+}
 
-  /**
-   * Invalidate the auth cache for a runtime, forcing fresh keychain reads.
-   * Called at turn boundaries and after auth errors.
-   */
-  invalidateAuthCache?(runtimeId: string): void;
+export interface MemorySettings {
+  readonly importFormat: 'tree' | 'flat';
+  readonly filenames: readonly string[];
+  readonly maxDirectories: number;
+  readonly maxDepth?: number;
+  readonly filtering: FileFilteringOptions;
 }
 
 export interface ConfigParameters {
+  readonly profileDirectory?: string;
+  readonly subagentDirectory?: string;
+  memorySettings?: Omit<MemorySettings, 'filenames'> & {
+    readonly filenames?: readonly string[];
+  };
   sessionId: string;
   embeddingModel?: string;
   sandbox?: SandboxConfig;
-  /**
-   * Transport for brokered GitHub operations, supplied by the CLI layer.
-   *
-   * core cannot import the broker directly: the broker lives in
-   * `packages/providers`, which core does not depend on. core therefore
-   * defines the port and the CLI provides the adapter. When absent, the
-   * `github` tool is not registered, so a host without the wiring simply
-   * does not advertise a tool it cannot serve.
-   *
-   * @plan PLAN-20260731-GHBROKER.P15
-   * @requirement REQ-003, REQ-004
-   */
-  githubBrokerClient?: GitHubBrokerClient;
   targetDir: string;
+  storageRoot?: string;
   debugMode: boolean;
   outputFormat?: OutputFormat;
   question?: string;
@@ -380,8 +375,6 @@ export interface ConfigParameters {
   mcpServers?: Record<string, MCPServerConfig>;
   lsp?: LspConfig | boolean;
   userMemory?: string;
-  llxprtMdFileCount?: number;
-  llxprtMdFilePaths?: string[];
   approvalMode?: ApprovalMode;
   showMemoryUsage?: boolean;
   contextLimit?: number;
@@ -400,7 +393,6 @@ export interface ConfigParameters {
   dumpOnError?: boolean;
   proxy?: string;
   cwd: string;
-  fileDiscoveryService?: FileDiscoveryService;
   includeDirectories?: string[];
   bugCommand?: BugCommandSettings;
   model: string;
@@ -409,10 +401,8 @@ export interface ConfigParameters {
   experimentalZedIntegration?: boolean;
   listExtensions?: boolean;
   activeExtensions?: ActiveExtension[];
-  providerManager?: RuntimeProviderManager;
   provider?: string;
   extensions?: LlxprtExtension[];
-  extensionLoader?: ExtensionLoader;
   enabledExtensions?: string[];
   enableExtensionReloading?: boolean;
   allowedMcpServers?: string[];
@@ -421,7 +411,6 @@ export interface ConfigParameters {
   summarizeToolOutput?: Record<string, SummarizeToolOutputSettings>;
   folderTrust?: boolean;
   ideMode?: boolean;
-  ideClient?: IdeClient;
   complexityAnalyzer?: ComplexityAnalyzerSettings;
   loadMemoryFromIncludeDirectories?: boolean;
   chatCompression?: ChatCompressionSettings;
@@ -437,19 +426,7 @@ export interface ConfigParameters {
   skipNextSpeakerCheck?: boolean;
   extensionManagement?: boolean;
   enablePromptCompletion?: boolean;
-  eventEmitter?: EventEmitter;
-  settingsService?: SettingsService;
-  /**
-   * #2534 review Finding 6: explicit ownership declaration for an injected
-   * settingsService. 'delegated' asserts the CALLER created the service for
-   * this Config's exclusive use (the CLI bootstrap's pattern: the service is
-   * constructed by the bootstrap and handed to Config construction), so the
-   * constructor's activeProvider/model store seeding applies. The default
-   * (omitted, or 'shared') keeps an injected service untouched — absence of
-   * an activeProvider key is not proof of freshness for a service carrying
-   * injector-owned state (#2300).
-   */
-  settingsServiceOwnership?: 'shared' | 'delegated';
+  initialSettings?: Readonly<Record<string, unknown>>;
   policyEngineConfig?: PolicyEngineConfig;
   truncateToolOutputThreshold?: number;
   truncateToolOutputLines?: number;
@@ -471,52 +448,9 @@ export interface ConfigParameters {
   skillsSupport?: boolean;
   disabledSkills?: string[];
   sanitizationConfig?: EnvironmentSanitizationConfig;
-  onReload?: () => Promise<{
-    disabledSkills?: string[];
-    adminSkillsEnabled?: boolean;
-  }>;
-  onReloadMcpServers?: () => Promise<{
-    mcpServers: Record<string, MCPServerConfig>;
-    blockedMcpServers: Array<{ name: string; extensionName: string }>;
-    settingsMcpServers: Record<string, MCPServerConfig>;
-  }>;
   outputSettings?: OutputSettings;
   introspectionAgentSettings?: IntrospectionAgentSettings;
   useWriteTodos?: boolean;
-
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-001
-   * Factory for creating AgentClient instances. Injected by composition roots.
-   * Absence is an error at USE time (initialize/initializeContentGeneratorConfig),
-   * never at Config construction time.
-   */
-  agentClientFactory?: AgentClientFactory;
-
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-002
-   * Factory for creating CoreToolScheduler instances. Injected by composition roots.
-   * Absence is an error at USE time (getOrCreateScheduler),
-   * never at Config construction time.
-   */
-  toolSchedulerFactory?: ToolSchedulerFactory;
-
-  /**
-   * @plan PLAN-20260610-ISSUE1592.P01
-   * @requirement REQ-INV-003
-   * TaskTool registration descriptor. Injected by composition roots (P03+).
-   * During P01-P02, core-local default registration is used when not provided.
-   */
-  taskToolRegistration?: TaskToolRegistration;
-
-  /**
-   * Registration hook for post-skill-discovery tool registration.
-   * Injected by composition roots. Eliminates the inverted core->tools
-   * dependency by letting the CLI register ActivateSkillTool without
-   * core importing from the tools package.
-   */
-  postSkillDiscoveryToolRegistrar?: PostSkillDiscoveryToolRegistrar;
 
   jitContextEnabled?: boolean;
   adminSkillsEnabled?: boolean;
@@ -526,4 +460,30 @@ export interface ConfigParameters {
   onModelChange?: (model: string) => void;
   mcpEnabled?: boolean;
   extensionsEnabled?: boolean;
+}
+
+export interface ConfigInitializationDependencies {
+  readonly initializeMemory?: () => Promise<void>;
+  workspacePaths: WorkspacePathOperations;
+  workspaceFiles: WorkspaceTextOperations;
+  workspaceIgnore: WorkspaceIgnoreOperations;
+  workspaceScans: WorkspaceScanOperations;
+  lspDiagnostics?: ILspService;
+  initializeIde?: () => Promise<void>;
+  initializeTools: () => Promise<void>;
+  startLsp?: () => Promise<void>;
+  startExtensions?: () => Promise<void>;
+  publishTools?: () => Promise<void>;
+  summarizeOutput?: (
+    content: string,
+    signal: AbortSignal,
+    tokenBudget?: number,
+  ) => Promise<string>;
+  mcpApprovalPolicy: McpApprovalPolicy;
+  startMcpDiscovery: () => void;
+  startMcpExtension: (extension: LlxprtExtension) => Promise<void>;
+  stopMcpExtension: (extension: LlxprtExtension) => Promise<void>;
+  readMcpInstructions: () => string | undefined;
+  messageBus?: MessageBus;
+  startMcp?: () => Promise<void>;
 }

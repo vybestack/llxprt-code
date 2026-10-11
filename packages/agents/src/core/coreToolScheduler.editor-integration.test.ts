@@ -1,8 +1,10 @@
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
 /**
  * REAL behavioral integration suite for issue #2659.
@@ -32,7 +34,7 @@ import * as os from 'node:os';
 
 import { CoreToolScheduler } from './coreToolScheduler.js';
 import type { ToolCall } from './coreToolScheduler.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   ApprovalMode,
   DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
@@ -113,7 +115,10 @@ function createToolHost(targetDir: string): IToolHost {
     getApprovalMode: () => 'default' as const,
     setApprovalMode: () => {},
     isInteractive: () => true,
-    hasFeatureFlag: () => false,
+    runSearch: <T>(
+      _directories: readonly string[],
+      operation: () => Promise<T>,
+    ): Promise<T> => operation(),
     getFileService: () => ({
       shouldGitIgnoreFile: () => false,
       shouldLlxprtIgnoreFile: () => false,
@@ -129,9 +134,12 @@ function createToolHost(targetDir: string): IToolHost {
     getFileFilteringRespectLlxprtIgnore: () => true,
     getLlxprtIgnoreFilePath: () => null,
     recordFileRead: () => {},
-    getFileSystemService: () => undefined,
+    readTextFile: (filePath) =>
+      import('node:fs/promises').then((fs) => fs.readFile(filePath, 'utf8')),
+    writeTextFile: (filePath, content) =>
+      import('node:fs/promises').then((fs) => fs.writeFile(filePath, content)),
     getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({
+    readExecutionPolicy: () => ({
       'tool-output-max-items': 50,
       'tool-output-max-tokens': 50000,
       'tool-output-item-size-limit': 524288,
@@ -185,7 +193,7 @@ function buildTestContext(
       getExcludeTools: () => [],
     },
     new CoreMessageBusAdapter(messageBus),
-    new SettingsService(),
+    assembleTaskSchemaPolicy(new SettingsService()),
   );
   toolRegistry.registerTool(editTool);
   toolRegistry.registerTool(writeFileTool);
@@ -198,34 +206,50 @@ function buildTestContext(
   const onToolCallsUpdate = vi.fn();
 
   let currentMode = initialMode;
-  const config = {
-    getSessionId: () => TEST_SESSION_ID,
-    getUsageStatisticsEnabled: () => false,
-    getDebugMode: () => false,
-    isInteractive: () => true,
-    getApprovalMode: () => currentMode,
-    setApprovalMode: (mode: ApprovalMode) => {
-      currentMode = mode;
-      engine.setApprovalMode(mode);
-    },
-    getEphemeralSettings: () => ({
-      'tool-output-max-tokens': 50000,
-      'tool-output-max-items': 50,
+  const config = Object.assign(
+    new Config({
+      sessionId: TEST_SESSION_ID,
+      model: 'test-model',
+      cwd: tempDir,
+      targetDir: tempDir,
+      debugMode: false,
     }),
-    getAllowedTools: () => [],
-    getContentGeneratorConfig: () => ({ model: 'test-model' }),
-    getToolRegistry: () => toolRegistry,
-    getMessageBus: () => messageBus,
-    getEnableHooks: () => false,
-    getHookSystem: () => null,
-    getPolicyEngine: () => engine,
-    getModel: () => 'test-model',
-    getTruncateToolOutputThreshold: () =>
-      DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
-    getTruncateToolOutputLines: () => DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
-  } as unknown as Config;
+    {
+      getSessionId: () => TEST_SESSION_ID,
+      getUsageStatisticsEnabled: () => false,
+      getDebugMode: () => false,
+      isInteractive: () => true,
+      getApprovalMode: () => currentMode,
+      setApprovalMode: (mode: ApprovalMode) => {
+        currentMode = mode;
+        engine.setApprovalMode(mode);
+      },
+      getEphemeralSettings: () => ({
+        'tool-output-max-tokens': 50000,
+        'tool-output-max-items': 50,
+      }),
+      getAllowedTools: () => [],
+      getContentGeneratorConfig: () => ({ model: 'test-model' }),
+      getMessageBus: () => messageBus,
+      getEnableHooks: () => false,
+      getHookSystem: () => null,
+      getPolicyEngine: () => engine,
+      getProvider: () => 'test-provider',
+      getModel: () => 'test-model',
+      getTruncateToolOutputThreshold: () =>
+        DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
+      getTruncateToolOutputLines: () => DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
+    },
+  );
 
+  const { settingsOwner } = createSessionSettingsFixture(
+    config,
+    new SettingsService(),
+  );
   const scheduler = new CoreToolScheduler({
+    telemetry: settingsOwner.telemetry,
+    readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+    getToolGovernance: () => settingsOwner.readToolGovernance([]),
     config,
     messageBus,
     toolRegistry,

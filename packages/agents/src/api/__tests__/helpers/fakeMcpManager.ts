@@ -15,15 +15,14 @@
  * Builds a fully-controllable `McpControlDeps` backed by an in-memory
  * runtime-status view. The view drives the SAME narrow callbacks the
  * production Config capabilities expose (getMcpRuntimeStatus /
- * refreshMcpServers) plus the global core server status channel
- * (updateMCPServerStatus). McpControl reads these exactly as it does in
+ * refreshMcpServers). Server states belong to the fake manager instance.
+ * McpControl reads these exactly as it does in
  * production — no production code reads anything from this fake.
  */
 
 import {
   MCPServerStatus,
   MCPDiscoveryState,
-  updateMCPServerStatus,
 } from '@vybestack/llxprt-code-core';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
@@ -44,6 +43,7 @@ export interface FakeRegistryTool {
 
 /** Controllable in-memory state for a fake MCP runtime-status view. */
 export interface FakeMcpManagerView {
+  setServerStatus(name: string, status: MCPServerStatus): void;
   setServers(servers: Record<string, MCPServerConfig>): void;
   setDiscoveryState(state: MCPDiscoveryState): void;
   setFailure(server: string, message: string): void;
@@ -66,6 +66,13 @@ interface FakeManagerInternal extends FakeMcpManagerView {
 }
 
 class FakeManager implements FakeManagerInternal {
+  readonly serverStates = new Map<
+    string,
+    { status: MCPServerStatus; requiresOAuth: boolean }
+  >();
+  setServerStatus(name: string, status: MCPServerStatus): void {
+    this.serverStates.set(name, { status, requiresOAuth: false });
+  }
   private servers: Record<string, MCPServerConfig> = {};
   private state: MCPDiscoveryState = MCPDiscoveryState.NOT_STARTED;
   private readonly failures = new Map<string, string>();
@@ -190,6 +197,7 @@ export function createFakeMcpDeps(
 
   const statusView: McpRuntimeStatusView | undefined = hasManager
     ? {
+        serverStates: manager.serverStates,
         get servers() {
           return manager.getMcpServers();
         },
@@ -232,9 +240,4 @@ export function fakeServerConfig(
     cwd: process.cwd(),
     ...overrides,
   } as MCPServerConfig;
-}
-
-/** Sets the global core server-status channel McpControl reads via getMCPServerStatus. */
-export function setServerStatus(name: string, status: MCPServerStatus): void {
-  updateMCPServerStatus(name, status);
 }

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import { ConfigBasedRedactor } from './ConfigBasedRedactor.js';
 import type { ConversationDataRedactor } from './ConfigBasedRedactor.js';
@@ -26,7 +26,7 @@ export interface RequestSetupContext {
  */
 export function setupRedactor(
   normalizedOptions: GenerateChatOptions,
-  activeConfig: Config,
+  activeConfig: ProviderRequestDiagnostics,
   ctx: RequestSetupContext,
 ): ConversationDataRedactor | null {
   const invocation = normalizedOptions.invocation;
@@ -39,7 +39,7 @@ export function setupRedactor(
   if (invocation?.redaction) {
     redactor = new ConfigBasedRedactor({ ...invocation.redaction });
   } else {
-    redactor = new ConfigBasedRedactor(activeConfig.getRedactionConfig());
+    redactor = new ConfigBasedRedactor(activeConfig.redaction);
   }
   ctx.debug.log(() => `After redactor setup: hasRedactor=true`);
   return redactor;
@@ -49,12 +49,12 @@ export function setupRedactor(
  * Check whether conversation logging is enabled, re-throwing on failure.
  */
 export function checkConversationLoggingEnabled(
-  activeConfig: Config,
+  activeConfig: ProviderRequestDiagnostics,
   debug: DebugLogger,
 ): boolean {
   try {
     debug.log(() => `About to call getConversationLoggingEnabled()`);
-    const enabled = activeConfig.getConversationLoggingEnabled();
+    const enabled = activeConfig.conversationLoggingEnabled;
     debug.log(() => `getConversationLoggingEnabled() returned: ${enabled}`);
     return enabled;
   } catch (error) {
@@ -70,7 +70,7 @@ export function checkConversationLoggingEnabled(
  * Log the request if conversation logging is enabled.
  */
 export async function logRequestIfEnabled(
-  activeConfig: Config,
+  activeConfig: ProviderRequestDiagnostics,
   normalizedOptions: GenerateChatOptions,
   promptId: string,
   redactor: ConversationDataRedactor | null,

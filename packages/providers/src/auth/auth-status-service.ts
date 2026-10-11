@@ -15,19 +15,15 @@
  *        OAuth is enabled; falls back to token-store validity check.
  *   G2 – logout no longer performs manager-layer Gemini filesystem cleanup;
  *        the provider's own logout() handles provider-specific cleanup.
- *   G3 – clearProviderAuthCaches uses generic duck-typed optional calls with
- *        independent try/catch per call (no provider-name branching).
+ *   G3 – cache invalidation is supplied by the owning runtime.
  */
 
-import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-auth';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { AuthStatus, TokenStore } from './types.js';
 import type { ProviderRegistry } from './provider-registry.js';
 import type { ProactiveRenewalManager } from './proactive-renewal-manager.js';
 import type { OAuthBucketManager } from './OAuthBucketManager.js';
 import type { TokenAccessCoordinator } from './token-access-coordinator.js';
-import { unwrapLoggingProvider } from './auth-utils.js';
-import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 
 const logger = new DebugLogger('llxprt:oauth:status');
 
@@ -38,6 +34,7 @@ export class AuthStatusService {
     private readonly proactiveRenewalManager: ProactiveRenewalManager,
     private readonly bucketManager: OAuthBucketManager,
     private readonly tokenAccessCoordinator: TokenAccessCoordinator,
+    private readonly invalidateAuthCaches?: (providerName: string) => void,
   ) {}
 
   // --------------------------------------------------------------------------
@@ -339,131 +336,7 @@ export class AuthStatusService {
     return statuses;
   }
 
-  // --------------------------------------------------------------------------
-  // clearProviderAuthCaches  (G3: no provider-name branching)
-  // --------------------------------------------------------------------------
-
-  /**
-   * Clear all auth caches for a provider after logout.
-   *
-   * Operates on the core BaseProvider instance resolved via the runtime
-   * provider manager. Uses duck-typed optional calls with an independent
-   * try/catch per call so one failure does not skip the next (G3).
-   *
-   * The runtime scope flush always executes in a finally block (G4/E).
-   *
-   * This method is non-throwing on provider-resolution/dynamic-import
-   * failures (E).
-   */
   async clearProviderAuthCaches(providerName: string): Promise<void> {
-    let providerManager:
-      | { getProviderByName: (name: string) => unknown }
-      | undefined;
-    let runtimeContext: { runtimeId?: string } | undefined;
-
-    try {
-      providerManager = oauthRuntimeBridge.getProviderManager();
-
-      try {
-        runtimeContext = oauthRuntimeBridge.getRuntimeContext();
-      } catch (rctxErr) {
-        logger.debug(
-          `Could not get CLI runtime context for ${providerName}:`,
-          rctxErr,
-        );
-      }
-    } catch (accessorErr) {
-      logger.debug(
-        `Failed to resolve runtime accessors for ${providerName} cache clear:`,
-        accessorErr,
-      );
-      // Still attempt scope flush below
-    }
-
-    if (providerManager) {
-      const rawProvider = providerManager.getProviderByName(providerName);
-      const provider = unwrapLoggingProvider(
-        rawProvider as { name: string } | undefined,
-      );
-
-      if (!provider) {
-        logger.debug(
-          `Provider ${providerName} not found in runtime manager; skipping cache clear.`,
-        );
-      } else {
-        this.clearCoreProviderCaches(providerName, provider);
-      }
-    }
-
-    this.flushKnownRuntimeScopes(providerName, runtimeContext);
-    logger.debug(`Cleared auth caches for provider: ${providerName}`);
-  }
-
-  /**
-   * Duck-typed independent cache clearing for a resolved core provider instance.
-   * G3: each method call is wrapped in its own try/catch so one failure does
-   * not prevent the remaining cleanup steps from executing.
-   */
-  private clearCoreProviderCaches(
-    providerName: string,
-    provider: { name: string },
-  ): void {
-    const p = provider as Record<string, unknown>;
-
-    if (
-      'clearAuthCache' in provider &&
-      typeof p['clearAuthCache'] === 'function'
-    ) {
-      try {
-        (provider as { clearAuthCache: () => void }).clearAuthCache();
-      } catch (e) {
-        logger.debug(`clearAuthCache failed for ${providerName}:`, e);
-      }
-    }
-
-    if ('clearAuth' in provider && typeof p['clearAuth'] === 'function') {
-      try {
-        (provider as { clearAuth: () => void }).clearAuth();
-      } catch (e) {
-        logger.debug(`clearAuth failed for ${providerName}:`, e);
-      }
-    }
-
-    if ('clearState' in provider && typeof p['clearState'] === 'function') {
-      try {
-        (provider as { clearState: () => void }).clearState();
-      } catch (e) {
-        logger.debug(`clearState failed for ${providerName}:`, e);
-      }
-    }
-  }
-
-  /**
-   * Flush the explicitly resolved runtime auth scope. Issue #2300 intentionally
-   * removes legacy broad-scope flushing; callers without a runtimeId cannot
-   * safely infer which runtime owns the provider credentials.
-   */
-  private flushKnownRuntimeScopes(
-    providerName: string,
-    runtimeContext: { runtimeId?: string } | undefined,
-  ): void {
-    if (!runtimeContext?.runtimeId) {
-      logger.debug(
-        `No runtimeId available while clearing ${providerName}; skipping runtime auth scope flush.`,
-      );
-      return;
-    }
-
-    try {
-      flushRuntimeAuthScope(runtimeContext.runtimeId);
-      logger.debug(
-        `Flushed runtime auth scope ${runtimeContext.runtimeId} for ${providerName}`,
-      );
-    } catch (flushError) {
-      logger.debug(
-        `Skipped flush for runtime ${runtimeContext.runtimeId} while clearing ${providerName}:`,
-        flushError,
-      );
-    }
+    this.invalidateAuthCaches?.(providerName);
   }
 }

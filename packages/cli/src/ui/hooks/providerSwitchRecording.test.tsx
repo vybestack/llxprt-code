@@ -20,15 +20,15 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  Config,
   RecordingIntegration,
   isSessionStartHeader,
+  type AgentClientContract,
   type HydratedModel,
   type SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import { hasDialogRequest } from '../../__tests__/dialogStore.js';
+import { LiveProviderConfig } from '../../__tests__/liveProviderConfig.js';
 import { buildNewRecordingService } from '../../cliSessionBootstrap.js';
 import { MessageType } from '../types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
@@ -45,7 +45,7 @@ interface ConfigBackedRuntime {
     providerName: string;
     previousModel: string | null;
   }>;
-  getActiveProviderStatus(): {
+  providerStatus(): {
     providerName: string | null;
     modelName: string | null;
   };
@@ -65,7 +65,9 @@ const SAVED_PROFILES: Readonly<
 };
 
 /** The runtime API as the dialogs see it, switching the real Config. */
-function createConfigBackedRuntime(config: Config): ConfigBackedRuntime {
+function createConfigBackedRuntime(
+  config: LiveProviderConfig,
+): ConfigBackedRuntime {
   const status = () => ({
     providerName: config.getProvider() ?? null,
     modelName: config.getModel() === '' ? null : config.getModel(),
@@ -84,7 +86,7 @@ function createConfigBackedRuntime(config: Config): ConfigBackedRuntime {
         previousModel,
       };
     },
-    getActiveProviderStatus: status,
+    providerStatus: status,
     getActiveProviderName: () => config.getProvider() ?? null,
     listSavedProfiles: async () => Object.keys(SAVED_PROFILES),
     loadProfileByName: async (name) => {
@@ -119,8 +121,16 @@ import { profileCommand } from '../commands/profileCommand.js';
 
 const PROJECT_HASH = 'provider-switch-recording';
 
-function noProviderConfig(root: string): Config {
-  return new Config({
+/** The session client recording bootstrap needs; these tests never use its agent client. */
+function sessionClientFor(root: string) {
+  return {
+    getAgentClient: () => ({}) as AgentClientContract,
+    workspaceDirectories: () => [root],
+  };
+}
+
+function noProviderConfig(root: string): LiveProviderConfig {
+  return new LiveProviderConfig({
     cwd: root,
     targetDir: root,
     debugMode: false,
@@ -128,7 +138,6 @@ function noProviderConfig(root: string): Config {
     userMemory: '',
     sessionId: 'switch-recording-session',
     model: '',
-    settingsService: new SettingsService(),
   });
 }
 
@@ -139,7 +148,7 @@ function pickerModel(provider: string, id: string): HydratedModel {
 describe('provider changes made in dialogs reach the session recording (issue #3732)', () => {
   let root: string;
   let chatsDir: string;
-  let config: Config;
+  let config: LiveProviderConfig;
   let recording: SessionRecordingService;
   let integration: RecordingIntegration;
   let addedMessages: string[];
@@ -149,7 +158,12 @@ describe('provider changes made in dialogs reach the session recording (issue #3
     chatsDir = join(root, 'chats');
     config = noProviderConfig(root);
     runtimeHolder.current = createConfigBackedRuntime(config);
-    recording = await buildNewRecordingService(config, PROJECT_HASH, chatsDir);
+    recording = await buildNewRecordingService(
+      config,
+      PROJECT_HASH,
+      chatsDir,
+      sessionClientFor(root),
+    );
     integration = new RecordingIntegration(recording);
     addedMessages = [];
   });
@@ -277,7 +291,7 @@ describe('provider changes made in dialogs reach the session recording (issue #3
       useLoadProfileDialog({
         addMessage,
         dialogs,
-        recordingIntegrationRef: { current: integration },
+        recorder: integration,
       }),
     );
 
@@ -298,7 +312,7 @@ describe('provider changes made in dialogs reach the session recording (issue #3
       useProfileManagement({
         addMessage,
         dialogs,
-        recordingIntegrationRef: { current: integration },
+        recorder: integration,
       }),
     );
 
@@ -321,7 +335,11 @@ describe('provider changes made in dialogs reach the session recording (issue #3
       useLoadProfileDialog({
         addMessage,
         dialogs,
-        recordingIntegrationRef: swapped,
+        recorder: {
+          // The dialogs read the live integration when they record.
+          recordProviderSwitch: (provider, model) =>
+            swapped.current?.recordProviderSwitch(provider, model),
+        },
       }),
     );
 
@@ -344,14 +362,12 @@ describe('provider changes made in dialogs reach the session recording (issue #3
       const heldBytes = recording.getPendingByteCount();
       await integration.dispose();
       await recording.dispose();
-      config.setEphemeralSetting(
-        'session-recording-queue-max-bytes',
-        heldBytes,
-      );
+      config.setSessionRecordingQueueByteLimit(heldBytes);
       recording = await buildNewRecordingService(
         config,
         PROJECT_HASH,
         chatsDir,
+        sessionClientFor(root),
       );
       integration = new RecordingIntegration(recording);
     });
@@ -433,7 +449,7 @@ describe('provider changes made in dialogs reach the session recording (issue #3
             addedMessages.push(`${message.type}:${message.content}`);
           },
           dialogs,
-          recordingIntegrationRef: { current: integration },
+          recorder: integration,
         }),
       );
 
@@ -456,7 +472,7 @@ describe('provider changes made in dialogs reach the session recording (issue #3
     it('reports a provider status read failure as a recording failure, not a failed profile load', async () => {
       const failingStatusRuntime: ConfigBackedRuntime = {
         ...requireRuntime(),
-        getActiveProviderStatus: () => {
+        providerStatus: () => {
           throw new Error('provider status unavailable');
         },
       };
@@ -470,7 +486,7 @@ describe('provider changes made in dialogs reach the session recording (issue #3
             addedMessages.push(`${message.type}:${message.content}`);
           },
           dialogs,
-          recordingIntegrationRef: { current: integration },
+          recorder: integration,
         }),
       );
 
@@ -500,7 +516,7 @@ describe('provider changes made in dialogs reach the session recording (issue #3
             addedMessages.push(`${message.type}:${message.content}`);
           },
           dialogs,
-          recordingIntegrationRef: { current: integration },
+          recorder: integration,
         }),
       );
 
@@ -528,6 +544,24 @@ describe('provider changes made in dialogs reach the session recording (issue #3
       }
       const context = createMockCommandContext({
         recordingIntegration: integration,
+        services: {
+          agent: {
+            getProvider: () => config.getProvider() ?? '',
+            getModel: () => config.getModel(),
+            profiles: {
+              load: async (name: string) => {
+                await requireRuntime().loadProfileByName(name);
+                return {
+                  providerName: config.getProvider(),
+                  modelName: config.getModel(),
+                  infoMessages: [],
+                  warnings: [],
+                };
+              },
+            },
+            sessionClient: { publishTools: async () => {} },
+          },
+        },
       });
 
       const result = await loadCommand.action(context, 'lunahigh');

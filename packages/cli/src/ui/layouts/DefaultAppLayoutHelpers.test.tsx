@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
+
 /**
  * Static-item composition coverage for DefaultAppLayoutHelpers (issue #2025).
  *
@@ -36,6 +38,7 @@ const config = buildSlashCommandRuntime(
     debugMode: false,
     model: 'test-model',
   }),
+  createUiSessionOwner(),
 );
 
 const settings = new LoadedSettings(

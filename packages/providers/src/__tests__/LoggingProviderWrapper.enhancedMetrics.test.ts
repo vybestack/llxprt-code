@@ -7,6 +7,7 @@
  * Split from LoggingProviderWrapper.apiTelemetry.test.ts for max-lines compliance.
  */
 
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import { describe, expect, it, vi, beforeEach } from 'bun:test';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import type { GenerateChatOptions, IContent, IProvider } from '../IProvider.js';
@@ -170,7 +171,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
     it('should pass total tokens (input + output) to performanceTracker via processStreamForMetrics', async () => {
       const provider = new MultiChunkWithUsageProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
@@ -202,7 +209,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
     it('should capture TTFT (timeToFirstToken) on first chunk via processStreamForMetrics', async () => {
       const provider = new MultiChunkWithUsageProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
@@ -235,7 +248,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
     it('should count chunks correctly via processStreamForMetrics', async () => {
       const provider = new MultiChunkWithUsageProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
@@ -269,7 +288,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
     it('should capture TTFT on first token-bearing chunk (ignoring metadata-only chunks)', async () => {
       const provider = new MetadataThenTextProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
@@ -301,7 +326,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
     it('should treat tool_call blocks as token-bearing for TTFT detection', async () => {
       const provider = new ToolCallOnlyProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
@@ -333,7 +364,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
     it('should preserve first-chunk TTFT and chunk count when processStreamForMetrics errors', async () => {
       const provider = new TextThenErrorProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
@@ -371,7 +408,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
     it('should compute tokensPerSecond as cumulative average', async () => {
       const provider = new MultiChunkWithUsageProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(false);
@@ -437,7 +480,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
     it('should pass total tokens (input + output) to performanceTracker via logResponseStream', async () => {
       const provider = new MultiChunkForLoggingProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(true); // Logging ENABLED → logResponseStream path
@@ -469,7 +518,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
     it('should capture TTFT and chunkCount via logResponseStream', async () => {
       const provider = new MultiChunkForLoggingProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(true); // Logging ENABLED → logResponseStream path
@@ -544,7 +599,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
     it('should record failed logResponseStream calls as errors instead of completions', async () => {
       const provider = new TextThenErrorWithUsageProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(true); // Logging ENABLED → logResponseStream path
@@ -584,7 +645,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
     it('should reset performance tracker metrics when clearState is called', async () => {
       const provider = new MultiChunkForLoggingProvider();
-      const wrapper = new LoggingProviderWrapper(provider, new StubRedactor());
+      const wrapper = new LoggingProviderWrapper(
+        provider,
+        new StubRedactor(),
+        undefined,
+        () =>
+          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+      );
 
       const settings = new SettingsService();
       const config = createConfigStub(true);

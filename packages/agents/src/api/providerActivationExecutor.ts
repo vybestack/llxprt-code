@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { ModelSelectionOperations } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
 
 /**
  * Consolidated provider-activation / authentication executor (#2374, part of
@@ -37,18 +38,21 @@
 
 import * as fs from 'node:fs/promises';
 import os from 'node:os';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
+import { setActiveModel } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
 import {
-  switchActiveProvider,
-  setActiveModel,
   setActiveModelParam,
   clearActiveModelParam,
   getActiveModelParams,
-  applyCliArgumentOverrides,
+} from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
+import { applyCliArgumentOverrides } from '@vybestack/llxprt-code-providers/runtime/settingsResolver.js';
+import {
   setProviderApiKey,
   setProviderBaseUrl,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+} from '@vybestack/llxprt-code-providers/runtime/providerConfigUtils.js';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import type { ProviderActivationIntent } from './config-types.js';
 import {
@@ -104,15 +108,47 @@ export interface ProviderActivationResult {
 export async function executeProviderActivation(
   config: Config,
   intent: ProviderActivationIntent,
+  switchProvider: ProviderSwitcher,
+  settingsService: SettingsService,
+  manager: RuntimeProviderManager,
+  refreshClient: (method?: string) => Promise<void>,
+  selection: ModelSelectionOperations,
 ): Promise<ProviderActivationResult> {
+  if (typeof switchProvider !== 'function')
+    throw new Error(
+      'Provider activation requires an owner-bound provider switch.',
+    );
   const authMode = intent.authMode ?? 'auto';
   if (authMode === 'none') {
-    return executeNoAuth(config, intent);
+    return executeNoAuth(
+      config,
+      intent,
+      switchProvider,
+      settingsService,
+      manager,
+      selection,
+    );
   }
   if (authMode === 'provider-or-oauth') {
-    return executeProviderOrOauth(config, intent);
+    return executeProviderOrOauth(
+      config,
+      intent,
+      switchProvider,
+      settingsService,
+      manager,
+      refreshClient,
+      selection,
+    );
   }
-  return executeAuto(config, intent);
+  return executeAuto(
+    config,
+    intent,
+    switchProvider,
+    settingsService,
+    manager,
+    refreshClient,
+    selection,
+  );
 }
 
 // ─── authMode: 'none' ───────────────────────────────────────────────────────
@@ -126,12 +162,20 @@ export async function executeProviderActivation(
 async function executeNoAuth(
   config: Config,
   intent: ProviderActivationIntent,
+  switchProvider: ProviderSwitcher,
+  settingsService: SettingsService,
+  manager: RuntimeProviderManager,
+  selection: ModelSelectionOperations,
 ): Promise<ProviderActivationResult> {
   let switchError: string | undefined;
   if (intent.provider !== undefined) {
-    switchError = await safeActivateProvider(intent.provider);
+    switchError = await safeActivateProvider(intent.provider, switchProvider);
   }
-  const keyfileWarning = await applyRuntimeProviderOverrides(config);
+  const keyfileWarning = await applyRuntimeProviderOverrides(
+    config,
+    settingsService,
+    manager,
+  );
   const infoMessages: string[] = [];
   if (keyfileWarning !== undefined) {
     infoMessages.push(keyfileWarning);
@@ -139,10 +183,16 @@ async function executeNoAuth(
   // Guard: skip model/param application when no provider is active (the
   // switch may have failed or no provider was requested). setActiveModel/
   // setActiveModelParam require an active provider and would throw.
-  if (resolveActiveProviderName(config) !== undefined) {
-    await applyModelAndParams(config, intent);
+  if (resolveActiveProviderName(manager) !== undefined) {
+    await applyModelAndParams(
+      config,
+      intent,
+      settingsService,
+      manager,
+      selection,
+    );
   }
-  const activeName = resolveActiveProviderName(config);
+  const activeName = resolveActiveProviderName(manager);
   return {
     authFailed: false,
     ...(activeName !== undefined ? { activeProvider: activeName } : {}),
@@ -162,6 +212,11 @@ async function executeNoAuth(
 async function executeProviderOrOauth(
   config: Config,
   intent: ProviderActivationIntent,
+  switchProvider: ProviderSwitcher,
+  settingsService: SettingsService,
+  manager: RuntimeProviderManager,
+  refreshClient: (method?: string) => Promise<void>,
+  selection: ModelSelectionOperations,
 ): Promise<ProviderActivationResult> {
   let switchError: string | undefined;
   if (intent.provider !== undefined) {
@@ -170,28 +225,46 @@ async function executeProviderOrOauth(
     // would be lost across the switch without reapply. This mirrors the auto
     // path's profileAuthEphemerals cycle and is strictly-better than HEAD zed
     // (#2374 finding 5).
-    const profileAuthEphemerals = snapshotProfileAuthEphemerals(config);
-    switchError = await safeActivateProvider(intent.provider);
+    const profileAuthEphemerals = snapshotProfileAuthEphemerals({
+      'auth-key': settingsService.get('auth-key'),
+      'auth-keyfile': settingsService.get('auth-keyfile'),
+      'auth-key-name': settingsService.get('auth-key-name'),
+      'base-url': settingsService.get('base-url'),
+    });
+    switchError = await safeActivateProvider(intent.provider, switchProvider);
     if (
       switchError === undefined &&
       hasProfileAuthEphemerals(profileAuthEphemerals)
     ) {
-      reapplyProfileAuthEphemerals(config, profileAuthEphemerals);
+      reapplyProfileAuthEphemerals(
+        (key, value) => settingsService.set(key, value),
+        profileAuthEphemerals,
+      );
     }
   }
-  const keyfileWarning = await applyRuntimeProviderOverrides(config);
+  const keyfileWarning = await applyRuntimeProviderOverrides(
+    config,
+    settingsService,
+    manager,
+  );
   // Guard: skip model/param application when no provider is active (the
   // switch may have failed). setActiveModel/setActiveModelParam require an
   // active provider and would throw.
-  if (resolveActiveProviderName(config) !== undefined) {
-    await applyModelAndParams(config, intent);
+  if (resolveActiveProviderName(manager) !== undefined) {
+    await applyModelAndParams(
+      config,
+      intent,
+      settingsService,
+      manager,
+      selection,
+    );
   }
   // Re-read the manager's active-provider state AFTER the switch so the
   // provider-vs-oauth branch reflects the switch result. A configured provider
   // that was successfully switched must take the provider branch (#2374
   // finding 2). Mirrors HEAD zed's activateProviderFromConfig returning
   // hasActiveProvider reflecting the switch.
-  const managerAfterSwitch = config.getProviderManager();
+  const managerAfterSwitch = manager;
   const activeManager = resolveActiveManager(managerAfterSwitch);
   const infoMessages: string[] = [];
   if (keyfileWarning !== undefined) {
@@ -199,12 +272,12 @@ async function executeProviderOrOauth(
   }
   if (activeManager !== undefined) {
     await ensureProviderManagerOnConfig(config, activeManager);
-    await config.refreshAuth('provider');
+    await refreshClient('provider');
     attachProviderManagerToContentConfig(config, activeManager);
   } else {
-    await config.refreshAuth('oauth');
+    await refreshClient('oauth');
   }
-  const activeName = resolveActiveProviderName(config);
+  const activeName = resolveActiveProviderName(manager);
   return {
     authFailed: false,
     ...(activeName !== undefined ? { activeProvider: activeName } : {}),
@@ -220,23 +293,39 @@ async function executeProviderOrOauth(
  */
 async function applyRuntimeProviderOverrides(
   config: Config,
+  settingsService: SettingsService,
+  manager: RuntimeProviderManager,
 ): Promise<string | undefined> {
-  const authKey = config.getEphemeralSetting('auth-key') as string | undefined;
-  const authKeyfile = config.getEphemeralSetting('auth-keyfile') as
-    | string
-    | undefined;
-  const baseUrl = config.getEphemeralSetting('base-url') as string | undefined;
+  const rawKey = settingsService.get('auth-key');
+  const authKey = typeof rawKey === 'string' ? rawKey : undefined;
+  const rawKeyfile = settingsService.get('auth-keyfile');
+  const authKeyfile = typeof rawKeyfile === 'string' ? rawKeyfile : undefined;
+  const rawUrl = settingsService.get('base-url');
+  const baseUrl = typeof rawUrl === 'string' ? rawUrl : undefined;
   let keyfileWarning: string | undefined;
 
   if (authKey && authKey.trim() !== '') {
-    await setProviderApiKey(authKey);
+    await setProviderApiKey(
+      authKey,
+      { setEphemeralSetting: (key, value) => settingsService.set(key, value) },
+      settingsService,
+      manager.getActiveProvider(),
+    );
   } else if (authKeyfile) {
     try {
       const resolvedPath = authKeyfile.replace(/^~/, os.homedir());
       const keyFromFile = (await fs.readFile(resolvedPath, 'utf-8')).trim();
       if (keyFromFile) {
-        await setProviderApiKey(keyFromFile);
-        config.setEphemeralSetting('auth-keyfile', resolvedPath);
+        await setProviderApiKey(
+          keyFromFile,
+          {
+            setEphemeralSetting: (key, value) =>
+              settingsService.set(key, value),
+          },
+          settingsService,
+          manager.getActiveProvider(),
+        );
+        settingsService.set('auth-keyfile', resolvedPath);
       }
     } catch (error) {
       // Best-effort: the auth-keyfile could not be read. Surface the error
@@ -250,7 +339,11 @@ async function applyRuntimeProviderOverrides(
   }
 
   if (baseUrl !== undefined) {
-    await setProviderBaseUrl(baseUrl);
+    await setProviderBaseUrl(
+      baseUrl,
+      { setEphemeralSetting: (key, value) => settingsService.set(key, value) },
+      settingsService,
+    );
   }
   return keyfileWarning;
 }
@@ -275,10 +368,7 @@ function attachProviderManagerToContentConfig(
   config: Config,
   manager: RuntimeProviderManager,
 ): void {
-  const contentGenConfig = config.getContentGeneratorConfig();
-  if (contentGenConfig && !contentGenConfig.providerManager) {
-    contentGenConfig.providerManager = manager;
-  }
+  configureProviderRuntimeFactories(config, manager);
 }
 
 // ─── authMode: 'auto' (CLI path) ────────────────────────────────────────────
@@ -293,12 +383,34 @@ function attachProviderManagerToContentConfig(
 async function executeAuto(
   config: Config,
   intent: ProviderActivationIntent,
+  switchProvider: ProviderSwitcher,
+  settingsService: SettingsService,
+  manager: RuntimeProviderManager,
+  refreshClient: (method?: string) => Promise<void>,
+  selection: ModelSelectionOperations,
 ): Promise<ProviderActivationResult> {
   const configProvider = intent.provider ?? config.getProvider();
   if (configProvider === undefined) {
-    return executeAutoNoProvider(config, intent);
+    return executeAutoNoProvider(
+      config,
+      intent,
+      switchProvider,
+      settingsService,
+      manager,
+      refreshClient,
+      selection,
+    );
   }
-  return executeAutoProvider(config, intent, configProvider);
+  return executeAutoProvider(
+    config,
+    intent,
+    configProvider,
+    switchProvider,
+    settingsService,
+    manager,
+    refreshClient,
+    selection,
+  );
 }
 
 /**
@@ -312,10 +424,14 @@ async function executeAuto(
 async function executeAutoNoProvider(
   config: Config,
   intent: ProviderActivationIntent,
+  switchProvider: ProviderSwitcher,
+  settingsService: SettingsService,
+  manager: RuntimeProviderManager,
+  refreshClient: (method?: string) => Promise<void>,
+  selection: ModelSelectionOperations,
 ): Promise<ProviderActivationResult> {
-  const manager = config.getProviderManager();
   const fallbackDefault =
-    intent.defaultProvider ?? manager?.getActiveProviderName();
+    intent.defaultProvider ?? manager.getActiveProviderName();
 
   if (fallbackDefault === undefined) {
     return {
@@ -325,8 +441,8 @@ async function executeAutoNoProvider(
   }
 
   try {
-    await switchActiveProvider(fallbackDefault);
-    await config.refreshAuth(intent.authMethod);
+    await switchProvider(fallbackDefault);
+    await refreshClient(intent.authMethod);
   } catch {
     // Log but don't fail — auth will be triggered lazily on the first API call.
   }
@@ -334,10 +450,16 @@ async function executeAutoNoProvider(
   // model/param application to avoid throwing from setActiveModelParam/
   // clearActiveModelParam (which require an active provider). Mirrors the
   // original CLI bootstrap which returned false without touching model params.
-  if (resolveActiveProviderName(config) !== undefined) {
-    await applyModelAndParams(config, intent);
+  if (resolveActiveProviderName(manager) !== undefined) {
+    await applyModelAndParams(
+      config,
+      intent,
+      settingsService,
+      manager,
+      selection,
+    );
   }
-  const activeName = resolveActiveProviderName(config);
+  const activeName = resolveActiveProviderName(manager);
   return {
     authFailed: false,
     ...(activeName !== undefined ? { activeProvider: activeName } : {}),
@@ -357,13 +479,17 @@ async function executeAutoProvider(
   config: Config,
   intent: ProviderActivationIntent,
   provider: string,
+  switchProvider: ProviderSwitcher,
+  settingsService: SettingsService,
+  manager: RuntimeProviderManager,
+  refreshClient: (method?: string) => Promise<void>,
+  selection: ModelSelectionOperations,
 ): Promise<ProviderActivationResult> {
   try {
-    const manager = config.getProviderManager();
-    const alreadyActive = manager?.getActiveProviderName() === provider;
+    const alreadyActive = manager.getActiveProviderName() === provider;
     if (isPureAlreadyActiveRefresh(intent, alreadyActive)) {
-      await config.refreshAuth(intent.authMethod);
-      const activeName = resolveActiveProviderName(config);
+      await refreshClient(intent.authMethod);
+      const activeName = resolveActiveProviderName(manager);
       return {
         authFailed: false,
         ...(activeName !== undefined ? { activeProvider: activeName } : {}),
@@ -371,11 +497,16 @@ async function executeAutoProvider(
       };
     }
 
-    const profileAuthEphemerals = snapshotProfileAuthEphemerals(config);
+    const profileAuthEphemerals = snapshotProfileAuthEphemerals({
+      'auth-key': settingsService.get('auth-key'),
+      'auth-keyfile': settingsService.get('auth-keyfile'),
+      'auth-key-name': settingsService.get('auth-key-name'),
+      'base-url': settingsService.get('base-url'),
+    });
     let infoMessages: readonly string[] = [];
     let switchError: string | undefined;
     if (!alreadyActive) {
-      const switchResult = await switchActiveProvider(provider, {
+      const switchResult = await switchProvider(provider, {
         skipModelDefaults: true,
         preserveEphemerals: [
           'auth-key',
@@ -392,7 +523,10 @@ async function executeAutoProvider(
       });
       infoMessages = switchResult?.infoMessages ?? [];
       if (hasProfileAuthEphemerals(profileAuthEphemerals)) {
-        reapplyProfileAuthEphemerals(config, profileAuthEphemerals);
+        reapplyProfileAuthEphemerals(
+          (key, value) => settingsService.set(key, value),
+          profileAuthEphemerals,
+        );
       }
     }
     // #2534 review Finding 1: CLI overrides apply AFTER the provider switch so
@@ -409,6 +543,9 @@ async function executeAutoProvider(
     await applyCliArgumentOverrides(
       toArgvShape(intent),
       toBootstrapArgsShape(intent),
+      { setEphemeralSetting: (key, value) => settingsService.set(key, value) },
+      settingsService,
+      manager.getActiveProvider(),
     );
     // Always refresh auth in the 'auto' path. The non-interactive flow runs
     // postConfigRuntime step 13 with authMode 'none' (which skips refreshAuth)
@@ -419,10 +556,16 @@ async function executeAutoProvider(
     // E2E regression). refreshAuth is idempotent — it re-derives auth from the
     // current ephemeral settings — so calling it when the interactive path
     // already refreshed (via activateConfiguredProvider) is harmless.
-    await config.refreshAuth(intent.authMethod);
+    await refreshClient(intent.authMethod);
 
-    await applyModelAndParams(config, intent);
-    const activeName = resolveActiveProviderName(config);
+    await applyModelAndParams(
+      config,
+      intent,
+      settingsService,
+      manager,
+      selection,
+    );
+    const activeName = resolveActiveProviderName(manager);
     return {
       authFailed: false,
       ...(activeName !== undefined ? { activeProvider: activeName } : {}),
@@ -446,6 +589,9 @@ async function executeAutoProvider(
 async function applyModelAndParams(
   config: Config,
   intent: ProviderActivationIntent,
+  settingsService: SettingsService,
+  manager: RuntimeProviderManager,
+  selection: ModelSelectionOperations,
 ): Promise<void> {
   // When the intent declares no model and no model params, leave the active
   // provider's model/params untouched. This keeps authMode 'none' callers
@@ -457,12 +603,18 @@ async function applyModelAndParams(
     typeof intent.model === 'string' && intent.model.trim().length > 0
       ? intent.model.trim()
       : undefined;
-  const activeProvider = config.getProviderManager()?.getActiveProvider();
+  const activeProvider = manager.getActiveProvider();
   const resolvedModel =
     modelOverride ??
+    selection.readModel() ??
     resolveFallbackModel(config, activeProvider?.getDefaultModel?.());
   if (resolvedModel !== undefined) {
-    await setActiveModel(resolvedModel);
+    await setActiveModel(
+      resolvedModel,
+      selection,
+      settingsService,
+      manager.getActiveProvider(),
+    );
   }
 
   // Only clear stale params when the caller explicitly provided modelParams.
@@ -470,13 +622,16 @@ async function applyModelAndParams(
   // clear all existing params — wiping profile defaults (#2374 CodeRabbit).
   if (intent.modelParams !== undefined) {
     const desiredParams = intent.modelParams;
-    const existingParams = getActiveModelParams();
+    const existingParams = getActiveModelParams(
+      settingsService,
+      activeProvider?.name,
+    );
     for (const [key, value] of Object.entries(desiredParams)) {
-      setActiveModelParam(key, value);
+      setActiveModelParam(key, value, settingsService, activeProvider?.name);
     }
     for (const key of Object.keys(existingParams)) {
       if (!(key in desiredParams)) {
-        clearActiveModelParam(key);
+        clearActiveModelParam(key, settingsService, activeProvider?.name);
       }
     }
   }
@@ -484,7 +639,10 @@ async function applyModelAndParams(
   // Mirror the Zed integration's applyProfileModelParams: when an ephemeral
   // base-url is set (and not the literal 'none' opt-out), push it onto the
   // active provider instance so provider-routed generation honors it.
-  applyEphemeralBaseUrlToProvider(config, activeProvider);
+  applyEphemeralBaseUrlToProvider(
+    settingsService.get('base-url'),
+    activeProvider,
+  );
 }
 
 /**
@@ -494,25 +652,20 @@ async function applyModelAndParams(
  * not regress Zed's provider-side base URL.
  */
 function applyEphemeralBaseUrlToProvider(
-  config: Config,
+  value: unknown,
   activeProvider: ReturnType<RuntimeProviderManager['getActiveProvider']>,
 ): void {
   if (activeProvider === undefined) {
     return;
   }
-  const ephemeralBaseUrl = config.getEphemeralSetting('base-url') as
-    | string
-    | undefined;
+  const ephemeralBaseUrl = typeof value === 'string' ? value : undefined;
   if (
     ephemeralBaseUrl &&
     ephemeralBaseUrl !== 'none' &&
     'setBaseUrl' in activeProvider &&
-    typeof (activeProvider as { setBaseUrl?: (url: string) => void })
-      .setBaseUrl === 'function'
+    typeof activeProvider.setBaseUrl === 'function'
   ) {
-    (activeProvider as { setBaseUrl: (url: string) => void }).setBaseUrl(
-      ephemeralBaseUrl,
-    );
+    activeProvider.setBaseUrl(ephemeralBaseUrl);
   }
 }
 
@@ -607,8 +760,10 @@ function isPureAlreadyActiveRefresh(
   );
 }
 
-function resolveActiveProviderName(config: Config): string | undefined {
-  return config.getProviderManager()?.getActiveProviderName();
+function resolveActiveProviderName(
+  manager: RuntimeProviderManager,
+): string | undefined {
+  return manager.getActiveProviderName();
 }
 
 /**
@@ -620,9 +775,10 @@ function resolveActiveProviderName(config: Config): string | undefined {
  */
 async function safeActivateProvider(
   provider: string,
+  switchProvider: ProviderSwitcher,
 ): Promise<string | undefined> {
   try {
-    await switchActiveProvider(provider, {
+    await switchProvider(provider, {
       skipModelDefaults: true,
       preserveEphemerals: [
         'auth-key',
@@ -643,8 +799,8 @@ async function safeActivateProvider(
  * reads cleanly and satisfies the optional-chain lint rule.
  */
 function resolveActiveManager(
-  manager: ReturnType<Config['getProviderManager']>,
-): NonNullable<ReturnType<Config['getProviderManager']>> | undefined {
+  manager: RuntimeProviderManager | undefined,
+): RuntimeProviderManager | undefined {
   if (manager === undefined) {
     return undefined;
   }

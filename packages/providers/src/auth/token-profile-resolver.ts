@@ -13,10 +13,10 @@
  * without instantiating the full coordinator.
  */
 
+import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-auth';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { createProfileManager } from './profile-utils.js';
-import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 
 const logger = new DebugLogger('llxprt:oauth:token');
 
@@ -24,22 +24,11 @@ const logger = new DebugLogger('llxprt:oauth:token');
  * Resolve the current profile name from metadata or runtime settings.
  * Returns null if unavailable (not an error unless requestedProfileName is set).
  */
-export async function resolveCurrentProfileName(
-  providerName: string,
+export function resolveCurrentProfileName(
   requestedProfileName: string | null,
-): Promise<string | null> {
-  if (requestedProfileName) {
-    return requestedProfileName;
-  }
-  try {
-    return oauthRuntimeBridge.getCurrentProfileName();
-  } catch (error) {
-    logger.debug(
-      `Could not resolve current profile for ${providerName}:`,
-      error,
-    );
-    return null;
-  }
+  getOwnerProfileName: () => string | null,
+): string | null {
+  return requestedProfileName ?? getOwnerProfileName();
 }
 
 /**
@@ -51,12 +40,13 @@ export async function loadProfileBuckets(
   providerName: string,
   currentProfileName: string,
   requestedProfileName: string | null,
+  profiles?: Pick<ProfileManager, 'loadProfile'>,
 ): Promise<string[]> {
   let profile: Awaited<
     ReturnType<Awaited<ReturnType<typeof createProfileManager>>['loadProfile']>
   >;
   try {
-    const profileManager = await createProfileManager();
+    const profileManager = profiles ?? (await createProfileManager());
     profile = await profileManager.loadProfile(currentProfileName);
   } catch (error) {
     logger.debug(`Could not load profile buckets for ${providerName}:`, error);
@@ -99,16 +89,18 @@ export async function loadProfileBuckets(
  */
 export async function resolveProfileBuckets(
   providerName: string,
+  getOwnerProfileName: () => string | null,
   metadata?: OAuthTokenRequestMetadata,
+  profiles?: Pick<ProfileManager, 'loadProfile'>,
 ): Promise<string[]> {
   const requestedProfileName =
     typeof metadata?.profileId === 'string' && metadata.profileId.trim() !== ''
       ? metadata.profileId.trim()
       : null;
 
-  const currentProfileName = await resolveCurrentProfileName(
-    providerName,
+  const currentProfileName = resolveCurrentProfileName(
     requestedProfileName,
+    getOwnerProfileName,
   );
   if (!currentProfileName) {
     return [];
@@ -118,6 +110,7 @@ export async function resolveProfileBuckets(
     providerName,
     currentProfileName,
     requestedProfileName,
+    profiles,
   );
 }
 
@@ -127,12 +120,8 @@ export async function resolveProfileBuckets(
  */
 export async function resolveCurrentProfileSessionMetadata(
   providerName: string,
+  currentProfileName: string | null,
 ): Promise<OAuthTokenRequestMetadata | undefined> {
-  const currentProfileName = await resolveCurrentProfileName(
-    providerName,
-    null,
-  );
-
   if (!currentProfileName || currentProfileName.trim() === '') {
     return undefined;
   }
@@ -151,13 +140,18 @@ export interface CurrentProfileOAuthContext {
 
 export async function resolveCurrentProfileOAuthContext(
   providerName: string,
+  currentProfileName: string | null,
+  profiles?: Pick<ProfileManager, 'loadProfile'>,
 ): Promise<CurrentProfileOAuthContext | undefined> {
-  const metadata = await resolveCurrentProfileSessionMetadata(providerName);
+  const metadata = await resolveCurrentProfileSessionMetadata(
+    providerName,
+    currentProfileName,
+  );
   if (metadata?.profileId === undefined) {
     return undefined;
   }
 
-  const profileManager = await createProfileManager();
+  const profileManager = profiles ?? (await createProfileManager());
   const profile = await profileManager.loadProfile(metadata.profileId);
   const profileProvider =
     'provider' in profile && typeof profile.provider === 'string'

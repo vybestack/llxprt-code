@@ -1,3 +1,6 @@
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import { describe, it, expect, beforeEach } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -13,7 +16,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
@@ -23,6 +26,9 @@ import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentG
  * blocks — the post-P13 replacement for the deleted GenerateContentResponse
  * `.text` getter.
  */
+import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
+const modelTools = installModelToolFixture();
+
 function extractText(output: {
   content: { blocks: IContent['blocks'] };
 }): string {
@@ -45,7 +51,7 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
       sandbox: undefined,
       sessionId: 'test-session',
       model: 'gemini-1.5-pro',
-      settingsService,
+      initialSettings: settingsService.getAllGlobalSettings(),
     });
 
     const providerRuntime = createProviderRuntimeContext({
@@ -57,7 +63,7 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
 
     const manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    config.setProviderManager(manager);
+    configureProviderRuntimeFactories(config, manager);
 
     const runtimeState = createAgentRuntimeState({
       runtimeId: 'runtime-test',
@@ -68,6 +74,8 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
 
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
+      prepareProviderInvocation: (name, parameters, signal) =>
+        captureProviderInvocation(providerRuntime, name, parameters, signal),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -80,9 +88,12 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
         },
         'reasoning.includeInContext': true,
       },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      provider: createProviderAdapterFromManager(manager),
+      telemetry: createTelemetryAdapter(
+        config,
+        createSessionSettingsFixture(config).settingsOwner.telemetry,
+      ),
+      tools: createToolRegistryViewFromRegistry(modelTools()),
       providerRuntime: { ...providerRuntime },
     });
 

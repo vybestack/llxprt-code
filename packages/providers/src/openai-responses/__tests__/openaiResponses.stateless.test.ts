@@ -306,8 +306,9 @@ describe('OpenAI Responses provider stateless contract tests', () => {
       config,
     });
     const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings,
+      runtimeId: runtime.runtimeId,
+      runtimeMetadata: runtime.metadata,
+
       providerName: 'openai-responses',
       ephemeralsSnapshot: {
         temperature: 0.11,

@@ -347,4 +347,51 @@ describe('useTokenMetricsTracking', () => {
 
     expect(onHistoryServiceReplaced).toHaveBeenCalledWith(historyServiceB);
   });
+  it('keeps the UI token listener on owner changes without subscribing the raw recorder', () => {
+    const first = makeHistoryService(11);
+    const second = makeHistoryService(22);
+    const firstRuntime = makeConfig(makeAgentClient(first));
+    const secondRuntime = makeConfig(makeAgentClient(second));
+    useRuntimeApiMock.mockReturnValue(
+      makeRuntimeApi(
+        { tokensPerMinute: 1, throttleWaitTimeMs: 0 },
+        { input: 0, output: 0, cache: 0, tool: 0, thought: 0, total: 0 },
+      ),
+    );
+    const published: number[] = [];
+    const rawSubscribe = vi.fn();
+    const recordingIntegrationRef = {
+      current: { onHistoryServiceReplaced: rawSubscribe },
+    };
+    const { rerender, unmount } = renderHook(
+      ({ uiRuntime }) =>
+        useTokenMetricsTracking({
+          uiRuntime: uiRuntime as never,
+          recordingOwner: 'agent',
+          updateHistoryTokenCount: (value) => {
+            published.push(value);
+          },
+          recordingIntegrationRef: recordingIntegrationRef as never,
+        }),
+      { initialProps: { uiRuntime: firstRuntime } },
+    );
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    rerender({ uiRuntime: secondRuntime });
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(published).toStrictEqual([11, 22]);
+    expect(first.off).toHaveBeenCalledWith(
+      'tokensUpdated',
+      expect.any(Function),
+    );
+    expect(rawSubscribe).not.toHaveBeenCalled();
+    unmount();
+    expect(second.off).toHaveBeenCalledWith(
+      'tokensUpdated',
+      expect.any(Function),
+    );
+  });
 });

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { configureCommandOptions } from '../command-configuration.js';
 import type { CommandModule } from 'yargs';
 import {
   requestConsentNonInteractive,
@@ -51,18 +52,20 @@ export const linkCommand: CommandModule = {
   describe:
     'Links an extension from a local path. Updates made to the local path will always be reflected.',
   builder: (yargs) =>
-    yargs
-      .positional('path', {
-        describe: 'The name of the extension to link.',
-        type: 'string',
-      })
-      .option('consent', {
-        describe:
-          'Acknowledge the security risks of installing an extension and skip the confirmation prompt.',
-        type: 'boolean',
-        default: false,
-      })
-      .check((_) => true),
+    configureCommandOptions(yargs, (configuration) =>
+      configuration
+        .positional('path', {
+          describe: 'The name of the extension to link.',
+          type: 'string',
+        })
+        .option('consent', {
+          describe:
+            'Acknowledge the security risks of installing an extension and skip the confirmation prompt.',
+          type: 'boolean',
+          default: false,
+        })
+        .check((_) => true),
+    ),
   handler: async (argv) => {
     await handleLink({
       path: argv['path'] as string,

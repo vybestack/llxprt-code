@@ -5,6 +5,7 @@
  */
 
 import type { TokenUsageLogger } from '../core/TokenUsageLogger.js';
+import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -118,5 +119,35 @@ export async function emitCompressionLifecycleEvent(
       compressionPromptTokens: usage.promptTokens,
       compressionOutputTokens: usage.outputTokens,
     }),
+  });
+}
+
+export async function recordCompressionTelemetry(
+  logger: DebugLogger,
+  tokenUsageLogger: TokenUsageLogger | null,
+  runtimeContext: AgentRuntimeContext,
+  historyService: HistoryService,
+  providerResolver: (
+    profileName?: string,
+  ) => CompressionProviderResult | Promise<CompressionProviderResult>,
+  tokensBefore: number,
+  summary: IContent | undefined,
+): Promise<void> {
+  // Emit the compression lifecycle event into the token-usage log (#3130
+  // AC-7). Exactly-once: this branch runs only on a genuine 'applied'
+  // outcome; retry logic is internal to runCompressionWithRetryAndFallback.
+  // The compression itself has already succeeded and history is updated.
+  // Observing it must not undo that, so this is the one fail-open boundary
+  // for the emission; the emitter stays guard-free inside.
+  await emitCompressionLifecycleEvent(
+    tokenUsageLogger,
+    runtimeContext,
+    historyService,
+    providerResolver,
+    tokensBefore,
+    historyService.getTotalTokens(),
+    summary,
+  ).catch((error: unknown) => {
+    logger.error('Failed to record compression telemetry', error);
   });
 }

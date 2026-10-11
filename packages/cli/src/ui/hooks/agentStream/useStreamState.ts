@@ -20,7 +20,7 @@ import {
   EmojiFilter,
   type EmojiFilterMode,
   type ThinkingBlock,
-  GitService,
+  type WorkspaceCheckpointOperations,
 } from '@vybestack/llxprt-code-core';
 import { type HistoryItemWithoutId, MessageType } from '../../types.js';
 import {
@@ -76,7 +76,7 @@ export interface UseStreamStateReturn {
   };
   flushPendingHistoryItem: (timestamp: number) => void;
   logger: ReturnType<typeof useLogger>;
-  gitService: GitService | undefined;
+  gitService: WorkspaceCheckpointOperations | undefined;
   thinkingBlocksRef: React.MutableRefObject<ThinkingBlock[]>;
 }
 
@@ -294,7 +294,7 @@ export function useStreamState(
   runtime: StreamRuntime,
 ): UseStreamStateReturn {
   const basic = useBasicStreamState();
-  const storage = runtime.storage;
+  const storage = runtime.projectTempDir;
 
   const emojiFilter = useEmojiFilter(useEmojiFilterMode(runtime));
   const sanitizeContent = useSanitizeContent(emojiFilter);
@@ -310,13 +310,9 @@ export function useStreamState(
     basic.thinkingBlocksRef,
   );
   const logger = useLogger(storage);
-  const gitService = useMemo(() => {
-    const projectRoot = runtime.session.getProjectRoot();
-    if (projectRoot.length === 0) {
-      return undefined;
-    }
-    return new GitService(projectRoot, storage);
-  }, [runtime, storage]);
+  const gitService = runtime.checkpoint.getCheckpointingEnabled()
+    ? runtime.checkpoint.checkpoints
+    : undefined;
 
   return {
     ...basic,

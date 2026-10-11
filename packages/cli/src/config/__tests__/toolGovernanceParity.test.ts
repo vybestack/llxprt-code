@@ -3,6 +3,11 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+const retainedActivationOperations: Array<{ dispose(): void | Promise<void> }> =
+  [];
+
+const retainedSettingsOwners: SessionSettingsOwner[] = [];
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P13
@@ -39,7 +44,14 @@ import {
 } from '@vybestack/llxprt-code-core';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ProviderManager } from '@vybestack/llxprt-code-providers';
+import {
+  ProviderManager,
+  type IProvider,
+} from '@vybestack/llxprt-code-providers';
+import {
+  loadPrecedenceProviderContributions,
+  registerPrecedenceProviders,
+} from './precedenceProviderContributions.js';
 import { loadCliConfig } from '../config.js';
 import { parseArguments } from '../cliArgParser.js';
 import { READ_ONLY_TOOL_NAMES } from '../toolGovernance.js';
@@ -79,7 +91,9 @@ void vi.mock('fs', () => {
     ...actualFs,
     mkdirSync: vi.fn(),
     writeFileSync: vi.fn(),
-    existsSync: vi.fn((p) => mockPaths.has(p.toString())),
+    existsSync: vi.fn(
+      (p) => mockPaths.has(p.toString()) || actualFs.existsSync(p),
+    ),
     statSync: vi.fn((p) => {
       if (mockPaths.has(p.toString()))
         return { isDirectory: () => true } as unknown as import('fs').Stats;
@@ -107,26 +121,31 @@ void vi.mock('../profileBootstrap.js', () => {
   const { SettingsService: RealSettingsService } = realLlxprtCodeSettingsModule;
   return {
     ...actual,
-    prepareRuntimeForProfile: vi.fn(async () => ({
-      runtime: {
-        settingsService: new RealSettingsService(),
-        config: null,
-        runtimeId: 'mock-runtime',
-        metadata: {},
-      },
-      runtimeMessageBus: undefined,
-      providerManager: {
-        listProviders: vi.fn(() => []),
-        getActiveProviderName: vi.fn(() => null),
-        setActiveProvider: vi.fn(),
-        getActiveProvider: vi.fn(() => undefined),
-        getAvailableModels: vi.fn(async () => []),
-        getProviderByName: vi.fn(() => ({
-          getDefaultModel: () => 'gemini-2.5-pro',
-        })),
-      },
-      oauthManager: undefined,
-    })),
+    prepareRuntimeForProfile: vi.fn(async () => {
+      const settingsService = new RealSettingsService();
+      const providerManager = new ProviderManager({ settingsService });
+      const provider: IProvider = {
+        name: 'openai',
+        getDefaultModel: () => 'test-model',
+        getModels: async () => [],
+        async *generateChatCompletion() {
+          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ready' }] };
+        },
+      };
+      providerManager.registerProvider(provider);
+      runtimeSettingsState.providerManager = providerManager;
+      return {
+        runtime: {
+          settingsService,
+          config: null,
+          runtimeId: 'mock-runtime',
+          metadata: {},
+        },
+        runtimeMessageBus: undefined,
+        providerManager,
+        oauthManager: null,
+      };
+    }),
   };
 });
 
@@ -168,51 +187,21 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
       modelName: '',
       warnings: [],
     })),
-    getCliRuntimeContext: vi.fn(() => runtimeSettingsState.context),
-    setCliRuntimeContext: vi.fn(
-      (
-        svc: SettingsService,
-        cfg?: ServerConfig.Config,
-        opts: { metadata?: Record<string, unknown>; runtimeId?: string } = {},
-      ) => {
-        runtimeSettingsState.context = {
-          settingsService: svc,
-          config: cfg ?? null,
-          runtimeId: opts.runtimeId ?? 'mock-runtime',
-          metadata: opts.metadata ?? {},
-        };
-      },
-    ),
     switchActiveProvider: vi.fn(async () => ({
       changed: true,
       previousProvider: null,
       nextProvider: 'gemini',
       infoMessages: [],
     })),
-    registerCliProviderInfrastructure: vi.fn(
-      (mgr: ProviderManager, oauth: unknown) => {
-        runtimeSettingsState.providerManager = mgr;
-        runtimeSettingsState.oauthManager = oauth ?? null;
-      },
-    ),
     applyCliArgumentOverrides: vi.fn(async () => {}),
-    getCliRuntimeConfig: vi.fn(
-      () => runtimeSettingsState.context?.config ?? null,
-    ),
-    getCliRuntimeServices: vi.fn(() => ({
-      config: runtimeSettingsState.context?.config ?? null,
-      settingsService:
-        runtimeSettingsState.context?.settingsService ?? new SettingsService(),
-      providerManager: getProviderManager(),
-    })),
-    getCliProviderManager: vi.fn(() => runtimeSettingsState.providerManager),
-    getCliOAuthManager: vi.fn(() => {
+    providerManager: vi.fn(() => runtimeSettingsState.providerManager),
+    oauthManager: vi.fn(() => {
       if (runtimeSettingsState.oauthManager === null) {
         throw new Error('OAuthManager missing from runtime registration');
       }
       return runtimeSettingsState.oauthManager;
     }),
-    getActiveProviderStatus: vi.fn(() => ({ name: null })),
+    providerStatus: vi.fn(() => ({ name: null })),
     listProviders: vi.fn(() => []),
     getActiveProviderName: vi.fn(() => null),
     setActiveModel: vi.fn(async () => ({
@@ -241,8 +230,10 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
     listSavedProfiles: vi.fn(() => []),
     getProfileByName: vi.fn(() => undefined),
     setDefaultProfileName: vi.fn(),
-    updateActiveProviderBaseUrl: vi.fn(async () => undefined),
-    updateActiveProviderApiKey: vi.fn(async () => undefined),
+    updateActiveProviderBaseUrl: vi.fn(async () => ({
+      message: 'Base URL updated',
+    })),
+    updateActiveProviderApiKey: vi.fn(async () => ({ message: 'Key updated' })),
     getRuntimeDiagnosticsSnapshot: vi.fn(() => ({})),
     getActiveToolFormatState: vi.fn(() => ({})),
     setActiveToolFormatOverride: vi.fn(),
@@ -263,7 +254,7 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
         },
         runtimeMessageBus: { kind: 'session-bus' },
         providerManager: getProviderManager(),
-        oauthManager: { id: 'oauth-manager' },
+        oauthManager: null,
       }),
     ),
   };
@@ -310,15 +301,27 @@ async function runConfig(settings: Settings, argv: string[] = []) {
   process.argv = ['node', 'script.js', ...argv];
   const parsedArgv = await parseArguments(settings);
   const runtimeSettingsService = new SettingsService();
-  return loadCliConfig(
+  const settingsOwner = new SessionSettingsOwner(runtimeSettingsService);
+  retainedSettingsOwners.push(settingsOwner);
+  const config = await loadCliConfig(
     settings,
     [],
     makeExtMgr(),
     'test-session',
     parsedArgv,
     undefined,
-    { settingsService: runtimeSettingsService },
+    {
+      settingsService: runtimeSettingsService,
+      sessionSettingsOwner: settingsOwner,
+      providerContributions: await loadPrecedenceProviderContributions(),
+      onProviderManagerReady: registerPrecedenceProviders,
+      onActivationBootstrapReady: (operation) => {
+        operation.takeSettingsOwner(runtimeSettingsService);
+        retainedActivationOperations.push(operation);
+      },
+    },
   );
+  return { config, settingsOwner };
 }
 
 function emptyToolInlineProfile(): string {
@@ -332,6 +335,22 @@ function emptyToolInlineProfile(): string {
 // ─── Suite ────────────────────────────────────────────────────────────────────
 
 describe('toolGovernanceParity: interactive mode', () => {
+  afterEach(async () => {
+    const results = await Promise.allSettled(
+      retainedActivationOperations
+        .splice(0)
+        .map(async (operation) => operation.dispose()),
+    );
+    const errors = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (errors.length > 0)
+      throw new AggregateError(errors, 'Activation fixture cleanup');
+  });
+  afterEach(async () => {
+    for (const owner of retainedSettingsOwners.splice(0)) await owner.dispose();
+  });
+
   const originalArgv = process.argv;
   const originalIsTTY = process.stdin.isTTY;
 
@@ -365,7 +384,7 @@ describe('toolGovernanceParity: interactive mode', () => {
 
   it('interactive mode: no tools excluded by default (DEFAULT approval)', async () => {
     process.stdin.isTTY = true;
-    const config = await runConfig({});
+    const { config: config } = await runConfig({});
     expect(config.getExcludeTools()).not.toContain(ShellTool.Name);
     expect(config.getExcludeTools()).not.toContain(EditTool.Name);
     expect(config.getExcludeTools()).not.toContain(WriteFileTool.Name);
@@ -373,7 +392,7 @@ describe('toolGovernanceParity: interactive mode', () => {
 
   it('interactive YOLO mode: no tools excluded', async () => {
     process.stdin.isTTY = true;
-    const config = await runConfig({}, ['--yolo']);
+    const { config: config } = await runConfig({}, ['--yolo']);
     expect(config.getExcludeTools()).not.toContain(ShellTool.Name);
     expect(config.getExcludeTools()).not.toContain(EditTool.Name);
     expect(config.getExcludeTools()).not.toContain(WriteFileTool.Name);
@@ -381,7 +400,10 @@ describe('toolGovernanceParity: interactive mode', () => {
 
   it('interactive AUTO_EDIT mode: no tools excluded', async () => {
     process.stdin.isTTY = true;
-    const config = await runConfig({}, ['--approval-mode', 'auto_edit']);
+    const { config: config } = await runConfig({}, [
+      '--approval-mode',
+      'auto_edit',
+    ]);
     expect(config.getExcludeTools()).not.toContain(ShellTool.Name);
     expect(config.getExcludeTools()).not.toContain(EditTool.Name);
     expect(config.getExcludeTools()).not.toContain(WriteFileTool.Name);
@@ -389,13 +411,34 @@ describe('toolGovernanceParity: interactive mode', () => {
 
   it('interactive inline profile preserves an explicit empty allowlist', async () => {
     process.stdin.isTTY = true;
-    const config = await runConfig({}, ['--profile', emptyToolInlineProfile()]);
+    const { settingsOwner: configSettingsOwner } = await runConfig({}, [
+      '--profile',
+      emptyToolInlineProfile(),
+    ]);
 
-    expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([]);
+    expect(
+      configSettingsOwner.readNamedParameter('tools.allowed'),
+    ).toStrictEqual([]);
   });
 });
 
 describe('toolGovernanceParity: non-interactive mode', () => {
+  afterEach(async () => {
+    const results = await Promise.allSettled(
+      retainedActivationOperations
+        .splice(0)
+        .map(async (operation) => operation.dispose()),
+    );
+    const errors = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (errors.length > 0)
+      throw new AggregateError(errors, 'Activation fixture cleanup');
+  });
+  afterEach(async () => {
+    for (const owner of retainedSettingsOwners.splice(0)) await owner.dispose();
+  });
+
   const originalArgv = process.argv;
   const originalIsTTY = process.stdin.isTTY;
 
@@ -429,7 +472,7 @@ describe('toolGovernanceParity: non-interactive mode', () => {
 
   it('non-interactive DEFAULT mode: excludes ShellTool, EditTool, WriteFileTool', async () => {
     process.stdin.isTTY = false;
-    const config = await runConfig({}, ['-p', 'test']);
+    const { config: config } = await runConfig({}, ['-p', 'test']);
     expect(config.getExcludeTools()).toContain(ShellTool.Name);
     expect(config.getExcludeTools()).toContain(EditTool.Name);
     expect(config.getExcludeTools()).toContain(WriteFileTool.Name);
@@ -437,7 +480,7 @@ describe('toolGovernanceParity: non-interactive mode', () => {
 
   it('non-interactive AUTO_EDIT mode: excludes only ShellTool', async () => {
     process.stdin.isTTY = false;
-    const config = await runConfig({}, [
+    const { config: config } = await runConfig({}, [
       '-p',
       'test',
       '--approval-mode',
@@ -451,7 +494,7 @@ describe('toolGovernanceParity: non-interactive mode', () => {
 
   it('non-interactive YOLO mode: no extra tools excluded', async () => {
     process.stdin.isTTY = false;
-    const config = await runConfig({}, ['-p', 'test', '--yolo']);
+    const { config: config } = await runConfig({}, ['-p', 'test', '--yolo']);
     expect(config.getExcludeTools()).not.toContain(ShellTool.Name);
     expect(config.getExcludeTools()).not.toContain(EditTool.Name);
     expect(config.getExcludeTools()).not.toContain(WriteFileTool.Name);
@@ -459,7 +502,7 @@ describe('toolGovernanceParity: non-interactive mode', () => {
 
   it('non-interactive with --allowed-tools=ShellTool: ShellTool NOT excluded', async () => {
     process.stdin.isTTY = false;
-    const config = await runConfig({}, [
+    const { config: config } = await runConfig({}, [
       '-p',
       'test',
       '--allowed-tools',
@@ -470,7 +513,7 @@ describe('toolGovernanceParity: non-interactive mode', () => {
 
   it('non-interactive with --allowed-tools=run_shell_command: ShellTool NOT excluded', async () => {
     process.stdin.isTTY = false;
-    const config = await runConfig({}, [
+    const { config: config } = await runConfig({}, [
       '-p',
       'test',
       '--allowed-tools',
@@ -481,7 +524,7 @@ describe('toolGovernanceParity: non-interactive mode', () => {
 
   it('non-interactive with --allowed-tools=run_shell_commander: ShellTool remains excluded', async () => {
     process.stdin.isTTY = false;
-    const config = await runConfig({}, [
+    const { config: config } = await runConfig({}, [
       '-p',
       'test',
       '--allowed-tools',
@@ -492,7 +535,7 @@ describe('toolGovernanceParity: non-interactive mode', () => {
 
   it('non-interactive with --allowed-tools= ShellTool(ls) : ShellTool NOT excluded', async () => {
     process.stdin.isTTY = false;
-    const config = await runConfig({}, [
+    const { config: config } = await runConfig({}, [
       '-p',
       'test',
       '--allowed-tools',
@@ -503,6 +546,22 @@ describe('toolGovernanceParity: non-interactive mode', () => {
 });
 
 describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () => {
+  afterEach(async () => {
+    const results = await Promise.allSettled(
+      retainedActivationOperations
+        .splice(0)
+        .map(async (operation) => operation.dispose()),
+    );
+    const errors = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (errors.length > 0)
+      throw new AggregateError(errors, 'Activation fixture cleanup');
+  });
+  afterEach(async () => {
+    for (const owner of retainedSettingsOwners.splice(0)) await owner.dispose();
+  });
+
   const originalArgv = process.argv;
   const originalIsTTY = process.stdin.isTTY;
 
@@ -536,8 +595,11 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
 
   it('non-interactive DEFAULT: allowed tools include all READ_ONLY_TOOL_NAMES', async () => {
     process.stdin.isTTY = false;
-    const config = await runConfig({}, ['-p', 'test']);
-    const allowed = config.getEphemeralSetting('tools.allowed') as
+    const { settingsOwner: configSettingsOwner } = await runConfig({}, [
+      '-p',
+      'test',
+    ]);
+    const allowed = configSettingsOwner.readNamedParameter('tools.allowed') as
       | string[]
       | undefined;
     expect(allowed).toBeDefined();
@@ -549,13 +611,13 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
 
   it('non-interactive AUTO_EDIT: allowed tools include replace (edit tool)', async () => {
     process.stdin.isTTY = false;
-    const config = await runConfig({}, [
+    const { settingsOwner: configSettingsOwner } = await runConfig({}, [
       '-p',
       'test',
       '--approval-mode',
       'auto_edit',
     ]);
-    const allowed = config.getEphemeralSetting('tools.allowed') as
+    const allowed = configSettingsOwner.readNamedParameter('tools.allowed') as
       | string[]
       | undefined;
     expect(allowed).toBeDefined();
@@ -565,13 +627,13 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
 
   it('non-interactive DEFAULT with explicit --allowed-tools: union with read-only set', async () => {
     process.stdin.isTTY = false;
-    const config = await runConfig({}, [
+    const { settingsOwner: configSettingsOwner } = await runConfig({}, [
       '-p',
       'test',
       '--allowed-tools',
       'read_file',
     ]);
-    const allowed = config.getEphemeralSetting('tools.allowed') as
+    const allowed = configSettingsOwner.readNamedParameter('tools.allowed') as
       | string[]
       | undefined;
     expect(allowed).toBeDefined();
@@ -581,14 +643,14 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
 
   it('non-interactive YOLO with explicit --allowed-tools: only explicit set', async () => {
     process.stdin.isTTY = false;
-    const config = await runConfig({}, [
+    const { settingsOwner: configSettingsOwner } = await runConfig({}, [
       '-p',
       'test',
       '--yolo',
       '--allowed-tools',
       'read_file',
     ]);
-    const allowed = config.getEphemeralSetting('tools.allowed') as
+    const allowed = configSettingsOwner.readNamedParameter('tools.allowed') as
       | string[]
       | undefined;
     expect(allowed).toBeDefined();
@@ -598,8 +660,12 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
 
   it('non-interactive YOLO with no explicit allowed tools: tools.allowed is undefined (all allowed)', async () => {
     process.stdin.isTTY = false;
-    const config = await runConfig({}, ['-p', 'test', '--yolo']);
-    const allowed = config.getEphemeralSetting('tools.allowed');
+    const { settingsOwner: configSettingsOwner } = await runConfig({}, [
+      '-p',
+      'test',
+      '--yolo',
+    ]);
+    const allowed = configSettingsOwner.readNamedParameter('tools.allowed');
     // YOLO with no explicit allowed tools → unrestricted (undefined)
     expect(allowed).toBeUndefined();
   });
@@ -611,7 +677,7 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
     'non-interactive %s inline profile preserves an explicit empty allowlist',
     async (_mode, modeArgs) => {
       process.stdin.isTTY = false;
-      const config = await runConfig({}, [
+      const { settingsOwner: configSettingsOwner } = await runConfig({}, [
         '-p',
         'test',
         ...modeArgs,
@@ -619,7 +685,9 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
         emptyToolInlineProfile(),
       ]);
 
-      expect(config.getEphemeralSetting('tools.allowed')).toStrictEqual([]);
+      expect(
+        configSettingsOwner.readNamedParameter('tools.allowed'),
+      ).toStrictEqual([]);
     },
   );
   it('READ_ONLY_TOOL_NAMES contains expected read-only tools', () => {
@@ -643,13 +711,13 @@ describe('toolGovernanceParity: tool policy - non-interactive allowed sets', () 
 
   it('non-interactive DEFAULT: approval mode is DEFAULT', async () => {
     process.stdin.isTTY = false;
-    const config = await runConfig({}, ['-p', 'test']);
+    const { config: config } = await runConfig({}, ['-p', 'test']);
     expect(config.getApprovalMode()).toBe(ApprovalMode.DEFAULT);
   });
 
   it('non-interactive YOLO: approval mode is YOLO', async () => {
     process.stdin.isTTY = false;
-    const config = await runConfig({}, ['-p', 'test', '--yolo']);
+    const { config: config } = await runConfig({}, ['-p', 'test', '--yolo']);
     expect(config.getApprovalMode()).toBe(ApprovalMode.YOLO);
   });
 });

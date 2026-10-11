@@ -1,3 +1,4 @@
+import { createSessionPolicyFixture } from './session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -16,6 +17,8 @@
  * performCompression() to use the strategy pattern via the factory.
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -73,23 +76,23 @@ function buildRuntimeContext(
     sessionId: 'test-session',
   });
 
+  const settingsService = new SettingsService();
   const mockProviderAdapter = {
-    getActiveProvider: vi.fn(() => ({
-      name: 'test-provider',
-      generateChatCompletion: vi.fn(),
-    })),
+    getActiveProvider: () => buildMockProvider('default compression response'),
+    setActiveProvider: () => {},
   };
-
   const mockTelemetryAdapter = {
-    recordTokenUsage: vi.fn(),
-    recordEvent: vi.fn(),
+    logApiRequest: () => {},
+    logApiResponse: () => {},
+    logApiError: () => {},
   };
-
   const mockToolsView = {
-    getToolRegistry: vi.fn(() => undefined),
+    listToolNames: () => [],
+    getToolMetadata: () => undefined,
   };
 
   return createAgentRuntimeContext({
+    ...createSessionPolicyFixture(settingsService, runtimeState.runtimeId),
     state: runtimeState,
     history: historyService,
     settings: {
@@ -103,27 +106,33 @@ function buildRuntimeContext(
     provider: mockProviderAdapter,
     telemetry: mockTelemetryAdapter,
     tools: mockToolsView,
-    providerRuntime: {
-      runtimeId: 'test-runtime',
-      settingsService: { get: vi.fn(() => undefined) } as never,
-      config: {} as never,
-    },
+    providerRuntime: createProviderRuntimeContext({
+      runtimeId: runtimeState.runtimeId,
+      settingsService,
+    }),
   });
 }
 
 function buildMockContentGenerator(): ContentGenerator {
   return {
-    generateContent: vi.fn(),
-    generateContentStream: vi.fn(),
-    countTokens: vi.fn().mockResolvedValue({ totalTokens: 100 }),
-    embedContent: vi.fn(),
-  } as unknown as ContentGenerator;
+    generateContent: async () => {
+      throw new Error('Unexpected content generation');
+    },
+    generateContentStream: async () => {
+      throw new Error('Unexpected stream generation');
+    },
+    countTokens: async () => ({ totalTokens: 100 }),
+    embedContent: async () => {
+      throw new Error('Unexpected embedding');
+    },
+  };
 }
 
 function buildMockProvider(summaryText: string) {
   return {
     name: 'test-provider',
-    generateChatCompletion: vi.fn(async function* () {
+    getModels: async () => [],
+    generateChatCompletion: vi.fn(async function* (): AsyncGenerator<IContent> {
       yield {
         speaker: 'ai',
         blocks: [{ type: 'text', text: summaryText }],
@@ -188,12 +197,10 @@ describe('Compression Dispatcher Integration (P13)', () => {
         vi.spyOn(historyService, 'getTotalTokens').mockReturnValue(100_000);
 
         const mockProvider = buildMockProvider('should-not-appear');
-        vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-          mockProvider as never,
+        vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(
+          mockProvider,
         );
-        vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(
-          true,
-        );
+        vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
 
         await chat.performCompression('test-prompt-id');
 
@@ -246,12 +253,10 @@ describe('Compression Dispatcher Integration (P13)', () => {
         const summaryText =
           '<state_snapshot><overall_goal>Test goal</overall_goal></state_snapshot>';
         const mockProvider = buildMockProvider(summaryText);
-        vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-          mockProvider as never,
+        vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(
+          mockProvider,
         );
-        vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(
-          true,
-        );
+        vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
 
         await chat.performCompression('test-prompt-id');
 
@@ -299,10 +304,8 @@ describe('Compression Dispatcher Integration (P13)', () => {
       const summaryText =
         '<state_snapshot><overall_goal>Default strategy</overall_goal></state_snapshot>';
       const mockProvider = buildMockProvider(summaryText);
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+      vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
+      vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
 
       await chat.performCompression('test-prompt-id');
 
@@ -348,12 +351,10 @@ describe('Compression Dispatcher Integration (P13)', () => {
         const summaryText =
           '<state_snapshot><overall_goal>Ordered result</overall_goal></state_snapshot>';
         const mockProvider = buildMockProvider(summaryText);
-        vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-          mockProvider as never,
+        vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(
+          mockProvider,
         );
-        vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(
-          true,
-        );
+        vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
 
         await chat.performCompression('test-prompt-id');
 
@@ -398,15 +399,17 @@ describe('Compression Dispatcher Integration (P13)', () => {
       // Make the provider throw an error to simulate strategy failure
       const mockProvider = {
         name: 'test-provider',
-        generateChatCompletion: vi.fn(async function* () {
-          throw new Error('Strategy execution failed');
-          yield undefined as never;
-        }),
+        getModels: async () => [],
+        generateChatCompletion: vi.fn(
+          async function* (): AsyncGenerator<IContent> {
+            yield await Promise.reject<IContent>(
+              new Error('Strategy execution failed'),
+            );
+          },
+        ),
       };
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+      vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
+      vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
 
       // Should propagate the error
       await expect(chat.performCompression('test-prompt-id')).rejects.toThrow(
@@ -439,14 +442,13 @@ describe('Compression Dispatcher Integration (P13)', () => {
       // Simulate a provider that returns an invalid generator
       const mockProvider = {
         name: 'test-provider',
+        getModels: async () => [],
         generateChatCompletion: vi.fn(() => {
           throw new Error('Provider initialization failed');
         }),
       };
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+      vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
+      vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
 
       await expect(chat.performCompression('test-prompt-id')).rejects.toThrow(
         /Provider initialization failed/,
@@ -483,10 +485,8 @@ describe('Compression Dispatcher Integration (P13)', () => {
       const summaryText =
         '<state_snapshot><overall_goal>Success</overall_goal></state_snapshot>';
       const mockProvider = buildMockProvider(summaryText);
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+      vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
+      vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
 
       await chat.performCompression('test-prompt-id');
 
@@ -521,8 +521,8 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       // Double-check: construct a partial CompressionContext-shaped object
       // and verify 'historyService' is not among its expected fields
-      const knownFields = new Set(contextKeys);
-      expect(knownFields.has('historyService' as never)).toBe(false);
+      const knownFields = new Set<string>(contextKeys);
+      expect(knownFields.has('historyService')).toBe(false);
     });
   });
 
@@ -541,14 +541,12 @@ describe('Compression Dispatcher Integration (P13)', () => {
     });
 
     it('should trigger PreCompress hook before compression', async () => {
-      const historyService = new HistoryService(8000);
+      const historyService = new HistoryService();
       // Add a message to trigger compression
       historyService.add(createUserMessage('Test message'), 'test-model');
 
-      const mockContentGenerator: ContentGenerator = vi.fn();
-      const mockProvider = {
-        generateChatCompletion: mockContentGenerator,
-      };
+      const mockContentGenerator = buildMockContentGenerator();
+      const mockProvider = buildMockProvider('Compressed summary');
 
       const runtimeContext = buildRuntimeContext(historyService, {
         compressionStrategy: 'middle-out',
@@ -560,18 +558,8 @@ describe('Compression Dispatcher Integration (P13)', () => {
         {},
         [],
       );
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        mockProvider as never,
-      );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
-
-      // Mock the compression to return valid history
-      (
-        mockContentGenerator as Mock<typeof mockContentGenerator>
-      ).mockResolvedValueOnce({
-        content: 'Compressed summary',
-        usage: {},
-      } as never);
+      vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(mockProvider);
+      vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
 
       await chat.performCompression('test-prompt-id');
 
@@ -580,13 +568,13 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       // Assert: triggerPreCompressHook was called with correct parameters
       expect(triggerPreCompressHook).toHaveBeenCalledWith(
-        expect.anything(), // config
-        PreCompressTrigger.Manual, // or Auto - depends on context
+        PreCompressTrigger.Manual,
+        undefined,
       );
     });
 
     it('should proceed with compression even if PreCompress hook throws', async () => {
-      const localHistoryService = new HistoryService(8000);
+      const localHistoryService = new HistoryService();
       populateHistory(localHistoryService);
 
       const localContentGenerator = buildMockContentGenerator();
@@ -604,10 +592,10 @@ describe('Compression Dispatcher Integration (P13)', () => {
         {},
         [],
       );
-      vi.spyOn(chat as never, 'resolveProviderForRuntime').mockReturnValue(
-        localMockProvider as never,
+      vi.spyOn(chat, 'resolveProviderForRuntime').mockReturnValue(
+        localMockProvider,
       );
-      vi.spyOn(chat as never, 'providerSupportsIContent').mockReturnValue(true);
+      vi.spyOn(chat, 'providerSupportsIContent').mockReturnValue(true);
 
       // Mock triggerPreCompressHook to throw
       (
@@ -624,10 +612,12 @@ describe('Compression Dispatcher Integration (P13)', () => {
     });
 
     it('should call PreCompress hook when compression is attempted on empty history', async () => {
-      const historyService = new HistoryService(8000);
+      const historyService = new HistoryService();
       // Empty history - compression will be skipped after PreCompress hook
 
-      const mockContentGenerator: ContentGenerator = vi.fn();
+      const mockContentGenerator = buildMockContentGenerator();
+      const generate = vi.spyOn(mockContentGenerator, 'generateContent');
+      const stream = vi.spyOn(mockContentGenerator, 'generateContentStream');
 
       const runtimeContext = buildRuntimeContext(historyService, {
         compressionStrategy: 'middle-out',
@@ -645,10 +635,12 @@ describe('Compression Dispatcher Integration (P13)', () => {
       expect(result).toBe(PerformCompressionResult.SKIPPED_EMPTY);
       expect(triggerPreCompressHook).toHaveBeenCalledTimes(1);
       expect(triggerPreCompressHook).toHaveBeenCalledWith(
-        expect.anything(),
         PreCompressTrigger.Manual,
+        undefined,
       );
-      expect(mockContentGenerator).not.toHaveBeenCalled();
+      expect(generate).not.toHaveBeenCalled();
+      expect(stream).not.toHaveBeenCalled();
+      expect(historyService.getCurated()).toStrictEqual([]);
     });
   });
 });

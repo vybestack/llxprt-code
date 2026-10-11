@@ -4,6 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { mkdtemp, mkdir, writeFile, rm, realpath } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+let fixtureDirectory: string;
+let priorConfigHome: string | undefined;
+const composeFixtureRuntime = installWorkspaceRuntimeFixture(
+  () => fixtureDirectory,
+);
+let memoryRuntime: ReturnType<typeof composeFixtureRuntime>;
+
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
  * @requirement:REQ-API-001
@@ -51,9 +62,9 @@ void vi.mock('../contexts/RuntimeContext.js', () => {
   };
   const api = {
     __setStatusForTesting: setStatus,
-    getActiveProviderStatus: () => status,
+    providerStatus: () => status,
     getActiveProfileName: () => undefined,
-    getCliProviderManager: () => undefined,
+    providerManager: () => undefined,
   };
   return {
     useRuntimeApi: () => api,
@@ -99,26 +110,8 @@ const mockHistoryManager = useHistory as Mock<typeof useHistory>;
 // Mock dependencies
 void vi.mock(
   '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js',
-  () => ({
-    getProviderManager: vi.fn(() => ({
-      hasActiveProvider: () => true,
-      getActiveProvider: () => ({
-        name: 'test-provider',
-        getCurrentModel: () => 'test-model',
-        isPaidMode: () => false,
-      }),
-    })),
-  }),
+  () => ({}),
 );
-
-void vi.mock('../../config/environmentLoader.js', () => ({
-  loadHierarchicalLlxprtMemory: vi.fn(() =>
-    Promise.resolve({
-      memoryContent: 'test memory content',
-      fileCount: 1,
-    }),
-  ),
-}));
 
 export const loadSettings = vi.fn((_dir) => ({
   merged: {
@@ -150,7 +143,7 @@ describe('SessionController', () => {
     // paid-mode changes; reset it so those changes do not leak between tests.
     const runtimeModuleForReset = await import('../contexts/RuntimeContext.js');
     (
-      runtimeModuleForReset.getRuntimeApi() as unknown as {
+      runtimeModuleForReset.useRuntimeApi() as unknown as {
         __setStatusForTesting: (next: {
           providerName?: string;
           modelName?: string;
@@ -162,6 +155,14 @@ describe('SessionController', () => {
       modelName: 'test-model',
       isPaidMode: false,
     });
+    fixtureDirectory = await realpath(
+      await mkdtemp(join(tmpdir(), 'controller-memory-')),
+    );
+    priorConfigHome = process.env.LLXPRT_CONFIG_HOME;
+    process.env.LLXPRT_CONFIG_HOME = join(fixtureDirectory, 'global');
+    await mkdir(join(fixtureDirectory, 'global'));
+    await mkdir(join(fixtureDirectory, '.git'));
+    await writeFile(join(fixtureDirectory, 'LLXPRT.md'), 'test memory content');
     vi.clearAllMocks();
     vi.useFakeTimers();
 
@@ -179,29 +180,29 @@ describe('SessionController', () => {
     });
 
     mockConfig = {
+      getMcpServers: () => undefined,
       getModel: vi.fn(() => 'test-model'),
       getDebugMode: vi.fn(() => false),
-      getFileService: vi.fn(),
       getExtensionContextFilePaths: vi.fn(() => []),
       // The memory refresh now passes the loaded extensions through to
       // loadHierarchicalLlxprtMemory; without this the refresh throws before
       // reaching it.
       getExtensions: vi.fn(() => []),
       getFolderTrust: vi.fn(() => true),
-      getUserMemory: vi.fn(() => 'test memory content'),
-      setUserMemory: vi.fn(),
-      setLlxprtMdFileCount: vi.fn(),
       setModel: vi.fn(),
-      getWorkingDir: vi.fn(() => process.cwd()),
+      getWorkingDir: vi.fn(() => fixtureDirectory),
       shouldLoadMemoryFromIncludeDirectories: vi.fn(() => false),
-      getWorkspaceContext: vi.fn(() => ({
-        getDirectories: vi.fn(() => [process.cwd()]),
-      })),
+
       getFileFilteringOptions: vi.fn(() => ({})),
     } as unknown as Partial<Config>;
+    memoryRuntime = composeFixtureRuntime(mockConfig as Config);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await composeFixtureRuntime.dispose();
+    await rm(fixtureDirectory, { recursive: true, force: true });
+    if (priorConfigHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
+    else process.env.LLXPRT_CONFIG_HOME = priorConfigHome;
     vi.clearAllMocks();
     vi.useRealTimers();
     vi.restoreAllMocks();
@@ -216,7 +217,7 @@ describe('SessionController', () => {
     };
 
     const { unmount } = render(
-      <SessionController config={mockConfig as Config}>
+      <SessionController config={memoryRuntime}>
         <TestComponent />
       </SessionController>,
     );
@@ -250,7 +251,7 @@ describe('SessionController', () => {
     };
 
     const { lastFrame, unmount } = render(
-      <SessionController config={mockConfig as Config}>
+      <SessionController config={memoryRuntime}>
         <TestComponent />
       </SessionController>,
     );
@@ -267,7 +268,7 @@ describe('SessionController', () => {
     const TestComponent = () => null;
 
     const { unmount } = render(
-      <SessionController config={mockConfig as Config} turnStore={turnStore}>
+      <SessionController config={memoryRuntime} turnStore={turnStore}>
         <TestComponent />
       </SessionController>,
     );
@@ -303,7 +304,7 @@ describe('SessionController', () => {
     };
 
     const { unmount, rerender } = render(
-      <SessionController config={mockConfig as Config}>
+      <SessionController config={memoryRuntime}>
         <TestComponent />
       </SessionController>,
     );
@@ -318,7 +319,7 @@ describe('SessionController', () => {
     // manager.
     const paidRuntimeModule = await import('../contexts/RuntimeContext.js');
     (
-      paidRuntimeModule.getRuntimeApi() as unknown as {
+      paidRuntimeModule.useRuntimeApi() as unknown as {
         __setStatusForTesting: (next: {
           providerName?: string;
           modelName?: string;
@@ -336,7 +337,7 @@ describe('SessionController', () => {
 
     // Re-render to get updated state
     rerender(
-      <SessionController config={mockConfig as Config}>
+      <SessionController config={memoryRuntime}>
         <TestComponent />
       </SessionController>,
     );
@@ -360,17 +361,18 @@ describe('SessionController', () => {
     };
 
     const { unmount } = render(
-      <SessionController config={mockConfig as Config}>
+      <SessionController config={memoryRuntime}>
         <TestComponent />
       </SessionController>,
     );
 
     await contextValue!.performMemoryRefresh();
 
-    expect(mockConfig.setUserMemory).toHaveBeenCalledWith(
-      'test memory content',
+    expect(memoryRuntime.getUserMemory()).toContain('test memory content');
+    expect(memoryRuntime.getLlxprtMdFilePaths()).toContain(
+      join(fixtureDirectory, 'LLXPRT.md'),
     );
-    expect(mockConfig.setLlxprtMdFileCount).toHaveBeenCalledWith(1);
+    expect(memoryRuntime.getLlxprtMdFileCount()).toBe(1);
 
     // Check that info messages were added
     expect(mockAddItem).toHaveBeenCalledTimes(2);
@@ -393,12 +395,9 @@ describe('SessionController', () => {
   });
 
   it('should handle memory refresh errors', async () => {
-    const envLoaderModule = await import('../../config/environmentLoader.js');
-    (
-      envLoaderModule.loadHierarchicalLlxprtMemory as Mock<
-        typeof envLoaderModule.loadHierarchicalLlxprtMemory
-      >
-    ).mockRejectedValueOnce(new Error('Memory load failed'));
+    vi.spyOn(memoryRuntime, 'refreshMemory').mockRejectedValueOnce(
+      new Error('Memory load failed'),
+    );
 
     let contextValue: SessionContextType | undefined;
 
@@ -408,7 +407,7 @@ describe('SessionController', () => {
     };
 
     const { unmount } = render(
-      <SessionController config={mockConfig as Config}>
+      <SessionController config={memoryRuntime}>
         <TestComponent />
       </SessionController>,
     );
@@ -429,14 +428,11 @@ describe('SessionController', () => {
     unmount();
   });
 
-  it('should call loadHierarchicalLlxprtMemory with config.getWorkingDir()', async () => {
-    const customWorkingDir = '/custom/working/directory';
-    (mockConfig.getWorkingDir as ReturnType<typeof vi.fn>).mockReturnValue(
-      customWorkingDir,
+  it('reloads physical instructions through the retained workspace', async () => {
+    await writeFile(
+      join(fixtureDirectory, 'LLXPRT.md'),
+      'refreshed retained workspace instructions',
     );
-
-    expect(customWorkingDir).not.toBe(process.cwd());
-
     let contextValue: SessionContextType | undefined;
 
     const TestComponent = () => {
@@ -445,54 +441,29 @@ describe('SessionController', () => {
     };
 
     const { unmount } = render(
-      <SessionController config={mockConfig as Config}>
+      <SessionController config={memoryRuntime}>
         <TestComponent />
       </SessionController>,
     );
 
     await contextValue!.performMemoryRefresh();
 
-    const envLoaderModule = await import('../../config/environmentLoader.js');
-    const mockLoadHierarchicalLlxprtMemory =
-      envLoaderModule.loadHierarchicalLlxprtMemory as Mock<
-        typeof envLoaderModule.loadHierarchicalLlxprtMemory
-      >;
-    const settingsModule = await import('../../config/settings.js');
-    const loadSettingsMock = settingsModule.loadSettings as Mock<
-      typeof settingsModule.loadSettings
-    >;
-
-    expect(loadSettingsMock).toHaveBeenCalledWith(customWorkingDir);
-    // The subject of this test is the working directory that is passed, not
-    // the full argument list: pinning every position made it fail on an
-    // optional parameter that is now undefined, which expect.anything() does
-    // not match.
-    expect(mockLoadHierarchicalLlxprtMemory).toHaveBeenCalled();
-    expect(mockLoadHierarchicalLlxprtMemory.mock.calls[0][0]).toBe(
-      customWorkingDir,
+    expect(memoryRuntime.getUserMemory()).toContain(
+      'refreshed retained workspace instructions',
     );
-
-    expect(mockLoadHierarchicalLlxprtMemory).not.toHaveBeenCalledWith(
-      process.cwd(),
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
+    expect(memoryRuntime.getUserMemory()).not.toContain('test memory content');
+    expect(memoryRuntime.getLlxprtMdFilePaths()).toContain(
+      join(fixtureDirectory, 'LLXPRT.md'),
     );
 
     unmount();
   });
 
-  it('should call loadSettings with config.getWorkingDir() on memory refresh', async () => {
-    const customWorkingDir = '/custom/working/dir';
-    (mockConfig.getWorkingDir as ReturnType<typeof vi.fn>).mockReturnValue(
-      customWorkingDir,
+  it('keeps the retained workspace when declarative working-directory display changes', async () => {
+    await writeFile(
+      join(fixtureDirectory, 'LLXPRT.md'),
+      'refreshed retained workspace instructions',
     );
-
     let contextValue: SessionContextType | undefined;
 
     const TestComponent = () => {
@@ -501,19 +472,20 @@ describe('SessionController', () => {
     };
 
     const { unmount } = render(
-      <SessionController config={mockConfig as Config}>
+      <SessionController config={memoryRuntime}>
         <TestComponent />
       </SessionController>,
     );
 
     await contextValue!.performMemoryRefresh();
 
-    const settingsModule = await import('../../config/settings.js');
-    const loadSettingsMock = settingsModule.loadSettings as Mock<
-      typeof settingsModule.loadSettings
-    >;
-
-    expect(loadSettingsMock).toHaveBeenCalledWith(customWorkingDir);
+    expect(memoryRuntime.getUserMemory()).toContain(
+      'refreshed retained workspace instructions',
+    );
+    expect(memoryRuntime.getUserMemory()).not.toContain('test memory content');
+    expect(memoryRuntime.getLlxprtMdFilePaths()).toContain(
+      join(fixtureDirectory, 'LLXPRT.md'),
+    );
 
     unmount();
   });
@@ -529,7 +501,7 @@ describe('SessionController', () => {
     };
 
     const { unmount, rerender } = render(
-      <SessionController config={mockConfig as Config}>
+      <SessionController config={memoryRuntime}>
         <TestComponent />
       </SessionController>,
     );
@@ -544,7 +516,7 @@ describe('SessionController', () => {
     );
     const runtimeModule = await import('../contexts/RuntimeContext.js');
     (
-      runtimeModule.getRuntimeApi() as unknown as {
+      runtimeModule.useRuntimeApi() as unknown as {
         __setStatusForTesting: (next: {
           providerName?: string;
           modelName?: string;
@@ -561,7 +533,7 @@ describe('SessionController', () => {
 
     // Re-render to get updated state
     rerender(
-      <SessionController config={mockConfig as Config}>
+      <SessionController config={memoryRuntime}>
         <TestComponent />
       </SessionController>,
     );
@@ -583,7 +555,7 @@ describe('SessionController', () => {
     };
 
     const { unmount } = render(
-      <SessionController config={mockConfig as Config}>
+      <SessionController config={memoryRuntime}>
         <TestComponent />
       </SessionController>,
     );
@@ -606,7 +578,7 @@ describe('SessionController', () => {
     };
 
     const { unmount } = render(
-      <SessionController config={mockConfig as Config}>
+      <SessionController config={memoryRuntime}>
         <TestComponent />
       </SessionController>,
     );
@@ -631,7 +603,7 @@ describe('SessionController', () => {
       return null;
     };
     const { unmount, rerender } = render(
-      <SessionController config={mockConfig as Config}>
+      <SessionController config={memoryRuntime}>
         <TestComponent />
       </SessionController>,
     );
@@ -639,7 +611,7 @@ describe('SessionController', () => {
     contextValue.appDispatch({ type: 'REFRESH_THEME' });
     contextValue.appDispatch({ type: 'SET_NEEDS_RELOGIN', payload: true });
     rerender(
-      <SessionController config={mockConfig as Config}>
+      <SessionController config={memoryRuntime}>
         <TestComponent />
       </SessionController>,
     );

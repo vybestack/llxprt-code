@@ -30,6 +30,7 @@
  * echo. The mount/session read does not publish and is out of scope here.
  */
 
+import { createMockRuntimeApi } from '../../components/__tests__/StatsDisplay.testHelpers.js';
 import { describe, it, expect, afterEach } from 'bun:test';
 import React, { act } from 'react';
 import * as fs from 'node:fs';
@@ -156,6 +157,9 @@ function commandContextFrom(
   errors: string[],
 ): CommandContext {
   return {
+    runtimeApi: createMockRuntimeApi(),
+    refreshProviderAliases: async () => {},
+    oauthControl: {} as CommandContext['oauthControl'],
     signal: new AbortController().signal,
     services: {
       config: null,

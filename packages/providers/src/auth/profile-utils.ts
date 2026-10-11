@@ -41,11 +41,11 @@ async function getProfileManagerCtor(): Promise<ProfileManagerCtor> {
 /**
  * Creates a new ProfileManager instance.
  */
-export async function createProfileManager(): Promise<
-  InstanceType<ProfileManagerCtor>
-> {
+export async function createProfileManager(
+  directory?: string,
+): Promise<InstanceType<ProfileManagerCtor>> {
   const ProfileManager = await getProfileManagerCtor();
-  return new ProfileManager();
+  return new ProfileManager(directory);
 }
 
 /**

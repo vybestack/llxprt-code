@@ -123,13 +123,11 @@ ensureReactSharedInternals();
 const actualSchedulerModule = {
   ...(await import('./useReactToolScheduler.js')),
 };
+const mockUseReactToolScheduler = vi.fn<typeof useReactToolScheduler>();
 void vi.mock('./useReactToolScheduler.js', () => ({
   ...actualSchedulerModule,
-  useReactToolScheduler: vi.fn(),
+  useReactToolScheduler: mockUseReactToolScheduler,
 }));
-const mockUseReactToolScheduler = useReactToolScheduler as Mock<
-  (...args: never[]) => unknown
->;
 
 void vi.mock('./useKeypress.js', () => ({
   useKeypress: vi.fn(),
@@ -147,31 +145,6 @@ void vi.mock('./atCommandProcessor.js', () =>
 
 void vi.mock('../utils/markdownUtilities.js', () => ({
   findLastSafeSplitPoint: vi.fn((s: string) => s.length),
-}));
-
-void vi.mock('./useStateAndRef.js', () => ({
-  useStateAndRef: <T,>(
-    initial: T,
-  ): [
-    T,
-    React.MutableRefObject<T>,
-    React.Dispatch<React.SetStateAction<T>>,
-  ] => {
-    const [state, setState] = React.useState(initial);
-    const ref = React.useRef(initial);
-    const setStateInternal = React.useCallback(
-      (valueOrUpdater: React.SetStateAction<T>) => {
-        const nextValue =
-          typeof valueOrUpdater === 'function'
-            ? valueOrUpdater(ref.current)
-            : valueOrUpdater;
-        ref.current = nextValue;
-        setState(nextValue);
-      },
-      [],
-    );
-    return [state, ref, setStateInternal];
-  },
 }));
 
 void vi.mock('./useLogger.js', () => ({
@@ -197,19 +170,21 @@ void vi.mock('./slashCommandProcessor.js', () => ({
 // --- END MOCKS ---
 
 describe('useAgentStream - ThinkingBlock Integration', () => {
-  let mockAddItem: Mock<(...args: never[]) => unknown>;
+  let mockAddItem: Mock<Parameters<typeof useAgentStream>[2]>;
   let mockConfig: Config;
   let mockSettings: LoadedSettings;
-  let mockOnDebugMessage: Mock<(...args: never[]) => unknown>;
-  let mockHandleSlashCommand: Mock<(...args: never[]) => unknown>;
-  let mockScheduleToolCalls: Mock<(...args: never[]) => unknown>;
-  let mockCancelAllToolCalls: Mock<(...args: never[]) => unknown>;
-  let mockMarkToolsAsDisplayCleared: Mock<(...args: never[]) => unknown>;
+  let mockOnDebugMessage: Mock<(message: string) => void>;
+  let mockHandleSlashCommand: Mock<Parameters<typeof useAgentStream>[6]>;
+  let mockScheduleToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[1]>;
+  let mockCancelAllToolCalls: Mock<ReturnType<typeof useReactToolScheduler>[3]>;
+  let mockMarkToolsAsDisplayCleared: Mock<
+    ReturnType<typeof useReactToolScheduler>[2]
+  >;
 
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockAddItem = vi.fn();
+    mockAddItem = vi.fn<Parameters<typeof useAgentStream>[2]>(() => 0);
 
     const contentGeneratorConfig = {
       model: 'test-model',
@@ -304,7 +279,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
 
   const renderTestHook = (
     initialToolCalls: TrackedToolCall[] = [],
-    agentClient?: unknown,
+    agentClient?: Parameters<typeof createFakeAgentFromMockClient>[0],
   ) => {
     let currentToolCalls = initialToolCalls;
     const setToolCalls = (newToolCalls: TrackedToolCall[]) => {
@@ -328,12 +303,12 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
 
     const { result, rerender } = renderHook(
       (props: {
-        client: unknown;
-        history: unknown[];
+        client: Parameters<typeof useAgentStream>[0];
+        history: Parameters<typeof useAgentStream>[1];
         addItem: UseHistoryManagerReturn['addItem'];
         runtime: ReturnType<typeof createStreamRuntimeForTest>;
         onDebugMessage: (message: string) => void;
-        handleSlashCommand: (cmd: unknown) => Promise<unknown>;
+        handleSlashCommand: Parameters<typeof useAgentStream>[6];
         shellModeActive: boolean;
         loadedSettings: LoadedSettings;
         toolCalls?: TrackedToolCall[];
@@ -353,7 +328,6 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
           () => 'vscode' as EditorType,
           () => {},
           () => Promise.resolve(),
-          false,
           () => {},
           () => {},
           () => {},
@@ -366,9 +340,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
           addItem: mockAddItem as unknown as UseHistoryManagerReturn['addItem'],
           runtime: createStreamRuntimeForTest(mockConfig),
           onDebugMessage: mockOnDebugMessage,
-          handleSlashCommand: mockHandleSlashCommand as unknown as (
-            cmd: unknown,
-          ) => Promise<unknown>,
+          handleSlashCommand: mockHandleSlashCommand,
           shellModeActive: false,
           loadedSettings: mockLoadedSettings,
           toolCalls: initialToolCalls,
@@ -478,6 +450,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
     const lastAiCall = mockAddItem.mock.calls
       .filter((call) => call[0].type === MessageType.AI)
       .pop();
+    if (lastAiCall === undefined) throw new Error('Expected AI history item');
 
     expect(lastAiCall).toBeDefined();
     const historyItem = lastAiCall[0] as HistoryItemAi;
@@ -526,7 +499,9 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
       await waitFor(() => {
         const pending = result.current.pendingHistoryItems;
         thinkingText = pending
-          .flatMap((item) => item.thinkingBlocks ?? [])
+          .flatMap((item) =>
+            item.type === 'gemini' ? (item.thinkingBlocks ?? []) : [],
+          )
           .map((block) => block.thought)
           .join('');
         if (!thinkingText.includes('Streaming thought')) {
@@ -585,6 +560,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
     const lastAiCall = mockAddItem.mock.calls
       .filter((call) => call[0].type === MessageType.AI)
       .pop();
+    if (lastAiCall === undefined) throw new Error('Expected AI history item');
 
     expect(lastAiCall).toBeDefined();
     const historyItem = lastAiCall[0] as HistoryItemAi;
@@ -639,6 +615,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
     const lastAiCall = mockAddItem.mock.calls
       .filter((call) => call[0].type === MessageType.AI)
       .pop();
+    if (lastAiCall === undefined) throw new Error('Expected AI history item');
 
     const historyItem = lastAiCall[0] as HistoryItemAi;
     const block = historyItem.thinkingBlocks![0];
@@ -692,7 +669,6 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
         () => 'vscode' as EditorType,
         () => {},
         () => Promise.resolve(),
-        false,
         () => {},
         () => {},
         () => {},
@@ -713,6 +689,7 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
     const lastAiCall = mockAddItem.mock.calls
       .filter((call) => call[0].type === MessageType.AI)
       .pop();
+    if (lastAiCall === undefined) throw new Error('Expected AI history item');
 
     const historyItem = lastAiCall[0] as HistoryItemAi;
     expect(historyItem.thinkingBlocks).toBeDefined();

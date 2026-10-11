@@ -5,9 +5,10 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto';
-import { link, mkdir, stat, watch, writeFile } from 'node:fs/promises';
+import { unwatchFile, watchFile } from 'node:fs';
+import { link, mkdir, stat, writeFile } from 'node:fs/promises';
 import { hostname } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { LocalMediaStore } from './local-media-store.js';
 
 function requiredArgument(index: number, name: string): string {
@@ -58,19 +59,25 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-async function waitForPath(path: string): Promise<void> {
-  if (await pathExists(path)) return;
-  const controller = new AbortController();
-  const events = watch(dirname(path), { signal: controller.signal });
-  try {
-    if (await pathExists(path)) return;
-    for await (const _event of events) {
-      if (await pathExists(path)) return;
-    }
-    throw new Error(`Filesystem watch ended before ${path} appeared`);
-  } finally {
-    controller.abort();
-  }
+function waitForPath(path: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const observe = (): void => {
+      void pathExists(path).then(
+        (exists) => {
+          if (exists) {
+            unwatchFile(path, observe);
+            resolve();
+          }
+        },
+        (error: unknown) => {
+          unwatchFile(path, observe);
+          reject(error);
+        },
+      );
+    };
+    watchFile(path, { interval: 10 }, observe);
+    observe();
+  });
 }
 
 async function writeCrashedLock(rootDirectory: string): Promise<void> {
@@ -89,6 +96,11 @@ async function writeCrashedLock(rootDirectory: string): Promise<void> {
   );
 }
 
+// The locking test contender uses this same duration (300). The heartbeat runs
+// every third of it, so the margin before a live holder looks stale must
+// absorb scheduler stalls on loaded CI hosts.
+const HOLD_PUBLISH_STALE_LOCK_MS = 300;
+
 function createStore(
   mode: string,
   rootDirectory: string,
@@ -106,7 +118,7 @@ function createStore(
     ...(readyPath === undefined || releasePath === undefined
       ? {}
       : {
-          staleLockMs: 30,
+          staleLockMs: HOLD_PUBLISH_STALE_LOCK_MS,
           fileOperations: {
             link: async (sourcePath, destinationPath): Promise<void> => {
               const released = waitForPath(releasePath);

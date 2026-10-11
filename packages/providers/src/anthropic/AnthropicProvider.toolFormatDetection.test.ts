@@ -9,6 +9,7 @@ const realLlxprtCodeSettingsModule = {
 const mockSettingsService = {
   set: vi.fn(),
   get: vi.fn(),
+  getAllGlobalSettings: () => ({}),
   setProviderSetting: vi.fn(),
   getProviderSetting: vi.fn(),
   getProviderSettings: vi.fn(),

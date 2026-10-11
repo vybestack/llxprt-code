@@ -10,7 +10,6 @@
  * @pseudocode:analysis/pseudocode/03-tool-hook-pipeline.md
  */
 
-import type { Config } from '../config/config.js';
 import {
   BeforeToolHookOutput,
   AfterToolHookOutput,
@@ -22,26 +21,9 @@ import type {
   ToolCallConfirmationDetails,
 } from '@vybestack/llxprt-code-tools';
 import { DebugLogger } from '../debug/index.js';
-import type { HookSystem } from '../hooks/hookSystem.js';
-import type { HookConfigBoundary } from './hookConfigBoundary.js';
+import type { HookExecutionOwner } from '../hooks/hookEventHandler.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hook-triggers:tool');
-
-/**
- * Returns the active HookSystem (or null) when hooks are enabled.
- * Handles config test doubles that may not implement hook accessors.
- */
-function getEnabledHookSystem(config: HookConfigBoundary): HookSystem | null {
-  const enabled = config.getEnableHooks?.();
-  if (enabled !== true) {
-    return null;
-  }
-  const hookSystem = config.getHookSystem?.();
-  if (hookSystem === undefined) {
-    return null;
-  }
-  return hookSystem;
-}
 
 /**
  * Trigger BeforeTool hook for a tool call
@@ -54,26 +36,26 @@ function getEnabledHookSystem(config: HookConfigBoundary): HookSystem | null {
  * @returns BeforeToolHookOutput if hooks execute, undefined otherwise
  */
 export async function triggerBeforeToolHook(
-  config: Config,
   toolName: string,
   toolInput: Record<string, unknown>,
   mcpContext?: McpContext,
+  owner?: HookExecutionOwner,
 ): Promise<BeforeToolHookOutput | undefined> {
   // Get the HookSystem singleton (null when hooks disabled or unavailable)
-  const hookSystem = getEnabledHookSystem(config);
-  if (!hookSystem) {
+  if (owner === undefined) {
     return undefined;
   }
 
+  owner.signal?.throwIfAborted();
   try {
     // Initialize hook system if needed
-    await hookSystem.initialize();
 
     // Fire the event using HookSystem facade
-    const result = await hookSystem.fireBeforeToolEvent(
+    const result = await owner.beforeTool?.(
       toolName,
       toolInput,
       mcpContext,
+      owner.signal,
     );
 
     debugLogger.debug(`BeforeTool hook executed for tool: ${toolName}`);
@@ -106,21 +88,20 @@ export async function triggerBeforeToolHook(
  * @returns AfterToolHookOutput if hooks execute, undefined otherwise
  */
 export async function triggerAfterToolHook(
-  config: Config,
   toolName: string,
   toolInput: Record<string, unknown>,
   toolOutput: ToolResult,
   mcpContext?: McpContext,
+  owner?: HookExecutionOwner,
 ): Promise<AfterToolHookOutput | undefined> {
   // Get the HookSystem singleton (null when hooks disabled or unavailable)
-  const hookSystem = getEnabledHookSystem(config);
-  if (!hookSystem) {
+  if (owner === undefined) {
     return undefined;
   }
 
+  owner.signal?.throwIfAborted();
   try {
     // Initialize hook system if needed
-    await hookSystem.initialize();
 
     // Fire the event using HookSystem facade
     const toolResponse = {
@@ -129,11 +110,12 @@ export async function triggerAfterToolHook(
       ...(toolOutput.metadata && { metadata: toolOutput.metadata }),
       ...(toolOutput.error && { error: toolOutput.error }),
     };
-    const result = await hookSystem.fireAfterToolEvent(
+    const result = await owner.afterTool?.(
       toolName,
       toolInput,
       toolResponse,
       mcpContext,
+      owner.signal,
     );
 
     debugLogger.debug(`AfterTool hook executed for tool: ${toolName}`);
@@ -266,24 +248,23 @@ function getNotificationMessage(
  * @returns NotificationHookResult if hooks execute, undefined otherwise
  */
 export async function triggerToolNotificationHook(
-  config: Config,
   confirmationDetails: ToolCallConfirmationDetails,
+  owner?: HookExecutionOwner,
 ): Promise<NotificationHookResult | undefined> {
-  const hookSystem = getEnabledHookSystem(config);
-  if (!hookSystem) {
+  if (owner === undefined) {
     return undefined;
   }
 
+  owner.signal?.throwIfAborted();
   try {
-    await hookSystem.initialize();
-
     const message = getNotificationMessage(confirmationDetails);
     const serializedDetails = toSerializableDetails(confirmationDetails);
 
-    await hookSystem.fireNotificationEvent(
+    await owner.notification?.(
       NotificationType.ToolPermission,
       message,
       serializedDetails,
+      owner.signal,
     );
 
     debugLogger.debug(

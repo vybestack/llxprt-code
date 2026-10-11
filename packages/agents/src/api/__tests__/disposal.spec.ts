@@ -26,10 +26,11 @@
  * assertions pass with no rewrite.
  *
  * GREEN-reachability contract per row:
- * - agentClient: observes `agentClient._unsubscribe` transitioning
- *   `function → undefined` (client.ts:146 sets it; client.ts:263-265 clears it
- *   on dispose). The fake client IS constructed and its constructor DOES set
- *   `_unsubscribe`, so this is a genuine transition.
+ * - agentClient: observes its `handleModelChanged` handler leaving
+ *   `coreEvents.listeners(CoreEvent.ModelChanged)` (client.ts registers it in
+ *   the constructor; dispose() removes it). The fake client IS constructed and
+ *   its constructor DOES register the handler, so this is a genuine
+ *   transition.
  * - scheduler + confirmationCoordinator: inject
  *   `createRecordingSchedulerFactory().factory` + drive a tool turn; assert the
  *   recording handle's REAL `disposed` boolean. CORRECT (the fake handle
@@ -74,8 +75,7 @@ import {
   type DisposalProbe,
   extensionsDisposed,
   type FakeExtension,
-  installFakeExtensionLoader,
-  installLoaderWithoutUnload,
+  buildExtensionDisposalAgent,
   isAggregateDisposeError,
   lspDisposed,
   messageBusSubscriptionCount,
@@ -93,9 +93,9 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
     try {
       const probe: DisposalProbe = captureProbe(agent);
       // PRE-dispose sanity read: the agentClient is NOT yet torn down. The
-      // probe reads `agentClient._unsubscribe` (a function at GREEN, set by
-      // client.ts:146) which transitions to undefined on dispose
-      // (client.ts:263-265). dispose() line 60 -> config.dispose() ->
+      // probe reads the client's `handleModelChanged` handler (registered by
+      // the client.ts constructor) which dispose() removes from
+      // coreEvents. dispose() line 60 -> config.dispose() ->
       // agentClient.dispose().
       expect(agentClientDisposed(probe)).toBe(false);
       await agent.dispose();
@@ -240,7 +240,31 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
   });
 
   it('T13e extension teardown unloads ONLY the active extensions (inactive ones are filtered out), in encounter order @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    const extensions: readonly FakeExtension[] = [
+      {
+        name: 'alpha',
+        version: '1.0.0',
+        isActive: true,
+        path: '/ext/alpha',
+        contextFiles: [],
+      },
+      {
+        name: 'beta-inactive',
+        version: '1.0.0',
+        isActive: false,
+        path: '/ext/beta',
+        contextFiles: [],
+      },
+      {
+        name: 'gamma',
+        version: '2.0.0',
+        isActive: true,
+        path: '/ext/gamma',
+        contextFiles: [],
+      },
+    ];
+    const { agent, cleanup, recorder } =
+      await buildExtensionDisposalAgent(extensions);
     try {
       const probe: DisposalProbe = captureProbe(agent);
       // Install a loader carrying a mix of active and inactive extensions. The
@@ -249,30 +273,6 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
       // recorder captures the NAMES actually passed to unloadExtension, so the
       // assertion verifies the real filtering output — inactive extensions are
       // NEVER unloaded, active ones are unloaded in encounter order.
-      const extensions: readonly FakeExtension[] = [
-        {
-          name: 'alpha',
-          version: '1.0.0',
-          isActive: true,
-          path: '/ext/alpha',
-          contextFiles: [],
-        },
-        {
-          name: 'beta-inactive',
-          version: '1.0.0',
-          isActive: false,
-          path: '/ext/beta',
-          contextFiles: [],
-        },
-        {
-          name: 'gamma',
-          version: '2.0.0',
-          isActive: true,
-          path: '/ext/gamma',
-          contextFiles: [],
-        },
-      ];
-      const recorder = installFakeExtensionLoader(probe, extensions);
 
       // Pre-dispose: nothing unloaded yet, marker not set.
       expect(recorder.unloaded).toStrictEqual([]);
@@ -291,29 +291,29 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
   });
 
   it('T13e when every extension is inactive, NONE are unloaded yet teardown still completes @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+    const extensions: readonly FakeExtension[] = [
+      {
+        name: 'idle-one',
+        version: '1.0.0',
+        isActive: false,
+        path: '/ext/one',
+        contextFiles: [],
+      },
+      {
+        name: 'idle-two',
+        version: '1.0.0',
+        isActive: false,
+        path: '/ext/two',
+        contextFiles: [],
+      },
+    ];
+    const { agent, cleanup, recorder } =
+      await buildExtensionDisposalAgent(extensions);
     try {
       const probe: DisposalProbe = captureProbe(agent);
       // All extensions inactive: the isActive filter yields an empty set, so
       // unloadExtension is NEVER called, yet dispose() still completes the
       // teardown step and records its completion marker.
-      const extensions: readonly FakeExtension[] = [
-        {
-          name: 'idle-one',
-          version: '1.0.0',
-          isActive: false,
-          path: '/ext/one',
-          contextFiles: [],
-        },
-        {
-          name: 'idle-two',
-          version: '1.0.0',
-          isActive: false,
-          path: '/ext/two',
-          contextFiles: [],
-        },
-      ];
-      const recorder = installFakeExtensionLoader(probe, extensions);
 
       await agent.dispose();
 
@@ -324,27 +324,26 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
     }
   });
 
-  it('T13e a loader lacking the optional unloadExtension method is skipped defensively: dispose completes, nothing is unloaded @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016', async () => {
-    const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+  it('T13e a loader lacking the required unloadExtension method reports failure while other teardown completes @plan:PLAN-20260617-COREAPI.P24 @requirement:REQ-016', async () => {
+    const extensions: readonly FakeExtension[] = [
+      {
+        name: 'active-but-unloadless',
+        version: '1.0.0',
+        isActive: true,
+        path: '/ext/x',
+        contextFiles: [],
+      },
+    ];
+    const { agent, cleanup, recorder } = await buildExtensionDisposalAgent(
+      extensions,
+      true,
+    );
     try {
       const probe: DisposalProbe = captureProbe(agent);
-      // Loader exposes getExtensions() with an ACTIVE extension but does NOT
-      // surface unloadExtension. dispose()'s defensive guard
-      // (unloadExtensionSafely) must skip the missing method rather than
-      // crashing — dispose still completes and records its marker, with nothing
-      // unloaded.
-      const extensions: readonly FakeExtension[] = [
-        {
-          name: 'active-but-unloadless',
-          version: '1.0.0',
-          isActive: true,
-          path: '/ext/x',
-          contextFiles: [],
-        },
-      ];
-      const recorder = installLoaderWithoutUnload(probe, extensions);
 
-      await agent.dispose();
+      await expect(agent.dispose()).rejects.toThrow(
+        'this.unloadExtension is not a function',
+      );
 
       expect(recorder.unloaded).toStrictEqual([]);
       expect(extensionsDisposed(probe)).toBe(true);
@@ -377,9 +376,9 @@ describe('Disposal @plan:PLAN-20260617-COREAPI.P13 @requirement:REQ-016', () => 
     try {
       const probe: DisposalProbe = captureProbe(agent);
       // PRE-dispose sanity read: agentClient + extensions not yet torn down.
-      // agentClient reads `_unsubscribe` (function → undefined); extensions
-      // reads the ownership completion marker. Both are genuine pre-dispose
-      // "not-yet-torn-down" reads.
+      // agentClient reads its `handleModelChanged` handler still registered
+      // on coreEvents; extensions reads the ownership completion marker. Both
+      // are genuine pre-dispose "not-yet-torn-down" reads.
       expect(agentClientDisposed(probe)).toBe(false);
       expect(extensionsDisposed(probe)).toBe(false);
       // First dispose performs the teardown; dispose.md lines 11-12 guard with

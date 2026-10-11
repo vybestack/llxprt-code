@@ -7,8 +7,6 @@
 /* @plan PLAN-20250212-LSP.P31 */
 /* @requirement REQ-DIAG-010, REQ-GRACE-050, REQ-GRACE-055 */
 
-import fs from 'node:fs/promises';
-
 import * as path from 'path';
 import * as Diff from 'diff';
 import process from 'node:process';
@@ -56,7 +54,6 @@ import {
   applyLineGuardedReplacement,
   toIdeConnectionStatus,
   readTextFileViaHost,
-  createDefaultToolHost,
   getTargetDirCompat,
   getWorkspaceRootsCompat,
   createEditModifyContext,
@@ -317,12 +314,7 @@ class EditToolInvocation extends BaseToolInvocation<
     filePath: string,
     content: string,
   ): Promise<void> {
-    const fileSystemService = this.host.getFileSystemService?.();
-    if (fileSystemService !== undefined) {
-      await fileSystemService.writeTextFile(filePath, content);
-      return;
-    }
-    await fs.writeFile(filePath, content, 'utf8');
+    await this.host.writeTextFile(filePath, content);
   }
 
   /**
@@ -875,7 +867,7 @@ export class EditTool
   private readonly lspService?: ILspService;
 
   constructor(
-    private readonly host: IToolHost = createDefaultToolHost(),
+    private readonly host: IToolHost,
     messageBusOrIdeService?: IToolMessageBus | IIdeService,
     ideServiceOrLspService?: IIdeService | ILspService,
     lspService?: ILspService,

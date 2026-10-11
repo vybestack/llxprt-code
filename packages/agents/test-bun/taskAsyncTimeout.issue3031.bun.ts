@@ -3,6 +3,14 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
+import { TaskLaunchOwner } from '../src/session/task-launch-owner.js';
 
 /**
  * Issue #3031 — async `task` timeout observability.
@@ -21,42 +29,33 @@
 
 import { describe, it, expect } from 'bun:test';
 import { TaskTool } from '../src/tools/task.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { installTaskSettingsFixtures } from './task-settings-fixture.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SubagentOrchestrator } from '../src/core/subagentOrchestrator.js';
 import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 
-function makeConfig(settings: Record<string, number>): Config {
-  return {
-    getSessionId: () => 'session-async-3031',
-    getEphemeralSettings: () => ({ ...settings }),
-    isInteractive: () => false,
-    getSettingsService: () =>
-      ({
-        getAllGlobalSettings: () => ({ subagents: { asyncEnabled: true } }),
-      }) as unknown,
-  } as unknown as Config;
-}
+const makeConfig = installTaskSettingsFixtures('session-async-3031');
 
 describe('Issue #3031 — async task timeout observability', () => {
   it('the async launch result carries clamp metadata + notice for -1 under a finite max', async () => {
     const launchMock = mockLaunchCompleting();
-    const mockAsyncTaskManager = makeMockAsyncTaskManager();
-    const tool = new TaskTool(
-      makeConfig({
-        'task-default-timeout-seconds': 60,
-        'task-max-timeout-seconds': 120,
-      }),
-      {
-        messageBus: new MessageBus(),
-        orchestratorFactory: () =>
-          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
-        getAsyncTaskManager: () =>
-          mockAsyncTaskManager.manager as unknown as AsyncTaskManager,
-        isInteractiveEnvironment: () => false,
-      },
-    );
+    const manager = new AsyncTaskManager();
+    const fixture = makeConfig({
+      'task-default-timeout-seconds': 60,
+      'task-max-timeout-seconds': 120,
+    });
+    const tool = new TaskTool(fixture.config, {
+      ...fixture.policies,
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
+      messageBus: new MessageBus(),
+      orchestratorFactory: () =>
+        ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+      taskLaunchOwner: new TaskLaunchOwner(manager),
+      isInteractiveEnvironment: () => false,
+    });
 
     const invocation = tool.build({
       subagent_name: 'helper',
@@ -83,19 +82,21 @@ describe('Issue #3031 — async task timeout observability', () => {
     const failTaskSpy = spyFailTask(manager);
     const launchMock = mockLaunchHangingUntilAbort();
 
-    const tool = new TaskTool(
-      makeConfig({
-        'task-default-timeout-seconds': 60,
-        'task-max-timeout-seconds': 0.05, // 50ms
-      }),
-      {
-        messageBus: new MessageBus(),
-        orchestratorFactory: () =>
-          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
-        getAsyncTaskManager: () => manager,
-        isInteractiveEnvironment: () => false,
-      },
-    );
+    const fixture = makeConfig({
+      'task-default-timeout-seconds': 60,
+      'task-max-timeout-seconds': 0.05, // 50ms
+    });
+    const tool = new TaskTool(fixture.config, {
+      ...fixture.policies,
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
+      messageBus: new MessageBus(),
+      orchestratorFactory: () =>
+        ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+      taskLaunchOwner: new TaskLaunchOwner(manager),
+      isInteractiveEnvironment: () => false,
+    });
 
     const invocation = tool.build({
       subagent_name: 'helper',
@@ -134,19 +135,21 @@ describe('Issue #3031 — async task timeout observability', () => {
       throw err;
     };
 
-    const tool = new TaskTool(
-      makeConfig({
-        'task-default-timeout-seconds': 60,
-        'task-max-timeout-seconds': 0.05, // 50ms
-      }),
-      {
-        messageBus: new MessageBus(),
-        orchestratorFactory: () =>
-          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
-        getAsyncTaskManager: () => manager,
-        isInteractiveEnvironment: () => false,
-      },
-    );
+    const fixture = makeConfig({
+      'task-default-timeout-seconds': 60,
+      'task-max-timeout-seconds': 0.05, // 50ms
+    });
+    const tool = new TaskTool(fixture.config, {
+      ...fixture.policies,
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
+      messageBus: new MessageBus(),
+      orchestratorFactory: () =>
+        ({ launch: launchMock }) as unknown as SubagentOrchestrator,
+      taskLaunchOwner: new TaskLaunchOwner(manager),
+      isInteractiveEnvironment: () => false,
+    });
 
     const invocation = tool.build({
       subagent_name: 'helper',
@@ -203,30 +206,6 @@ function mockLaunchHangingUntilAbort() {
       scope,
       dispose: async () => {},
     };
-  };
-}
-
-interface MockAsyncTaskManager {
-  manager: {
-    canLaunchAsync: () => { allowed: boolean };
-    tryReserveAsyncSlot: () => string;
-    registerTask: () => void;
-    completeTask: () => void;
-    failTask: () => void;
-    getTask: () => { status: string } | undefined;
-  };
-}
-
-function makeMockAsyncTaskManager(): MockAsyncTaskManager {
-  return {
-    manager: {
-      canLaunchAsync: () => ({ allowed: true }),
-      tryReserveAsyncSlot: () => 'booking-1',
-      registerTask: () => {},
-      completeTask: () => {},
-      failTask: () => {},
-      getTask: () => ({ status: 'running' }),
-    },
   };
 }
 

@@ -184,7 +184,7 @@ class AstGrepToolInvocation extends BaseToolInvocation<
 
     try {
       const observedFileBudget = resolveObservedFileBudget(
-        this.host.getEphemeralSettings()['tool-output-max-items'],
+        this.host.readExecutionPolicy()['tool-output-max-items'],
       );
       const {
         matches,

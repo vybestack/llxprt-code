@@ -10,8 +10,7 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import type { ToolFormatOverrideLiteral } from '@vybestack/llxprt-code-providers/runtime.js';
+import type { ToolFormatOverrideLiteral } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
 
 const STRUCTURED_FORMATS = [
   'openai',
@@ -30,13 +29,13 @@ export const toolformatCommand: SlashCommand = {
     'override the auto-detected tool calling/format parser for tools',
   kind: CommandKind.BUILT_IN,
   action: async (
-    _context: CommandContext,
+    context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn | void> => {
     const formatName = args.trim();
     let state;
     try {
-      const runtime = getRuntimeApi();
+      const runtime = context.runtimeApi;
       state = await runtime.getActiveToolFormatState();
     } catch (error) {
       return {
@@ -56,7 +55,7 @@ export const toolformatCommand: SlashCommand = {
     }
 
     if (formatName === 'auto') {
-      const runtime = getRuntimeApi();
+      const runtime = context.runtimeApi;
       const updated = await runtime.setActiveToolFormatOverride(null);
       return {
         type: 'message',
@@ -75,7 +74,7 @@ export const toolformatCommand: SlashCommand = {
 
     try {
       const normalized = formatName as ToolFormatOverrideLiteral;
-      const runtime = getRuntimeApi();
+      const runtime = context.runtimeApi;
       const updated = await runtime.setActiveToolFormatOverride(normalized);
       return {
         type: 'message',

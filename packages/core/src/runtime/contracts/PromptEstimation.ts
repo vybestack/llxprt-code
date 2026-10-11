@@ -268,7 +268,10 @@ async function estimateProjection(
   activeProvider: string,
   projection: PromptEnvelopeProjection,
   estimationProjection: PromptEnvelopeEstimationProjection,
-  factory: RuntimeTokenizerFactory,
+  factory: Pick<
+    RuntimeTokenizerFactory,
+    'estimatePrompt' | 'claimsModel' | 'getEstimatorFamily'
+  >,
 ): Promise<Awaited<ReturnType<RuntimeTokenizerFactory['estimatePrompt']>>> {
   const result = await factory.estimatePrompt({
     activeProvider,
@@ -286,7 +289,10 @@ async function estimateProjection(
 export async function estimatePromptEnvelope(
   activeProvider: string,
   projection: PromptEnvelopeProjection,
-  factory: RuntimeTokenizerFactory,
+  factory: Pick<
+    RuntimeTokenizerFactory,
+    'estimatePrompt' | 'claimsModel' | 'getEstimatorFamily'
+  >,
 ): Promise<PromptEnvelopeEstimate> {
   const unsupportedMedia = validateProjection(activeProvider, projection);
   const wireResult = await estimateProjection(

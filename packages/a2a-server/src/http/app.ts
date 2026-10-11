@@ -249,7 +249,7 @@ async function getGitService(
   storage: Storage,
 ): Promise<GitService | undefined> {
   try {
-    const gitService = new GitService(workspaceRoot, storage);
+    const gitService = new GitService(workspaceRoot, storage.getHistoryDir());
     await gitService.initialize();
     return gitService;
   } catch (e) {

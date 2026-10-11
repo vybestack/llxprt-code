@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { ImageOperationRunner } from '@vybestack/llxprt-code-core';
 import {
   ExitCodes,
   writeToStdout,
@@ -116,7 +116,7 @@ Saved to: ${result.absoluteOutputPath}`;
  */
 export async function runDirectImageModeAndExit(
   argv: ParsedCliArgs,
-  config: Config,
+  runImageOperation: ImageOperationRunner | undefined,
 ): Promise<number | null> {
   let request;
   try {
@@ -130,8 +130,7 @@ export async function runDirectImageModeAndExit(
     return null;
   }
 
-  const runImageOperation = resolveRunImageOperation(config);
-  if (runImageOperation === null) {
+  if (runImageOperation === undefined) {
     writeToStderr(
       'Image generation is unavailable. It uses your Codex account and works ' +
         'with any provider, so this usually means Codex OAuth is not set up. ' +
@@ -175,40 +174,6 @@ export async function runDirectImageModeAndExit(
     process.removeListener('SIGINT', onSigInt);
   }
   return exitCode;
-}
-
-/**
- * Resolve the common image-operation runner bound to the Config composition
- * root via the typed public getter. Returns null when no image capability is
- * configured (capability-specific error path).
- */
-function resolveRunImageOperation(
-  config: Config,
-):
-  | ((input: {
-      readonly prompt: string;
-      readonly outputPath: string;
-      readonly inputPaths: readonly string[];
-      readonly signal?: AbortSignal;
-    }) => Promise<DirectImageResult>)
-  | null {
-  // Resolve via the typed public getter only. A config without the getter
-  // (or one exposing only a property) is treated as unavailable so the unsafe
-  // property cast can never regress.
-  if (typeof config.getRunImageOperation !== 'function') {
-    return null;
-  }
-  const capability = config.getRunImageOperation();
-  if (typeof capability !== 'function') {
-    return null;
-  }
-  return (input) =>
-    capability({
-      prompt: input.prompt,
-      outputPath: input.outputPath,
-      inputPaths: input.inputPaths,
-      ...(input.signal !== undefined ? { signal: input.signal } : {}),
-    });
 }
 
 export { ImageModeError };

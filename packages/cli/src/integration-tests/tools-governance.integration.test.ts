@@ -14,7 +14,7 @@ import {
 } from '@vybestack/llxprt-code-settings';
 import { toolsCommand } from '../ui/commands/toolsCommand.js';
 import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { assertDefined } from '../__tests__/assertions.js';
 
 const PROFILE_NAME = 'dev-profile';
@@ -79,6 +79,7 @@ describe('tools governance integration', () => {
     const exported = await settings.exportForProfile();
     expect(exported.tools.disabled).toStrictEqual(['code-editor']);
 
+    const settingsOwner = new SessionSettingsOwner(settings);
     const registeredTools = [
       {
         name: 'file-reader',
@@ -98,20 +99,16 @@ describe('tools governance integration', () => {
     // tool registry.
     const agentStub = {
       tools: { list: () => registeredTools },
-    } as unknown as NonNullable<typeof context.services.agent>;
-
-    const configStub = {
-      getToolRegistry: () => ({ getAllTools: () => registeredTools }),
-      getSettingsService: () => settings,
-      getEphemeralSetting: (key: string) => settings.get(key),
-      getEphemeralSettings: () => settings.getAllGlobalSettings(),
+      getEphemeralSetting: (key: string) =>
+        settingsOwner.readNamedParameter(key),
+      getEphemeralSettings: () => settingsOwner.captureNamedParameters(),
       setEphemeralSetting: (key: string, value: unknown) =>
-        settings.set(key, value),
-    } as unknown as Config;
+        settingsOwner.writeUserParameter(key, value),
+    };
 
     const uiAddItem = vi.fn();
     const context = createMockCommandContext({
-      services: { config: configStub, agent: agentStub },
+      services: { agent: agentStub },
       ui: { addItem: uiAddItem },
     });
 
@@ -125,5 +122,6 @@ describe('tools governance integration', () => {
 
     await toolsCommand.action(context, 'enable code-editor');
     expect(settings.get('tools.disabled')).toStrictEqual([]);
+    await settingsOwner.dispose();
   });
 });

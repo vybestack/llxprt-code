@@ -249,11 +249,25 @@ export async function reloadUserPolicyRules(
   engine: PolicyEngine,
   approvalMode: ApprovalMode,
 ): Promise<readonly PolicyRule[]> {
-  const kept = engine.getRules().filter((rule) => {
-    const source = rule.source ?? '';
-    return !source.startsWith(USER_SOURCE_PREFIX);
-  });
+  const freshUserRules = await prepareUserPolicyRules(approvalMode);
+  engine.replaceRules([
+    ...retainNonUserPolicyRules(engine.getRules()),
+    ...freshUserRules,
+  ]);
+  return engine.getRules();
+}
 
+export function retainNonUserPolicyRules(
+  rules: readonly PolicyRule[],
+): readonly PolicyRule[] {
+  return rules.filter(
+    (rule) => !(rule.source ?? '').startsWith(USER_SOURCE_PREFIX),
+  );
+}
+
+export async function prepareUserPolicyRules(
+  approvalMode: ApprovalMode,
+): Promise<readonly PolicyRule[]> {
   const userDir = Storage.getUserPoliciesDir();
   const { rules: freshUserRules, errors } = await loadPoliciesFromToml(
     approvalMode,
@@ -267,7 +281,5 @@ export async function reloadUserPolicyRules(
     );
   }
 
-  const combined = [...kept, ...freshUserRules];
-  engine.replaceRules(combined);
-  return engine.getRules();
+  return freshUserRules;
 }

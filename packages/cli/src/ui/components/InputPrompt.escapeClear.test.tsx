@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+
 import {
   automock,
   advanceTimersByTimeAsync,
@@ -205,6 +208,7 @@ describe('InputPrompt', () => {
     mockedUseShellHistory.mockReturnValue(mockShellHistory);
 
     mockCommandCompletion = {
+      activeHint: '',
       suggestions: [],
       activeSuggestionIndex: -1,
       isLoadingSuggestions: false,
@@ -258,14 +262,12 @@ describe('InputPrompt', () => {
       onSubmit: vi.fn(),
       userMessages: [],
       onClearScreen: vi.fn(),
-      config: {
+      config: composeFixtureRuntime({
+        getMcpServers: () => undefined,
         getProjectRoot: () => path.join('test', 'project'),
         getTargetDir: () => path.join('test', 'project', 'src'),
         getVimMode: () => false,
-        getWorkspaceContext: () => ({
-          getDirectories: () => ['/test/project/src'],
-        }),
-      } as unknown as Config,
+      } as unknown as Config),
       slashCommands: mockSlashCommands,
       commandContext: mockCommandContext,
       shellModeActive: false,
@@ -288,7 +290,7 @@ describe('InputPrompt', () => {
 
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
-        { kittyProtocolEnabled: false },
+        {},
       );
 
       await act(async () => {
@@ -313,7 +315,7 @@ describe('InputPrompt', () => {
 
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
-        { kittyProtocolEnabled: false },
+        {},
       );
 
       try {
@@ -368,7 +370,7 @@ describe('InputPrompt', () => {
 
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
-        { kittyProtocolEnabled: false },
+        {},
       );
 
       try {
@@ -423,7 +425,7 @@ describe('InputPrompt', () => {
 
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
-        { kittyProtocolEnabled: false },
+        {},
       );
 
       await act(async () => {
@@ -444,7 +446,7 @@ describe('InputPrompt', () => {
 
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
-        { kittyProtocolEnabled: false },
+        {},
       );
 
       await act(async () => {
@@ -463,7 +465,7 @@ describe('InputPrompt', () => {
 
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
-        { kittyProtocolEnabled: false },
+        {},
       );
       await act(async () => {
         await runAllTimersAsync();
@@ -489,7 +491,7 @@ describe('InputPrompt', () => {
     it('should not interfere with existing keyboard shortcuts', async () => {
       const { stdin, unmount } = renderWithProviders(
         <InputPrompt {...props} />,
-        { kittyProtocolEnabled: false },
+        {},
       );
 
       await act(async () => {

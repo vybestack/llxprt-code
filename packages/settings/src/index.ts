@@ -51,7 +51,10 @@ export type {
   DirectSettingSpec,
 } from './settings/settingsRegistry.js';
 
-export { ProfileManager } from './profiles/ProfileManager.js';
+export {
+  ProfileManager,
+  applyProfileSettings,
+} from './profiles/ProfileManager.js';
 // Cohesive public profile-lock and write API. Internal lock handle/path/read/
 // temp/delete helpers are NOT re-exported. Consumers that need canonical
 // profile repair use repairCanonicalProfiles (settings-owned cohesive API).

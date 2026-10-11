@@ -1,8 +1,12 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 /**
  * Tests for Phase 2.1: CoreToolScheduler toolContextInteractiveMode option
@@ -16,13 +20,12 @@
  * to properly await execution before asserting.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { afterEach, describe, it, expect, beforeEach } from 'bun:test';
 import {
   CoreToolScheduler,
   type CompletedToolCall,
 } from './coreToolScheduler.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
-import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-test-utils/core/config.js';
 
 import type {
   ContextAwareTool,
@@ -30,23 +33,10 @@ import type {
 } from '@vybestack/llxprt-code-tools';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 
-function createMockMessageBus() {
-  return {
-    subscribe: vi.fn().mockReturnValue(() => {}),
-    publish: vi.fn(),
-    respondToConfirmation: vi.fn(),
-    requestConfirmation: vi.fn().mockResolvedValue(true),
-    removeAllListeners: vi.fn(),
-    listenerCount: vi.fn().mockReturnValue(0),
-  };
-}
-
-function createMockPolicyEngine() {
-  return {
-    evaluate: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
-    checkDecision: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
-  };
-}
+const ownedFixtures: Array<{
+  config: Config;
+  policyOwner: RuntimePolicyOwner;
+}> = [];
 
 class ContextAwareMockTool extends MockTool implements ContextAwareTool {
   context?: ToolContext;
@@ -79,28 +69,49 @@ function createMockConfig(
     approvalMode?: ApprovalMode;
     ephemeralSettings?: Record<string, unknown>;
   },
-): Config {
-  const mockPolicyEngine = createMockPolicyEngine();
-  const mockMessageBus = createMockMessageBus();
-
-  return {
-    getSessionId: () => 'test-session-id',
-    getUsageStatisticsEnabled: () => false,
-    getDebugMode: () => false,
-    getApprovalMode: () => options?.approvalMode ?? ApprovalMode.YOLO,
-    getEphemeralSettings: () => options?.ephemeralSettings ?? {},
-    getAllowedTools: () => [],
-    getExcludeTools: () => [],
-    getContentGeneratorConfig: () => ({
+): {
+  config: Config;
+  settingsOwner: SessionSettingsOwner;
+  policyOwner: RuntimePolicyOwner;
+} {
+  const config = Object.assign(
+    new Config({
+      sessionId: 'test-session-id',
+      cwd: process.cwd(),
+      targetDir: process.cwd(),
       model: 'test-model',
+      debugMode: false,
+      trustedFolder: true,
+      initialSettings: options?.ephemeralSettings ?? {},
+      policyEngineConfig: { defaultDecision: PolicyDecision.ALLOW },
     }),
-    getToolRegistry: () => toolRegistry,
-    getMessageBus: () => mockMessageBus,
-    getPolicyEngine: () => mockPolicyEngine,
-  } as unknown as Config;
+    {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => false,
+      getDebugMode: () => false,
+      getApprovalMode: () => options?.approvalMode ?? ApprovalMode.YOLO,
+
+      getAllowedTools: () => [],
+      getExcludeTools: () => [],
+      getContentGeneratorConfig: () => ({
+        model: 'test-model',
+      }),
+    },
+  );
+  const policyOwner = new RuntimePolicyOwner(config);
+  const settingsRoot = createSessionSettingsFixture(config);
+  ownedFixtures.push({ config, policyOwner });
+  return { ...settingsRoot, config, policyOwner };
 }
 
 describe('CoreToolScheduler toolContextInteractiveMode option', () => {
+  afterEach(async () => {
+    for (const fixture of ownedFixtures.splice(0)) {
+      await fixture.policyOwner.dispose();
+      await fixture.config.dispose();
+    }
+  });
+
   let abortController: AbortController;
 
   beforeEach(() => {
@@ -116,7 +127,11 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
       });
 
       const toolRegistry = createMockToolRegistry(contextAwareTool);
-      const config = createMockConfig(toolRegistry);
+      const {
+        config: config,
+        policyOwner,
+        settingsOwner: configSettingsOwner,
+      } = createMockConfig(toolRegistry);
 
       let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
         null;
@@ -125,9 +140,21 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
       });
 
       const scheduler = new CoreToolScheduler({
+        telemetry: RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+        readExecutionPolicy: () =>
+          configSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
         config,
-        messageBus: getTestRuntimeMessageBus(config),
-        toolRegistry: config.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
         },
@@ -162,7 +189,11 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
       });
 
       const toolRegistry = createMockToolRegistry(contextAwareTool);
-      const config = createMockConfig(toolRegistry);
+      const {
+        config: config,
+        policyOwner,
+        settingsOwner: configSettingsOwner,
+      } = createMockConfig(toolRegistry);
 
       let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
         null;
@@ -171,9 +202,21 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
       });
 
       const scheduler = new CoreToolScheduler({
+        telemetry: RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+        readExecutionPolicy: () =>
+          configSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
         config,
-        messageBus: getTestRuntimeMessageBus(config),
-        toolRegistry: config.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
@@ -224,7 +267,11 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
         });
 
         const toolRegistry = createMockToolRegistry(contextAwareTool);
-        const config = createMockConfig(toolRegistry);
+        const {
+          config: config,
+          policyOwner,
+          settingsOwner: configSettingsOwner,
+        } = createMockConfig(toolRegistry);
 
         let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
           null;
@@ -235,9 +282,21 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
         );
 
         const scheduler = new CoreToolScheduler({
+          telemetry: RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-caller-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
+          readExecutionPolicy: () =>
+            configSettingsOwner.readToolExecutionPolicy(),
+          getToolGovernance: () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
           config,
-          messageBus: getTestRuntimeMessageBus(config),
-          toolRegistry: config.getToolRegistry(),
+          messageBus: policyOwner.session.messageBus,
+          toolRegistry,
           toolContextInteractiveMode: false,
           onAllToolCallsComplete: async (calls) => {
             completionResolver?.(calls);
@@ -285,7 +344,11 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
         });
 
         const toolRegistry = createMockToolRegistry(contextAwareTool);
-        const config = createMockConfig(toolRegistry);
+        const {
+          config: config,
+          policyOwner,
+          settingsOwner: configSettingsOwner,
+        } = createMockConfig(toolRegistry);
 
         let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
           null;
@@ -296,9 +359,21 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
         );
 
         const scheduler = new CoreToolScheduler({
+          telemetry: RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-caller-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
+          readExecutionPolicy: () =>
+            configSettingsOwner.readToolExecutionPolicy(),
+          getToolGovernance: () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
           config,
-          messageBus: getTestRuntimeMessageBus(config),
-          toolRegistry: config.getToolRegistry(),
+          messageBus: policyOwner.session.messageBus,
+          toolRegistry,
           toolContextInteractiveMode: true,
           onAllToolCallsComplete: async (calls) => {
             completionResolver?.(calls);
@@ -333,7 +408,11 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
       });
 
       const toolRegistry = createMockToolRegistry(contextAwareTool);
-      const config = createMockConfig(toolRegistry);
+      const {
+        config: config,
+        policyOwner,
+        settingsOwner: configSettingsOwner,
+      } = createMockConfig(toolRegistry);
 
       let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
         null;
@@ -342,9 +421,21 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
       });
 
       const scheduler = new CoreToolScheduler({
+        telemetry: RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+        readExecutionPolicy: () =>
+          configSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
         config,
-        messageBus: getTestRuntimeMessageBus(config),
-        toolRegistry: config.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
@@ -394,7 +485,11 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
       });
 
       const toolRegistry = createMockToolRegistry(contextAwareTool);
-      const config = createMockConfig(toolRegistry);
+      const {
+        config: config,
+        policyOwner,
+        settingsOwner: configSettingsOwner,
+      } = createMockConfig(toolRegistry);
 
       let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
         null;
@@ -403,9 +498,21 @@ describe('CoreToolScheduler toolContextInteractiveMode option', () => {
       });
 
       const scheduler = new CoreToolScheduler({
+        telemetry: RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+        readExecutionPolicy: () =>
+          configSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
         config,
-        messageBus: getTestRuntimeMessageBus(config),
-        toolRegistry: config.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);

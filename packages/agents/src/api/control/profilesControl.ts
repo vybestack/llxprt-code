@@ -31,6 +31,7 @@ import type {
 
 import { parseProfileJson } from '@vybestack/llxprt-code-settings';
 import type { AgentProviderState } from '../agentImpl.js';
+import type { AgentProfileApplication } from '../profileApplicationAssembly.js';
 
 /**
  * Reads a directory's entry names, returning an empty array when the directory
@@ -54,20 +55,8 @@ function safeReadDir(dir: string): readonly string[] {
 export interface ProfilesControlDeps {
   /** Reads the mutable per-agent provider/model/param state. */
   readonly getState: () => AgentProviderState;
-  /**
-   * Applies a provider (+optional model) switch preserving context (the same
-   * path setProvider uses). Returns a promise whose result is discarded.
-   */
-  readonly applySwitch: (provider: string, model?: string) => Promise<unknown>;
-  /**
-   * Applies a record of model params via the lazy runtime mutators and updates
-   * the per-agent map.
-   */
-  readonly applyParams: (params: Readonly<Record<string, unknown>>) => void;
-  /** Sets the per-agent keyName (authKeyName from a profile). */
-  readonly setKeyName: (keyName: string | undefined) => void;
-  /** Sets the per-agent load-balancer flag. */
-  readonly setLoadBalancer: (isLb: boolean) => void;
+  readonly application: AgentProfileApplication;
+  readonly captureEphemerals: () => Record<string, unknown>;
   /** The agent's working directory (config.getTargetDir()). */
   readonly workingDir: string;
 }
@@ -118,6 +107,15 @@ export class ProfilesControl implements AgentProfileControl {
   private defaultName: string | undefined;
 
   constructor(private readonly deps: ProfilesControlDeps) {}
+
+  load: AgentProfileApplication['load'] = (name) =>
+    this.deps.application.load(name);
+  applySnapshot: AgentProfileApplication['applySnapshot'] = (
+    profile,
+    options,
+  ) => this.deps.application.applySnapshot(profile, options);
+  isApplying = (): boolean => this.deps.application.isApplying();
+  cancelAndJoin = (): Promise<void> => this.deps.application.cancelAndJoin();
 
   /**
    * Returns resolvable profile summaries, merging in-memory saved profiles
@@ -279,19 +277,27 @@ export class ProfilesControl implements AgentProfileControl {
     }
     const detail: ProfileDetail =
       saved ?? (candidate as PublicProfileCandidate).detail;
-    // Apply provider + model via the context-preserving switch path.
-    await this.deps.applySwitch(detail.provider, detail.model);
-    // Apply model params (lazy runtime mutator + per-agent map update).
-    if (detail.modelParams !== undefined) {
-      this.deps.applyParams(detail.modelParams);
-    }
-    // Record authKeyName so getProviderStatus().keyName reflects it.
-    this.deps.setKeyName(detail.authKeyName);
-    // Record the load-balancer flag (LB uses targets[]; the fixture's
-    // provider/model fields ARE the active selection).
-    const detailRecord = detail as unknown as Readonly<Record<string, unknown>>;
-    const isLb = detail.isLoadBalancer ?? detailRecord['targets'] !== undefined;
-    this.deps.setLoadBalancer(isLb);
+    await this.deps.application.applySnapshot(
+      {
+        version: 1,
+        provider: detail.provider,
+        model: detail.model,
+        modelParams: structuredClone(detail.modelParams ?? {}),
+        ephemeralSettings: {
+          ...this.deps.captureEphemerals(),
+          ...(detail.baseUrl !== undefined
+            ? { 'base-url': detail.baseUrl }
+            : {}),
+          ...(detail.authKeyName !== undefined
+            ? { 'auth-key-name': detail.authKeyName }
+            : {}),
+          ...(detail.authKeyFile !== undefined
+            ? { 'auth-keyfile': detail.authKeyFile }
+            : {}),
+        },
+      },
+      { profileName: name },
+    );
   }
 
   /**

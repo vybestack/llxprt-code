@@ -46,6 +46,7 @@ export { OpenAIVercelProvider } from './openai-vercel/index.js';
 export { FakeProvider } from './fake/FakeProvider.js';
 export {
   LoadBalancingProvider,
+  isResolvedSubProfile,
   type LoadBalancingProviderConfig,
   type LoadBalancerSubProfile,
   type LoadBalancerStats,
@@ -134,7 +135,6 @@ export {
   type ProviderFileScope,
   type ProviderFilesMode,
 } from './providerFilePolicy.js';
-export { cleanupProviderFilesForSession } from './runtime/runtimeRegistry.js';
 export type { IProviderConfig } from './types/IProviderConfig.js';
 export type {
   ProviderTelemetryContext,

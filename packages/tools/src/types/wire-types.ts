@@ -118,5 +118,8 @@ export type ToolDeclarations = FunctionDeclaration[];
  */
 export interface CallableTool {
   tool(): Promise<ToolDeclarations>;
-  callTool(functionCalls: ToolCallRequest[]): Promise<ContentPart[]>;
+  callTool(
+    functionCalls: ToolCallRequest[],
+    signal?: AbortSignal,
+  ): Promise<ContentPart[]>;
 }

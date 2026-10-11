@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { physicalFiles } from './helpers/physical-files.js';
+import { createToolHost } from './helpers/create-grep-tool-host.js';
+
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { execSync } from 'node:child_process';
@@ -68,40 +71,6 @@ function initGitRepo(dir: string): void {
 
 const gitAdd = (dir: string): void =>
   void execSync('git add -A', { cwd: dir, stdio: 'ignore' });
-
-function createToolHost(targetDir: string): IToolHost {
-  return {
-    getTargetDir: () => targetDir,
-    getWorkspaceRoots: () => [targetDir],
-    getApprovalMode: () => 'auto',
-    setApprovalMode: () => {},
-    isInteractive: () => false,
-    hasFeatureFlag: () => false,
-    getFileService: () => ({
-      shouldGitIgnoreFile: () => false,
-      shouldLlxprtIgnoreFile: () => false,
-      shouldIgnoreFile: () => false,
-      filterFiles: (paths) => paths,
-    }),
-    getFileFilteringOptions: () => ({
-      respectGitIgnore: true,
-      respectLlxprtIgnore: true,
-    }),
-    getFileExclusions: () => [],
-    getReadManyFilesExclusions: () => [],
-    getFileFilteringRespectLlxprtIgnore: () => true,
-    getLlxprtIgnoreFilePath: () => null,
-    recordFileRead: () => {},
-    getFileSystemService: () => undefined,
-    getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({
-      'tool-output-max-items': 50,
-      'tool-output-max-tokens': 50000,
-      'tool-output-item-size-limit': 524288,
-    }),
-    getDebugMode: () => false,
-  };
-}
 
 async function executeGrep(
   host: IToolHost,
@@ -824,6 +793,7 @@ describe('Grep aggregate budget across multiple workspaces (C.2, C.4)', () => {
     async () => {
       const directories = createBudgetWorkspaceDirectories(tempDir);
       const host: IToolHost = {
+        ...physicalFiles,
         ...createToolHost(tempDir),
         getWorkspaceRoots: () => directories,
       };
@@ -868,6 +838,7 @@ describe('Ripgrep aggregate budget across multiple workspaces (C.2, C.4)', () =>
     async () => {
       const directories = createBudgetWorkspaceDirectories(tempDir);
       const host: IToolHost = {
+        ...physicalFiles,
         ...createToolHost(tempDir),
         getWorkspaceRoots: () => directories,
       };

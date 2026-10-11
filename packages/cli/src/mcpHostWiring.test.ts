@@ -4,26 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Behavioral coverage for issue #2764 Phase 4: the CLI composition wires
- * plugin-contributed MCP auth factories into the transport's startup
- * registry, replacing any previously wired set on every wiring run, so
- * servers selecting a custom `authProviderType` resolve without
- * core-package changes. Everything below the wiring helper (registry build,
- * registration, lookup) is real — no mocks.
- */
-
-import { afterEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
+import { buildMcpAuthFactoryRegistry } from '@vybestack/llxprt-code-mcp/auth/mcp-auth-factory.js';
 import {
-  getRegisteredMcpAuthFactoryRegistry,
-  resetRegisteredMcpAuthFactories,
-} from '@vybestack/llxprt-code-mcp/auth/mcp-auth-factory.js';
-import { buildProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
-import type {
-  LoadedRuntimePlugin,
-  RuntimeMcpAuthFactoryContribution,
+  buildProviderContributionRegistry,
+  type ProviderContributionRegistry,
+  type LoadedRuntimePlugin,
+  type RuntimeMcpAuthFactoryContribution,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import { wireMcpAuthFactories } from './mcpHostWiring.js';
+
+function composeFactories(
+  registry: ProviderContributionRegistry,
+): ReturnType<typeof buildMcpAuthFactoryRegistry> {
+  return buildMcpAuthFactoryRegistry(
+    registry.getMcpAuthFactories().map((entry) => entry.contribution),
+  );
+}
 
 /** A contributed factory whose provider construction is never exercised. */
 function contribution(type: string): RuntimeMcpAuthFactoryContribution {
@@ -49,11 +45,7 @@ function pluginWithMcpAuthFactories(
   };
 }
 
-describe('wireMcpAuthFactories', () => {
-  afterEach(() => {
-    resetRegisteredMcpAuthFactories();
-  });
-
+describe('owner-local MCP auth factory composition', () => {
   it('threads plugin-contributed MCP auth factories into the registered registry', () => {
     const googleCredentials = contribution('google_credentials');
     const impersonation = contribution('service_account_impersonation');
@@ -61,9 +53,7 @@ describe('wireMcpAuthFactories', () => {
       pluginWithMcpAuthFactories(googleCredentials, impersonation),
     ]);
 
-    wireMcpAuthFactories(registry);
-
-    const registered = getRegisteredMcpAuthFactoryRegistry();
+    const registered = composeFactories(registry);
     expect(registered.listAuthProviderTypes()).toStrictEqual([
       'google_credentials',
       'service_account_impersonation',
@@ -77,31 +67,33 @@ describe('wireMcpAuthFactories', () => {
   });
 
   it('registers an empty factory set when no plugin contributes factories', () => {
-    wireMcpAuthFactories(buildProviderContributionRegistry([]));
-
-    const registered = getRegisteredMcpAuthFactoryRegistry();
+    const registered = composeFactories(buildProviderContributionRegistry([]));
     expect(registered.listAuthProviderTypes()).toStrictEqual([]);
     expect(
       registered.getAuthProviderFactory('google_credentials'),
     ).toBeUndefined();
   });
 
-  it('replaces a previously wired factory set on a later wiring run', () => {
+  it('keeps earlier owners independent when a later plugin set is composed', () => {
     const alpha = contribution('alpha_auth');
-    wireMcpAuthFactories(
+    const first = composeFactories(
       buildProviderContributionRegistry([pluginWithMcpAuthFactories(alpha)]),
     );
 
     const beta = contribution('beta_auth');
-    wireMcpAuthFactories(
+    const registered = composeFactories(
       buildProviderContributionRegistry([pluginWithMcpAuthFactories(beta)]),
     );
 
-    const registered = getRegisteredMcpAuthFactoryRegistry();
     expect(registered.listAuthProviderTypes()).toStrictEqual(['beta_auth']);
     expect(registered.getAuthProviderFactory('beta_auth')).toBe(
       beta.createAuthProvider,
     );
     expect(registered.getAuthProviderFactory('alpha_auth')).toBeUndefined();
+    expect(first.listAuthProviderTypes()).toStrictEqual(['alpha_auth']);
+    expect(first.getAuthProviderFactory('beta_auth')).toBeUndefined();
+    expect(first.getAuthProviderFactory('alpha_auth')).toBe(
+      alpha.createAuthProvider,
+    );
   });
 });

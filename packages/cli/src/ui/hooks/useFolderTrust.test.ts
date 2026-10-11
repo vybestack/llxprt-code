@@ -22,6 +22,7 @@ import {
   vi,
   type Mock,
 } from 'bun:test';
+import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import { renderHook } from '../../__tests__/render.js';
 import { act } from 'react';
 import { type FolderTrustRuntime, useFolderTrust } from './useFolderTrust.js';
@@ -64,11 +65,11 @@ void vi.mock('node:process', () => {
 describe('useFolderTrust', () => {
   let mockSettings: LoadedSettings;
   let mockTrustedFolders: LoadedTrustedFolders;
-  let loadTrustedFoldersSpy: Mock<(...args: never[]) => unknown>;
-  let isWorkspaceTrustedSpy: Mock<(...args: never[]) => unknown>;
-  let addItem: Mock<(...args: never[]) => unknown>;
+  let loadTrustedFoldersSpy: Mock<typeof trustedFolders.loadTrustedFolders>;
+  let isWorkspaceTrustedSpy: Mock<typeof trustedFolders.isWorkspaceTrusted>;
+  let addItem: Mock<UseHistoryManagerReturn['addItem']>;
   let mockConfig: FolderTrustRuntime & {
-    setTrustedFolderLive: Mock<(...args: never[]) => unknown>;
+    setTrustedFolderLive: Mock<FolderTrustRuntime['setTrustedFolderLive']>;
   };
   let mockStore: ReturnType<typeof createDialogStore>;
   let mockDialogs: DialogOpeners;
@@ -120,7 +121,7 @@ describe('useFolderTrust', () => {
       .mockReturnValue(mockTrustedFolders);
     isWorkspaceTrustedSpy = vi.spyOn(trustedFolders, 'isWorkspaceTrusted');
     mockedCwd.mockReturnValue('/test/path');
-    addItem = vi.fn();
+    addItem = vi.fn<UseHistoryManagerReturn['addItem']>(() => 0);
     mockStore = createDialogStore();
     mockDialogs = createDialogOpeners(mockStore);
     mockConfig = {
@@ -713,7 +714,9 @@ describe('useFolderTrust', () => {
 
   const observeConfiguredWorkingDirectoryTrust = async (): Promise<{
     readonly isDialogOpen: boolean;
-    readonly persistedTrust: ReturnType<typeof vi.fn>;
+    readonly persistedTrust: ReturnType<
+      typeof trustedFolders.loadTrustedFolders
+    >['setValue'];
   }> => {
     const configuredWorkingDirectory = '/workspace/from-config';
     mockedCwd.mockReturnValue('/unrelated/process-cwd');

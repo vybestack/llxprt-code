@@ -1,3 +1,4 @@
+import { detectFromProviderConfig } from '../../runtime/providerInspection.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -18,25 +19,15 @@ const { mockConsumeCodexRateLimitResetCredit } = {
   mockConsumeCodexRateLimitResetCredit: vi.fn(),
 };
 
-const getCliOAuthManagerMock = vi.fn();
-const maybeGetCliOAuthManagerMock = vi.fn();
+const oauthManagerMock = vi.fn();
+const optionalOAuthManagerMock = vi.fn();
 const getEphemeralSettingMock = vi.fn();
 // These runtime-API mocks intentionally return undefined for the API-key
-// provider path (getActiveProviderName / getCliProviderManager) so that only
+// provider path (getActiveProviderName / providerManager) so that only
 // the OAuth quota path is exercised here; the API-key path is covered
 // elsewhere (statsQuota tests).
 const getActiveProviderNameMock = vi.fn();
-const getCliProviderManagerMock = vi.fn();
-
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => ({
-    getCliOAuthManager: getCliOAuthManagerMock,
-    maybeGetCliOAuthManager: maybeGetCliOAuthManagerMock,
-    getEphemeralSetting: getEphemeralSettingMock,
-    getActiveProviderName: getActiveProviderNameMock,
-    getCliProviderManager: getCliProviderManagerMock,
-  }),
-}));
+const providerManagerMock = vi.fn();
 
 void vi.mock('@vybestack/llxprt-code-providers', () => {
   const actual = realLlxprtCodeProvidersModule;
@@ -163,17 +154,49 @@ describe('quotaCommand', () => {
   let mockContext: CommandContext;
 
   beforeEach(() => {
-    mockContext = createMockCommandContext();
+    mockContext = createMockCommandContext({
+      oauthControl: {
+        isAvailable: () => {
+          try {
+            return Boolean(optionalOAuthManagerMock() ?? oauthManagerMock());
+          } catch {
+            return false;
+          }
+        },
+        getAllAnthropicUsageInfo: () =>
+          optionalOAuthManagerMock().getAllAnthropicUsageInfo(),
+        getAllCodexUsageInfo: () =>
+          optionalOAuthManagerMock().getAllCodexUsageInfo(),
+        getAllCodexRateLimitResetCredits: () =>
+          oauthManagerMock().getAllCodexRateLimitResetCredits(),
+        hasCodexToken: async () =>
+          (await oauthManagerMock().getToken('codex')) !== null,
+        listBuckets: (provider: string) =>
+          oauthManagerMock().listBuckets(provider),
+        readCodexBucketToken: (bucket: string) =>
+          oauthManagerMock().getTokenStore().getToken('codex', bucket),
+      },
+      runtimeApi: {
+        getEphemeralSetting: getEphemeralSettingMock,
+        getActiveProviderName: getActiveProviderNameMock,
+        detectProviderQuota: (name: string) => {
+          const provider = providerManagerMock()?.getProviderByName(name);
+          return provider === undefined
+            ? undefined
+            : detectFromProviderConfig(provider);
+        },
+      },
+    });
 
-    getCliOAuthManagerMock.mockReset();
-    maybeGetCliOAuthManagerMock.mockReset();
+    oauthManagerMock.mockReset();
+    optionalOAuthManagerMock.mockReset();
     getEphemeralSettingMock.mockReset();
     getActiveProviderNameMock.mockReset();
-    getCliProviderManagerMock.mockReset();
+    providerManagerMock.mockReset();
     mockConsumeCodexRateLimitResetCredit.mockReset();
 
     getEphemeralSettingMock.mockReturnValue(undefined);
-    maybeGetCliOAuthManagerMock.mockReturnValue(null);
+    optionalOAuthManagerMock.mockReturnValue(null);
   });
 
   describe('command structure', () => {
@@ -224,7 +247,7 @@ describe('quotaCommand', () => {
 
   describe('default action (status)', () => {
     it('shows no quota message when no quota available', async () => {
-      maybeGetCliOAuthManagerMock.mockReturnValue(null);
+      optionalOAuthManagerMock.mockReturnValue(null);
       getEphemeralSettingMock.mockReturnValue(undefined);
 
       await quotaCommand.action!(mockContext, '');
@@ -250,7 +273,7 @@ describe('quotaCommand', () => {
           .fn()
           .mockResolvedValue(new Map<string, Record<string, unknown>>()),
       };
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
 
       await quotaCommand.action!(mockContext, '');
 
@@ -262,8 +285,8 @@ describe('quotaCommand', () => {
 
   describe('credits subcommand', () => {
     it('shows info when no OAuth manager available', async () => {
-      maybeGetCliOAuthManagerMock.mockReturnValue(null);
-      getCliOAuthManagerMock.mockImplementation(() => {
+      optionalOAuthManagerMock.mockReturnValue(null);
+      oauthManagerMock.mockImplementation(() => {
         throw new Error('not registered');
       });
 
@@ -283,8 +306,8 @@ describe('quotaCommand', () => {
           .fn()
           .mockResolvedValue(new Map<string, Record<string, unknown>>()),
       };
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
+      oauthManagerMock.mockReturnValue(oauthManager);
 
       const credits = quotaCommand.subCommands?.find(
         (sc) => sc.name === 'credits',
@@ -308,8 +331,8 @@ describe('quotaCommand', () => {
           ]),
         ),
       };
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
+      oauthManagerMock.mockReturnValue(oauthManager);
 
       const credits = quotaCommand.subCommands?.find(
         (sc) => sc.name === 'credits',
@@ -327,8 +350,8 @@ describe('quotaCommand', () => {
           .fn()
           .mockRejectedValue(new Error('upstream down')),
       };
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
+      oauthManagerMock.mockReturnValue(oauthManager);
 
       const credits = quotaCommand.subCommands?.find(
         (sc) => sc.name === 'credits',
@@ -357,8 +380,8 @@ describe('quotaCommand', () => {
           ]),
         ),
       };
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
+      oauthManagerMock.mockReturnValue(oauthManager);
 
       const credits = quotaCommand.subCommands?.find(
         (sc) => sc.name === 'credits',
@@ -383,8 +406,8 @@ describe('quotaCommand', () => {
           ]),
         ),
       };
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
+      oauthManagerMock.mockReturnValue(oauthManager);
 
       const credits = quotaCommand.subCommands?.find(
         (sc) => sc.name === 'credits',
@@ -415,8 +438,8 @@ describe('quotaCommand', () => {
         getToken: vi.fn().mockResolvedValue(null),
         listBuckets: vi.fn().mockResolvedValue([]),
       };
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
+      oauthManagerMock.mockReturnValue(oauthManager);
 
       const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
       await reset!.action!(mockContext, '');
@@ -434,8 +457,8 @@ describe('quotaCommand', () => {
         getToken: vi.fn().mockResolvedValue('codex-token'),
         listBuckets: vi.fn().mockResolvedValue(['default']),
       };
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
+      oauthManagerMock.mockReturnValue(oauthManager);
 
       const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
       await reset!.action!(mockContext, '');
@@ -459,8 +482,8 @@ describe('quotaCommand', () => {
         getToken: vi.fn().mockResolvedValue('codex-token'),
         listBuckets: vi.fn().mockResolvedValue(['default']),
       };
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
+      oauthManagerMock.mockReturnValue(oauthManager);
 
       const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
       await reset!.action!(mockContext, '');
@@ -472,9 +495,13 @@ describe('quotaCommand', () => {
 
     it('successfully redeems a credit and shows success + refreshed quota', async () => {
       const oauthManager = makeCodexResetOauthManager();
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
-      mockContext = createMockCommandContext({ overwriteConfirmed: true });
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
+      oauthManagerMock.mockReturnValue(oauthManager);
+      mockContext = createMockCommandContext({
+        overwriteConfirmed: true,
+        runtimeApi: mockContext.runtimeApi,
+        oauthControl: mockContext.oauthControl,
+      });
 
       mockConsumeCodexRateLimitResetCredit.mockResolvedValue({
         code: 'reset',
@@ -508,9 +535,13 @@ describe('quotaCommand', () => {
 
     it('shows already_redeemed message', async () => {
       const oauthManager = makeCodexResetOauthManager();
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
-      mockContext = createMockCommandContext({ overwriteConfirmed: true });
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
+      oauthManagerMock.mockReturnValue(oauthManager);
+      mockContext = createMockCommandContext({
+        overwriteConfirmed: true,
+        runtimeApi: mockContext.runtimeApi,
+        oauthControl: mockContext.oauthControl,
+      });
 
       mockConsumeCodexRateLimitResetCredit.mockResolvedValue({
         code: 'already_redeemed',
@@ -537,9 +568,13 @@ describe('quotaCommand', () => {
 
     it('shows error when consume returns null', async () => {
       const oauthManager = makeCodexResetOauthManager();
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
-      mockContext = createMockCommandContext({ overwriteConfirmed: true });
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
+      oauthManagerMock.mockReturnValue(oauthManager);
+      mockContext = createMockCommandContext({
+        overwriteConfirmed: true,
+        runtimeApi: mockContext.runtimeApi,
+        oauthControl: mockContext.oauthControl,
+      });
 
       mockConsumeCodexRateLimitResetCredit.mockResolvedValue(null);
 
@@ -553,9 +588,13 @@ describe('quotaCommand', () => {
 
     it('shows error when consume throws an exception', async () => {
       const oauthManager = makeCodexResetOauthManager();
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
-      mockContext = createMockCommandContext({ overwriteConfirmed: true });
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
+      oauthManagerMock.mockReturnValue(oauthManager);
+      mockContext = createMockCommandContext({
+        overwriteConfirmed: true,
+        runtimeApi: mockContext.runtimeApi,
+        oauthControl: mockContext.oauthControl,
+      });
 
       mockConsumeCodexRateLimitResetCredit.mockRejectedValue(
         new Error('Network timeout'),
@@ -575,8 +614,8 @@ describe('quotaCommand', () => {
           getToken: vi.fn().mockResolvedValue({ account_id: 'acct-123' }),
         }),
       });
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
+      oauthManagerMock.mockReturnValue(oauthManager);
 
       const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
       await reset!.action!(mockContext, '');
@@ -611,8 +650,12 @@ describe('quotaCommand', () => {
             .mockResolvedValueOnce(makeCodexToken()),
         }),
       });
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
-      mockContext = createMockCommandContext({ overwriteConfirmed: true });
+      oauthManagerMock.mockReturnValue(oauthManager);
+      mockContext = createMockCommandContext({
+        overwriteConfirmed: true,
+        runtimeApi: mockContext.runtimeApi,
+        oauthControl: mockContext.oauthControl,
+      });
       mockConsumeCodexRateLimitResetCredit.mockResolvedValue({ code: 'reset' });
 
       const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
@@ -633,8 +676,8 @@ describe('quotaCommand', () => {
           .fn()
           .mockRejectedValue(new Error('reset fetch failed')),
       });
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
+      oauthManagerMock.mockReturnValue(oauthManager);
 
       const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
       await reset!.action!(mockContext, '');
@@ -644,9 +687,9 @@ describe('quotaCommand', () => {
       expect(lastItem.text).toContain('Failed to reset rate-limit window:');
     });
 
-    it('shows /auth codex info when getCliOAuthManager throws', async () => {
-      maybeGetCliOAuthManagerMock.mockReturnValue(null);
-      getCliOAuthManagerMock.mockImplementation(() => {
+    it('shows /auth codex info when oauthManager throws', async () => {
+      optionalOAuthManagerMock.mockReturnValue(null);
+      oauthManagerMock.mockImplementation(() => {
         throw new Error('not registered');
       });
 
@@ -661,8 +704,8 @@ describe('quotaCommand', () => {
 
     it('prompts for confirmation before redeeming when not yet confirmed', async () => {
       const oauthManager = makeCodexResetOauthManager();
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
+      oauthManagerMock.mockReturnValue(oauthManager);
       // mockContext has NO overwriteConfirmed — first invocation.
 
       const reset = quotaCommand.subCommands?.find((sc) => sc.name === 'reset');
@@ -694,9 +737,13 @@ describe('quotaCommand', () => {
 
     it('succeeds when provider arg is explicitly codex', async () => {
       const oauthManager = makeCodexResetOauthManager();
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
-      mockContext = createMockCommandContext({ overwriteConfirmed: true });
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
+      oauthManagerMock.mockReturnValue(oauthManager);
+      mockContext = createMockCommandContext({
+        overwriteConfirmed: true,
+        runtimeApi: mockContext.runtimeApi,
+        oauthControl: mockContext.oauthControl,
+      });
 
       mockConsumeCodexRateLimitResetCredit.mockResolvedValue({
         code: 'reset',
@@ -719,12 +766,16 @@ describe('quotaCommand', () => {
 
     it('forwards the custom base-url as the 5th arg to consumeCodexRateLimitResetCredit', async () => {
       const oauthManager = makeCodexResetOauthManager();
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
+      oauthManagerMock.mockReturnValue(oauthManager);
       getEphemeralSettingMock.mockReturnValue(
         'https://example.test/backend-api',
       );
-      mockContext = createMockCommandContext({ overwriteConfirmed: true });
+      mockContext = createMockCommandContext({
+        overwriteConfirmed: true,
+        runtimeApi: mockContext.runtimeApi,
+        oauthControl: mockContext.oauthControl,
+      });
 
       mockConsumeCodexRateLimitResetCredit.mockResolvedValue({
         code: 'reset',
@@ -746,10 +797,14 @@ describe('quotaCommand', () => {
 
     it('forwards undefined as base-url when the setting is whitespace-only', async () => {
       const oauthManager = makeCodexResetOauthManager();
-      maybeGetCliOAuthManagerMock.mockReturnValue(oauthManager);
-      getCliOAuthManagerMock.mockReturnValue(oauthManager);
+      optionalOAuthManagerMock.mockReturnValue(oauthManager);
+      oauthManagerMock.mockReturnValue(oauthManager);
       getEphemeralSettingMock.mockReturnValue('   ');
-      mockContext = createMockCommandContext({ overwriteConfirmed: true });
+      mockContext = createMockCommandContext({
+        overwriteConfirmed: true,
+        runtimeApi: mockContext.runtimeApi,
+        oauthControl: mockContext.oauthControl,
+      });
 
       mockConsumeCodexRateLimitResetCredit.mockResolvedValue({
         code: 'reset',

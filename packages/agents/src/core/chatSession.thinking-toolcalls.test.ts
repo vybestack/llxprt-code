@@ -1,3 +1,6 @@
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -8,6 +11,8 @@
  * Behavioral tests for thinking/tool-call co-location in ChatSession history.
  * REPRO/root-cause scenarios live in chatSession.thinking-toolcalls.repro.test.ts.
  */
+import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
+const modelTools = installModelToolFixture();
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession } from './chatSession.js';
@@ -26,7 +31,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import type {
@@ -67,7 +72,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    config.setProviderManager(manager);
+    configureProviderRuntimeFactories(config, manager);
   });
 
   it('should combine thinking block with subsequent tool calls in same history entry when yielded separately', async () => {
@@ -146,6 +151,8 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
+      prepareProviderInvocation: (name, parameters, signal) =>
+        captureProviderInvocation(providerRuntime, name, parameters, signal),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -155,9 +162,12 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
         telemetry: { enabled: true, target: null },
       },
 
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      provider: createProviderAdapterFromManager(manager),
+      telemetry: createTelemetryAdapter(
+        config,
+        createSessionSettingsFixture(config).settingsOwner.telemetry,
+      ),
+      tools: createToolRegistryViewFromRegistry(modelTools()),
       providerRuntime: { ...providerRuntime },
     });
 
@@ -262,6 +272,8 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
+      prepareProviderInvocation: (name, parameters, signal) =>
+        captureProviderInvocation(providerRuntime, name, parameters, signal),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -270,9 +282,12 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
         preserveThreshold: 0.2,
         telemetry: { enabled: true, target: null },
       },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      provider: createProviderAdapterFromManager(manager),
+      telemetry: createTelemetryAdapter(
+        config,
+        createSessionSettingsFixture(config).settingsOwner.telemetry,
+      ),
+      tools: createToolRegistryViewFromRegistry(modelTools()),
       providerRuntime: { ...providerRuntime },
     });
 
@@ -371,6 +386,8 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
+      prepareProviderInvocation: (name, parameters, signal) =>
+        captureProviderInvocation(providerRuntime, name, parameters, signal),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -379,9 +396,12 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
         preserveThreshold: 0.2,
         telemetry: { enabled: true, target: null },
       },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      provider: createProviderAdapterFromManager(manager),
+      telemetry: createTelemetryAdapter(
+        config,
+        createSessionSettingsFixture(config).settingsOwner.telemetry,
+      ),
+      tools: createToolRegistryViewFromRegistry(modelTools()),
       providerRuntime: { ...providerRuntime },
     });
 
@@ -491,6 +511,8 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
+      prepareProviderInvocation: (name, parameters, signal) =>
+        captureProviderInvocation(providerRuntime, name, parameters, signal),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -499,9 +521,12 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
         preserveThreshold: 0.2,
         telemetry: { enabled: true, target: null },
       },
-      provider: createProviderAdapterFromManager(config.getProviderManager()),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      provider: createProviderAdapterFromManager(manager),
+      telemetry: createTelemetryAdapter(
+        config,
+        createSessionSettingsFixture(config).settingsOwner.telemetry,
+      ),
+      tools: createToolRegistryViewFromRegistry(modelTools()),
       providerRuntime: { ...providerRuntime },
     });
 

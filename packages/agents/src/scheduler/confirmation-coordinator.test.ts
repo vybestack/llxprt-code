@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 
 import { runAllTimersAsync } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
@@ -59,7 +60,7 @@ describe('ConfirmationCoordinator', () => {
       coordinator.dispose();
 
       // Emit a response after dispose — the handler should have been removed
-      messageBus.emit(MessageBusType.TOOL_CONFIRMATION_RESPONSE, {
+      messageBus.publish({
         correlationId: 'corr-1',
         outcome: ToolConfirmationOutcome.ProceedOnce,
       } as ToolConfirmationResponse);
@@ -123,7 +124,7 @@ describe('ConfirmationCoordinator', () => {
         coordinator as unknown as { pendingConfirmations: Map<string, string> }
       ).pendingConfirmations.set('corr-1', 'call-1');
 
-      messageBus.emit(MessageBusType.TOOL_CONFIRMATION_RESPONSE, {
+      messageBus.publish({
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
         correlationId: 'corr-1',
         outcome: ToolConfirmationOutcome.ProceedOnce,
@@ -144,7 +145,7 @@ describe('ConfirmationCoordinator', () => {
         coordinator as unknown as { pendingConfirmations: Map<string, string> }
       ).pendingConfirmations.set('corr-1', 'call-1');
 
-      messageBus.emit(MessageBusType.TOOL_CONFIRMATION_RESPONSE, {
+      messageBus.publish({
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
         correlationId: 'corr-1',
         outcome: ToolConfirmationOutcome.ProceedOnce,
@@ -166,7 +167,7 @@ describe('ConfirmationCoordinator', () => {
         coordinator as unknown as { pendingConfirmations: Map<string, string> }
       ).pendingConfirmations.set('corr-1', 'call-1');
 
-      messageBus.emit(MessageBusType.TOOL_CONFIRMATION_RESPONSE, {
+      messageBus.publish({
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
         correlationId: 'corr-1',
         outcome: ToolConfirmationOutcome.ProceedOnce,
@@ -191,7 +192,7 @@ describe('ConfirmationCoordinator', () => {
         }
       ).staleCorrelationIds.set('stale-corr', timeout);
 
-      messageBus.emit(MessageBusType.TOOL_CONFIRMATION_RESPONSE, {
+      messageBus.publish({
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
         correlationId: 'stale-corr',
         outcome: ToolConfirmationOutcome.ProceedOnce,
@@ -204,7 +205,7 @@ describe('ConfirmationCoordinator', () => {
     it('ignores unknown correlation IDs', () => {
       const { messageBus, schedulerAccessor } = createCoordinator();
 
-      messageBus.emit(MessageBusType.TOOL_CONFIRMATION_RESPONSE, {
+      messageBus.publish({
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
         correlationId: 'unknown-corr',
         outcome: ToolConfirmationOutcome.ProceedOnce,
@@ -217,8 +218,14 @@ describe('ConfirmationCoordinator', () => {
       // ToolCall with a different status (not awaiting_approval)
       const scheduledCall: ToolCall = {
         status: 'scheduled',
-        request: { callId: 'call-1', name: 'testTool', args: {} },
-        tool: {} as ToolCall['tool'],
+        request: {
+          callId: 'call-1',
+          name: 'testTool',
+          args: {},
+          isClientInitiated: false,
+          prompt_id: 'test',
+        },
+        tool: new MockTool('testTool'),
         invocation: {} as WaitingToolCall['invocation'],
       };
       const { coordinator, messageBus, schedulerAccessor } = createCoordinator({
@@ -230,7 +237,7 @@ describe('ConfirmationCoordinator', () => {
         coordinator as unknown as { pendingConfirmations: Map<string, string> }
       ).pendingConfirmations.set('corr-1', 'call-1');
 
-      messageBus.emit(MessageBusType.TOOL_CONFIRMATION_RESPONSE, {
+      messageBus.publish({
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
         correlationId: 'corr-1',
         outcome: ToolConfirmationOutcome.ProceedOnce,
@@ -250,7 +257,7 @@ describe('ConfirmationCoordinator', () => {
         coordinator as unknown as { pendingConfirmations: Map<string, string> }
       ).pendingConfirmations.set('corr-1', 'call-1');
 
-      messageBus.emit(MessageBusType.TOOL_CONFIRMATION_RESPONSE, {
+      messageBus.publish({
         type: MessageBusType.TOOL_CONFIRMATION_RESPONSE,
         correlationId: 'corr-1',
         confirmed: true,

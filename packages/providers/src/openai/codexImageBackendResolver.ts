@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 /**
  * Factory that builds a lazy resolveBackend closure for GenerateImageTool.
  *
@@ -74,8 +75,9 @@ export interface ResolvedImageBackendLike {
 
 export interface CodexImageBackendResolverDeps {
   readonly oauthManager: OAuthManager | undefined;
-  readonly getActiveProvider: () => IProvider | undefined;
+  readonly getActiveProvider: () => IProvider | RuntimeProvider | undefined;
   readonly fetchImpl?: typeof fetch;
+  readonly getBaseUrl?: () => string | undefined;
 }
 
 /**
@@ -145,7 +147,9 @@ export function createCodexImageBackendResolver(
     // canonical endpoint is used.
     const provider = deps.getActiveProvider();
     const activeBaseUrl =
-      provider === undefined ? undefined : getBaseUrlFromProvider(provider);
+      deps.getBaseUrl !== undefined
+        ? deps.getBaseUrl()
+        : getBaseUrlFromProvider(provider);
     const baseUrl = isCodexBaseUrl(activeBaseUrl)
       ? (activeBaseUrl as string)
       : DEFAULT_CODEX_BASE_URL;

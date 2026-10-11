@@ -4,6 +4,8 @@
  */
 
 // @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006
+import type { McpClientManager, McpClient } from '@vybestack/llxprt-code-mcp';
+import type { McpServerRuntimeState } from '@vybestack/llxprt-code-mcp';
 import type { MCPOAuthConfig } from '@vybestack/llxprt-code-core';
 // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md lines 01-04
 import type { McpOAuthStatus } from '@vybestack/llxprt-code-core';
@@ -12,7 +14,6 @@ import type { MCPServerConfig } from '@vybestack/llxprt-code-core/config/config.
 import {
   MCPServerStatus,
   MCPDiscoveryState,
-  getMCPServerStatus,
 } from '@vybestack/llxprt-code-core';
 import type {
   AgentMcpControl,
@@ -78,6 +79,7 @@ export interface McpRuntimeStatusView {
   readonly servers: Record<string, MCPServerConfig>;
   readonly discoveryFailures: ReadonlyMap<string, string>;
   readonly discoveryState: MCPDiscoveryState;
+  readonly serverStates: ReadonlyMap<string, McpServerRuntimeState>;
 }
 
 /**
@@ -91,6 +93,9 @@ export interface McpRuntimeStatusView {
  * @requirement:REQ-019
  */
 export interface McpControlDeps {
+  readonly subscribeStatus?: (listener: () => void) => () => void;
+  readonly findResource?: AgentMcpControl['findResource'];
+  readonly readResource?: (server: string, uri: string) => Promise<unknown>;
   /** Returns true when the named server was authenticated via mcpLogin. */
   readonly isMcpAuthenticated: (server: string) => boolean;
   /**
@@ -126,9 +131,9 @@ export interface McpControlDeps {
     extensionName: string;
   }>;
   /** @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 Prompt registry view. */
-  readonly getPromptRegistry?: () => McpPromptRegistryView | undefined;
+  readonly listPrompts?: AgentMcpControl['listPrompts'];
   /** @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 Resource registry view. */
-  readonly getResourceRegistry?: () => McpResourceRegistryView | undefined;
+  readonly listResources?: AgentMcpControl['listResources'];
   /** @plan:PLAN-20260622-COREAPIGAP.P14 @requirement:REQ-006 Re-publishes client tool declarations. */
   readonly refreshClientTools?: () => Promise<void>;
   /**
@@ -143,6 +148,8 @@ export interface McpControlDeps {
     server: string,
     oauthConfig: MCPOAuthConfig,
     mcpServerUrl: string | undefined,
+    signal: AbortSignal,
+    onDisplayMessage?: (message: string) => void,
   ) => Promise<void>;
   /**
    * @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004 @pseudocode agents-projection.md line 02
@@ -170,6 +177,7 @@ function mapDiscoveryState(
   state: MCPDiscoveryState,
   serverNames: readonly string[],
   failures: ReadonlyMap<string, string>,
+  states: ReadonlyMap<string, McpServerRuntimeState>,
 ): PublicMcpDiscoveryState {
   if (state === MCPDiscoveryState.NOT_STARTED) {
     return 'idle';
@@ -181,7 +189,7 @@ function mapDiscoveryState(
     return 'ready';
   }
   const anyConnected = serverNames.some(
-    (name) => getMCPServerStatus(name) === MCPServerStatus.CONNECTED,
+    (name) => states.get(name)?.status === MCPServerStatus.CONNECTED,
   );
   return anyConnected ? 'partial' : 'failed';
 }
@@ -196,16 +204,18 @@ function mapDiscoveryState(
 function mapServerStatus(
   name: string,
   failures: ReadonlyMap<string, string>,
+  states: ReadonlyMap<string, McpServerRuntimeState>,
 ): McpServerInfo['status'] {
   if (failures.has(name)) {
     return 'error';
   }
-  switch (getMCPServerStatus(name)) {
+  switch (states.get(name)?.status) {
     case MCPServerStatus.CONNECTED:
       return 'connected';
     case MCPServerStatus.CONNECTING:
       return 'connecting';
     case MCPServerStatus.DISCONNECTING:
+      return 'disconnecting';
     case MCPServerStatus.DISCONNECTED:
     default:
       return 'disconnected';
@@ -213,7 +223,83 @@ function mapServerStatus(
 }
 
 export class McpControl implements AgentMcpControl {
+  private closed = false;
+  private readonly statusSubscriptions = new Set<() => void>();
+
+  listBlockedServers(): ReturnType<AgentMcpControl['listBlockedServers']> {
+    if (this.closed) throw new Error('MCP control is closed');
+    return (this.deps?.getBlockedServers?.() ?? []).map((server) => ({
+      ...server,
+    }));
+  }
+
+  subscribeStatus(listener: () => void): () => void {
+    if (this.closed) throw new Error('MCP control is closed');
+    const release = this.deps?.subscribeStatus?.(listener);
+    const unsubscribe = (): void => {
+      release?.();
+      this.statusSubscriptions.delete(unsubscribe);
+    };
+    this.statusSubscriptions.add(unsubscribe);
+    return unsubscribe;
+  }
+  private readonly authentication = new Map<
+    string,
+    {
+      controller: AbortController;
+      work: Promise<McpServerAuthStatus>;
+    }
+  >();
+
+  async cancelAndJoin(): Promise<void> {
+    this.closed = true;
+    const failures: unknown[] = [];
+    for (const release of this.statusSubscriptions) {
+      try {
+        release();
+      } catch (error) {
+        failures.push(error);
+      }
+    }
+    this.statusSubscriptions.clear();
+    const pending = [...this.authentication.values()];
+    for (const { controller } of pending) controller.abort();
+    await Promise.allSettled(pending.map(({ work }) => work));
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'MCP subscription cleanup failed');
+  }
+
   constructor(private readonly deps?: McpControlDeps) {}
+
+  private serverDeclarations(): ReadonlyMap<string, MCPServerConfig> {
+    return new Map(Object.entries(this.deps?.getServerConfigs?.() ?? {}));
+  }
+
+  listPrompts(server: string): ReturnType<AgentMcpControl['listPrompts']> {
+    if (this.closed) throw new Error('MCP control is closed');
+    return this.deps?.listPrompts?.(server) ?? [];
+  }
+
+  listResources(): ReturnType<AgentMcpControl['listResources']> {
+    if (this.closed) throw new Error('MCP control is closed');
+    return this.deps?.listResources?.() ?? [];
+  }
+
+  findResource(
+    identifier: string,
+  ): ReturnType<AgentMcpControl['findResource']> {
+    if (this.closed) throw new Error('MCP control is closed');
+    if (!this.deps?.findResource)
+      throw new Error('MCP resource lookup is unavailable');
+    return this.deps.findResource(identifier);
+  }
+
+  async readResource(server: string, uri: string): Promise<unknown> {
+    if (this.closed) throw new Error('MCP control is closed');
+    if (!this.deps?.readResource)
+      throw new Error('MCP resource reading is unavailable');
+    return this.deps.readResource(server, uri);
+  }
 
   /**
    * Reads the configured servers from the live runtime-status snapshot and
@@ -235,7 +321,11 @@ export class McpControl implements AgentMcpControl {
       const info: McpServerInfo = {
         name,
         config,
-        status: mapServerStatus(name, status.discoveryFailures),
+        status: mapServerStatus(
+          name,
+          status.discoveryFailures,
+          status.serverStates,
+        ),
         ...(toolNames.length > 0 ? { tools: toolNames } : {}),
         ...(typeof config.type === 'string' ? { transport: config.type } : {}),
       };
@@ -358,6 +448,7 @@ export class McpControl implements AgentMcpControl {
       status.discoveryState,
       serverNames,
       status.discoveryFailures,
+      status.serverStates,
     );
   }
 
@@ -417,26 +508,68 @@ export class McpControl implements AgentMcpControl {
    * performOAuth rejection PROPAGATES (no restart, no setTools) — the control
    * does NOT catch. Both exits re-read the REAL status via buildAuthStatus.
    */
-  async authenticate(server: string): Promise<McpServerAuthStatus> {
-    const configs = this.deps?.getServerConfigs?.();
-    const serverConfig = configs ? configs[server] : undefined;
+  authenticate(
+    server: string,
+    onDisplayMessage?: (message: string) => void,
+  ): Promise<McpServerAuthStatus> {
+    if (this.closed) {
+      return Promise.reject(
+        new DOMException('MCP authentication owner disposed', 'AbortError'),
+      );
+    }
+    const existing = this.authentication.get(server);
+    if (existing) return existing.work;
+    const controller = new AbortController();
+    const work = this.authenticateOperation(
+      server,
+      controller.signal,
+      onDisplayMessage,
+    ).finally(() => {
+      this.authentication.delete(server);
+    });
+    this.authentication.set(server, { controller, work });
+    return work;
+  }
+
+  private async authenticateOperation(
+    server: string,
+    signal: AbortSignal,
+    onDisplayMessage?: (message: string) => void,
+  ): Promise<McpServerAuthStatus> {
+    const serverConfig = this.serverDeclarations().get(server);
     const performOAuth = this.deps?.performOAuth;
     if (serverConfig === undefined || performOAuth === undefined) {
-      return this.buildAuthStatus(server);
+      const status = await this.buildAuthStatus(server);
+      signal.throwIfAborted();
+      return status;
     }
     const oauthConfig = serverConfig.oauth ?? { enabled: false };
     const mcpServerUrl = serverConfig.httpUrl ?? serverConfig.url;
-    await performOAuth(server, oauthConfig, mcpServerUrl);
+    await performOAuth(
+      server,
+      oauthConfig,
+      mcpServerUrl,
+      signal,
+      onDisplayMessage,
+    );
+    signal.throwIfAborted();
     const refresh = this.deps?.refreshMcpServers;
     if (refresh !== undefined) {
       await refresh(server);
+      signal.throwIfAborted();
     }
     if (this.deps?.refreshClientTools !== undefined) {
       await this.deps.refreshClientTools();
+      signal.throwIfAborted();
     }
+    const status = await this.buildAuthStatus(server);
+    signal.throwIfAborted();
     // @pseudocode agents-projection.md 40-72 — reconcile the per-agent auth marker so a later auth(server)/details() read agrees with this success (undefined-safe when no writer is wired).
     this.deps?.markAuthenticated?.(server);
-    return this.buildAuthStatus(server);
+    return {
+      ...status,
+      sessionAuthenticated: this.deps?.isMcpAuthenticated(server) ?? false,
+    };
   }
 
   /**
@@ -456,12 +589,12 @@ export class McpControl implements AgentMcpControl {
     const includePrompts = opts?.includePrompts ?? false;
     const includeResources = opts?.includeResources ?? false;
     // @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-004
-    const configs = this.deps?.getServerConfigs?.() ?? {};
+    const configs = this.serverDeclarations();
     const toolsByServer = this.toolsByServer();
     const resourcesAll = includeResources
-      ? (this.deps?.getResourceRegistry?.()?.getAllResources() ?? [])
+      ? (this.deps?.listResources?.() ?? [])
       : [];
-    const names = Object.keys(configs);
+    const names = [...configs.keys()];
     const statusEntries = await Promise.all(
       names.map(
         async (name): Promise<[string, McpOAuthStatus]> => [
@@ -532,8 +665,7 @@ export class McpControl implements AgentMcpControl {
       detail.tools = toolsByServer[name] ?? [];
     }
     if (includePrompts) {
-      const prompts =
-        this.deps?.getPromptRegistry?.()?.getPromptsByServer(name) ?? [];
+      const prompts = this.deps?.listPrompts?.(name) ?? [];
       detail.prompts = prompts.map((p) => ({
         name: p.name,
         ...(p.description !== undefined ? { description: p.description } : {}),
@@ -552,4 +684,27 @@ export class McpControl implements AgentMcpControl {
     }
     return detail;
   }
+}
+
+export function readMcpRuntimeStatus(
+  manager: McpClientManager,
+): McpRuntimeStatusView {
+  return {
+    servers: manager.getStatusServers(),
+    serverStates: manager.getServerStates(),
+    discoveryFailures: manager.getDiscoveryFailures(),
+    discoveryState: manager.getDiscoveryState(),
+  };
+}
+
+export function requireMcpResourceClient(
+  manager: McpClientManager,
+  server: string,
+): McpClient {
+  const client = manager.getClient(server);
+  if (!client)
+    throw new Error(
+      `MCP client for server '${server}' is not available or not connected.`,
+    );
+  return client;
 }

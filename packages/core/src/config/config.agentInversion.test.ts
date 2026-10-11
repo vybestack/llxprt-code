@@ -3,351 +3,238 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '../session/session-settings-owner.js';
 
-import { describe, expect, it, vi } from 'bun:test';
-import type {
-  ContractContent,
-  ContractGenerateContentResponse,
-} from '../core/clientContract.js';
-import { Config, type ConfigParameters } from './config.js';
-import { MessageBus } from '../confirmation-bus/message-bus.js';
-import type { AgentClientContract } from '../core/clientContract.js';
-import type { ToolSchedulerContract } from '../core/toolSchedulerContract.js';
-import type { AgentRuntimeState } from '../runtime/AgentRuntimeState.js';
-import type { ContentGeneratorConfig } from '../core/contentGenerator.js';
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+
+import { afterEach, describe, expect, it } from 'bun:test';
+import { createTaskRegistration } from '@vybestack/llxprt-code-agents';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
+import {
+  initializeTestMcpRuntime,
+  installTestWorkspaceFilesystem,
+} from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { RuntimePolicyOwner } from '../policy/policy-owner.js';
+import { WorkspaceDefinitionOwner } from '../services/workspace-definition-owner.js';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Config } from './config.js';
 import {
   createToolRegistry,
   type TaskToolRegistration,
 } from './toolRegistryFactory.js';
-import {
-  DeclarativeTool,
-  Kind,
-  type ToolInvocation,
-} from '@vybestack/llxprt-code-tools';
 
-function baseParams(
-  overrides: Partial<ConfigParameters> = {},
-): ConfigParameters {
-  return {
-    sessionId: 'p01-session',
+const createFilesystem = installTestWorkspaceFilesystem();
+let configs: readonly Config[] = [];
+let settingsOwners: readonly SessionSettingsOwner[] = [];
+let policies: readonly RuntimePolicyOwner[] = [];
+let definitionRoots: ReadonlyArray<{
+  root: string;
+  owner: WorkspaceDefinitionOwner;
+}> = [];
+
+function configuration(): Config {
+  const config = new Config({
+    sessionId: 'construction-inversion',
     targetDir: process.cwd(),
-    debugMode: false,
     cwd: process.cwd(),
-    model: 'gemini-pro',
-    ...overrides,
-  };
+    model: 'fixture',
+    debugMode: false,
+    trustedFolder: true,
+    coreTools: ['InjectedTaskTool', 'TaskTool'],
+  });
+  configs = [...configs, config];
+  return config;
 }
 
-function emptyChatStream(): AsyncGenerator<never, never> {
-  return (async function* () {
-    if (Math.random() < 0) {
-      yield undefined as never;
-    }
-    return undefined as never;
-  })();
-}
-
-function emptyServerStream(): AsyncGenerator<never, never> {
-  return emptyChatStream();
-}
-
-function createFakeAgentClient(): AgentClientContract {
-  let initialized = false;
-  const history: ContractContent[] = [];
-  return {
-    async initialize(_config: ContentGeneratorConfig): Promise<void> {
-      initialized = true;
-    },
-    isInitialized(): boolean {
-      return initialized;
-    },
-    hasChatInitialized: vi.fn(() => false),
-    getChat: vi.fn(() => ({
-      sendMessageStream: vi.fn(async () => emptyChatStream()),
-      getHistory: () => history,
-      setHistory: vi.fn(),
-      clearHistory: vi.fn(),
-      getHistoryService: () => null,
-      wasRecentlyCompressed: () => false,
-      performCompression: vi.fn(async () => 0 as never),
-      recordCompletedToolCalls: vi.fn(),
-    })),
-    async getHistory(): Promise<Content[]> {
-      return history;
-    },
-    getHistoryService: () => null,
-    storeHistoryServiceForReuse: vi.fn(),
-    async storeHistoryForLaterUse(
-      storedHistory: ContractContent[],
-    ): Promise<void> {
-      history.push(...storedHistory);
-    },
-    dispose: vi.fn(async () => {}),
-    setTools: vi.fn(async () => {}),
-    clearTools: vi.fn(),
-    updateSystemInstruction: vi.fn(async () => {}),
-    addHistory: vi.fn(async (content: ContractContent) => {
-      history.push(content);
-    }),
-    resetChat: vi.fn(async () => {}),
-    resumeChat: vi.fn(async () => {}),
-    setHistory: vi.fn(async () => {}),
-    restoreHistory: vi.fn(async () => {}),
-    addDirectoryContext: vi.fn(async () => {}),
-    getContentGenerator: vi.fn(() => ({}) as never),
-    startChat: vi.fn(async () => ({
-      sendMessageStream: vi.fn(async () => emptyChatStream()),
-      getHistory: () => history,
-      setHistory: vi.fn(),
-      clearHistory: vi.fn(),
-      getHistoryService: () => null,
-      wasRecentlyCompressed: () => false,
-      performCompression: vi.fn(async () => 0 as never),
-      recordCompletedToolCalls: vi.fn(),
-    })),
-    generateDirectMessage: vi.fn(
-      async () => ({}) as ContractGenerateContentResponse,
-    ),
-    generateJson: vi.fn(async () => ({})),
-    generateContent: vi.fn(async () => ({}) as ContractGenerateContentResponse),
-    generateEmbedding: vi.fn(async () => []),
-    sendMessageStream: vi.fn(() => emptyServerStream()),
-    getCurrentSequenceModel: vi.fn(() => null),
-  };
-}
-
-class RegisteredTaskTool extends DeclarativeTool<
-  object,
-  { llmContent: string; returnDisplay: string }
-> {
-  constructor(readonly createdWith: unknown[]) {
-    super('task', 'task', 'fake task', Kind.Other, {}, true, false);
-  }
-
-  build(
-    params: object,
-  ): ToolInvocation<object, { llmContent: string; returnDisplay: string }> {
-    return {
-      params,
-      getDescription: () => 'fake task',
-      toolLocations: () => [],
-      shouldConfirmExecute: async () => false,
-      execute: async () => ({ llmContent: 'ok', returnDisplay: 'ok' }),
-    };
-  }
+async function assemble(config: Config, descriptor?: TaskToolRegistration) {
+  const root = await mkdtemp(join(tmpdir(), 'definition-inversion-'));
+  const definitions = new WorkspaceDefinitionOwner(
+    join(root, 'profiles'),
+    join(root, 'subagents'),
+  );
+  definitionRoots = [...definitionRoots, { root, owner: definitions }];
+  const settings = new SettingsService();
+  for (const [key, value] of Object.entries(config.getInitialSettings()))
+    settings.set(key, value);
+  const settingsOwner = new SessionSettingsOwner(settings);
+  settingsOwners = [...settingsOwners, settingsOwner];
+  const policy = new RuntimePolicyOwner(config);
+  policies = [...policies, policy];
+  const filesystem = createFilesystem({
+    targetDir: config.getTargetDir(),
+    includeDirectories: config.getConfiguredIncludeDirectories(),
+    isTrusted: () =>
+      new WorkspaceTrustLifecycle({
+        localTrust: config.initialWorkspaceTrust,
+      }).isTrustedFolder(),
+  });
+  const sessionRegistration =
+    descriptor === undefined
+      ? undefined
+      : {
+          ...descriptor,
+          create: (
+            config: unknown,
+            args: Parameters<TaskToolRegistration['create']>[1],
+          ) =>
+            descriptor.create(config, {
+              ...args,
+              createChildSettings: () => settingsOwner.createChildStore(),
+              readTaskPolicy: () => settingsOwner.readTaskPolicy(),
+              readRunPolicy: () => settingsOwner.readSubagentRunPolicy(),
+              readGovernance: () => settingsOwner.readToolGovernance([]),
+              instructions: emptyInstructionReads,
+            }),
+          buildArgs: (
+            config: unknown,
+            args: Parameters<TaskToolRegistration['buildArgs']>[1],
+          ) =>
+            descriptor.buildArgs(config, {
+              ...args,
+              createChildSettings: () => settingsOwner.createChildStore(),
+              readTaskPolicy: () => settingsOwner.readTaskPolicy(),
+              readRunPolicy: () => settingsOwner.readSubagentRunPolicy(),
+              readGovernance: () => settingsOwner.readToolGovernance([]),
+              instructions: emptyInstructionReads,
+            }),
+        };
+  const result = await createToolRegistry(
+    config,
+    config,
+    policy.session.messageBus,
+    () => settingsOwner.readRegistryPolicy(config.getExcludeTools() ?? []),
+    () => settingsOwner.readToolExecutionPolicy(),
+    filesystem.paths,
+    filesystem.files,
+    filesystem.ignore,
+    filesystem.scans,
+    undefined,
+    undefined,
+    sessionRegistration,
+    undefined,
+    true,
+    definitions.profileReads,
+    definitions.subagentReads,
+    undefined,
+    policy.trust,
+  );
+  return { ...result, messageBus: policy.session.messageBus };
 }
 
 describe('P01 construction inversion contracts', () => {
-  it('does not require agentClientFactory until Config.initialize uses the client seam', async () => {
-    const config = new Config(baseParams());
-    const messageBus = new MessageBus(
-      config.getPolicyEngine(),
-      config.getDebugMode(),
+  afterEach(async () => {
+    for (const { root, owner } of definitionRoots) {
+      await owner.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+    definitionRoots = [];
+    for (const owner of settingsOwners) await owner.dispose();
+    settingsOwners = [];
+    for (const policy of policies) await policy.dispose();
+    policies = [];
+    const closing = configs;
+    configs = [];
+    const results = await Promise.allSettled(
+      closing.map((config) => config.dispose()),
     );
-
-    await expect(config.initialize({ messageBus })).rejects.toThrow(
-      'agentClientFactory is required before Config.initialize() can create an AgentClient',
+    const errors = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
     );
+    if (errors.length > 0)
+      throw new AggregateError(errors, 'Config fixture disposal failed');
   });
 
-  it('creates the AgentClient through the injected factory during initialize', async () => {
-    const fakeClient = createFakeAgentClient();
-    const factory = vi.fn(
-      (_config: Config, _state: AgentRuntimeState) => fakeClient,
-    );
-    const config = new Config(baseParams({ agentClientFactory: factory }));
-    const messageBus = new MessageBus(
-      config.getPolicyEngine(),
-      config.getDebugMode(),
-    );
-
-    await config.initialize({ messageBus });
-
-    expect(factory).toHaveBeenCalledWith(
-      config,
-      expect.objectContaining({ runtimeId: 'p01-session' }),
-    );
-    expect(config.getAgentClient()).toBe(fakeClient);
-    expect(fakeClient.isInitialized()).toBe(false);
+  it('initializes workspace infrastructure without constructing a session client', async () => {
+    const config = configuration();
+    const owner = await initializeTestMcpRuntime(config);
+    try {
+      expect(owner.toolSelection).toBeDefined();
+      expect(owner.workspaceSkills.operations.list()).toStrictEqual([]);
+      expect('skillManager' in config).toBe(false);
+      expect('agentClient' in config).toBe(false);
+      expect('agentClientFactory' in config).toBe(false);
+    } finally {
+      await owner.dispose();
+    }
   });
 
-  it('creates schedulers through the injected factory and preserves per-session singleton reuse', async () => {
-    const fakeClient = createFakeAgentClient();
-    const scheduler: ToolSchedulerContract = {
-      schedule: vi.fn(async () => {}),
-      cancelAll: vi.fn(),
-      dispose: vi.fn(),
-      setCallbacks: vi.fn(),
-      handleConfirmationResponse: vi.fn(async () => {}),
-    };
-    const schedulerFactory = vi.fn(() => scheduler);
-    const config = new Config(
-      baseParams({
-        agentClientFactory: () => fakeClient,
-        toolSchedulerFactory: schedulerFactory,
-      }),
-    );
-    const messageBus = new MessageBus(
-      config.getPolicyEngine(),
-      config.getDebugMode(),
-    );
-    await config.initialize({ messageBus });
-    const callbacks = {
-      outputUpdateHandler: vi.fn(),
-      onAllToolCallsComplete: vi.fn(async () => {}),
-      onToolCallsUpdate: vi.fn(),
-      getPreferredEditor: () => undefined,
-      onEditorClose: vi.fn(),
-    };
-
-    const schedulerOwner = { sessionId: 'p01-scheduler-owner' };
-    const first = await config.getOrCreateScheduler(
-      schedulerOwner,
-      'session',
-      callbacks,
-      undefined,
-      {
-        messageBus,
-      },
-    );
-    const second = await config.getOrCreateScheduler(
-      schedulerOwner,
-      'session',
-      callbacks,
-      undefined,
-      {
-        messageBus,
-      },
-    );
-
-    expect(first).toBe(scheduler);
-    expect(second).toBe(scheduler);
-    expect(schedulerFactory).toHaveBeenCalledTimes(1);
+  it('keeps exactly one workspace registry through repeated initialization requests', async () => {
+    const config = configuration();
+    const owner = await initializeTestMcpRuntime(config);
+    try {
+      const tool = new MockTool({ name: 'workspace_probe' });
+      owner.toolPublication.registerTool(tool);
+      const retained = owner.toolPublication.getTool(tool.name);
+      await config.ensureInitialized();
+      expect(
+        new Set([tool, retained, owner.toolPublication.getTool(tool.name)])
+          .size,
+      ).toBe(1);
+      expect(owner.toolSelection.getAllToolNames()).toStrictEqual([tool.name]);
+    } finally {
+      await owner.dispose();
+    }
   });
 
   it('uses injected TaskToolRegistration metadata instead of the concrete class name', async () => {
-    const registeredTools: unknown[] = [];
-    const registration: TaskToolRegistration = {
-      toolClass: RegisteredTaskTool,
-      className: 'TaskTool',
-      staticName: 'task',
-      buildArgs: (_config, taskToolArgs) => ['config-arg', taskToolArgs],
-      create: (config, taskToolArgs) =>
-        new RegisteredTaskTool([config, taskToolArgs]) as never,
+    const config = configuration();
+    const descriptor = {
+      ...createTaskRegistration(),
+      className: 'InjectedTaskTool',
     };
-    const host = {
-      getCoreTools: () => ['TaskTool'],
-      getExcludeTools: () => undefined,
-      getUseRipgrep: () => false,
-      getProfileManager: () => ({}) as never,
-      setProfileManager: vi.fn(),
-      getSubagentManager: () => ({}) as never,
-      setSubagentManager: vi.fn(),
-      getInteractiveSubagentSchedulerFactory: () => undefined,
-      getAsyncTaskManager: () => undefined,
-      getShellJobManager: () => undefined,
-      getTaskToolRegistration: () => registration,
-    };
-    const config = new Config(baseParams());
-    vi.spyOn(config, 'getPromptRegistry').mockReturnValue({
-      clear: vi.fn(),
-      registerPrompt: vi.fn(),
-      getPrompt: vi.fn(),
-      listPrompts: vi.fn(() => []),
-    } as never);
-    const messageBus = new MessageBus(config.getPolicyEngine(), false);
-
-    const { registry, allPotentialTools } = await createToolRegistry(
-      host,
+    const { registry, allPotentialTools, messageBus } = await assemble(
       config,
-      messageBus,
+      descriptor,
     );
-    registeredTools.push(...registry.getAllTools());
-
-    const taskRecord = allPotentialTools.find(
-      (tool) => tool.toolName === 'TaskTool',
+    const records = allPotentialTools.filter(
+      (record) => record.displayName === 'task',
     );
-    expect(taskRecord).toStrictEqual(
-      expect.objectContaining({
-        toolClass: RegisteredTaskTool,
-        toolName: 'TaskTool',
-        displayName: 'task',
-        isRegistered: true,
-      }),
-    );
-    expect(taskRecord?.args[0]).toBe('config-arg');
-    const recordedTaskArgs = taskRecord?.args[1];
-    if (
-      typeof recordedTaskArgs !== 'object' ||
-      recordedTaskArgs === null ||
-      !('messageBus' in recordedTaskArgs)
-    ) {
+    expect(records).toHaveLength(1);
+    const record = records[0];
+    expect(record.isRegistered).toBe(true);
+    expect(record.toolName).not.toBe(record.toolClass?.name);
+    expect(record.args[0]).toBe(config);
+    const args = record.args[1];
+    if (typeof args !== 'object' || args === null || !('messageBus' in args))
       throw new Error(
-        'Expected registry TaskTool arguments with a MessageBus.',
+        'Missing session message bus in actual task construction',
       );
-    }
-    expect(recordedTaskArgs.messageBus).toBe(messageBus);
-
-    expect(registeredTools).toContainEqual(expect.any(RegisteredTaskTool));
-    const registeredTaskTool = registeredTools.find(
-      (tool): tool is RegisteredTaskTool => tool instanceof RegisteredTaskTool,
+    expect(args.messageBus).toBe(messageBus);
+    const tool = registry.getTool('task');
+    if (tool === undefined || record.toolClass === undefined)
+      throw new Error('Missing actual constructed task');
+    expect(tool instanceof record.toolClass).toBe(true);
+    expect(tool.schema.parametersJsonSchema).toHaveProperty(
+      'properties.goal_prompt',
     );
-    const createdTaskArgs = registeredTaskTool?.createdWith[1];
-    if (
-      typeof createdTaskArgs !== 'object' ||
-      createdTaskArgs === null ||
-      !('messageBus' in createdTaskArgs)
-    ) {
-      throw new Error(
-        'Expected constructed TaskTool arguments with a MessageBus.',
-      );
-    }
-    expect(createdTaskArgs.messageBus).toBe(messageBus);
+    expect(
+      tool
+        .build({
+          subagent_name: 'helper',
+          goal_prompt: 'A configured child task',
+        })
+        .getDescription(),
+    ).toContain('helper');
   });
 
   it('records disabled TaskTool diagnostic when registration is missing', async () => {
-    const host = {
-      getCoreTools: () => ['TaskTool'],
-      getExcludeTools: () => undefined,
-      getUseRipgrep: () => false,
-      getProfileManager: () => ({}) as never,
-      setProfileManager: vi.fn(),
-      getSubagentManager: () => ({}) as never,
-      setSubagentManager: vi.fn(),
-      getInteractiveSubagentSchedulerFactory: () => undefined,
-      getAsyncTaskManager: () => undefined,
-      getShellJobManager: () => undefined,
-      getTaskToolRegistration: () => undefined,
-    };
-    const config = new Config(baseParams());
-    vi.spyOn(config, 'getPromptRegistry').mockReturnValue({
-      clear: vi.fn(),
-      registerPrompt: vi.fn(),
-      getPrompt: vi.fn(),
-      listPrompts: vi.fn(() => []),
-    } as never);
-    const messageBus = new MessageBus(config.getPolicyEngine(), false);
-
-    const { registry, allPotentialTools } = await createToolRegistry(
-      host,
-      config,
-      messageBus,
+    const { registry, allPotentialTools } = await assemble(configuration());
+    const records = allPotentialTools.filter(
+      (record) => record.displayName === 'task',
     );
-
-    const taskRecord = allPotentialTools.find(
-      (tool) => tool.toolName === 'TaskTool',
-    );
-    expect(taskRecord).toStrictEqual(
-      expect.objectContaining({
-        toolClass: undefined,
-        toolName: 'TaskTool',
-        displayName: 'task',
-        isRegistered: false,
-        reason:
-          'TaskTool registration was not provided by the composition root',
-        args: [],
-      }),
-    );
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      toolClass: undefined,
+      toolName: 'TaskTool',
+      displayName: 'task',
+      isRegistered: false,
+      reason: 'TaskTool registration was not provided by the composition root',
+      args: [],
+    });
     expect(registry.getTool('task')).toBeUndefined();
   });
 });

@@ -1,3 +1,4 @@
+import { createUiSessionOwner } from './uiSessionOwner.js';
 /**
  * @plan PLAN-20260629-ISSUE2285.P11
  * @requirement REQ-006
@@ -18,6 +19,7 @@
  * new session/* modules by changing ONLY import specifiers, leaving assertion
  * bodies byte-identical.
  */
+import { createMinimalConfig } from './dispatch-settings-fixture.js';
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import {
@@ -36,6 +38,7 @@ const { mockWriteToStderr } = {
 };
 
 import * as coreModule from '@vybestack/llxprt-code-core';
+
 import {
   coreEvents,
   CoreEvent,
@@ -89,7 +92,7 @@ const dispatchTrace: string[] = [];
 void vi.mock('../cliAgentBootstrap.js', () => ({
   createForegroundAgent: vi.fn(async () => {
     dispatchTrace.push('createForegroundAgent');
-    return { fake: true } as unknown;
+    return { fake: true, workspace: createUiSessionOwner().workspace };
   }),
 }));
 
@@ -185,30 +188,6 @@ function findStartupWarningsProp(node: unknown): unknown[] | undefined {
 // heavyweight runtime objects.
 // ---------------------------------------------------------------------------
 
-function createMinimalConfig(options: {
-  interactive: boolean;
-  question?: string;
-  outputFormat?: string;
-}): unknown {
-  return {
-    isInteractive: () => options.interactive,
-    getQuestion: () => options.question ?? '',
-    getOutputFormat: () => options.outputFormat ?? 'text',
-    getProvider: () => undefined,
-    getProviderManager: () => undefined,
-    getModel: () => undefined,
-    getProjectRoot: () => '/tmp/test-project',
-    getTerminalBackground: () => '#000000',
-    getDebugMode: () => false,
-    getScreenReader: () => false,
-    getSessionId: () => 'test-session',
-    refreshAuth: vi.fn(async () => {}),
-    setEphemeralSetting: vi.fn(),
-    getEphemeralSetting: vi.fn(() => undefined),
-    getTelemetrySettings: () => ({ perf: { enabled: false, memory: false } }),
-  };
-}
-
 function createMinimalSettings(options?: {
   hideWindowTitle?: boolean;
   enableMouseEvents?: boolean;
@@ -237,6 +216,7 @@ function createMinimalSettings(options?: {
 // dispatch-branch traces would never record the runner.
 function createFakeAgent(): unknown {
   return {
+    workspace: createUiSessionOwner().workspace,
     getMessageBus: () => ({}) as never,
     hooks: {
       triggerSessionStart: vi.fn(async () => ({})),
@@ -244,17 +224,6 @@ function createFakeAgent(): unknown {
     tools: { get: () => undefined },
     dispose: vi.fn(async () => {}),
   };
-}
-
-/** The resolved-recording argument dispatch receives when nothing was resumed. */
-function emptyRecording(startupWarnings: string[] = []): never {
-  return {
-    recordingIntegration: undefined,
-    resumedHistory: undefined,
-    recordingService: undefined,
-    startupWarnings,
-    resumedLockHandle: null,
-  } as never;
 }
 
 // ---------------------------------------------------------------------------
@@ -298,15 +267,18 @@ describe('session-dispatch characterization', () => {
     });
 
     it('dispatch branch selection: interactive when config.isInteractive() returns true', async () => {
-      const config = createMinimalConfig({ interactive: true });
+      const { config: config, ...configRoot } = createMinimalConfig({
+        interactive: true,
+      });
       const settings = createMinimalSettings({ hideWindowTitle: true });
 
       await dispatchInteractiveOrNonInteractive({
+        runtimeSettings: configRoot.runtimeSettings,
         config: config as never,
         agent: createFakeAgent() as never,
         settings: settings as never,
         workspaceRoot: '/tmp/test',
-        recording: emptyRecording(),
+        recordingOwner: 'agent',
         hasPipedInput: false,
         readStdinData: async () => '',
       });
@@ -320,7 +292,7 @@ describe('session-dispatch characterization', () => {
     });
 
     it('dispatch branch selection: non-interactive piped/prompt when config.isInteractive() returns false', async () => {
-      const config = createMinimalConfig({
+      const { config: config, ...configRoot } = createMinimalConfig({
         interactive: false,
         question: 'hello',
       });
@@ -331,11 +303,12 @@ describe('session-dispatch characterization', () => {
       // (runPipedOrPromptSession propagates it), so we expect the sentinel.
       await expect(
         dispatchInteractiveOrNonInteractive({
+          runtimeSettings: configRoot.runtimeSettings,
           config: config as never,
           agent: createFakeAgent() as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
-          recording: emptyRecording(),
+          recordingOwner: 'agent',
           hasPipedInput: false,
           readStdinData: async () => '',
         }),
@@ -631,7 +604,7 @@ describe('session-dispatch characterization', () => {
 
     it('drives the non-interactive session using piped stdin when hasPipedInput is true', async () => {
       const pipedContent = 'piped prompt content';
-      const config = createMinimalConfig({
+      const { config: config, ...configRoot } = createMinimalConfig({
         interactive: false,
         question: '',
       });
@@ -640,11 +613,12 @@ describe('session-dispatch characterization', () => {
       // The real dispatch reads stdin via readStdinData when hasPipedInput.
       await expect(
         dispatchInteractiveOrNonInteractive({
+          runtimeSettings: configRoot.runtimeSettings,
           config: config as never,
           agent: createFakeAgent() as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
-          recording: emptyRecording(),
+          recordingOwner: 'agent',
           hasPipedInput: true,
           readStdinData: async () => {
             readStdinCalls++;
@@ -662,7 +636,7 @@ describe('session-dispatch characterization', () => {
     });
 
     async function verifyExits1WhenPipedStdinAndPromptAreBothEmptyNoInputNonInteractivePath() {
-      const config = createMinimalConfig({
+      const { config: config, ...configRoot } = createMinimalConfig({
         interactive: false,
         question: '',
       });
@@ -671,11 +645,12 @@ describe('session-dispatch characterization', () => {
       let caught: ExitCalledError | undefined;
       try {
         await dispatchInteractiveOrNonInteractive({
+          runtimeSettings: configRoot.runtimeSettings,
           config: config as never,
           agent: createFakeAgent() as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
-          recording: emptyRecording(),
+          recordingOwner: 'agent',
           hasPipedInput: true,
           readStdinData: async () => '',
         });
@@ -707,7 +682,7 @@ describe('session-dispatch characterization', () => {
     });
 
     it('uses the --prompt value directly when hasPipedInput is false and prompt is present', async () => {
-      const config = createMinimalConfig({
+      const { config: config, ...configRoot } = createMinimalConfig({
         interactive: false,
         question: 'cli-prompt-value',
       });
@@ -715,11 +690,12 @@ describe('session-dispatch characterization', () => {
 
       await expect(
         dispatchInteractiveOrNonInteractive({
+          runtimeSettings: configRoot.runtimeSettings,
           config: config as never,
           agent: createFakeAgent() as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
-          recording: emptyRecording(),
+          recordingOwner: 'agent',
           hasPipedInput: false,
           readStdinData: async () => {
             readStdinCalls++;
@@ -756,7 +732,9 @@ describe('session-dispatch characterization', () => {
     });
 
     it('startInteractiveUI registers a process exit handler for terminal protocol restoration', async () => {
-      const config = createMinimalConfig({ interactive: true });
+      const { config: config, ...configRoot } = createMinimalConfig({
+        interactive: true,
+      });
       const settings = createMinimalSettings({
         hideWindowTitle: true,
         enableMouseEvents: false,
@@ -767,10 +745,14 @@ describe('session-dispatch characterization', () => {
 
       await startInteractiveUI(
         config as never,
-        { fake: true } as never,
+        createFakeAgent() as never,
         settings as never,
         [],
         '/tmp/test',
+        {
+          recordingOwner: 'agent',
+          runtimeSettings: configRoot.runtimeSettings,
+        },
       );
 
       // Observable effect: the real code registered process.on('exit') handlers
@@ -780,7 +762,9 @@ describe('session-dispatch characterization', () => {
     });
 
     it('startInteractiveUI registers mouse-events exit handler when mouse events are enabled', async () => {
-      const config = createMinimalConfig({ interactive: true });
+      const { config: config, ...configRoot } = createMinimalConfig({
+        interactive: true,
+      });
       const settings = createMinimalSettings({
         hideWindowTitle: true,
         enableMouseEvents: true,
@@ -791,10 +775,14 @@ describe('session-dispatch characterization', () => {
 
       await startInteractiveUI(
         config as never,
-        { fake: true } as never,
+        createFakeAgent() as never,
         settings as never,
         [],
         '/tmp/test',
+        {
+          recordingOwner: 'agent',
+          runtimeSettings: configRoot.runtimeSettings,
+        },
       );
 
       // Observable effect: with mouse events enabled, the real code registers
@@ -806,17 +794,23 @@ describe('session-dispatch characterization', () => {
     });
 
     it('startInteractiveUI calls Ink render with the AppWrapper element tree', async () => {
-      const config = createMinimalConfig({ interactive: true });
+      const { config: config, ...configRoot } = createMinimalConfig({
+        interactive: true,
+      });
       const settings = createMinimalSettings({
         hideWindowTitle: true,
       });
 
       await startInteractiveUI(
         config as never,
-        { fake: true } as never,
+        createFakeAgent() as never,
         settings as never,
         ['startup warning'],
         '/tmp/test',
+        {
+          recordingOwner: 'agent',
+          runtimeSettings: configRoot.runtimeSettings,
+        },
       );
 
       // Observable effect: the real code called Ink render (the recording fake
@@ -895,7 +889,7 @@ describe('session-dispatch characterization', () => {
       const stdoutWrite = vi
         .spyOn(process.stdout, 'write')
         .mockImplementation(() => true);
-      const config = createMinimalConfig({
+      const { config: config } = createMinimalConfig({
         interactive: false,
         outputFormat: OutputFormat.STREAM_JSON,
       });
@@ -923,7 +917,7 @@ describe('session-dispatch characterization', () => {
       const stdoutWrite = vi
         .spyOn(process.stdout, 'write')
         .mockImplementation(() => true);
-      const config = createMinimalConfig({
+      const { config: config } = createMinimalConfig({
         interactive: false,
         outputFormat: OutputFormat.JSON,
       });
@@ -951,7 +945,7 @@ describe('session-dispatch characterization', () => {
       const stdoutWrite = vi
         .spyOn(process.stdout, 'write')
         .mockImplementation(() => true);
-      const config = createMinimalConfig({
+      const { config: config } = createMinimalConfig({
         interactive: false,
         outputFormat: 'text',
       });
@@ -1007,16 +1001,18 @@ describe('session-dispatch characterization', () => {
 
     /** Runs dispatch with the fixed recording/stdin arguments these cases share. */
     function runDispatch(
-      config: unknown,
+      { config, runtimeSettings }: ReturnType<typeof createMinimalConfig>,
       settings: unknown,
       recordingStartupWarnings: string[] = [],
     ) {
       return dispatchInteractiveOrNonInteractive({
+        runtimeSettings,
         config: config as never,
         agent: createFakeAgent() as never,
         settings: settings as never,
         workspaceRoot: '/tmp/test',
-        recording: emptyRecording(recordingStartupWarnings),
+        recordingOwner: 'agent',
+        recordingStartupWarnings,
         hasPipedInput: false,
         readStdinData: async () => '',
       });

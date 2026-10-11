@@ -4,19 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installSchedulerToolFixture } from './__tests__/scheduler-tool-owner-fixture.js';
+
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from 'bun:test';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
-import {
-  createMockMessageBus,
-  createMockPolicyEngine,
-} from './__tests__/coreToolScheduler-test-helpers.js';
 
 describe('CoreToolScheduler Buffered Parallel Execution', () => {
+  const fixtureRoot = installSchedulerToolFixture();
   it('should execute tool calls in parallel but publish results in order', async () => {
     const completionOrder: number[] = [];
     const publishOrder: number[] = [];
@@ -46,44 +43,26 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
       });
 
     const mockTool = new MockTool({ name: 'mockTool', execute: executeFn });
-    const mockToolRegistry = {
-      getTool: () => mockTool,
-      getFunctionDeclarations: () => [],
-      tools: new Map(),
-      discovery: {},
-      registerTool: () => {},
-      getToolByName: () => mockTool,
-      getToolByDisplayName: () => mockTool,
-      getTools: () => [],
-      discoverTools: async () => {},
-      getAllTools: () => [],
-      getToolsByServer: () => [],
-    } as unknown as ToolRegistry;
 
     const onToolCallsUpdate = vi.fn();
-    const mockPolicyEngine = createMockPolicyEngine();
 
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      getApprovalMode: () => ApprovalMode.YOLO,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getEnableHooks: () => false,
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
+    const fixture = fixtureRoot([mockTool], {
+      sessionId: 'test-session-id',
+      approvalMode: ApprovalMode.YOLO,
+      interactive: false,
+    });
 
     const scheduler = new CoreToolScheduler({
-      config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+      config: fixture.config,
+      telemetry: fixture.settingsOwner.telemetry,
+      readExecutionPolicy: () =>
+        fixture.settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        fixture.settingsOwner.readToolGovernance(
+          fixture.config.getExcludeTools() ?? [],
+        ),
+      messageBus: fixture.messageBus,
+      toolRegistry: fixture.selection,
       onAllToolCallsComplete: vi.fn(),
       onToolCallsUpdate: (calls) => {
         onToolCallsUpdate(calls);
@@ -169,44 +148,26 @@ describe('CoreToolScheduler Buffered Parallel Execution', () => {
       });
 
     const mockTool = new MockTool({ name: 'mockTool', execute: executeFn });
-    const mockToolRegistry = {
-      getTool: () => mockTool,
-      getFunctionDeclarations: () => [],
-      tools: new Map(),
-      discovery: {},
-      registerTool: () => {},
-      getToolByName: () => mockTool,
-      getToolByDisplayName: () => mockTool,
-      getTools: () => [],
-      discoverTools: async () => {},
-      getAllTools: () => [],
-      getToolsByServer: () => [],
-    } as unknown as ToolRegistry;
 
     const onToolCallsUpdate = vi.fn();
-    const mockPolicyEngine = createMockPolicyEngine();
 
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      getApprovalMode: () => ApprovalMode.YOLO,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getEnableHooks: () => false,
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
+    const fixture = fixtureRoot([mockTool], {
+      sessionId: 'test-session-id',
+      approvalMode: ApprovalMode.YOLO,
+      interactive: false,
+    });
 
     const scheduler = new CoreToolScheduler({
-      config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+      config: fixture.config,
+      telemetry: fixture.settingsOwner.telemetry,
+      readExecutionPolicy: () =>
+        fixture.settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        fixture.settingsOwner.readToolGovernance(
+          fixture.config.getExcludeTools() ?? [],
+        ),
+      messageBus: fixture.messageBus,
+      toolRegistry: fixture.selection,
       onAllToolCallsComplete: vi.fn(),
       onToolCallsUpdate: (calls) => {
         onToolCallsUpdate(calls);

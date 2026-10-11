@@ -1,3 +1,4 @@
+import { createProviderConfigFixture } from './__tests__/provider-config-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -5,11 +6,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { Config } from '@vybestack/llxprt-code-core';
-import type {
-  RuntimeContentGeneratorFactory,
-  RuntimeTokenizerFactory,
-} from '@vybestack/llxprt-code-core';
+import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
 import type { RuntimePromptEstimateRequest } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { ProviderContentGenerator } from '@vybestack/llxprt-code-providers';
 import { configureProviderRuntimeFactories } from '../composition/index.js';
@@ -25,20 +22,13 @@ import type { TiktokenModuleLoader } from '../tokenizers/o200kBaseCounter.js';
 import {
   activateIsolatedRuntimeContext,
   createIsolatedRuntimeContext,
-} from './runtimeSettings.js';
+} from './index.js';
 
 async function captureRejection(operation: Promise<unknown>): Promise<unknown> {
   return operation.then(
     () => new Error('expected the operation to reject'),
     (error: unknown) => error,
   );
-}
-
-interface ConfigWithRuntimeFactories extends Config {
-  getContentGeneratorFactory():
-    | RuntimeContentGeneratorFactory<ProviderContentGenerator>
-    | undefined;
-  getTokenizerFactory(): RuntimeTokenizerFactory | undefined;
 }
 
 type PrepareTokenizer = NonNullable<
@@ -88,40 +78,51 @@ describe('configureProviderRuntimeFactories', () => {
    * @requirement:REQ-DEP-001
    */
   it('injects providers-backed content generator and tokenizer factories into CLI config', async () => {
-    const runtimeHandle = createIsolatedRuntimeContext({
-      runtimeId: 'provider-runtime-factory-injection',
-      config: new Config({
+    const runtimeHandle = (() => {
+      const {
+        config: capturedConfig25,
+        settingsService: capturedConfig25SettingsService,
+        settingsOwner: capturedConfig25SettingsOwner,
+      } = createProviderConfigFixture({
         sessionId: 'provider-runtime-factory-injection',
         targetDir: process.cwd(),
         cwd: process.cwd(),
         model: 'gpt-4.1',
         debugMode: false,
-      }),
-      metadata: { source: 'issue1584-p16a' },
-      prepare: async () => {},
-    });
+      });
+      return createIsolatedRuntimeContext(
+        {
+          settingsOwner: capturedConfig25SettingsOwner,
+          runtimeId: 'provider-runtime-factory-injection',
+          config: capturedConfig25,
+          metadata: { source: 'issue1584-p16a' },
+          prepare: async () => {},
+        },
+        capturedConfig25SettingsService,
+      );
+    })();
 
     await activateIsolatedRuntimeContext(runtimeHandle, {
       runtimeId: runtimeHandle.runtimeId,
       metadata: { source: 'issue1584-p16a' },
     });
 
-    const config = runtimeHandle.config as ConfigWithRuntimeFactories;
+    const config = runtimeHandle.config;
     const manager = runtimeHandle.providerManager;
 
     configureProviderRuntimeFactories(config, manager);
 
-    const contentGeneratorFactory = config.getContentGeneratorFactory();
-    const tokenizerFactory = config.getTokenizerFactory();
+    const { contentGeneratorFactory, tokenizerFactory } =
+      configureProviderRuntimeFactories(config, manager);
 
     expect(contentGeneratorFactory).toBeDefined();
     expect(tokenizerFactory).toBeDefined();
+    expect(contentGeneratorFactory.createContentGenerator()).toBeInstanceOf(
+      ProviderContentGenerator,
+    );
+    expect(tokenizerFactory.getTokenizer('openai', 'gpt-4.1')).toBeDefined();
     expect(
-      contentGeneratorFactory?.createContentGenerator(manager),
-    ).toBeInstanceOf(ProviderContentGenerator);
-    expect(tokenizerFactory?.getTokenizer('openai', 'gpt-4.1')).toBeDefined();
-    expect(
-      tokenizerFactory?.getTokenizer('anthropic', 'claude-3-5-sonnet'),
+      tokenizerFactory.getTokenizer('anthropic', 'claude-3-5-sonnet'),
     ).toBeDefined();
   });
 
@@ -153,51 +154,62 @@ describe('configureProviderRuntimeFactories', () => {
    * rather than through a locally built registry.
    */
   it('composes a separately calibrated estimator for each Claude 5 model', async () => {
-    const runtimeHandle = createIsolatedRuntimeContext({
-      runtimeId: 'provider-runtime-factory-claude5',
-      config: new Config({
+    const runtimeHandle = (() => {
+      const {
+        config: capturedConfig26,
+        settingsService: capturedConfig26SettingsService,
+        settingsOwner: capturedConfig26SettingsOwner,
+      } = createProviderConfigFixture({
         sessionId: 'provider-runtime-factory-claude5',
         targetDir: process.cwd(),
         cwd: process.cwd(),
         model: 'claude-opus-5',
         debugMode: false,
-      }),
-      metadata: { source: 'issue2835' },
-      prepare: async () => {},
-    });
+      });
+      return createIsolatedRuntimeContext(
+        {
+          settingsOwner: capturedConfig26SettingsOwner,
+          runtimeId: 'provider-runtime-factory-claude5',
+          config: capturedConfig26,
+          metadata: { source: 'issue2835' },
+          prepare: async () => {},
+        },
+        capturedConfig26SettingsService,
+      );
+    })();
     await activateIsolatedRuntimeContext(runtimeHandle, {
       runtimeId: runtimeHandle.runtimeId,
       metadata: { source: 'issue2835' },
     });
-    const config = runtimeHandle.config as ConfigWithRuntimeFactories;
+    const config = runtimeHandle.config;
     configureProviderRuntimeFactories(config, runtimeHandle.providerManager);
-    const tokenizerFactory = config.getTokenizerFactory();
+    const tokenizerFactory = runtimeHandle.tokenizerFactory;
     expect(tokenizerFactory).toBeDefined();
 
-    expect(tokenizerFactory?.claimsModel?.('claude-opus-5')).toBe(true);
-    expect(tokenizerFactory?.getEstimatorFamily?.('claude-opus-5')).toBe(
+    expect(tokenizerFactory.claimsModel?.('claude-opus-5')).toBe(true);
+    expect(tokenizerFactory.getEstimatorFamily?.('claude-opus-5')).toBe(
       'anthropic-claude-opus-5',
     );
-    expect(tokenizerFactory?.claimsModel?.('claude-fable-5')).toBe(true);
-    expect(tokenizerFactory?.getEstimatorFamily?.('claude-fable-5')).toBe(
+    expect(tokenizerFactory.claimsModel?.('claude-fable-5')).toBe(true);
+    expect(tokenizerFactory.getEstimatorFamily?.('claude-fable-5')).toBe(
       'anthropic-claude-fable-5',
     );
 
-    const opus = await tokenizerFactory!.estimatePrompt(
+    const opus = await tokenizerFactory.estimatePrompt(
       buildClaudeEstimateRequest('claude-opus-5', 'anthropic'),
     );
     expect(opus.family).toBe('anthropic-claude-opus-5');
     expect(opus.method).toBe('calibrated');
     expect(opus.count).toBeGreaterThan(0);
 
-    const fable = await tokenizerFactory!.estimatePrompt(
+    const fable = await tokenizerFactory.estimatePrompt(
       buildClaudeEstimateRequest('claude-fable-5', 'anthropic'),
     );
     expect(fable.family).toBe('anthropic-claude-fable-5');
     expect(fable.method).toBe('calibrated');
     expect(fable.estimatorVersion).not.toBe(opus.estimatorVersion);
 
-    const proxied = await tokenizerFactory!.estimatePrompt(
+    const proxied = await tokenizerFactory.estimatePrompt(
       buildClaudeEstimateRequest('claude-opus-5', 'zai'),
     );
     expect(proxied.family).toBe('legacy-unregistered');
@@ -224,28 +236,41 @@ describe('configureProviderRuntimeFactories', () => {
   });
 
   it('preserves an explicitly injected tokenizer factory as the authoritative runtime factory', async () => {
-    const runtimeHandle = createIsolatedRuntimeContext({
-      runtimeId: 'provider-runtime-injected-tokenizer-factory',
-      config: new Config({
+    const runtimeHandle = (() => {
+      const {
+        config: capturedConfig27,
+        settingsService: capturedConfig27SettingsService,
+        settingsOwner: capturedConfig27SettingsOwner,
+      } = createProviderConfigFixture({
         sessionId: 'provider-runtime-injected-tokenizer-factory',
         targetDir: process.cwd(),
         cwd: process.cwd(),
         model: 'gpt-5.6-sol',
         debugMode: false,
-      }),
-      prepare: async () => {},
-    });
+      });
+      return createIsolatedRuntimeContext(
+        {
+          settingsOwner: capturedConfig27SettingsOwner,
+          runtimeId: 'provider-runtime-injected-tokenizer-factory',
+          config: capturedConfig27,
+          prepare: async () => {},
+        },
+        capturedConfig27SettingsService,
+      );
+    })();
     await activateIsolatedRuntimeContext(runtimeHandle, {
       runtimeId: runtimeHandle.runtimeId,
     });
-    const config = runtimeHandle.config as ConfigWithRuntimeFactories;
+    const config = runtimeHandle.config;
     const injectedFactory = createRuntimeTokenizerFactory();
-    config.setTokenizerFactory(injectedFactory);
+    runtimeHandle.providerManager.setTokenizerFactory?.(injectedFactory);
 
     try {
       configureProviderRuntimeFactories(config, runtimeHandle.providerManager);
 
-      expect(config.getTokenizerFactory()).toBe(injectedFactory);
+      expect(runtimeHandle.providerManager.getTokenizerFactory?.()).toBe(
+        injectedFactory,
+      );
     } finally {
       await runtimeHandle.cleanup();
     }

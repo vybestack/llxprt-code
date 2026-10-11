@@ -26,7 +26,7 @@ export function createConfigParams(
     sandbox: undefined,
     sessionId: 'test-session',
     model: 'claude-sonnet-4-5-20250929',
-    settingsService,
+    initialSettings: settingsService.getAllGlobalSettings(),
   };
 }
 

@@ -19,7 +19,7 @@ import type {
 } from '@vybestack/llxprt-code-tools';
 import type { ToolCall } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { ToolGovernance } from '../core/toolGovernance.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { ToolLookup } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createErrorResponse } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
 import { setToolContext } from './utils.js';
@@ -30,7 +30,7 @@ import levenshtein from 'fast-levenshtein';
 
 export class ToolDispatcher {
   constructor(
-    private readonly toolRegistry: ToolRegistry,
+    private readonly toolRegistry: ToolLookup,
     private readonly config: Config,
   ) {}
 

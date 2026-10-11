@@ -6,7 +6,7 @@
 
 import { oauthUIBridge, type OAuthUIEvent } from '@vybestack/llxprt-code-auth';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { RuntimeKind } from '../runtime/active-runtime-identity.js';
+import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 const logger = new DebugLogger('llxprt:auth:interactive-coordinator');
 

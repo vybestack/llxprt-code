@@ -7,7 +7,12 @@
 import { z } from 'zod';
 import type { McpAuthProviderFactory } from '@vybestack/llxprt-code-mcp';
 import type { ProviderAliasConfig } from '../providerAliases.js';
-import type { ProviderAliasFactory, RuntimePluginManifest } from './types.js';
+import type {
+  ProviderAliasFactory,
+  RuntimePluginManifest,
+  RuntimeProviderContribution,
+  RuntimeMcpAuthFactoryContribution,
+} from './types.js';
 
 export const RUNTIME_PLUGIN_SUPPORTED_API_VERSION = 1;
 
@@ -50,9 +55,7 @@ const RUNTIME_CONTRIBUTED_ALIAS_SCHEMA = z
 const RUNTIME_PROVIDER_CONTRIBUTION_SCHEMA = z
   .object({
     providerId: z.string().min(1),
-    createProvider: z.custom<ProviderAliasFactory>(
-      (value): value is ProviderAliasFactory => typeof value === 'function',
-    ),
+    createProvider: z.unknown(),
     builtinAliases: z.array(RUNTIME_CONTRIBUTED_ALIAS_SCHEMA).optional(),
   })
   .strict();
@@ -60,9 +63,7 @@ const RUNTIME_PROVIDER_CONTRIBUTION_SCHEMA = z
 const RUNTIME_MCP_AUTH_FACTORY_CONTRIBUTION_SCHEMA = z
   .object({
     authProviderType: z.string().min(1),
-    createAuthProvider: z.custom<McpAuthProviderFactory>(
-      (value): value is McpAuthProviderFactory => typeof value === 'function',
-    ),
+    createAuthProvider: z.unknown(),
   })
   .strict();
 
@@ -169,8 +170,50 @@ export function parseRuntimePluginManifest(
     throw new RuntimePluginMalformedError(specifier, parsed.error.issues);
   }
 
-  deepFreezeManifest(parsed.data);
-  return parsed.data;
+  const providers = parsed.data.providers.map(
+    (contribution, index): RuntimeProviderContribution => {
+      const createProvider = contribution.createProvider;
+      if (!isProviderFactory(createProvider)) {
+        throw new RuntimePluginMalformedError(specifier, [
+          {
+            path: ['providers', index, 'createProvider'],
+            message: 'expected a callable provider factory',
+          },
+        ]);
+      }
+      return { ...contribution, createProvider };
+    },
+  );
+  const mcpAuthFactories = parsed.data.mcpAuthFactories?.map(
+    (contribution, index): RuntimeMcpAuthFactoryContribution => {
+      const createAuthProvider = contribution.createAuthProvider;
+      if (!isMcpAuthFactory(createAuthProvider)) {
+        throw new RuntimePluginMalformedError(specifier, [
+          {
+            path: ['mcpAuthFactories', index, 'createAuthProvider'],
+            message: 'expected a callable MCP auth factory',
+          },
+        ]);
+      }
+      return { ...contribution, createAuthProvider };
+    },
+  );
+  const manifest: RuntimePluginManifest = {
+    apiVersion: parsed.data.apiVersion,
+    id: parsed.data.id,
+    providers,
+    mcpAuthFactories,
+  };
+  deepFreezeManifest(manifest);
+  return manifest;
+}
+
+function isProviderFactory(value: unknown): value is ProviderAliasFactory {
+  return typeof value === 'function';
+}
+
+function isMcpAuthFactory(value: unknown): value is McpAuthProviderFactory {
+  return typeof value === 'function';
 }
 
 /**

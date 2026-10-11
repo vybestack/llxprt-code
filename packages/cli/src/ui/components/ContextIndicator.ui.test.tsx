@@ -11,12 +11,8 @@
  */
 
 import { render } from 'ink-testing-library';
-import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
+import { describe, it, expect, vi } from 'bun:test';
 import { Footer } from './Footer.js';
-import { getProviderManager } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
-import type { IProvider } from '@vybestack/llxprt-code-providers';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 // Mock the hooks
 void vi.mock('../hooks/useResponsive.js', () => ({
@@ -27,40 +23,11 @@ void vi.mock('../hooks/useResponsive.js', () => ({
 // exercise. Supplying it here keeps the subject the context indicator itself.
 void vi.mock('../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: () => ({
-    getActiveProviderStatus: () => ({ providerName: 'openai' }),
+    providerStatus: () => ({ providerName: 'openai' }),
   }),
 }));
 
-// Mock the provider manager
-void vi.mock(
-  '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js',
-  () => ({
-    getProviderManager: vi.fn(),
-  }),
-);
-
 describe('ContextIndicator UI', () => {
-  let mockProviderManager: ProviderManager;
-
-  beforeEach(() => {
-    // Create a real ProviderManager instance and mock its methods.
-    // ProviderManager requires an explicit runtime context (issue #2300); it
-    // deliberately refuses to read ambient global state.
-    mockProviderManager = new ProviderManager({
-      settingsService: new SettingsService(),
-    });
-
-    // Mock the methods we need
-    vi.spyOn(mockProviderManager, 'hasActiveProvider').mockReturnValue(true);
-    vi.spyOn(mockProviderManager, 'getActiveProvider').mockReturnValue({
-      name: 'openai',
-    } as unknown as IProvider);
-
-    (getProviderManager as Mock<typeof getProviderManager>).mockReturnValue(
-      mockProviderManager,
-    );
-  });
-
   it('should display context percentage without remote tokens', () => {
     const { lastFrame } = render(
       <Footer
@@ -138,15 +105,6 @@ describe('ContextIndicator UI', () => {
   });
 
   it('should handle non-OpenAI providers', () => {
-    // Mock a non-OpenAI provider
-    (
-      mockProviderManager.getActiveProvider as Mock<
-        typeof mockProviderManager.getActiveProvider
-      >
-    ).mockReturnValue({
-      name: 'anthropic',
-    } as unknown as IProvider);
-
     const { lastFrame } = render(
       <Footer
         model="claude-3-opus"

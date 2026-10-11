@@ -3,6 +3,9 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { SimpleExtensionLoader } from '@vybestack/llxprt-code-core/utils/extensionLoader.js';
+import { fromConfig } from '@vybestack/llxprt-code-agents';
+import { buildCliStyleConfig } from './buildCliStyleConfig.js';
 
 /**
  * @plan:PLAN-20260617-COREAPI.P13
@@ -36,6 +39,10 @@
  */
 
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import {
+  coreEvents,
+  CoreEvent,
+} from '@vybestack/llxprt-code-core/utils/events.js';
 
 // ─── Internal record narrowing (cast-exempt in the helper) ──────────────────
 
@@ -133,35 +140,38 @@ function readField(rec: RecordLike, key: string): unknown {
 // real flipped `true`.
 
 /**
- * Reads the agentClient disposed state by observing the GENUINE state
- * transition of its runtime-subscription handle. The real `AgentClient`
- * constructor (client.ts:146) sets `this._unsubscribe =
- * subscribeToAgentRuntimeState(...)` (a function). `AgentClient.dispose()`
- * (client.ts:263-265) calls `this._unsubscribe()` then sets
- * `this._unsubscribe = undefined`. There is NO `disposed`/`isDisposed` boolean
- * on AgentClient — the genuine observable is the `_unsubscribe` handle
- * transitioning `function → undefined`.
+ * Reads the agentClient disposed state by observing the GENUINE
+ * listener-membership transition of its model-change handler. The real
+ * `AgentClient` constructor (client.ts) registers
+ * `coreEvents.on(CoreEvent.ModelChanged, this.handleModelChanged)` (plus the
+ * ModelProfileChanged twin) and `AgentClient.dispose()` unconditionally calls
+ * the matching `coreEvents.off(...)` for both. There is NO
+ * `disposed`/`isDisposed` boolean on AgentClient — the genuine observable is
+ * the handler reference (an instance arrow-function field, stable across
+ * dispose) being present in `coreEvents.listeners(CoreEvent.ModelChanged)`
+ * before dispose and absent after.
  *
- * This reader returns `true` when `_unsubscribe` is `undefined` (disposed) and
- * `false` when it is a `function` (still subscribed). The headless fake client
- * IS constructed by Config.refreshAuth and its constructor DOES set
- * `_unsubscribe` (client.ts:146), so the pre-dispose state is genuinely
- * "subscribed" (function) and the post-dispose state is genuinely
- * "unsubscribed" (undefined) — a real transition, not undefined→undefined.
- *
- * GREEN: client.ts:146 sets `_unsubscribe` (function); client.ts:263-265 sets
- * `_unsubscribe = undefined` on dispose.
+ * This reader returns `true` when the captured client's handler is no longer
+ * registered (disposed) and `false` while it is still registered (alive).
+ * The headless fake client IS constructed by Config.refreshAuth and its
+ * constructor DOES register the handler, so the pre-dispose state is genuinely
+ * "registered" and the post-dispose state is genuinely "removed" — a real
+ * transition. Handler references are per-instance, so coexisting clients in
+ * one spec observe independently.
  */
 export function agentClientDisposed(probe: DisposalProbe): boolean {
   const client = asRecord(probe.agentClient);
   if (client === null) {
     return false;
   }
-  const unsub = client['_unsubscribe'];
-  // GREEN: client.ts:263-265 sets `_unsubscribe = undefined` on dispose.
-  // Pre-dispose (client.ts:146): `_unsubscribe` is a function → false.
-  // Post-dispose: `_unsubscribe` is undefined → true.
-  return unsub === undefined;
+  const handler = client['handleModelChanged'];
+  if (typeof handler !== 'function') {
+    return false;
+  }
+  const listeners = coreEvents.listeners(CoreEvent.ModelChanged);
+  // Pre-dispose: the constructor-registered handler is still on the emitter
+  // → false (alive). Post-dispose: dispose() removed it → true (disposed).
+  return !listeners.includes(handler);
 }
 
 /**
@@ -404,28 +414,6 @@ export function aggregateMessage(e: unknown): string {
   return e instanceof Error ? e.message : '';
 }
 
-// ─── Extension-teardown observation (dispose.md line 80) ────────────────────
-//
-// dispose() tears down active extensions via the Config-owned ExtensionLoader:
-// it reads `config.getExtensionLoader().getExtensions()`, filters to
-// `isActive`, and calls `loader.unloadExtension(ext)` for each active one
-// (agentImpl.ts collectActiveExtensions / unloadExtensionSafely). The headless
-// fake Config exposes a loader with ZERO extensions, so the active-extension
-// teardown path (the isActive filter + the unload call) is never exercised.
-//
-// This installer replaces the captured Config's `getExtensionLoader` with a
-// fake loader carrying a caller-supplied extension set, and records the NAMES
-// of every extension actually passed to `unloadExtension`. The disposal spec
-// then asserts the OBSERVABLE contract: ONLY active extensions are unloaded
-// (inactive ones are filtered out), in encounter order. This is genuine
-// behavioral observation of the teardown's filtering output — not a spy
-// call-count substituted for behavior.
-
-/**
- * Minimal structural view of a LlxprtExtension as needed for teardown
- * observation. Mirrors core configTypes.LlxprtExtension's teardown-relevant
- * fields (name + isActive); the loader only reads these during unload.
- */
 export interface FakeExtension {
   readonly name: string;
   readonly version: string;
@@ -434,90 +422,50 @@ export interface FakeExtension {
   readonly contextFiles: readonly string[];
 }
 
-/**
- * Records the observable result of the extension-teardown step: the ordered
- * list of extension names actually unloaded during dispose().
- */
-export interface ExtensionTeardownRecorder {
-  /** Names of extensions passed to loader.unloadExtension(), in call order. */
-  readonly unloaded: readonly string[];
-}
-
-interface MutableRecorder {
-  unloaded: string[];
-}
-
-/**
- * Installs a fake extension loader on the captured Config so that dispose()'s
- * active-extension teardown path runs against a known extension set. Returns a
- * recorder whose `unloaded` array is populated (in call order) with the name of
- * every extension dispose() passes to `unloadExtension`. Call BEFORE
- * `agent.dispose()`.
- *
- * The fake loader surfaces exactly the two methods dispose() probes
- * (`getExtensions`, `unloadExtension`), matching the real ExtensionLoader's
- * teardown surface. `getExtensions` returns the supplied list verbatim;
- * `unloadExtension` records the received extension's name. dispose() filters to
- * `isActive` before calling unloadExtension, so the recorder observes ONLY the
- * active extensions — the genuine filtering contract.
- */
-/**
- * Cast-free accessor for the probe's owned Config record. The disposal probe
- * always wires an owned Config; a missing ownership/config indicates broken
- * test setup, so this throws rather than silently returning an inert recorder.
- */
-function requireProbeConfig(probe: DisposalProbe): Record<string, unknown> {
-  const ownership = asRecord(probe.ownership);
-  if (ownership === null) {
-    throw new Error('disposal probe is missing its ownership record');
-  }
-  const config = asRecord(ownership['config']);
-  if (config === null) {
-    throw new Error('disposal probe ownership is missing its config');
-  }
-  return config;
-}
-
-export function installFakeExtensionLoader(
-  probe: DisposalProbe,
+export async function buildExtensionDisposalAgent(
   extensions: readonly FakeExtension[],
-): ExtensionTeardownRecorder {
-  const recorder: MutableRecorder = { unloaded: [] };
-  const config = requireProbeConfig(probe);
-  const fakeLoader = {
-    getExtensions(): readonly FakeExtension[] {
-      return extensions;
-    },
-    unloadExtension(extension: FakeExtension): void {
-      recorder.unloaded.push(extension.name);
+  missingUnload = false,
+): Promise<{
+  agent: Agent;
+  cleanup(): Promise<void>;
+  recorder: { readonly unloaded: readonly string[] };
+}> {
+  const data = extensions.map((extension) => ({
+    ...extension,
+    contextFiles: [...extension.contextFiles],
+  }));
+  const loader = new SimpleExtensionLoader([...data]);
+  const recorder = {
+    get unloaded(): readonly string[] {
+      return data
+        .filter((extension) => !loader.getExtensions().includes(extension))
+        .map((extension) => extension.name);
     },
   };
-  // Override the Config-owned loader accessor with one returning the fake.
-  const mutableConfig = config as { getExtensionLoader?: () => unknown };
-  mutableConfig.getExtensionLoader = (): unknown => fakeLoader;
-  return recorder;
-}
-
-/**
- * Installs a fake extension loader whose object does NOT expose the optional
- * `unloadExtension` method, exercising dispose()'s defensive guard
- * (unloadExtensionSafely skips loaders lacking the method rather than
- * crashing). Returns a recorder that — because the method is absent — stays
- * empty even though active extensions are present. The spec asserts dispose()
- * completes without throwing AND nothing was unloaded.
- */
-export function installLoaderWithoutUnload(
-  probe: DisposalProbe,
-  extensions: readonly FakeExtension[],
-): ExtensionTeardownRecorder {
-  const recorder: MutableRecorder = { unloaded: [] };
-  const config = requireProbeConfig(probe);
-  const fakeLoader = {
-    getExtensions(): readonly FakeExtension[] {
-      return extensions;
+  const built = await buildCliStyleConfig(
+    'plain-text.jsonl',
+    {},
+    {},
+    { enableExtensionReloading: true },
+    loader,
+  );
+  const agent = await fromConfig({
+    settingsOwner: built.settingsOwner,
+    settingsService: built.settingsService,
+    config: built.config,
+    providerManager: built.providerManager,
+    agentClient: built.agentClient,
+    mcpRuntime: built.mcpRuntime,
+    mcpOwnership: 'agent',
+  });
+  if (missingUnload)
+    Object.defineProperty(loader, 'unloadExtension', { value: undefined });
+  return {
+    agent,
+    recorder,
+    cleanup: async () => {
+      await agent.dispose().catch(() => undefined);
+      await built.cleanup().catch(() => undefined);
     },
   };
-  const mutableConfig = config as { getExtensionLoader?: () => unknown };
-  mutableConfig.getExtensionLoader = (): unknown => fakeLoader;
-  return recorder;
 }

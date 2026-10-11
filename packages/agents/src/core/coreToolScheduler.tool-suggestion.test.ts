@@ -4,34 +4,36 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installSchedulerToolFixture } from './__tests__/scheduler-tool-owner-fixture.js';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
+
 import { describe, it, expect, vi } from 'bun:test';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import {
-  createMockMessageBus,
-  createMockPolicyEngine,
-} from './__tests__/coreToolScheduler-test-helpers.js';
 
 describe('CoreToolScheduler getToolSuggestion', () => {
+  const fixtureRoot = installSchedulerToolFixture();
   it('should suggest the top N closest tool names for a typo', () => {
     // Create mocked tool registry
-    const mockToolRegistry = {
-      getAllToolNames: () => ['list_files', 'read_file', 'write_file'],
-    } as unknown as ToolRegistry;
-    const mockConfig = {
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getEnableHooks: () => false,
-      getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
+
+    const fixture = fixtureRoot(
+      ['list_files', 'read_file', 'write_file'].map(
+        (name) => new MockTool({ name }),
+      ),
+      { sessionId: 'test-session-id', interactive: false },
+    );
 
     // Create scheduler
     const scheduler = new CoreToolScheduler({
-      config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+      config: fixture.config,
+      telemetry: fixture.settingsOwner.telemetry,
+      readExecutionPolicy: () =>
+        fixture.settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        fixture.settingsOwner.readToolGovernance(
+          fixture.config.getExcludeTools() ?? [],
+        ),
+      messageBus: fixture.messageBus,
+      toolRegistry: fixture.selection,
       getPreferredEditor: () => 'vscode',
       onEditorClose: vi.fn(),
     });

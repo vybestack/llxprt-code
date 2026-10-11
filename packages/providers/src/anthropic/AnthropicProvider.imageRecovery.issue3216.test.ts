@@ -184,7 +184,7 @@ function setupProvider(
     ({ settingsService: svc }) => {
       svc.set('auth-key', 'test-api-key');
       svc.set('activeProvider', 'anthropic');
-      svc.setProviderSetting('anthropic', 'streaming', 'disabled');
+      svc.setProviderSetting('anthropic', 'streaming', true);
       svc.setProviderSetting('anthropic', 'prompt-caching', 'off');
       return new AnthropicProvider(
         'test-api-key',
@@ -207,16 +207,6 @@ function setupProvider(
   if (options.withImageBudget === true) {
     svc.set('max-image-dimension', options.maxImageDimension ?? 2000);
   }
-  const ephemeralSettings: Record<string, unknown> = {
-    ...svc.getAllGlobalSettings(),
-    ...svc.getProviderSettings(provider.name),
-  };
-  runtime.config.getEphemeralSettings = () => ({ ...ephemeralSettings });
-  runtime.config.getEphemeralSetting = (key: string) => {
-    const providerValue = svc.getProviderSettings(provider.name)[key];
-    if (providerValue !== undefined) return providerValue;
-    return svc.get(key);
-  };
 
   return { provider, runtimeContext: runtime, settingsService: svc };
 }
@@ -737,6 +727,7 @@ describe('AnthropicProvider image recovery through RetryOrchestrator (@issue:321
       runtime: runtimeContext,
       config: runtimeContext.config,
       ephemerals: { retries: 3, retrywait: 0 },
+      resolved: { streaming: true },
     } as Parameters<typeof createProviderCallOptions>[0]);
 
     const chunks: string[] = [];

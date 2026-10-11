@@ -1,3 +1,4 @@
+import { promises as fixtureFs } from 'node:fs';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -46,7 +47,11 @@ describe('ReadFileTool direct API', () => {
       getApprovalMode: () => 'auto',
       setApprovalMode: () => {},
       isInteractive: () => false,
-      hasFeatureFlag: () => false,
+
+      runSearch: <T>(
+        _directories: readonly string[],
+        operation: () => Promise<T>,
+      ): Promise<T> => operation(),
       getFileService: () => ({
         shouldGitIgnoreFile: () => false,
         shouldLlxprtIgnoreFile: () => false,
@@ -62,9 +67,11 @@ describe('ReadFileTool direct API', () => {
       getFileFilteringRespectLlxprtIgnore: () => true,
       getLlxprtIgnoreFilePath: () => null,
       recordFileRead: () => {},
-      getFileSystemService: () => undefined,
+      readTextFile: (filePath) => fixtureFs.readFile(filePath, 'utf8'),
+      writeTextFile: (filePath, content) =>
+        fixtureFs.writeFile(filePath, content),
       getLlxprtIgnorePatterns: () => [],
-      getEphemeralSettings: () => ({}),
+      readExecutionPolicy: () => ({}),
       getDebugMode: () => false,
     };
   }

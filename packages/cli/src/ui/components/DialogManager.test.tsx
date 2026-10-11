@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
+
 import { Config } from '@vybestack/llxprt-code-core';
 import { buildSlashCommandRuntime } from '../cliUiRuntime.js';
 import { DialogManager } from './DialogManager.js';
@@ -23,6 +25,8 @@ import {
   createMockSettings,
 } from '../../__tests__/render.js';
 import type { HydratedModel } from '@vybestack/llxprt-code-core';
+import { readFile } from 'node:fs/promises';
+import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 
 // Mock the providers runtime barrel to avoid the broken dist dependency chain.
 void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
@@ -88,7 +92,7 @@ function createFakeRuntime(overrides: Partial<FakeRuntimeState> = {}) {
       }
       return state.setProviderResult;
     }),
-    getActiveProviderStatus: vi.fn(() => state.providerStatus),
+    providerStatus: vi.fn(() => state.providerStatus),
     getActiveProviderName: () => state.providerStatus.providerName,
   };
 }
@@ -122,6 +126,41 @@ describe('useModelDialogHandler', () => {
     callSequence = [];
     fakeRuntime = createFakeRuntime();
   });
+  it('persists model selection through the Agent recorder without a raw write', async () => {
+    await withRecordingLifetimeFixture(async ({ agent }) => {
+      await agent.setHistory([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'start' }] },
+      ]);
+      await agent.session.setRecording({ enabled: true });
+      const path = agent.session.getRecording().path;
+      if (!path) throw new Error('No recording path');
+      const store = createSeededStore();
+      const rawWrite = vi.fn();
+      const { result, unmount } = renderHook(() =>
+        useModelDialogHandler(
+          fakeRuntime as never,
+          mockAddItem,
+          store,
+          'openai',
+          {
+            recordingOwner: 'agent',
+            services: { agent },
+            recordingIntegration: { recordProviderSwitch: rawWrite } as never,
+          },
+        ),
+      );
+      result.current(makeModel('openai', 'owner-model'));
+      await waitFor(() =>
+        expect(hasDialogRequest(store, 'modelConfig')).toBe(true),
+      );
+      const lines = (await readFile(path, 'utf8')).split('\n');
+      expect(
+        lines.filter((line) => line.includes('provider_switch')),
+      ).toHaveLength(1);
+      expect(rawWrite).not.toHaveBeenCalled();
+      unmount();
+    });
+  }, 30000);
 
   it('opens config dialog after successful same-provider model switch', async () => {
     const store = createSeededStore();
@@ -323,6 +362,7 @@ function DialogManagerHarness({ store }: { store: DialogStore }) {
       debugMode: false,
       model: 'test',
     }),
+    createUiSessionOwner(),
   );
   return (
     <AppCommandsProvider value={commands}>

@@ -221,17 +221,13 @@ const updateExtensionsCommand: SlashCommand = {
 };
 
 function filterExtensionsToRestart(
-  extensionLoader: NonNullable<
-    ReturnType<
-      NonNullable<CommandContext['services']['config']>['getExtensionLoader']
-    >
-  >,
+  extensions: LlxprtExtension[],
   names: string[] | null,
   context: CommandContext,
 ): LlxprtExtension[] {
-  let extensionsToRestart = extensionLoader
-    .getExtensions()
-    .filter((extension: LlxprtExtension) => extension.isActive);
+  let extensionsToRestart = extensions.filter(
+    (extension: LlxprtExtension) => extension.isActive,
+  );
   if (names) {
     extensionsToRestart = extensionsToRestart.filter(
       (extension: LlxprtExtension) => names.includes(extension.name),
@@ -258,11 +254,7 @@ function filterExtensionsToRestart(
 }
 
 async function performRestart(
-  extensionLoader: NonNullable<
-    ReturnType<
-      NonNullable<CommandContext['services']['config']>['getExtensionLoader']
-    >
-  >,
+  restart: (extension: LlxprtExtension) => Promise<void>,
   extensionsToRestart: LlxprtExtension[],
   context: CommandContext,
 ): Promise<void> {
@@ -276,7 +268,7 @@ async function performRestart(
   const results = await Promise.allSettled(
     extensionsToRestart.map(async (extension: LlxprtExtension) => {
       if (extension.isActive) {
-        await extensionLoader.restartExtension(extension);
+        await restart(extension);
         context.ui.dispatchExtensionStateUpdate({
           type: 'RESTARTED',
           payload: {
@@ -319,8 +311,8 @@ async function restartAction(
   context: CommandContext,
   args: string,
 ): Promise<void> {
-  const extensionLoader = context.services.config?.getExtensionLoader();
-  if (!extensionLoader) {
+  const restart = context.services.config?.restartExtension;
+  if (!restart) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -331,7 +323,7 @@ async function restartAction(
     return;
   }
 
-  const extensions = extensionLoader.getExtensions();
+  const extensions = context.services.config?.getExtensions() ?? [];
   if (showMessageIfNoExtensions(context, extensions)) {
     return;
   }
@@ -351,7 +343,7 @@ async function restartAction(
   }
 
   const extensionsToRestart = filterExtensionsToRestart(
-    extensionLoader,
+    extensions,
     names,
     context,
   );
@@ -359,7 +351,7 @@ async function restartAction(
     return;
   }
 
-  await performRestart(extensionLoader, extensionsToRestart, context);
+  await performRestart(restart, extensionsToRestart, context);
 }
 
 async function completeExtensions(
@@ -391,10 +383,10 @@ async function installAction(
   context: CommandContext,
   args: string,
 ): Promise<void> {
-  const extensionLoader = context.services.config?.getExtensionLoader();
+  const restart = context.services.config?.restartExtension;
 
   // Check if extension reloading is enabled
-  if (!extensionLoader) {
+  if (!restart) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,
@@ -481,9 +473,9 @@ async function uninstallAction(
   context: CommandContext,
   args: string,
 ): Promise<void> {
-  const extensionLoader = context.services.config?.getExtensionLoader();
+  const restart = context.services.config?.restartExtension;
 
-  if (!extensionLoader) {
+  if (!restart) {
     context.ui.addItem(
       {
         type: MessageType.ERROR,

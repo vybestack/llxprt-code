@@ -14,13 +14,10 @@ import {
   CredentialResolutionError,
   ProxyProviderKeyStorage,
   ProxySocketClient,
-  ProxyTokenStore,
-  runtimeScopedStates,
   type CredentialResolutionDiagnostics,
   type CredentialResolutionErrorKind,
   type CredentialResolutionResult,
   type IProviderKeyStorage,
-  type IProviderRuntimeContext,
   type ISettingsService,
   type OAuthManager,
 } from '../index.js';
@@ -31,11 +28,7 @@ const CREDENTIAL_SECRET = 'issue3451-credential-secret';
 const CAPABILITY_SECRET = 'issue3451-capability-secret';
 const KEY_MATERIAL_SECRET = 'issue3451-key-material-secret';
 
-type ProxyBehavior =
-  | 'not-found'
-  | 'disconnect-on-request'
-  | 'unauthorized'
-  | 'token-then-disconnect';
+type ProxyBehavior = 'not-found' | 'disconnect-on-request' | 'unauthorized';
 
 interface ProxyHarness {
   readonly socketPath: string;
@@ -62,13 +55,6 @@ function createSettingsService(
     on: () => {},
     off: () => {},
   };
-}
-
-function createRuntimeContext(
-  runtimeId: string,
-  settingsService: ISettingsService,
-): IProviderRuntimeContext {
-  return { runtimeId, settingsService, metadata: {} };
 }
 
 function createEmptyKeyStorage(): IProviderKeyStorage {
@@ -113,21 +99,6 @@ async function startProxy(behavior: ProxyBehavior): Promise<ProxyHarness> {
                 id: frame.id,
                 code: 'NOT_FOUND',
                 error: 'credential absent',
-              }),
-            );
-          } else if (
-            behavior === 'token-then-disconnect' &&
-            requestCount === 1
-          ) {
-            socket.write(
-              encodeFrame({
-                ok: true,
-                id: frame.id,
-                data: {
-                  access_token: CREDENTIAL_SECRET,
-                  token_type: 'Bearer',
-                  expiry: Math.floor(Date.now() / 1000) + 3600,
-                },
               }),
             );
           } else {
@@ -201,16 +172,6 @@ function expectSafeFailure(
   return result.failure;
 }
 
-function createProxyOAuthManager(tokenStore: ProxyTokenStore): OAuthManager {
-  return {
-    getToken: async (provider) => {
-      const token = await tokenStore.getToken(provider);
-      return token?.access_token ?? null;
-    },
-    isAuthenticated: async () => true,
-  };
-}
-
 describe('Credential resolution diagnostics', () => {
   const clients: ProxySocketClient[] = [];
   const harnesses: ProxyHarness[] = [];
@@ -219,14 +180,12 @@ describe('Credential resolution diagnostics', () => {
   beforeEach(() => {
     originalSocketEnv = process.env[CREDENTIAL_SOCKET_ENV];
     delete process.env[CREDENTIAL_SOCKET_ENV];
-    runtimeScopedStates.clear();
   });
 
   afterEach(async () => {
     vi.restoreAllMocks();
     for (const client of clients.splice(0)) client.close();
     for (const harness of harnesses.splice(0)) await harness.close();
-    runtimeScopedStates.clear();
     if (originalSocketEnv === undefined) {
       delete process.env[CREDENTIAL_SOCKET_ENV];
     } else {
@@ -240,7 +199,6 @@ describe('Credential resolution diagnostics', () => {
       'issue3451-unused-proxy.sock',
     );
     const settings = createSettingsService();
-    const runtime = createRuntimeContext('runtime-unconfigured', settings);
     const resolver = new AuthPrecedenceResolver(
       {
         providerId: 'test-provider',
@@ -248,12 +206,12 @@ describe('Credential resolution diagnostics', () => {
       },
       {
         settingsService: settings,
-        getActiveRuntimeContext: () => runtime,
       },
     );
 
     const result = await resolver.resolveAuthenticationResult({
       includeOAuth: true,
+      runtimeId: 'runtime-unconfigured',
     });
 
     const failure = expectSafeFailure(result, 'no-credential-configured', [
@@ -319,8 +277,6 @@ describe('Credential resolution diagnostics', () => {
       {
         settingsService: settings,
         providerKeyStorage: createEmptyKeyStorage(),
-        getActiveRuntimeContext: () =>
-          createRuntimeContext('runtime-not-found', settings),
       },
     );
 
@@ -355,8 +311,6 @@ describe('Credential resolution diagnostics', () => {
       { providerId: 'test-provider' },
       {
         settingsService: settings,
-        getActiveRuntimeContext: () =>
-          createRuntimeContext('runtime-missing-storage', settings),
       },
     );
     const absentKeyResolver = new AuthPrecedenceResolver(
@@ -364,8 +318,6 @@ describe('Credential resolution diagnostics', () => {
       {
         settingsService: settings,
         providerKeyStorage: createEmptyKeyStorage(),
-        getActiveRuntimeContext: () =>
-          createRuntimeContext('runtime-absent-key', settings),
       },
     );
 
@@ -418,8 +370,6 @@ describe('Credential resolution diagnostics', () => {
       {
         settingsService: settings,
         providerKeyStorage: new ProxyProviderKeyStorage(client),
-        getActiveRuntimeContext: () =>
-          createRuntimeContext('runtime-proxy-not-found', settings),
       },
     );
 
@@ -452,8 +402,6 @@ describe('Credential resolution diagnostics', () => {
       {
         settingsService: settings,
         providerKeyStorage: new ProxyProviderKeyStorage(client),
-        getActiveRuntimeContext: () =>
-          createRuntimeContext('runtime-proxy-unreachable', settings),
       },
     );
 
@@ -493,8 +441,6 @@ describe('Credential resolution diagnostics', () => {
       {
         settingsService: settings,
         providerKeyStorage: new ProxyProviderKeyStorage(client),
-        getActiveRuntimeContext: () =>
-          createRuntimeContext('runtime-proxy-unreachable', settings),
       },
     );
 
@@ -528,8 +474,6 @@ describe('Credential resolution diagnostics', () => {
       {
         settingsService: settings,
         providerKeyStorage: keyStorage,
-        getActiveRuntimeContext: () =>
-          createRuntimeContext('runtime-key-storage-failure', settings),
       },
     );
 
@@ -573,8 +517,6 @@ describe('Credential resolution diagnostics', () => {
       {
         settingsService: settings,
         providerKeyStorage: observingStorage,
-        getActiveRuntimeContext: () =>
-          createRuntimeContext('runtime-proxy-loss', settings),
       },
     );
 
@@ -606,8 +548,6 @@ describe('Credential resolution diagnostics', () => {
       {
         settingsService: settings,
         providerKeyStorage: new ProxyProviderKeyStorage(client),
-        getActiveRuntimeContext: () =>
-          createRuntimeContext('runtime-unauthorized', settings),
       },
     );
 
@@ -636,8 +576,6 @@ describe('Credential resolution diagnostics', () => {
       { providerId: 'test-provider' },
       {
         settingsService: settings,
-        getActiveRuntimeContext: () =>
-          createRuntimeContext('runtime-keyfile-failure', settings),
       },
     );
 
@@ -678,8 +616,6 @@ describe('Credential resolution diagnostics', () => {
       {
         settingsService: settings,
         oauthManager,
-        getActiveRuntimeContext: () =>
-          createRuntimeContext('runtime-oauth-failure', settings),
       },
     );
 
@@ -731,8 +667,6 @@ describe('Credential resolution diagnostics', () => {
         settingsService: settings,
         providerKeyStorage: keyStorage,
         oauthManager,
-        getActiveRuntimeContext: () =>
-          createRuntimeContext('runtime-significant-failure', settings),
       },
     );
 
@@ -769,67 +703,5 @@ describe('Credential resolution diagnostics', () => {
     expect(authentication).toBeNull();
     expect(hasNonOAuth).toBe(false);
     expect(oauthOnly).toBe(true);
-  });
-
-  it('keeps a warm runtime cached while a fresh runtime makes a failing live proxy call', async () => {
-    const harness = await startProxy('token-then-disconnect');
-    harnesses.push(harness);
-    process.env[CREDENTIAL_SOCKET_ENV] = harness.socketPath;
-    const tokenStore = new ProxyTokenStore(
-      harness.socketPath,
-      CAPABILITY_SECRET,
-    );
-    clients.push(tokenStore.getClient());
-    const settings = createSettingsService({
-      currentProfile: 'sandbox-profile',
-    });
-    const parentRuntime = createRuntimeContext('parent-runtime', settings);
-    const subagentRuntime = createRuntimeContext(
-      'parent-runtime#typescriptexpert#fresh',
-      settings,
-    );
-    let activeRuntime = parentRuntime;
-    const resolver = new AuthPrecedenceResolver(
-      {
-        providerId: 'test-provider',
-        oauthProvider: 'test-oauth',
-        isOAuthEnabled: true,
-        supportsOAuth: true,
-      },
-      {
-        settingsService: settings,
-        oauthManager: createProxyOAuthManager(tokenStore),
-        getActiveRuntimeContext: () => activeRuntime,
-      },
-    );
-
-    const parentInitial = await resolver.resolveAuthenticationResult({
-      includeOAuth: true,
-    });
-    const parentCached = await resolver.resolveAuthenticationResult({
-      includeOAuth: true,
-    });
-    activeRuntime = subagentRuntime;
-    const subagentFailure = await resolver.resolveAuthenticationResult({
-      includeOAuth: true,
-    });
-    activeRuntime = parentRuntime;
-    const parentAfterFailure = await resolver.resolveAuthenticationResult({
-      includeOAuth: true,
-    });
-
-    expect(parentInitial.token).toBe(CREDENTIAL_SECRET);
-    expect(parentCached.token).toBe(CREDENTIAL_SECRET);
-    const failure = expectSafeFailure(subagentFailure, 'proxy-unavailable', [
-      CREDENTIAL_SECRET,
-      CAPABILITY_SECRET,
-      KEY_MATERIAL_SECRET,
-    ]);
-    expect(failure.diagnostics.runtimeId).toBe(
-      'parent-runtime#typescriptexpert#fresh',
-    );
-    expect(failure.diagnostics.proxyContacted).toBe(true);
-    expect(parentAfterFailure.token).toBe(CREDENTIAL_SECRET);
-    expect(harness.requestCount()).toBe(2);
   });
 });

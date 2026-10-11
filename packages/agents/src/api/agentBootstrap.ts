@@ -1,8 +1,14 @@
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderManager.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
+import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 
 /**
  * @plan:PLAN-20260617-COREAPI.P15
@@ -14,6 +20,9 @@
  * limits.
  */
 
+import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import { PLACEHOLDER_MODEL, UNCONFIGURED_PROVIDER } from './constants.js';
+import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { randomUUID } from 'node:crypto';
 import type { AgentMessageInput } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type {
@@ -24,7 +33,6 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type {
-  ToolSchedulerFactory,
   ToolSchedulerFactoryOptions,
   ToolSchedulerContract,
 } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
@@ -122,14 +130,44 @@ export function validateAgentRuntimeId(runtimeId: unknown): void {
  * Returns an AgentClientFactory that constructs the agents-owned AgentClient.
  * @pseudocode createAgent.md step 21
  */
-export function buildAgentClientFactory(): (
+export function buildAgentClientFactory(
+  mediaStore?: LocalMediaStore,
+): (
   config: Config,
   runtimeState: AgentRuntimeState,
+  readMcpInstructions?: () => string | undefined,
+  suppliedMediaStore?: LocalMediaStore,
+  workspacePaths?: WorkspacePathOperations,
+  instructions?: InstructionReadOperations,
 ) => AgentClientContract {
   return (
     config: Config,
     runtimeState: AgentRuntimeState,
-  ): AgentClientContract => new AgentClient(config, runtimeState);
+    readMcpInstructions: () => string | undefined = () => undefined,
+    suppliedMediaStore?: LocalMediaStore,
+    workspacePaths?: WorkspacePathOperations,
+    instructions?: InstructionReadOperations,
+  ): AgentClientContract => {
+    const store = suppliedMediaStore ?? mediaStore;
+    if (store === undefined)
+      throw new Error('Client factory requires an explicit media store');
+    if (workspacePaths === undefined)
+      throw new Error('Client factory requires explicit workspace paths');
+    if (instructions === undefined)
+      throw new Error(
+        'Client factory requires explicit instruction operations',
+      );
+    return new AgentClient(
+      config,
+      runtimeState,
+      readMcpInstructions,
+      store,
+      workspacePaths,
+      undefined,
+      undefined,
+      instructions,
+    );
+  };
 }
 
 /**
@@ -147,12 +185,12 @@ export function buildAgentClientFactory(): (
  * @requirement:REQ-016
  * @pseudocode createAgent.md steps 24-26
  */
-export function wrapSchedulerFactory(
+export function wrapSchedulerFactory<T extends ToolSchedulerContract>(
   factory: AgentSchedulerFactory,
-  buildRealScheduler: ToolSchedulerFactory,
+  buildRealScheduler: (options: ToolSchedulerFactoryOptions) => T,
   createdHandles: AgentSchedulerHandle[],
-): ToolSchedulerFactory {
-  return (options: ToolSchedulerFactoryOptions): ToolSchedulerContract => {
+): (options: ToolSchedulerFactoryOptions) => T {
+  return (options: ToolSchedulerFactoryOptions): T => {
     const scheduler = buildRealScheduler(options);
     const handle = factory({
       sessionId: options.config.getSessionId(),
@@ -160,7 +198,18 @@ export function wrapSchedulerFactory(
         ? { interactiveMode: options.toolContextInteractiveMode }
         : {}),
     });
-    createdHandles.push(handle);
+    if (handle instanceof Promise) {
+      const acquisition = Promise.allSettled([handle]);
+      createdHandles.push({
+        dispose: async () => {
+          const [result] = await acquisition;
+          if (result.status === 'rejected') throw result.reason;
+          await result.value.dispose();
+        },
+      });
+    } else {
+      createdHandles.push(handle);
+    }
     return scheduler;
   };
 }
@@ -365,6 +414,7 @@ export interface SessionLock {
 
 /** Ownership record retained on the facade for disposal + T13 harness probes. */
 export interface OwnershipRecord {
+  readonly disposeMcpRuntime?: () => Promise<void> | undefined;
   disposed: boolean;
   runtimeHandle: {
     cleanup: () => Promise<void> | void;
@@ -434,6 +484,7 @@ export interface OwnershipRecord {
  * @pseudocode createAgent.md steps 150-153
  */
 export function recordOwnership(deps: {
+  readonly disposeMcpRuntime?: () => Promise<void> | undefined;
   runtimeHandle: OwnershipRecord['runtimeHandle'];
   config: Config;
   messageBus: unknown;
@@ -448,6 +499,7 @@ export function recordOwnership(deps: {
 }): OwnershipRecord {
   return {
     disposed: false,
+    disposeMcpRuntime: deps.disposeMcpRuntime,
     runtimeHandle: deps.runtimeHandle,
     config: deps.config,
     messageBus: deps.messageBus,
@@ -725,4 +777,35 @@ export function buildToolInfos(
         : {}),
     };
   });
+}
+
+export function buildFacadeState(
+  parsed: Pick<AgentConfig, 'provider' | 'model' | 'modelParams' | 'sessionId'>,
+  baseUrl: string | undefined,
+  runtimeId: string,
+): ReturnType<typeof createAgentRuntimeState> {
+  return createAgentRuntimeState({
+    runtimeId,
+    provider: parsed.provider.trim() || UNCONFIGURED_PROVIDER,
+    model: parsed.model.trim() || PLACEHOLDER_MODEL,
+    baseUrl,
+    modelParams: parsed.modelParams,
+    sessionId: parsed.sessionId,
+  });
+}
+
+export function bindTelemetry(
+  client: AgentClientContract,
+  config: Config,
+  settings: SessionSettingsOwner,
+  manager: RuntimeProviderManager,
+): void {
+  client.bindTelemetry(
+    settings.telemetry,
+    captureProviderRequestDiagnostics(
+      config,
+      settings,
+      manager.accumulateSessionTokens.bind(manager),
+    ),
+  );
 }

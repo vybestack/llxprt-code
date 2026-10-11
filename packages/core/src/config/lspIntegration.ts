@@ -1,16 +1,15 @@
 /**
- * LSP integration — extracted from Config.registerMcpNavigationTools() and Config.shutdownLspService().
+ * LSP navigation transport integration for the explicit workspace owner.
  *
  * Handles MCP transport setup, tool registration, and cleanup for
  * LSP-provided navigation tools.
  */
 
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import type {
-  McpCallableTool,
-  McpPart,
-  McpTool,
-} from '../tools-adapters/CoreMcpToolServiceAdapter.js';
+  McpToolPublication,
+  CallableTool,
+  ContentPart,
+} from '@vybestack/llxprt-code-tools';
 import type { ToolCallRequest } from '../llm-types/toolCall.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
@@ -20,7 +19,7 @@ import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { Readable, Writable } from 'node:stream';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
-import type { Config } from './config.js';
+import type { McpApprovalPolicy } from '@vybestack/llxprt-code-mcp';
 
 const MCP_NAVIGATION_REGISTRATION_TIMEOUT_MS = 2_000;
 
@@ -33,54 +32,58 @@ export interface LspState {
 
 /** Narrow interface for LSP integration — avoids full Config dependency */
 export interface LspHost {
+  isTrustedFolder(): boolean;
   getTargetDir(): string;
-  getToolRegistry(): ToolRegistry;
+  readonly registration: Pick<
+    McpToolPublication,
+    'registerTool' | 'sortTools' | 'removeMcpToolsByServer'
+  >;
+  assertActive(): void;
+  assertInvocation(): void;
+  acceptInvocation<T>(operation: Promise<T>): Promise<T>;
 }
 
 /**
  * Initialize LSP service client and register MCP navigation tools.
- * Non-fatal: any failure disables LSP without crashing.
+ * Unavailable external service startup disables LSP; activation and cleanup errors propagate.
  */
 export async function initializeLsp(
   state: LspState,
   host: LspHost,
+  approvalPolicy: McpApprovalPolicy,
 ): Promise<void> {
   if (state.lspConfig === undefined) {
     return;
   }
 
-  try {
-    const { LspServiceClient } = await import(
-      '@vybestack/llxprt-code-ide-integration'
-    );
-    state.lspServiceClient = new LspServiceClient(
-      state.lspConfig,
-      host.getTargetDir(),
-    );
-    await state.lspServiceClient.start();
+  const { LspServiceClient } = await import(
+    '@vybestack/llxprt-code-ide-integration'
+  );
+  state.lspServiceClient ??= new LspServiceClient(
+    state.lspConfig,
+    host.getTargetDir(),
+  );
+  await state.lspServiceClient.start();
+  host.assertActive();
 
-    if (state.lspServiceClient.isAlive() !== true) {
-      const reason = state.lspServiceClient.getUnavailableReason();
-      if (
-        typeof reason === 'string' &&
-        reason !== '' &&
-        reason.includes('not found')
-      ) {
-        debugLogger.error(
-          'LSP: @vybestack/llxprt-code-lsp package not found. Install with: npm install -g @vybestack/llxprt-code-lsp',
-        );
-      }
-    }
-
+  if (state.lspServiceClient.isAlive() !== true) {
+    const reason = state.lspServiceClient.getUnavailableReason();
     if (
-      state.lspServiceClient.isAlive() &&
-      state.lspConfig.navigationTools !== false
+      typeof reason === 'string' &&
+      reason !== '' &&
+      reason.includes('not found')
     ) {
-      await registerAvailableNavigationTools(state, host);
+      debugLogger.error(
+        'LSP: @vybestack/llxprt-code-lsp package not found. Install with: npm install -g @vybestack/llxprt-code-lsp',
+      );
     }
-  } catch {
-    // LSP service initialization failed - continue without LSP
-    state.lspServiceClient = undefined;
+  }
+
+  if (
+    state.lspServiceClient.isAlive() &&
+    state.lspConfig.navigationTools !== false
+  ) {
+    await registerAvailableNavigationTools(state, host, approvalPolicy);
   }
 }
 
@@ -105,13 +108,15 @@ export function parseLspConfig(
  * JSON-parsed configs may omit the field despite the declared type requiring it.
  */
 function normalizeLspConfig(lsp: LspConfig): LspConfig {
-  const raw = lsp as Partial<LspConfig>;
-  return Array.isArray(raw.servers) ? lsp : { ...lsp, servers: [] };
+  return Array.isArray(lsp.servers)
+    ? structuredClone(lsp)
+    : { ...structuredClone(lsp), servers: [] };
 }
 
 async function registerAvailableNavigationTools(
   state: LspState,
   host: LspHost,
+  approvalPolicy: McpApprovalPolicy,
 ): Promise<void> {
   const streams = state.lspServiceClient?.getMcpTransportStreams();
   if (streams === undefined || streams === null) {
@@ -125,11 +130,10 @@ async function registerAvailableNavigationTools(
     await registerMcpNavigationTools(
       state,
       host,
+      approvalPolicy,
       streams,
       abortController.signal,
     );
-  } catch {
-    await cleanupLspMcpResources(state, host.getToolRegistry());
   } finally {
     clearTimeout(timeout);
   }
@@ -143,29 +147,28 @@ function throwIfNavigationRegistrationAborted(signal: AbortSignal): void {
   }
 }
 
-async function cleanupLspMcpResources(
+export async function cleanupLspMcpResources(
   state: LspState,
-  registry: ToolRegistry,
+  registry: Pick<McpToolPublication, 'removeMcpToolsByServer'>,
 ): Promise<void> {
-  registry.removeMcpToolsByServer('lsp-navigation');
-
-  if (state.lspMcpClient) {
-    try {
-      await state.lspMcpClient.close();
-    } catch {
-      // Close errors are non-fatal during cleanup.
-    }
-  }
+  const client = state.lspMcpClient;
+  const transport = state.lspMcpTransport;
   state.lspMcpClient = undefined;
-
-  if (state.lspMcpTransport) {
+  state.lspMcpTransport = undefined;
+  const failures: unknown[] = [];
+  for (const close of [
+    () => registry.removeMcpToolsByServer('lsp-navigation'),
+    () => client?.close(),
+    () => transport?.close(),
+  ]) {
     try {
-      await state.lspMcpTransport.close();
-    } catch {
-      // Close errors are non-fatal during cleanup.
+      await Promise.resolve(close());
+    } catch (error) {
+      failures.push(error);
     }
   }
-  state.lspMcpTransport = undefined;
+  if (failures.length > 0)
+    throw new AggregateError(failures, 'LSP navigation cleanup failed');
 }
 
 const LSP_NAVIGATION_REQUEST_TIMEOUT_MS = 250;
@@ -295,9 +298,11 @@ function extractToolDefs(response: {
   return tools ?? [];
 }
 
-class LspNavigationCallableTool implements McpCallableTool {
+class LspNavigationCallableTool implements CallableTool {
   constructor(
     private readonly mcpClient: Client,
+    private readonly assertActive: () => void,
+    private readonly accept: LspHost['acceptInvocation'],
     private readonly toolDef: {
       name: string;
       description?: string;
@@ -305,7 +310,7 @@ class LspNavigationCallableTool implements McpCallableTool {
     },
   ) {}
 
-  async tool(): Promise<McpTool> {
+  async tool(): Promise<Awaited<ReturnType<CallableTool['tool']>>> {
     return [
       {
         name: this.toolDef.name,
@@ -315,20 +320,23 @@ class LspNavigationCallableTool implements McpCallableTool {
     ];
   }
 
-  async callTool(functionCalls: ToolCallRequest[]): Promise<McpPart[]> {
+  async callTool(functionCalls: ToolCallRequest[]): Promise<ContentPart[]> {
     if (functionCalls.length !== 1) {
       throw new Error(
         'LspNavigationCallableTool only supports single function call',
       );
     }
+    this.assertActive();
     const call = functionCalls[0];
-    const result = await this.mcpClient.callTool(
-      {
-        name: call.name,
-        arguments: call.args,
-      },
-      undefined,
-      { timeout: LSP_NAVIGATION_REQUEST_TIMEOUT_MS },
+    const result = await this.accept(
+      this.mcpClient.callTool(
+        {
+          name: call.name,
+          arguments: call.args,
+        },
+        undefined,
+        { timeout: LSP_NAVIGATION_REQUEST_TIMEOUT_MS },
+      ),
     );
 
     return [
@@ -349,25 +357,34 @@ async function registerDiscoveredTools(
     description?: string;
     inputSchema?: unknown;
   }>,
-  registry: ToolRegistry,
+  registry: Pick<
+    McpToolPublication,
+    'registerTool' | 'sortTools' | 'removeMcpToolsByServer'
+  >,
   host: LspHost,
+  approvalPolicy: McpApprovalPolicy,
 ): Promise<void> {
   for (const toolDef of toolDefs) {
-    const callableTool = new LspNavigationCallableTool(client, toolDef);
+    const callableTool = new LspNavigationCallableTool(
+      client,
+      () => host.assertInvocation(),
+      (operation) => host.acceptInvocation(operation),
+      toolDef,
+    );
 
     const discoveredTool = new DiscoveredMCPTool(
-      callableTool as ConstructorParameters<typeof DiscoveredMCPTool>[0],
+      approvalPolicy,
+      callableTool,
       'lsp-navigation',
       toolDef.name,
       toolDef.description ?? '',
       toolDef.inputSchema ?? { type: 'object', properties: {} },
       true,
       undefined,
-      // LspHost is a strict subset of Config; the runtime value is always a
-      // full Config instance, but this module only depends on the narrow interface.
-      host as unknown as Config,
+      host,
     );
 
+    host.assertActive();
     registry.registerTool(discoveredTool);
   }
 
@@ -380,13 +397,14 @@ async function registerDiscoveredTools(
 async function registerMcpNavigationTools(
   state: LspState,
   host: LspHost,
+  approvalPolicy: McpApprovalPolicy,
   streams: {
     readable: Readable;
     writable: Writable;
   },
   signal: AbortSignal,
 ): Promise<void> {
-  const registry = host.getToolRegistry();
+  const registry = host.registration;
 
   try {
     const transport = createStreamTransport(streams);
@@ -407,11 +425,24 @@ async function registerMcpNavigationTools(
       return;
     }
 
-    await registerDiscoveredTools(client, toolDefs, registry, host);
+    await registerDiscoveredTools(
+      client,
+      toolDefs,
+      registry,
+      host,
+      approvalPolicy,
+    );
     throwIfNavigationRegistrationAborted(signal);
-  } catch {
-    await cleanupLspMcpResources(state, registry);
-    throw new Error('MCP navigation registration failed');
+  } catch (error) {
+    try {
+      await cleanupLspMcpResources(state, registry);
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        'MCP navigation registration failed',
+      );
+    }
+    throw error;
   }
 }
 
@@ -420,34 +451,24 @@ async function registerMcpNavigationTools(
  */
 export async function shutdownLsp(
   state: LspState,
-  registry: ToolRegistry,
+  registry: Pick<McpToolPublication, 'removeMcpToolsByServer'>,
+  stopService = true,
 ): Promise<void> {
-  registry.removeMcpToolsByServer('lsp-navigation');
-
-  if (state.lspMcpClient) {
+  const service = state.lspServiceClient;
+  state.lspServiceClient = undefined;
+  const failures: unknown[] = [];
+  try {
+    await cleanupLspMcpResources(state, registry);
+  } catch (error) {
+    failures.push(error);
+  }
+  if (stopService) {
     try {
-      await state.lspMcpClient.close();
-    } catch {
-      // Close errors are non-fatal
+      await service?.shutdown();
+    } catch (error) {
+      failures.push(error);
     }
   }
-  state.lspMcpClient = undefined;
-
-  if (state.lspMcpTransport) {
-    try {
-      await state.lspMcpTransport.close();
-    } catch {
-      // Close errors are non-fatal
-    }
-  }
-  state.lspMcpTransport = undefined;
-
-  if (state.lspServiceClient) {
-    try {
-      await state.lspServiceClient.shutdown();
-    } catch {
-      // Shutdown failure is non-fatal
-    }
-    state.lspServiceClient = undefined;
-  }
+  if (failures.length > 0)
+    throw new AggregateError(failures, 'LSP shutdown failed');
 }

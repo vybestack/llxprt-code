@@ -1,3 +1,4 @@
+import { promises as fixtureFs } from 'node:fs';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -21,7 +22,10 @@ export function createRealToolHost(
     getApprovalMode: () => 'auto',
     setApprovalMode: () => {},
     isInteractive: () => false,
-    hasFeatureFlag: () => false,
+    runSearch: <T>(
+      _directories: readonly string[],
+      operation: () => Promise<T>,
+    ): Promise<T> => operation(),
     getFileService: () => fileService,
     getFileFilteringOptions: () => ({ ...defaultFiltering }),
     getFileExclusions: () => [],
@@ -30,9 +34,11 @@ export function createRealToolHost(
       defaultFiltering.respectLlxprtIgnore,
     getLlxprtIgnoreFilePath: () => null,
     recordFileRead: () => {},
-    getFileSystemService: () => undefined,
+    readTextFile: (filePath) => fixtureFs.readFile(filePath, 'utf8'),
+    writeTextFile: (filePath, content) =>
+      fixtureFs.writeFile(filePath, content),
     getLlxprtIgnorePatterns: () => fileService.getLlxprtIgnorePatterns(),
-    getEphemeralSettings: () => ({
+    readExecutionPolicy: () => ({
       'tool-output-max-items': 50,
       'tool-output-max-tokens': 50000,
       'tool-output-item-size-limit': 524288,

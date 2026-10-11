@@ -4,16 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { advanceTimersByTimeAsync } from '../../../test-utils/src/async-timers.js';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
-import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
-  MCPServerStatus,
-  addMCPStatusChangeListener,
-  getMCPServerStatus,
-  removeMCPStatusChangeListener,
-} from '../client/mcp-client.js';
+  buildToolGovernance,
+  ToolRegistry,
+} from '@vybestack/llxprt-code-tools';
+import { MCPServerStatus } from '../client/mcp-client.js';
 import { MCP_CAPABILITY_NOT_AUTHORIZED_MESSAGE } from '../client/mcp-errors.js';
 import { generateMcpToolName } from '../client/mcp-tool.js';
 import {
@@ -25,7 +22,15 @@ function createToolRegistry(): ToolRegistry {
   return new ToolRegistry(
     {},
     { requestConfirmation: async () => false },
-    new SettingsService(),
+    () => ({
+      hideTaskAsync: false,
+      lazyMcp: false,
+      eagerServers: [],
+      governance: buildToolGovernance({
+        getEphemeralSettings: () => ({}),
+        getExcludeTools: () => [],
+      }),
+    }),
   );
 }
 
@@ -74,6 +79,10 @@ describe('applyFakeServerDiscovery authorization', () => {
     vi.useFakeTimers();
     const name = 'latency-revocation';
     const registry = createToolRegistry();
+    const statuses: MCPServerStatus[] = [];
+    const updateStatus = (status: MCPServerStatus): void => {
+      statuses.push(status);
+    };
     let authorized = true;
 
     const discovery = applyFakeServerDiscovery(
@@ -81,6 +90,8 @@ describe('applyFakeServerDiscovery authorization', () => {
       registry,
       fixtureWithTool(name, 50),
       () => authorized,
+      undefined,
+      updateStatus,
     );
     await advanceTimersByTimeAsync(25);
     authorized = false;
@@ -91,13 +102,17 @@ describe('applyFakeServerDiscovery authorization', () => {
       registeredToolNames: [],
     });
     expect(registry.getTool(`${name}_tool`)).toBeUndefined();
-    expect(getMCPServerStatus(name)).toBe(MCPServerStatus.DISCONNECTED);
+    expect(statuses[statuses.length - 1]).toBe(MCPServerStatus.DISCONNECTED);
   });
 
   it('does not wait when authorization aborts immediately before latency', async () => {
     vi.useFakeTimers();
     const name = 'latency-already-aborted';
     const registry = createToolRegistry();
+    const statuses: MCPServerStatus[] = [];
+    const updateStatus = (status: MCPServerStatus): void => {
+      statuses.push(status);
+    };
     const controller = new AbortController();
     const discovery = applyFakeServerDiscovery(
       name,
@@ -105,6 +120,7 @@ describe('applyFakeServerDiscovery authorization', () => {
       fixtureWithTool(name, 50),
       abortOnSecondAuthorizationCheck(controller),
       controller.signal,
+      updateStatus,
     );
     const completed = vi.fn();
     void discovery.then(completed);
@@ -121,6 +137,10 @@ describe('applyFakeServerDiscovery authorization', () => {
     vi.useFakeTimers();
     const name = 'latency-listener-cleanup';
     const registry = createToolRegistry();
+    const statuses: MCPServerStatus[] = [];
+    const updateStatus = (status: MCPServerStatus): void => {
+      statuses.push(status);
+    };
     const controller = new AbortController();
     const removeEventListener = vi.spyOn(
       controller.signal,
@@ -133,6 +153,7 @@ describe('applyFakeServerDiscovery authorization', () => {
       fixtureWithTool(name, 50),
       () => true,
       controller.signal,
+      updateStatus,
     );
     await advanceTimersByTimeAsync(50);
     await discovery;
@@ -146,6 +167,10 @@ describe('applyFakeServerDiscovery authorization', () => {
   it('treats authorization callback failures as revoked authorization', async () => {
     const name = 'authorization-error';
     const registry = createToolRegistry();
+    const statuses: MCPServerStatus[] = [];
+    const updateStatus = (status: MCPServerStatus): void => {
+      statuses.push(status);
+    };
 
     const outcome = await applyFakeServerDiscovery(
       name,
@@ -154,6 +179,8 @@ describe('applyFakeServerDiscovery authorization', () => {
       () => {
         throw new Error('authorization unavailable');
       },
+      undefined,
+      updateStatus,
     );
 
     expect(outcome).toStrictEqual({
@@ -161,19 +188,25 @@ describe('applyFakeServerDiscovery authorization', () => {
       registeredToolNames: [],
     });
     expect(registry.getTool(`${name}_tool`)).toBeUndefined();
-    expect(getMCPServerStatus(name)).toBe(MCPServerStatus.DISCONNECTED);
+    expect(statuses[statuses.length - 1]).toBe(MCPServerStatus.DISCONNECTED);
   });
 
   it('rolls back the tool whose publication revokes authorization', async () => {
     const name = 'tool-publication-revocation';
     const toolName = generateMcpToolName(name, `${name}_tool`);
     const registry = createToolRegistry();
+    const statuses: MCPServerStatus[] = [];
+    const updateStatus = (status: MCPServerStatus): void => {
+      statuses.push(status);
+    };
 
     const outcome = await applyFakeServerDiscovery(
       name,
       registry,
       fixtureWithTool(name),
       () => registry.getTool(toolName) === undefined,
+      undefined,
+      updateStatus,
     );
 
     expect(outcome).toStrictEqual({
@@ -181,13 +214,17 @@ describe('applyFakeServerDiscovery authorization', () => {
       registeredToolNames: [],
     });
     expect(registry.getTool(toolName)).toBeUndefined();
-    expect(getMCPServerStatus(name)).toBe(MCPServerStatus.DISCONNECTED);
+    expect(statuses[statuses.length - 1]).toBe(MCPServerStatus.DISCONNECTED);
   });
 
   it('denies invocation through a stale fake tool handle after authorization is revoked', async () => {
     const name = 'stale-handle-revocation';
     const toolName = generateMcpToolName(name, `${name}_tool`);
     const registry = createToolRegistry();
+    const statuses: MCPServerStatus[] = [];
+    const updateStatus = (status: MCPServerStatus): void => {
+      statuses.push(status);
+    };
     let authorized = true;
 
     await applyFakeServerDiscovery(
@@ -195,6 +232,8 @@ describe('applyFakeServerDiscovery authorization', () => {
       registry,
       fixtureWithTool(name),
       () => authorized,
+      undefined,
+      updateStatus,
     );
     const staleInvocation = registry.getTool(toolName)?.build({});
     expect(staleInvocation).toBeDefined();
@@ -213,18 +252,26 @@ describe('applyFakeServerDiscovery authorization', () => {
     const revokingStatus = MCPServerStatus.CONNECTING;
     const name = `status-${revokingStatus}-revocation`;
     const registry = createToolRegistry();
+    const statuses: MCPServerStatus[] = [];
+    const updateStatus = (status: MCPServerStatus): void => {
+      statuses.push(status);
+    };
     let authorized = true;
     const statusRevoker = revokeOnStatus(name, revokingStatus, () => {
       authorized = false;
     });
-    addMCPStatusChangeListener(statusRevoker);
 
-    try {
+    {
       const outcome = await applyFakeServerDiscovery(
         name,
         registry,
         fixtureWithTool(name),
         () => authorized,
+        undefined,
+        (status) => {
+          updateStatus(status);
+          statusRevoker(name, status);
+        },
       );
 
       expect(outcome).toStrictEqual({
@@ -232,9 +279,7 @@ describe('applyFakeServerDiscovery authorization', () => {
         registeredToolNames: [],
       });
       expect(registry.getTool(`${name}_tool`)).toBeUndefined();
-      expect(getMCPServerStatus(name)).toBe(MCPServerStatus.DISCONNECTED);
-    } finally {
-      removeMCPStatusChangeListener(statusRevoker);
+      expect(statuses[statuses.length - 1]).toBe(MCPServerStatus.DISCONNECTED);
     }
   });
 });

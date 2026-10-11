@@ -1,3 +1,4 @@
+import { CoreToolScheduler } from '../../coreToolScheduler.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -19,6 +20,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import { bindSchedulerOwner } from '../../../session/assembleSchedulerOwner.js';
 import { AgenticLoop } from '../AgenticLoop.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -48,13 +50,14 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
 
     const toolRegistry = createToolRegistryForTest([pauseTool]);
     const messageBus = new MessageBus(createAskPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAskPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAskPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.YOLO,
+      });
 
     // Turn 1: model requests the pause tool, then finishes the turn.
     // No Turn 2 script is provided — if the loop tries to continue, the
@@ -69,6 +72,20 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
     ]);
 
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
       agentClient: client,
       config,
       messageBus,
@@ -101,13 +118,14 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
 
     const toolRegistry = createToolRegistryForTest([pauseTool]);
     const messageBus = new MessageBus(createAskPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAskPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAskPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.YOLO,
+      });
 
     const { client, history } = createScriptedAgentClient([
       [
@@ -119,6 +137,20 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
     ]);
 
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
       agentClient: client,
       config,
       messageBus,
@@ -157,13 +189,14 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
 
     const toolRegistry = createToolRegistryForTest([pauseTool, echoTool]);
     const messageBus = new MessageBus(createAskPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAskPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAskPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.YOLO,
+      });
 
     const { client, turnMessages } = createScriptedAgentClient([
       [
@@ -176,6 +209,20 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
     ]);
 
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
       agentClient: client,
       config,
       messageBus,
@@ -206,13 +253,14 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
 
     const toolRegistry = createToolRegistryForTest([normalTool]);
     const messageBus = new MessageBus(createAskPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAskPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAskPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.YOLO,
+      });
 
     const { client, turnMessages } = createScriptedAgentClient([
       [toolCallRequestEvent('get_info', 'info-1', {}), finishedEvent()],
@@ -220,6 +268,20 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
     ]);
 
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
       agentClient: client,
       config,
       messageBus,
@@ -274,13 +336,14 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
 
       const toolRegistry = createToolRegistryForTest([pauseTool]);
       const messageBus = new MessageBus(createAskPolicyEngine(), false);
-      const config = createTestConfig({
-        messageBus,
-        toolRegistry,
-        policyEngine: createAskPolicyEngine(),
-        interactive: true,
-        approvalMode: ApprovalMode.YOLO,
-      });
+      const { config: config, settingsOwner: configSettingsOwner } =
+        createTestConfig({
+          messageBus,
+          toolRegistry,
+          policyEngine: createAskPolicyEngine(),
+          interactive: true,
+          approvalMode: ApprovalMode.YOLO,
+        });
 
       const { client } = createScriptedAgentClient([
         [
@@ -292,6 +355,20 @@ describe('AgenticLoop pause loop-break (issue #2653)', () => {
       ]);
 
       const loop = new AgenticLoop({
+        createSchedulerOwner: bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
         agentClient: client,
         config,
         messageBus,

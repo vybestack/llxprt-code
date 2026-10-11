@@ -6,6 +6,7 @@
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { CommandKind } from './types.js';
 import { terminalSetupCommand } from './terminalSetupCommand.js';
 import * as terminalSetupModule from '../utils/terminalSetup.js';
 import type { CommandContext } from './types.js';
@@ -30,7 +31,7 @@ describe('terminalSetupCommand', () => {
   it('should have correct metadata', () => {
     expect(terminalSetupCommand.name).toBe('terminal-setup');
     expect(terminalSetupCommand.description).toContain('multiline input');
-    expect(terminalSetupCommand.kind).toBe('built-in');
+    expect(terminalSetupCommand.kind).toBe(CommandKind.BUILT_IN);
   });
 
   it('should return success message when terminal setup succeeds', async () => {

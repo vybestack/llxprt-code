@@ -693,6 +693,26 @@ const agent = await fromConfig({
 });
 ```
 
+### Supplied workspace memory ownership
+
+`createAgent` and `fromConfig` accept an explicit workspace memory root through
+`memoryOwner: { owner, ownership }`. Omitting `ownership`, or setting it to
+`'caller'`, borrows the root. The caller retains its lifetime. Disposing a facade
+removes its session subscriptions without closing or disposing that memory root,
+so the caller and other sessions can continue reading and refreshing it.
+
+Set `ownership: 'agent'` to transfer the root. The agent closes new memory
+admission synchronously when disposal begins and joins refreshes and subscriber
+publication already accepted by the root. Failed adoption also disposes a
+transferred root and preserves cleanup failures alongside the adoption error.
+Caller-owned roots are left usable after failed adoption.
+
+Memory constructed internally is agent-owned. An activation preflight that
+constructed the workspace memory root transfers it explicitly during adoption.
+An existing `mcpRuntime` handoff retains its memory composition; do not also
+supply `memoryOwner` to replace it. This contract does not transfer the caller's
+Config, provider manager, settings store or other supplied workspace roots.
+
 ## Related guides
 
 - [Getting started](getting-started.md) — using the `llxprt` CLI.

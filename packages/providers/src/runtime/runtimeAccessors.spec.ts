@@ -1,3 +1,4 @@
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -10,51 +11,36 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import {
-  describe,
-  expect,
-  it,
-  beforeEach,
-  afterEach,
-  vi,
-  type Mock,
-} from 'bun:test';
-import {
-  upsertRuntimeEntry,
-  resetCliRuntimeRegistryForTesting,
-} from './runtimeRegistry.js';
-import { configureCliStatelessHardening } from './statelessHardening.js';
-import { setCliRuntimeContext } from './runtimeLifecycle.js';
+import { describe, expect, it, beforeEach, vi, type Mock } from 'bun:test';
+import { useRuntimeTestOwners } from './__tests__/runtime-owner-test-helpers.js';
+import { MissingProviderRuntimeError } from './messages.js';
 import type {
-  Config,
   RuntimeProvider,
   RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
-import type { OAuthManager } from '../auth/index.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 import {
-  getCliRuntimeServices,
   getActiveModelName,
-  getActiveProviderStatus,
+  listProviders,
+  getActiveProviderName,
+  getSessionTokenUsage,
+  listAvailableModels,
+  getActiveProviderMetrics,
+  getUnallowedParametersForActiveModel,
+} from './providerReadOperations.js';
+import {
   getEphemeralSetting,
   setEphemeralSetting,
   clearEphemeralSetting,
+  getEphemeralSettings,
+} from './ownerSettingsOperations.js';
+import {
   getActiveModelParams,
   setActiveModelParam,
   clearActiveModelParam,
-  listProviders,
-  getActiveProviderName,
-  getCliProviderManager,
-  getCliRuntimeConfig,
-  getCliOAuthManager,
-  getSessionTokenUsage,
-  getEphemeralSettings,
-  listAvailableModels,
-  getActiveProviderMetrics,
-  isCliRuntimeStatelessReady,
-  getUnallowedParametersForActiveModel,
-} from './runtimeAccessors.js';
+} from './providerModelParameters.js';
+import { readProviderStatus } from './providerStatus.js';
 
 /**
  * Test suite for runtimeAccessors module
@@ -63,37 +49,20 @@ import {
  * runtime accessor functions after extraction from runtimeSettings.ts.
  */
 describe('runtimeAccessors', () => {
-  let mockConfig: Config;
+  const roots = useRuntimeTestOwners();
+  let mockConfig: SessionSettingsOwner;
+  let declaredModel = 'gpt-4';
   let mockSettingsService: SettingsService;
   let mockRuntimeProviderManager: RuntimeProviderManager;
-
   beforeEach(() => {
-    resetCliRuntimeRegistryForTesting();
-    configureCliStatelessHardening(null);
-
-    // Create mock instances
-    mockConfig = {
-      getModel: vi.fn().mockReturnValue('gpt-4'),
-      getProvider: vi.fn().mockReturnValue('openai'),
-      getEphemeralSettings: vi.fn().mockReturnValue({}),
-      getEphemeralSetting: vi
-        .fn()
-        .mockImplementation((_key: string) => undefined),
-      setEphemeralSetting: vi.fn(),
-      setRuntimeProviderManager: vi.fn(),
-      setProvider: vi.fn(),
-      setModel: vi.fn(),
-    } as unknown as Config;
-
-    mockSettingsService = {
-      get: vi.fn().mockImplementation((key: string) => {
-        if (key === 'activeProvider') return 'openai';
-        return undefined;
-      }),
-      getProviderSettings: vi.fn().mockReturnValue({ model: 'gpt-4' }),
-      setProviderSetting: vi.fn(),
-      set: vi.fn(),
-    } as unknown as SettingsService;
+    mockSettingsService = new SettingsService();
+    mockSettingsService.set('activeProvider', 'openai');
+    mockSettingsService.setProviderSetting('openai', 'model', 'gpt-4');
+    mockConfig = roots.config(
+      'owner-runtime',
+      mockSettingsService,
+    ).settingsOwner;
+    declaredModel = 'gpt-4';
 
     mockRuntimeProviderManager = {
       getActiveProvider: vi.fn().mockReturnValue({
@@ -119,134 +88,113 @@ describe('runtimeAccessors', () => {
     } as unknown as RuntimeProviderManager;
   });
 
-  afterEach(() => {
-    resetCliRuntimeRegistryForTesting();
-    configureCliStatelessHardening(null);
+  it('reads the supplied owner without a registered runtime', () => {
+    const settings = new SettingsService();
+    settings.set('activeProvider', 'owner-provider');
+    settings.setProviderSetting('owner-provider', 'model', 'owner-model');
+    const owner = roots.config('owner-runtime', settings).settingsOwner;
+
+    expect(getActiveModelName(owner)).toBe('owner-model');
+    expect(getActiveProviderName(owner, mockRuntimeProviderManager)).toBe(
+      'owner-provider',
+    );
+  });
+  it('keeps equal-label owners separate without requiring profile services', () => {
+    const firstSettings = new SettingsService();
+    firstSettings.set('activeProvider', 'first-provider');
+    const secondSettings = new SettingsService();
+    secondSettings.set('activeProvider', 'second-provider');
+    const first = roots.config('same-label', firstSettings).settingsOwner;
+    const second = roots.config('same-label', secondSettings).settingsOwner;
+    expect(getActiveProviderName(first, mockRuntimeProviderManager)).toBe(
+      'first-provider',
+    );
+    expect(getActiveProviderName(second, mockRuntimeProviderManager)).toBe(
+      'second-provider',
+    );
   });
 
-  // Helper to set up a complete runtime context with provider manager
-  const setupCompleteRuntime = () => {
-    const runtimeId = `test-runtime-${Date.now()}`;
+  it('rejects an incomplete supplied owner rather than borrowing the ambient runtime', () => {
+    const owner = {};
+    expect(() => Reflect.apply(listProviders, undefined, [owner])).toThrow(
+      TypeError,
+    );
+  });
 
-    setCliRuntimeContext(mockSettingsService, mockConfig, { runtimeId });
-
-    // Update the entry with the provider manager
-    upsertRuntimeEntry(runtimeId, {
-      providerManager: mockRuntimeProviderManager,
-    });
-    return runtimeId;
-  };
-
-  describe('getCliRuntimeServices', () => {
-    it('should throw descriptive error when no runtime is registered', () => {
-      expect(() => getCliRuntimeServices()).toThrow(
-        /runtime|registered|initialized/i,
+  describe('explicit owner capabilities', () => {
+    it('rejects missing owner without selecting a registered runtime', () => {
+      expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
+        MissingProviderRuntimeError,
       );
     });
-
-    it('should return services object with config, settingsService, providerManager', () => {
-      setupCompleteRuntime();
-
-      const services = getCliRuntimeServices();
-
-      expect(services).toHaveProperty('settingsService');
-      expect(services).toHaveProperty('config');
-      expect(services).toHaveProperty('providerManager');
+    it('resolves the supplied owner and its provider manager separately', () => {
+      expect(listProviders(mockRuntimeProviderManager)).toStrictEqual([
+        'openai',
+        'anthropic',
+      ]);
     });
   });
 
   describe('getActiveModelName', () => {
     it('should return model from config when available', () => {
-      setupCompleteRuntime();
-
-      const modelName = getActiveModelName();
+      const modelName = getActiveModelName(mockConfig);
       expect(typeof modelName).toBe('string');
     });
   });
 
-  describe('ephemeral settings round-trip', () => {
-    it('should get/set/clear ephemeral setting', () => {
-      setupCompleteRuntime();
-
-      // Set ephemeral setting
-      setEphemeralSetting('test-key', 'test-value');
-      expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
-        'test-key',
-        'test-value',
-      );
-
-      // Get ephemeral setting
-      getEphemeralSetting('test-key');
-      expect(mockConfig.getEphemeralSetting).toHaveBeenCalledWith('test-key');
-
-      // Clear ephemeral setting
-      clearEphemeralSetting('test-key');
-      expect(mockConfig.setEphemeralSetting).toHaveBeenCalledWith(
-        'test-key',
-        undefined,
-      );
+  describe('settings round-trips on real owners', () => {
+    const owners = useRuntimeTestOwners();
+    it('sets, reads, and clears an ephemeral on only its supplied owner', () => {
+      const { settingsOwner: first } = owners.config();
+      const { settingsOwner: second } = owners.config();
+      setEphemeralSetting('context-limit', 4096, first);
+      setEphemeralSetting('context-limit', 8192, second);
+      expect(getEphemeralSetting('context-limit', first)).toBe(4096);
+      clearEphemeralSetting('context-limit', first);
+      expect(getEphemeralSetting('context-limit', first)).toBeUndefined();
+      expect(first.isUserParameter('context-limit')).toBe(false);
+      expect(getEphemeralSetting('context-limit', second)).toBe(8192);
     });
 
-    it('should get all ephemeral settings', () => {
-      setupCompleteRuntime();
-
-      getEphemeralSettings();
-      expect(mockConfig.getEphemeralSettings).toHaveBeenCalled();
+    it('returns the supplied owner ephemeral snapshot without including sibling writes', () => {
+      const { settingsOwner: first } = owners.config();
+      const { settingsOwner: second } = owners.config();
+      setEphemeralSetting('first-setting', 'first-value', first);
+      setEphemeralSetting('second-setting', 'second-value', second);
+      expect(getEphemeralSettings(first)).toMatchObject({
+        'first-setting': 'first-value',
+      });
+      expect(getEphemeralSettings(first)).not.toHaveProperty('second-setting');
     });
-  });
 
-  describe('model params round-trip', () => {
-    it('should get/set/clear active model param', () => {
-      setupCompleteRuntime();
-
-      // Get active model params
-      const params = getActiveModelParams();
-      expect(typeof params).toBe('object');
-
-      // Set active model param
-      setActiveModelParam('temperature', 0.7);
-      expect(mockSettingsService.setProviderSetting).toHaveBeenCalled();
-
-      // Clear active model param
-      clearActiveModelParam('temperature');
-      expect(mockSettingsService.setProviderSetting).toHaveBeenCalledWith(
-        expect.any(String),
-        'temperature',
-        undefined,
-      );
+    it('sets and clears model parameters on exactly the supplied settings store and provider', () => {
+      const first = new SettingsService();
+      const second = new SettingsService();
+      first.setProviderSetting('openai', 'model', 'reserved-model');
+      setActiveModelParam('temperature', 0.7, first, 'openai');
+      setActiveModelParam('temperature', 0.2, second, 'openai');
+      expect(getActiveModelParams(first, 'openai')).toStrictEqual({
+        temperature: 0.7,
+      });
+      clearActiveModelParam('temperature', first, 'openai');
+      expect(getActiveModelParams(first, 'openai')).toStrictEqual({});
+      expect(getActiveModelParams(second, 'openai')).toStrictEqual({
+        temperature: 0.2,
+      });
+      expect(first.getProviderSettings('openai').model).toBe('reserved-model');
     });
   });
 
   describe('getUnallowedParametersForActiveModel', () => {
     const useProviderModel = (provider: string, model: string) => {
-      // #2534 C1/C3: config.getProvider() is a projection of the settings
-      // store, so the provider identity is modeled on the store mock.
-      (
-        mockConfig.getProvider as Mock<typeof mockConfig.getProvider>
-      ).mockReturnValue(provider);
-      (
-        mockSettingsService.get as Mock<typeof mockSettingsService.get>
-      ).mockImplementation((key: string) => {
-        if (key === 'activeProvider') return provider;
-        return undefined;
-      });
-      (mockConfig.getModel as Mock<typeof mockConfig.getModel>).mockReturnValue(
-        model,
-      );
-      (
-        mockSettingsService.getProviderSettings as Mock<
-          typeof mockSettingsService.getProviderSettings
-        >
-      ).mockReturnValue({
-        model,
-      });
+      mockSettingsService.set('activeProvider', provider);
+      mockSettingsService.setProviderSetting(provider, 'model', model);
     };
 
     it('returns the kimi alias sampling params for kimi-k3', () => {
       useProviderModel('kimi', 'kimi-k3');
-      setupCompleteRuntime();
 
-      const result = getUnallowedParametersForActiveModel();
+      const result = getUnallowedParametersForActiveModel(mockConfig);
       expect(result).toStrictEqual(
         expect.arrayContaining([
           'temperature',
@@ -260,56 +208,54 @@ describe('runtimeAccessors', () => {
 
     it('returns the kimi alias sampling params for k3-256k (broad rule match)', () => {
       useProviderModel('kimi', 'k3-256k');
-      setupCompleteRuntime();
 
-      expect(getUnallowedParametersForActiveModel()).toContain('temperature');
+      expect(getUnallowedParametersForActiveModel(mockConfig)).toContain(
+        'temperature',
+      );
     });
 
     it('returns an empty array for a model whose alias has no unallowed rules', () => {
       useProviderModel('openai', 'gpt-4');
-      setupCompleteRuntime();
 
-      expect(getUnallowedParametersForActiveModel()).toStrictEqual([]);
+      expect(getUnallowedParametersForActiveModel(mockConfig)).toStrictEqual(
+        [],
+      );
     });
 
     it('returns an empty array when there is no active provider', () => {
-      (
-        mockConfig.getProvider as Mock<typeof mockConfig.getProvider>
-      ).mockReturnValue('');
-      (
-        mockSettingsService.get as Mock<typeof mockSettingsService.get>
-      ).mockReturnValue(undefined);
-      setupCompleteRuntime();
-
-      expect(getUnallowedParametersForActiveModel()).toStrictEqual([]);
+      mockSettingsService.set('activeProvider', undefined);
+      expect(getUnallowedParametersForActiveModel(mockConfig)).toStrictEqual(
+        [],
+      );
     });
   });
 
   describe('provider queries', () => {
     it('should list providers', () => {
-      setupCompleteRuntime();
-
-      const providers = listProviders();
+      const providers = listProviders(mockRuntimeProviderManager);
       expect(Array.isArray(providers)).toBe(true);
     });
 
     it('should get active provider name', () => {
-      setupCompleteRuntime();
-
-      const name = getActiveProviderName();
+      const name = getActiveProviderName(
+        mockConfig,
+        mockRuntimeProviderManager,
+      );
       expect(name).toBe('openai');
     });
 
     it('should get active provider status', () => {
-      setupCompleteRuntime();
-
-      const status = getActiveProviderStatus();
+      const status = readProviderStatus(
+        mockSettingsService,
+        mockRuntimeProviderManager,
+        declaredModel,
+      );
       expect(status).toHaveProperty('providerName');
       expect(status).toHaveProperty('modelName');
       expect(status).toHaveProperty('displayLabel');
     });
   });
-  describe('getActiveProviderStatus provider resolution', () => {
+  describe('provider status resolution', () => {
     type StubProvider = RuntimeProvider & {
       getBaseURL?: () => string | undefined;
     };
@@ -349,21 +295,8 @@ describe('runtimeAccessors', () => {
       model?: string;
       providerSettingsModel?: string;
     }): void => {
-      // #2534 C1/C3: config.getProvider() reads the settings store, so the
-      // resolved identity is modeled on the store mock; opts.activeProvider
-      // models the ProviderManager runtime cache (which may still hold the
-      // previous provider while the store carries the resolved identity).
-      (
-        mockConfig.getProvider as Mock<typeof mockConfig.getProvider>
-      ).mockReturnValue(opts.providerName ?? '');
-      (mockConfig.getModel as Mock<typeof mockConfig.getModel>).mockReturnValue(
-        opts.model ?? '',
-      );
-      (
-        mockSettingsService.get as Mock<typeof mockSettingsService.get>
-      ).mockImplementation((key: string) =>
-        key === 'activeProvider' ? (opts.providerName ?? '') : undefined,
-      );
+      mockSettingsService.set('activeProvider', opts.providerName ?? '');
+      declaredModel = opts.model ?? '';
       if (opts.activeProvider !== undefined) {
         (
           mockRuntimeProviderManager.getActiveProviderName as Mock<
@@ -371,16 +304,12 @@ describe('runtimeAccessors', () => {
           >
         ).mockReturnValue(opts.activeProvider);
       }
-      (
-        mockSettingsService.getProviderSettings as Mock<
-          typeof mockSettingsService.getProviderSettings
-        >
-      ).mockReturnValue(
-        opts.providerSettingsModel !== undefined
-          ? { model: opts.providerSettingsModel }
-          : {},
-      );
-      setupCompleteRuntime();
+      if (opts.providerName)
+        mockSettingsService.setProviderSetting(
+          opts.providerName,
+          'model',
+          opts.providerSettingsModel,
+        );
     };
 
     beforeEach(() => {
@@ -434,7 +363,11 @@ describe('runtimeAccessors', () => {
         providerSettingsModel: 'gpt-5.6-sol',
       });
 
-      const status = getActiveProviderStatus();
+      const status = readProviderStatus(
+        mockSettingsService,
+        mockRuntimeProviderManager,
+        declaredModel,
+      );
 
       expect(status).toStrictEqual({
         providerName: 'codex',
@@ -459,7 +392,11 @@ describe('runtimeAccessors', () => {
         providerSettingsModel: 'gpt-5.6-sol',
       });
 
-      const status = getActiveProviderStatus();
+      const status = readProviderStatus(
+        mockSettingsService,
+        mockRuntimeProviderManager,
+        declaredModel,
+      );
 
       expect(status.providerName).toBe('codex');
       expect(status.modelName).toBe('gpt-5.6-sol');
@@ -471,7 +408,11 @@ describe('runtimeAccessors', () => {
     it('falls back to the active provider metadata when no provider name is configured', () => {
       configureFor({ providerName: '', model: '' });
 
-      const status = getActiveProviderStatus();
+      const status = readProviderStatus(
+        mockSettingsService,
+        mockRuntimeProviderManager,
+        declaredModel,
+      );
 
       expect(status).toStrictEqual({
         providerName: 'gemini',
@@ -499,7 +440,11 @@ describe('runtimeAccessors', () => {
       });
       configureFor({ providerName: '', model: '' });
 
-      const status = getActiveProviderStatus();
+      const status = readProviderStatus(
+        mockSettingsService,
+        mockRuntimeProviderManager,
+        declaredModel,
+      );
 
       expect(status.providerName).toBeNull();
       expect(status.modelName).toBeNull();
@@ -527,7 +472,11 @@ describe('runtimeAccessors', () => {
         providerSettingsModel: 'gpt-5.6-sol',
       });
 
-      const status = getActiveProviderStatus();
+      const status = readProviderStatus(
+        mockSettingsService,
+        mockRuntimeProviderManager,
+        declaredModel,
+      );
 
       expect(status.providerName).toBe('codex');
       expect(status.modelName).toBe('gpt-5.6-sol');
@@ -566,7 +515,11 @@ describe('runtimeAccessors', () => {
       );
       configureFor({ providerName: '', model: '' });
 
-      const status = getActiveProviderStatus();
+      const status = readProviderStatus(
+        mockSettingsService,
+        mockRuntimeProviderManager,
+        declaredModel,
+      );
 
       expect(status.providerName).toBe('gemini');
       expect(status.modelName).toBe('gemini-2.5-pro');
@@ -576,91 +529,24 @@ describe('runtimeAccessors', () => {
   });
 
   describe('accessor functions', () => {
-    it('should get CLI runtime config', () => {
-      setupCompleteRuntime();
-
-      const config = getCliRuntimeConfig();
-      expect(config).toBe(mockConfig);
-    });
-
-    it('should get CLI provider manager', () => {
-      setupCompleteRuntime();
-
-      const manager = getCliProviderManager();
-      expect(manager).toBe(mockRuntimeProviderManager);
-    });
-
-    it('should ignore non-function OAuth setAddItem fields', () => {
-      const runtimeId = setupCompleteRuntime();
-      upsertRuntimeEntry(runtimeId, {
-        oauthManager: {
-          providers: new Map([
-            [
-              'bad-provider',
-              {
-                name: 'bad-provider',
-                setAddItem: true,
-              },
-            ],
-          ]),
-        },
-      });
-
-      expect(() => getCliProviderManager({ addItem: vi.fn() })).not.toThrow();
-    });
     it('should get session token usage', () => {
-      setupCompleteRuntime();
-
-      const usage = getSessionTokenUsage();
+      const usage = getSessionTokenUsage(mockRuntimeProviderManager);
       expect(usage).toHaveProperty('input');
       expect(usage).toHaveProperty('output');
       expect(usage).toHaveProperty('total');
     });
 
     it('should get active provider metrics', () => {
-      setupCompleteRuntime();
-
-      const metrics = getActiveProviderMetrics();
+      const metrics = getActiveProviderMetrics(mockRuntimeProviderManager);
       expect(metrics).toBeDefined();
     });
 
     it('should list available models', async () => {
-      setupCompleteRuntime();
-
-      const models = await listAvailableModels('openai');
+      const models = await listAvailableModels(
+        'openai',
+        mockRuntimeProviderManager,
+      );
       expect(Array.isArray(models)).toBe(true);
-    });
-
-    it('should throw when CLI OAuth manager is missing from a partial runtime entry', () => {
-      setupCompleteRuntime();
-
-      expect(() => getCliOAuthManager()).toThrow(/OAuthManager/);
-    });
-
-    it('should get CLI OAuth manager for a complete subagent runtime entry', () => {
-      const runtimeId = setupCompleteRuntime();
-      const oauthManager = {} as OAuthManager;
-      upsertRuntimeEntry(runtimeId, {
-        runtimeKind: 'subagent',
-        oauthManager,
-      });
-
-      expect(getCliOAuthManager()).toBe(oauthManager);
-    });
-  });
-
-  describe('stateless readiness', () => {
-    it('returns false instead of throwing when stateless mode has no active runtime', () => {
-      configureCliStatelessHardening('strict');
-
-      expect(isCliRuntimeStatelessReady()).toBe(false);
-    });
-
-    it('should check if runtime is stateless ready', () => {
-      setupCompleteRuntime();
-
-      const ready = isCliRuntimeStatelessReady();
-      expect(typeof ready).toBe('boolean');
     });
   });
 });

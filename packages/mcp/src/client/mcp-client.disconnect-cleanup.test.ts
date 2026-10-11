@@ -3,6 +3,9 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createTestOAuthBinding } from './test-support/index.js';
+
+import { unsupportedApprovalPolicy } from './test-support/approval-policy.js';
 
 import { automock } from '../../../test-utils/src/automock.js';
 import { advanceTimersByTimeAsync } from '../../../test-utils/src/async-timers.js';
@@ -26,17 +29,11 @@ import type { PromptRegistry } from './test-support/mcpClientTestSupport.js';
 import type { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
 import { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
 import { McpClient } from './mcp-client.js';
-import {
-  addMCPStatusChangeListener,
-  MCPServerStatus,
-  removeMCPStatusChangeListener,
-} from './mcp-status.js';
+import { MCPServerStatus } from './mcp-status.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { registerMcpHostServices } from '../host/hostServices.js';
 
 // Exercises the real host seam instead of mocking a module (#3305).
 const mockEmitFeedback = vi.fn();
-registerMcpHostServices({ emitFeedback: mockEmitFeedback });
 
 const realStdioModule = {
   ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
@@ -160,6 +157,8 @@ describe('McpClient disconnect cleanup', () => {
       transport as unknown as SdkClientStdioLib.StdioClientTransport,
     );
     const client = new McpClient(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       'test-server',
       { command: 'test-command' },
       { removeMcpToolsByServer: vi.fn() } as unknown as ToolRegistry,
@@ -169,6 +168,8 @@ describe('McpClient disconnect cleanup', () => {
       createTrustedConfig(),
       false,
       '0.0.1',
+      undefined,
+      mockEmitFeedback,
     );
     await client.connect();
 
@@ -193,7 +194,12 @@ describe('McpClient disconnect cleanup', () => {
     vi.spyOn(SdkClientStdioLib, 'StdioClientTransport').mockReturnValue(
       {} as SdkClientStdioLib.StdioClientTransport,
     );
+    let statusListener:
+      | ((name: string, status: MCPServerStatus) => void)
+      | undefined;
     const client = new McpClient(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       'test-server',
       { command: 'test-command' },
       { removeMcpToolsByServer: vi.fn() } as unknown as ToolRegistry,
@@ -203,6 +209,9 @@ describe('McpClient disconnect cleanup', () => {
       createTrustedConfig(),
       false,
       '0.0.1',
+      undefined,
+      mockEmitFeedback,
+      (status) => statusListener?.('test-server', status),
     );
     await client.connect();
     const disconnectingFailure = new Error('disconnecting listener failed');
@@ -211,7 +220,7 @@ describe('McpClient disconnect cleanup', () => {
       disconnectingFailure,
       disconnectedFailure,
     );
-    addMCPStatusChangeListener(throwingStatusListener);
+    statusListener = throwingStatusListener;
 
     let failure: unknown;
     try {
@@ -219,7 +228,7 @@ describe('McpClient disconnect cleanup', () => {
     } catch (error) {
       failure = error;
     } finally {
-      removeMCPStatusChangeListener(throwingStatusListener);
+      statusListener = undefined;
     }
 
     expect(sdkClient.close).toHaveBeenCalledOnce();
@@ -230,14 +239,15 @@ describe('McpClient disconnect cleanup', () => {
     });
   });
 
-  it('times out a hanging SDK client close and keeps it retryable', async () => {
+  it('joins a timed-out SDK close before reporting the timeout and keeps it retryable', async () => {
     vi.useFakeTimers();
+    const closeFinished = createDeferred<void>();
     try {
       const sdkClient = {
         connect: vi.fn(),
         close: vi
           .fn()
-          .mockImplementationOnce(() => new Promise<void>(() => {}))
+          .mockImplementationOnce(() => closeFinished.promise)
           .mockResolvedValueOnce(undefined),
         registerCapabilities: vi.fn(),
         setRequestHandler: vi.fn(),
@@ -250,6 +260,8 @@ describe('McpClient disconnect cleanup', () => {
         {} as SdkClientStdioLib.StdioClientTransport,
       );
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         { command: 'test-command' },
         { removeMcpToolsByServer: vi.fn() } as unknown as ToolRegistry,
@@ -259,14 +271,26 @@ describe('McpClient disconnect cleanup', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        mockEmitFeedback,
       );
       await client.connect();
 
+      let settled = false;
       const disconnect = client.disconnect().then(
-        () => undefined,
-        (error: unknown) => error,
+        () => {
+          settled = true;
+        },
+        (error: unknown) => {
+          settled = true;
+          return error;
+        },
       );
       await advanceTimersByTimeAsync(10_000);
+      await Promise.resolve();
+      const settledBeforeClose = settled;
+      closeFinished.resolve();
+      expect(settledBeforeClose).toBe(false);
 
       await expect(disconnect).resolves.toMatchObject({
         message: "Timed out closing MCP client 'test-server' after 10000ms",
@@ -297,6 +321,8 @@ describe('McpClient disconnect cleanup', () => {
       {} as SdkClientStdioLib.StdioClientTransport,
     );
     const client = new McpClient(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       'test-server',
       { command: 'test-command' },
       { removeMcpToolsByServer: vi.fn() } as unknown as ToolRegistry,
@@ -306,6 +332,8 @@ describe('McpClient disconnect cleanup', () => {
       createTrustedConfig(),
       false,
       '0.0.1',
+      undefined,
+      mockEmitFeedback,
     );
     await client.connect();
 
@@ -336,6 +364,8 @@ describe('McpClient disconnect cleanup', () => {
       }),
     } as unknown as ToolRegistry;
     const client = new McpClient(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       'test-server',
       { command: 'test-command' },
       toolRegistry,
@@ -345,6 +375,8 @@ describe('McpClient disconnect cleanup', () => {
       createTrustedConfig(),
       false,
       '0.0.1',
+      undefined,
+      mockEmitFeedback,
     );
     await client.connect();
 
@@ -381,6 +413,8 @@ describe('McpClient disconnect cleanup', () => {
       }),
     } as unknown as PromptRegistry;
     const client = new McpClient(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       'test-server',
       { command: 'test-command' },
       toolRegistry,
@@ -390,6 +424,8 @@ describe('McpClient disconnect cleanup', () => {
       createTrustedConfig(),
       false,
       '0.0.1',
+      undefined,
+      mockEmitFeedback,
     );
     await client.connect();
 
@@ -446,7 +482,12 @@ describe('McpClient disconnect cleanup', () => {
         throw new Error('persistent resource registry failure');
       }),
     } as unknown as ResourceRegistry;
+    let statusListener:
+      | ((name: string, status: MCPServerStatus) => void)
+      | undefined;
     const client = new McpClient(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       'test-server',
       { command: 'test-command' },
       toolRegistry,
@@ -456,6 +497,9 @@ describe('McpClient disconnect cleanup', () => {
       createTrustedConfig(),
       false,
       '0.0.1',
+      undefined,
+      mockEmitFeedback,
+      (status) => statusListener?.('test-server', status),
     );
     await client.connect();
 
@@ -467,11 +511,11 @@ describe('McpClient disconnect cleanup', () => {
     const throwingStatusListener = () => {
       throw new Error('status listener failed');
     };
-    addMCPStatusChangeListener(throwingStatusListener);
+    statusListener = throwingStatusListener;
     try {
       expect(() => errorHandler(new Error('connection lost'))).not.toThrow();
     } finally {
-      removeMCPStatusChangeListener(throwingStatusListener);
+      statusListener = undefined;
     }
 
     await waitFor(() => {
@@ -512,6 +556,8 @@ describe('McpClient disconnect cleanup', () => {
     const toolCleanup = createRetryingToolRegistry();
     const toolRegistry = toolCleanup.registry;
     const client = new McpClient(
+      createTestOAuthBinding(),
+      unsupportedApprovalPolicy(),
       'test-server',
       { command: 'test-command' },
       toolRegistry,
@@ -521,6 +567,8 @@ describe('McpClient disconnect cleanup', () => {
       createTrustedConfig(),
       false,
       '0.0.1',
+      undefined,
+      mockEmitFeedback,
     );
     await client.connect();
     const errorHandler = (

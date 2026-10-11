@@ -62,6 +62,7 @@ export interface AgentStreamOrchestrationDeps {
   terminalHeight?: number;
   onEditorOpen: () => void;
   recordingIntegration?: RecordingIntegration;
+  recordingOwner?: 'agent' | 'raw';
   runtimeMessageBus?: MessageBus;
   subagentManager?: UiSubagentManager;
   /**
@@ -121,18 +122,11 @@ export function useAgentStreamOrchestration(
     scheduler.toolCalls,
     st.turnCancelled,
   );
-  // Cancels EVERY running async subagent on ESC, not only those launched by the
-  // current foreground turn. This is intentional (issue #2074): an async task
-  // launched in a prior turn has its foreground-signal relay bound to that
-  // earlier turn's signal, which already settled and can never abort. Relaying
-  // alone would therefore leave such cross-turn tasks running, which is the
-  // exact bug #2074 reports. The AsyncTaskManager is the single session-wide
-  // owner of running tasks, so cancelling all of them is the only mechanism
-  // that reliably stops detached subagents regardless of launch turn.
   const cancelRunningAsyncTasks = useCallback(() => {
-    const mgr = args.runtime.asyncTasks.getAsyncTaskManager();
-    mgr?.getRunningTasks().forEach((t) => mgr.cancelTask(t.id));
-  }, [args.runtime]);
+    for (const task of args.agent.tasks.listRunning()) {
+      if (task.kind === 'subagent') void args.agent.tasks.cancel(task.id);
+    }
+  }, [args.agent]);
   const { cancelOngoingRequest } = useCancellation(
     streamingState,
     st.turnCancelledRef,
@@ -208,12 +202,10 @@ function useToolSchedulerState(
   st: ReturnType<typeof useStreamState>,
 ): ToolSchedulerState {
   const scheduler = useToolSchedulerSetup(
-    args.runtime,
     st.setPendingHistoryItem,
     args.getPreferredEditor,
     args.onEditorClose,
     args.onEditorOpen,
-    args.runtimeMessageBus,
     args.addItem,
     args.agent,
   );
@@ -405,6 +397,7 @@ function buildSubmitQueryDeps({
     onCancelSubmit: args.onCancelSubmit,
     onAuthError: args.onAuthError,
     recordingIntegration: args.recordingIntegration,
+    recordingOwner: args.recordingOwner,
     sanitizeContent: st.sanitizeContent,
     flushPendingHistoryItem: st.flushPendingHistoryItem,
     pendingResponse: st.pendingResponse,

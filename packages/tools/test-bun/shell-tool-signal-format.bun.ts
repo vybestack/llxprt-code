@@ -43,12 +43,10 @@ function createResultHost(
   };
   return {
     getTargetDir: () => process.cwd(),
-    getWorkspaceContext: () => ({
-      getDirectories: () => [process.cwd()],
-      isPathWithinWorkspace: (resolvedPath: string) =>
-        resolvedPath === process.cwd() ||
-        resolvedPath.startsWith(`${process.cwd()}/`),
-    }),
+    workspaceDirectories: () => [process.cwd()],
+    containsWorkspacePath: (resolvedPath: string) =>
+      resolvedPath === process.cwd() ||
+      resolvedPath.startsWith(`${process.cwd()}/`),
     isCommandAllowed: () => ({ allowed: true }),
     isShellInvocationAllowlisted: () => false,
     isInteractive: () => true,

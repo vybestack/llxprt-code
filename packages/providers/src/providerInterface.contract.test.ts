@@ -5,6 +5,7 @@
  * @pseudocode provider-invocation.md lines 3-12
  */
 
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { describe, it, expect, beforeEach } from 'bun:test';
 import type {
   BaseProviderConfig,
@@ -80,7 +81,10 @@ describe('generateChatCompletion contract', () => {
 
     expect(contractProvider.lastOptions?.contents).toStrictEqual([message]);
     expect(contractProvider.lastOptions?.tools).toBeUndefined();
-    expect(contractProvider.lastOptions?.settings).toBe(options.settings);
+    expect(contractProvider.lastOptions?.resolved.model).toBe(
+      contractProvider.getDefaultModel(),
+    );
+    expect(contractProvider.lastOptions).not.toHaveProperty('settings');
   });
 
   it('honours provided GenerateChatOptions payload', async () => {
@@ -107,8 +111,10 @@ describe('generateChatCompletion contract', () => {
 
     const options = {
       contents: [asContent('options-call')],
-      settings: customSettings,
-      config: fakeConfig,
+      invocation: captureProviderInvocation(
+        { settingsService: customSettings, runtimeId: 'options-test' },
+        'contract',
+      ),
       metadata: { requestId: 'options-test' },
     } satisfies Parameters<OptionRecorderProvider['generateChatCompletion']>[0];
 
@@ -116,8 +122,11 @@ describe('generateChatCompletion contract', () => {
 
     await provider.generateChatCompletion(options).next();
 
-    expect(provider.lastOptions?.settings).toBe(customSettings);
-    expect(provider.lastOptions?.config).toBe(fakeConfig);
+    expect(provider.lastOptions?.invocation.getEphemeral('auth-key')).toBe(
+      'options-token',
+    );
+    expect(provider.lastOptions).not.toHaveProperty('settings');
+    expect(provider.lastOptions).not.toHaveProperty('config');
     expect(provider.lastOptions?.metadata).toMatchObject({
       requestId: 'options-test',
     });

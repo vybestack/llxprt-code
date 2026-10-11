@@ -3,9 +3,13 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { ToolSelection } from '@vybestack/llxprt-code-tools';
+import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 
 import type * as acp from '@agentclientprotocol/sdk';
 import {
+  type WorkspaceTrustReader,
   type Config,
   type DebugLogger,
   type MessageBus,
@@ -26,15 +30,18 @@ export interface ZedTerminalSetup {
 export function buildZedTerminalSetup(
   sessionId: string,
   config: Config,
-  baseRegistry: ToolRegistry,
+  baseRegistry: Pick<ToolSelection, 'getAllTools'>,
   connection: acp.AgentSideConnection,
   logger: DebugLogger,
   messageBus: MessageBus,
+  paths: WorkspacePathOperations,
+  settings: SessionSettingsOwner,
+  trust: WorkspaceTrustReader,
 ): ZedTerminalSetup {
   // ACP receives the same finite acquisition budget as local shell execution,
   // rather than approximating bytes from the model-facing token limit.
   const outputBudget = resolveAcquisitionBudgetFromSetting(
-    config.getEphemeralSetting('shell-output-retention-max-bytes'),
+    settings.readNamedParameter('shell-output-retention-max-bytes'),
   );
   const terminals = new TerminalManager(
     sessionId,
@@ -46,9 +53,9 @@ export function buildZedTerminalSetup(
   );
   const messageBusAdapter = new CoreMessageBusAdapter(messageBus);
   const registry = new ToolRegistry(
-    new CoreToolRegistryHostAdapter(config),
+    new CoreToolRegistryHostAdapter(config, trust),
     messageBusAdapter,
-    config.getSettingsService(),
+    () => settings.readRegistryPolicy(config.getExcludeTools() ?? []),
   );
   const baseTools = baseRegistry.getAllTools();
   let hasShellTool = false;
@@ -63,7 +70,9 @@ export function buildZedTerminalSetup(
     registry.registerTool(
       new ShellTool(
         new AcpTerminalShellHost(
-          new CoreShellToolHostAdapter(config),
+          new CoreShellToolHostAdapter(config, paths, () =>
+            settings.readToolExecutionPolicy(),
+          ),
           terminals,
         ),
         messageBusAdapter,

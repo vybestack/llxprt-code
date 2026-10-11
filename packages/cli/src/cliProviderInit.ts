@@ -4,24 +4,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  type RuntimeProviderManager,
+  type Config,
+  setGitStatsService,
+} from '@vybestack/llxprt-code-core';
+
 import dns from 'node:dns';
-import { type Config, setGitStatsService } from '@vybestack/llxprt-code-core';
 import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { loadProfileByName } from '@vybestack/llxprt-code-providers/runtime.js';
 import {
-  preflightAgentActivation,
+  type Agent,
+  type AgentProfileApplication,
+  type AgentActivationOperation,
   type ProviderActivationIntent,
-  type ActivationPreflightToken,
+  type ActivationPreflight,
 } from '@vybestack/llxprt-code-agents';
 import { GitStatsServiceImpl } from './providers/logging/git-stats-service-impl.js';
 import { validateDnsResolutionOrder } from './cliBootstrap.js';
 import type { LoadedSettings } from './config/settings.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
 
-export type CliProviderManager = NonNullable<
-  ReturnType<Config['getProviderManager']>
->;
+export type CliProviderManager = RuntimeProviderManager;
 
 /**
  * Compute the merged model params (profile + CLI) that should be applied
@@ -121,7 +125,7 @@ function buildActivationCliOverrides(
  * construction, changing the observable process lifecycle.
  *
  * The CLI builds a DECLARATIVE {@link ProviderActivationIntent} and calls the
- * public {@link preflightAgentActivation} agent-bootstrap entrypoint (#2378).
+ * agents-owned bootstrap operation’s preflight method (#2378).
  * The CLI does NOT import or execute the runtime activation primitive
  * (`executeProviderActivation`) directly; preflight owns that internally and
  * returns the typed declarative result. The SAME Config is later adopted by
@@ -130,7 +134,7 @@ function buildActivationCliOverrides(
  */
 export interface ConfiguredProviderActivationResult {
   readonly authFailed: boolean;
-  readonly token?: ActivationPreflightToken;
+  readonly activationPreflight?: ActivationPreflight;
   readonly intent?: ProviderActivationIntent;
 }
 
@@ -138,6 +142,7 @@ export async function activateConfiguredProvider(
   config: Config,
   providerManager: CliProviderManager,
   argv: ParsedCliArgs,
+  operation: AgentActivationOperation,
 ): Promise<ConfiguredProviderActivationResult> {
   const configProvider = config.getProvider();
   const cliModelOverride = (config as Config & { _cliModelOverride?: string })
@@ -161,7 +166,7 @@ export async function activateConfiguredProvider(
   };
   let result;
   try {
-    result = await preflightAgentActivation(config, intent);
+    result = await operation.preflight(intent);
   } catch (error) {
     const bootstrapLogger = new DebugLogger('llxprt:bootstrap');
     bootstrapLogger.error(
@@ -174,7 +179,9 @@ export async function activateConfiguredProvider(
   }
   return {
     authFailed: result.authFailed,
-    ...(result.token !== undefined ? { token: result.token, intent } : {}),
+    ...(result.token !== undefined
+      ? { activationPreflight: { operation, token: result.token }, intent }
+      : {}),
   };
 }
 
@@ -186,6 +193,7 @@ export async function activateConfiguredProvider(
 export async function reapplyBootstrapProfile(
   argv: ParsedCliArgs,
   runtimeSettingsService: SettingsService,
+  profileApplication: AgentProfileApplication,
 ): Promise<void> {
   const envProfile = process.env.LLXPRT_BOOTSTRAP_PROFILE;
   const bootstrapProfileName =
@@ -200,7 +208,7 @@ export async function reapplyBootstrapProfile(
     return;
   }
   try {
-    await loadProfileByName(bootstrapProfileName);
+    await profileApplication.load(bootstrapProfileName);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     debugLogger.warn(
@@ -219,15 +227,14 @@ export async function configureProvidersAndServices(
   settings: LoadedSettings,
   argv: ParsedCliArgs,
   runtimeSettingsService: SettingsService,
+  profileApplication: AgentProfileApplication,
+  providerManager: RuntimeProviderManager,
 ): Promise<CliProviderManager> {
-  const providerManager = config.getProviderManager();
-  if (!providerManager) {
-    throw new Error(
-      '[cli] Provider manager should have been initialized by loadCliConfig',
-    );
-  }
-
-  await reapplyBootstrapProfile(argv, runtimeSettingsService);
+  await reapplyBootstrapProfile(
+    argv,
+    runtimeSettingsService,
+    profileApplication,
+  );
 
   if (config.getConversationLoggingEnabled()) {
     const gitStatsService = new GitStatsServiceImpl(config);
@@ -242,7 +249,9 @@ export async function configureProvidersAndServices(
 }
 
 /** Connect the IDE companion client when IDE mode is enabled. */
-export async function connectIdeClientIfEnabled(config: Config): Promise<void> {
+export async function connectIdeClientIfEnabled(
+  config: Pick<Agent['ide'], 'getIdeMode' | 'getIdeClient'>,
+): Promise<void> {
   if (!config.getIdeMode()) {
     return;
   }
@@ -258,8 +267,12 @@ export async function connectIdeClientIfEnabled(config: Config): Promise<void> {
  * never throws or produces an unhandled rejection, but logs failures so they
  * are observable.
  */
-export function ensureAcpProviderActivated(config: Config): void {
-  const providerManagerForAcp = config.getProviderManager();
+export function ensureAcpProviderActivated(
+  config: Config,
+  providerManagerForAcp:
+    | Pick<RuntimeProviderManager, 'hasActiveProvider' | 'setActiveProvider'>
+    | undefined,
+): void {
   const configProvider = config.getProvider();
   if (!configProvider || !providerManagerForAcp) {
     return;

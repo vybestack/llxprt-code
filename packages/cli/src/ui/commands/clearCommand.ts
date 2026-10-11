@@ -5,52 +5,12 @@
  */
 
 import {
-  triggerSessionEndHook,
-  triggerSessionStartHook,
   SessionEndReason,
   SessionStartSource,
-  type SessionStartHookOutput,
 } from '@vybestack/llxprt-code-core';
+import { AgentBusyError } from '@vybestack/llxprt-code-agents';
 import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { CommandKind, type SlashCommand } from './types.js';
-import type { HookSkillState } from '../cliUiRuntime.js';
-
-type SessionHookRuntime = Pick<
-  HookSkillState,
-  'getEnableHooks' | 'getHookSystem'
->;
-
-/**
- * Helper to trigger session end hook with fail-open behavior.
- */
-async function triggerSessionEndHookSafe(
-  runtime: SessionHookRuntime | null | undefined,
-  reason: SessionEndReason,
-): Promise<void> {
-  if (!runtime) return;
-  try {
-    await triggerSessionEndHook(runtime, reason);
-  } catch {
-    // Hooks are fail-open - continue even if hook fails
-  }
-}
-
-/**
- * Helper to trigger session start hook with fail-open behavior.
- */
-async function triggerSessionStartHookSafe(
-  runtime: SessionHookRuntime | null | undefined,
-  source: SessionStartSource,
-): Promise<SessionStartHookOutput | undefined> {
-  if (!runtime) return undefined;
-  try {
-    return await triggerSessionStartHook(runtime, source);
-  } catch {
-    // Hooks are fail-open - continue even if hook fails
-    return undefined;
-  }
-}
-
 export const clearCommand: SlashCommand = {
   name: 'clear',
   description: 'clear the screen and conversation history',
@@ -63,21 +23,26 @@ export const clearCommand: SlashCommand = {
       context.ui.setDebugMessage('Clearing terminal and resetting chat.');
 
       // Trigger SessionEnd hook before clearing (fail-open)
-      await triggerSessionEndHookSafe(
-        context.services.config,
-        SessionEndReason.Clear,
-      );
+      await agent.hooks.triggerSessionEnd(SessionEndReason.Clear);
 
-      await agent.resetChat();
+      try {
+        await agent.session.startNewSession();
+      } catch (error) {
+        if (!(error instanceof AgentBusyError)) throw error;
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: error.message,
+        };
+      }
 
       // Trigger SessionStart hook after clearing (fail-open)
-      const sessionStartOutput = await triggerSessionStartHookSafe(
-        context.services.config,
+      const sessionStartOutput = await agent.hooks.triggerSessionStart(
         SessionStartSource.Clear,
       );
 
       // Display system message if provided
-      if (sessionStartOutput?.systemMessage) {
+      if (sessionStartOutput.systemMessage) {
         context.ui.addItem(
           {
             type: 'info',
@@ -95,5 +60,6 @@ export const clearCommand: SlashCommand = {
     uiTelemetryService.reset();
     context.ui.updateHistoryTokenCount(0);
     context.ui.clear();
+    return undefined;
   },
 };

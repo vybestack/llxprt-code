@@ -24,7 +24,7 @@
  *    observers.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   MessageBusType,
@@ -70,7 +70,15 @@ type HookObserver = (
  */
 export interface HookControlDeps {
   /** The agent's live Config (carries the HookSystem + enable flag). */
-  readonly config: Config;
+  readonly hookOperations: Pick<
+    SessionHookOwner,
+    | 'execution'
+    | 'listHooks'
+    | 'getDisabledHooks'
+    | 'setDisabledHooks'
+    | 'closeAdmission'
+    | 'finishSession'
+  >;
   /** The single shared MessageBus the runtime threads through every surface. */
   readonly messageBus: MessageBus;
   /**
@@ -80,6 +88,8 @@ export interface HookControlDeps {
   readonly sessionId: () => string;
   /** Resolves the agent working directory used to populate the hook input. */
   readonly cwd: () => string;
+  /** Reads the executing facade's active transcript, not the shared Config. */
+  readonly transcriptPath?: () => string | undefined;
 }
 
 type SessionStartResult = {
@@ -124,6 +134,10 @@ export class HookControl implements AgentHookControl {
    * @plan:PLAN-20260617-COREAPI.P23
    * @requirement:REQ-015
    */
+  execution(identity: Parameters<SessionHookOwner['execution']>[0]) {
+    return this.deps.hookOperations.execution(identity);
+  }
+
   onHookExecution(cb: HookObserver): Unsubscribe {
     this.observers.add(cb);
     return () => {
@@ -137,16 +151,25 @@ export class HookControl implements AgentHookControl {
    * @plan:PLAN-20260617-COREAPI.P23
    * @requirement:REQ-015
    */
-  triggerSessionStart(): Promise<SessionStartResult> {
-    this.sessionStartPromise ??= this.fireSessionStart();
+  triggerSessionStart(
+    source: SessionStartSource = SessionStartSource.Startup,
+  ): Promise<SessionStartResult> {
+    if (source !== SessionStartSource.Startup)
+      return this.fireSessionStart(source);
+    this.sessionStartPromise ??= this.fireSessionStart(source);
     return this.sessionStartPromise;
   }
 
-  private async fireSessionStart(): Promise<SessionStartResult> {
-    const input = this.buildSessionStartInput();
+  private async fireSessionStart(
+    source: SessionStartSource,
+  ): Promise<SessionStartResult> {
+    const input = this.buildSessionStartInput(source);
     const result = await triggerSessionStartHook(
-      this.deps.config,
-      SessionStartSource.Startup,
+      source,
+      this.deps.hookOperations.execution({
+        sessionId: this.deps.sessionId,
+        transcriptPath: () => this.deps.transcriptPath?.(),
+      }),
     );
     const output = this.toHookOutput(HookEventName.SessionStart, result);
     this.emit(HookEventName.SessionStart, input, output);
@@ -169,11 +192,43 @@ export class HookControl implements AgentHookControl {
    * @plan:PLAN-20260617-COREAPI.P23
    * @requirement:REQ-015
    */
-  async triggerSessionEnd(): Promise<void> {
-    const input = this.buildSessionEndInput();
-    const result = await triggerSessionEndHook(
-      this.deps.config,
+  closeAdmission(): void {
+    this.deps.hookOperations.closeAdmission();
+  }
+
+  private finalSessionEnd: Promise<void> | undefined;
+
+  finishSessionEnd(): Promise<void> {
+    this.finalSessionEnd ??= this.fireFinalSessionEnd();
+    return this.finalSessionEnd;
+  }
+
+  private async fireFinalSessionEnd(): Promise<void> {
+    const input = this.buildSessionEndInput(SessionEndReason.Exit);
+    const result = await this.deps.hookOperations.finishSession(
       SessionEndReason.Exit,
+      {
+        sessionId: this.deps.sessionId,
+        transcriptPath: () => this.deps.transcriptPath?.(),
+      },
+    );
+    this.emit(
+      HookEventName.SessionEnd,
+      input,
+      this.toHookOutput(HookEventName.SessionEnd, result?.finalOutput),
+    );
+  }
+
+  async triggerSessionEnd(
+    reason: SessionEndReason = SessionEndReason.Exit,
+  ): Promise<void> {
+    const input = this.buildSessionEndInput(reason);
+    const result = await triggerSessionEndHook(
+      reason,
+      this.deps.hookOperations.execution({
+        sessionId: this.deps.sessionId,
+        transcriptPath: () => this.deps.transcriptPath?.(),
+      }),
     );
     const output = this.toHookOutput(HookEventName.SessionEnd, result);
     this.emit(HookEventName.SessionEnd, input, output);
@@ -195,47 +250,40 @@ export class HookControl implements AgentHookControl {
    * @plan:PLAN-20260622-COREAPIGAP.P10 @requirement:REQ-004 @pseudocode lines 1-19
    */
   listHooks(): readonly HookInfo[] {
-    const system = this.deps.config.getHookSystem();
-    if (!system) return [];
-    if (!system.isInitialized()) return [];
-    const registry = system.getRegistry();
-    return registry.getAllHooks().map((entry) => ({
-      name: registry.getHookName(entry),
-      eventName: String(entry.eventName),
-      enabled: entry.enabled,
-      source: String(entry.source),
-    }));
+    return this.deps.hookOperations.listHooks();
   }
 
   /**
    * @plan:PLAN-20260622-COREAPIGAP.P10 @requirement:REQ-004 @pseudocode lines 30-32
    */
   getDisabledHooks(): readonly string[] {
-    return [...this.deps.config.getDisabledHooks()];
+    return [...this.deps.hookOperations.getDisabledHooks()];
   }
 
   /**
    * @plan:PLAN-20260622-COREAPIGAP.P10 @requirement:REQ-004 @pseudocode lines 40-42
    */
   setDisabledHooks(names: readonly string[]): void {
-    this.deps.config.setDisabledHooks([...names]);
+    this.deps.hookOperations.setDisabledHooks([...names]);
   }
 
   /**
    * @plan:PLAN-20260622-COREAPIGAP.P10 @requirement:REQ-004 @pseudocode lines 50-54
    */
   disable(name: string): void {
-    const current = this.deps.config.getDisabledHooks();
+    const current = this.deps.hookOperations.getDisabledHooks();
     if (current.includes(name)) return;
-    this.deps.config.setDisabledHooks([...current, name]);
+    this.deps.hookOperations.setDisabledHooks([...current, name]);
   }
 
   /**
    * @plan:PLAN-20260622-COREAPIGAP.P10 @requirement:REQ-004 @pseudocode lines 57-61
    */
   enable(name: string): void {
-    const current = this.deps.config.getDisabledHooks();
-    this.deps.config.setDisabledHooks(current.filter((n) => n !== name));
+    const current = this.deps.hookOperations.getDisabledHooks();
+    this.deps.hookOperations.setDisabledHooks(
+      current.filter((n) => n !== name),
+    );
   }
 
   /**
@@ -333,7 +381,7 @@ export class HookControl implements AgentHookControl {
   private buildBaseInput(event: HookEventName): HookInput {
     return {
       session_id: this.deps.sessionId(),
-      transcript_path: '',
+      transcript_path: this.deps.transcriptPath?.() ?? '',
       cwd: this.deps.cwd(),
       hook_event_name: event,
       timestamp: new Date().toISOString(),
@@ -345,10 +393,12 @@ export class HookControl implements AgentHookControl {
    * @plan:PLAN-20260617-COREAPI.P23
    * @requirement:REQ-015
    */
-  private buildSessionStartInput(): SessionStartInput {
+  private buildSessionStartInput(
+    source: SessionStartSource,
+  ): SessionStartInput {
     return {
       ...this.buildBaseInput(HookEventName.SessionStart),
-      source: SessionStartSource.Startup,
+      source,
     };
   }
 
@@ -357,10 +407,10 @@ export class HookControl implements AgentHookControl {
    * @plan:PLAN-20260617-COREAPI.P23
    * @requirement:REQ-015
    */
-  private buildSessionEndInput(): SessionEndInput {
+  private buildSessionEndInput(reason: SessionEndReason): SessionEndInput {
     return {
       ...this.buildBaseInput(HookEventName.SessionEnd),
-      reason: SessionEndReason.Exit,
+      reason,
     };
   }
 
@@ -413,4 +463,20 @@ export class HookControl implements AgentHookControl {
     }
     return HookEventName.Notification;
   }
+}
+
+export function createAgentHookControl(
+  hookOperations: HookControlDeps['hookOperations'],
+  messageBus: MessageBus,
+  sessionId: () => string,
+  cwd: () => string,
+  transcriptPath: () => string | undefined,
+): HookControl {
+  return new HookControl({
+    hookOperations,
+    messageBus,
+    sessionId,
+    cwd,
+    transcriptPath,
+  });
 }

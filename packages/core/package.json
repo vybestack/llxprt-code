@@ -26,6 +26,15 @@
       "bun": "./src/auth-factories.ts",
       "import": "./dist/src/auth-factories.js"
     },
+    "./config/agentClientLifecycle.js": {
+      "bun": "./src/config/agentClientLifecycle.ts",
+      "import": "./dist/src/config/agentClientLifecycle.js"
+    },
+    "./session/session-settings-owner.js": {
+      "types": "./dist/src/session/session-settings-owner.d.ts",
+      "bun": "./src/session/session-settings-owner.ts",
+      "import": "./dist/src/session/session-settings-owner.js"
+    },
     "./config/config.js": {
       "bun": "./src/config/config.ts",
       "import": "./dist/src/config/config.js"
@@ -118,6 +127,14 @@
       "bun": "./src/runtime/createAgentRuntimeContext.ts",
       "import": "./dist/src/runtime/createAgentRuntimeContext.js"
     },
+    "./runtime/providerRequestDiagnostics.js": {
+      "bun": "./src/runtime/providerRequestDiagnostics.ts",
+      "import": "./dist/src/runtime/providerRequestDiagnostics.js"
+    },
+    "./runtime/providerRequestContext.js": {
+      "bun": "./src/runtime/providerRequestContext.ts",
+      "import": "./dist/src/runtime/providerRequestContext.js"
+    },
     "./runtime/providerRuntimeContext.js": {
       "bun": "./src/runtime/providerRuntimeContext.ts",
       "import": "./dist/src/runtime/providerRuntimeContext.js"
@@ -133,6 +150,11 @@
     "./runtime/RuntimeInvocationContext.js": {
       "bun": "./src/runtime/RuntimeInvocationContext.ts",
       "import": "./dist/src/runtime/RuntimeInvocationContext.js"
+    },
+    "./runtime/admittedModelParameters.js": {
+      "types": "./dist/src/runtime/admittedModelParameters.d.ts",
+      "bun": "./src/runtime/admittedModelParameters.ts",
+      "import": "./dist/src/runtime/admittedModelParameters.js"
     },
     "./services/fileSystemService.js": {
       "types": "./dist/src/services/fileSystemService.d.ts",
@@ -185,6 +207,11 @@
       "bun": "./src/services/history/semantic-media-purge.ts",
       "import": "./dist/src/services/history/semantic-media-purge.js"
     },
+    "./services/history/provider-file-binding.js": {
+      "types": "./dist/src/services/history/provider-file-binding.d.ts",
+      "bun": "./src/services/history/provider-file-binding.ts",
+      "import": "./dist/src/services/history/provider-file-binding.js"
+    },
     "./services/history/historyCloneUtils.js": {
       "types": "./dist/src/services/history/historyCloneUtils.d.ts",
       "bun": "./src/services/history/historyCloneUtils.ts",
@@ -232,6 +259,11 @@
       "types": "./dist/src/storage/sessionTypes.d.ts",
       "bun": "./src/storage/sessionTypes.ts",
       "import": "./dist/src/storage/sessionTypes.js"
+    },
+    "./storage/session-media-owner.js": {
+      "types": "./dist/src/storage/session-media-owner.d.ts",
+      "bun": "./src/storage/session-media-owner.ts",
+      "import": "./dist/src/storage/session-media-owner.js"
     },
     "./storage/local-media-store.js": {
       "types": "./dist/src/storage/local-media-store.d.ts",
@@ -292,6 +324,14 @@
     "./telemetry/file-exporters.js": {
       "bun": "./src/telemetry/file-exporters.ts",
       "import": "./dist/src/telemetry/file-exporters.js"
+    },
+    "./test-utils/ephemeral-default-ownership.js": {
+      "types": "./src/config/ephemeralDefaultOwnership.ts",
+      "bun": "./src/config/ephemeralDefaultOwnership.ts"
+    },
+    "./utils/summarizer.js": {
+      "bun": "./src/utils/summarizer.ts",
+      "import": "./dist/src/utils/summarizer.js"
     },
     "./utils/debugLogger.js": {
       "bun": "./src/utils/debugLogger.ts",
@@ -401,6 +441,11 @@
       "bun": "./src/config/toolRegistryFactory.ts",
       "import": "./dist/src/config/toolRegistryFactory.js"
     },
+    "./config/task-schema-policy-assembly.js": {
+      "types": "./dist/src/config/task-schema-policy-assembly.d.ts",
+      "bun": "./src/config/task-schema-policy-assembly.ts",
+      "import": "./dist/src/config/task-schema-policy-assembly.js"
+    },
     "./config/types.js": {
       "bun": "./src/config/types.ts",
       "import": "./dist/src/config/types.js"
@@ -432,6 +477,26 @@
     "./hooks/types.js": {
       "bun": "./src/hooks/types.ts",
       "import": "./dist/src/hooks/types.js"
+    },
+    "./hooks/session-hook-owner.js": {
+      "types": "./dist/src/hooks/session-hook-owner.d.ts",
+      "bun": "./src/hooks/session-hook-owner.ts",
+      "import": "./dist/src/hooks/session-hook-owner.js"
+    },
+    "./hooks/hook-configuration.js": {
+      "types": "./dist/src/hooks/hook-configuration.d.ts",
+      "bun": "./src/hooks/hook-configuration.ts",
+      "import": "./dist/src/hooks/hook-configuration.js"
+    },
+    "./hooks/hookEventHandler.js": {
+      "types": "./dist/src/hooks/hookEventHandler.d.ts",
+      "bun": "./src/hooks/hookEventHandler.ts",
+      "import": "./dist/src/hooks/hookEventHandler.js"
+    },
+    "./hooks/hookTranslator.js": {
+      "types": "./dist/src/hooks/hookTranslator.d.ts",
+      "bun": "./src/hooks/hookTranslator.ts",
+      "import": "./dist/src/hooks/hookTranslator.js"
     },
     "./policy/policy-engine.js": {
       "bun": "./src/policy/policy-engine.ts",
@@ -489,6 +554,50 @@
       "bun": "./src/services/asyncTaskManager.ts",
       "import": "./dist/src/services/asyncTaskManager.js"
     },
+    "./config/asyncTaskServices.js": {
+      "bun": "./src/config/asyncTaskServices.ts",
+      "import": "./dist/src/config/asyncTaskServices.js"
+    },
+    "./config/mcp-lazy-tool-sync.js": {
+      "bun": "./src/config/mcp-lazy-tool-sync.ts",
+      "import": "./dist/src/config/mcp-lazy-tool-sync.js"
+    },
+    "./policy/config.js": {
+      "bun": "./src/policy/config.ts",
+      "import": "./dist/src/policy/config.js"
+    },
+    "./policy/mcp-approval.js": {
+      "bun": "./src/policy/mcp-approval.ts",
+      "import": "./dist/src/policy/mcp-approval.js"
+    },
+    "./services/asyncTaskAutoTrigger.js": {
+      "bun": "./src/services/asyncTaskAutoTrigger.ts",
+      "import": "./dist/src/services/asyncTaskAutoTrigger.js"
+    },
+    "./services/asyncTaskReminderService.js": {
+      "bun": "./src/services/asyncTaskReminderService.ts",
+      "import": "./dist/src/services/asyncTaskReminderService.js"
+    },
+    "./services/asyncWorkFacade.js": {
+      "bun": "./src/services/asyncWorkFacade.ts",
+      "import": "./dist/src/services/asyncWorkFacade.js"
+    },
+    "./services/shellJobManager.js": {
+      "bun": "./src/services/shellJobManager.ts",
+      "import": "./dist/src/services/shellJobManager.js"
+    },
+    "./services/shellNotificationAdapter.js": {
+      "bun": "./src/services/shellNotificationAdapter.ts",
+      "import": "./dist/src/services/shellNotificationAdapter.js"
+    },
+    "./tools-adapters/CoreAsyncTaskServiceAdapter.js": {
+      "bun": "./src/tools-adapters/CoreAsyncTaskServiceAdapter.ts",
+      "import": "./dist/src/tools-adapters/CoreAsyncTaskServiceAdapter.js"
+    },
+    "./utils/version.js": {
+      "bun": "./src/utils/version.ts",
+      "import": "./dist/src/utils/version.js"
+    },
     "./services/complexity-analyzer.js": {
       "bun": "./src/services/complexity-analyzer.ts",
       "import": "./dist/src/services/complexity-analyzer.js"
@@ -500,6 +609,22 @@
     "./services/todo-reminder-service.js": {
       "bun": "./src/services/todo-reminder-service.ts",
       "import": "./dist/src/services/todo-reminder-service.js"
+    },
+    "./skills/workspace-skill-owner.js": {
+      "bun": "./src/skills/workspace-skill-owner.ts",
+      "import": "./dist/src/skills/workspace-skill-owner.js"
+    },
+    "./utils/workspace-extension-owner.js": {
+      "bun": "./src/utils/workspace-extension-owner.ts",
+      "import": "./dist/src/utils/workspace-extension-owner.js"
+    },
+    "./utils/extensionLoader.js": {
+      "bun": "./src/utils/extensionLoader.ts",
+      "import": "./dist/src/utils/extensionLoader.js"
+    },
+    "./config/skill-tool-sync.js": {
+      "bun": "./src/config/skill-tool-sync.ts",
+      "import": "./dist/src/config/skill-tool-sync.js"
     },
     "./skills/skillManager.js": {
       "bun": "./src/skills/skillManager.ts",
@@ -552,6 +677,60 @@
     "./utils/tool-utils.js": {
       "bun": "./src/utils/tool-utils.ts",
       "import": "./dist/src/utils/tool-utils.js"
+    },
+    "./runtime/bindProviderMedia.js": {
+      "types": "./dist/src/runtime/bindProviderMedia.d.ts",
+      "bun": "./src/runtime/bindProviderMedia.ts",
+      "import": "./dist/src/runtime/bindProviderMedia.js"
+    },
+    "./runtime/bindProviderFiles.js": {
+      "types": "./dist/src/runtime/bindProviderFiles.d.ts",
+      "bun": "./src/runtime/bindProviderFiles.ts",
+      "import": "./dist/src/runtime/bindProviderFiles.js"
+    },
+    "./runtime/bindProviderMediaAndFiles.js": {
+      "types": "./dist/src/runtime/bindProviderMediaAndFiles.d.ts",
+      "bun": "./src/runtime/bindProviderMediaAndFiles.ts",
+      "import": "./dist/src/runtime/bindProviderMediaAndFiles.js"
+    },
+    "./runtime/provider-media-file-adapter.js": {
+      "types": "./dist/src/runtime/provider-media-file-adapter.d.ts",
+      "bun": "./src/runtime/provider-media-file-adapter.ts",
+      "import": "./dist/src/runtime/provider-media-file-adapter.js"
+    },
+    "./policy/policy-owner.js": {
+      "bun": "./src/policy/policy-owner.ts",
+      "import": "./dist/src/policy/policy-owner.js"
+    },
+    "./lsp/workspace-lsp-owner.js": {
+      "types": "./dist/src/lsp/workspace-lsp-owner.d.ts",
+      "bun": "./src/lsp/workspace-lsp-owner.ts",
+      "import": "./dist/src/lsp/workspace-lsp-owner.js"
+    },
+    "./services/workspace-ide-owner.js": {
+      "types": "./dist/src/services/workspace-ide-owner.d.ts",
+      "bun": "./src/services/workspace-ide-owner.ts",
+      "import": "./dist/src/services/workspace-ide-owner.js"
+    },
+    "./services/workspace-trust-lifecycle.js": {
+      "types": "./dist/src/services/workspace-trust-lifecycle.d.ts",
+      "bun": "./src/services/workspace-trust-lifecycle.ts",
+      "import": "./dist/src/services/workspace-trust-lifecycle.js"
+    },
+    "./services/workspace-trust-transition.js": {
+      "types": "./dist/src/services/workspace-trust-transition.d.ts",
+      "bun": "./src/services/workspace-trust-transition.ts",
+      "import": "./dist/src/services/workspace-trust-transition.js"
+    },
+    "./services/workspace-filesystem-owner.js": {
+      "types": "./dist/src/services/workspace-filesystem-owner.d.ts",
+      "bun": "./src/services/workspace-filesystem-owner.ts",
+      "import": "./dist/src/services/workspace-filesystem-owner.js"
+    },
+    "./services/workspace-memory-owner.js": {
+      "types": "./dist/src/services/workspace-memory-owner.d.ts",
+      "bun": "./src/services/workspace-memory-owner.ts",
+      "import": "./dist/src/services/workspace-memory-owner.js"
     }
   },
   "scripts": {
@@ -565,6 +744,10 @@
   "files": [
     "index.ts",
     "src",
+    "!src/test-utils/config.ts",
+    "!dist/src/test-utils/config.js",
+    "!dist/src/test-utils/config.d.ts",
+    "!dist/src/test-utils/config.js.map",
     "!**/*.test.*",
     "!**/*.spec.*",
     "!**/__tests__/**",

@@ -1,10 +1,21 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import {
+  mkdtempSync,
+  readFileSync,
+  existsSync,
+  rmSync,
+  statSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { z } from 'zod';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { logs } from '@opentelemetry/api-logs';
+import { HookEventName, type BeforeToolInput } from '../hooks/types.js';
 import type { Config } from '../config/config.js';
 import {
   EVENT_HOOK_CALL,
@@ -37,36 +48,7 @@ import {
   it,
   expect,
   setSystemTime,
-  type Mock,
 } from 'bun:test';
-
-// Mock ClearcutLogger to avoid import errors
-const mockClearcutLogger = {
-  prototype: {
-    logMalformedJsonResponseEvent: vi.fn(),
-    logModelRoutingEvent: vi.fn(),
-    logExtensionInstallEvent: vi.fn(),
-    logExtensionUninstallEvent: vi.fn(),
-    logExtensionEnableEvent: vi.fn(),
-    logExtensionDisableEvent: vi.fn(),
-  },
-};
-
-(globalThis as { ClearcutLogger?: typeof mockClearcutLogger }).ClearcutLogger =
-  mockClearcutLogger;
-
-const mockIsTelemetrySdkInitialized = vi.fn(() => true);
-const __actual = {
-  ...(await import('@vybestack/llxprt-code-telemetry/telemetry/sdk.js')),
-};
-void vi.mock('@vybestack/llxprt-code-telemetry/telemetry/sdk.js', () => {
-  const actual =
-    __actual as typeof import('@vybestack/llxprt-code-telemetry/telemetry/sdk.js');
-  return {
-    ...actual,
-    isTelemetrySdkInitialized: mockIsTelemetrySdkInitialized,
-  };
-});
 
 const {
   logHookCall,
@@ -79,28 +61,90 @@ const {
   logExtensionEnable,
   logExtensionDisable,
 } = await import('@vybestack/llxprt-code-telemetry/telemetry/loggers.js');
-const metrics = await import(
-  '@vybestack/llxprt-code-telemetry/telemetry/metrics.js'
-);
 const uiTelemetry = await import('./uiTelemetry.js');
 
 describe('loggers', () => {
-  const mockLogger = {
-    emit: vi.fn(),
-  };
-  const mockUiEvent = {
-    addEvent: vi.fn(),
-  };
-
-  beforeEach(() => {
-    mockIsTelemetrySdkInitialized.mockReturnValue(true);
-    vi.spyOn(logs, 'getLogger').mockReturnValue(mockLogger);
-    vi.spyOn(uiTelemetry.uiTelemetryService, 'addEvent').mockImplementation(
-      mockUiEvent.addEvent,
+  let telemetry: RootTelemetry;
+  let outfile: string;
+  beforeEach(async () => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    outfile = join(
+      mkdtempSync(join(tmpdir(), 'selected-logger-')),
+      'events.jsonl',
     );
-    vi.useFakeTimers();
+    telemetry = await RootTelemetry.create({
+      sessionId: 'test-session-id',
+      enabled: true,
+      outfile,
+      maxBytes: 1048576,
+      maxFiles: 2,
+      readPrivacySettings: () => ({
+        logPrompts: true,
+        logConversations: false,
+        logApiBodies: false,
+        maxChars: 4000,
+      }),
+    });
+    uiTelemetry.uiTelemetryService.reset();
     setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
   });
+  afterEach(async () => {
+    await telemetry.close();
+    rmSync(dirname(outfile), { recursive: true, force: true });
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+  function exportedRecords(): Array<{
+    body?: unknown;
+    attributes: Record<string, unknown>;
+  }> {
+    if (!existsSync(outfile)) return [];
+    return readFileSync(outfile, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .flatMap((line) => {
+        const parsed = z
+          .object({
+            body: z.unknown().optional(),
+            attributes: z.record(z.unknown()),
+          })
+          .safeParse(JSON.parse(line));
+        return parsed.success ? [parsed.data] : [];
+      });
+  }
+  async function exportedMetrics(): Promise<
+    Array<{ name: string; points: unknown[] }>
+  > {
+    await telemetry.flush();
+    if (!existsSync(outfile)) return [];
+    const schema = z.object({
+      scopeMetrics: z.array(
+        z.object({
+          metrics: z.array(
+            z.object({
+              descriptor: z.object({ name: z.string() }),
+              dataPoints: z.array(z.unknown()),
+            }),
+          ),
+        }),
+      ),
+    });
+    return readFileSync(outfile, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .flatMap((line) => {
+        const parsed = schema.safeParse(JSON.parse(line));
+        return parsed.success
+          ? parsed.data.scopeMetrics.flatMap((scope) =>
+              scope.metrics.map((metric) => ({
+                name: metric.descriptor.name,
+                points: metric.dataPoints,
+              })),
+            )
+          : [];
+      });
+  }
 
   describe('logHookCall', () => {
     const mockConfig = {
@@ -110,36 +154,33 @@ describe('loggers', () => {
       getTelemetryLogPromptsEnabled: () => true,
     } as unknown as Config;
 
-    it('should log a hook call event', () => {
-      const event = new HookCallEvent(
-        'BeforeTool',
-        {
-          session_id: 'session-1',
-          cwd: '/tmp',
-          hook_event_name: 'BeforeTool',
-          timestamp: '2025-01-01T00:00:00.000Z',
-          transcript_path: '/tmp/transcript.jsonl',
-          tool_name: 'write_file',
-          tool_input: { file_path: 'a.txt', content: 'x' },
+    it('should log a hook call event', async () => {
+      const input: BeforeToolInput = {
+        session_id: 'session-1',
+        cwd: '/tmp',
+        hook_event_name: 'BeforeTool',
+        timestamp: '2025-01-01T00:00:00.000Z',
+        transcript_path: '/tmp/transcript.jsonl',
+        tool_name: 'write_file',
+        tool_input: { file_path: 'a.txt', content: 'x' },
+      };
+      const event = new HookCallEvent(HookEventName.BeforeTool, input, {
+        hookConfig: {
+          type: 'command',
+          command: 'node hook.cjs',
         },
-        {
-          hookConfig: {
-            type: 'command',
-            command: 'node hook.cjs',
-          },
-          eventName: 'BeforeTool',
-          success: true,
-          output: { decision: 'allow' },
-          stdout: '{"decision":"allow"}',
-          stderr: '',
-          exitCode: 0,
-          duration: 12,
-        },
-      );
+        eventName: HookEventName.BeforeTool,
+        success: true,
+        output: { decision: 'allow' },
+        stdout: '{"decision":"allow"}',
+        stderr: '',
+        exitCode: 0,
+        duration: 12,
+      });
 
-      logHookCall(mockConfig, event);
+      logHookCall(mockConfig, event, telemetry);
 
-      expect(mockLogger.emit).toHaveBeenCalledWith({
+      expect(exportedRecords()).toContainEqual({
         body: 'Hook call: BeforeTool. Success: true. Duration: 12ms.',
         attributes: {
           'session.id': 'test-session-id',
@@ -159,12 +200,12 @@ describe('loggers', () => {
       getUsageStatisticsEnabled: () => true,
     } as unknown as Config;
 
-    it('logs the event to OTEL', () => {
+    it('logs the event to OTEL', async () => {
       const event = new MalformedJsonResponseEvent('test-model');
 
-      logMalformedJsonResponse(mockConfig, event);
+      logMalformedJsonResponse(mockConfig, event, telemetry);
 
-      expect(mockLogger.emit).toHaveBeenCalledWith({
+      expect(exportedRecords()).toContainEqual({
         body: 'Malformed JSON response from test-model.',
         attributes: {
           'session.id': 'test-session-id',
@@ -185,17 +226,7 @@ describe('loggers', () => {
       getTelemetryLogPromptsEnabled: () => true,
     } as Config;
 
-    const mockMetrics = {
-      recordFileOperationMetric: vi.fn(),
-    };
-
-    beforeEach(() => {
-      vi.spyOn(metrics, 'recordFileOperationMetric').mockImplementation(
-        mockMetrics.recordFileOperationMetric,
-      );
-    });
-
-    it('should log a file operation event', () => {
+    it('should log a file operation event', async () => {
       const event = new FileOperationEvent(
         'test-tool',
         FileOperation.READ,
@@ -205,9 +236,9 @@ describe('loggers', () => {
         'typescript',
       );
 
-      logFileOperation(mockConfig, event);
+      logFileOperation(mockConfig, event, telemetry);
 
-      expect(mockLogger.emit).toHaveBeenCalledWith({
+      expect(exportedRecords()).toContainEqual({
         body: 'File operation: read. Lines: 10.',
         attributes: {
           'session.id': 'test-session-id',
@@ -222,12 +253,21 @@ describe('loggers', () => {
         },
       });
 
-      expect(mockMetrics.recordFileOperationMetric).toHaveBeenCalledWith(
-        mockConfig,
-        'read',
-        10,
-        'text/plain',
-        '.txt',
+      expect(await exportedMetrics()).toContainEqual(
+        expect.objectContaining({
+          name: 'llxprt_code.file.operation.count',
+          points: expect.arrayContaining([
+            expect.objectContaining({
+              value: 1,
+              attributes: expect.objectContaining({
+                operation: 'read',
+                lines: 10,
+                mimetype: 'text/plain',
+                extension: '.txt',
+              }),
+            }),
+          ]),
+        }),
       );
     });
   });
@@ -238,7 +278,7 @@ describe('loggers', () => {
       getUsageStatisticsEnabled: () => true,
     } as unknown as Config;
 
-    it('should log a tool output truncated event', () => {
+    it('should log a tool output truncated event', async () => {
       const event = new ToolOutputTruncatedEvent('prompt-id-1', {
         toolName: 'test-tool',
         originalContentLength: 1000,
@@ -247,9 +287,9 @@ describe('loggers', () => {
         lines: 10,
       });
 
-      logToolOutputTruncated(mockConfig, event);
+      logToolOutputTruncated(mockConfig, event, telemetry);
 
-      expect(mockLogger.emit).toHaveBeenCalledWith({
+      expect(exportedRecords()).toContainEqual({
         body: 'Tool output truncated for test-tool.',
         attributes: {
           'session.id': 'test-session-id',
@@ -273,11 +313,7 @@ describe('loggers', () => {
       getUsageStatisticsEnabled: () => true,
     } as unknown as Config;
 
-    beforeEach(() => {
-      vi.spyOn(metrics, 'recordModelRoutingMetrics');
-    });
-
-    it('should log the event to OTEL and record metrics', () => {
+    it('should log the event to OTEL and record metrics', async () => {
       const event = new ModelRoutingEvent(
         'gemini-pro',
         'default',
@@ -287,9 +323,9 @@ describe('loggers', () => {
         undefined,
       );
 
-      logModelRouting(mockConfig, event);
+      logModelRouting(mockConfig, event, telemetry);
 
-      expect(mockLogger.emit).toHaveBeenCalledWith({
+      expect(exportedRecords()).toContainEqual({
         body: 'Model routing decision. Model: gemini-pro, Source: default',
         attributes: {
           'session.id': 'test-session-id',
@@ -298,20 +334,22 @@ describe('loggers', () => {
         },
       });
 
-      expect(metrics.recordModelRoutingMetrics).toHaveBeenCalledWith(
-        mockConfig,
-        event,
+      expect(exportedRecords()).toContainEqual(
+        expect.objectContaining({
+          attributes: expect.objectContaining({
+            model: 'gemini-pro',
+            source: 'default',
+            contextLimit: 100,
+            fallback: false,
+          }),
+        }),
       );
     });
 
-    it('should not log if OTEL SDK is not initialized', () => {
-      mockLogger.emit.mockClear();
-      (
-        metrics.recordModelRoutingMetrics as Mock<
-          typeof metrics.recordModelRoutingMetrics
-        >
-      ).mockClear();
-      mockIsTelemetrySdkInitialized.mockReturnValue(false);
+    it('does not export after the selected root is disabled', async () => {
+      await exportedMetrics();
+      await telemetry.setEnabled(false);
+      const bytesBeforeEvent = statSync(outfile).size;
       const event = new ModelRoutingEvent(
         'gemini-pro',
         'default',
@@ -321,10 +359,11 @@ describe('loggers', () => {
         undefined,
       );
 
-      logModelRouting(mockConfig, event);
+      logModelRouting(mockConfig, event, telemetry);
 
-      expect(mockLogger.emit).not.toHaveBeenCalled();
-      expect(metrics.recordModelRoutingMetrics).not.toHaveBeenCalled();
+      expect(exportedRecords()).toHaveLength(0);
+      await telemetry.flush();
+      expect(statSync(outfile).size - bytesBeforeEvent).toBe(0);
     });
   });
 
@@ -338,7 +377,7 @@ describe('loggers', () => {
       vi.resetAllMocks();
     });
 
-    it('should log extension install event', () => {
+    it('should log extension install event', async () => {
       const event = new ExtensionInstallEvent(
         'vscode',
         '0.1.0',
@@ -346,9 +385,9 @@ describe('loggers', () => {
         'success',
       );
 
-      logExtensionInstallEvent(mockConfig, event);
+      logExtensionInstallEvent(mockConfig, event, telemetry);
 
-      expect(mockLogger.emit).toHaveBeenCalledWith({
+      expect(exportedRecords()).toContainEqual({
         body: 'Installed extension vscode',
         attributes: {
           'session.id': 'test-session-id',
@@ -373,12 +412,12 @@ describe('loggers', () => {
       vi.resetAllMocks();
     });
 
-    it('should log extension uninstall event', () => {
+    it('should log extension uninstall event', async () => {
       const event = new ExtensionUninstallEvent('vscode', 'success');
 
-      logExtensionUninstall(mockConfig, event);
+      logExtensionUninstall(mockConfig, event, telemetry);
 
-      expect(mockLogger.emit).toHaveBeenCalledWith({
+      expect(exportedRecords()).toContainEqual({
         body: 'Uninstalled extension vscode',
         attributes: {
           'session.id': 'test-session-id',
@@ -401,12 +440,12 @@ describe('loggers', () => {
       vi.resetAllMocks();
     });
 
-    it('should log extension enable event', () => {
+    it('should log extension enable event', async () => {
       const event = new ExtensionEnableEvent('vscode', 'user');
 
-      logExtensionEnable(mockConfig, event);
+      logExtensionEnable(mockConfig, event, telemetry);
 
-      expect(mockLogger.emit).toHaveBeenCalledWith({
+      expect(exportedRecords()).toContainEqual({
         body: 'Enabled extension vscode',
         attributes: {
           'session.id': 'test-session-id',
@@ -429,12 +468,12 @@ describe('loggers', () => {
       vi.resetAllMocks();
     });
 
-    it('should log extension disable event', () => {
+    it('should log extension disable event', async () => {
       const event = new ExtensionDisableEvent('vscode', 'user');
 
-      logExtensionDisable(mockConfig, event);
+      logExtensionDisable(mockConfig, event, telemetry);
 
-      expect(mockLogger.emit).toHaveBeenCalledWith({
+      expect(exportedRecords()).toContainEqual({
         body: 'Disabled extension vscode',
         attributes: {
           'session.id': 'test-session-id',

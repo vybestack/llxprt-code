@@ -1,3 +1,4 @@
+import type { SessionSettingsOwner } from '../session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -25,6 +26,7 @@
  * defaultRuntimeStateFactory fallback are deleted — a context exists only
  * when a caller supplies its settings service.
  */
+import type { ProviderRetryOperations } from './contracts/ProviderRetryOperations.js';
 import type { Config } from '../config/config.js';
 import { MissingRuntimeProviderError } from './errors/MissingRuntimeProviderError.js';
 import type { RequestMediaResolutionService } from '../storage/request-media-resolver.js';
@@ -40,6 +42,12 @@ export interface ProviderFileBindingStore {
     reference: ProviderFileReferenceMetadata,
   ): Promise<void>;
 }
+
+export type RuntimeKind =
+  | 'cli-bootstrap'
+  | 'cli-interactive'
+  | 'agent'
+  | 'subagent';
 
 export interface RuntimeSettingsState {
   get(key: string): unknown;
@@ -63,14 +71,28 @@ export interface RuntimeSettingsState {
  * @requirement REQ-D01-003
  * @pseudocode lines 122-133
  */
-export interface ProviderRuntimeContext {
+export interface ProviderRequestCollaborators extends ProviderRetryOperations {
+  readonly config?: Config;
+  readonly runtimeId?: string;
+  readonly runtimeKind?: RuntimeKind;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+  readonly mediaResolver?: RequestMediaResolutionService;
+  readonly requestMediaBudgetBytes?: number;
+  readonly providerFileBindings?: ProviderFileBindingStore;
+  readonly providerFileLifecycle?: object;
+}
+
+export interface ProviderRuntimeContext extends ProviderRetryOperations {
+  readonly sessionSettings?: SessionSettingsOwner;
   settingsService: RuntimeSettingsState;
   config?: Config;
   runtimeId?: string;
+  runtimeKind?: RuntimeKind;
   metadata?: Record<string, unknown>;
   mediaResolver?: RequestMediaResolutionService;
   requestMediaBudgetBytes?: number;
   providerFileBindings?: ProviderFileBindingStore;
+  providerFileLifecycle?: object;
 }
 
 /**
@@ -79,14 +101,17 @@ export interface ProviderRuntimeContext {
  * @requirement REQ-D01-003
  * @pseudocode lines 122-133
  */
-export interface ProviderRuntimeContextInit {
+export interface ProviderRuntimeContextInit extends ProviderRetryOperations {
+  readonly sessionSettings?: SessionSettingsOwner;
   settingsService?: RuntimeSettingsState | null;
   config?: Config;
   runtimeId?: string;
+  runtimeKind?: RuntimeKind;
   metadata?: Record<string, unknown>;
   mediaResolver?: RequestMediaResolutionService;
   requestMediaBudgetBytes?: number;
   providerFileBindings?: ProviderFileBindingStore;
+  providerFileLifecycle?: object;
 }
 
 export function createProviderRuntimeContext(
@@ -108,12 +133,22 @@ export function createProviderRuntimeContext(
   }
 
   return {
+    sessionSettings: init.sessionSettings,
     settingsService,
+    readRetryAuthToken: init.readRetryAuthToken,
+    handleAuthError: init.handleAuthError,
+    tryBucketFailover: init.tryBucketFailover,
+    readFailoverBuckets: init.readFailoverBuckets,
+    readCurrentBucket: init.readCurrentBucket,
+    readFailoverReasons: init.readFailoverReasons,
+    resetBucketSession: init.resetBucketSession,
     config: init.config,
     runtimeId: init.runtimeId,
+    runtimeKind: init.runtimeKind,
     metadata: init.metadata,
     mediaResolver: init.mediaResolver,
     requestMediaBudgetBytes: init.requestMediaBudgetBytes,
     providerFileBindings: init.providerFileBindings,
+    providerFileLifecycle: init.providerFileLifecycle,
   };
 }

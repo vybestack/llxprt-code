@@ -10,7 +10,6 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
 async function logoutViaAgent(
@@ -57,10 +56,11 @@ function logoutErrorHandler(
 }
 
 async function logoutViaRuntimeApi(
+  context: CommandContext,
   provider: string,
 ): Promise<MessageActionReturn> {
   try {
-    const oauthManager = getRuntimeApi().getCliOAuthManager();
+    const oauthManager = context.oauthControl;
     const supportedProviders = oauthManager.getSupportedProviders();
     if (!supportedProviders.includes(provider)) {
       return {
@@ -105,6 +105,6 @@ export const logoutCommand: SlashCommand = {
     if (agent) {
       return logoutViaAgent(agent, provider);
     }
-    return logoutViaRuntimeApi(provider);
+    return logoutViaRuntimeApi(context, provider);
   },
 };

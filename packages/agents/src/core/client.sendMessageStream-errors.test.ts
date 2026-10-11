@@ -307,7 +307,7 @@ describe('Agent Client (client.ts)', () => {
       const stream = client.sendMessageStream(initialRequest, signal, promptId);
       const events = await fromAsync(stream);
 
-      // Assert: model_info, then error event and retried content
+      // The recovered 413 is not surfaced; only the retried content is emitted.
       expect(events).toStrictEqual([
         {
           type: AgentEventType.ModelInfo,
@@ -316,12 +316,6 @@ describe('Agent Client (client.ts)', () => {
             providerName: 'gemini',
             profileName: null,
             displayLabel: 'test-model',
-          },
-        },
-        {
-          type: AgentEventType.Error,
-          value: {
-            error: { message: 'Payload too large', status: 413 },
           },
         },
         { type: AgentEventType.Content, value: 'Retried content' },
@@ -344,7 +338,8 @@ describe('Agent Client (client.ts)', () => {
             ],
           },
         ],
-        expect.any(Object),
+        signal,
+        undefined,
       );
 
       // A tool-payload 413 must not run compression or enforcement (REQ-3251-5)
@@ -382,15 +377,12 @@ describe('Agent Client (client.ts)', () => {
       client['chat'] = mockChat as ChatSession;
 
       const initialRequest = [{ type: 'text', text: 'Hi' }];
+      const signal = new AbortController().signal;
       const events = await fromAsync(
-        client.sendMessageStream(
-          initialRequest,
-          new AbortController().signal,
-          promptId,
-        ),
+        client.sendMessageStream(initialRequest, signal, promptId),
       );
 
-      // The retried Content flows to the consumer after the surfaced 413.
+      // The retried Content flows to the consumer without the recovered 413.
       expect(events).toStrictEqual([
         {
           type: AgentEventType.ModelInfo,
@@ -401,7 +393,6 @@ describe('Agent Client (client.ts)', () => {
             displayLabel: 'test-model',
           },
         },
-        { type: AgentEventType.Error, value: requestTooLarge },
         { type: AgentEventType.Content, value: 'Retried content' },
       ]);
 
@@ -416,7 +407,8 @@ describe('Agent Client (client.ts)', () => {
       expect(mockTurnRunFn).toHaveBeenNthCalledWith(
         2,
         [{ speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] }],
-        expect.any(Object),
+        signal,
+        undefined,
       );
     });
 
@@ -440,7 +432,7 @@ describe('Agent Client (client.ts)', () => {
         label,
         result,
       }: (typeof compressionEscalationCases)[number]) => {
-        const { mockChat, promptId, events } =
+        const { mockChat, promptId, signal, events } =
           await observeEscalatesToContextWindowEnforcement({
             label,
             result,
@@ -454,7 +446,8 @@ describe('Agent Client (client.ts)', () => {
         expect(mockTurnRunFn).toHaveBeenNthCalledWith(
           2,
           [{ speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] }],
-          expect.any(Object),
+          signal,
+          undefined,
         );
         expect(events).toContainEqual({
           type: AgentEventType.Content,
@@ -498,16 +491,13 @@ describe('Agent Client (client.ts)', () => {
       client['chat'] = mockChat as ChatSession;
 
       const initialRequest = [{ type: 'text', text: 'Hi' }];
+      const signal = new AbortController().signal;
       // A rejected compression must not crash the stream; the retry still runs.
       const events = await fromAsync(
-        client.sendMessageStream(
-          initialRequest,
-          new AbortController().signal,
-          promptId,
-        ),
+        client.sendMessageStream(initialRequest, signal, promptId),
       );
 
-      return { mockChat, promptId, events };
+      return { mockChat, promptId, signal, events };
     };
 
     it('ends the iteration gracefully when context-window enforcement fails on a context-size 413', async () => {
@@ -596,12 +586,9 @@ describe('Agent Client (client.ts)', () => {
           filename: 'chart.png',
         },
       ];
+      const signal = new AbortController().signal;
       const events = await fromAsync(
-        client.sendMessageStream(
-          initialRequest,
-          new AbortController().signal,
-          promptId,
-        ),
+        client.sendMessageStream(initialRequest, signal, promptId),
       );
 
       expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
@@ -618,7 +605,8 @@ describe('Agent Client (client.ts)', () => {
             ],
           },
         ],
-        expect.any(Object),
+        signal,
+        undefined,
       );
       expect(mockChat.performCompression).not.toHaveBeenCalled();
       expect(mockChat.enforceContextWindow).not.toHaveBeenCalled();
@@ -828,7 +816,7 @@ describe('Agent Client (client.ts)', () => {
         stopRecursingAfterOneRetryWhen413ErrorsAreRepeatedlyReceivedObservation2,
       } =
         await observeStopRecursingAfterOneRetryWhen413ErrorsAreRepeatedlyReceived();
-      expect(events.length).toBe(3);
+      expect(events.length).toBe(2);
       expect(typeObservation).toBe(AgentEventType.ModelInfo);
       expect(
         stopRecursingAfterOneRetryWhen413ErrorsAreRepeatedlyReceivedObservation2,
@@ -876,11 +864,7 @@ describe('Agent Client (client.ts)', () => {
         );
         const events = await fromAsync(stream);
 
-        // Assert: 1 ModelInfo + exactly 2 Error events (original + 1 retry), no infinite loop
-
-        // turn.run should be called exactly twice
-
-        // The guarded retry must not compress a second time (REQ-3251-3)
+        // The discarded initial 413 is absent; the repeated 413 remains terminal.
 
         const typeObservation = events[0]?.type;
         const stopRecursingAfterOneRetryWhen413ErrorsAreRepeatedlyReceivedObservation2 =
