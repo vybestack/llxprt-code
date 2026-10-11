@@ -35,7 +35,7 @@ export function createClientToolChannel(
   getToolGovernance: () => ToolGovernance,
   readApprovalMode: (() => ApprovalMode) | undefined,
   telemetry: RootTelemetry,
-): ClientChannel {
+): ClientChannel & { hasPendingWork(): boolean } {
   const observers = new Set<AgentDisplayCallbacks>();
   const completions = new Set<Promise<void>>();
   let controller = new AbortController();
@@ -73,6 +73,7 @@ export function createClientToolChannel(
   );
   const lease = owner.acquire();
   return {
+    hasPendingWork: () => owner.hasPendingWork() || completions.size > 0,
     ready: lease.ready,
     schedule: (request, signal) =>
       lease.schedule(request, AbortSignal.any([signal, controller.signal])),

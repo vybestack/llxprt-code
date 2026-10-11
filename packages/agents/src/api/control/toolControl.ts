@@ -99,6 +99,7 @@ export class ToolControlError extends Error {
  * @requirement:REQ-006
  */
 export interface ToolControlDeps {
+  readonly assertSessionAdmission?: () => void;
   readonly telemetry: RootTelemetry;
   readonly taskLaunchOwner?: TaskLaunchOwner;
   readonly shellOwner: ShellJobOwner;
@@ -156,9 +157,17 @@ export class ToolControl implements AgentToolControl {
   private readonly toolUpdateCallbacks = new Set<ToolUpdateCallback>();
   private readonly seen = new Set<string>();
   private readonly clientChannels = new Set<
-    ReturnType<AgentToolControl['openClientChannel']>
+    ReturnType<typeof createClientToolChannel>
   >();
   private disposal?: Promise<void>;
+  private pendingClientWork = 0;
+
+  hasPendingClientWork(): boolean {
+    return (
+      this.pendingClientWork > 0 ||
+      [...this.clientChannels].some((channel) => channel.hasPendingWork())
+    );
+  }
 
   openClientChannel(
     onComplete?: (calls: CompletedToolCall[]) => void | Promise<void>,
@@ -182,6 +191,15 @@ export class ToolControl implements AgentToolControl {
     this.clientChannels.add(channel);
     return {
       ...channel,
+      schedule: async (request, signal) => {
+        this.deps.assertSessionAdmission?.();
+        this.pendingClientWork++;
+        try {
+          await channel.schedule(request, signal);
+        } finally {
+          this.pendingClientWork--;
+        }
+      },
       release: async () => {
         try {
           await channel.release();

@@ -245,7 +245,7 @@ async function addCodexHeaders(
   headers['ChatGPT-Account-ID'] = accountId;
   headers['originator'] = 'codex_cli_rs';
 
-  const invocationSessionId = options.invocation.runtimeId;
+  const invocationSessionId = options.invocation.sessionId;
   const sessionId =
     typeof invocationSessionId === 'string' && invocationSessionId.trim() !== ''
       ? invocationSessionId

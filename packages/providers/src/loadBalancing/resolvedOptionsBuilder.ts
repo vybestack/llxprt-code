@@ -210,6 +210,7 @@ function createDelegateInvocation(
 ): GenerateChatOptions['invocation'] | undefined {
   return createRuntimeInvocationContext({
     runtimeId: options.invocation?.runtimeId,
+    sessionId: options.invocation?.sessionId,
     runtimeMetadata: options.invocation?.metadata,
 
     modelParams: ctx.memberParameters?.modelParams,

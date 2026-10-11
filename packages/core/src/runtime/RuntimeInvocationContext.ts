@@ -34,6 +34,7 @@ export type { TelemetryContext } from './contracts/TelemetryContext.js';
 export interface RuntimeInvocationContext {
   /** Stable identifier for the invocation/runtime */
   readonly runtimeId: string;
+  readonly sessionId?: string;
   /** Immutable metadata merged from caller + provider manager layers */
   readonly metadata: Readonly<Record<string, unknown>>;
   /** Snapshot of global ephemeral overrides for this invocation */
@@ -73,6 +74,7 @@ export interface RuntimeInvocationContextInit {
   providerDefaults?: Readonly<Record<string, unknown>>;
   configuredHeaders?: Readonly<Record<string, string>>;
   runtimeId?: string;
+  sessionId?: string;
   runtimeMetadata?: Readonly<Record<string, unknown>>;
   modelParams?: Readonly<Record<string, unknown>>;
   modelParamsProviderName?: string;
@@ -213,6 +215,7 @@ export function createRuntimeInvocationContext(
 
   const context: RuntimeInvocationContext = {
     runtimeId,
+    sessionId: init.sessionId,
     metadata: mergedMetadata,
     ephemerals,
     cliSettings,

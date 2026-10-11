@@ -591,6 +591,7 @@ export class SessionClientOwner {
       manager: this.manager,
       tokenizerFactory: this.tokenizerFactory,
       runtimeId: state.runtimeId,
+      sessionId: state.sessionId,
       toolSelection: this.toolCatalog.selection,
       definitions:
         this.profileDefinitions !== undefined &&

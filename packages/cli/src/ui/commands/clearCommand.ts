@@ -8,6 +8,7 @@ import {
   SessionEndReason,
   SessionStartSource,
 } from '@vybestack/llxprt-code-core';
+import { AgentBusyError } from '@vybestack/llxprt-code-agents';
 import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { CommandKind, type SlashCommand } from './types.js';
 export const clearCommand: SlashCommand = {
@@ -24,7 +25,16 @@ export const clearCommand: SlashCommand = {
       // Trigger SessionEnd hook before clearing (fail-open)
       await agent.hooks.triggerSessionEnd(SessionEndReason.Clear);
 
-      await agent.session.startNewSession();
+      try {
+        await agent.session.startNewSession();
+      } catch (error) {
+        if (!(error instanceof AgentBusyError)) throw error;
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: error.message,
+        };
+      }
 
       // Trigger SessionStart hook after clearing (fail-open)
       const sessionStartOutput = await agent.hooks.triggerSessionStart(
@@ -50,5 +60,6 @@ export const clearCommand: SlashCommand = {
     uiTelemetryService.reset();
     context.ui.updateHistoryTokenCount(0);
     context.ui.clear();
+    return undefined;
   },
 };

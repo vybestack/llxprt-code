@@ -7,10 +7,18 @@
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { getToolKeyStorage } from '@vybestack/llxprt-code-core';
 import type { AgentDeps } from './agentImpl.js';
+import type { AgentExecutionCoordinator } from './agentExecutionCoordinator.js';
 import { ToolControl } from './control/toolControl.js';
 
-export function assembleAgentTools(deps: AgentDeps): ToolControl {
+export function assembleAgentTools(
+  deps: AgentDeps,
+  coordinator: AgentExecutionCoordinator,
+): ToolControl {
+  const assertSessionAdmission = (): void => coordinator.assertNoCommit();
+  deps.taskLaunchOwner.bindSessionAdmission(assertSessionAdmission);
+  deps.shellOwner.bindSessionAdmission(assertSessionAdmission);
   return new ToolControl({
+    assertSessionAdmission,
     taskLaunchOwner: deps.taskLaunchOwner,
     shellOwner: deps.shellOwner,
     childDisplay: deps.loopHolder.childDisplay,

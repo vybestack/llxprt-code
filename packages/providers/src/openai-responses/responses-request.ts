@@ -28,6 +28,7 @@ export interface ResponsesRequest {
   };
   readonly invocation: {
     readonly runtimeId: string;
+    readonly sessionId?: string;
     readonly signal?: AbortSignal;
     readonly ephemerals: Readonly<Record<string, unknown>>;
     readonly modelBehavior: Readonly<Record<string, unknown>>;
@@ -80,6 +81,7 @@ export function captureResponsesRequest(
     }),
     invocation: Object.freeze({
       runtimeId: invocation.runtimeId,
+      sessionId: invocation.sessionId,
       signal: invocation.signal,
       ephemerals,
       modelBehavior: Object.freeze({ ...invocation.modelBehavior }),

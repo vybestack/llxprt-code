@@ -34,6 +34,7 @@ export function assembleSchedulerOwner(
     async () => {
       await scheduler?.joinExecutions();
     },
+    () => scheduler?.hasPendingWork() ?? false,
   );
 }
 

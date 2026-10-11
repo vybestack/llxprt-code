@@ -22,6 +22,13 @@ export interface TaskLaunch {
 
 export class TaskLaunchOwner {
   private closed = false;
+  private assertSessionAdmission: (() => void) | undefined;
+
+  bindSessionAdmission(assertAdmission: () => void): void {
+    if (this.assertSessionAdmission !== undefined)
+      throw new Error('Background owner already has session admission');
+    this.assertSessionAdmission = assertAdmission;
+  }
   private readonly launches = new Map<TaskLaunch, Promise<void>>();
   private readonly ids = new Set<string>();
   private readonly failures: unknown[] = [];
@@ -29,6 +36,7 @@ export class TaskLaunchOwner {
   private readonly notices = new Set<AsyncNoticeUnsubscribe>();
   private readonly noticeDrains = new Set<Promise<void>>();
   private trigger?: AsyncTaskAutoTrigger;
+  private noticeDeliveries = 0;
 
   constructor(
     readonly manager: AsyncTaskManager,
@@ -41,6 +49,14 @@ export class TaskLaunchOwner {
     shellManager?: ShellJobManager | ShellNotificationSource,
   ): AsyncNoticeUnsubscribe {
     if (this.closed) throw new Error('Agent task admission is closed');
+    const deliverOwnedNotice = async (message: string): Promise<void> => {
+      this.noticeDeliveries++;
+      try {
+        await deliver(message);
+      } finally {
+        this.noticeDeliveries--;
+      }
+    };
     if (!this.trigger) {
       const reminder = new AsyncTaskReminderService(this);
       const source =
@@ -48,10 +64,15 @@ export class TaskLaunchOwner {
           ? new ShellNotificationAdapter(shellManager)
           : shellManager;
       reminder.setShellNotificationSource(source);
-      this.trigger = new AsyncTaskAutoTrigger(this, reminder, isBusy, deliver);
+      this.trigger = new AsyncTaskAutoTrigger(
+        this,
+        reminder,
+        isBusy,
+        deliverOwnedNotice,
+      );
       this.trigger.setShellNotificationSource(source);
     }
-    this.trigger.updateCallbacks(isBusy, deliver);
+    this.trigger.updateCallbacks(isBusy, deliverOwnedNotice);
     const subscription = this.trigger.subscribe();
     let draining: Promise<void> | undefined;
     const retire = (): void => {
@@ -101,6 +122,7 @@ export class TaskLaunchOwner {
       publish: (result: ToolResult) => void,
     ) => Promise<void>,
   ): Promise<ToolResult> {
+    this.assertSessionAdmission?.();
     if (this.closed)
       return Promise.reject(new Error('Agent task admission is closed'));
     if (this.readMaxTasks) this.manager.setMaxAsyncTasks(this.readMaxTasks());
@@ -161,7 +183,11 @@ export class TaskLaunchOwner {
   }
 
   hasPendingWork(): boolean {
-    return this.launches.size > 0 || this.noticeDrains.size > 0;
+    return (
+      this.launches.size > 0 ||
+      this.noticeDrains.size > 0 ||
+      this.noticeDeliveries > 0
+    );
   }
 
   async join(): Promise<void> {

@@ -373,12 +373,14 @@ function useSubmitQueryEffects(
 
   useEffect(() => {
     const isAgentBusy = () => streamingState !== StreamingState.Idle;
-    const triggerAgentTurn = async (message: string) => {
-      enqueueSubmission({
-        query: [{ type: 'text', text: message }],
+    const triggerAgentTurn = (message: string): Promise<void> =>
+      new Promise<void>((resolve) => {
+        enqueueSubmission({
+          query: [{ type: 'text', text: message }],
+          onConsumed: resolve,
+        });
+        scheduleNextQueuedSubmission();
       });
-      scheduleNextQueuedSubmission();
-    };
 
     const unsubscribe = agent.tasks.subscribeNotifications(
       isAgentBusy,
@@ -412,7 +414,11 @@ function useDrainCleanup(
         retryTimeoutRef.current = null;
       }
       if (pendingSubmissionRef.current !== null) {
-        requeueSubmission(pendingSubmissionRef.current);
+        if (pendingSubmissionRef.current.onConsumed !== undefined) {
+          pendingSubmissionRef.current.onConsumed();
+        } else {
+          requeueSubmission(pendingSubmissionRef.current);
+        }
         pendingSubmissionRef.current = null;
         releaseDrain();
       }
@@ -472,6 +478,8 @@ function useDrainSubmission(
           pendingSubmissionRef.current = null;
           if (disposition !== 'consumed' && !retryLimitReached) {
             requeueSubmission(next);
+          } else {
+            next.onConsumed?.();
           }
           releaseDrain();
         }

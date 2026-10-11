@@ -45,6 +45,7 @@ export function buildNormalizedOptions(
   });
   const invocation = createRuntimeInvocationContext({
     runtimeId: runtime.runtimeId,
+    sessionId: 'test-session',
     runtimeMetadata: runtime.metadata,
 
     providerName: 'openai-responses',

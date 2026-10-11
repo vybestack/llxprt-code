@@ -19,6 +19,8 @@ import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
 import { buildCliStyleConfig } from '../../../../agents/src/api/__tests__/helpers/buildCliStyleConfig.js';
 import { drain } from '../../../../agents/src/api/__tests__/helpers/agentHarness.js';
 import { setupOwnerSessionRecording } from '../../cliSessionBootstrap.js';
+import { TaskLaunchOwner } from '../../../../agents/src/session/task-launch-owner.js';
+import { setImmediate } from 'node:timers/promises';
 import { clearCommand } from './clearCommand.js';
 import { continueCommand } from './continueCommand.js';
 import type { HistoryItemWithoutId } from '../types.js';
@@ -127,6 +129,46 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
       .split('\n')
       .map((line) => hookInput.parse(JSON.parse(line)));
   }
+
+  it('reports pending background work without clearing the conversation or terminal', async () => {
+    if (
+      !('deps' in agent) ||
+      typeof agent.deps !== 'object' ||
+      agent.deps === null
+    )
+      throw new Error('Expected agent dependencies');
+    if (
+      !('taskLaunchOwner' in agent.deps) ||
+      !(agent.deps.taskLaunchOwner instanceof TaskLaunchOwner)
+    )
+      throw new Error('Expected task owner');
+    const owner = agent.deps.taskLaunchOwner;
+    await owner.start(async (launch, publish) => {
+      owner.manager.registerTask({
+        id: 'clear-blocker',
+        subagentName: 'worker',
+        goalPrompt: 'work',
+        abortController: launch.controller,
+      });
+      launch.register('clear-blocker');
+      publish({ llmContent: '', returnDisplay: '' });
+    });
+    await setImmediate();
+    const running = await clearAction(context, '');
+    expect(running).toMatchObject({ type: 'message', messageType: 'error' });
+    if (running?.type !== 'message') throw new Error('Expected error message');
+    expect(running.content).toContain('background tasks');
+    expect(running.content).toContain('finish or cancel');
+    owner.manager.failTask('clear-blocker', 'completion notice');
+    const pending = await clearAction(context, '');
+    expect(pending).toStrictEqual(running);
+    expect(agent.session.getSessionId()).toBe(oldId);
+    expect(
+      (await agent.getHistory()).flatMap((item) => item.blocks),
+    ).toContainEqual({ type: 'text', text: 'old question' });
+    expect(uiEvents).not.toContain('clear');
+    expect(uiEvents).not.toContain('tokens:0');
+  });
 
   it('ends the old session before starting the new one and updates Config identity', async () => {
     await clearAction(context, '');

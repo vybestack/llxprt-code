@@ -14,6 +14,13 @@ type JobHandler = (job: ShellJob) => void;
 export class ShellJobOwner implements ShellNotificationSource {
   private manager?: ShellJobManager;
   private closed = false;
+  private assertSessionAdmission: (() => void) | undefined;
+
+  bindSessionAdmission(assertAdmission: () => void): void {
+    if (this.assertSessionAdmission !== undefined)
+      throw new Error('Background owner already has session admission');
+    this.assertSessionAdmission = assertAdmission;
+  }
   private exitListenerInstalled = false;
   private disposal?: Promise<void>;
   private readonly subscribers = new Map<
@@ -47,6 +54,7 @@ export class ShellJobOwner implements ShellNotificationSource {
   launch(
     input: Parameters<ShellJobManager['launch']>[0],
   ): ReturnType<ShellJobManager['launch']> {
+    this.assertSessionAdmission?.();
     if (this.closed) throw new Error('Agent shell job admission is closed');
     const settings = this.readSettings();
     if (!this.manager) {

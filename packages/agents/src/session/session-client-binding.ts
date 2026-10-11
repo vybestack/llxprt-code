@@ -55,6 +55,7 @@ export function bindClientSettings(
   config: Config,
   settingsOwner: SessionSettingsOwner,
   runtimeId: string,
+  sessionId: string,
 ): void {
   client.bindRuntimeSettings(
     () => settingsOwner.readRuntimePolicy(),
@@ -66,6 +67,7 @@ export function bindClientSettings(
       name,
       parameters,
       signal,
+      sessionId,
     ),
   );
 }
@@ -82,6 +84,7 @@ export interface FactoryClientBindings {
   readonly manager: RuntimeProviderManager;
   readonly tokenizerFactory: RuntimeTokenizerFactory;
   readonly runtimeId: string;
+  readonly sessionId: string;
   readonly toolSelection: Parameters<
     AgentClientContract['bindToolSelection']
   >[0];
@@ -130,6 +133,7 @@ export function bindFactoryClient(
     bindings.config,
     bindings.settingsOwner,
     bindings.runtimeId,
+    bindings.sessionId,
   );
   if (bindings.providerFiles !== undefined)
     client.bindProviderFiles?.(

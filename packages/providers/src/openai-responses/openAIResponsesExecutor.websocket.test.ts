@@ -564,7 +564,7 @@ describe('executeOpenAIResponsesRequest WebSocket handshake identity @issue:2772
     vi.restoreAllMocks();
   });
 
-  it('sends the current Codex handshake headers with the runtime identity', async () => {
+  it('sends the current Codex handshake headers with the session identity', async () => {
     const harness = new SocketHarness([completingScript()]);
     const transport = createCodexResponsesWebSocketTransport({
       openSocket: harness.openSocket,
@@ -584,21 +584,21 @@ describe('executeOpenAIResponsesRequest WebSocket handshake identity @issue:2772
       'X-Provider': 'p',
       'ChatGPT-Account-ID': 'codex-account',
       originator: 'codex_cli_rs',
-      'session-id': 'test-runtime',
-      'thread-id': 'test-runtime',
-      'x-client-request-id': 'test-runtime',
+      'session-id': 'test-session',
+      'thread-id': 'test-session',
+      'x-client-request-id': 'test-session',
       'OpenAI-Beta': CODEX_WEBSOCKET_BETA_HEADER,
     });
   });
 
-  it('omits every identity header when no runtime identity resolves', async () => {
+  it('omits every identity header when no session identity resolves', async () => {
     const harness = new SocketHarness([completingScript()]);
     const transport = createCodexResponsesWebSocketTransport({
       openSocket: harness.openSocket,
     });
     const defaults = buildNormalizedOptions();
     const optionsWithoutIdentity = buildNormalizedOptions({
-      invocation: { ...defaults.invocation, runtimeId: '' },
+      invocation: { ...defaults.invocation, sessionId: undefined },
     });
 
     await drainHarness(

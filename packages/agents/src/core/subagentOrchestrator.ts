@@ -694,6 +694,7 @@ export class SubagentOrchestrator {
             provider,
             parameters,
             signal,
+            params.runtimeState.sessionId,
           ),
         readRuntimeSettings: () =>
           params.isolatedHandle.settingsOwner.readRuntimePolicy(),

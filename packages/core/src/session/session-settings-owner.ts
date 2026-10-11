@@ -373,6 +373,7 @@ export class SessionSettingsOwner {
     providerName: string,
     modelParameters?: AdmittedModelParameters,
     signal?: AbortSignal,
+    sessionId?: string,
   ): RuntimeInvocationContext {
     this.assertOpen();
     return captureProviderInvocation(
@@ -380,6 +381,7 @@ export class SessionSettingsOwner {
       providerName,
       modelParameters,
       signal,
+      sessionId,
     );
   }
 

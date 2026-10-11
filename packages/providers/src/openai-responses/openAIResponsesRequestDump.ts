@@ -146,7 +146,7 @@ export async function buildWebSocketHandshakeHeaders(
   };
   headers['ChatGPT-Account-ID'] = await deps.getCodexAccountId();
   headers['originator'] = 'codex_cli_rs';
-  const invocationSessionId = params.normalizedOptions.invocation.runtimeId;
+  const invocationSessionId = params.normalizedOptions.invocation.sessionId;
   const sessionId =
     typeof invocationSessionId === 'string' && invocationSessionId.trim() !== ''
       ? invocationSessionId

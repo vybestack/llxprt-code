@@ -7,8 +7,8 @@
 export class AgentBusyError extends Error {
   readonly code = 'busy';
 
-  constructor() {
-    super('Agent already has an active turn');
+  constructor(message = 'Agent already has an active turn') {
+    super(message);
     this.name = 'AgentBusyError';
   }
 }

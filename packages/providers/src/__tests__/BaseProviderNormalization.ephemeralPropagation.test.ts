@@ -184,7 +184,7 @@ describe('BaseProvider ephemeral snapshot propagation into invocation', () => {
     expect(invocation?.getEphemeral('dumpcontext')).toBe('error');
   });
 
-  it('preserves the provided invocation runtimeId over the normalized runtime id', async () => {
+  it('preserves the provided runtime and session identities through normalization', async () => {
     const { provider, manager, settingsService, runtimeContext } =
       createHarnessWithDumpContext();
 
@@ -192,6 +192,7 @@ describe('BaseProvider ephemeral snapshot propagation into invocation', () => {
 
     const providedInvocation = createRuntimeInvocationContext({
       runtimeId: 'ephemeral-provided-runtimeId',
+      sessionId: 'separate-conversation-id',
 
       providerName: provider.name,
       ephemeralsSnapshot: {},
@@ -217,6 +218,7 @@ describe('BaseProvider ephemeral snapshot propagation into invocation', () => {
     // runtime's runtimeId ('ephemeral-harness').
     expect(invocation?.runtimeId).toBe('ephemeral-provided-runtimeId');
     expect(invocation?.runtimeId).not.toBe(runtimeContext.runtimeId);
+    expect(invocation?.sessionId).toBe('separate-conversation-id');
   });
 
   it('preserves provided invocation metadata, userMemory, redaction, and telemetry', async () => {

@@ -4,12 +4,8 @@ import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
-
-import type { ToolExecutionPolicy } from '@vybestack/llxprt-code-tools';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
-import type { ToolLookup } from '@vybestack/llxprt-code-tools';
 import type {
   ToolCallRequestInfo,
   ToolCallResponseInfo,
@@ -23,7 +19,6 @@ import type { EditorType } from '@vybestack/llxprt-code-core/utils/editor.js';
 import { logToolCall } from '@vybestack/llxprt-code-core/telemetry/loggers.js';
 import { ToolCallEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SerializableConfirmationDetails } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import { DEFAULT_AGENT_ID } from '@vybestack/llxprt-code-core/core/turn.js';
 import { createErrorResponse } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
@@ -62,6 +57,8 @@ import {
   applyTransition,
   buildCancelAllEntry,
 } from '../scheduler/status-transitions.js';
+import type { CoreToolSchedulerOptions } from './core-tool-scheduler-options.js';
+export type { CoreToolSchedulerOptions } from './core-tool-scheduler-options.js';
 import type { ToolSchedulerContract } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 
 interface QueuedRequest {
@@ -92,29 +89,6 @@ export type {
   ToolCallsUpdateHandler,
 } from '@vybestack/llxprt-code-core/scheduler/types.js';
 
-/**
- * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P05
- * @requirement REQ-D01-001.1
- * @requirement REQ-D01-001.2
- * @pseudocode lines 56-72
- */
-export interface CoreToolSchedulerOptions {
-  telemetry: RootTelemetry;
-  readApprovalMode?: () => ApprovalMode;
-  getToolGovernance: () => ToolGovernance;
-  readExecutionPolicy: () => ToolExecutionPolicy;
-  config: Config;
-  messageBus: MessageBus;
-  toolRegistry: ToolLookup;
-  outputUpdateHandler?: OutputUpdateHandler;
-  onAllToolCallsComplete?: AllToolCallsCompleteHandler;
-  onToolCallsUpdate?: ToolCallsUpdateHandler;
-  getPreferredEditor: () => EditorType | undefined;
-  onEditorClose: () => void;
-  onEditorOpen?: () => void;
-  toolContextInteractiveMode?: boolean;
-}
-
 /** @plan PLAN-20260825-SHELLMEM.P02 @requirement REQ-3329-05 */
 export class CoreToolScheduler implements ToolSchedulerContract {
   private toolCalls: ToolCall[] = [];
@@ -137,6 +111,15 @@ export class CoreToolScheduler implements ToolSchedulerContract {
   private readonly hookOwners = new Map<string, HookExecutionOwner>();
   private readonly resultAggregator: ResultAggregator;
   private readonly executions = new Set<Promise<unknown>>();
+
+  hasPendingWork(): boolean {
+    return (
+      this.isScheduling ||
+      this.isRunning() ||
+      this.requestQueue.length > 0 ||
+      this.executions.size > 0
+    );
+  }
 
   async joinExecutions(): Promise<void> {
     const errors: unknown[] = [];

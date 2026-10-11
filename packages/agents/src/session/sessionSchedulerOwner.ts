@@ -50,7 +50,12 @@ export class SessionSchedulerOwner {
       | OwnedScheduler
       | Promise<OwnedScheduler>,
     private readonly joinExecutions: () => Promise<void>,
+    private readonly readPendingWork: () => boolean = () => false,
   ) {}
+
+  hasPendingWork(): boolean {
+    return (this.lifetime?.executions.size ?? 0) > 0 || this.readPendingWork();
+  }
 
   acquire(): SchedulerLease {
     if (this.disposed)

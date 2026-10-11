@@ -17,6 +17,7 @@ export function captureProviderInvocation(
   providerName: string,
   modelParameters?: AdmittedModelParameters,
   signal?: AbortSignal,
+  sessionId?: string,
 ): RuntimeInvocationContext {
   const global = owner.settingsService.getAllGlobalSettings();
   const active = global['activeProvider'];
@@ -34,6 +35,7 @@ export function captureProviderInvocation(
     providerSettings['base-url'];
   return createRuntimeInvocationContext({
     runtimeId: owner.runtimeId,
+    sessionId,
     fallbackRuntimeId: `${providerName}:admission`,
     runtimeMetadata: owner.metadata,
     providerName,

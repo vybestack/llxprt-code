@@ -30,6 +30,14 @@ import {
   isDoneEvent,
   internalSettingsOwner,
 } from './helpers/agentHarness.js';
+import { buildResponsesHeaders } from '../../../../providers/src/openai-responses/openAIResponsesHttpStream.js';
+import { buildWebSocketHandshakeHeaders } from '../../../../providers/src/openai-responses/openAIResponsesRequestDump.js';
+import { captureResponsesRequest } from '../../../../providers/src/openai-responses/responses-request.js';
+import { buildNormalizedOptions } from '../../../../providers/src/openai-responses/responses-request.test-helpers.js';
+import type { ResponsesExecutorDeps } from '../../../../providers/src/openai-responses/openAIResponsesExecutor.js';
+import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
+import { ShellJobOwner } from '../../session/shell-job-owner.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 
 function clientOwner(agent: Agent): SessionClientOwner {
@@ -83,9 +91,10 @@ function recordedLineTypes(path: string): string[] {
 
 async function withRecordedConversation<T>(
   fn: (agent: Agent, recordingPath: string) => Promise<T>,
+  fixture = 'plain-text.jsonl',
 ): Promise<T> {
   const workingDir = mkdtempSync(join(tmpdir(), 'llxprt-clear-conversation-'));
-  const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+  const { agent, cleanup } = await buildAgent(fixture, {
     workingDir,
   });
   try {
@@ -106,8 +115,84 @@ async function withRecordedConversation<T>(
 }
 
 describe('starting a new conversation session', () => {
-  it('rejects foreground turns and settings while recording retirement is paused', async () => {
+  it('uses the new session in real HTTP and WebSocket headers, including after a model change', async () => {
     await withRecordedConversation(async (agent) => {
+      const oldId = agent.session.getSessionId();
+      await agent.session.startNewSession();
+      const nextId = agent.session.getSessionId();
+      const deps: ResponsesExecutorDeps = {
+        providerName: 'openai-responses',
+        logger: new DebugLogger('clear-headers-test'),
+        isCodexMode: () => true,
+        getCodexAccountId: async () => 'account',
+        resolveAuthTokenForPrompt: async () => 'token',
+        shouldRetryOnError: () => false,
+        getUnallowedModelParameters: () => new Set<string>(),
+      };
+      const original = FakeProvider.prototype.generateChatCompletion;
+      const headers: Array<Record<string, string>> = [];
+      const capture = spyOn(
+        FakeProvider.prototype,
+        'generateChatCompletion',
+      ).mockImplementation(async function* (this: FakeProvider, options) {
+        if (Array.isArray(options) || options.invocation === undefined)
+          throw new Error('Expected admitted invocation');
+        const request = captureResponsesRequest(
+          buildNormalizedOptions({ invocation: options.invocation }),
+          'openai-responses',
+          'https://example.com',
+          undefined,
+          'model',
+        );
+        headers.push(
+          await buildResponsesHeaders(
+            'token',
+            'application/json',
+            true,
+            request,
+            deps,
+          ),
+        );
+        headers.push(
+          await buildWebSocketHandshakeHeaders(
+            { apiKey: 'token', normalizedOptions: request },
+            deps,
+          ),
+        );
+        yield* original.call(this, options);
+      });
+      try {
+        await drain(agent.stream('after clear'));
+        await agent.setModel('changed-model');
+        await drain(agent.stream('after model change'));
+        expect(headers).toHaveLength(4);
+        expect(
+          headers
+            .filter((_, index) => index % 2 === 0)
+            .map((header) => header.session_id),
+        ).toStrictEqual([nextId, nextId]);
+        expect(
+          headers
+            .filter((_, index) => index % 2 !== 0)
+            .map((header) => [header['session-id'], header['thread-id']]),
+        ).toStrictEqual([
+          [nextId, nextId],
+          [nextId, nextId],
+        ]);
+        expect(
+          headers.flatMap((header) => Object.values(header)),
+        ).not.toContain(oldId);
+        expect(
+          headers.flatMap((header) => Object.values(header)),
+        ).not.toContain(`${nextId}#client`);
+      } finally {
+        capture.mockRestore();
+      }
+    }, 'multi-turn-text.jsonl');
+  });
+
+  it('rejects foreground turns and settings while recording retirement is paused', async () => {
+    await withRecordedConversation(async (agent, oldPath) => {
       const entered = deferred();
       const release = deferred();
       const original = SessionRecordingService.prototype.dispose;
@@ -122,6 +207,50 @@ describe('starting a new conversation session', () => {
       const switching = agent.session.startNewSession();
       try {
         await entered.promise;
+        if (
+          !('deps' in agent) ||
+          typeof agent.deps !== 'object' ||
+          agent.deps === null
+        )
+          throw new Error('Expected agent dependencies');
+        if (
+          !('taskLaunchOwner' in agent.deps) ||
+          !(agent.deps.taskLaunchOwner instanceof TaskLaunchOwner)
+        )
+          throw new Error('Expected task owner');
+        if (
+          !('shellOwner' in agent.deps) ||
+          !(agent.deps.shellOwner instanceof ShellJobOwner)
+        )
+          throw new Error('Expected shell owner');
+        const { taskLaunchOwner, shellOwner } = agent.deps;
+        expect(() => taskLaunchOwner.start(async () => {})).toThrow(
+          AgentBusyError,
+        );
+        expect(() =>
+          shellOwner.launch({
+            command: 'printf forbidden',
+            cwd: process.cwd(),
+          }),
+        ).toThrow(AgentBusyError);
+        const channel = agent.tools.openClientChannel();
+        try {
+          await channel.ready;
+          await expect(
+            channel.schedule(
+              {
+                callId: 'forbidden',
+                name: 'read_file',
+                args: { absolute_path: oldPath },
+                isClientInitiated: true,
+                prompt_id: 'forbidden',
+              },
+              new AbortController().signal,
+            ),
+          ).rejects.toThrow(AgentBusyError);
+        } finally {
+          await channel.release();
+        }
         await expect(
           drain(agent.stream('must not be admitted')),
         ).rejects.toThrow(AgentBusyError);

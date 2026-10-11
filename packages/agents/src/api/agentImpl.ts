@@ -44,6 +44,7 @@ import {
 import type { ActiveRun } from './directProviderAdmission.js';
 import { assembleForegroundRun } from './foreground-run-assembly.js';
 import { streamForegroundRun } from './foregroundRunLifecycle.js';
+import { createNewSessionAdmission } from './new-session-admission.js';
 import { AgentExecutionCoordinator } from './agentExecutionCoordinator.js';
 import type {
   AgentHistoryItem,
@@ -80,8 +81,8 @@ import { type HookControl, createAgentHookControl } from './control/hooks.js';
 import { PolicyControl } from './control/policyControl.js';
 import { createTasksControl } from './control/tasksControl.js';
 import type { TasksControl } from './control/tasksControl.js';
-import { SessionControl } from './control/sessionControl.js';
-import { createAgentSessionPersistence } from './control/recordedHistoryPersistence.js';
+import type { SessionControl } from './control/sessionControl.js';
+import { assembleSessionControl } from './session-control-assembly.js';
 import {
   createRecordingExecution,
   currentRecordingPath,
@@ -321,7 +322,7 @@ export class AgentImpl implements Agent {
     this.seedAuthState(rs.provider);
     // Shared mutable holders threaded from finalizeAgent.
     this.editorCallbacksHolder = deps.editorCallbacksHolder;
-    this.tools = assembleAgentTools(deps);
+    this.tools = assembleAgentTools(deps, this.coordinator);
     this.profiles = assembleAgentProfiles(
       deps.config,
       deps.settingsService,
@@ -385,34 +386,27 @@ export class AgentImpl implements Agent {
     )(changed, signal);
 
   private buildSessionControl(): SessionControl {
-    const mediaStore =
-      this.deps.mediaStore ?? this.deps.resolveClient().mediaStore;
-    if (mediaStore === undefined)
-      throw new Error('Agent client requires explicit media store');
-    return new SessionControl({
+    const config = this.deps.config;
+    const settingsOwner = this.deps.settingsOwner;
+    return assembleSessionControl(config, this.deps.mediaStore, {
       readRecordingQueueLimit: () =>
-        this.deps.settingsOwner.readRecordingQueueLimit(
-          this.deps.config.getSessionRecordingQueueByteLimit(),
+        settingsOwner.readRecordingQueueLimit(
+          config.getSessionRecordingQueueByteLimit(),
         ),
-      config: this.deps.config,
       directories: () => this.deps.mcpOperations.workspacePaths.directories(),
-      mediaStore,
-      persistence: createAgentSessionPersistence(
-        this.deps.config.storageRoot,
-        this.deps.config.projectChatsDir,
-        mediaStore,
-        this.deps.config.getSessionPersistenceQueueByteLimit(),
-      ),
       sessionIdentityOwnership: this.deps.sessionIdentityOwnership,
       sessionId: () => this.deps.runtimeId,
-      withSessionTransition: async (operation) => {
-        this.assertProfileIdle();
-        await this.coordinator.withIdleBoundary(operation);
-      },
+      resolveClient: () => this.deps.resolveClient(),
+      withSessionTransition: createNewSessionAdmission(
+        this.deps.taskLaunchOwner,
+        this.deps.shellOwner,
+        this.coordinator,
+        this.tools,
+        () => this.assertProfileIdle(),
+      ),
       closeSessionAdmission: () => this.coordinator.closeAdmission(),
       prepareNewSessionClient: (id) =>
         this.deps.sessionClient.prepareNewSession(id, () => this.rebuild()),
-      resolveClient: () => this.deps.resolveClient(),
       getProvider: () => this.providerState.provider,
       getModel: () => this.getModel(),
     });
