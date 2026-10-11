@@ -26,7 +26,6 @@ import {
   setupSessionRecording,
   type ResolvedRecording,
 } from './cliSessionBootstrap.js';
-import type { ParsedCliArgs } from './cliBootstrap.js';
 
 let projectHash = '';
 const CORRUPT_REASON =
@@ -204,11 +203,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       },
       restoreError,
     );
-    const setup = await setupSessionRecording(
-      config,
-      {} as ParsedCliArgs,
-      null,
-    );
+    const setup = await setupSessionRecording(config, null);
     resolved.push(setup);
     return { setup, config };
   }

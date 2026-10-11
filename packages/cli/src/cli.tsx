@@ -97,6 +97,10 @@ import {
 } from './cliTerminalSession.js';
 import { maybeHopIntoSandbox } from './cliSandbox.js';
 import {
+  exitAfterSessionListOrDelete,
+  hasSessionManagementFlag,
+} from './cliSessionListAndDelete.js';
+import {
   bootstrapRuntimeAndConfig,
   setupSessionRecording,
 } from './cliSessionBootstrap.js';
@@ -219,11 +223,7 @@ async function constructForegroundAgentAndDispatch(
   );
   await connectIdeClientIfEnabled(config);
 
-  const recording = await setupSessionRecording(
-    config,
-    argv,
-    bootstrapSelection,
-  );
+  const recording = await setupSessionRecording(config, bootstrapSelection);
 
   await dispatchInteractiveOrNonInteractive({
     config,
@@ -332,13 +332,16 @@ async function runPostParseStartup(): Promise<void> {
   await cleanupCheckpoints();
 }
 
-/** Guard stdin-or-prompt unless image mode is active (bypasses the guard). */
+/**
+ * Guard stdin-or-prompt unless image mode is active or a session-management
+ * flag is present (both bypass the guard: neither takes a prompt).
+ */
 async function ensureStdinOrPrompt(
   argv: ParsedCliArgs,
   hasPipedInput: boolean,
   readStdinOnce: () => Promise<string>,
 ): Promise<void> {
-  if (!detectImageModeFromArgv(argv)) {
+  if (!detectImageModeFromArgv(argv) && !hasSessionManagementFlag(argv)) {
     await ensureStdinOrPromptProvided(
       hasPipedInput,
       readStdinOnce,
@@ -383,6 +386,11 @@ export async function main() {
     argv,
     workspaceRoot,
   );
+
+  // Listing/deleting recordings needs the Config (the one source of the
+  // recordings' location) but none of what follows: terminal setup, provider
+  // configuration/activation, the sandbox hop, agent construction, recording.
+  await exitAfterSessionListOrDelete(argv, config);
 
   await rejectPromptInteractiveWithPipedStdin(argv);
 

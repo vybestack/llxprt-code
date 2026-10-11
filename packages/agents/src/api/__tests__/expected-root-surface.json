@@ -2,6 +2,7 @@
   "AdapterError",
   "Agent",
   "AgentActivationPreflightResult",
+  "AgentAttemptBoundaryEvent",
   "AgentAuth",
   "AgentAuthControl",
   "AgentAuthKeysControl",

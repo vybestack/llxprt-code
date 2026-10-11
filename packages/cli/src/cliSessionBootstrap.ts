@@ -14,12 +14,8 @@ import {
   SessionDiscovery,
   SessionTransitionService,
   resumeSession,
-  describeUnreadableRecording,
   matchUnreadableRecordings,
   CONTINUE_LATEST,
-  listSessions,
-  deleteSession,
-  getProjectHash,
   type ContinueTarget,
   type UnreadableRecording,
   type IContent,
@@ -34,67 +30,21 @@ import { ExtensionStorage, loadExtensions } from './config/extension.js';
 import { registerCleanup } from './utils/cleanup.js';
 import { setCliRuntimeContext } from '@vybestack/llxprt-code-providers/runtime.js';
 import { promises as fsPromises } from 'fs';
-import { basename, join } from 'path';
+import { basename } from 'path';
 import { ExtensionEnablementManager } from './config/extensions/extensionEnablement.js';
 import { resolveForegroundRuntimeId } from './config/profileBootstrap.js';
 import { wireMcpAuthFactories } from './mcpHostWiring.js';
 import type { ParsedCliArgs } from './cliBootstrap.js';
 import {
+  describeUnreadableRecordings,
+  formatSkippedRecordingsWarning,
+} from './skippedRecordingsWarning.js';
+import { resolveSessionStorageLocation } from './sessionStorageLocation.js';
+import {
   initializeObservationProducer,
   stopObservationProducer,
   type BootstrapSelection,
 } from './observation/jspWiring.js';
-
-/** Format a single recorded-session summary line for --list-sessions output. */
-export function formatSessionSummaryLine(
-  session: Awaited<ReturnType<typeof listSessions>>['sessions'][number],
-  index: number,
-): string {
-  const modified = session.lastModified.toLocaleString();
-  const sizeKb = (session.fileSize / 1024).toFixed(1);
-  return `  ${index + 1}. ${session.sessionId.slice(0, 8)}  ${modified}  ${sizeKb} KB  ${session.provider}/${session.model}`;
-}
-
-/**
- * Handle the --list-sessions and --delete-session flags. Both perform their
- * own process.exit, so this returns only when neither flag was supplied.
- */
-export async function handleSessionListAndDelete(
-  argv: ParsedCliArgs,
-  chatsDir: string,
-  projectHash: string,
-): Promise<void> {
-  if (argv.listSessions === true) {
-    const { sessions } = await listSessions(chatsDir, projectHash);
-    if (sessions.length === 0) {
-      debugLogger.log('No recorded sessions for this project.');
-    } else {
-      debugLogger.log(`Sessions for this project (${sessions.length}):
-`);
-      sessions.forEach((session, i) => {
-        debugLogger.log(formatSessionSummaryLine(session, i));
-      });
-    }
-    process.exit(0);
-  }
-
-  // Preserve old empty-string falsy behavior: only process non-empty strings
-  if (typeof argv.deleteSession === 'string' && argv.deleteSession.length > 0) {
-    const result = await deleteSession(
-      argv.deleteSession,
-      chatsDir,
-      projectHash,
-    );
-    if (result.ok) {
-      debugLogger.log(
-        chalk.green(`Deleted session ${result.deletedSessionId.slice(0, 8)}`),
-      );
-      process.exit(0);
-    }
-    debugLogger.error(chalk.red(result.error));
-    process.exit(1);
-  }
-}
 
 export interface ResolvedRecording {
   recordingService: SessionRecordingService;
@@ -309,15 +259,10 @@ function activateRecording(
 
 export async function setupSessionRecording(
   config: Config,
-  argv: ParsedCliArgs,
   bootstrapSelection: BootstrapSelection | null,
 ): Promise<SessionRecordingSetup> {
-  const projectHash = getProjectHash(config.getProjectRoot());
-  const chatsDir = join(config.getProjectTempDir(), 'chats');
+  const { chatsDir, projectHash } = resolveSessionStorageLocation(config);
   await fsPromises.mkdir(chatsDir, { recursive: true });
-
-  // --list-sessions / --delete-session: handle early exits.
-  await handleSessionListAndDelete(argv, chatsDir, projectHash);
 
   const {
     recordingService,
@@ -481,14 +426,6 @@ async function forkStartupCheckpoint(
   };
 }
 
-function describeUnreadableRecordings(
-  unreadableRecordings: readonly UnreadableRecording[],
-): string {
-  return unreadableRecordings
-    .map((recording) => `  ${describeUnreadableRecording(recording)}`)
-    .join('\n');
-}
-
 /** One visible warning naming every unreadable recording discovery skipped. */
 function warnSkippedRecordings(
   unreadableRecordings: readonly UnreadableRecording[],
@@ -497,8 +434,7 @@ function warnSkippedRecordings(
   if (unreadableRecordings.length === 0) return;
   recordStartupWarning(
     startupWarnings,
-    `Skipped ${unreadableRecordings.length} unreadable session recording(s):\n` +
-      describeUnreadableRecordings(unreadableRecordings),
+    formatSkippedRecordingsWarning(unreadableRecordings),
   );
 }
 

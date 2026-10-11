@@ -442,7 +442,7 @@ function* mapValueEventComplex(
 }
 
 /**
- * The 21-variant stream-event mapping table. Returns the public events
+ * The 22-variant stream-event mapping table. Returns the public events
  * emitted for a single inner ServerAgentStreamEvent and mutates `state`
  * for terminal tracking (pendingDoneReason / lastFinished / lastStop).
  * It NEVER yields a `done`: terminal variants only record their reason so
@@ -456,6 +456,11 @@ function* mapStreamEvent(
   // @pseudocode event-adapter.md step 222: Retry
   if (e.type === AgentEventType.Retry) {
     yield { type: 'retry' };
+    return;
+  }
+  // Issue #3840: continuation-attempt separator, projected 1:1.
+  if (e.type === AgentEventType.AttemptBoundary) {
+    yield { type: 'attempt-boundary' };
     return;
   }
   // @pseudocode event-adapter.md step 223: InvalidStream
