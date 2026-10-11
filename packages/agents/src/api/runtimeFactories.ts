@@ -31,6 +31,7 @@ import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-
 import { bindSchedulerOwner } from '../session/assembleSchedulerOwner.js';
 import { createChildToolAssembly } from '../session/childToolAssembly.js';
 import { ShellJobOwner } from '../session/shell-job-owner.js';
+import { LoopRunLifetime } from './loop-run-lifetime.js';
 import type { TaskLaunchOwner } from '../session/task-launch-owner.js';
 export { TaskLaunchOwner } from '../session/task-launch-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -233,8 +234,8 @@ export function createAgenticLoop(
       options.telemetry,
     ),
   });
-  return {
-    run: (message, signal, promptId) => loop.run(message, signal, promptId),
-    dispose: () => shellOwner.dispose(),
-  };
+  return new LoopRunLifetime(
+    (message, signal, promptId) => loop.run(message, signal, promptId),
+    () => shellOwner.dispose(),
+  );
 }
