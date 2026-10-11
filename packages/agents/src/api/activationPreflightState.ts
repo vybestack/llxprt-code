@@ -115,6 +115,8 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
   #disposed = false;
   #closing: Promise<void> | undefined;
   #tail: Promise<unknown> = Promise.resolve();
+  #publicClosed = false;
+  readonly #publicWork = new Set<Promise<unknown>>();
   #receipt:
     | {
         token: ActivationPreflightToken;
@@ -165,8 +167,10 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
     this.sessionClient = {
       workspaceDirectories: () => workspaceFilesystem.paths.directories(),
       getAgentClient: () => ownedSessionClient.getAgentClient(),
-      refreshAuth: (method) => ownedSessionClient.refreshAuth(method),
-      runImageOperation: (input) => ownedSessionClient.runImageOperation(input),
+      refreshAuth: (method) =>
+        this.#admitPublic(() => ownedSessionClient.refreshAuth(method)),
+      runImageOperation: (input) =>
+        this.#admitPublic(() => ownedSessionClient.runImageOperation(input)),
     };
     this.#mediaOwner = mediaOwner;
     this.#config = config;
@@ -211,8 +215,25 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
     return !this.#disposed && attempt === this.#attempt;
   }
 
+  #assertPublicOpen(): void {
+    if (this.#publicClosed)
+      throw new AgentBootstrapError('Activation bootstrap is disposed');
+  }
+
+  async #admitPublic<T>(operation: () => Promise<T>): Promise<T> {
+    this.#assertPublicOpen();
+    const accepted = operation();
+    this.#publicWork.add(accepted);
+    try {
+      return await accepted;
+    } finally {
+      this.#publicWork.delete(accepted);
+    }
+  }
+
   dispose(): Promise<void> {
     if (this.#closing !== undefined) return this.#closing;
+    this.#publicClosed = true;
     this.#disposed = true;
     ++this.#attempt;
     this.#receipt = undefined;
@@ -221,35 +242,43 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
       ? this.workspaceMemory.dispose()
       : undefined;
     void memoryClosing?.catch(() => undefined);
-    this.#closing = this.#tail.then(async () => {
-      const client = this.#ownsSessionClient
-        ? this.ownedSessionClient
-        : undefined;
-      const memoryCleanup = await Promise.allSettled([memoryClosing]);
-      const clientCleanup = await Promise.allSettled([client?.dispose()]);
-      const mediaCleanup = await Promise.allSettled([
-        this.ownsDefinitions ? this.workspaceDefinitions.dispose() : undefined,
-        this.#mediaOwner?.dispose(),
-        this.ownsFilesystem ? this.trustCleanup?.() : undefined,
-        this.ownsFilesystem ? this.workspaceFilesystem.dispose() : undefined,
-      ]);
-      const failures = [
-        ...clientCleanup,
-        ...memoryCleanup,
-        ...mediaCleanup,
-      ].flatMap((result) =>
-        result.status === 'rejected' ? [result.reason] : [],
-      );
-      if (this.#ownsSettings && this.settingsOwnerOwnership === 'transferred') {
-        const settingsCleanup = await Promise.allSettled([
-          this.settingsOwner.dispose(),
+    this.#closing = Promise.allSettled([this.#tail, ...this.#publicWork]).then(
+      async (work) => {
+        const client = this.#ownsSessionClient
+          ? this.ownedSessionClient
+          : undefined;
+        const memoryCleanup = await Promise.allSettled([memoryClosing]);
+        const clientCleanup = await Promise.allSettled([client?.dispose()]);
+        const mediaCleanup = await Promise.allSettled([
+          this.ownsDefinitions
+            ? this.workspaceDefinitions.dispose()
+            : undefined,
+          this.#mediaOwner?.dispose(),
+          this.ownsFilesystem ? this.trustCleanup?.() : undefined,
+          this.ownsFilesystem ? this.workspaceFilesystem.dispose() : undefined,
         ]);
-        for (const result of settingsCleanup)
-          if (result.status === 'rejected') failures.push(result.reason);
-      }
-      if (failures.length > 0)
-        throw new AggregateError(failures, 'Activation owner cleanup failed');
-    });
+        const failures = [
+          ...work,
+          ...clientCleanup,
+          ...memoryCleanup,
+          ...mediaCleanup,
+        ].flatMap((result) =>
+          result.status === 'rejected' ? [result.reason] : [],
+        );
+        if (
+          this.#ownsSettings &&
+          this.settingsOwnerOwnership === 'transferred'
+        ) {
+          const settingsCleanup = await Promise.allSettled([
+            this.settingsOwner.dispose(),
+          ]);
+          for (const result of settingsCleanup)
+            if (result.status === 'rejected') failures.push(result.reason);
+        }
+        if (failures.length > 0)
+          throw new AggregateError(failures, 'Activation owner cleanup failed');
+      },
+    );
     return this.#closing;
   }
 

@@ -12,6 +12,8 @@ import { MemoryTokenStore } from './helpers/provider-auth-fixtures.js';
 import { describe, expect, it } from 'bun:test';
 import { assembleAgentActivationBootstrap } from '../providerSwitchAssembly.js';
 import { AgentActivationBootstrap } from '../activationPreflightState.js';
+import { SessionClientOwner } from '../../session/session-client-owner.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { fromConfig } from '../fromConfig.js';
 import {
   buildCliStyleConfig,
@@ -100,6 +102,7 @@ const intent = { provider: 'fake', authMode: 'auto' } as const;
 describe('activation bootstrap receipts', () => {
   it('adopts the real Config once without repeating authentication', async () => {
     const built = await setup();
+
     try {
       const result = await built.operation.preflight(intent);
       if (!result.token) throw new Error('Missing receipt');
@@ -678,6 +681,101 @@ describe('preflight adoption boundaries', () => {
       expect((await retry).token).toBeUndefined();
     } finally {
       built.provider.released.resolve();
+      await built.operation.dispose();
+      await built.cleanup();
+    }
+  });
+});
+
+describe('activation public admission lifetime', () => {
+  it('joins a failing image request while closing only its facade admission', async () => {
+    const built = await setup();
+    const other = await setup();
+    const entered = deferred();
+    const released = deferred();
+    const failure = new Error('Image transport failed');
+    const handed = await SessionClientOwner.create(
+      built.config,
+      assembleTaskSchemaPolicy(built.settingsService),
+      built.providerManager,
+      built.runtimeFactoryBindings.agentClientFactory,
+      built.agentClient.mediaStore,
+      built.mcpRuntime.readInstructions,
+      built.mcpRuntime.workspacePaths,
+      built.settingsOwner,
+      built.runtime.contentGeneratorFactory,
+      built.runtime.tokenizerFactory,
+      built.agentClient,
+      built.messageBus,
+    );
+    const operation = new AgentActivationBootstrap(
+      built.config,
+      built.providerManager,
+      async () => ({ authFailed: false, infoMessages: [] }),
+      undefined,
+      handed,
+      built.mcpRuntime.workspaceFilesystem,
+      built.mcpRuntime.workspaceMemory,
+      false,
+      built.settingsOwner,
+      'borrowed',
+      built.mcpRuntime.workspaceDefinitions,
+      false,
+      built.operation.workspaceTrust,
+    );
+    operation.takeSessionClient(built.config);
+    handed.bindImageOperation(async () => {
+      entered.resolve();
+      await released.promise;
+      throw failure;
+    });
+    built.operation.takeSettingsOwner(built.settingsService);
+    const accepted = operation.sessionClient.runImageOperation({
+      prompt: 'held image',
+      outputPath: 'held.png',
+    });
+    const outcome = accepted.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await entered.promise;
+    let finished = false;
+    const closing = Promise.resolve(operation.dispose());
+    const closed = closing.then(
+      () => {
+        finished = true;
+      },
+      () => {
+        finished = true;
+      },
+    );
+    try {
+      await expect(operation.sessionClient.refreshAuth()).rejects.toThrow(
+        /disposed/,
+      );
+      await expect(
+        operation.sessionClient.runImageOperation({
+          prompt: 'late image',
+          outputPath: 'late.png',
+        }),
+      ).rejects.toThrow(/disposed/);
+      await Promise.resolve();
+      expect(finished).toBe(false);
+      expect(
+        (await other.operation.preflight({ provider: 'fake' })).authFailed,
+      ).toBe(false);
+      released.resolve();
+      expect(await outcome).toBe(failure);
+      await expect(closing).rejects.toThrow(/cleanup/);
+      expect(handed.getAgentClient()).toBe(built.agentClient);
+      await handed.refreshAuth();
+    } finally {
+      released.resolve();
+      await outcome;
+      await closed;
+      await other.operation.dispose();
+      await other.cleanup();
+      await handed.dispose();
       await built.operation.dispose();
       await built.cleanup();
     }
