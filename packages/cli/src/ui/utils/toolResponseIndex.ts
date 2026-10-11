@@ -91,6 +91,22 @@ export class ToolResponseIndex {
     };
   }
 
+  /** Parks a group's opener beside its responses while no pass is running. */
+  saveOpener(opener: IContent): void {
+    writeFileSync(join(this.directory, 'opener'), JSON.stringify(opener), {
+      mode: 0o600,
+    });
+  }
+
+  loadOpener(): IContent {
+    return z
+      .custom<IContent>(
+        (value) => typeof value === 'object' && value !== null,
+        'Missing parked opener',
+      )
+      .parse(JSON.parse(readFileSync(join(this.directory, 'opener'), 'utf8')));
+  }
+
   close(): void {
     rmSync(this.directory, { recursive: true, force: true });
   }

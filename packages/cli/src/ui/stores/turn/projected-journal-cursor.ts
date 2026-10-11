@@ -1,43 +1,35 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { open, stat, type FileHandle } from 'node:fs/promises';
+import { stat } from 'node:fs/promises';
 import {
   REPLACE_RECORD_TYPES,
   applyReplaceRecord,
   contentTxId,
   enterHistoryRecord,
   type IContent,
-  type JournalReadCounters,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryItem } from '../../types.js';
 import { rowIdentity, rowIdentityKey } from '../../utils/rowIdentity.js';
 import { HistoryProjection } from '../../utils/historyProjection.js';
 import {
   frameRecords,
-  openFileChunks,
   type FramingMetrics,
-  type FramingSource,
   type OversizedLine,
   type RecordLine,
   type SkippedHistoryLine,
 } from './projected-journal-records.js';
+import {
+  completePrefix,
+  framingSource,
+  type ProjectedJournalOptions,
+} from './projected-journal-source.js';
+
+export type { ProjectedJournalOptions } from './projected-journal-source.js';
 import { PagerReplaceTransaction } from './projected-journal-replace.js';
 import {
   JournalPageFile,
   type DisplayJournalEntry,
 } from './journal-page-file.js';
 
-export interface ProjectedJournalOptions {
-  readonly chunkBytes?: number;
-  readonly counters?: JournalReadCounters;
-  readonly signal?: AbortSignal;
-  readonly temporaryRoot?: string;
-  readonly read?: (path: string, signal: AbortSignal) => AsyncIterable<string>;
-  readonly readBounded?: (
-    path: string,
-    signal: AbortSignal,
-    endExclusive: number,
-  ) => AsyncIterable<string>;
-}
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -48,96 +40,6 @@ function isContent(value: unknown): value is IContent {
     Array.isArray(value.blocks)
   );
 }
-async function readBlock(
-  file: FileHandle,
-  buffer: Buffer,
-  start: number,
-  length: number,
-): Promise<void> {
-  let filled = 0;
-  while (filled < length) {
-    const { bytesRead } = await file.read(
-      buffer,
-      filled,
-      length - filled,
-      start + filled,
-    );
-    if (bytesRead === 0)
-      throw new Error('Truncated journal while locating complete prefix');
-    filled += bytesRead;
-  }
-}
-
-async function completePrefix(
-  filePath: string,
-  signal: AbortSignal | undefined,
-): Promise<{ fileBytes: number; endExclusive: number }> {
-  const file = await open(filePath, 'r');
-  try {
-    const fileBytes = (await file.stat()).size;
-    const buffer = Buffer.alloc(65_536);
-    let end = fileBytes;
-    while (end > 0) {
-      signal?.throwIfAborted();
-      const start = Math.max(0, end - buffer.length);
-      const length = end - start;
-      await readBlock(file, buffer, start, length);
-      const newline = buffer.lastIndexOf(10, length - 1);
-      if (newline !== -1)
-        return { fileBytes, endExclusive: start + newline + 1 };
-      end = start;
-    }
-    return { fileBytes, endExclusive: 0 };
-  } finally {
-    await file.close();
-  }
-}
-function framingSource(
-  filePath: string,
-  options: ProjectedJournalOptions,
-  from: number,
-  endExclusive: number | null,
-): FramingSource {
-  const signal = options.signal ?? new AbortController().signal;
-  if (options.read)
-    return {
-      chunks: options.read(filePath, signal),
-      startOffset: from,
-      endExclusive: null,
-      skipBytes: from,
-      signal,
-    };
-  if (endExclusive === null)
-    throw new Error('A bounded journal read needs a complete-prefix end');
-  if (options.readBounded)
-    return {
-      chunks:
-        endExclusive === 0
-          ? emptyChunks()
-          : options.readBounded(filePath, signal, endExclusive),
-      startOffset: from,
-      endExclusive,
-      skipBytes: from,
-      signal,
-    };
-  return {
-    chunks: openFileChunks(
-      filePath,
-      options.chunkBytes ?? 65536,
-      from,
-      endExclusive,
-      signal,
-    ),
-    startOffset: from,
-    endExclusive,
-    skipBytes: 0,
-    signal,
-  };
-}
-async function* emptyChunks(): AsyncIterable<string> {
-  // An empty complete prefix has nothing to read.
-}
-
 function entryKey(entry: DisplayJournalEntry): string | undefined {
   const identity =
     entry.kind === 'projected'
@@ -169,10 +71,20 @@ export class ProjectedJournalCursor {
   /** Byte offset of the newest record that opened a not-yet-closed group. */
   private groupOffset: number | null = null;
   /**
-   * The projected final group, re-read from its opener on the next extension
-   * because later appends can add responses to it. Bounded by one group.
+   * The projected final group. Its pages are re-projected on the next
+   * extension because later appends can add responses to it; a tool group is
+   * carried (see carriedGroup), any other group is re-read from its opener.
    */
   private tailGroup: { offset: number; pageStart: number } | null = null;
+  /**
+   * The projection holding the open tail tool group's responses (on disk,
+   * per call) and its opener, parked on disk. The next extension feeds only
+   * the new records into it instead of re-reading every response. Nothing but
+   * scratch files survives between extensions; bounded by one group's call
+   * count, never by history.
+   */
+  private carriedGroup: { readonly projection: HistoryProjection } | null =
+    null;
   /**
    * Offset of the `replace_begin` of a transaction that was still open at the
    * end of the last extension, or null. Its rows are not shown; the next
@@ -475,7 +387,7 @@ export class ProjectedJournalCursor {
     const served = this.pages.length;
     this.pages.truncate(group.pageStart);
     this.lowWater = grows ? group.pageStart : served;
-    return group.offset;
+    return this.carriedGroup ? this.completeBytes : group.offset;
   }
 
   private async projectFrom(
@@ -483,17 +395,13 @@ export class ProjectedJournalCursor {
     endExclusive: number | null,
   ): Promise<void> {
     this.framing.completeThrough = from;
-    this.groupOffset = null;
-    this.groupRows = 0;
     this.replaceTx = new PagerReplaceTransaction(this.pages);
-    const projection = new HistoryProjection(
-      undefined,
-      this.options.counters?.ownership,
-      this.options.temporaryRoot,
-      this.options.signal,
-    );
+    const carried = this.carriedGroup;
+    this.carriedGroup = null;
+    const projection = carried?.projection ?? this.freshProjection();
     let previousEnd = from;
     try {
+      if (carried) this.resumeCarried(projection);
       const framed = frameRecords(
         framingSource(this.filePath, this.options, from, endExclusive),
         this.framing,
@@ -508,13 +416,56 @@ export class ProjectedJournalCursor {
       }
       this.options.signal?.throwIfAborted();
       const pageStart = this.pages.length;
-      this.append(projection.flush(), previousEnd);
+      this.append(projection.project(), previousEnd);
       this.settleOpenTransaction(pageStart);
+      this.carryToolGroup(projection, pageStart);
       this.completeBytes = this.framing.completeThrough;
       this.observedCompleteBytes = this.completeBytes;
     } finally {
-      projection.close();
+      if (!this.isCarried(projection)) projection.close();
     }
+  }
+
+  private resumeCarried(projection: HistoryProjection): void {
+    if (this.groupOffset === null)
+      throw new Error('Carried group has no opener');
+    projection.resume({ kind: 'journal', offset: this.groupOffset });
+  }
+
+  private isCarried(projection: HistoryProjection): boolean {
+    return this.carriedGroup?.projection === projection;
+  }
+
+  /** A projection with no open group. */
+  private freshProjection(): HistoryProjection {
+    this.groupOffset = null;
+    this.groupRows = 0;
+    return this.newProjection();
+  }
+
+  private newProjection(): HistoryProjection {
+    return new HistoryProjection(
+      undefined,
+      this.options.counters?.ownership,
+      this.options.temporaryRoot,
+      this.options.signal,
+    );
+  }
+
+  /**
+   * Keeps the projection's indexed responses when the pass ended inside a
+   * tool group, so responses appended later join it without re-reading the
+   * ones already indexed.
+   */
+  private carryToolGroup(
+    projection: HistoryProjection,
+    pageStart: number,
+  ): void {
+    if (this.tailGroup === null || this.pages.length <= pageStart) return;
+    const tail = this.tailPage();
+    if (tail.kind !== 'projected' || tail.item.type !== 'tool_group') return;
+    projection.suspend();
+    this.carriedGroup = { projection };
   }
 
   /**
@@ -550,6 +501,8 @@ export class ProjectedJournalCursor {
 
   /** A failed extension leaves no half-applied state: the next one rebuilds. */
   private discardProjection(): void {
+    this.carriedGroup?.projection.close();
+    this.carriedGroup = null;
     this.pages.clear();
     this.ordinals.clear();
     this.tailGroup = null;
@@ -681,6 +634,8 @@ export class ProjectedJournalCursor {
     this.controller.abort();
     await this.readSettled;
     this.releasePage();
+    this.carriedGroup?.projection.close();
+    this.carriedGroup = null;
     this.pages.close();
   }
 }

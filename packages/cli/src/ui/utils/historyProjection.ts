@@ -49,41 +49,70 @@ export class HistoryProjection {
 
   *flush(): Iterable<HistoryItem> {
     try {
-      if (!this.opener) return;
-      for (const item of projectToolPages(
-        this.opener,
-        this.responses,
-        this.groupStart,
-        this.mode,
-        this.ownership,
-      )) {
-        this.signal?.throwIfAborted();
-        const identity = item.rowIdentity;
-        const projected: HistoryItem = {
-          ...item,
-          id: this.id--,
-          ...(identity?.kind === 'legacy'
-            ? {
-                rowIdentity: {
-                  ...this.source,
-                  discriminator: identity.discriminator,
-                  ...(identity.toolOffset === undefined
-                    ? {}
-                    : { toolOffset: identity.toolOffset }),
-                },
-              }
-            : {}),
-        };
-        this.ownership?.retain(projected);
-        try {
-          yield projected;
-        } finally {
-          this.ownership?.release(projected);
-        }
-      }
+      yield* this.project();
     } finally {
       this.close();
     }
+  }
+
+  /** Projects the open group without closing it, so later rows can join. */
+  *project(): Iterable<HistoryItem> {
+    if (!this.opener) return;
+    for (const item of projectToolPages(
+      this.opener,
+      this.responses,
+      this.groupStart,
+      this.mode,
+      this.ownership,
+    )) {
+      this.signal?.throwIfAborted();
+      const identity = item.rowIdentity;
+      const projected: HistoryItem = {
+        ...item,
+        id: this.id--,
+        ...(identity?.kind === 'legacy'
+          ? {
+              rowIdentity: {
+                ...this.source,
+                discriminator: identity.discriminator,
+                ...(identity.toolOffset === undefined
+                  ? {}
+                  : { toolOffset: identity.toolOffset }),
+              },
+            }
+          : {}),
+      };
+      this.ownership?.retain(projected);
+      try {
+        yield projected;
+      } finally {
+        this.ownership?.release(projected);
+      }
+    }
+  }
+
+  /**
+   * Parks the open group's opener on disk beside its indexed responses, so
+   * nothing but the group's call-count-sized scratch survives between passes.
+   * `resume` brings the opener back for more responses to join.
+   */
+  suspend(): void {
+    if (!this.opener) return;
+    this.responses ??= new ToolResponseIndex(
+      this.temporaryRoot,
+      this.ownership,
+    );
+    this.responses.saveOpener(this.opener);
+    this.ownership?.release(this.opener);
+    this.opener = undefined;
+  }
+
+  resume(source: RowSource): void {
+    if (!this.responses) throw new Error('No parked group to resume');
+    const opener = this.responses.loadOpener();
+    this.ownership?.retain(opener);
+    this.opener = opener;
+    this.source = source;
   }
 
   close(): void {

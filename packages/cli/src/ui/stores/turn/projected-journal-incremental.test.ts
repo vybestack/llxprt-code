@@ -119,6 +119,51 @@ describe('incremental projected journal cursor', () => {
     });
   });
 
+  it('bounds per-refresh decodes while results accrete on one opener', async () => {
+    const calls = 40;
+    const ids = Array.from({ length: calls }, (_, index) => `call-${index}`);
+    const opener = line(1, 'content', {
+      content: {
+        speaker: 'ai',
+        blocks: ids.map((id) => ({
+          type: 'tool_call',
+          id,
+          name: 'read_file',
+          parameters: {},
+        })),
+      },
+    });
+    const result = (seq: number, id: string): string =>
+      line(seq, 'content', {
+        content: {
+          speaker: 'tool',
+          blocks: [
+            {
+              type: 'tool_response',
+              callId: id,
+              toolName: 'read_file',
+              result: `result-of-${id}`,
+            },
+          ],
+        },
+      });
+    await withCursor(opener, async (cursor, file, decoded) => {
+      await cursor.pageBack(10);
+      const perRefresh: number[] = [];
+      let served: DisplayJournalEntry[] = [];
+      for (const [index, id] of ids.entries()) {
+        const before = decoded();
+        await appendFile(file, result(index + 2, id));
+        ({ entries: served } = await cursor.pageForward(10));
+        perRefresh.push(decoded() - before);
+      }
+      // Each refresh decodes the new record, never the group's earlier results.
+      expect(Math.max(...perRefresh)).toBeLessThanOrEqual(2);
+      const text = JSON.stringify(served);
+      for (const id of ids) expect(text).toContain(`result-of-${id}`);
+    });
+  });
+
   it('keeps eviction free of page-file reads on a large journal', async () => {
     await withCursor(journal(LARGE), async (cursor) => {
       const { entries } = await cursor.pageBack(LARGE);
