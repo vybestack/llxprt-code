@@ -28,31 +28,15 @@ export type { StatelessHardeningPreference } from './statelessHardening.js';
 export { validateRuntimeId } from './runtimeIdValidation.js';
 
 export {
-  getActiveModelName,
-  listAvailableModels,
-  getActiveProviderMetrics,
-  getSessionTokenUsage,
-  getUnallowedParametersForActiveModel,
-  listProviders,
-  getActiveProviderName,
-  NO_ACTIVE_PROVIDER_ERROR_MESSAGE,
-} from './providerReadOperations.js';
-export {
-  getEphemeralSettings,
-  getEphemeralSetting,
   setEphemeralSetting,
   clearEphemeralSetting,
-  getSessionSetting,
   setSessionSetting,
   clearSessionSetting,
 } from './ownerSettingsOperations.js';
 export {
-  getActiveModelParams,
   setActiveModelParam,
   clearActiveModelParam,
 } from './providerModelParameters.js';
-export { readProviderStatus } from './providerStatus.js';
-export type { ProviderRuntimeStatus } from './providerStatus.js';
 
 export { activateIsolatedRuntimeContext } from './runtimeLifecycle.js';
 export { beginCliRuntimeRegistration } from './cliForegroundRuntime.js';

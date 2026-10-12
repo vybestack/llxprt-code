@@ -22,12 +22,12 @@ import type {
   ProfileManager,
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
+import { extractModelParams } from '../model-parameter-data.js';
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import {
   clearActiveModelParam,
-  getActiveModelParams,
   setActiveModelParam,
 } from './providerModelParameters.js';
 import {
@@ -339,7 +339,10 @@ function applyProfileModelParams(
   providerName: string | undefined,
 ): void {
   const profileParams = getProfileModelParams(sanitizedProfile);
-  const existingParams = getActiveModelParams(settingsService, providerName);
+  const existingParams =
+    providerName === undefined
+      ? {}
+      : extractModelParams(settingsService.getProviderSettings(providerName));
   for (const [key, value] of Object.entries(profileParams)) {
     setActiveModelParam(key, value, settingsService, providerName);
   }

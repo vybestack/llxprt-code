@@ -53,7 +53,6 @@ import type { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtim
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { type IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
-import { readActiveProviderName } from '@vybestack/llxprt-code-providers/runtime/providerReadOperations.js';
 import type {
   AgentRuntimeFactoryBindings,
   RuntimeProviderManager,
@@ -316,6 +315,7 @@ async function activateCreatedSession(
     handle.providerManager,
     (method) => client.refreshAuth(method),
     assembleModelSelection(handle.settingsOwner),
+    () => handle.settingsOwner.readSelectedProvider(),
   );
 }
 
@@ -689,6 +689,7 @@ async function applyActivation(
   manager: RuntimeProviderManager,
   refreshClient: (method?: string) => Promise<void>,
   selection: ModelSelectionOperations,
+  readProviderName: () => string | undefined,
 ): Promise<{ readonly provider: string; readonly model: string }> {
   const intent: ProviderActivationIntent = parsed.activation ?? {
     provider: parsed.provider,
@@ -731,7 +732,8 @@ async function applyActivation(
   const runtimeProvider =
     activationResult.activeProvider ??
     manager.getActiveProviderName() ??
-    safeActiveProviderName(settingsService, manager);
+    readProviderName() ??
+    '';
   const postProvider =
     parsed.activation === undefined
       ? parsed.provider
@@ -748,14 +750,6 @@ async function applyActivation(
   const runtimeModel = resolvedConfigModel || activeModel;
   const postModel = runtimeModel || parsed.model;
   return { provider: postProvider, model: postModel };
-}
-
-/** Reads the active provider name without throwing when unset. */
-function safeActiveProviderName(
-  settings: SettingsService,
-  manager: RuntimeProviderManager,
-): string {
-  return readActiveProviderName(settings, manager) ?? '';
 }
 
 /** Reads the active model name without throwing when unset. */

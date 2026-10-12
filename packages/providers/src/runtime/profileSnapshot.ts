@@ -18,7 +18,7 @@ import type {
   LoadBalancerProfile,
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
-import { extractModelParams } from './providerModelParameters.js';
+import { extractModelParams } from '../model-parameter-data.js';
 import type { OAuthManager } from '../auth/oauth-manager.js';
 import type { ProfileOAuthWork } from '../auth/types.js';
 import type { ProfileApplicationResult } from './profileApplication.js';

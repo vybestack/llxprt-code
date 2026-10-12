@@ -25,21 +25,6 @@ function requireOwner(owner?: NamedSettingsCommands): NamedSettingsCommands {
   return owner;
 }
 
-export function getEphemeralSettings(
-  owner?: NamedSettingsCommands,
-): Readonly<Record<string, unknown>> {
-  const config = requireOwner(owner);
-  return config.captureNamedParameters();
-}
-
-export function getEphemeralSetting(
-  key: string,
-  owner?: NamedSettingsCommands,
-): unknown {
-  const config = requireOwner(owner);
-  return config.readNamedParameter(key);
-}
-
 export function setEphemeralSetting(
   key: string,
   value: unknown,
@@ -55,14 +40,6 @@ export function clearEphemeralSetting(
 ): void {
   const config = requireOwner(owner);
   config.writeUserParameter(key, undefined);
-}
-
-export function getSessionSetting(
-  key: string,
-  owner?: NamedSettingsCommands,
-): unknown {
-  const config = requireOwner(owner);
-  return config.readSessionOverride(key);
 }
 
 export function setSessionSetting(

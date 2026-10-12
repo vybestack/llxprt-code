@@ -89,7 +89,10 @@ import {
   currentRecordingPath,
 } from './recordingExecution.js';
 import { assembleAgentProfiles } from './profileApplicationAssembly.js';
-import { assembleProviderReads } from './provider-read-assembly.js';
+import {
+  assembleProviderReads,
+  createProviderState,
+} from './provider-read-assembly.js';
 import { assembleProfileReplacement } from './profileReplacement.js';
 import { buildNewControls, type NewControls } from './control/newControls.js';
 
@@ -277,13 +280,19 @@ export class AgentImpl implements Agent {
   readonly getProviderContextLimit: Agent['getProviderContextLimit'];
   readonly listAvailableModels: Agent['listAvailableModels'];
 
+  readonly providerReads: Agent['providerReads'];
+
   constructor(private readonly deps: AgentDeps) {
     this.metrics = deps.settingsOwner.telemetry.localMetrics;
     this.sessionClient = deps.sessionClient.operations;
     const reads = assembleProviderReads(
       deps.providerManager,
       () => this.getProviderStatus().provider,
+      deps.settingsOwner,
+      () => this.providerState.model,
+      (provider) => deps.settingsService.getProviderSettings(provider),
     );
+    this.providerReads = reads.providerReads;
     this.hasActiveProvider = reads.hasActiveProvider;
     this.getProviderContextLimit = reads.getProviderContextLimit;
     this.listAvailableModels = reads.listAvailableModels;
@@ -310,18 +319,9 @@ export class AgentImpl implements Agent {
     // genuine live objects dispose() tears down (no second bus, no clones).
     this.messageBus = deps.messageBus;
 
-    const rs = deps.runtimeState;
-    this.providerState = {
-      provider: rs.provider,
-      model: rs.model,
-      modelParams: Object.assign(
-        Object.create(null) as Record<string, unknown>,
-        rs.modelParams ?? {},
-      ),
-      baseUrl: rs.baseUrl,
-    };
+    this.providerState = createProviderState(deps.runtimeState);
     // @plan:PLAN-20260617-COREAPI.P18 @requirement:REQ-008
-    this.seedAuthState(rs.provider);
+    this.seedAuthState(deps.runtimeState.provider);
     // Shared mutable holders threaded from finalizeAgent.
     this.editorCallbacksHolder = deps.editorCallbacksHolder;
     this.tools = assembleAgentTools(deps, this.coordinator);
@@ -704,9 +704,7 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-004
    */
   getModel(): string {
-    return (
-      this.deps.settingsOwner.readSelectedModel() ?? this.providerState.model
-    );
+    return this.providerReads.getActiveModelName();
   }
 
   /**

@@ -9,7 +9,7 @@ import { MessageType } from '../types.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import { NO_ACTIVE_PROVIDER_ERROR_MESSAGE } from '@vybestack/llxprt-code-providers/runtime/providerReadOperations.js';
+import { NO_ACTIVE_PROVIDER_ERROR_MESSAGE } from '@vybestack/llxprt-code-agents';
 import type { DialogOpeners } from '../stores/dialog/dialogOpeners.js';
 
 interface UseProviderDialogParams {

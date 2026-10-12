@@ -40,8 +40,7 @@ import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OAuthManager } from '../auth/index.js';
 import { assembleCliProviderRuntime } from './assembleCliProviderRuntime.js';
-import { listProviders } from './providerReadOperations.js';
-import { MissingProviderRuntimeError } from './messages.js';
+import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
 
 describe('assembleCliProviderRuntime @plan:PLAN-20270110-ISSUE2378.P04 @requirement:REQ-2378-004', () => {
   it('owns session-bus construction internally and binds the OAuth manager to that exact bus', () => {
@@ -80,9 +79,11 @@ describe('assembleCliProviderRuntime @plan:PLAN-20270110-ISSUE2378.P04 @requirem
     expect(first.registration.providerFileLifecycle).not.toBe(
       second.registration.providerFileLifecycle,
     );
-    expect(() => listProviders()).toThrow(MissingProviderRuntimeError);
-    expect(() => listProviders()).toThrow(
-      'Provider listing requires an explicit owner',
+    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+      'Provider reads require an explicit session owner',
+    );
+    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+      'Provider reads require an explicit session owner',
     );
     first.registration.dispose();
     second.registration.dispose();

@@ -1,3 +1,4 @@
+import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -11,7 +12,7 @@ import {
 } from '@vybestack/llxprt-code-policy/confirmation-bus/types.js';
 import { createProviderConfigFixture } from './__tests__/provider-config-fixture.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createIsolatedRuntimeContext, listProviders } from './index.js';
+import { createIsolatedRuntimeContext } from './index.js';
 import { assembleCliProviderRuntime } from './assembleCliProviderRuntime.js';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
 
@@ -43,9 +44,9 @@ describe('CLI foreground provider ownership', () => {
     expect(bundle.oauthManager?.runtimeMessageBus).toBe(
       bundle.runtimeMessageBus,
     );
-    expect(listProviders(bundle.providerManager)).toContain('openai');
-    expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
-      'Provider listing requires an explicit owner',
+    expect(bundle.providerManager.listProviders()).toContain('openai');
+    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+      'Provider reads require an explicit session owner',
     );
     expect('providerManager' in config).toBe(false);
     expect(bundle.runtime.providerFileLifecycle).toBe(

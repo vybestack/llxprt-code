@@ -7,7 +7,11 @@ import type {
   SettingsTelemetryState,
   StreamRuntimeDeclarationSource,
 } from '../ui/cliUiRuntime.js';
-import type { Agent, FromConfigOptions } from '@vybestack/llxprt-code-agents';
+import type {
+  Agent,
+  FromConfigOptions,
+  SessionProviderReads,
+} from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -22,26 +26,12 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { getOpenAIProviderInfo } from '@vybestack/llxprt-code-providers';
 import { refreshAliasProviders } from '@vybestack/llxprt-code-providers/composition.js';
 import {
-  NO_ACTIVE_PROVIDER_ERROR_MESSAGE,
-  readActiveProviderName,
-  getActiveModelName,
-  getActiveProviderMetrics,
-  getSessionTokenUsage,
-  getUnallowedParametersForActiveModel,
-  listAvailableModels,
-  listProviders,
-} from '@vybestack/llxprt-code-providers/runtime/providerReadOperations.js';
-import {
-  getEphemeralSetting,
-  getEphemeralSettings,
   setEphemeralSetting,
-  getSessionSetting,
   setSessionSetting,
   clearSessionSetting,
 } from '@vybestack/llxprt-code-providers/runtime/ownerSettingsOperations.js';
 import {
   clearActiveModelParam,
-  getActiveModelParams,
   setActiveModelParam,
 } from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
 import {
@@ -50,7 +40,6 @@ import {
   updateActiveProviderApiKey,
 } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
 import { getProfileByName } from '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js';
-import { readProviderStatus } from '@vybestack/llxprt-code-providers/runtime/providerStatus.js';
 import type { RuntimeOwnerFeatures } from '../ui/contexts/RuntimeContext.js';
 import type { ProviderAliasRefresh } from '../ui/contexts/ProviderAliasRefreshContext.js';
 import { createProviderInspection } from './providerInspection.js';
@@ -75,15 +64,12 @@ function bindProviderMutations(
 ): Pick<
   RuntimeOwnerFeatures,
   | 'setActiveModel'
-  | 'getActiveModelParams'
   | 'setActiveModelParam'
   | 'clearActiveModelParam'
   | 'updateActiveProviderApiKey'
 > {
   return {
     setActiveModel: changeModel,
-    getActiveModelParams: () =>
-      getActiveModelParams(settingsService, manager.getActiveProviderName()),
     setActiveModelParam: (key, value) =>
       setActiveModelParam(
         key,
@@ -118,28 +104,32 @@ export function createRuntimeOwnerFeatures(
   sessionSettings: SessionSettingsOwner,
   settingsService: SettingsService,
   definitions: Pick<Agent['workspace'], 'profileDefinitions' | 'profileWrites'>,
+  reads: Pick<
+    SessionProviderReads,
+    | 'listProviders'
+    | 'getActiveProviderName'
+    | 'listAvailableModels'
+    | 'getActiveModelName'
+    | 'providerStatus'
+    | 'getUnallowedParametersForActiveModel'
+    | 'getActiveProviderMetrics'
+    | 'getSessionTokenUsage'
+    | 'getActiveModelParams'
+  >,
 ): RuntimeOwnerFeatures {
   sessionSettings.assertSettingsIdentity(settingsService);
   return {
-    listProviders: () => listProviders(manager),
-    getActiveProviderName: () => {
-      const name = readActiveProviderName(settingsService, manager);
-      if (name === null) throw new Error(NO_ACTIVE_PROVIDER_ERROR_MESSAGE);
-      return name;
-    },
-    listAvailableModels: (provider) => listAvailableModels(provider, manager),
-    getActiveModelName: () => getActiveModelName(sessionSettings, manager),
-    providerStatus: () =>
-      readProviderStatus(
-        settingsService,
-        manager,
-        sessionSettings.readSelectedModel() ?? owner.getModel(),
-      ),
-    getEphemeralSettings: () => getEphemeralSettings(sessionSettings),
+    listProviders: () => reads.listProviders(),
+    getActiveModelParams: () => reads.getActiveModelParams(),
+    getActiveProviderName: () => reads.getActiveProviderName(),
+    listAvailableModels: (provider) => reads.listAvailableModels(provider),
+    getActiveModelName: () => reads.getActiveModelName(),
+    providerStatus: () => reads.providerStatus(),
+    getEphemeralSettings: () => sessionSettings.captureNamedParameters(),
     setEphemeralSetting: (key, value) =>
       setEphemeralSetting(key, value, sessionSettings),
     getUnallowedParametersForActiveModel: () =>
-      getUnallowedParametersForActiveModel(sessionSettings, manager),
+      reads.getUnallowedParametersForActiveModel(),
     saveLoadBalancerProfile: (name, profile) =>
       definitions.profileWrites.saveProfile(name, profile),
     listSavedProfiles: () => definitions.profileDefinitions.listProfiles(),
@@ -159,10 +149,10 @@ export function createRuntimeOwnerFeatures(
         sessionSettings,
         manager.getActiveProvider(),
       ),
-    getActiveProviderMetrics: () => getActiveProviderMetrics(manager),
-    getSessionTokenUsage: () => getSessionTokenUsage(manager),
-    getEphemeralSetting: (key) => getEphemeralSetting(key, sessionSettings),
-    getSessionSetting: (key) => getSessionSetting(key, sessionSettings),
+    getActiveProviderMetrics: () => reads.getActiveProviderMetrics(),
+    getSessionTokenUsage: () => reads.getSessionTokenUsage(),
+    getEphemeralSetting: (key) => sessionSettings.readNamedParameter(key),
+    getSessionSetting: (key) => sessionSettings.readSessionOverride(key),
     setSessionSetting: (key, value) =>
       setSessionSetting(key, value, sessionSettings),
     clearSessionSetting: (key) => clearSessionSetting(key, sessionSettings),

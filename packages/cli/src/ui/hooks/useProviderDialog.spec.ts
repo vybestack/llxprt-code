@@ -15,7 +15,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { act } from 'react';
 import { renderHook } from '../../__tests__/render.js';
 import { MessageType } from '../types.js';
-import { NO_ACTIVE_PROVIDER_ERROR_MESSAGE } from '@vybestack/llxprt-code-providers/runtime.js';
+import { NO_ACTIVE_PROVIDER_ERROR_MESSAGE } from '@vybestack/llxprt-code-agents';
 import type { AgentProviderSwitchResult } from '@vybestack/llxprt-code-agents';
 import {
   createDialogStore,

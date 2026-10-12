@@ -9,7 +9,6 @@ import {
   type Agent,
   type ProviderActivationIntent,
 } from '@vybestack/llxprt-code-agents';
-import { getActiveProviderName } from '@vybestack/llxprt-code-providers/runtime.js';
 import {
   buildCliStyleConfig,
   type MessageBus,
@@ -35,9 +34,7 @@ describe('fromConfig executes the activation intent (#2374)', () => {
         activation: intent,
       });
       expect(agent.getProvider()).toBe('fake');
-      expect(
-        getActiveProviderName(built.settingsOwner, built.providerManager),
-      ).toBe('fake');
+      expect(agent.providerReads.getActiveProviderName()).toBe('fake');
       await agent.dispose();
     } finally {
       await built.cleanup();

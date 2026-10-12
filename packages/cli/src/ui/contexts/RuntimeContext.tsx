@@ -17,25 +17,13 @@ import type {
   Agent,
   AgentProviderSwitchOptions,
   AgentProviderSwitchResult,
+  SessionProviderReads,
 } from '@vybestack/llxprt-code-agents';
 import type {
-  getActiveModelName,
-  getActiveProviderMetrics,
-  getActiveProviderName,
-  getUnallowedParametersForActiveModel,
-  listAvailableModels,
-  listProviders,
-  getSessionTokenUsage,
-} from '@vybestack/llxprt-code-providers/runtime/providerReadOperations.js';
-import type {
-  getEphemeralSetting,
-  getEphemeralSettings,
-  getSessionSetting,
   setEphemeralSetting,
   setSessionSetting,
   clearSessionSetting,
 } from '@vybestack/llxprt-code-providers/runtime/ownerSettingsOperations.js';
-import type { getActiveModelParams } from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
 import type {
   getActiveToolFormatState,
   setActiveModel,
@@ -47,7 +35,6 @@ import type {
   getProfileByName,
   saveLoadBalancerProfile,
 } from '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js';
-import type { ProviderRuntimeStatus } from '@vybestack/llxprt-code-providers/runtime/providerStatus.js';
 import type { createProviderInspection } from '../../runtime/providerInspection.js';
 import type { getOpenAIProviderInfo } from '@vybestack/llxprt-code-providers';
 
@@ -57,43 +44,44 @@ import type { getOpenAIProviderInfo } from '@vybestack/llxprt-code-providers';
  * @pseudocode cli-runtime-isolation.md lines 4-10
  * React bridge that binds UI runtime operations to its Agent and owner features.
  */
-type RuntimeFunctions = ReturnType<typeof createProviderInspection> & {
-  listProviders: () => ReturnType<typeof listProviders>;
-  getActiveProviderName: () => ReturnType<typeof getActiveProviderName>;
-  listAvailableModels: (
-    provider?: string,
-  ) => ReturnType<typeof listAvailableModels>;
-  getActiveModelName: () => ReturnType<typeof getActiveModelName>;
-  providerStatus: () => ProviderRuntimeStatus;
-  getEphemeralSettings: () => ReturnType<typeof getEphemeralSettings>;
-  setEphemeralSetting: (
-    key: string,
-    value: unknown,
-  ) => ReturnType<typeof setEphemeralSetting>;
-  getUnallowedParametersForActiveModel: () => ReturnType<
-    typeof getUnallowedParametersForActiveModel
-  >;
-  saveProfileDefinition: (name: string, profile: unknown) => Promise<void>;
-  saveLoadBalancerProfile: (
-    name: string,
-    profile: Parameters<typeof saveLoadBalancerProfile>[1],
-  ) => Promise<void>;
-  listSavedProfiles: () => Promise<string[]>;
-  getProfileByName: (name: string) => ReturnType<typeof getProfileByName>;
-  getActiveToolFormatState: () => ReturnType<typeof getActiveToolFormatState>;
-  setActiveToolFormatOverride: (
-    format: Parameters<typeof setActiveToolFormatOverride>[0],
-  ) => ReturnType<typeof setActiveToolFormatOverride>;
-  getActiveProviderMetrics: () => ReturnType<typeof getActiveProviderMetrics>;
-  getSessionTokenUsage: () => ReturnType<typeof getSessionTokenUsage>;
-  getEphemeralSetting: (key: string) => ReturnType<typeof getEphemeralSetting>;
-  getSessionSetting: (key: string) => ReturnType<typeof getSessionSetting>;
-  setSessionSetting: (
-    key: string,
-    value: unknown,
-  ) => ReturnType<typeof setSessionSetting>;
-  clearSessionSetting: (key: string) => ReturnType<typeof clearSessionSetting>;
-};
+type RuntimeFunctions = ReturnType<typeof createProviderInspection> &
+  Pick<
+    SessionProviderReads,
+    | 'listProviders'
+    | 'getActiveProviderName'
+    | 'listAvailableModels'
+    | 'getActiveModelName'
+    | 'providerStatus'
+    | 'getUnallowedParametersForActiveModel'
+    | 'getActiveProviderMetrics'
+    | 'getSessionTokenUsage'
+  > & {
+    getEphemeralSettings: () => Readonly<Record<string, unknown>>;
+    setEphemeralSetting: (
+      key: string,
+      value: unknown,
+    ) => ReturnType<typeof setEphemeralSetting>;
+    saveProfileDefinition: (name: string, profile: unknown) => Promise<void>;
+    saveLoadBalancerProfile: (
+      name: string,
+      profile: Parameters<typeof saveLoadBalancerProfile>[1],
+    ) => Promise<void>;
+    listSavedProfiles: () => Promise<string[]>;
+    getProfileByName: (name: string) => ReturnType<typeof getProfileByName>;
+    getActiveToolFormatState: () => ReturnType<typeof getActiveToolFormatState>;
+    setActiveToolFormatOverride: (
+      format: Parameters<typeof setActiveToolFormatOverride>[0],
+    ) => ReturnType<typeof setActiveToolFormatOverride>;
+    getEphemeralSetting: (key: string) => unknown;
+    getSessionSetting: (key: string) => unknown;
+    setSessionSetting: (
+      key: string,
+      value: unknown,
+    ) => ReturnType<typeof setSessionSetting>;
+    clearSessionSetting: (
+      key: string,
+    ) => ReturnType<typeof clearSessionSetting>;
+  };
 
 type AgentSetProvider = (
   provider: string,
@@ -112,7 +100,9 @@ type ProfileRuntimeApi = Pick<
 
 export type RuntimeOwnerFeatures = RuntimeFunctions & {
   setActiveModel: (model: string) => ReturnType<typeof setActiveModel>;
-  getActiveModelParams: () => ReturnType<typeof getActiveModelParams>;
+  getActiveModelParams: () => ReturnType<
+    SessionProviderReads['getActiveModelParams']
+  >;
   setActiveModelParam: (key: string, value: unknown) => void;
   clearActiveModelParam: (key: string) => void;
   updateActiveProviderApiKey: (

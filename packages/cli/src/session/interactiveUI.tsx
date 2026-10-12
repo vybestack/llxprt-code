@@ -328,6 +328,7 @@ function buildRenderElement(
       runtimeSettings.owner,
       runtimeSettings.store,
       agent.workspace,
+      agent.providerReads,
     );
   return (
     <React.StrictMode>

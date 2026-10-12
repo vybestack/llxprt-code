@@ -1,3 +1,4 @@
+import type { SessionProviderReads } from './session-provider-reads.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import type {
@@ -1062,6 +1063,7 @@ export interface AgentLspControl {
 }
 
 export interface Agent {
+  readonly providerReads: SessionProviderReads;
   readonly sessionClient: {
     readonly fetch: NetworkFetch;
     readonly runImageOperation: ImageOperationRunner;

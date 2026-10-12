@@ -156,6 +156,7 @@ async function profile() {
         boot.runtimeSettingsOwner,
         boot.runtimeSettingsService,
         agent.workspace,
+        agent.providerReads,
       );
       await setupOwnerSessionRecording(boot.config, agent, argv, null);
       const events = await stream(agent, 'profile-controlled prompt');

@@ -5,9 +5,10 @@
  */
 import { afterEach, describe, expect, it } from 'bun:test';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { fromConfig } from '@vybestack/llxprt-code-agents';
-import { listProviders } from '@vybestack/llxprt-code-providers/runtime.js';
-import { readActiveProviderName } from '@vybestack/llxprt-code-providers/runtime/providerReadOperations.js';
+import {
+  fromConfig,
+  SessionProviderReads,
+} from '@vybestack/llxprt-code-agents';
 import { createRuntimeApi } from '../../ui/contexts/RuntimeContext.js';
 import { createRuntimeOwnerFeatures } from '../createRuntimeOwnerFeatures.js';
 import { createSessionModelCommand } from '../session-model-command.js';
@@ -49,8 +50,8 @@ describe('CLI retained session model commands', () => {
       sessionId: 'shared-isolation-label',
     });
     try {
-      expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
-        'Provider listing requires an explicit owner',
+      expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+        'Provider reads require an explicit session owner',
       );
       expect(first.providerManager).not.toBe(second.providerManager);
       const firstApi = createRuntimeApi(
@@ -63,6 +64,7 @@ describe('CLI retained session model commands', () => {
           first.settingsOwner,
           first.settingsService,
           agentA.workspace,
+          agentA.providerReads,
         ),
         agentA.sessionClient.fetch,
       );
@@ -76,12 +78,13 @@ describe('CLI retained session model commands', () => {
           second.settingsOwner,
           second.settingsService,
           agentB.workspace,
+          agentB.providerReads,
         ),
         agentB.sessionClient.fetch,
       );
-      expect(
-        readActiveProviderName(first.settingsService, first.providerManager),
-      ).toBe(firstApi.getActiveProviderName());
+      expect(agentA.providerReads.readActiveProviderName()).toBe(
+        firstApi.getActiveProviderName(),
+      );
       expect([
         firstApi.getActiveProviderName(),
         secondApi.getActiveProviderName(),

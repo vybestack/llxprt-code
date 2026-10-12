@@ -59,12 +59,7 @@ import {
   createProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  switchActiveProvider,
-  getActiveProviderName,
-  listProviders,
-  readProviderStatus,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+import { switchActiveProvider } from '@vybestack/llxprt-code-providers/runtime.js';
 import {
   createTempDirectory,
   cleanupTempDirectory,
@@ -430,9 +425,9 @@ describe('Provider switching reachable through CLI/runtime flow', () => {
    */
   it('switchActiveProvider changes active provider through CLI runtime path', async () => {
     await providerManager.setActiveProvider('provider-a');
-    expect(
-      getActiveProviderName(sessionRoot.settingsOwner, providerManager),
-    ).toBe('provider-a');
+    expect(sessionRoot.agent.providerReads.getActiveProviderName()).toBe(
+      'provider-a',
+    );
 
     const result = await switchActiveProvider(
       'provider-b',
@@ -443,9 +438,9 @@ describe('Provider switching reachable through CLI/runtime flow', () => {
     );
     expect(result.changed).toBe(true);
     expect(result.nextProvider).toBe('provider-b');
-    expect(
-      getActiveProviderName(sessionRoot.settingsOwner, providerManager),
-    ).toBe('provider-b');
+    expect(sessionRoot.agent.providerReads.getActiveProviderName()).toBe(
+      'provider-b',
+    );
   });
 
   /**
@@ -456,7 +451,7 @@ describe('Provider switching reachable through CLI/runtime flow', () => {
    * registered providers.
    */
   it('listProviders returns registered providers through CLI runtime path', () => {
-    const providers = listProviders(providerManager);
+    const providers = sessionRoot.agent.providerReads.listProviders();
     expect(providers).toContain('provider-a');
     expect(providers).toContain('provider-b');
   });
@@ -478,11 +473,7 @@ describe('Provider switching reachable through CLI/runtime flow', () => {
         sessionClient.refreshAuth(),
       )),
     );
-    const status = readProviderStatus(
-      settingsService,
-      providerManager,
-      sessionRoot.agent.getModel(),
-    );
+    const status = sessionRoot.agent.providerReads.providerStatus();
     expect(status.providerName).toBe('provider-b');
   });
 

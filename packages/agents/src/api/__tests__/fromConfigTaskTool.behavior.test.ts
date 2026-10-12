@@ -14,7 +14,7 @@ function requirePaths(
     throw new Error('Fixture factory requires workspace paths');
   return paths;
 }
-import { listProviders } from '@vybestack/llxprt-code-providers/runtime.js';
+import { SessionProviderReads } from '@vybestack/llxprt-code-agents';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 
 /**
@@ -530,8 +530,8 @@ describe('fromConfig tokenizer readiness @requirement:REQ-3217-001 @requirement:
         model: 'fake-model',
       });
       expect(readinessTarget?.provider).not.toBe('stale-config-provider');
-      expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
-        'Provider listing requires an explicit owner',
+      expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+        'Provider reads require an explicit session owner',
       );
     } finally {
       await built.cleanup();

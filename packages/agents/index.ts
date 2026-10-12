@@ -22,3 +22,9 @@ export {
 } from './src/api/profileApplicationAssembly.js';
 
 export { McpRuntimeOwner } from './src/api/mcpRuntimeAssembly.js';
+
+export {
+  NO_ACTIVE_PROVIDER_ERROR_MESSAGE,
+  SessionProviderReads,
+  type SessionProviderStatus,
+} from './src/api/session-provider-reads.js';

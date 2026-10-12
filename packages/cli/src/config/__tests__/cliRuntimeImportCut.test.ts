@@ -1,3 +1,4 @@
+import { SessionProviderReads } from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -199,6 +200,12 @@ describe('CLI provider bootstrap across owners', () => {
             item.settingsOwner,
             item.settingsService,
             definitionFixture(),
+            new SessionProviderReads(
+              item.settingsOwner,
+              item.runtimeState.providerManager,
+              () => config.getModel(),
+              (provider) => item.settingsService.getProviderSettings(provider),
+            ),
           ).getActiveModelName(),
         ).toBe(item.model);
       }

@@ -5,47 +5,12 @@
  */
 
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { getProviderConfigKeys } from '@vybestack/llxprt-code-settings/settings/settingsRegistry.js';
-
-const RESERVED_PROVIDER_SETTING_KEYS: readonly string[] = Object.freeze(
-  getProviderConfigKeys(),
-);
 
 export function getProviderSettingsSnapshot(
   settings: Pick<SettingsService, 'getProviderSettings'>,
   providerName: string,
 ): Record<string, unknown> {
   return settings.getProviderSettings(providerName);
-}
-
-export function extractModelParams(
-  providerSettings: Record<string, unknown>,
-): Record<string, unknown> {
-  const params: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(providerSettings)) {
-    if (
-      value === undefined ||
-      value === null ||
-      RESERVED_PROVIDER_SETTING_KEYS.includes(key)
-    )
-      continue;
-    params[key] = value;
-  }
-  return params;
-}
-
-export function getActiveModelParams(
-  settingsService: Pick<SettingsService, 'getProviderSettings'>,
-  providerName: string | undefined,
-): Record<string, unknown> {
-  if (!providerName) {
-    return {};
-  }
-  const providerSettings = getProviderSettingsSnapshot(
-    settingsService,
-    providerName,
-  );
-  return extractModelParams(providerSettings);
 }
 
 export function setActiveModelParam(
