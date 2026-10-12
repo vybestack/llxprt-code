@@ -201,7 +201,7 @@ let runtimeManager: import('@vybestack/llxprt-code-core').RuntimeProviderManager
 describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURESTORE.P17', () => {
   let mockKeyring: KeyringAdapter & { store: Map<string, string> };
   let tempDir: string;
-  let runtimeMod: typeof import('@vybestack/llxprt-code-providers/runtime.js');
+  let runtimeMod: typeof import('../../../../agents/src/api/settingsResolver.js');
   let contextFactoryMod: typeof import('@vybestack/llxprt-code-providers/runtime.js');
   let cleanupHandle: (() => Promise<void> | void) | null = null;
 
@@ -210,7 +210,7 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
     tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'auth-key-name-test-'));
     mockStorageRef = createTestStorage(mockKeyring, tempDir);
 
-    runtimeMod = await import('@vybestack/llxprt-code-providers/runtime.js');
+    runtimeMod = await import('../../../../agents/src/api/settingsResolver.js');
     contextFactoryMod = await import(
       '@vybestack/llxprt-code-providers/runtime.js'
     );
@@ -532,7 +532,7 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
   describe('Issue #208 auth-key-name clear behavior', () => {
     let mockKeyring: KeyringAdapter & { store: Map<string, string> };
     let tempDir: string;
-    let runtimeMod: typeof import('@vybestack/llxprt-code-providers/runtime.js');
+    let runtimeMod: typeof import('../../../../agents/src/api/providerMutations.js');
     let contextFactoryMod: typeof import('@vybestack/llxprt-code-providers/runtime.js');
     let cleanupHandle: (() => Promise<void> | void) | null = null;
 
@@ -543,7 +543,9 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
       );
       mockStorageRef = createTestStorage(mockKeyring, tempDir);
 
-      runtimeMod = await import('@vybestack/llxprt-code-providers/runtime.js');
+      runtimeMod = await import(
+        '../../../../agents/src/api/providerMutations.js'
+      );
       contextFactoryMod = await import(
         '@vybestack/llxprt-code-providers/runtime.js'
       );

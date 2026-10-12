@@ -4,8 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export { admitModelParameters } from './admitModelParameters.js';
-export { admitLoadBalancerModelParameters } from './admitLoadBalancerModelParameters.js';
 export { createProviderKeyStorage } from '../auth/index.js';
 export {
   createRuntimeActivationBindings,
@@ -36,27 +34,3 @@ export type {
   AssembleCliProviderRuntimeInput,
   AssembledCliProviderRuntime,
 } from './assembleCliProviderRuntime.js';
-
-export {
-  switchActiveProvider,
-  DEFAULT_PRESERVE_EPHEMERALS,
-} from './providerSwitch.js';
-
-export {
-  updateActiveProviderApiKey,
-  updateActiveProviderBaseUrl,
-  setActiveModel,
-} from './providerMutations.js';
-
-export {
-  applyCliArgumentOverrides,
-  resolveNamedKey,
-} from './settingsResolver.js';
-
-// Provider config utilities (re-exported so the zed/ACP integration and other
-// bootstrap clients reach them via the public runtime.js barrel).
-export {
-  setProviderApiKey,
-  setProviderBaseUrl,
-} from './providerConfigUtils.js';
-export type { ProviderConfigResult } from './providerConfigUtils.js';

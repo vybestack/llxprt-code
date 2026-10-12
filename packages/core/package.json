@@ -731,6 +731,11 @@
       "types": "./dist/src/services/workspace-memory-owner.d.ts",
       "bun": "./src/services/workspace-memory-owner.ts",
       "import": "./dist/src/services/workspace-memory-owner.js"
+    },
+    "./runtime/admit-model-parameters.js": {
+      "types": "./dist/src/runtime/admit-model-parameters.d.ts",
+      "bun": "./src/runtime/admit-model-parameters.ts",
+      "import": "./dist/src/runtime/admit-model-parameters.js"
     }
   },
   "scripts": {

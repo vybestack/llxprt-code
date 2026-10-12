@@ -123,7 +123,9 @@ void vi.mock(
   },
 );
 
-const { switchActiveProvider } = await import('./index.js');
+const { switchActiveProvider } = await import(
+  '../../../agents/src/api/provider-switch/provider-switch.js'
+);
 
 let mockOAuthEnabledForClaudeCode = false;
 

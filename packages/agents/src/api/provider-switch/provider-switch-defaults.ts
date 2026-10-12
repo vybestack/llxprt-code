@@ -3,12 +3,12 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { ProviderAliasConfig } from '../composition/providerAliases.js';
-import { computeModelDefaults } from '../model-defaults.js';
+import type { ProviderAliasConfig } from '@vybestack/llxprt-code-providers/composition.js';
+import { computeModelDefaults } from '@vybestack/llxprt-code-providers/model-defaults.js';
 import {
   REASONING_OBJECT_VALUED_EPHEMERAL_KEYS,
   USER_OWNED_SWITCH_PRESERVED_KEYS,
-} from './modelDefaultOwnership.js';
+} from './model-default-ownership.js';
 
 export interface EphemeralDefaultWrites {
   getEphemeralSetting(key: string): unknown;

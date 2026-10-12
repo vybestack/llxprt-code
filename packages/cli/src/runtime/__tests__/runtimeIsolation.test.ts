@@ -6,6 +6,7 @@ import {
   assembleProfileApplication,
   assembleProviderSwitch,
   SessionProviderReads,
+  switchActiveProvider,
 } from '@vybestack/llxprt-code-agents';
 import {
   providerSwitchInputs,
@@ -33,11 +34,12 @@ import { setActiveModelParam } from '../../../../agents/src/api/model-parameters
 import {
   activateIsolatedRuntimeContext,
   createIsolatedRuntimeContext,
+} from '@vybestack/llxprt-code-providers/runtime.js';
+import {
   setActiveModel,
-  switchActiveProvider,
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+} from '../../../../agents/src/api/providerMutations.js';
 import { Config } from '@vybestack/llxprt-code-core';
 import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeContextFactory.js';
 import { createProviderSessionOwner } from '../../integration-tests/__tests__/session-client-owner-fixture.js';

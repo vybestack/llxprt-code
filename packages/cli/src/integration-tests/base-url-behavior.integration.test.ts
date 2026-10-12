@@ -37,8 +37,8 @@ import {
   initializeTestSessionRoot,
   type CliTestSessionRoot,
 } from './test-utils.js';
-import { switchActiveProvider } from '@vybestack/llxprt-code-providers/runtime.js';
-import { setProviderBaseUrl } from '@vybestack/llxprt-code-providers/runtime/providerConfigUtils.js';
+import { switchActiveProvider } from '@vybestack/llxprt-code-agents';
+import { setProviderBaseUrl } from '../../../agents/src/api/providerConfigUtils.js';
 
 /**
  * @plan:PLAN-20250218-STATELESSPROVIDER.P07

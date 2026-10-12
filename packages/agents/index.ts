@@ -50,3 +50,8 @@ export {
   AgentProfilePreflight,
   type AgentPostConfigSettings,
 } from './src/api/profile-preflight.js';
+
+export {
+  switchActiveProvider,
+  DEFAULT_PRESERVE_EPHEMERALS,
+} from './src/api/provider-switch/provider-switch.js';

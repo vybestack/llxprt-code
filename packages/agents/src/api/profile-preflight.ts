@@ -27,7 +27,7 @@ import {
   assembleCliProviderRuntime,
   type AssembledCliProviderRuntime,
 } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
-import { applyCliArgumentOverrides } from '@vybestack/llxprt-code-providers/runtime/settingsResolver.js';
+import { applyCliArgumentOverrides } from './settingsResolver.js';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 import {
   captureAgentPreflightHostInput,

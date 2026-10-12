@@ -17,7 +17,7 @@
       "runtime-service-bundle": 0
     },
     "providers": {
-      "runtime-service-bundle": 31,
+      "runtime-service-bundle": 30,
       "runtime-service-bag-parameter": 12
     },
     "zed-acp": {

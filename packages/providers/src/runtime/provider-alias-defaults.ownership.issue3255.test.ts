@@ -113,9 +113,13 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
   };
 });
 
-const { switchActiveProvider } = await import('./providerSwitch.js');
+const { switchActiveProvider } = await import(
+  '../../../agents/src/api/provider-switch/provider-switch.js'
+);
 
-const { setActiveModel } = await import('./providerMutations.js');
+const { setActiveModel } = await import(
+  '../../../agents/src/api/providerMutations.js'
+);
 
 const mockOAuthManager = {
   clearRetryHandlers: () => {},

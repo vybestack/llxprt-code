@@ -43,16 +43,16 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
-import { setActiveModel } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { setActiveModel } from './providerMutations.js';
 import {
   setActiveModelParam,
   clearActiveModelParam,
 } from './model-parameters.js';
-import { applyCliArgumentOverrides } from '@vybestack/llxprt-code-providers/runtime/settingsResolver.js';
+import { applyCliArgumentOverrides } from './settingsResolver.js';
 import {
   setProviderApiKey,
   setProviderBaseUrl,
-} from '@vybestack/llxprt-code-providers/runtime/providerConfigUtils.js';
+} from './providerConfigUtils.js';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import type { ProviderActivationIntent } from './config-types.js';
 import {

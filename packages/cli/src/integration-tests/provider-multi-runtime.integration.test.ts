@@ -27,10 +27,10 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { type Profile } from '@vybestack/llxprt-code-settings';
 import { Config } from '@vybestack/llxprt-code-core';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
+import { switchActiveProvider } from '@vybestack/llxprt-code-agents';
 import {
   activateIsolatedRuntimeContext,
   createIsolatedRuntimeContext,
-  switchActiveProvider,
   type IsolatedRuntimeActivationOptions,
   type IsolatedRuntimeContextHandle,
 } from '@vybestack/llxprt-code-providers/runtime.js';

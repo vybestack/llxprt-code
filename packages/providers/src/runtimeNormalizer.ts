@@ -6,13 +6,11 @@
 
 import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 import type { GenerateChatOptions, IProvider } from './IProvider.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { ProviderRuntimeNormalizationError } from './errors.js';
 import { getBaseUrlFromProvider } from './baseUrlResolver.js';
 import { isAbortSignal } from './utils/abortSignal.js';
 import { safeGetDefaultModel } from './utils/safeDefaultModel.js';
-import { PROVIDER_CONFIG_KEYS } from './providerConfigKeys.js';
 import { isContainerSandbox } from './utils/containerSandbox.js';
 
 export interface RuntimeNormalizerDeps {
@@ -96,20 +94,6 @@ export function normalizeRuntimeInputs(
 
 function validString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
-}
-
-export function buildEphemeralsSnapshot(
-  settingsService: SettingsService,
-  providerName: string,
-): Record<string, unknown> {
-  return {
-    ...Object.fromEntries(
-      Object.entries(settingsService.getAllGlobalSettings()).filter(
-        ([key]) => !PROVIDER_CONFIG_KEYS.has(key),
-      ),
-    ),
-    [providerName]: { ...settingsService.getProviderSettings(providerName) },
-  };
 }
 
 function shouldApplyGlobal(

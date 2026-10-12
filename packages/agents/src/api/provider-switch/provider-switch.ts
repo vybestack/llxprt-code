@@ -6,7 +6,7 @@
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { OAuthManager } from '../auth/oauth-manager.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   DebugLogger,
   type Config,
@@ -18,13 +18,13 @@ import type {
   ProviderSwitchResult,
 } from '@vybestack/llxprt-code-core';
 import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { extractProviderBaseUrl } from './providerMutations.js';
+import { extractProviderBaseUrl } from '@vybestack/llxprt-code-providers/composition.js';
 import {
   loadProviderAliasEntries,
   type ProviderAliasConfig,
   ensureOAuthProviderRegistered,
   configureProviderRuntimeFactories,
-} from '../composition/index.js';
+} from '@vybestack/llxprt-code-providers/composition.js';
 import {
   executeProviderSwitch,
   type SwitchRequest,
@@ -32,8 +32,6 @@ import {
   type SwitchActivationOperations,
 } from './provider-switch-execution.js';
 import type { SwitchOAuthOperations } from './provider-switch-oauth.js';
-
-export { resolveLazyClaudeCodeOAuthDecision } from './provider-switch-oauth.js';
 
 function logger(): DebugLogger {
   return new DebugLogger('llxprt:runtime:settings');

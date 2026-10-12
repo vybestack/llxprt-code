@@ -118,6 +118,7 @@
   "ChatCompressionInfoSchema",
   "CheckpointInfo",
   "CompressionResult",
+  "DEFAULT_PRESERVE_EPHEMERALS",
   "DisplayCallbacks",
   "DoneReason",
   "DoneReasonSchema",
@@ -217,5 +218,6 @@
   "registerActivateSkillTool",
   "requestAgentPreflightOAuth",
   "splitPartsByRole",
+  "switchActiveProvider",
   "toConfigParameters"
 ]

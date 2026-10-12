@@ -51,16 +51,6 @@
       "bun": "./src/runtime/index.ts",
       "import": "./dist/src/runtime/index.js"
     },
-    "./runtime/admitModelParameters.js": {
-      "types": "./dist/src/runtime/admitModelParameters.d.ts",
-      "bun": "./src/runtime/admitModelParameters.ts",
-      "import": "./dist/src/runtime/admitModelParameters.js"
-    },
-    "./runtime/admitLoadBalancerModelParameters.js": {
-      "types": "./dist/src/runtime/admitLoadBalancerModelParameters.d.ts",
-      "bun": "./src/runtime/admitLoadBalancerModelParameters.ts",
-      "import": "./dist/src/runtime/admitLoadBalancerModelParameters.js"
-    },
     "./runtime/runtimeLifecycle.js": {
       "types": "./dist/src/runtime/runtimeLifecycle.d.ts",
       "bun": "./src/runtime/runtimeLifecycle.ts",
@@ -85,26 +75,6 @@
       "types": "./dist/src/runtime/cliForegroundRuntime.d.ts",
       "bun": "./src/runtime/cliForegroundRuntime.ts",
       "import": "./dist/src/runtime/cliForegroundRuntime.js"
-    },
-    "./runtime/settingsResolver.js": {
-      "types": "./dist/src/runtime/settingsResolver.d.ts",
-      "bun": "./src/runtime/settingsResolver.ts",
-      "import": "./dist/src/runtime/settingsResolver.js"
-    },
-    "./runtime/providerSwitch.js": {
-      "types": "./dist/src/runtime/providerSwitch.d.ts",
-      "bun": "./src/runtime/providerSwitch.ts",
-      "import": "./dist/src/runtime/providerSwitch.js"
-    },
-    "./runtime/providerMutations.js": {
-      "types": "./dist/src/runtime/providerMutations.d.ts",
-      "bun": "./src/runtime/providerMutations.ts",
-      "import": "./dist/src/runtime/providerMutations.js"
-    },
-    "./runtime/providerConfigUtils.js": {
-      "types": "./dist/src/runtime/providerConfigUtils.d.ts",
-      "bun": "./src/runtime/providerConfigUtils.ts",
-      "import": "./dist/src/runtime/providerConfigUtils.js"
     },
     "./runtime/statelessHardening.js": {
       "types": "./dist/src/runtime/statelessHardening.d.ts",
