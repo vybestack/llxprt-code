@@ -441,6 +441,10 @@ async function verifyStoredHistoryOnToolsRefresh(): Promise<{
         stored.clear();
         await stored.waitForOwnershipSettlement();
       },
+      clearHistoryForDisposal: async (): Promise<void> => {
+        stored.clear();
+        await stored.waitForOwnershipSettlement();
+      },
       getHistoryService: vi.fn().mockReturnValue(stored),
       getLastPromptTokenCount: vi.fn().mockReturnValue(0),
       getProjectedPromptBaseline: vi.fn().mockReturnValue(0),
