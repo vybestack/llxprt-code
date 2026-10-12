@@ -147,16 +147,14 @@ import {
 import { ChatSession, StreamEventType } from './chatSession.js';
 import { executeNonInteractiveRun } from './subagentNonInteractive.js';
 import type { ExecutionLoopContext } from './subagentExecution.js';
-import {
-  getScopeLocalFuncDefs,
-  createToolExecutionConfig,
-} from './subagentRuntimeSetup.js';
+import { getScopeLocalFuncDefs } from './subagentRuntimeSetup.js';
 import { SubAgentScope } from './subagent.js';
 import { classifyToolCompletions } from './subagentToolProcessing.js';
 import {
   createStatelessRuntimeBundle,
   defaultModelConfig,
   defaultRunConfig,
+  scopeInputs,
 } from './__tests__/subagent-test-helpers.js';
 
 const { readTodos, TodoStoreMock } = (() => {
@@ -406,35 +404,24 @@ async function runInteractiveDirect(responses: readonly IContent[]): Promise<{
   const bundle = createStatelessRuntimeBundle({
     history: new HistoryService(),
     providerAdapter,
-  });
-  const toolExecutorContext = createToolExecutionConfig(
-    bundle.telemetryRoot,
-    () => bundle.runtimeContext.readToolExecutionPolicy(),
-    () => bundle.runtimeContext.state.sessionId,
     toolRegistry,
-  );
-  const scope = new (SubAgentScope as unknown as new (
-    ...args: unknown[]
-  ) => SubAgentScope)(
+  });
+  const scope = await SubAgentScope.create(
     'interactive-issue3535-agent',
-    bundle.runtimeContext,
+    config,
+    { systemPrompt: 'Do the task.' },
     defaultModelConfig,
     defaultRunConfig,
-    { systemPrompt: 'Do the task.' },
-    undefined,
-    toolExecutorContext,
-    async () => [],
-    config,
-    fixturePaths(),
-    () => undefined,
-    emptyInstructionReads,
-    undefined,
-    messageBus,
     undefined,
     OUTPUT_CONFIG,
-    undefined,
-    undefined,
-    {},
+    ...scopeInputs({
+      runtimeBundle: bundle,
+      environmentContextLoader: async () => [],
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
+      messageBus,
+    }),
   );
   await scope.runInteractive(new ContextState());
   return {
