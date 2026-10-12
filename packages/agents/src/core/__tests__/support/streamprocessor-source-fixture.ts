@@ -20,6 +20,7 @@ import {
   type DiskTextTail,
 } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import { projectionInstructions } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/projection-ownership-fixture.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { StreamProcessor } from '../../StreamProcessor.js';
 import { ConversationManager } from '../../ConversationManager.js';
 import { CompressionHandler } from '../../../compression/CompressionHandler.js';
@@ -143,6 +144,9 @@ export function assembleProcessorFixture(
   promptEstimator?: RuntimeTokenizerFactory,
 ) {
   const requests: ApiRequestEvent[] = [];
+  // Runtime policy (context-limit, compression thresholds) is read live from the
+  // same store the tests mutate, as the session owner does in production.
+  const settingsOwner = new SessionSettingsOwner(settings);
   const providerRuntime = {
     config,
     settingsService: settings,
@@ -152,6 +156,7 @@ export function assembleProcessorFixture(
     prepareProviderInvocation: (name, parameters, signal) =>
       captureProviderInvocation(providerRuntime, name, parameters, signal),
     promptEstimator,
+    readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
     state: {
       runtimeId: providerRuntime.runtimeId,
       sessionId: config.getSessionId(),
