@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { beforeEach, describe, it, expect, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import { createCompletionHandler, tokenize } from './index.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
@@ -17,9 +17,6 @@ import type {
 } from './types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { firstNonEmptyString } from '../../../utils/coalesce.js';
-
-// Mock command context for tests
-const mockContext = createMockCommandContext();
 
 // Helper functions to create test arguments
 const literal = (
@@ -121,6 +118,10 @@ function completerForErrorMode(isAsyncError: boolean): CompleterFn {
 }
 
 describe('argumentResolver @plan:PLAN-20251013-AUTOCOMPLETE.P04', () => {
+  let mockContext: ReturnType<typeof createMockCommandContext>;
+  beforeEach(() => {
+    mockContext = createMockCommandContext();
+  });
   describe('Basic functionality', () => {
     it('handles empty input gracefully @plan:PLAN-20251013-AUTOCOMPLETE.P04 @requirement:REQ-001', async () => {
       const schema: CommandArgumentSchema = [value('arg1', 'First argument')];

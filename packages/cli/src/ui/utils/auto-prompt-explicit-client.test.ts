@@ -26,17 +26,13 @@ import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
 import { buildAgentClientFactory } from '../../../../agents/src/api/agentBootstrap.js';
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it, spyOn } from 'bun:test';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { TestRuntimeProviderManager } from '../../../../agents/src/test-utils/runtimeProviderManager.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
@@ -57,6 +53,7 @@ async function owner(
   settings: SettingsService;
   requests: unknown[];
   sessionClient: SessionClientOwner;
+  readModelListenerCount: () => number;
 }> {
   const settings = new SettingsService();
   const config = new Config({
@@ -94,6 +91,21 @@ async function owner(
   const settingsOwner = new SessionSettingsOwner(settings);
   settingsOwner.bindTelemetry(config);
   settingsOwner.initializeProviderSelection(name, 'test-model');
+  const listeners = new Set<
+    Parameters<SessionSettingsOwner['subscribeModelChanges']>[0]
+  >();
+  const subscribe = settingsOwner.subscribeModelChanges.bind(settingsOwner);
+  const subscriptionSpy = spyOn(
+    settingsOwner,
+    'subscribeModelChanges',
+  ).mockImplementation((listener) => {
+    const unsubscribe = subscribe(listener);
+    listeners.add(listener);
+    return () => {
+      unsubscribe();
+      listeners.delete(listener);
+    };
+  });
   const sessionClient = await SessionClientOwner.create(
     config,
     assembleTaskSchemaPolicy(settings),
@@ -126,6 +138,7 @@ async function owner(
   cleanups.push(async () => {
     await sessionClient.dispose();
     await settingsOwner.dispose();
+    subscriptionSpy.mockRestore();
     await memory.dispose();
     await tools.dispose();
     await media.dispose();
@@ -133,7 +146,14 @@ async function owner(
   });
   await sessionClient.refreshAuth();
   const client = sessionClient.getAgentClient();
-  return { client, config, settings, requests, sessionClient };
+  return {
+    client,
+    config,
+    settings,
+    requests,
+    sessionClient,
+    readModelListenerCount: () => listeners.size,
+  };
 }
 
 function liveRuntime(source: {
@@ -197,9 +217,8 @@ describe('auto prompt explicit client ownership', () => {
 
   for (const failure of [undefined, new Error('detached generation denied')]) {
     it(`releases detached client event subscriptions after ${failure ? 'failure' : 'success'}`, async () => {
-      const before = coreEvents.listenerCount(CoreEvent.ModelChanged);
       const detached = await owner('detached-owner', failure);
-      expect(coreEvents.listenerCount(CoreEvent.ModelChanged)).toBe(before + 1);
+      expect(detached.readModelListenerCount()).toBe(1);
       const runtime: AutoPromptRuntime = {
         getProvider: () => 'gemini',
         get agentClient() {
@@ -221,7 +240,9 @@ describe('auto prompt explicit client ownership', () => {
           : { text: '  detached-owner: expanded prompt\n' },
       );
       expect(detached.requests).toHaveLength(1);
-      expect(coreEvents.listenerCount(CoreEvent.ModelChanged)).toBe(before + 1);
+      expect(detached.readModelListenerCount()).toBe(1);
+      await detached.sessionClient.dispose();
+      expect(detached.readModelListenerCount()).toBe(0);
     });
   }
 });

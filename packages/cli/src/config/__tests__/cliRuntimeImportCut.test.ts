@@ -211,12 +211,20 @@ describe('CLI provider bootstrap across owners', () => {
               },
             },
             assembleSettingsControl(
-              () => item.settingsOwner,
+              item.settingsOwner.readNamedParameter.bind(item.settingsOwner),
+              item.settingsOwner.captureNamedParameters.bind(
+                item.settingsOwner,
+              ),
+              item.settingsOwner.writeUserParameter.bind(item.settingsOwner),
+              item.settingsOwner.readSessionOverride.bind(item.settingsOwner),
+              item.settingsOwner.writeSessionOverride.bind(item.settingsOwner),
+              item.settingsOwner.clearSessionOverride.bind(item.settingsOwner),
               () => {},
               () => {},
             ),
             assembleToolFormatControl(
-              () => item.settingsOwner,
+              item.settingsOwner.readToolFormat.bind(item.settingsOwner),
+              item.settingsOwner.writeToolFormat.bind(item.settingsOwner),
               () => item.runtimeState.providerManager.getActiveProvider(),
               () => {},
               () => {},

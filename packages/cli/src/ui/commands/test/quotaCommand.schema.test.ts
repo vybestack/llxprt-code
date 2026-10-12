@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { beforeEach, describe, it, expect } from 'bun:test';
 import { createCompletionHandler } from '../schema/index.js';
 import { quotaCommand } from '../quotaCommand.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
@@ -14,10 +14,10 @@ import type {
 } from '../schema/types.js';
 
 describe('quotaCommand schema completion', () => {
-  // The completion handler is read-only with respect to the context for these
-  // tests (it never mutates it), so a single shared mock is safe and avoids
-  // per-test boilerplate.
-  const mockContext = createMockCommandContext();
+  let mockContext: ReturnType<typeof createMockCommandContext>;
+  beforeEach(() => {
+    mockContext = createMockCommandContext();
+  });
 
   /**
    * Resolve the reset subcommand, asserting its schema exists at runtime and
