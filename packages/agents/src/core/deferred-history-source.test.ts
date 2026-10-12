@@ -8,13 +8,8 @@ import {
   rowIndex,
 } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  buildAgent,
-  internalConfig,
-} from '../api/__tests__/helpers/agentHarness.js';
-import { AgentClient } from './client.js';
-import { randomUUID } from 'node:crypto';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import { buildAgent } from '../api/__tests__/helpers/agentHarness.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { accountingFactory } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
 import { bindClientTokenization } from '../session/session-client-binding.js';
@@ -22,31 +17,15 @@ import {
   requireMediaStore,
   type LocalMediaStore,
 } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
-
-const fixturePaths = installTestWorkspacePaths({
-  targetDir: process.cwd(),
-  isTrusted: () => true,
-});
 
 async function buildDeferredClient(): Promise<{
-  client: AgentClient;
+  client: AgentClientContract;
   store: LocalMediaStore;
   cleanup: () => Promise<void>;
 }> {
   const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-  const store = requireMediaStore(agent.agentClient);
-  const client = new AgentClient(
-    internalConfig(agent),
-    createAgentRuntimeState({
-      runtimeId: randomUUID(),
-      provider: 'fake',
-      model: 'fake-model',
-    }),
-    () => undefined,
-    store,
-    fixturePaths(),
-  );
+  const client = await agent.sessionClient.createDetachedAgentClient();
+  const store = requireMediaStore(client);
   bindClientTokenization(client, accountingFactory((text) => text.length));
   return {
     client,
