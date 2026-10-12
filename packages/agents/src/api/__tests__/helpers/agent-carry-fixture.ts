@@ -14,6 +14,7 @@ import {
   accountingFactory,
 } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { AgentClient } from '../../../core/client.js';
+import { isHistorySource } from '../../../core/deferredHistorySource.js';
 import { createAgentRuntimeFactoryBindings } from '../../runtimeFactories.js';
 import { buildAgent, type Agent } from './agentHarness.js';
 
@@ -78,17 +79,43 @@ export class CarryProbeClient extends AgentClient {
     }
   }
 
+  private observedOptions(
+    options: DeferredHistorySourceOptions,
+  ): DeferredHistorySourceOptions {
+    return {
+      ...options,
+      ownership: this.owners,
+      counters: { ...this.counters.counters, ownership: this.owners },
+      signal: this.abort.signal,
+    };
+  }
+
   override async setHistoryFromSource(
     source: AsyncIterable<IContent>,
     options: DeferredHistorySourceOptions = {},
   ): Promise<void> {
     this.admissions++;
-    await super.setHistoryFromSource(this.observed(source), {
-      ...options,
-      ownership: this.owners,
-      counters: { ...this.counters.counters, ownership: this.owners },
-      signal: this.abort.signal,
-    });
+    await super.setHistoryFromSource(
+      this.observed(source),
+      this.observedOptions(options),
+    );
+  }
+
+  // Client replacement carries the previous journal into the new client
+  // through this deferred-source admission, which the chat then adopts as is.
+  override async storeHistoryForLaterUse(
+    history: readonly IContent[] | AsyncIterable<IContent>,
+    options: DeferredHistorySourceOptions = {},
+  ): Promise<void> {
+    if (!isHistorySource(history)) {
+      await super.storeHistoryForLaterUse(history, options);
+      return;
+    }
+    this.admissions++;
+    await super.storeHistoryForLaterUse(
+      this.observed(history),
+      this.observedOptions(options),
+    );
   }
 }
 
