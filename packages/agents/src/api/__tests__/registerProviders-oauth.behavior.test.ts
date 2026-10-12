@@ -1,4 +1,4 @@
-import { CredentialAuthority } from '../../../../providers/src/auth/proxy/credential-store-factory.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
 /**
  * @license

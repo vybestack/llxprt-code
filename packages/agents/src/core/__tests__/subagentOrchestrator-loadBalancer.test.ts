@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
@@ -128,6 +129,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     const foregroundConfig1 = makeForegroundConfig();
     const foregroundSettings1 = createSessionSettingsFixture(foregroundConfig1);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings1.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings1.settingsOwner.createChildStore(),
@@ -165,6 +167,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     const foregroundConfig2 = makeForegroundConfig();
     const foregroundSettings2 = createSessionSettingsFixture(foregroundConfig2);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings2.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings2.settingsOwner.createChildStore(),
@@ -216,6 +219,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     const foregroundConfig3 = makeForegroundConfig();
     const foregroundSettings3 = createSessionSettingsFixture(foregroundConfig3);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings3.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings3.settingsOwner.createChildStore(),
@@ -271,6 +275,7 @@ describe('SubagentOrchestrator - Load Balancer Profiles (Issue #2410)', () => {
     const foregroundConfig4 = makeForegroundConfig();
     const foregroundSettings4 = createSessionSettingsFixture(foregroundConfig4);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings4.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings4.settingsOwner.createChildStore(),

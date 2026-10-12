@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
@@ -90,6 +91,7 @@ async function launchSubagent(
     foregroundSettings,
   );
   const orchestrator = new SubagentOrchestrator({
+    credentialAuthority: new CredentialAuthority(),
     workspaceTrust: foregroundSettings1.workspaceTrust,
     createChildSettings: () =>
       foregroundSettings1.settingsOwner.createChildStore(),
@@ -343,6 +345,7 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
         foreground,
       );
       const orchestrator = new SubagentOrchestrator({
+        credentialAuthority: new CredentialAuthority(),
         workspaceTrust: foregroundSettings2.workspaceTrust,
         createChildSettings: () =>
           foregroundSettings2.settingsOwner.createChildStore(),

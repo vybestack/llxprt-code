@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -52,6 +53,7 @@ export function createObservedChildTask(
     readMcpInstructions,
     orchestratorFactory: (messageBus) =>
       new SubagentOrchestrator({
+        credentialAuthority: new CredentialAuthority(),
         instructions,
         workspaceTrust,
         subagentManager: subagents,

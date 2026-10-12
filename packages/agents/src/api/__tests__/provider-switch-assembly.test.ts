@@ -1,4 +1,4 @@
-import { CredentialAuthority } from '../../../../providers/src/auth/proxy/credential-store-factory.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC

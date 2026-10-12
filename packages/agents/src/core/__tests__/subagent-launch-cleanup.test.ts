@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { describe, expect, it, vi } from 'bun:test';
 import * as runtime from '@vybestack/llxprt-code-providers/runtime.js';
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
@@ -55,6 +56,7 @@ describe('subagent cleanup error retention', () => {
             });
           try {
             const orchestrator = new SubagentOrchestrator({
+              credentialAuthority: new CredentialAuthority(),
               workspaceTrust,
               createChildSettings: () => settingsOwner.createChildStore(),
               readRunPolicy: () => settingsOwner.readSubagentRunPolicy(),

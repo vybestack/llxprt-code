@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -310,10 +311,13 @@ describe('public Agent workspace definition lifetime', () => {
         workingDir: root,
       },
     );
-    const manager = new ProviderManager({
-      config: caller.config,
-      settingsService: caller.settingsService,
-    });
+    const manager = new ProviderManager(
+      {
+        config: caller.config,
+        settingsService: caller.settingsService,
+      },
+      new CredentialAuthority(),
+    );
     manager.registerProvider(
       new FakeProvider(join(fixturesDir, 'multi-turn-text.jsonl')),
     );

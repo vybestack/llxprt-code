@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
 
 import {
@@ -188,6 +189,7 @@ describe('TaskTool runtime MessageBus integration', () => {
       orchestratorFactory: (coreSchedulerMessageBus) => {
         expect(coreSchedulerMessageBus).toBe(sessionMessageBus);
         return new SubagentOrchestrator({
+          credentialAuthority: new CredentialAuthority(),
           workspaceTrust: mcpRuntime.trust,
           createChildSettings: () => settingsOwner.createChildStore(),
           readRunPolicy: () => settingsOwner.readSubagentRunPolicy(),

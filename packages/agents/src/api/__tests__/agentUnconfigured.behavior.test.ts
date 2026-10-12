@@ -13,6 +13,7 @@ const createFilesystem = installTestWorkspaceFilesystem();
 import { ApprovalMode } from '@vybestack/llxprt-code-policy';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { afterEach as disposeOwnedPolicies } from 'bun:test';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 
 import { buildTestMcpRuntime } from './helpers/buildCliStyleConfig.js';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
@@ -53,7 +54,9 @@ import {
 } from '@vybestack/llxprt-code-core';
 
 function makeUnconfiguredProviderManager(): RuntimeProviderManager {
+  const keys = new CredentialAuthority().createProviderKeyStorage();
   return {
+    getProviderKeys: () => keys,
     hasActiveProvider: () => false,
     getActiveProvider: () => undefined,
     getActiveProviderName: () => undefined,

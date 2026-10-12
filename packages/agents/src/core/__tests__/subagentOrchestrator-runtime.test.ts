@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   createSessionSettingsFixture,
   subagentSessionPorts,
@@ -94,6 +95,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const foregroundConfig1 = makeForegroundConfig();
     const foregroundSettings1 = createSessionSettingsFixture(foregroundConfig1);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings1),
 
       instructions: emptyInstructionReads,
@@ -152,6 +154,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const foregroundConfig2 = config;
     const foregroundSettings2 = createSessionSettingsFixture(foregroundConfig2);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings2),
 
       instructions: emptyInstructionReads,
@@ -223,6 +226,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const foregroundConfig3 = makeForegroundConfig();
     const foregroundSettings3 = createSessionSettingsFixture(foregroundConfig3);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings3),
 
       instructions: emptyInstructionReads,
@@ -302,6 +306,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       const foregroundSettings4 =
         createSessionSettingsFixture(foregroundConfig4);
       const orchestrator = new SubagentOrchestrator({
+        credentialAuthority: new CredentialAuthority(),
         workspaceTrust: foregroundSettings4.workspaceTrust,
         createChildSettings: () =>
           foregroundSettings4.settingsOwner.createChildStore(),
@@ -378,6 +383,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const foregroundConfig5 = makeForegroundConfig();
     const foregroundSettings5 = createSessionSettingsFixture(foregroundConfig5);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings5),
 
       instructions: emptyInstructionReads,
@@ -431,6 +437,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const foregroundConfig6 = makeForegroundConfig();
     const foregroundSettings6 = createSessionSettingsFixture(foregroundConfig6);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings6),
 
       instructions: emptyInstructionReads,
@@ -493,6 +500,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const foregroundConfig7 = makeForegroundConfig();
     const foregroundSettings7 = createSessionSettingsFixture(foregroundConfig7);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings7),
 
       instructions: emptyInstructionReads,
@@ -561,6 +569,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       const foregroundSettings8 =
         createSessionSettingsFixture(foregroundConfig8);
       const orchestrator = new SubagentOrchestrator({
+        credentialAuthority: new CredentialAuthority(),
         workspaceTrust: foregroundSettings8.workspaceTrust,
         createChildSettings: () =>
           foregroundSettings8.settingsOwner.createChildStore(),
@@ -642,6 +651,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const foregroundConfig9 = makeForegroundConfig();
     const foregroundSettings9 = createSessionSettingsFixture(foregroundConfig9);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings9),
 
       instructions: emptyInstructionReads,
@@ -703,6 +713,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const foregroundSettings10 =
       createSessionSettingsFixture(foregroundConfig10);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings10),
 
       instructions: emptyInstructionReads,
@@ -764,6 +775,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const foregroundSettings11 =
       createSessionSettingsFixture(foregroundConfig11);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings11),
 
       instructions: emptyInstructionReads,
@@ -825,6 +837,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const foregroundSettings12 =
       createSessionSettingsFixture(foregroundConfig12);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings12),
 
       instructions: emptyInstructionReads,
@@ -883,6 +896,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const foregroundSettings13 =
       createSessionSettingsFixture(foregroundConfig13);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings13),
 
       instructions: emptyInstructionReads,

@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { AgentClient } from '../../core/client.js';
 import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 /**
@@ -68,6 +69,7 @@ async function withChildOwner(
     );
     let adoptedChildSettings: SettingsService | undefined;
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       runtimeFactoryBindings: {
         ...createAgentRuntimeFactoryBindings(),
         agentClientFactory: (

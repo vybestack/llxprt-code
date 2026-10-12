@@ -122,12 +122,6 @@ async function pauseProviderRefresh(
     config: built.config,
     messageBus: built.messageBus,
   });
-  oauth.registerProvider(new AnthropicOAuthProvider(globalThis.fetch, store));
-  await oauth.toggleOAuthEnabled('claudecode');
-  built.sessionClient.bindProviderFiles(
-    built.runtime.providerFileLifecycle,
-    (provider) => oauth.composeRetryOperations(provider),
-  );
   const transport = spyOn(globalThis, 'fetch').mockImplementation(
     async (input, init): Promise<Response> => {
       if (
@@ -158,6 +152,12 @@ async function pauseProviderRefresh(
         { headers: { 'Content-Type': 'application/json' } },
       );
     },
+  );
+  oauth.registerProvider(new AnthropicOAuthProvider(globalThis.fetch, store));
+  await oauth.toggleOAuthEnabled('claudecode');
+  built.sessionClient.bindProviderFiles(
+    built.runtime.providerFileLifecycle,
+    (provider) => oauth.composeRetryOperations(provider),
   );
   return { oauthManager: oauth, restore: () => transport.mockRestore() };
 }
