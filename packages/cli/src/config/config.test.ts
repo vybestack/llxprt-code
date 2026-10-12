@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
@@ -277,6 +278,8 @@ describe('when folder is NOT trusted', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getApprovalMode()).toBe(ServerConfig.ApprovalMode.DEFAULT);
   });
@@ -293,6 +296,8 @@ describe('when folder is NOT trusted', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getApprovalMode()).toBe(ServerConfig.ApprovalMode.DEFAULT);
   });
@@ -309,6 +314,8 @@ describe('when folder is NOT trusted', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getApprovalMode()).toBe(ServerConfig.ApprovalMode.DEFAULT);
   });
@@ -325,6 +332,8 @@ describe('when folder is NOT trusted', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getApprovalMode()).toBe(ServerConfig.ApprovalMode.DEFAULT);
   });
@@ -692,6 +701,8 @@ describe('parseArguments', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
 
     expect(config.isContinueSession()).toBe(true);
@@ -783,6 +794,8 @@ describe('loadCliConfig', () => {
         ),
         'core-tool-restriction',
         argv,
+        undefined,
+        { credentialAuthority: new CredentialAuthority() },
       );
       expect(config.getCoreTools()).toStrictEqual(
         settings.tools?.core ?? settings.coreTools,
@@ -818,6 +831,8 @@ describe('loadCliConfig', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     const expectedIncludeDirectories = [
       path.resolve(path.sep, 'settings', 'path1'),

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import type { AgentActivationOperation } from '@vybestack/llxprt-code-agents';
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
@@ -306,6 +307,7 @@ describe('loadCliConfig memory discovery', () => {
       argv,
       workspaceDir,
       {
+        credentialAuthority: new CredentialAuthority(),
         onActivationBootstrapReady: (owner) => {
           operation = owner;
         },
@@ -340,6 +342,7 @@ describe('loadCliConfig memory discovery', () => {
       createArgv(),
       workspaceDir,
       {
+        credentialAuthority: new CredentialAuthority(),
         onActivationBootstrapReady: (owner) => {
           operation = owner;
         },

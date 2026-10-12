@@ -20,6 +20,7 @@
  *   CLI --model > profile model > settings.model > env vars > alias default > Gemini default
  */
 
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
@@ -285,6 +286,7 @@ async function runConfig(settings: Settings, argv?: string[]) {
     parsedArgv,
     undefined,
     {
+      credentialAuthority: new CredentialAuthority(),
       settingsService: runtimeSettingsService,
       providerContributions: await loadPrecedenceProviderContributions(),
     },

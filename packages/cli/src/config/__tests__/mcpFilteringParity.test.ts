@@ -19,6 +19,7 @@
  *   - argv.allowedMcpServerNames (overrides settings-level filtering)
  */
 
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
@@ -296,7 +297,11 @@ async function loadMcpConfig(
     'test-session',
     argv,
     undefined,
-    { settingsService: runtimeSettingsService, sessionSettingsOwner },
+    {
+      credentialAuthority: new CredentialAuthority(),
+      settingsService: runtimeSettingsService,
+      sessionSettingsOwner,
+    },
   );
 }
 
@@ -322,7 +327,10 @@ async function getBlockedMcpServers(
     'test-session',
     argv,
     undefined,
-    { settingsService: runtimeSettingsService },
+    {
+      credentialAuthority: new CredentialAuthority(),
+      settingsService: runtimeSettingsService,
+    },
   );
   return config.getBlockedMcpServers() ?? [];
 }

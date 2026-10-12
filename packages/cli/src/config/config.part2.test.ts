@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
@@ -285,6 +286,8 @@ describe('loadCliConfig chatCompression', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getChatCompression()).toStrictEqual({
       contextPercentageThreshold: 0.5,
@@ -304,6 +307,8 @@ describe('loadCliConfig chatCompression', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getChatCompression()).toBeUndefined();
   });
@@ -345,6 +350,8 @@ describe('loadCliConfig useRipgrep', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getUseRipgrep()).toBe(true);
   });
@@ -365,6 +372,8 @@ describe('loadCliConfig useRipgrep', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getUseRipgrep()).toBe(false);
   });
@@ -385,6 +394,8 @@ describe('loadCliConfig useRipgrep', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getUseRipgrep()).toBe(false);
   });
@@ -405,6 +416,8 @@ describe('loadCliConfig useRipgrep', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getUseRipgrep()).toBe(true);
   });
@@ -441,6 +454,8 @@ describe('screenReader configuration', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getScreenReader()).toBe(true);
   });
@@ -460,6 +475,8 @@ describe('screenReader configuration', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getScreenReader()).toBe(false);
   });
@@ -479,6 +496,8 @@ describe('screenReader configuration', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getScreenReader()).toBe(true);
   });
@@ -496,6 +515,8 @@ describe('screenReader configuration', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getScreenReader()).toBe(false);
   });
@@ -536,6 +557,8 @@ describe('loadCliConfig tool exclusions', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getExcludeTools()).not.toContain('run_shell_command');
     expect(config.getExcludeTools()).not.toContain('replace');
@@ -555,6 +578,8 @@ describe('loadCliConfig tool exclusions', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getExcludeTools()).not.toContain('run_shell_command');
     expect(config.getExcludeTools()).not.toContain('replace');
@@ -574,6 +599,8 @@ describe('loadCliConfig tool exclusions', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getExcludeTools()).toContain('run_shell_command');
     expect(config.getExcludeTools()).toContain('replace');
@@ -593,6 +620,8 @@ describe('loadCliConfig tool exclusions', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getExcludeTools()).not.toContain('run_shell_command');
     expect(config.getExcludeTools()).not.toContain('replace');
@@ -619,6 +648,8 @@ describe('loadCliConfig tool exclusions', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getExcludeTools()).not.toContain(ShellTool.Name);
   });
@@ -643,6 +674,8 @@ describe('loadCliConfig tool exclusions', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getExcludeTools()).not.toContain(ShellTool.Name);
   });
@@ -667,6 +700,8 @@ describe('loadCliConfig tool exclusions', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
     expect(config.getExcludeTools()).not.toContain(ShellTool.Name);
   });

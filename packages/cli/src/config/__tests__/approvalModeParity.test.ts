@@ -21,6 +21,7 @@
  *   - trustedFolder true / false
  */
 
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
@@ -288,7 +289,10 @@ async function getApprovalMode(
     'test-session',
     argv,
     undefined,
-    { settingsService: runtimeSettingsService },
+    {
+      credentialAuthority: new CredentialAuthority(),
+      settingsService: runtimeSettingsService,
+    },
   );
   return config.getApprovalMode();
 }

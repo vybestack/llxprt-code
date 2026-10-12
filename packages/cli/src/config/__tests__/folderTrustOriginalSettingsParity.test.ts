@@ -20,6 +20,7 @@
  * verifies that a profile's ephemeral settings cannot change the trust evaluation.
  */
 
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { restoreEnv, setEnv } from '@vybestack/llxprt-code-test-utils';
 import {
   describe,
@@ -276,6 +277,7 @@ async function runConfig(settings: Settings, cwd: string = process.cwd()) {
   const argv = await parseArguments(settings);
   const runtimeSettingsService = new SettingsService();
   return loadCliConfig(settings, [], makeExtMgr(), 'test-session', argv, cwd, {
+    credentialAuthority: new CredentialAuthority(),
     settingsService: runtimeSettingsService,
   });
 }

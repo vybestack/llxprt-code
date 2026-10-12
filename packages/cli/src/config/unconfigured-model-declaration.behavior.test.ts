@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -38,6 +39,7 @@ describe('unconfigured CLI model declaration', () => {
         argv,
         directory,
         {
+          credentialAuthority: new CredentialAuthority(),
           settingsService: store,
           sessionSettingsOwner: owner,
           onActivationBootstrapReady: (value) => {

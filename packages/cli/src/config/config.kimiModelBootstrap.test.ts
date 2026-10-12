@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 /**
  * @license
@@ -43,6 +44,8 @@ describe('loadCliConfig provider alias model bootstrap', () => {
       ),
       'test-session',
       argv,
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
 
     expect(config.getProvider()).toBe('kimi');
@@ -71,6 +74,7 @@ describe('loadCliConfig provider alias model bootstrap', () => {
       argv,
       process.cwd(),
       {
+        credentialAuthority: new CredentialAuthority(),
         settingsService: firstSettings,
         sessionSettingsOwner: firstOwner,
         onProviderFilesReady: (files) => {
@@ -89,6 +93,7 @@ describe('loadCliConfig provider alias model bootstrap', () => {
       argv,
       process.cwd(),
       {
+        credentialAuthority: new CredentialAuthority(),
         settingsService: secondSettings,
         sessionSettingsOwner: secondOwner,
         onProviderFilesReady: (files) => {

@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -357,6 +358,7 @@ async function runConfig(settings: Settings, argv: string[] = []) {
     parsedArgv,
     undefined,
     {
+      credentialAuthority: new CredentialAuthority(),
       settingsService: runtimeSettingsService,
       sessionSettingsOwner: settingsOwner,
       onActivationBootstrapReady: (operation) => {
