@@ -139,13 +139,24 @@ function switchActivationOperations(
 }
 
 function switchOAuthOperations(
+  manager: RuntimeProviderManager,
   oauth: OAuthManager | null,
   addItem: OAuthUICallback | undefined,
 ): SwitchOAuthOperations | null {
   if (oauth === null) return null;
   return {
     register: () =>
-      ensureOAuthProviderRegistered('claudecode', oauth, undefined, addItem),
+      ensureOAuthProviderRegistered(
+        'claudecode',
+        oauth,
+        (input, init) => {
+          if (manager.fetchNetwork === undefined)
+            throw new Error('Provider manager requires root fetch');
+          return manager.fetchNetwork(input, init);
+        },
+        undefined,
+        addItem,
+      ),
     isEnabled: () => oauth.isOAuthEnabled('claudecode'),
     enable: async () => {
       await oauth.toggleOAuthEnabled('claudecode');
@@ -238,7 +249,7 @@ export async function switchActiveProvider(
   );
   const oauth =
     name === 'claudecode'
-      ? switchOAuthOperations(oauthManager, options.addItem)
+      ? switchOAuthOperations(providerManager, oauthManager, options.addItem)
       : null;
   const oauthPolicy = Object.freeze({
     explicitAutoOAuth: options.autoOAuth,

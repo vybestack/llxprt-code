@@ -209,9 +209,13 @@ function resolveOAuthManager(
   settings: SettingsService,
   profileReads: IsolatedRuntimeContextOptions['profileReads'],
   requestInteractiveAuth: InteractiveAuthPromptOperation | undefined,
+  requestFetch: (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => Promise<Response>,
 ): OAuthManager {
   if (optionsOAuthManager) {
-    registerStandardOAuthProviders(optionsOAuthManager);
+    registerStandardOAuthProviders(optionsOAuthManager, requestFetch);
     return optionsOAuthManager;
   }
   if (!tokenStore) {
@@ -241,7 +245,7 @@ function resolveOAuthManager(
       runtimeKind: activationState.currentRuntimeKind,
     }),
   });
-  registerStandardOAuthProviders(oauthManager, tokenStore);
+  registerStandardOAuthProviders(oauthManager, requestFetch, tokenStore);
   return oauthManager;
 }
 
@@ -448,6 +452,11 @@ function resolveOwnerOAuthManager(
     settings,
     options.profileReads,
     options.requestInteractiveAuth,
+    (input, init) => {
+      if (providerManager.fetchNetwork === undefined)
+        throw new Error('Provider manager requires root fetch');
+      return providerManager.fetchNetwork(input, init);
+    },
   );
   return {
     oauthManager,

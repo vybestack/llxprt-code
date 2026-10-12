@@ -41,7 +41,7 @@ describe('OAuth registration ownership (#2891, #2616)', () => {
       new HostCredentialOwner(process.env).authority.createTokenStore(),
     );
     manager.registerProvider(
-      new AnthropicOAuthProvider(manager.getTokenStore()),
+      new AnthropicOAuthProvider(globalThis.fetch, manager.getTokenStore()),
     );
 
     expect(isOAuthProviderRegistered('claudecode', manager)).toBe(true);
@@ -53,11 +53,11 @@ describe('OAuth registration ownership (#2891, #2616)', () => {
       const manager = new OAuthManager(
         new HostCredentialOwner(process.env).authority.createTokenStore(),
       );
-      const provider = new Provider(manager.getTokenStore());
+      const provider = new Provider(globalThis.fetch, manager.getTokenStore());
       manager.registerProvider(provider);
 
-      ensureOAuthProviderRegistered(provider.name, manager);
-      ensureOAuthProviderRegistered(provider.name, manager);
+      ensureOAuthProviderRegistered(provider.name, manager, globalThis.fetch);
+      ensureOAuthProviderRegistered(provider.name, manager, globalThis.fetch);
 
       expect(manager.getProvider(provider.name)).toBe(provider);
     },
@@ -71,10 +71,10 @@ describe('OAuth registration ownership (#2891, #2616)', () => {
       new HostCredentialOwner(process.env).authority.createTokenStore(),
     );
     for (const name of ['claudecode', 'codex']) {
-      ensureOAuthProviderRegistered(name, first);
+      ensureOAuthProviderRegistered(name, first, globalThis.fetch);
       expect(isOAuthProviderRegistered(name, second)).toBe(false);
       expect(first.getProvider(name)).toBeDefined();
-      ensureOAuthProviderRegistered(name, second);
+      ensureOAuthProviderRegistered(name, second, globalThis.fetch);
       expect(second.getProvider(name)).toBeDefined();
       expect(second.getProvider(name)).not.toBe(first.getProvider(name));
     }
@@ -100,6 +100,7 @@ describe('OAuth registration ownership (#2891, #2616)', () => {
       if (direct) {
         first.registerProvider(
           new AnthropicOAuthProvider(
+            globalThis.fetch,
             first.getTokenStore(),
             initiallyAttached
               ? captureAuthorization(originalEvents)
@@ -110,6 +111,7 @@ describe('OAuth registration ownership (#2891, #2616)', () => {
         ensureOAuthProviderRegistered(
           'claudecode',
           first,
+          globalThis.fetch,
           undefined,
           initiallyAttached ? captureAuthorization(originalEvents) : undefined,
         );
@@ -117,6 +119,7 @@ describe('OAuth registration ownership (#2891, #2616)', () => {
       ensureOAuthProviderRegistered(
         'claudecode',
         second,
+        globalThis.fetch,
         undefined,
         captureAuthorization(secondEvents),
       );
@@ -124,6 +127,7 @@ describe('OAuth registration ownership (#2891, #2616)', () => {
       ensureOAuthProviderRegistered(
         'claudecode',
         first,
+        globalThis.fetch,
         undefined,
         captureAuthorization(firstEvents),
       );
@@ -155,7 +159,7 @@ describe('OAuth registration ownership (#2891, #2616)', () => {
     const manager = new OAuthManager(
       new HostCredentialOwner(process.env).authority.createTokenStore(),
     );
-    ensureOAuthProviderRegistered('claudecode', manager);
+    ensureOAuthProviderRegistered('claudecode', manager, globalThis.fetch);
     expect(manager.getProvider('claudecode')).toBeInstanceOf(
       AnthropicOAuthProvider,
     );
@@ -169,13 +173,14 @@ describe('OAuth registration ownership (#2891, #2616)', () => {
       registerProvider: manager.registerProvider.bind(manager),
       getProvider: manager.getProvider.bind(manager),
     };
-    ensureOAuthProviderRegistered('claudecode', registration);
+    ensureOAuthProviderRegistered('claudecode', registration, globalThis.fetch);
     expect(manager.getSupportedProviders()).toStrictEqual([]);
     expect(isOAuthProviderRegistered('claudecode', registration)).toBe(false);
 
     ensureOAuthProviderRegistered(
       'claudecode',
       registration,
+      globalThis.fetch,
       manager.getTokenStore(),
     );
     expect(manager.getProvider('claudecode')).toBeInstanceOf(
@@ -187,7 +192,7 @@ describe('OAuth registration ownership (#2891, #2616)', () => {
     const manager = new OAuthManager(
       new HostCredentialOwner(process.env).authority.createTokenStore(),
     );
-    ensureOAuthProviderRegistered('not-a-provider', manager);
+    ensureOAuthProviderRegistered('not-a-provider', manager, globalThis.fetch);
     expect(isOAuthProviderRegistered('not-a-provider', manager)).toBe(false);
     expect(manager.getSupportedProviders()).toStrictEqual([]);
   });

@@ -92,7 +92,7 @@ describe('CodexOAuthProvider public single-flight', () => {
   });
 
   it('joins two public same-bucket flows before starting callback infrastructure', async () => {
-    const provider = new CodexOAuthProvider(makeTokenStore());
+    const provider = new CodexOAuthProvider(globalThis.fetch, makeTokenStore());
     provider.setAuthContext({ bucket: 'default' });
 
     const [first, second] = await Promise.all([
@@ -127,7 +127,7 @@ describe('CodexOAuthProvider public single-flight', () => {
       openBrowserSecurely as Mock<typeof openBrowserSecurely>
     ).mockRejectedValueOnce(new Error('No browser available'));
 
-    const provider = new CodexOAuthProvider(makeTokenStore());
+    const provider = new CodexOAuthProvider(globalThis.fetch, makeTokenStore());
     const deviceToken = {
       access_token: 'device-access',
       refresh_token: 'device-refresh',

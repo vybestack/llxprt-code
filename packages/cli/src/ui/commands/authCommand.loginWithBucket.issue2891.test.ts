@@ -147,7 +147,7 @@ function buildObjectGraph(tempDir: string): ObjectGraph {
   const settings = new InMemoryOAuthSettings();
   const oauthManager = new OAuthManager(tokenStore, settings);
 
-  registerStandardOAuthProviders(oauthManager, tokenStore);
+  registerStandardOAuthProviders(oauthManager, globalThis.fetch, tokenStore);
 
   // Construct the AnthropicProvider with the SAME OAuthManager instance, the
   // way createAnthropicAliasProvider binds the `claudecode` alias.

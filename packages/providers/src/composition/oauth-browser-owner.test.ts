@@ -109,7 +109,8 @@ function buildManager(
       authOnly: owner.settingsService.get('authOnly') === true,
     }),
   });
-  if (construction === 'adopted-live') registerStandardOAuthProviders(manager);
+  if (construction === 'adopted-live')
+    registerStandardOAuthProviders(manager, globalThis.fetch);
   if (construction === 'adopted' || construction === 'adopted-live') {
     const handle = createIsolatedRuntimeContext(
       {
@@ -122,7 +123,7 @@ function buildManager(
       adoptingOwner.settingsService,
     );
     cleanups.push(() => handle.cleanup());
-  } else registerStandardOAuthProviders(manager);
+  } else registerStandardOAuthProviders(manager, globalThis.fetch);
   return manager;
 }
 
@@ -160,8 +161,8 @@ describe('OAuth owner reads before registration', () => {
   ] as const)(
     '%s %s preserves owner browser policy and bucket routing without an identity scope',
     async (construction, providerName) => {
-      globalThis.fetch = vi.fn(
-        async () =>
+      const requestFetch = vi.fn(
+        async (_input: string | URL | Request, _init?: RequestInit) =>
           new Response(
             JSON.stringify({
               id_token: `header.${Buffer.from(JSON.stringify({ account_id: 'owner-account' })).toString('base64url')}.signature`,
@@ -174,6 +175,7 @@ describe('OAuth owner reads before registration', () => {
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           ),
       );
+      globalThis.fetch = requestFetch;
       const a = context(`browser-a-${construction}`);
       const b = context(`browser-b-${construction}`);
       const cleanups: Array<() => void | Promise<void>> = [];
@@ -208,20 +210,22 @@ describe('OAuth owner reads before registration', () => {
         ).toStrictEqual(['Owner A', 'Owner B']);
         launches.length = 0;
         a.settingsService.set('auth.noBrowser', true);
-        globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
-          if (String(input).includes('deviceauth'))
-            throw new Error('device-route');
-          return new Response(
-            JSON.stringify({
-              id_token: `header.${Buffer.from(JSON.stringify({ account_id: 'owner-account' })).toString('base64url')}.signature`,
-              access_token: 'browser-token',
-              expires_in: 3600,
-              token_type: 'Bearer',
-              scope: 'user:inference',
-            }),
-            { status: 200 },
-          );
-        });
+        requestFetch.mockImplementation(
+          async (input: string | URL | Request) => {
+            if (String(input).includes('deviceauth'))
+              throw new Error('device-route');
+            return new Response(
+              JSON.stringify({
+                id_token: `header.${Buffer.from(JSON.stringify({ account_id: 'owner-account' })).toString('base64url')}.signature`,
+                access_token: 'browser-token',
+                expires_in: 3600,
+                token_type: 'Bearer',
+                scope: 'user:inference',
+              }),
+              { status: 200 },
+            );
+          },
+        );
         if (providerA instanceof AnthropicOAuthProvider) {
           providerA.setAddItem(() => {
             setImmediate(() => providerA.submitAuthCode('manual-code'));

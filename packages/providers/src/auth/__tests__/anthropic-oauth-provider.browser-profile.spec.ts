@@ -143,6 +143,7 @@ describe('AnthropicOAuthProvider browser profile association', () => {
     vi.spyOn(global.console, 'log').mockImplementation(() => {});
     association = () => undefined;
     provider = new AnthropicOAuthProvider(
+      globalThis.fetch,
       makeTokenStore(),
       undefined,
       undefined,

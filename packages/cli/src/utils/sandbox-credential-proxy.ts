@@ -273,10 +273,13 @@ async function startCredentialProxyForSandbox(
     throwCredentialProxySetupError(error, sessionTmpdirCleanup);
   }
   try {
-    await createAndStartProxy({
-      socketPath: socketRuntimePath,
-      onSandboxHandshake,
-    });
+    await createAndStartProxy(
+      {
+        socketPath: socketRuntimePath,
+        onSandboxHandshake,
+      },
+      globalThis.fetch,
+    );
   } catch (error) {
     throwCredentialProxySetupError(
       new FatalSandboxError(

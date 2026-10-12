@@ -581,6 +581,9 @@ export class ProviderManager implements IProviderManager {
    */
   private requestFetch: NetworkFetch = globalThis.fetch;
 
+  readonly fetchNetwork: NetworkFetch = (input, init) =>
+    this.requestFetch(input, init);
+
   bindNetworkFetch(requestFetch: NetworkFetch): void {
     this.requestFetch = requestFetch;
   }

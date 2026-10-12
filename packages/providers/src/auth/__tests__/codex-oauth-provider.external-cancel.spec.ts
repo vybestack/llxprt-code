@@ -154,7 +154,7 @@ describe('CodexOAuthProvider external cancellation', () => {
     openBrowserMock.mockResolvedValue(undefined);
     vi.spyOn(ClipboardService, 'copyToClipboard').mockResolvedValue(undefined);
     vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-    provider = new CodexOAuthProvider(makeTokenStore());
+    provider = new CodexOAuthProvider(globalThis.fetch, makeTokenStore());
     deviceStarts = 0;
     installDeviceFlow(provider, () => {
       deviceStarts += 1;

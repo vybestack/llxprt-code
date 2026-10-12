@@ -1,3 +1,4 @@
+import type { OAuthFetch } from '@vybestack/llxprt-code-auth/types.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -100,6 +101,7 @@ export class CodexOAuthProvider implements OAuthProvider {
   private currentAuthBucket?: string;
 
   constructor(
+    requestFetch: OAuthFetch,
     tokenStore: TokenStore,
     addItem?: OAuthUICallback,
     private readonly isBrowserDisabled: () => boolean = () => false,
@@ -108,7 +110,7 @@ export class CodexOAuthProvider implements OAuthProvider {
       bucket?: string,
     ) => BrowserProfileAssociation | undefined = () => undefined,
   ) {
-    this.deviceFlow = new CodexDeviceFlow();
+    this.deviceFlow = new CodexDeviceFlow(requestFetch);
     this.logger = new DebugLogger('llxprt:auth:codex');
     this.tokenStore = tokenStore;
     this.addItem = addItem;

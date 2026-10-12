@@ -100,6 +100,7 @@ describe('Codex per-bucket browser profile selection', () => {
 
   it('completes concurrent public flows with each immutable bucket profile', async () => {
     const provider = new CodexOAuthProvider(
+      globalThis.fetch,
       {
         ...createInMemorySecureStore(),
         saveToken: async () => {},

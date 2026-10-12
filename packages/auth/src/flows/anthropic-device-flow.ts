@@ -1,3 +1,4 @@
+import type { OAuthFetch } from '../types.js';
 /**
  * Anthropic OAuth 2.0 Device Flow Implementation
  *
@@ -31,7 +32,10 @@ export class AnthropicDeviceFlow {
   private redirectUri: string;
   revokeToken?: (token: string) => Promise<void>;
 
-  constructor(config?: Partial<AnthropicFlowConfig>) {
+  constructor(
+    private readonly requestFetch: OAuthFetch,
+    config?: Partial<AnthropicFlowConfig>,
+  ) {
     const defaultConfig: AnthropicFlowConfig = {
       clientId: '9d1c250a-e61b-44d9-88ed-5944d1962f5e', // Anthropic's public OAuth client ID
       authorizationEndpoint: 'https://claude.ai/oauth/authorize', // Use claude.ai like OpenCode's "max" mode
@@ -127,7 +131,7 @@ export class AnthropicDeviceFlow {
       code_verifier: this.codeVerifier,
     };
 
-    const response = await fetch(this.config.tokenEndpoint, {
+    const response = await this.requestFetch(this.config.tokenEndpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json', // JSON, not form-encoded!
@@ -190,7 +194,7 @@ export class AnthropicDeviceFlow {
 
     while (Date.now() - startTime < expiresIn) {
       try {
-        const response = await fetch(this.config.tokenEndpoint, {
+        const response = await this.requestFetch(this.config.tokenEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -246,7 +250,7 @@ export class AnthropicDeviceFlow {
     refreshToken: string,
     signal?: AbortSignal,
   ): Promise<OAuthToken> {
-    const response = await fetch(this.config.tokenEndpoint, {
+    const response = await this.requestFetch(this.config.tokenEndpoint, {
       signal,
       method: 'POST',
       headers: {

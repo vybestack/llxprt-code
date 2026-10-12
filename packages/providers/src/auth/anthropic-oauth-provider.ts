@@ -1,3 +1,4 @@
+import type { OAuthFetch } from '@vybestack/llxprt-code-auth/types.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -97,6 +98,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    * Constructor completes synchronously - no async calls
    */
   constructor(
+    requestFetch: OAuthFetch,
     tokenStore: TokenStore,
     addItem?: OAuthUICallback,
     private readonly isBrowserDisabled: () => boolean = () => false,
@@ -106,7 +108,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     ) => BrowserProfileAssociation | undefined = () => undefined,
   ) {
     assertTokenStore(tokenStore);
-    this.deviceFlow = new AnthropicDeviceFlow();
+    this.deviceFlow = new AnthropicDeviceFlow(requestFetch);
     this.retryHandler = new RetryHandler();
     this.errorHandler = new GracefulErrorHandler(this.retryHandler);
     this.logger = new DebugLogger('llxprt:auth:claudecode');

@@ -73,7 +73,7 @@ describe('CodexOAuthProvider', () => {
       secureStore,
       lockDir: path.join(tempDir, 'locks'),
     });
-    provider = new CodexOAuthProvider(tokenStore);
+    provider = new CodexOAuthProvider(globalThis.fetch, tokenStore);
   });
 
   afterEach(async () => {

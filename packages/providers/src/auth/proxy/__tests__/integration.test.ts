@@ -300,27 +300,36 @@ describe('proxy integration (phase 31)', () => {
   it('returns lifecycle handle with stop function when proxy is started', async () => {
     // @requirement R25.1
     // @scenario Lifecycle helper should create and return a stop-capable proxy handle.
-    const handle = await createAndStartProxy({
-      socketPath: path.join(tmpDir, 'lifecycle.sock'),
-    });
+    const handle = await createAndStartProxy(
+      {
+        socketPath: path.join(tmpDir, 'lifecycle.sock'),
+      },
+      globalThis.fetch,
+    );
     expect(typeof handle.stop).toBe('function');
   });
 
   it('supports create/stop lifecycle sequence through helper API', async () => {
     // @requirement R25.3
     // @scenario Lifecycle helper should start then stop proxy without leaking resources.
-    const handle = await createAndStartProxy({
-      socketPath: path.join(tmpDir, 'lifecycle-stop.sock'),
-    });
+    const handle = await createAndStartProxy(
+      {
+        socketPath: path.join(tmpDir, 'lifecycle-stop.sock'),
+      },
+      globalThis.fetch,
+    );
     await stopProxy();
     await expect(handle.stop()).resolves.toBeUndefined();
   });
 
   it('generates and exposes a capability token after proxy start', async () => {
     // @scenario Lifecycle should generate a per-session capability token.
-    await createAndStartProxy({
-      socketPath: path.join(tmpDir, 'capability-token.sock'),
-    });
+    await createAndStartProxy(
+      {
+        socketPath: path.join(tmpDir, 'capability-token.sock'),
+      },
+      globalThis.fetch,
+    );
     const token = getProxyCapabilityToken();
     expect(typeof token).toBe('string');
     expect(token).toMatch(/^[0-9a-f]{64}$/); // 32 bytes hex-encoded
@@ -415,9 +424,12 @@ describe('proxy integration (phase 31)', () => {
 
   it('clears capability token after proxy stop', async () => {
     // @scenario Lifecycle should clear the capability token on stop.
-    await createAndStartProxy({
-      socketPath: path.join(tmpDir, 'capability-token-clear.sock'),
-    });
+    await createAndStartProxy(
+      {
+        socketPath: path.join(tmpDir, 'capability-token-clear.sock'),
+      },
+      globalThis.fetch,
+    );
     expect(getProxyCapabilityToken()).toBeDefined();
     await stopProxy();
     expect(getProxyCapabilityToken()).toBeUndefined();
@@ -431,9 +443,12 @@ describe('proxy integration (phase 31)', () => {
       const blockingFile = path.join(tmpDir, 'blocking-file');
       fs.writeFileSync(blockingFile, '');
       await expect(
-        createAndStartProxy({
-          socketPath: path.join(blockingFile, 'subdir', 'fail.sock'),
-        }),
+        createAndStartProxy(
+          {
+            socketPath: path.join(blockingFile, 'subdir', 'fail.sock'),
+          },
+          globalThis.fetch,
+        ),
       ).rejects.toThrow(/ENOTDIR|ENOENT|EACCES|EADDRINUSE|EINVAL/i);
       expect(getProxyCapabilityToken()).toBeUndefined();
     });

@@ -323,15 +323,6 @@ function resolveAuthOnlyFlag(
   return false;
 }
 
-/** Registers OAuth providers for authentication support. */
-function registerOAuthProviders(
-  oauthManager: OAuthManager,
-  tokenStore: TokenStore,
-  addItem: ProviderManagerFactoryOptions['addItem'],
-): void {
-  registerStandardOAuthProviders(oauthManager, tokenStore, addItem);
-}
-
 /** Resolves OpenAI-specific settings from user settings and ephemeral overrides. */
 function resolveOpenaiSettings(
   settings: RuntimeContextShape['settingsService'],
@@ -440,7 +431,12 @@ function registerAllProviders(
     { providerContributions },
   );
 
-  registerOAuthProviders(oauthManager, tokenStore, addItem);
+  registerStandardOAuthProviders(
+    oauthManager,
+    manager.fetchNetwork,
+    tokenStore,
+    addItem,
+  );
 }
 
 /**

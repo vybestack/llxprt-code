@@ -80,8 +80,8 @@ describe('profile postcommit sibling lifetime', () => {
       config: owner().config,
       messageBus: owner().messageBus,
     });
-    oauth.registerProvider(new CodexOAuthProvider(store));
-    oauth.registerProvider(new AnthropicOAuthProvider(store));
+    oauth.registerProvider(new CodexOAuthProvider(globalThis.fetch, store));
+    oauth.registerProvider(new AnthropicOAuthProvider(globalThis.fetch, store));
     for (const provider of ['codex', 'claudecode']) {
       const model = new FakeProvider(
         fileURLToPath(new URL('./fixtures/plain-text.jsonl', import.meta.url)),

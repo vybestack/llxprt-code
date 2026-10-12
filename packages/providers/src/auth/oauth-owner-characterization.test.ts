@@ -62,7 +62,7 @@ function owner(
       interactiveTimeoutMs: settings.get('auth-interactive-timeout-ms'),
     }),
   });
-  registerStandardOAuthProviders(oauth);
+  registerStandardOAuthProviders(oauth, globalThis.fetch);
   return { config, settings, oauth };
 }
 

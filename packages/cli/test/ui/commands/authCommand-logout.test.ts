@@ -115,8 +115,12 @@ describe.skipIf(skipInCI)(
       context = createMockContext();
 
       // Register test providers
-      oauthManager.registerProvider(new CodexOAuthProvider(tokenStore));
-      oauthManager.registerProvider(new AnthropicOAuthProvider(tokenStore));
+      oauthManager.registerProvider(
+        new CodexOAuthProvider(globalThis.fetch, tokenStore),
+      );
+      oauthManager.registerProvider(
+        new AnthropicOAuthProvider(globalThis.fetch, tokenStore),
+      );
     });
 
     afterEach(async () => {
@@ -336,8 +340,12 @@ describe.skipIf(skipInCI)(
       context = createMockContext();
 
       // Register test providers
-      oauthManager.registerProvider(new CodexOAuthProvider(tokenStore));
-      oauthManager.registerProvider(new AnthropicOAuthProvider(tokenStore));
+      oauthManager.registerProvider(
+        new CodexOAuthProvider(globalThis.fetch, tokenStore),
+      );
+      oauthManager.registerProvider(
+        new AnthropicOAuthProvider(globalThis.fetch, tokenStore),
+      );
     });
 
     afterEach(async () => {
@@ -462,8 +470,12 @@ describe.skipIf(skipInCI)(
       context = createMockContext();
 
       // Register test providers
-      oauthManager.registerProvider(new CodexOAuthProvider(tokenStore));
-      oauthManager.registerProvider(new AnthropicOAuthProvider(tokenStore));
+      oauthManager.registerProvider(
+        new CodexOAuthProvider(globalThis.fetch, tokenStore),
+      );
+      oauthManager.registerProvider(
+        new AnthropicOAuthProvider(globalThis.fetch, tokenStore),
+      );
     });
 
     afterEach(async () => {
@@ -626,8 +638,12 @@ describe.skipIf(skipInCI)('AuthCommand - Logout Property-Based Tests', () => {
     context = createMockContext();
 
     // Register test providers
-    oauthManager.registerProvider(new CodexOAuthProvider(tokenStore));
-    oauthManager.registerProvider(new AnthropicOAuthProvider(tokenStore));
+    oauthManager.registerProvider(
+      new CodexOAuthProvider(globalThis.fetch, tokenStore),
+    );
+    oauthManager.registerProvider(
+      new AnthropicOAuthProvider(globalThis.fetch, tokenStore),
+    );
   });
 
   afterEach(async () => {

@@ -44,6 +44,7 @@ describe('profile refresh cancellation', () => {
       },
     );
     const provider: OAuthProvider = new CodexOAuthProvider(
+      globalThis.fetch,
       new MemoryTokenStore(),
     );
     const result = provider

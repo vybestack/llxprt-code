@@ -55,7 +55,7 @@ describe('AnthropicOAuthProvider.getToken() - no provider-level refresh (Issue #
       expired,
     );
 
-    const provider = new AnthropicOAuthProvider(tokenStore);
+    const provider = new AnthropicOAuthProvider(globalThis.fetch, tokenStore);
     const deviceFlow = (
       provider as unknown as {
         deviceFlow: {
@@ -83,7 +83,7 @@ describe('AnthropicOAuthProvider.getToken() - no provider-level refresh (Issue #
       valid,
     );
 
-    const provider = new AnthropicOAuthProvider(tokenStore);
+    const provider = new AnthropicOAuthProvider(globalThis.fetch, tokenStore);
 
     const result = await provider.getToken();
 
@@ -96,7 +96,7 @@ describe('AnthropicOAuthProvider.getToken() - no provider-level refresh (Issue #
       null,
     );
 
-    const provider = new AnthropicOAuthProvider(tokenStore);
+    const provider = new AnthropicOAuthProvider(globalThis.fetch, tokenStore);
 
     const result = await provider.getToken();
 

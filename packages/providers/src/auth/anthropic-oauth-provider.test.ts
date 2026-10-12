@@ -90,7 +90,11 @@ describe('AnthropicOAuthProvider', () => {
 
     mockAddItem = vi.fn();
 
-    provider = new AnthropicOAuthProvider(mockTokenStore, mockAddItem);
+    provider = new AnthropicOAuthProvider(
+      globalThis.fetch,
+      mockTokenStore,
+      mockAddItem,
+    );
 
     // Mock the pending auth promise to prevent hanging
     vi.spyOn(provider, 'waitForAuthCode').mockResolvedValue(
@@ -133,7 +137,11 @@ describe('AnthropicOAuthProvider', () => {
     vi.clearAllMocks();
 
     // Re-initialize mocks (it seems the provider's addItem is getting lost)
-    provider = new AnthropicOAuthProvider(mockTokenStore, mockAddItem);
+    provider = new AnthropicOAuthProvider(
+      globalThis.fetch,
+      mockTokenStore,
+      mockAddItem,
+    );
 
     // Mock the pending auth promise to prevent hanging - need to call submitAuthCode
     vi.spyOn(provider, 'waitForAuthCode').mockImplementation(async () =>
@@ -168,7 +176,11 @@ describe('AnthropicOAuthProvider', () => {
     vi.clearAllMocks();
 
     // Re-initialize mocks (it seems the provider's addItem is getting lost)
-    provider = new AnthropicOAuthProvider(mockTokenStore, mockAddItem);
+    provider = new AnthropicOAuthProvider(
+      globalThis.fetch,
+      mockTokenStore,
+      mockAddItem,
+    );
 
     // Mock the pending auth promise to prevent hanging - need to call submitAuthCode
     vi.spyOn(provider, 'waitForAuthCode').mockImplementation(async () =>
@@ -195,7 +207,11 @@ describe('AnthropicOAuthProvider', () => {
     vi.clearAllMocks();
 
     // Re-initialize mocks (it seems the provider's addItem is getting lost)
-    provider = new AnthropicOAuthProvider(mockTokenStore, mockAddItem);
+    provider = new AnthropicOAuthProvider(
+      globalThis.fetch,
+      mockTokenStore,
+      mockAddItem,
+    );
 
     vi.spyOn(provider, 'waitForAuthCode').mockImplementation(async () =>
       Promise.resolve('mock-auth-code#mock-state'),
@@ -215,7 +231,11 @@ describe('AnthropicOAuthProvider', () => {
     vi.clearAllMocks();
 
     // Re-initialize mocks (it seems the provider's addItem is getting lost)
-    provider = new AnthropicOAuthProvider(mockTokenStore, mockAddItem);
+    provider = new AnthropicOAuthProvider(
+      globalThis.fetch,
+      mockTokenStore,
+      mockAddItem,
+    );
 
     vi.spyOn(provider, 'waitForAuthCode').mockImplementation(async () =>
       Promise.resolve('mock-auth-code#mock-state'),
@@ -241,7 +261,11 @@ describe('AnthropicOAuthProvider', () => {
     vi.clearAllMocks();
 
     // Re-initialize mocks (it seems the provider's addItem is getting lost)
-    provider = new AnthropicOAuthProvider(mockTokenStore, mockAddItem);
+    provider = new AnthropicOAuthProvider(
+      globalThis.fetch,
+      mockTokenStore,
+      mockAddItem,
+    );
 
     vi.spyOn(provider, 'waitForAuthCode').mockImplementation(async () =>
       Promise.resolve('mock-auth-code#mock-state'),
@@ -267,7 +291,11 @@ describe('AnthropicOAuthProvider', () => {
     vi.clearAllMocks();
 
     // Re-initialize mocks (it seems the provider's addItem is getting lost)
-    provider = new AnthropicOAuthProvider(mockTokenStore, mockAddItem);
+    provider = new AnthropicOAuthProvider(
+      globalThis.fetch,
+      mockTokenStore,
+      mockAddItem,
+    );
 
     vi.spyOn(provider, 'waitForAuthCode').mockImplementation(async () =>
       Promise.resolve('mock-auth-code#mock-state'),
@@ -284,7 +312,11 @@ describe('AnthropicOAuthProvider', () => {
 
   it('throws when constructed without a TokenStore', () => {
     expect(
-      () => new AnthropicOAuthProvider(undefined as unknown as TokenStore),
+      () =>
+        new AnthropicOAuthProvider(
+          globalThis.fetch,
+          undefined as unknown as TokenStore,
+        ),
     ).toThrow(/TokenStore/);
   });
 

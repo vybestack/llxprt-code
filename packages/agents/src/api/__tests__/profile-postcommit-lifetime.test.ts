@@ -261,7 +261,7 @@ async function exercise(
       config: built.config,
       messageBus: built.messageBus,
     });
-    oauth.registerProvider(new AnthropicOAuthProvider(store));
+    oauth.registerProvider(new AnthropicOAuthProvider(globalThis.fetch, store));
     await oauth.toggleOAuthEnabled('claudecode');
     const agent = await fromConfig({
       oauthManager: oauth,
@@ -292,7 +292,9 @@ async function exercise(
         config: other.config,
         messageBus: other.messageBus,
       });
-      otherRenewals.registerProvider(new AnthropicOAuthProvider(otherStore));
+      otherRenewals.registerProvider(
+        new AnthropicOAuthProvider(globalThis.fetch, otherStore),
+      );
       await otherRenewals.toggleOAuthEnabled('claudecode');
       await otherStore.saveToken(
         'claudecode',
