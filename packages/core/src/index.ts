@@ -50,6 +50,7 @@ export * from './skills/skillDiscovery.js';
 
 // Export environment sanitization
 export * from './services/environmentSanitization.js';
+export type { NetworkFetch } from './utils/fetch.js';
 
 // Export debugLogger
 export * from './utils/debugLogger.js';

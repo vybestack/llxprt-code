@@ -63,10 +63,8 @@ import { tmpdir } from 'node:os';
 import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import {
-  OAuthManager,
-  createTokenStore,
-} from '@vybestack/llxprt-code-providers/auth.js';
+import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import { createKeyringTokenStore } from '@vybestack/llxprt-code-core/auth-factories.js';
 import {
   discoverRuntimePluginPackages,
   loadRuntimePlugins,
@@ -376,7 +374,7 @@ const LEFTOVER_GEMINI_ALIAS: ProviderAliasEntry = {
 };
 
 const BASE_ONLY_OAUTH_MANAGER = new OAuthManager(
-  createTokenStore(),
+  createKeyringTokenStore(),
   undefined,
   {},
 );

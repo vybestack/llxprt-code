@@ -1,10 +1,10 @@
-import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { NetworkFetch } from '@vybestack/llxprt-code-core';
 import type React from 'react';
 import type { RuntimeProfileAgent } from './runtimeProfileAgent.js';
 import {

@@ -40,6 +40,7 @@
       "policy",
       "providers",
       "settings",
+      "storage",
       "telemetry",
       "tools"
     ],
@@ -99,7 +100,7 @@
   },
   "testOnlyEdges": {
     "a2a-server": [],
-    "agents": ["storage", "test-utils"],
+    "agents": ["test-utils"],
     "auth": ["test-utils"],
     "cli": ["policy", "test-utils"],
     "core": ["agents", "providers", "test-utils"],
