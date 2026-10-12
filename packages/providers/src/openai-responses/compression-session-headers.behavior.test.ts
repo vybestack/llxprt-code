@@ -68,7 +68,7 @@ describe('compression profile conversation identity', () => {
         await agent.session.startNewSession();
         const sessionId = agent.session.getSessionId();
         const provider = agent.providerManager.getActiveProvider();
-        if (!provider) throw new Error('Expected provider');
+        if (provider === undefined) throw new Error('Expected provider');
         const config = internalConfig(agent);
         const owner = internalSettingsOwner(agent);
         const standard: StandardProfile = {
