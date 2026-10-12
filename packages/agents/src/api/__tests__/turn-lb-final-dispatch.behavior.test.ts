@@ -1,3 +1,4 @@
+import { internalConfig } from './helpers/agentHarness.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -9,7 +10,6 @@ import {
   ProfileManager,
   type LoadBalancerProfile,
 } from '@vybestack/llxprt-code-settings';
-import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.js';
 import { successful, withOwners } from './turn-revision-capture.fixture.js';
 
 function barrier(): {
@@ -84,7 +84,7 @@ describe('Final LB delegate authorization after asynchronous member authenticati
         const held = barrier();
         let reads = 0;
         const storage = vi
-          .spyOn(createProviderKeyStorage(), 'getKey')
+          .spyOn(internalConfig(a).getProviderKeys(), 'getKey')
           .mockImplementation(async () => {
             reads++;
             if (reads === 2) await held.wait();
@@ -153,7 +153,7 @@ describe('Final LB delegate authorization after asynchronous member authenticati
       const held = barrier();
       let reads = 0;
       const storage = vi
-        .spyOn(createProviderKeyStorage(), 'getKey')
+        .spyOn(internalConfig(a).getProviderKeys(), 'getKey')
         .mockImplementation(async () => {
           reads++;
           if (reads === 2) await held.wait();

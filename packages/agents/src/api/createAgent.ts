@@ -1,3 +1,5 @@
+import { createTaskRegistration } from './runtimeFactories.js';
+import { HostCredentialOwner } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -104,11 +106,14 @@ import {
 import { assembleHostGitHubBroker } from './host-github-broker-owner.js';
 
 export async function createAgent(rawConfig: AgentConfig): Promise<Agent> {
+  const credentialAuthority =
+    rawConfig.credentialAuthority ??
+    new HostCredentialOwner(process.env).authority;
   const images = prepareImageConstruction(rawConfig.imageOperation);
   const github = assembleHostGitHubBroker(rawConfig);
   try {
     return await createAgentWithHostGitHub(
-      { ...rawConfig, imageOperation: images.selection },
+      { ...rawConfig, credentialAuthority, imageOperation: images.selection },
       github,
     );
   } catch (primaryError) {
@@ -215,11 +220,21 @@ function createSessionMedia(config: Config): SessionMediaOwner {
   );
 }
 
+function selectTasks(
+  factories: AgentRuntimeFactoryBindings | undefined,
+  authority: AgentConfig['credentialAuthority'],
+): ReturnType<typeof createTaskRegistration> {
+  return factories?.taskToolRegistration() ?? createTaskRegistration(authority);
+}
+
+type CreatedAgentMcpOptions = McpAssemblyOptions &
+  Pick<AgentConfig, 'imageOperation' | 'credentialAuthority'>;
+
 async function finishCreatedAgent(
   handle: IsolatedRuntimeContextHandle,
   config: Config,
   messageBus: MessageBus,
-  mcpOptions: McpAssemblyOptions & Pick<AgentConfig, 'imageOperation'>,
+  mcpOptions: CreatedAgentMcpOptions,
   parsed: ReturnType<typeof AgentConfigSchema.parse>,
   resolvedAuth: ReturnType<typeof resolveAuthType>,
   runtimeId: string,
@@ -244,7 +259,7 @@ async function finishCreatedAgent(
       factories?.agentClientFactory,
       mcpOptions,
       policyOwner,
-      factories?.taskToolRegistration(),
+      selectTasks(factories, mcpOptions.credentialAuthority),
       (parsed.harness?.forceConfirmations ?? true) && config.isInteractive(),
     );
     disposeMcpRuntime = () => mcpRuntime.dispose();

@@ -1,3 +1,4 @@
+import { HostCredentialOwner } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -159,6 +160,7 @@ async function discoverZedSessionProviderInputs(): Promise<ZedSessionProviderInp
       import('@vybestack/llxprt-code-providers/auth.js'),
     ]);
   return {
+    credentialAuthority: new HostCredentialOwner(process.env).authority,
     providerContributions: await loadInstalledRuntimePlugins(),
     oauthSettings: createFileOAuthSettingsProvider(),
   };

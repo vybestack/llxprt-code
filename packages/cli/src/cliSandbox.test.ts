@@ -34,6 +34,7 @@ import { start_sandbox } from './utils/sandbox.js';
 import {
   auditLog,
   resetAuditLogStateForTesting,
+  CredentialAuthority,
 } from '@vybestack/llxprt-code-providers/auth.js';
 import { initializeOutputListenersAndFlush } from './session/outputListeners.js';
 import {
@@ -251,6 +252,7 @@ describe('CLI sandbox', () => {
       argv,
       workspaceRoot: '/tmp/ws',
       runtimeSettingsService: {} as SandboxHopOptions['runtimeSettingsService'],
+      credentialAuthority: new CredentialAuthority(),
       initialAuthFailed: false,
       readStdin: async () => '',
       hasPipedInput: false,

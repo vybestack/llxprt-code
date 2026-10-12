@@ -37,14 +37,6 @@ const tokenStoreMocks = {
   listBuckets: vi.fn(),
 };
 
-const actual = {
-  ...(await import('@vybestack/llxprt-code-providers/auth.js')),
-};
-void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
-  ...actual,
-  createTokenStore: () => ({ listBuckets: tokenStoreMocks.listBuckets }),
-}));
-
 describe('profileCommand', () => {
   let context: CommandContext;
 
@@ -61,6 +53,7 @@ describe('profileCommand', () => {
       });
     context = createMockCommandContext({
       runtimeApi: runtimeMocks,
+      oauthControl: { listBuckets: tokenStoreMocks.listBuckets },
       services: {
         agent: {
           workspace: definitions,

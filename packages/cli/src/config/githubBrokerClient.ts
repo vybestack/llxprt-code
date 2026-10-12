@@ -22,6 +22,7 @@
 import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
 import type { ProxySocketClient } from '@vybestack/llxprt-code-auth';
 import {
+  type CredentialAuthority,
   createGitHubBrokerSocketClient,
   executeGitHubOp,
 } from '@vybestack/llxprt-code-providers/auth.js';
@@ -42,6 +43,10 @@ const GITHUB_OP_TIMEOUT_MS = 3_600_000;
  */
 class ProxyGitHubBrokerClient implements GitHubBrokerClient {
   constructor(private readonly client: ProxySocketClient) {}
+
+  dispose(): void {
+    this.client.close();
+  }
 
   async runOperation(
     op: string,
@@ -78,6 +83,7 @@ class ProxyGitHubBrokerClient implements GitHubBrokerClient {
  * @requirement REQ-004
  */
 class HostGitHubBrokerClient implements GitHubBrokerClient {
+  dispose(): void {}
   async runOperation(
     op: string,
     params: Record<string, unknown>,
@@ -97,8 +103,12 @@ class HostGitHubBrokerClient implements GitHubBrokerClient {
  * @plan PLAN-20260731-GHBROKER.P15
  * @requirement REQ-001, REQ-003, REQ-015
  */
-export function createGitHubBrokerClient(): GitHubBrokerClient {
-  const socketClient = createGitHubBrokerSocketClient();
+export function createGitHubBrokerClient(
+  authority: CredentialAuthority | undefined,
+): GitHubBrokerClient & { dispose(): void } {
+  if (!authority)
+    throw new Error('GitHub broker requires an explicit credential owner');
+  const socketClient = createGitHubBrokerSocketClient(authority);
   return socketClient === null
     ? new HostGitHubBrokerClient()
     : new ProxyGitHubBrokerClient(socketClient);

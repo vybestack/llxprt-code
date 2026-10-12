@@ -1,4 +1,7 @@
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type {
+  CredentialAuthority,
+  OAuthManager,
+} from '@vybestack/llxprt-code-providers/auth.js';
 import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 import {
@@ -141,6 +144,7 @@ export interface SessionRecordingSetup extends ResolvedRecording {
 }
 
 export interface RuntimeConfigBootstrap {
+  readonly credentialAuthority: CredentialAuthority;
   readonly oauthManager?: OAuthManager;
   readonly providerFileLifecycle: ProviderFileLifecycle;
   readonly policyOwner?: RuntimePolicyOwner;
@@ -199,10 +203,17 @@ function requireAssembled<T>(value: T | undefined, what: string): T {
   return value;
 }
 
+function requireProfileApplication(
+  value: AgentProfileApplication | undefined,
+): AgentProfileApplication {
+  return requireAssembled(value, 'profile application');
+}
+
 export async function bootstrapRuntimeAndConfig(
   settings: LoadedSettings,
   argv: ParsedCliArgs,
   workspaceRoot: string,
+  credentialAuthority: CredentialAuthority,
 ): Promise<RuntimeConfigBootstrap> {
   const runtimeSettingsService = new SettingsService();
   const runtimeSettingsOwner = new SessionSettingsOwner(runtimeSettingsService);
@@ -236,6 +247,7 @@ export async function bootstrapRuntimeAndConfig(
       argv,
       workspaceRoot,
       {
+        credentialAuthority,
         settingsService: runtimeSettingsService,
         sessionSettingsOwner: runtimeSettingsOwner,
         providerContributions,
@@ -260,6 +272,7 @@ export async function bootstrapRuntimeAndConfig(
       },
     );
     return {
+      credentialAuthority,
       oauthManager,
       providerFileLifecycle: requireCliProviderFiles(providerFileLifecycle),
       providerManager: requireAssembled(providerManager, 'provider manager'),
@@ -272,10 +285,7 @@ export async function bootstrapRuntimeAndConfig(
       runtimeSettingsService,
       runtimeSettingsOwner,
       switchProvider: requireAssembled(switchProvider, 'provider switch'),
-      profileApplication: requireAssembled(
-        profileApplication,
-        'profile application',
-      ),
+      profileApplication: requireProfileApplication(profileApplication),
       activationOperation: requireAssembled(
         activationOperation,
         'activation bootstrap',

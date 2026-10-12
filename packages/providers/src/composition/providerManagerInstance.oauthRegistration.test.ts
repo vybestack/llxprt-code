@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -41,6 +42,10 @@ function makeWrapper(
 
 void mock.module('../ProviderManager.js', () => {
   class MockProviderManager {
+    peekProviderKeyStorage(): undefined {
+      return undefined;
+    }
+    bindProviderKeyStorage(): void {}
     setRetryOperationsFactory(): void {}
     setConfig(): void {}
     setActiveProvider(): void {}
@@ -145,6 +150,8 @@ describe('claudecode OAuth registration with environment key', () => {
     );
 
     const { oauthManager } = createProviderManager(activeContext, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new NodeFileSystem(),
       config: undefined,
       allowBrowserEnvironment: false,
@@ -219,6 +226,8 @@ describe('claudecode OAuth registration with environment key', () => {
     } as unknown as Config;
 
     createProviderManager(activeContext, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new NodeFileSystem(),
       config: mockConfig,
       allowBrowserEnvironment: false,
@@ -281,6 +290,8 @@ describe('claudecode OAuth registration with environment key', () => {
     } as unknown as Config;
 
     createProviderManager(activeContext, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new NodeFileSystem(),
       config: mockConfig,
       allowBrowserEnvironment: false,
@@ -332,6 +343,8 @@ describe('claudecode OAuth registration with environment key', () => {
     );
 
     const { oauthManager } = createProviderManager(activeContext, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new NodeFileSystem(),
       config: undefined,
       allowBrowserEnvironment: false,

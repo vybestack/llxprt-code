@@ -13,7 +13,7 @@ import {
   isInternalSettingKey,
   type LoadBalancerProfile,
 } from '@vybestack/llxprt-code-settings';
-import { createTokenStore } from '@vybestack/llxprt-code-providers/auth.js';
+import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 import { validateBucketName, validateProfileName } from './profileSchemas.js';
 
 /**
@@ -175,6 +175,7 @@ export function createLoadBalancerProfileDefinition(
 async function verifyBucketsExist(
   bucketArgs: readonly string[],
   runtimeApi: RuntimeApi,
+  listBuckets: OAuthControl['listBuckets'],
   agent?: Pick<Agent, 'getProvider'> | null,
 ): Promise<MessageActionReturn | null> {
   try {
@@ -190,8 +191,7 @@ async function verifyBucketsExist(
       };
     }
 
-    const tokenStore = createTokenStore();
-    const availableBuckets = await tokenStore.listBuckets(provider);
+    const availableBuckets = await listBuckets(provider);
 
     for (const bucket of bucketArgs) {
       if (!availableBuckets.includes(bucket)) {
@@ -231,7 +231,8 @@ function validateBucketArgs(
 export async function saveModelProfile(
   parts: readonly string[],
   runtimeApi: RuntimeApi,
-  agent?: Pick<Agent, 'getProvider' | 'saveProfileSnapshot'> | null,
+  agent: Pick<Agent, 'getProvider' | 'saveProfileSnapshot'> | null | undefined,
+  listBuckets: OAuthControl['listBuckets'],
 ): Promise<MessageActionReturn | OpenDialogActionReturn> {
   if (parts.length < 2) {
     return {
@@ -276,7 +277,12 @@ export async function saveModelProfile(
   }
 
   if (bucketArgs.length > 0) {
-    const bucketError = await verifyBucketsExist(bucketArgs, runtimeApi, agent);
+    const bucketError = await verifyBucketsExist(
+      bucketArgs,
+      runtimeApi,
+      listBuckets,
+      agent,
+    );
     if (bucketError) {
       return bucketError;
     }

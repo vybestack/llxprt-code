@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 import { createProviderConfigFixture } from '../runtime/__tests__/provider-config-fixture.js';
 /**
  * @license
@@ -53,6 +54,8 @@ describe('logout ownership', () => {
       const build = (context: ReturnType<typeof ownerContext>) => {
         if (construction === 'composition') {
           return createProviderManager(context, {
+            credentialAuthority: new CredentialAuthority(),
+
             fileSystem: new NodeFileSystem(),
             config: context.config,
             activateConfiguredProvider: false,
@@ -60,6 +63,8 @@ describe('logout ownership', () => {
         }
         const handle = createIsolatedRuntimeContext(
           {
+            credentialAuthority: new CredentialAuthority(),
+
             ...context,
             activationBindings,
           },

@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -23,7 +24,10 @@ describe('public provider-manager filesystem injection', () => {
         runtimeId: 'filesystem-injection-test',
         metadata: { stage: 'test' },
       },
-      { fileSystem },
+      {
+        credentialAuthority: new CredentialAuthority(),
+        fileSystem,
+      },
     );
 
     expect(manager.getActiveProvider()?.name).toBe('anthropic');

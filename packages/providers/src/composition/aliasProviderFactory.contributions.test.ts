@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -20,7 +21,7 @@ import { assertInstanceOf } from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
-import { OAuthManager, createTokenStore } from '../auth/index.js';
+import { OAuthManager, HostCredentialOwner } from '../auth/index.js';
 import {
   createOpenAIAliasProvider,
   registerAliasProviders,
@@ -41,7 +42,11 @@ import type {
 import type { IProvider } from '../IProvider.js';
 import type { IProviderConfig } from '../types/IProviderConfig.js';
 
-const OAUTH_MANAGER = new OAuthManager(createTokenStore(), undefined, {});
+const OAUTH_MANAGER = new OAuthManager(
+  new HostCredentialOwner(process.env).authority.createTokenStore(),
+  undefined,
+  {},
+);
 const EMPTY_PROVIDER_CONFIG: IProviderConfig = {};
 const FALLBACK_BASE_URL = 'https://fallback.example.com/v1';
 
@@ -507,6 +512,8 @@ describe('refreshAliasProviders registry reuse', () => {
         runtimeId: 'issue2758-refresh-test',
       } as never,
       {
+        credentialAuthority: new CredentialAuthority(),
+
         fileSystem: new NodeFileSystem(),
         providerContributions: contributions,
         activateConfiguredProvider: false,
@@ -556,6 +563,8 @@ describe('refreshAliasProviders registry reuse', () => {
     const a = createProviderManager(
       { settingsService: new SettingsService(), runtimeId: 'shared' } as never,
       {
+        credentialAuthority: new CredentialAuthority(),
+
         fileSystem: new NodeFileSystem(),
         providerContributions: await createContributions('plugin-a'),
       },
@@ -563,6 +572,8 @@ describe('refreshAliasProviders registry reuse', () => {
     const b = createProviderManager(
       { settingsService: new SettingsService(), runtimeId: 'shared' } as never,
       {
+        credentialAuthority: new CredentialAuthority(),
+
         fileSystem: new NodeFileSystem(),
         providerContributions: await createContributions('plugin-b'),
       },

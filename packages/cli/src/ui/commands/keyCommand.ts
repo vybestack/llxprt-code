@@ -24,7 +24,7 @@ import type { CommandArgumentSchema, CompleterFn } from './schema/types.js';
 import { maskKeyForDisplay } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { SecureStoreError } from '@vybestack/llxprt-code-storage';
-import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.js';
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import { firstNonEmptyString } from '../../utils/coalesce.js';
 
 /**
@@ -34,70 +34,26 @@ import { firstNonEmptyString } from '../../utils/coalesce.js';
 const SUBCOMMANDS = ['save', 'load', 'show', 'list', 'delete'] as const;
 type Subcommand = (typeof SUBCOMMANDS)[number];
 
-// ─── Key-Name Completion Cache (issue #2620) ────────────────────────────────
-//
-// Issue #2620: `/key load <name>` triggered an OS keychain enumeration on every
-// keystroke because keyNameCompleter called listKeys() with no caching. Key
-// names change rarely, so a short TTL cache dramatically reduces keyring reads
-// (and thus macOS Keychain authorization prompts). The cache is invalidated
-// only by the mutating /key subcommands (save, delete) AFTER a successful
-// mutation; load does not change the stored key set and does not invalidate.
+type KeyCompletionReads = {
+  listKeyCompletionNames(): Promise<readonly string[]>;
+  invalidateKeyCompletion(): void;
+};
 
-const KEY_NAME_CACHE_TTL_MS = 5000;
-
-interface KeyNameCacheState {
-  names: readonly string[];
-  expiresAt: number;
+function getKeyCompletion(
+  completion: KeyCompletionReads | null,
+): KeyCompletionReads {
+  if (!completion)
+    throw new Error('Key commands require an explicit credential owner');
+  return completion;
 }
 
-let keyNameCache: KeyNameCacheState | null = null;
-// Coalesces concurrent cache misses onto a single in-flight listKeys() call.
-let keyNameInFlight: Promise<readonly string[]> | null = null;
-// Bumped on every invalidation so an in-flight read that started before a
-// mutation can be discarded instead of repopulating the cache with stale names.
-let keyNameGeneration = 0;
-
-/**
- * Invalidate the key-name completion cache. Called by mutating /key
- * subcommands so subsequent autocompletion reflects the latest keyring state.
- */
-export function invalidateKeyCompletionCache(): void {
-  keyNameGeneration += 1;
-  keyNameCache = null;
-  // An in-flight result from before the mutation is now stale.
-  keyNameInFlight = null;
+function getKeyStorage(
+  storage: ProviderKeyStorageLike | undefined,
+): ProviderKeyStorageLike {
+  if (!storage)
+    throw new Error('Key commands require an explicit credential owner');
+  return storage;
 }
-
-async function getCachedKeyNames(): Promise<readonly string[]> {
-  const now = Date.now();
-  if (keyNameCache && keyNameCache.expiresAt > now) {
-    return keyNameCache.names;
-  }
-  // Cache miss — coalesce concurrent callers onto a single in-flight promise.
-  if (keyNameInFlight) {
-    return keyNameInFlight;
-  }
-  const startGeneration = keyNameGeneration;
-  const pending = createProviderKeyStorage().listKeys();
-  keyNameInFlight = pending;
-  try {
-    const names = await pending;
-    // Only cache if no mutation invalidated during the read; compute the
-    // expiry AFTER resolution so a slow keychain read still gets a full TTL.
-    if (keyNameGeneration === startGeneration) {
-      keyNameCache = { names, expiresAt: Date.now() + KEY_NAME_CACHE_TTL_MS };
-    }
-    return names;
-  } finally {
-    // Only clear our in-flight slot if we still own it; a concurrent
-    // invalidation may have already nulled it.
-    if (keyNameInFlight === pending) {
-      keyNameInFlight = null;
-    }
-  }
-}
-
-// ─── Error Formatting (R18.1) ────────────────────────────────────────────────
 
 /**
  * @plan PLAN-20260211-SECURESTORE.P15
@@ -150,7 +106,7 @@ async function handleSave(
   }
 
   // @plan:PLAN-20250214-CREDPROXY.P33
-  const storage = createProviderKeyStorage();
+  const storage = getKeyStorage(context.services.config?.getProviderKeys());
 
   // Check for existing key — prompt overwrite (R13.2, R13.3)
   try {
@@ -197,7 +153,7 @@ async function handleSave(
     await storage.saveKey(name, apiKey);
     // Invalidate only after a successful mutation so failed/declined paths
     // don't trigger needless future keychain prompts.
-    invalidateKeyCompletionCache();
+    getKeyCompletion(context.services.config).invalidateKeyCompletion();
     return {
       type: 'message',
       messageType: 'info',
@@ -234,7 +190,7 @@ async function handleLoad(
 
   const name = tokens[0];
   // @plan:PLAN-20250214-CREDPROXY.P33
-  const storage = createProviderKeyStorage();
+  const storage = getKeyStorage(context.services.config?.getProviderKeys());
 
   try {
     const key = await storage.getKey(name);
@@ -293,7 +249,10 @@ async function handleLoad(
  * @pseudocode lines 112-137
  * @requirement R15.1, R15.2
  */
-async function handleShow(tokens: string[]): Promise<MessageActionReturn> {
+async function handleShow(
+  tokens: string[],
+  storage: ProviderKeyStorageLike,
+): Promise<MessageActionReturn> {
   if (tokens.length === 0) {
     return {
       type: 'message',
@@ -304,7 +263,6 @@ async function handleShow(tokens: string[]): Promise<MessageActionReturn> {
 
   const name = tokens[0];
   // @plan:PLAN-20250214-CREDPROXY.P33
-  const storage = createProviderKeyStorage();
 
   try {
     const key = await storage.getKey(name);
@@ -341,9 +299,10 @@ async function handleShow(tokens: string[]): Promise<MessageActionReturn> {
  * @pseudocode lines 138-164
  * @requirement R16.1, R16.2
  */
-async function handleList(): Promise<MessageActionReturn> {
+async function handleList(
+  storage: ProviderKeyStorageLike,
+): Promise<MessageActionReturn> {
   // @plan:PLAN-20250214-CREDPROXY.P33
-  const storage = createProviderKeyStorage();
 
   try {
     const names = await storage.listKeys();
@@ -423,7 +382,7 @@ async function handleDelete(
   }
 
   // @plan:PLAN-20250214-CREDPROXY.P33
-  const storage = createProviderKeyStorage();
+  const storage = getKeyStorage(context.services.config?.getProviderKeys());
 
   try {
     // Check if key exists (R17.3)
@@ -454,7 +413,7 @@ async function handleDelete(
     await storage.deleteKey(name);
     // Invalidate only after a successful mutation so failed/declined paths
     // don't trigger needless future keychain prompts.
-    invalidateKeyCompletionCache();
+    getKeyCompletion(context.services.config).invalidateKeyCompletion();
     return {
       type: 'message',
       messageType: 'info',
@@ -480,9 +439,11 @@ async function handleDelete(
  * useSlashCompletion hook uses schema (not the completion property)
  * to provide argument-level autocomplete suggestions.
  */
-const keyNameCompleter: CompleterFn = async (_ctx, partial) => {
+const keyNameCompleter: CompleterFn = async (context, partial) => {
   try {
-    const names = await getCachedKeyNames();
+    const names = await getKeyCompletion(
+      context.services.config,
+    ).listKeyCompletionNames();
     return names
       .filter((name) => name.startsWith(partial))
       .map((name) => ({ value: name }));
@@ -582,9 +543,14 @@ export const keyCommand: SlashCommand = {
         case 'load':
           return handleLoad(tokens.slice(1), context);
         case 'show':
-          return handleShow(tokens.slice(1));
+          return handleShow(
+            tokens.slice(1),
+            getKeyStorage(context.services.config?.getProviderKeys()),
+          );
         case 'list':
-          return handleList();
+          return handleList(
+            getKeyStorage(context.services.config?.getProviderKeys()),
+          );
         case 'delete':
           return handleDelete(tokens.slice(1), context);
         default:

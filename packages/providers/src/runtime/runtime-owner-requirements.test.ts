@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -32,6 +33,8 @@ describe('isolated runtime construction requirements', () => {
     const { config, settingsService, settingsOwner } = buildOwner();
     const handle = createIsolatedRuntimeContext(
       {
+        credentialAuthority: new CredentialAuthority(),
+
         config,
         settingsOwner,
         activationBindings: createRuntimeActivationBindings(),

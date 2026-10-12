@@ -1,3 +1,4 @@
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
@@ -133,6 +134,7 @@ export interface SubagentLaunchResult {
 }
 
 export interface SubagentOrchestratorOptions {
+  readonly credentialAuthority?: CredentialAuthority;
   readonly requestInteractiveAuth?: InteractiveAuthPromptOperation;
   instructions: InstructionReadOperations;
   toolRegistry?: ToolSelection;
@@ -802,6 +804,7 @@ export class SubagentOrchestrator {
     const handle = createIsolatedRuntimeContext(
       {
         runtimeId: agentRuntimeId,
+        credentialAuthority: this.options.credentialAuthority,
         requestInteractiveAuth: this.options.requestInteractiveAuth,
         config: isolatedConfig,
         borrowedTelemetry: this.options.telemetry,
@@ -817,15 +820,12 @@ export class SubagentOrchestrator {
 
     let sessionClient: SessionClientOwner | undefined;
     try {
-      const ownedSessionClient = await this.createChildClient(
-        handle,
-        mediaOwner,
-      );
-      sessionClient = ownedSessionClient;
-      this.bindChildTools(ownedSessionClient);
+      const childClient = await this.createChildClient(handle, mediaOwner);
+      sessionClient = childClient;
+      this.bindChildTools(childClient);
       await handle.activate();
       const switchProvider = assembleSessionProviderSwitch(handle, () =>
-        ownedSessionClient.refreshAuth(),
+        childClient.refreshAuth(),
       );
 
       if (isLoadBalancerActivation) {
@@ -859,7 +859,7 @@ export class SubagentOrchestrator {
           switchProvider,
           handle.settingsService,
           handle.providerManager,
-          (method) => ownedSessionClient.refreshAuth(method),
+          (method) => childClient.refreshAuth(method),
           assembleModelSelection(handle.settingsOwner),
         );
       }
@@ -868,7 +868,7 @@ export class SubagentOrchestrator {
         runtimeStateProfile,
         profileName,
       );
-      return { ...handle, mediaOwner, sessionClient: ownedSessionClient };
+      return { ...handle, mediaOwner, sessionClient: childClient };
     } catch (error) {
       return cleanupAfterFailure(error, () =>
         disposeIsolatedMediaRuntime(handle, mediaOwner, sessionClient),

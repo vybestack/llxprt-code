@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -101,6 +102,8 @@ function createWorkflowOwner(
       runtimeKind: 'agent',
     }),
   );
+  const storage = new CredentialAuthority().createProviderKeyStorage();
+  manager.bindProviderKeyStorage(storage, () => storage.close());
   const providers = new Map<string, FakeProvider>();
   for (const name of ['openai', 'anthropic', 'gemini']) {
     const provider = new FakeProvider(fixture, directory);

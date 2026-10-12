@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -147,6 +148,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
 
   it('calls fromConfig exactly once with the existing config and an activation intent, and NO caller messageBus (the Agent owns its bus)', async () => {
     await createForegroundAgent({
+      credentialAuthority: new CredentialAuthority(),
       config,
       providerManager,
       settingsService,
@@ -173,6 +175,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
 
   it('returns the agent produced by fromConfig and it is disposed on cleanup', async () => {
     const agent = await createForegroundAgent({
+      credentialAuthority: new CredentialAuthority(),
       config,
       providerManager,
       settingsService,
@@ -189,6 +192,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
 
   it('disposes the agent on normal exit alongside the interactive UI cleanup', async () => {
     await createForegroundAgent({
+      credentialAuthority: new CredentialAuthority(),
       config,
       providerManager,
       settingsService,
@@ -208,6 +212,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
 
   it('disposes the agent when startup is interrupted before the UI registers cleanup', async () => {
     await createForegroundAgent({
+      credentialAuthority: new CredentialAuthority(),
       config,
       providerManager,
       settingsService,
@@ -226,6 +231,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
 
     await expect(
       createForegroundAgent({
+        credentialAuthority: new CredentialAuthority(),
         config,
         providerManager,
         settingsService,
@@ -240,6 +246,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
 
   it('forwards the exact existing Config to fromConfig (no duplicate runtime construction)', async () => {
     await createForegroundAgent({
+      credentialAuthority: new CredentialAuthority(),
       config,
       providerManager,
       settingsService,
@@ -255,6 +262,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
   it('declares the configured provider and model in the activation intent', async () => {
     useFixture({ provider: 'glm', model: 'glm-4' });
     await createForegroundAgent({
+      credentialAuthority: new CredentialAuthority(),
       config,
       providerManager,
       settingsService,
@@ -274,6 +282,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
   it('omits the model from the intent when the config model is the placeholder', async () => {
     useFixture({ provider: 'glm', model: 'placeholder-model' });
     await createForegroundAgent({
+      credentialAuthority: new CredentialAuthority(),
       config,
       providerManager,
       settingsService,
@@ -292,6 +301,7 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
 
   it('applies session policy updates through the foreground session owner', async () => {
     await createForegroundAgent({
+      credentialAuthority: new CredentialAuthority(),
       config,
       providerManager,
       settingsService,

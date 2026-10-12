@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../../providers/src/auth/proxy/credential-store-factory.js';
 import {
   modelSelectionInputs,
   providerSwitchInputs,
@@ -95,6 +96,8 @@ describe('Runtime model parameter isolation', () => {
     });
     settingsService = new SettingsService();
     const assembled = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService,
       config,
       runtimeId: 'model-params-isolation-test',

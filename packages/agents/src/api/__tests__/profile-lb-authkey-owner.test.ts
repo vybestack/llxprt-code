@@ -10,7 +10,6 @@ import {
   isResolvedSubProfile,
   type ResolvedSubProfile,
 } from '@vybestack/llxprt-code-providers';
-import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.js';
 import { memberOptions as options } from './helpers/member-auth-options.js';
 import {
   loadBalancer,
@@ -41,7 +40,7 @@ describe('Load balancer member credentials at use time', () => {
   it('resolves each named member key into delegate options only at use time', async () => {
     const reads: string[] = [];
     const storage = vi
-      .spyOn(createProviderKeyStorage(), 'getKey')
+      .spyOn(owner().config.getProviderKeys(), 'getKey')
       .mockImplementation(async (name) => {
         reads.push(name);
         return `resolved-${name}`;
@@ -69,11 +68,17 @@ describe('Load balancer member credentials at use time', () => {
         throw new Error('Expected resolved members');
       expect(first.authToken).toBeUndefined();
       expect(second.authToken).toBeUndefined();
-      const firstOptions = await options(first);
+      const firstOptions = await options(
+        first,
+        owner().config.getProviderKeys(),
+      );
       expect(firstOptions.resolved?.authToken).toBe('resolved-chutes');
       expect(firstOptions.metadata?.profileId).toBe('chutes');
       expect(reads).toStrictEqual(['chutes']);
-      const secondOptions = await options(second);
+      const secondOptions = await options(
+        second,
+        owner().config.getProviderKeys(),
+      );
       expect(secondOptions.resolved?.authToken).toBe('resolved-openrouter');
       expect(secondOptions.metadata?.profileId).toBe('router');
       expect(first.authToken).toBeUndefined();
@@ -85,13 +90,13 @@ describe('Load balancer member credentials at use time', () => {
 
   it('reads a rotated named key without caching plaintext', async () => {
     const storage = vi
-      .spyOn(createProviderKeyStorage(), 'getKey')
+      .spyOn(owner().config.getProviderKeys(), 'getKey')
       .mockResolvedValue(' key-A ');
     try {
       const resolved = await member(owner(), { 'auth-key-name': 'chutes' });
-      const first = await options(resolved);
+      const first = await options(resolved, owner().config.getProviderKeys());
       storage.mockResolvedValue(' key-B ');
-      const second = await options(resolved);
+      const second = await options(resolved, owner().config.getProviderKeys());
       expect(first.resolved?.authToken).toBe('key-A');
       expect(second.resolved?.authToken).toBe('key-B');
       expect(resolved.authToken).toBeUndefined();
@@ -104,9 +109,9 @@ describe('Load balancer member credentials at use time', () => {
     const keyfile = join(owner().directory, 'rotating');
     await writeFile(keyfile, ' first-file-key ');
     const resolved = await member(owner(), { 'auth-keyfile': keyfile });
-    const first = await options(resolved);
+    const first = await options(resolved, owner().config.getProviderKeys());
     await writeFile(keyfile, ' second-file-key ');
-    const second = await options(resolved);
+    const second = await options(resolved, owner().config.getProviderKeys());
     expect([
       first.resolved?.authToken,
       second.resolved?.authToken,
@@ -116,7 +121,7 @@ describe('Load balancer member credentials at use time', () => {
 
   it('prefers explicit auth-key over auth-key-name', async () => {
     const storage = vi
-      .spyOn(createProviderKeyStorage(), 'getKey')
+      .spyOn(owner().config.getProviderKeys(), 'getKey')
       .mockImplementation(async () => {
         throw new Error('Named key must not be read');
       });
@@ -126,7 +131,10 @@ describe('Load balancer member credentials at use time', () => {
         'auth-key-name': 'chutes',
       });
       expect(resolved.authKeyName).toBeUndefined();
-      expect((await options(resolved)).resolved?.authToken).toBe('direct-key');
+      expect(
+        (await options(resolved, owner().config.getProviderKeys())).resolved
+          ?.authToken,
+      ).toBe('direct-key');
     } finally {
       storage.mockRestore();
     }
@@ -134,12 +142,15 @@ describe('Load balancer member credentials at use time', () => {
 
   it('continues without a token when the named key is missing at use time', async () => {
     const storage = vi
-      .spyOn(createProviderKeyStorage(), 'getKey')
+      .spyOn(owner().config.getProviderKeys(), 'getKey')
       .mockResolvedValue(null);
     try {
       const resolved = await member(owner(), { 'auth-key-name': 'missing' });
       expect(resolved.authKeyName).toBe('missing');
-      expect((await options(resolved)).resolved?.authToken).toBeUndefined();
+      expect(
+        (await options(resolved, owner().config.getProviderKeys())).resolved
+          ?.authToken,
+      ).toBeUndefined();
       expect(resolved.authToken).toBeUndefined();
     } finally {
       storage.mockRestore();
@@ -148,7 +159,7 @@ describe('Load balancer member credentials at use time', () => {
 
   it('falls back to the rotated member keyfile when the named key is missing', async () => {
     const storage = vi
-      .spyOn(createProviderKeyStorage(), 'getKey')
+      .spyOn(owner().config.getProviderKeys(), 'getKey')
       .mockResolvedValue(null);
     try {
       const keyfile = join(owner().directory, 'fallback');
@@ -158,9 +169,10 @@ describe('Load balancer member credentials at use time', () => {
         'auth-keyfile': keyfile,
       });
       await writeFile(keyfile, ' fresh-file-key ');
-      expect((await options(resolved)).resolved?.authToken).toBe(
-        'fresh-file-key',
-      );
+      expect(
+        (await options(resolved, owner().config.getProviderKeys())).resolved
+          ?.authToken,
+      ).toBe('fresh-file-key');
       expect(resolved.authToken).toBeUndefined();
       expect(resolved.authKeyfile).toBe(keyfile);
     } finally {

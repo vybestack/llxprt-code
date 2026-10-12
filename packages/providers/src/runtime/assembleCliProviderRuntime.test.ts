@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -48,6 +49,8 @@ describe('assembleCliProviderRuntime @plan:PLAN-20270110-ISSUE2378.P04 @requirem
     const settingsService = new SettingsService();
 
     const result = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService,
       config: undefined,
       runtimeId: 'assemble-test-no-config',
@@ -65,11 +68,15 @@ describe('assembleCliProviderRuntime @plan:PLAN-20270110-ISSUE2378.P04 @requirem
 
   it('keeps same-label foreground owners separate when bootstrapped together', () => {
     const first = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService: new SettingsService(),
       config: undefined,
       runtimeId: 'same-label',
     });
     const second = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService: new SettingsService(),
       config: undefined,
       runtimeId: 'same-label',
@@ -92,6 +99,8 @@ describe('assembleCliProviderRuntime @plan:PLAN-20270110-ISSUE2378.P04 @requirem
     const settingsService = new SettingsService();
 
     const result = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService,
       config: undefined,
       runtimeId: 'assemble-test-providers',
@@ -108,6 +117,8 @@ describe('assembleCliProviderRuntime @plan:PLAN-20270110-ISSUE2378.P04 @requirem
     const settingsService = new SettingsService();
 
     const result = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService,
       config: undefined,
       runtimeId: 'assemble-test-oauth',
@@ -186,6 +197,8 @@ describe('assembleCliProviderRuntime OAuth-settings carry-through @plan:PLAN-202
     // This mirrors postConfigRuntime.setupRuntimeContext EXACTLY: a Config now
     // exists and the CLI recomposes the runtime WITHOUT passing oauthSettings.
     const result = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService,
       config,
       runtimeId: 'assemble-oauth-postconfig-enabled',
@@ -208,6 +221,8 @@ describe('assembleCliProviderRuntime OAuth-settings carry-through @plan:PLAN-202
     });
 
     const result = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService,
       config,
       runtimeId: 'assemble-oauth-postconfig-disabled',
@@ -226,6 +241,8 @@ describe('assembleCliProviderRuntime OAuth-settings carry-through @plan:PLAN-202
     const settingsService = new SettingsService();
 
     const result = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService,
       config: undefined,
       runtimeId: 'assemble-oauth-null-optout',
@@ -261,6 +278,8 @@ describe('assembleCliProviderRuntime OAuth-settings carry-through @plan:PLAN-202
     });
 
     const result = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService,
       config,
       runtimeId: 'assemble-oauth-bus-identity',

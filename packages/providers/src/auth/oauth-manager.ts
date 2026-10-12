@@ -47,6 +47,7 @@ import { ProactiveRenewalManager } from './proactive-renewal-manager.js';
 import { OAuthBucketManager } from './OAuthBucketManager.js';
 import { createProfileManager } from './profile-utils.js';
 import { OAuthForegroundLifetime } from './oauth-foreground-lifetime.js';
+import { closeOwnedTokenStore } from './proxy/credential-store-factory.js';
 import { TokenAccessCoordinator } from './token-access-coordinator.js';
 import { AuthFlowOrchestrator } from './auth-flow-orchestrator.js';
 import { AuthStatusService } from './auth-status-service.js';
@@ -196,6 +197,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     tokenStore: TokenStore,
     settings?: IOAuthSettingsProvider,
     runtimeDeps?: OAuthManagerRuntimeMessageBusDeps,
+    private readonly tokenStoreOwnership: 'owned' | 'borrowed' = 'borrowed',
   ) {
     this.parentInteractiveAuth = runtimeDeps?.requestInteractiveAuth;
     const directory = runtimeDeps?.config?.profileDirectory;
@@ -429,12 +431,20 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * and join in-flight ones. Later token reads no longer schedule renewals.
    * Called by the owner of this manager before it releases the token store.
    */
-  async dispose(): Promise<void> {
-    await this.foreground.dispose(async () => {
-      this.interactiveAuth.unbindHost();
-      await this.interactiveAuth.dispose();
-      await this.proactiveRenewalManager.cancelAndJoin();
-    });
+  private closing: Promise<void> | undefined;
+
+  dispose(): Promise<void> {
+    this.closing ??= this.foreground
+      .dispose(async () => {
+        this.interactiveAuth.unbindHost();
+        await this.interactiveAuth.dispose();
+        await this.proactiveRenewalManager.cancelAndJoin();
+      })
+      .finally(() => {
+        if (this.tokenStoreOwnership === 'owned')
+          closeOwnedTokenStore(this.tokenStore);
+      });
+    return this.closing;
   }
 
   private interactiveRequestPort(): InteractiveAuthRequestPort {

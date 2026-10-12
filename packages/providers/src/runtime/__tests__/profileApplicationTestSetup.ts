@@ -179,6 +179,7 @@ export const settingsServiceStub = {
 };
 
 export const providerManagerStub = {
+  getProviderKeys: () => createProviderKeyStorageMock(),
   available: [] as string[],
   activeProviderName: 'openai',
   providerLookup: new Map<

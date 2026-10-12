@@ -1,3 +1,7 @@
+import {
+  HostCredentialOwner,
+  type CredentialAuthority,
+} from '../auth/index.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -25,6 +29,7 @@ import { NodeFileSystem, type IFileSystem } from './IFileSystem.js';
  * Options for constructing a headless provider manager.
  */
 export interface HeadlessProviderManagerOptions {
+  readonly credentialAuthority?: CredentialAuthority;
   /** Provider name to activate (e.g. 'openai', 'anthropic', 'gemini'). */
   provider: string;
   fileSystem?: IFileSystem;
@@ -64,6 +69,9 @@ export function createHeadlessProviderManager(
 
   const { manager, oauthManager } = createProviderManager(context, {
     fileSystem: options.fileSystem ?? new NodeFileSystem(),
+    credentialAuthority:
+      options.credentialAuthority ??
+      new HostCredentialOwner(process.env).authority,
   });
 
   if (options.apiKey !== undefined) {

@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../../providers/src/auth/proxy/credential-store-factory.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
@@ -179,6 +180,8 @@ async function bootstrapRuntimeFixture(options: {
     const settingsOwner = new SessionSettingsOwner(settingsService);
     return createIsolatedRuntimeContext(
       {
+        credentialAuthority: new CredentialAuthority(),
+
         settingsOwner,
         runtimeId: options.runtimeId,
         // The caller supplies the Config (issue #3222): providers no longer

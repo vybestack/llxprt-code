@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../../../../providers/src/auth/proxy/credential-store-factory.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
@@ -100,6 +101,8 @@ export async function createSessionClientEngineFixture(
   const { config, messageBus, mcp } = workspace;
   const handle = createIsolatedRuntimeContext(
     {
+      credentialAuthority: new CredentialAuthority(),
+
       runtimeId: `engine-${randomUUID()}`,
       config,
       messageBus,

@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type {
+  CredentialAuthority,
+  OAuthManager,
+} from '@vybestack/llxprt-code-providers/auth.js';
 import type {
   createProviderManager,
   ProviderContributionRegistry,
@@ -95,6 +98,7 @@ export function captureZedHostInputs(host: Config): ZedHostInputs {
  * built-ins-only provider set and an OAuth manager without a settings surface.
  */
 export interface ZedSessionProviderInputs {
+  readonly credentialAuthority?: CredentialAuthority;
   readonly providerContributions?: ProviderContributionRegistry;
   readonly oauthSettings?: NonNullable<
     Parameters<typeof createProviderManager>[1]['oauthSettings']
@@ -264,7 +268,7 @@ export async function buildZedSessionAgent(
       filesystemOwner: filesystem,
       filesystemOwnership: 'agent',
       providerManager: manager,
-      ...sessionProviderInput(oauthManager, sessionId),
+      ...sessionProviderInput(oauthManager, sessionId, providerInputs),
       prepareSessionTools: (config, messageBus, tools) => {
         if (capabilities?.terminal !== true) return;
         terminalSetup = buildZedTerminalSetup(
@@ -297,8 +301,16 @@ export async function buildZedSessionAgent(
   };
 }
 
-function sessionProviderInput(oauthManager: OAuthManager, sessionId: string) {
-  return { oauthManager, sessionId };
+function sessionProviderInput(
+  oauthManager: OAuthManager,
+  sessionId: string,
+  providerInputs: ZedSessionProviderInputs,
+) {
+  return {
+    oauthManager,
+    sessionId,
+    credentialAuthority: providerInputs.credentialAuthority,
+  };
 }
 
 async function composeSessionProviderManager(
@@ -314,6 +326,10 @@ async function composeSessionProviderManager(
   const { createProviderManager, NodeFileSystem } = await import(
     '@vybestack/llxprt-code-providers/composition.js'
   );
+  if (providerInputs.credentialAuthority === undefined)
+    throw new Error(
+      'ACP provider construction requires a credential authority',
+    );
   const { manager, oauthManager } = createProviderManager(
     {
       config,
@@ -323,6 +339,7 @@ async function composeSessionProviderManager(
     {
       config,
       fileSystem: new NodeFileSystem(),
+      credentialAuthority: providerInputs.credentialAuthority,
       runtimeMessageBus: policy.session.messageBus,
       ...(providerInputs.oauthSettings === undefined
         ? {}

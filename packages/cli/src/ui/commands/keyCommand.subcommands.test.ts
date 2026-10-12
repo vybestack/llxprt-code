@@ -21,7 +21,8 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { keyCommand, invalidateKeyCompletionCache } from './keyCommand.js';
+import { keyCommand } from './keyCommand.js';
+import { KeyCompletionOwner } from './key-completion-owner.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { CommandContext, MessageActionReturn } from './types.js';
 import type { Config } from '@vybestack/llxprt-code-core';
@@ -88,7 +89,7 @@ let mockStorage: ProviderKeyStorage;
 const actual = { ...(await import('@vybestack/llxprt-code-storage')) };
 void vi.mock('@vybestack/llxprt-code-storage', () => ({
   ...actual,
-  getProviderKeyStorage: () => mockStorage,
+  getProviderKeys: () => mockStorage,
 }));
 
 // @plan:PLAN-20250214-CREDPROXY.P33
@@ -101,9 +102,21 @@ const actualActual = {
 void vi.mock('@vybestack/llxprt-code-providers/auth.js', () => ({
   ...actualActual,
   createProviderKeyStorage: () => mockStorage,
-  createTokenStore: () => ({}),
-  resetFactorySingletons: () => {},
 }));
+
+function createKeyCommandContext(
+  ...args: Parameters<typeof createMockCommandContext>
+): CommandContext {
+  const context = createMockCommandContext(...args);
+  if (context.services.config) {
+    context.services.config.getProviderKeys = () => mockStorage;
+    const completion = new KeyCompletionOwner(() => mockStorage);
+    context.services.config.listKeyCompletionNames = () => completion.list();
+    context.services.config.invalidateKeyCompletion = () =>
+      completion.invalidate();
+  }
+  return context;
+}
 
 // ─── Test Setup ──────────────────────────────────────────────────────────────
 
@@ -114,12 +127,13 @@ let context: CommandContext;
 describe('/key subcommands', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    invalidateKeyCompletionCache();
     mockKeyring = createMockKeyring();
     tempDir = await createTempFallbackDir();
     mockStorage = createTestStorage(mockKeyring, tempDir);
 
-    context = createMockCommandContext({ runtimeApi: mockRuntime });
+    context = createKeyCommandContext({ runtimeApi: mockRuntime });
+    if (!context.services.config) throw new Error('Missing fixture config');
+    context.services.config.getProviderKeys = () => mockStorage;
 
     mockRuntime.providerStatus.mockReturnValue({
       providerName: 'test-provider',
@@ -256,6 +270,7 @@ describe('/key subcommands', () => {
       // Mock non-interactive: config.isInteractive returns false
       context.services.config = composeFixtureRuntime({
         ...context.services.config,
+        getProviderKeys: () => mockStorage,
         isInteractive: () => false,
       } as unknown as Config);
 
@@ -464,6 +479,7 @@ describe('/key subcommands', () => {
       await mockStorage.saveKey('mykey', 'sk-value123');
       context.services.config = composeFixtureRuntime({
         ...context.services.config,
+        getProviderKeys: () => mockStorage,
         isInteractive: () => false,
       } as unknown as Config);
 
@@ -643,6 +659,21 @@ describe('/key subcommands', () => {
      * short TTL and invalidates on save/delete. Uses the top-level `complete`
      * helper so no duplicate is defined here.
      */
+
+    it('keeps completion caches independent for two command roots borrowing the same storage', async () => {
+      await mockStorage.saveKey('alpha', 'sk-alpha123');
+      expect(await complete('/key load ')).toStrictEqual(['alpha']);
+      await mockStorage.saveKey('beta', 'sk-beta123');
+      const sibling = createKeyCommandContext({ runtimeApi: mockRuntime });
+      const { createCompletionHandler } = await import('./schema/index.js');
+      const handler = createCompletionHandler(keyCommand.schema!);
+      const result = await handler(sibling, undefined, '/key load ');
+      expect(result.suggestions.map((entry) => entry.value)).toStrictEqual([
+        'alpha',
+        'beta',
+      ]);
+      expect(await complete('/key load ')).toStrictEqual(['alpha']);
+    });
 
     it('cache reduces listKeys calls within TTL', async () => {
       await mockStorage.saveKey('alpha', 'sk-alpha123');

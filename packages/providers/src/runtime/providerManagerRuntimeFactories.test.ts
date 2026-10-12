@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 import { createProviderConfigFixture } from './__tests__/provider-config-fixture.js';
 /**
  * @license
@@ -92,6 +93,8 @@ describe('configureProviderRuntimeFactories', () => {
       });
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           settingsOwner: capturedConfig25SettingsOwner,
           runtimeId: 'provider-runtime-factory-injection',
           config: capturedConfig25,
@@ -168,6 +171,8 @@ describe('configureProviderRuntimeFactories', () => {
       });
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           settingsOwner: capturedConfig26SettingsOwner,
           runtimeId: 'provider-runtime-factory-claude5',
           config: capturedConfig26,
@@ -250,6 +255,8 @@ describe('configureProviderRuntimeFactories', () => {
       });
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           settingsOwner: capturedConfig27SettingsOwner,
           runtimeId: 'provider-runtime-injected-tokenizer-factory',
           config: capturedConfig27,

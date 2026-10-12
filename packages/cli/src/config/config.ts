@@ -98,6 +98,7 @@ async function bootstrapAndLoadProfile(
     bootstrapArgs: bootstrapParsed.bootstrapArgs,
     runtimeMetadata: {
       ...bootstrapParsed.runtimeMetadata,
+      credentialAuthority: runtimeOverrides.credentialAuthority,
       settingsService:
         runtimeOverrides.settingsService ??
         bootstrapParsed.runtimeMetadata.settingsService,

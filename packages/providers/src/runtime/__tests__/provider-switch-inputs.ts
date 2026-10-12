@@ -85,9 +85,15 @@ export async function baseUrlInputs(
 
 export async function overrideInputs(
   root: ProviderFixtureRoot,
-): Promise<[Parameters<typeof setProviderApiKey>[1], SettingsService]> {
+): Promise<
+  [
+    Parameters<typeof setProviderApiKey>[1] & Pick<Config, 'getProviderKeys'>,
+    SettingsService,
+  ]
+> {
   return [
     {
+      getProviderKeys: () => root.config.getProviderKeys(),
       setEphemeralSetting: (key, value) =>
         root.settingsOwner.writeUserParameter(key, value),
     },

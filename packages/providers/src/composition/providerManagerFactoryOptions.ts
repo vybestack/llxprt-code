@@ -15,7 +15,7 @@ import type { IFileSystem } from './IFileSystem.js';
 import type { ProviderContributionRegistry } from './runtimePlugins/types.js';
 
 export interface ProviderManagerFactoryOptions {
-  readonly credentialAuthority?: CredentialAuthority;
+  readonly credentialAuthority: CredentialAuthority;
   fileSystem: IFileSystem;
   manager?: ProviderManager;
   config?: Config;

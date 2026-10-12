@@ -17,7 +17,7 @@ import type {
   LoadBalancerProfile,
   StandardProfile,
 } from '@vybestack/llxprt-code-settings';
-import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.js';
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
@@ -252,6 +252,7 @@ export function buildCompressionProfileEphemeralsSnapshot(
 export async function resolveCompressionProfileAuthToken(
   profileSettings: SettingsService,
   provider: string,
+  storage?: Pick<ProviderKeyStorageLike, 'getKey'>,
 ): Promise<{ authToken: string } | Record<string, never>> {
   const providerSettings = profileSettings.getProviderSettings(provider);
   const directAuth = getStringSettingFromValues([
@@ -267,7 +268,11 @@ export async function resolveCompressionProfileAuthToken(
     profileSettings.get('auth-key-name'),
   ]);
   if (keyName) {
-    const token = await createProviderKeyStorage().getKey(keyName);
+    if (!storage)
+      throw new Error(
+        'Compression key resolution requires an explicit credential owner',
+      );
+    const token = await storage.getKey(keyName);
     if (token) {
       return { authToken: token };
     }
@@ -296,6 +301,7 @@ export async function resolveCompressionProfileAuthToken(
 export async function buildCompressionProfileResolvedOptions(
   profileSettings: SettingsService,
   profile: StandardProfile,
+  storage?: Pick<ProviderKeyStorageLike, 'getKey'>,
 ): Promise<RuntimeGenerateChatOptions['resolved']> {
   const providerSettings = profileSettings.getProviderSettings(
     profile.provider,
@@ -318,6 +324,7 @@ export async function buildCompressionProfileResolvedOptions(
     ...(await resolveCompressionProfileAuthToken(
       profileSettings,
       profile.provider,
+      storage,
     )),
     ...(temperature !== undefined ? { temperature } : {}),
     ...(maxTokens !== undefined ? { maxTokens } : {}),
@@ -372,6 +379,7 @@ export async function resolveStandardCompressionProvider(
   const resolved = await buildCompressionProfileResolvedOptions(
     profileSettings,
     profile,
+    config?.peekProviderKeyStorage(),
   );
   const invocation = createRuntimeInvocationContext({
     runtimeId: runtime.runtimeId,

@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../../providers/src/auth/proxy/credential-store-factory.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 /**
  * @license
@@ -69,6 +70,8 @@ describe('Base URL Runtime Helper Integration', () => {
     settingsService = new SettingsService();
     const runtimeId = 'base-url-test-runtime';
     const assembled = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService,
       config,
       runtimeId,

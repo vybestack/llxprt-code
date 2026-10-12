@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 import { createProviderConfigFixture } from './__tests__/provider-config-fixture.js';
 /**
  * @license
@@ -26,6 +27,8 @@ describe('runtime/provider OAuth MessageBus seam integration', () => {
       });
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           settingsOwner: capturedConfig28SettingsOwner,
           runtimeId: 'runtime-auth-messagebus',
           config: capturedConfig28,

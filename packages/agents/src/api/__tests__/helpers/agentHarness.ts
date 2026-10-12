@@ -40,7 +40,6 @@ import {
   OpenAIProvider,
   AnthropicProvider,
 } from '@vybestack/llxprt-code-providers';
-import { createProviderKeyStorage } from '../../../../../providers/src/auth/proxy/credential-store-factory.js';
 import { vi } from 'bun:test';
 import {
   createAgent,
@@ -174,7 +173,7 @@ export async function buildProfileAgent(
     manager.registerProvider(provider);
   }
   const keys = vi
-    .spyOn(createProviderKeyStorage(), 'getKey')
+    .spyOn(internalConfig(built.agent).getProviderKeys(), 'getKey')
     .mockImplementation(async (name) => {
       if (name !== 'openai-prod' && name !== 'anthropic-prod')
         throw new Error(`Unexpected fixture key: ${name}`);
@@ -200,7 +199,7 @@ export async function buildProfilesAgent(
   manager.registerProvider(new OpenAIProvider('local-test-key'));
   manager.registerProvider(new AnthropicProvider('local-test-key'));
   const keys = vi
-    .spyOn(createProviderKeyStorage(), 'getKey')
+    .spyOn(internalConfig(built.agent).getProviderKeys(), 'getKey')
     .mockImplementation(async (name) => {
       if (
         name !== 'openai-prod' &&

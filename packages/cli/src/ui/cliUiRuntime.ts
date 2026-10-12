@@ -1,3 +1,5 @@
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
+import { createKeyCommandReads } from './commands/key-completion-owner.js';
 import type {
   UserPromptEvent,
   SlashCommandEvent,
@@ -456,7 +458,9 @@ export interface UiRuntimeBareSource
   extends StreamRuntimeBareSource,
     ApprovalState,
     ExtensionRuntime,
-    AppStateRuntime {}
+    AppStateRuntime {
+  getProviderKeys?(): ProviderKeyStorageLike;
+}
 
 export type StreamRuntimeDeclarationSource = Omit<
   StreamRuntimeBareSource,
@@ -944,6 +948,7 @@ export function buildSlashCommandRuntime(
       historyFilePath,
       userCommandsDir,
       projectCommandsDir,
+      ...createKeyCommandReads(source.getProviderKeys?.bind(source)),
       describeToolConfiguration: () => agent.tools.describeConfiguration(),
     },
     restartExtension !== undefined ? { restartExtension } : {},
@@ -976,7 +981,11 @@ export interface McpCommandRuntime {
  * been migrated to the nested UiRuntime pattern. The streaming path and
  * AppContainer MUST NOT use this type — they use StreamRuntime/UiRuntime.
  */
-export type CliUiRuntime = UiRuntimeBareSource &
+export type CliUiRuntime = {
+  getProviderKeys(): ProviderKeyStorageLike;
+  listKeyCompletionNames(): Promise<readonly string[]>;
+  invalidateKeyCompletion(): void;
+} & UiRuntimeBareSource &
   CheckpointRuntime &
   ToolRuntime &
   McpState &

@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../../../providers/src/auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -38,6 +39,8 @@ describe('provider switch assembly', () => {
     oauth.registerProvider(createTestProvider('claudecode'));
     const handle = createIsolatedRuntimeContext(
       {
+        credentialAuthority: new CredentialAuthority(),
+
         runtimeId: 'same-label',
         runtimeKind: 'agent',
         config,

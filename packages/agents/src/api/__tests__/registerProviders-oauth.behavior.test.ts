@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../../../providers/src/auth/proxy/credential-store-factory.js';
 import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
 /**
  * @license
@@ -111,6 +112,7 @@ describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
 
   async function registerAndGet(providerName: string): Promise<ProviderLike> {
     const runtimeId = `issue2410-oauth-${Math.random().toString(36).slice(2)}`;
+    const credentialAuthority = new CredentialAuthority();
     const handle = (() => {
       const capturedConfig1 = new Config({
         sessionId: runtimeId,
@@ -122,6 +124,7 @@ describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
       const settingsRoot = createSessionSettingsFixture(capturedConfig1);
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority,
           settingsOwner: settingsRoot.settingsOwner,
           runtimeId,
           // The caller supplies the Config (issue #3222): providers no longer
@@ -142,6 +145,8 @@ describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
         settingsService: handle.settingsService,
         runtimeId: handle.runtimeId,
         metadata: handle.metadata,
+        credentialAuthority,
+        oauthManager: handle.oauthManager,
       },
       handle.config,
     );

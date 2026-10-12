@@ -1,3 +1,4 @@
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
@@ -96,6 +97,7 @@ export interface TaskToolParams {
 }
 
 export interface TaskToolDependencies {
+  readonly credentialAuthority?: CredentialAuthority;
   readonly requestInteractiveAuth?: InteractiveAuthPromptOperation;
   readonly hookOwner?: SessionHookOwner;
   readonly workspaceTrust?: WorkspaceTrustControlPort;
@@ -866,6 +868,7 @@ export class TaskTool extends BaseDeclarativeTool<TaskToolParams, ToolResult> {
     }
 
     return new SubagentOrchestrator({
+      credentialAuthority: this.dependencies.credentialAuthority,
       subagentManager,
       profileManager,
       foregroundConfig: this.config,

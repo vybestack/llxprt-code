@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -37,7 +38,12 @@ if (!headless)
 async function bootstrap() {
   const settings = loadSettings(directory);
   const argv = await parseArguments(settings.merged);
-  const boot = await bootstrapRuntimeAndConfig(settings, argv, directory);
+  const boot = await bootstrapRuntimeAndConfig(
+    settings,
+    argv,
+    directory,
+    new CredentialAuthority(),
+  );
   const activation = await activateConfiguredProvider(
     boot.config,
     boot.providerManager,
@@ -70,6 +76,7 @@ async function record() {
   try {
     const owner = boot.activationOperation.sessionClient;
     const agent = await createForegroundAgent({
+      credentialAuthority: new CredentialAuthority(),
       policyOwner: boot.policyOwner,
       oauthManager: boot.oauthManager,
       providerFileLifecycle: boot.providerFileLifecycle,
@@ -123,6 +130,7 @@ async function profile() {
       boot.activationOperation,
     );
     const agent = await createForegroundAgent({
+      credentialAuthority: new CredentialAuthority(),
       policyOwner: boot.policyOwner,
       oauthManager: boot.oauthManager,
       providerFileLifecycle: boot.providerFileLifecycle,
@@ -188,6 +196,7 @@ async function profile() {
 async function resume() {
   const first = await bootstrap();
   const firstAgent = await createForegroundAgent({
+    credentialAuthority: new CredentialAuthority(),
     policyOwner: first.boot.policyOwner,
     oauthManager: first.boot.oauthManager,
     providerFileLifecycle: first.boot.providerFileLifecycle,
@@ -218,6 +227,7 @@ async function resume() {
   process.argv.push('--continue', id);
   const next = await bootstrap();
   const nextAgent = await createForegroundAgent({
+    credentialAuthority: new CredentialAuthority(),
     policyOwner: next.boot.policyOwner,
     oauthManager: next.boot.oauthManager,
     providerFileLifecycle: next.boot.providerFileLifecycle,

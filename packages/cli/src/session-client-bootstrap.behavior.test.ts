@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -135,7 +136,12 @@ describe('CLI session client bootstrap ownership', () => {
   async function bootstrap() {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
-    const boot = await bootstrapRuntimeAndConfig(settings, argv, directory);
+    const boot = await bootstrapRuntimeAndConfig(
+      settings,
+      argv,
+      directory,
+      new CredentialAuthority(),
+    );
     const activation = await activateConfiguredProvider(
       boot.config,
       boot.providerManager,

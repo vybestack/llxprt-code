@@ -1,3 +1,5 @@
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { CredentialAuthority } from '../../../../../providers/src/auth/proxy/credential-store-factory.js';
 import type { WorkspaceSkillAssemblyOperations } from '@vybestack/llxprt-code-core/config/skill-tool-sync.js';
 /**
  * @license
@@ -315,6 +317,8 @@ function createFixtureRuntime(
 ): IsolatedRuntimeContextHandle {
   return createIsolatedRuntimeContext(
     {
+      credentialAuthority: new CredentialAuthority(),
+
       runtimeId,
       config,
       messageBus,
@@ -496,9 +500,16 @@ function registerProvidersOntoManager(
     runtimeId: source.runtimeId,
     metadata: source.metadata,
   };
+  if (!(isolatedManager instanceof ProviderManager))
+    throw new Error('Expected concrete fixture manager');
   const { manager: registered } = createProviderManager(
     context as Parameters<typeof createProviderManager>[0],
-    { fileSystem: new NodeFileSystem(), config },
+    {
+      credentialAuthority: new CredentialAuthority(),
+      manager: isolatedManager,
+      fileSystem: new NodeFileSystem(),
+      config,
+    },
   );
   for (const name of registered.listProviders()) {
     const provider = registered.getProviderByName(name);

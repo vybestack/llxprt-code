@@ -1,3 +1,7 @@
+import type {
+  CredentialAuthority,
+  OAuthManager,
+} from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -202,7 +206,10 @@ export async function prepareOwnedMediaRuntime(
   policyOwner: RuntimePolicyOwner,
   factorySelection: Pick<
     AgentConfig,
-    'tokenizerFactory' | 'contentGeneratorFactory' | 'definitionOwner'
+    | 'tokenizerFactory'
+    | 'contentGeneratorFactory'
+    | 'definitionOwner'
+    | 'credentialAuthority'
   > = {},
 ): Promise<IsolatedRuntimeContextHandle> {
   let settingsOwner: SessionSettingsOwner | undefined;
@@ -234,6 +241,7 @@ export async function prepareOwnedMediaRuntime(
     // FakeProvider under LLXPRT_FAKE_RESPONSES) onto the isolated manager.
     return createIsolatedRuntimeContext(
       {
+        credentialAuthority: factorySelection.credentialAuthority,
         profileReads: factorySelection.definitionOwner?.profileReads,
         tokenizerFactory: factorySelection.tokenizerFactory,
         contentGeneratorFactory: factorySelection.contentGeneratorFactory,
@@ -283,6 +291,8 @@ export function registerProvidersOntoManager(
     settingsService: IsolatedRuntimeContextHandle['settingsService'];
     runtimeId: IsolatedRuntimeContextHandle['runtimeId'];
     metadata: IsolatedRuntimeContextHandle['metadata'];
+    credentialAuthority?: CredentialAuthority;
+    oauthManager?: OAuthManager;
   },
   config: Config,
 ): void {
@@ -304,14 +314,18 @@ export function registerProvidersOntoManager(
     throw new AgentBootstrapError(
       'Owned provider registration requires its concrete manager',
     );
+  if (source.credentialAuthority === undefined)
+    throw new Error('Provider registration requires its credential authority');
   createProviderManager(
     context as Parameters<typeof createProviderManager>[0],
     {
       fileSystem: new NodeFileSystem(),
+      credentialAuthority: source.credentialAuthority,
       manager: isolatedManager,
       config,
       oauthSettings: createFileOAuthSettingsProvider(),
       activateConfiguredProvider: false,
     },
+    source.oauthManager,
   );
 }

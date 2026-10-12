@@ -17,7 +17,8 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { LoadBalancingProvider } from '../../LoadBalancingProvider.js';
 import { ProviderManager } from '../../ProviderManager.js';
 import type { GenerateChatOptions, IProvider } from '../../IProvider.js';
-import { createProviderKeyStorage } from '../../auth/proxy/credential-store-factory.js';
+import { CredentialAuthority } from '../../auth/proxy/credential-store-factory.js';
+const keyStorage = new CredentialAuthority().createProviderKeyStorage();
 import { resolveLoadBalancerSubProfile } from './loadBalancerProfile.js';
 import { resolveMemberAuthentication } from '../../loadBalancing/memberAuthentication.js';
 
@@ -60,7 +61,7 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
     const keys = new Map<string, string | Error>([
       ['invalid key name!', new Error('Invalid key name')],
     ]);
-    const storage = createProviderKeyStorage();
+    const storage = keyStorage;
     const getKey = vi
       .spyOn(storage, 'getKey')
       .mockImplementation(async (name) => {
@@ -128,7 +129,7 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
         ephemeralSettings: { [key]: 'stray-credential' },
         auth: { type: 'oauth', buckets: ['acct-a'] },
       });
-      const storage = createProviderKeyStorage();
+      const storage = keyStorage;
       await storage.saveKey('stray-credential', 'stray-secret');
       try {
         const resolved = await resolveLoadBalancerSubProfile(
@@ -193,7 +194,7 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
         },
         auth: { type: 'apikey' },
       });
-      const storage = createProviderKeyStorage();
+      const storage = keyStorage;
       await storage.saveKey(keyName, '  first-key  ');
       try {
         const resolved = await resolveLoadBalancerSubProfile(
@@ -203,6 +204,7 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
         const providerManager = new ProviderManager({
           settingsService: new SettingsService(),
         });
+        providerManager.bindProviderKeyStorage(keyStorage);
         const delegate: IProvider = {
           name: 'key-probe',
           getModels: async () => [],
@@ -253,6 +255,7 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
             };
           },
         };
+        siblingManager.bindProviderKeyStorage(keyStorage);
         siblingManager.registerProvider(siblingDelegate);
         const siblingMember = {
           ...resolved,
@@ -335,11 +338,13 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
       const resolved = await resolveMemberAuthentication(
         member,
         silentLogger(),
+        keyStorage,
       );
       expect(resolved.authToken).toStrictEqual('fallback-token');
       const missing = await resolveMemberAuthentication(
         { ...member, authKeyfile: undefined },
         silentLogger(),
+        keyStorage,
       );
       expect(missing.authToken).toStrictEqual(undefined);
     },
@@ -412,7 +417,8 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
     );
     expect(resolved.authToken).toStrictEqual(undefined);
     expect(
-      (await resolveMemberAuthentication(resolved, silentLogger())).authToken,
+      (await resolveMemberAuthentication(resolved, silentLogger(), keyStorage))
+        .authToken,
     ).toStrictEqual(undefined);
     expect(resolved.auth).toStrictEqual({
       type: 'oauth',

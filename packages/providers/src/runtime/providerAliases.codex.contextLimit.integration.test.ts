@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 import { createProviderConfigFixture } from './__tests__/provider-config-fixture.js';
 /**
  * @license
@@ -30,6 +31,8 @@ describe('Codex effective context limit runtime integration', () => {
       settingsService,
     });
     const assembled = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService,
       config,
       runtimeId: RUNTIME_ID,

@@ -1,3 +1,4 @@
+import { CredentialAuthority } from './proxy/credential-store-factory.js';
 import { createProviderConfigFixture } from '../runtime/__tests__/provider-config-fixture.js';
 /**
  * @license
@@ -88,6 +89,8 @@ describe('isolated-runtime OAuthManager honors authOnly through the threaded con
       });
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           settingsOwner: capturedConfig4SettingsOwner,
           runtimeId: 'oauth-authonly-isolated',
           config: capturedConfig4,

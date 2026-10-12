@@ -1,3 +1,5 @@
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
@@ -235,6 +237,7 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
       });
       return contextFactoryMod.createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
           runtimeId: 'auth-key-test',
           config: capturedConfig1,
           prepare: async ({ providerManager }) => {
@@ -246,6 +249,11 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
         new SettingsService(),
       );
     })();
+    if (!mockStorageRef) throw new Error('Missing fixture key storage');
+    if (!(handle.providerManager instanceof ProviderManager))
+      throw new Error('Expected fixture manager');
+    handle.providerManager.bindProviderKeyStorage(mockStorageRef);
+    handle.config.bindProviderKeyStorage(mockStorageRef);
     await handle.activate();
     runtimeRoot = handle;
     runtimeManager = handle.providerManager;
@@ -564,6 +572,7 @@ describe('API key precedence and named key resolution @plan:PLAN-20260211-SECURE
           {
             runtimeId: 'auth-key-clear-test',
             config: capturedConfig2,
+            credentialAuthority: new CredentialAuthority(),
             prepare: async ({ providerManager }) => {
               providerManager.registerProvider(createStubProvider());
               await providerManager.setActiveProvider('test-provider');

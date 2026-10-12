@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
@@ -155,6 +156,8 @@ describe('Config-independent provider owner lifecycle', () => {
     manager.setActiveProvider(provider.name);
     const handle = createIsolatedRuntimeContext(
       {
+        credentialAuthority: new CredentialAuthority(),
+
         config: owner.config,
         settingsOwner: owner.settingsOwner,
         providerManager: manager,
@@ -178,6 +181,8 @@ describe('Config-independent provider owner lifecycle', () => {
     const owner = config(new SettingsService());
     const handle = createIsolatedRuntimeContext(
       {
+        credentialAuthority: new CredentialAuthority(),
+
         config: owner.config,
         settingsOwner: owner.settingsOwner,
       },
@@ -202,6 +207,8 @@ describe('Config-independent provider owner lifecycle', () => {
   it('retains the pre-Config root manager and token totals across explicit host adoption', async () => {
     const settings = new SettingsService();
     const early = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService: settings,
       config: undefined,
       runtimeId: 'shared-label',
@@ -216,6 +223,8 @@ describe('Config-independent provider owner lifecycle', () => {
     });
     try {
       const final = assembleCliProviderRuntime({
+        credentialAuthority: new CredentialAuthority(),
+
         settingsService: settings,
         config: owner.config,
         runtimeId: 'shared-label',

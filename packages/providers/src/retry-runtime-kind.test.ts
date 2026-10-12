@@ -1,3 +1,4 @@
+import { CredentialAuthority } from './auth/proxy/credential-store-factory.js';
 import { createProviderConfigFixture } from './runtime/__tests__/provider-config-fixture.js';
 /**
  * @license
@@ -96,6 +97,8 @@ describe('retry runtime kind', () => {
     const config = runtime.config;
     if (!config) throw new Error('Missing fixture config');
     const assembled = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService: root.settingsService,
       settingsOwner: root.settingsOwner,
       config,
@@ -119,6 +122,8 @@ describe('retry runtime kind', () => {
     root.settingsOwner.writeUserParameter('retrywait', 0);
     root.settingsOwner.writeUserParameter('auth-key', 'test-key');
     const owner = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       runtimeId: 'retry-owner',
       settingsService: root.settingsService,
       settingsOwner: root.settingsOwner,

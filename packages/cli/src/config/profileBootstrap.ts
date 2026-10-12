@@ -1,3 +1,7 @@
+import type {
+  CredentialAuthority,
+  OAuthManager,
+} from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -36,7 +40,6 @@ import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/run
 import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 
 export const DEFAULT_RUNTIME_ID = 'cli.runtime.bootstrap';
 
@@ -72,6 +75,7 @@ export interface BootstrapProfileArgs {
 }
 
 export interface RuntimeBootstrapMetadata {
+  readonly credentialAuthority?: CredentialAuthority;
   readonly sessionSettingsOwner?: SessionSettingsOwner;
   settingsService?: SettingsService;
   config?: ProviderRuntimeContext['config'];
@@ -99,6 +103,7 @@ export interface ParsedBootstrapArgs {
  * provider assembly and the post-Config re-assembly alike.
  */
 export interface CliRuntimeOverrides {
+  readonly credentialAuthority?: CredentialAuthority;
   onOAuthManagerReady?: (manager: OAuthManager | undefined) => void;
   onProviderFilesReady?: (lifecycle: ProviderFileLifecycle) => void;
   readonly sessionSettingsOwner?: SessionSettingsOwner;
@@ -465,7 +470,10 @@ export async function prepareRuntimeForProfile(
   // registration) to the providers package. Bus ownership lives inside that
   // helper (#2378) — the CLI supplies declarative context only and never
   // constructs a MessageBus itself.
+  if (runtimeInit.credentialAuthority === undefined)
+    throw new Error('CLI profile bootstrap requires a credential authority');
   const assembled = assembleCliProviderRuntime({
+    credentialAuthority: runtimeInit.credentialAuthority,
     settingsService,
     config: runtimeConfig,
     settingsOwner: runtimeInit.sessionSettingsOwner,

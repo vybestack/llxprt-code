@@ -1,3 +1,4 @@
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SessionImageSelection } from './session-image-assembly.js';
 import type {
   RuntimeTokenizerFactory,
@@ -410,6 +411,7 @@ export interface AgentConfig
   readonly contentGeneratorFactory?: RuntimeContentGeneratorFactory<ContentGenerator>;
   readonly runtimeActivationBindings?: RuntimeActivationBindings;
   readonly tokenStore?: TokenStore;
+  readonly credentialAuthority?: CredentialAuthority;
   /**
    * UNSTABLE escape hatch. Long-tail settings merged into ConfigParameters by
    * the adapter. Throws if it shadows a typed AgentConfig field. Subject to
@@ -442,6 +444,7 @@ interface FromConfigBaseOptions
   readonly runtimeFactoryBindings?: AgentRuntimeFactoryBindings;
   readonly runtimeActivationBindings?: RuntimeActivationBindings;
   readonly tokenStore?: TokenStore;
+  readonly credentialAuthority?: CredentialAuthority;
   readonly asyncTaskManager?: AsyncTaskManager;
   readonly config: Config;
   readonly settingsService: SettingsService;

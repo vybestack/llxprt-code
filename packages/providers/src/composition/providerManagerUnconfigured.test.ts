@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -59,6 +60,8 @@ describe('createProviderManager: unconfigured state (#2481)', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
@@ -107,6 +110,8 @@ describe('createProviderManager: explicit provider activation unchanged (#2481)'
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
@@ -125,6 +130,8 @@ describe('createProviderManager: explicit provider activation unchanged (#2481)'
     settingsService.set('activeProvider', 'openai');
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
@@ -149,6 +156,8 @@ describe('createProviderManager: invalid configured provider (#2481)', () => {
     // Build a valid unconfigured manager first, then test that a typo'd
     // explicit provider name surfaces as a structured error.
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
@@ -162,6 +171,8 @@ describe('createProviderManager: invalid configured provider (#2481)', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
@@ -183,6 +194,8 @@ describe('createProviderManager: invalid configured provider (#2481)', () => {
 
     const captured = captureThrown(() =>
       createProviderManager(runtime, {
+        credentialAuthority: new CredentialAuthority(),
+
         fileSystem: new MockFileSystem(),
         allowBrowserEnvironment: true,
       }),
@@ -203,6 +216,8 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
     settingsService.set('activeProvider', '  openai  ');
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
@@ -216,6 +231,8 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
     settingsService.set('activeProvider', '   ');
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
@@ -228,6 +245,8 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
     settingsService.set('activeProvider', '   ');
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
@@ -240,6 +259,8 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
     settingsService.set('activeProvider', '   ');
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
@@ -258,6 +279,8 @@ describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#248
     settingsService.set('activeProvider', 'unconfigured');
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
@@ -275,6 +298,8 @@ describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#248
     const runtime = createProviderRuntimeContext({ settingsService });
     const config = makeMinimalConfig('unconfigured');
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new MockFileSystem(),
       config,
       allowBrowserEnvironment: true,
@@ -290,6 +315,8 @@ describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#248
     const runtime = createProviderRuntimeContext({ settingsService });
     const config = makeMinimalConfig('   ');
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new MockFileSystem(),
       config,
       allowBrowserEnvironment: true,

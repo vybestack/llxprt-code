@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import process from 'node:process';
 import path from 'node:path';
 import { initializeParser } from '../utils/shell-parser.js';
@@ -64,6 +65,24 @@ export {
 import type { ShellExecutionConfig } from '../services/shellExecutionService.js';
 
 export class Config extends ConfigBase {
+  #providerKeyStorage: ProviderKeyStorageLike | undefined;
+
+  bindProviderKeyStorage(storage: ProviderKeyStorageLike): void {
+    this.#providerKeyStorage = storage;
+  }
+
+  peekProviderKeyStorage(): ProviderKeyStorageLike | undefined {
+    return this.#providerKeyStorage;
+  }
+
+  getProviderKeys(): ProviderKeyStorageLike {
+    if (!this.#providerKeyStorage)
+      throw new Error(
+        'Provider key storage requires an explicit credential owner',
+      );
+    return this.#providerKeyStorage;
+  }
+
   readonly profileDirectory: string | undefined;
   readonly subagentDirectory: string | undefined;
   readonly initialWorkspaceTrust: boolean | undefined;

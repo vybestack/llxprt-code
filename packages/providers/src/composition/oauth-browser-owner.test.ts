@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -69,11 +70,15 @@ function buildManager(
 ): OAuthManager {
   if (construction === 'composition-context')
     return createProviderManager(owner, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new NodeFileSystem(),
       activateConfiguredProvider: false,
     }).oauthManager;
   if (construction === 'composition')
     return createProviderManager(owner, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new NodeFileSystem(),
       config: owner.config,
       activateConfiguredProvider: false,
@@ -81,6 +86,8 @@ function buildManager(
   if (construction === 'isolated') {
     const handle = createIsolatedRuntimeContext(
       {
+        credentialAuthority: new CredentialAuthority(),
+
         ...owner,
         activationBindings,
       },
@@ -106,6 +113,8 @@ function buildManager(
   if (construction === 'adopted' || construction === 'adopted-live') {
     const handle = createIsolatedRuntimeContext(
       {
+        credentialAuthority: new CredentialAuthority(),
+
         ...adoptingOwner,
         activationBindings,
         oauthManager: manager,

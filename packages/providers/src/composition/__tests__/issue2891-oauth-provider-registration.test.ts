@@ -17,7 +17,7 @@ import {
   OAuthManager,
   AnthropicOAuthProvider,
   CodexOAuthProvider,
-  createTokenStore,
+  HostCredentialOwner,
 } from '../../auth/index.js';
 import {
   ensureOAuthProviderRegistered,
@@ -37,7 +37,9 @@ function captureAuthorization(events: OAuthUIEvent[]): OAuthUICallback {
 
 describe('OAuth registration ownership (#2891, #2616)', () => {
   it('recognizes directly registered providers before composition registration', () => {
-    const manager = new OAuthManager(createTokenStore());
+    const manager = new OAuthManager(
+      new HostCredentialOwner(process.env).authority.createTokenStore(),
+    );
     manager.registerProvider(
       new AnthropicOAuthProvider(manager.getTokenStore()),
     );
@@ -48,7 +50,9 @@ describe('OAuth registration ownership (#2891, #2616)', () => {
   it.each([AnthropicOAuthProvider, CodexOAuthProvider])(
     'preserves directly registered %p identity across repeated registration',
     (Provider) => {
-      const manager = new OAuthManager(createTokenStore());
+      const manager = new OAuthManager(
+        new HostCredentialOwner(process.env).authority.createTokenStore(),
+      );
       const provider = new Provider(manager.getTokenStore());
       manager.registerProvider(provider);
 
@@ -60,8 +64,12 @@ describe('OAuth registration ownership (#2891, #2616)', () => {
   );
 
   it('keeps two managers independent', () => {
-    const first = new OAuthManager(createTokenStore());
-    const second = new OAuthManager(createTokenStore());
+    const first = new OAuthManager(
+      new HostCredentialOwner(process.env).authority.createTokenStore(),
+    );
+    const second = new OAuthManager(
+      new HostCredentialOwner(process.env).authority.createTokenStore(),
+    );
     for (const name of ['claudecode', 'codex']) {
       ensureOAuthProviderRegistered(name, first);
       expect(isOAuthProviderRegistered(name, second)).toBe(false);
@@ -80,8 +88,12 @@ describe('OAuth registration ownership (#2891, #2616)', () => {
   ])(
     'routes a later callback only to its manager (%j)',
     async ({ direct, initiallyAttached }) => {
-      const first = new OAuthManager(createTokenStore());
-      const second = new OAuthManager(createTokenStore());
+      const first = new OAuthManager(
+        new HostCredentialOwner(process.env).authority.createTokenStore(),
+      );
+      const second = new OAuthManager(
+        new HostCredentialOwner(process.env).authority.createTokenStore(),
+      );
       const originalEvents: OAuthUIEvent[] = [];
       const firstEvents: OAuthUIEvent[] = [];
       const secondEvents: OAuthUIEvent[] = [];
@@ -140,7 +152,9 @@ describe('OAuth registration ownership (#2891, #2616)', () => {
   );
 
   it('registers using the manager token store when none is passed', () => {
-    const manager = new OAuthManager(createTokenStore());
+    const manager = new OAuthManager(
+      new HostCredentialOwner(process.env).authority.createTokenStore(),
+    );
     ensureOAuthProviderRegistered('claudecode', manager);
     expect(manager.getProvider('claudecode')).toBeInstanceOf(
       AnthropicOAuthProvider,
@@ -148,7 +162,9 @@ describe('OAuth registration ownership (#2891, #2616)', () => {
   });
 
   it('skips registration without a reachable token store, then permits an explicit store', () => {
-    const manager = new OAuthManager(createTokenStore());
+    const manager = new OAuthManager(
+      new HostCredentialOwner(process.env).authority.createTokenStore(),
+    );
     const registration = {
       registerProvider: manager.registerProvider.bind(manager),
       getProvider: manager.getProvider.bind(manager),
@@ -168,7 +184,9 @@ describe('OAuth registration ownership (#2891, #2616)', () => {
   });
 
   it('leaves unsupported provider names unregistered', () => {
-    const manager = new OAuthManager(createTokenStore());
+    const manager = new OAuthManager(
+      new HostCredentialOwner(process.env).authority.createTokenStore(),
+    );
     ensureOAuthProviderRegistered('not-a-provider', manager);
     expect(isOAuthProviderRegistered('not-a-provider', manager)).toBe(false);
     expect(manager.getSupportedProviders()).toStrictEqual([]);

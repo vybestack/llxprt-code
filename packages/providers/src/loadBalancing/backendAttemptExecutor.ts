@@ -1,3 +1,4 @@
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -37,6 +38,7 @@ import type { CircuitBreakerManager } from './circuitBreakerManager.js';
 import { resolveMemberAuthentication } from './memberAuthentication.js';
 
 export interface BackendAttemptDeps {
+  readonly keyStorage?: Pick<ProviderKeyStorageLike, 'getKey'>;
   readonly logger: DebugLogger;
   readonly circuitBreaker: CircuitBreakerManager;
   assertDispatch(
@@ -92,6 +94,7 @@ async function resolveBackendDelegate(
   const subProfile = await resolveMemberAuthentication(
     configuredSubProfile,
     deps.logger,
+    deps.keyStorage,
   );
   const resolvedOptions = deps.buildResolvedOptions(subProfile, options);
   requireTransportAttempt(resolvedOptions);

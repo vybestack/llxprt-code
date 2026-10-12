@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../../../providers/src/auth/proxy/credential-store-factory.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { assembleModelSelection } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
 import {
@@ -590,6 +591,8 @@ async function bootstrapRuntimeFixture(options: {
     const settingsOwner = new SessionSettingsOwner(settingsService);
     return createIsolatedRuntimeContext(
       {
+        credentialAuthority: new CredentialAuthority(),
+
         settingsOwner,
         runtimeId: options.id,
         config: capturedConfig3,

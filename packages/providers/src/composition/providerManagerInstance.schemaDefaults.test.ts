@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -41,6 +42,10 @@ function makeWrapper(
 
 void mock.module('../ProviderManager.js', () => {
   class MockProviderManager {
+    peekProviderKeyStorage(): undefined {
+      return undefined;
+    }
+    bindProviderKeyStorage(): void {}
     setRetryOperationsFactory(): void {}
     setConfig(): void {}
     setActiveProvider(): void {}
@@ -91,6 +96,8 @@ describe('providerManagerInstance schema-default behavior (issue #2033)', () => 
       metadata: { scope: 'test' },
     };
     createProviderManager(activeContext, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new MockFileSystem(),
       config: undefined,
       allowBrowserEnvironment: false,
@@ -135,6 +142,8 @@ describe('providerManagerInstance schema-default behavior (issue #2033)', () => 
       metadata: { scope: 'test' },
     };
     createProviderManager(activeContext, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: fs,
       config: undefined,
       allowBrowserEnvironment: false,

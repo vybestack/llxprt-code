@@ -10,7 +10,10 @@ import {
   WorkspaceFilesystemOwner,
 } from '@vybestack/llxprt-code-core';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { setTuiOwnsTerminal } from '@vybestack/llxprt-code-providers/auth.js';
+import {
+  setTuiOwnsTerminal,
+  type CredentialAuthority,
+} from '@vybestack/llxprt-code-providers/auth.js';
 import { loadCliConfig } from './config/config.js';
 import { isImageModeActive } from './config/imageMode.js';
 import { buildImageModeFlags } from './config/imageModeDispatch.js';
@@ -140,6 +143,7 @@ export interface SandboxHopOptions {
   argv: ParsedCliArgs;
   workspaceRoot: string;
   runtimeSettingsService: SettingsService;
+  credentialAuthority: CredentialAuthority;
   initialAuthFailed: boolean;
   readStdin: () => Promise<string>;
   hasPipedInput: boolean;
@@ -192,7 +196,10 @@ export async function maybeHopIntoSandbox(
     sessionId,
     argv,
     workspaceRoot,
-    { settingsService: runtimeSettingsService },
+    {
+      settingsService: runtimeSettingsService,
+      credentialAuthority: options.credentialAuthority,
+    },
   );
 
   const stdinData = hasPipedInput ? await readStdinData() : '';

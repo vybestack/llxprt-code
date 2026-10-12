@@ -1,4 +1,7 @@
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type {
+  CredentialAuthority,
+  OAuthManager,
+} from '@vybestack/llxprt-code-providers/auth.js';
 import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
@@ -141,6 +144,7 @@ export async function constructAgentWithSpinner(
   oauthManager?: OAuthManager,
   providerFileLifecycle?: ProviderFileLifecycle,
   argv?: ParsedCliArgs,
+  credentialAuthority?: CredentialAuthority,
 ): Promise<Agent> {
   const mcpServers = config.getMcpServers();
   const mcpServersCount = mcpServers ? Object.keys(mcpServers).length : 0;
@@ -155,6 +159,7 @@ export async function constructAgentWithSpinner(
 
   try {
     const agent = await createForegroundAgent({
+      credentialAuthority,
       config,
       providerManager,
       settingsService,

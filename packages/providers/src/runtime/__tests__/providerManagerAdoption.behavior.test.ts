@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -172,6 +173,8 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
       const capturedConfig5Settings = new SettingsService();
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           activationBindings,
           runtimeId: 'p04-pm-identity',
           config: capturedConfig5,
@@ -208,6 +211,8 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
       const capturedConfig6Settings = new SettingsService();
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           activationBindings,
           runtimeId: 'p04-pm-default',
           config: capturedConfig6,
@@ -245,6 +250,8 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
       const capturedConfig7Settings = new SettingsService();
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           activationBindings,
           runtimeId: 'p04-pm-adopted-activation',
           config: capturedConfig7,
@@ -297,6 +304,8 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
       const capturedConfig8Settings = new SettingsService();
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           activationBindings,
           runtimeId: 'p04-pm-no-second',
           config: capturedConfig8,
@@ -337,6 +346,8 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
       const capturedConfig9Settings = new SettingsService();
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           activationBindings,
           runtimeId: 'p04-pm-independent',
           config: capturedConfig9,
@@ -379,6 +390,8 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
       const capturedConfig10Settings = new SettingsService();
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           activationBindings,
           runtimeId: 'p04-pm-cleanup',
           config: capturedConfig10,
@@ -437,6 +450,8 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
             const capturedConfig11Settings = new SettingsService();
             return createIsolatedRuntimeContext(
               {
+                credentialAuthority: new CredentialAuthority(),
+
                 activationBindings,
                 runtimeId: `p04-prop-${runtimeId}`,
                 config: capturedConfig11,
@@ -481,6 +496,8 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
             const capturedConfig12Settings = new SettingsService();
             return createIsolatedRuntimeContext(
               {
+                credentialAuthority: new CredentialAuthority(),
+
                 activationBindings,
                 runtimeId: `p04-prop-omit-${runtimeId}`,
                 config: capturedConfig12,
@@ -522,6 +539,8 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
             const capturedConfig13Settings = new SettingsService();
             return createIsolatedRuntimeContext(
               {
+                credentialAuthority: new CredentialAuthority(),
+
                 activationBindings,
                 runtimeId: 'p04-prop-model-var',
                 config: capturedConfig13,
@@ -564,6 +583,8 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
             const capturedConfig14Settings = new SettingsService();
             return createIsolatedRuntimeContext(
               {
+                credentialAuthority: new CredentialAuthority(),
+
                 activationBindings,
                 runtimeId: `p04-prop-distinct-${idA}`,
                 config: capturedConfig14,
@@ -580,6 +601,8 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
             const capturedConfig15Settings = new SettingsService();
             return createIsolatedRuntimeContext(
               {
+                credentialAuthority: new CredentialAuthority(),
+
                 activationBindings,
                 runtimeId: `p04-prop-distinct-${idB}`,
                 config: capturedConfig15,

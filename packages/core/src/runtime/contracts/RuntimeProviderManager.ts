@@ -1,3 +1,4 @@
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -51,6 +52,7 @@ export interface RuntimeSessionTokenUsage {
  * @pseudocode component-boundaries.md C-CB-05, lines 50-54
  */
 export interface RuntimeProviderManager {
+  getProviderKeys?(): ProviderKeyStorageLike;
   getTokenizerFactory?(): RuntimeTokenizerFactory | undefined;
   setTokenizerFactory?(factory: RuntimeTokenizerFactory | undefined): void;
   dispose?(): void;

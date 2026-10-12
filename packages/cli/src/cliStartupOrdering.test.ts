@@ -20,6 +20,9 @@ import {
   mock,
 } from 'bun:test';
 import type { Config } from '@vybestack/llxprt-code-core';
+import * as credentialModule from '@vybestack/llxprt-code-providers/auth.js';
+import fs from 'node:fs';
+const credentialExports = { ...credentialModule };
 import { installDefinitionRuntimeFixture } from './__tests__/definition-runtime-fixture.js';
 const definitionFixture = installDefinitionRuntimeFixture();
 import {
@@ -387,9 +390,12 @@ describe('main() orchestration: capability consumption precedes settings/sandbox
 
   async function runMainConfigured(config: Config): Promise<void> {
     void mock.module('@vybestack/llxprt-code-providers/auth.js', () => ({
-      createTokenStore: () => {
-        callOrder.push('createTokenStore');
-        return {};
+      ...credentialExports,
+      HostCredentialOwner: class extends credentialExports.HostCredentialOwner {
+        constructor(environment: NodeJS.ProcessEnv) {
+          callOrder.push('captureCredentialAuthority');
+          super(environment);
+        }
       },
     }));
     void mock.module('./utils/sandbox-bashrc.js', () => ({
@@ -410,13 +416,13 @@ describe('main() orchestration: capability consumption precedes settings/sandbox
     process.env.LLXPRT_CREDENTIAL_SOCKET = '/tmp/test-ac4-socket.sock';
     try {
       await runMainConfigured(makeConfig(true, false));
-      expect(callOrder).toContain('createTokenStore');
+      expect(callOrder).toContain('captureCredentialAuthority');
       expect(callOrder).toContain('applySandboxBashrc');
       expect(callOrder).toContain('loadSettings');
-      expect(callOrder.indexOf('createTokenStore')).toBeLessThan(
+      expect(callOrder.indexOf('captureCredentialAuthority')).toBeLessThan(
         callOrder.indexOf('applySandboxBashrc'),
       );
-      expect(callOrder.indexOf('createTokenStore')).toBeLessThan(
+      expect(callOrder.indexOf('captureCredentialAuthority')).toBeLessThan(
         callOrder.indexOf('loadSettings'),
       );
       expect(callOrder.indexOf('applySandboxBashrc')).toBeLessThan(
@@ -430,17 +436,25 @@ describe('main() orchestration: capability consumption precedes settings/sandbox
   it('without a credential socket: does NOT consume the descriptor (direct mode), does NOT apply sandbox.bashrc (F3), and still reaches loadSettings', async () => {
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
     await runMainConfigured(makeConfig(true, false));
-    expect(callOrder).not.toContain('createTokenStore');
+    expect(callOrder).toContain('captureCredentialAuthority');
+    expect(callOrder.indexOf('captureCredentialAuthority')).toBeLessThan(
+      callOrder.indexOf('loadSettings'),
+    );
     expect(callOrder).not.toContain('applySandboxBashrc');
     expect(callOrder).toContain('loadSettings');
   });
 
-  it('fd-only ordering: invokes createTokenStore but never applySandboxBashrc (#1954 AC4)', async () => {
+  it('fd-only ordering: rejects mismatched transport before settings or sandbox.bashrc (#1954 AC4)', async () => {
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
     process.env.LLXPRT_CAPABILITY_FD = '3';
+    vi.spyOn(fs, 'readSync').mockImplementation(() => 0);
+    vi.spyOn(fs, 'closeSync').mockImplementation(() => {});
     try {
-      await runMainConfigured(makeConfig(true, false));
-      expect(callOrder).toContain('createTokenStore');
+      await expect(runMainConfigured(makeConfig(true, false))).rejects.toThrow(
+        'Capability transport requires LLXPRT_CREDENTIAL_SOCKET',
+      );
+      expect(callOrder).toContain('captureCredentialAuthority');
+      expect(callOrder).not.toContain('loadSettings');
       expect(callOrder).not.toContain('applySandboxBashrc');
     } finally {
       delete process.env.LLXPRT_CAPABILITY_FD;
@@ -473,9 +487,10 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       configurable: true,
     });
 
-    void mock.module('@vybestack/llxprt-code-providers/auth.js', () => ({
-      createTokenStore: () => ({}),
-    }));
+    void mock.module(
+      '@vybestack/llxprt-code-providers/auth.js',
+      () => credentialExports,
+    );
     void mock.module('./utils/sandbox-bashrc.js', () => ({
       applySandboxBashrc: () => {},
     }));

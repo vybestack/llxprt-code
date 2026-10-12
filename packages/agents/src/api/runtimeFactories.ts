@@ -1,3 +1,4 @@
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import type {
   ToolExecutionPolicy,
@@ -129,7 +130,9 @@ export function createToolScheduler(
  * imported the internal `createTaskToolRegistration` symbol call this helper
  * instead (#2204).
  */
-export function createTaskRegistration(): TaskToolRegistration {
+export function createTaskRegistration(
+  credentialAuthority?: CredentialAuthority,
+): TaskToolRegistration {
   return {
     toolClass: TaskTool,
     className: 'TaskTool',
@@ -140,6 +143,7 @@ export function createTaskRegistration(): TaskToolRegistration {
         config,
         {
           ...taskToolArgs,
+          credentialAuthority,
           readMcpInstructions:
             taskToolArgs.readMcpInstructions ?? (() => undefined),
         },
@@ -161,6 +165,7 @@ export function createTaskRegistration(): TaskToolRegistration {
           'Task requires explicit session policy and child settings',
         );
       return new TaskTool(config, {
+        credentialAuthority,
         createChildSettings: taskToolArgs.createChildSettings,
         readTaskPolicy: taskToolArgs.readTaskPolicy,
         readRunPolicy: taskToolArgs.readRunPolicy,

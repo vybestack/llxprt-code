@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -31,6 +32,24 @@ export interface RuntimeTestOwners {
   ): IsolatedRuntimeContextHandle;
   foreground(label?: string): AssembledCliProviderRuntime & RuntimeTestRoot;
 }
+function createRuntimeTestRoot(
+  label: string,
+  settingsService: SettingsService,
+  suppliedOwner?: SessionSettingsOwner,
+): RuntimeTestRoot {
+  const config = new Config({
+    sessionId: label,
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    model: 'owner-model',
+    debugMode: false,
+  });
+  const owner = suppliedOwner ?? new SessionSettingsOwner(settingsService);
+  owner.assertSettingsIdentity(settingsService);
+  owner.bindTelemetry(config);
+  return { config, settingsService, settingsOwner: owner };
+}
+
 export function useRuntimeTestOwners(): RuntimeTestOwners {
   const roots: RuntimeTestRoot[] = [];
   const cleanups: Array<() => void | Promise<void>> = [];
@@ -57,17 +76,7 @@ export function useRuntimeTestOwners(): RuntimeTestOwners {
     settingsService = new SettingsService(),
     suppliedOwner?: SessionSettingsOwner,
   ): RuntimeTestRoot => {
-    const config = new Config({
-      sessionId: label,
-      targetDir: process.cwd(),
-      cwd: process.cwd(),
-      model: 'owner-model',
-      debugMode: false,
-    });
-    const owner = suppliedOwner ?? new SessionSettingsOwner(settingsService);
-    owner.assertSettingsIdentity(settingsService);
-    owner.bindTelemetry(config);
-    const root = { config, settingsService, settingsOwner: owner };
+    const root = createRuntimeTestRoot(label, settingsService, suppliedOwner);
     roots.push(root);
     return root;
   };
@@ -88,6 +97,8 @@ export function useRuntimeTestOwners(): RuntimeTestOwners {
       );
       const handle = createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           config: root.config,
           settingsOwner: root.settingsOwner,
           tokenStore: new MemoryTokenStore(),
@@ -101,6 +112,8 @@ export function useRuntimeTestOwners(): RuntimeTestOwners {
     foreground: (label = 'same-label') => {
       const root = createRoot(label);
       const bundle = assembleCliProviderRuntime({
+        credentialAuthority: new CredentialAuthority(),
+
         settingsService: root.settingsService,
         config: root.config,
         settingsOwner: root.settingsOwner,

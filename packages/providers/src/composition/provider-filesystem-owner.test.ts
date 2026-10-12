@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 import { createProviderConfigFixture } from '../runtime/__tests__/provider-config-fixture.js';
 /**
  * @license
@@ -38,14 +39,22 @@ describe('provider manager filesystem ownership', () => {
           runtimeId: 'shared-provider-label',
           settingsService: first.settingsService,
         },
-        { config: first.config, fileSystem: first.fileSystem },
+        {
+          credentialAuthority: new CredentialAuthority(),
+          config: first.config,
+          fileSystem: first.fileSystem,
+        },
       );
       const b = createProviderManager(
         {
           runtimeId: 'shared-provider-label',
           settingsService: second.settingsService,
         },
-        { config: second.config, fileSystem: second.fileSystem },
+        {
+          credentialAuthority: new CredentialAuthority(),
+          config: second.config,
+          fileSystem: second.fileSystem,
+        },
       );
       expect(a.manager.getActiveProviderName()).toBe('openai');
       expect(b.manager.getActiveProviderName()).toBe('anthropic');

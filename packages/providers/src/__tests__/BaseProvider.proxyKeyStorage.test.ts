@@ -27,8 +27,8 @@ import {
   type BaseProviderConfig,
   type NormalizedGenerateChatOptions,
 } from '../BaseProvider.js';
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 import { CredentialProxyServer } from '../auth/proxy/credential-proxy-server.js';
-import { resetFactorySingletons } from '../auth/proxy/credential-store-factory.js';
 
 const userMessage = (text: string): IContent => ({
   speaker: 'human',
@@ -195,7 +195,6 @@ describe('#2946 BaseProvider proxy-aware key storage', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bpp-'));
     priorSocketEnv = process.env.LLXPRT_CREDENTIAL_SOCKET;
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    resetFactorySingletons();
   });
 
   afterEach(async () => {
@@ -204,7 +203,6 @@ describe('#2946 BaseProvider proxy-aware key storage', () => {
     } else {
       process.env.LLXPRT_CREDENTIAL_SOCKET = priorSocketEnv;
     }
-    resetFactorySingletons();
     if (server !== undefined) {
       // No catch: each test starts the server exactly once and never stops it,
       // so a failure here is a real teardown defect (an unreleased Unix socket
@@ -230,7 +228,10 @@ describe('#2946 BaseProvider proxy-aware key storage', () => {
     const socketPath = await startServerWithNamedKey();
     process.env.LLXPRT_CREDENTIAL_SOCKET = socketPath;
 
-    const provider = new ProxyAwareProvider();
+    const storage = new CredentialAuthority(
+      socketPath,
+    ).createProviderKeyStorage();
+    const provider = new ProxyAwareProvider(storage);
     const settings = new SettingsService();
     settings.set('activeProvider', 'proxy-aware');
     settings.set('auth-key-name', NAMED_KEY);
@@ -239,6 +240,7 @@ describe('#2946 BaseProvider proxy-aware key storage', () => {
     await provider.generateChatCompletion(buildChatOptions(settings)).next();
 
     expect(provider.capturedAuthToken).toBe(PROXY_SERVED_KEY);
+    storage.close();
   });
 
   it('honours an explicitly injected config.providerKeyStorage over the factory default, even with a proxy socket set', async () => {

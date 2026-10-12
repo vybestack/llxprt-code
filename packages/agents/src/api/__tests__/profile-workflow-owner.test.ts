@@ -9,7 +9,6 @@ import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-provid
 import { describe, expect, it, vi } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.js';
 import { writeProviderAliasConfig } from '@vybestack/llxprt-code-providers/composition.js';
 import {
   standardProfile,
@@ -84,7 +83,7 @@ describe('Profile cascade workflow at the owner', () => {
 
   it('resolves auth-key-name from secure storage and preserves the reference', async () => {
     const storage = vi
-      .spyOn(createProviderKeyStorage(), 'getKey')
+      .spyOn(owner().config.getProviderKeys(), 'getKey')
       .mockResolvedValue(' named-credential ');
     try {
       await owner().application.applySnapshot(
@@ -106,7 +105,7 @@ describe('Profile cascade workflow at the owner', () => {
 
   it('applies the issue 2477 Z.ai profile without Gemini fallback', async () => {
     const storage = vi
-      .spyOn(createProviderKeyStorage(), 'getKey')
+      .spyOn(owner().config.getProviderKeys(), 'getKey')
       .mockResolvedValue(' zai-key ');
     try {
       const result = await owner().application.applySnapshot({

@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -238,6 +239,7 @@ describe('real startup activation owner cleanup', () => {
         'standalone',
         argv,
         directory,
+        { credentialAuthority: new CredentialAuthority() },
       );
       expect(observed).toHaveLength(1);
       const owner = observed[0];
@@ -263,6 +265,7 @@ describe('real startup activation owner cleanup', () => {
         argv,
         directory,
         {
+          credentialAuthority: new CredentialAuthority(),
           onProviderSwitchReady: () => {
             throw new Error('finalization interrupted');
           },
@@ -370,6 +373,7 @@ describe('real startup activation owner cleanup', () => {
         'keyfile-failure',
         argv,
         directory,
+        { credentialAuthority: new CredentialAuthority() },
       ),
     ).rejects.toThrow('missing-key');
     expect(observed).toHaveLength(1);
@@ -412,7 +416,12 @@ describe('real startup activation owner cleanup', () => {
   it('keeps the caller Config and manager usable while adopted foreground trust retires', async () => {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
-    const boot = await bootstrapRuntimeAndConfig(settings, argv, directory);
+    const boot = await bootstrapRuntimeAndConfig(
+      settings,
+      argv,
+      directory,
+      new CredentialAuthority(),
+    );
     const manager = boot.providerManager;
 
     const activation = await activateConfiguredProvider(
@@ -434,6 +443,8 @@ describe('real startup activation owner cleanup', () => {
       boot.policyOwner,
       boot.oauthManager,
       boot.providerFileLifecycle,
+      undefined,
+      new CredentialAuthority(),
     );
     if (boot.policyOwner === undefined)
       throw new Error('Missing bootstrap policy owner');
@@ -639,7 +650,12 @@ describe('real startup activation owner cleanup', () => {
   it('releases the owner and Config when the session directory cannot be created', async () => {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
-    const boot = await bootstrapRuntimeAndConfig(settings, argv, directory);
+    const boot = await bootstrapRuntimeAndConfig(
+      settings,
+      argv,
+      directory,
+      new CredentialAuthority(),
+    );
     const invalidChatsDir = resolve(directory, 'not-a-directory');
     await writeFile(invalidChatsDir, 'a file');
     const disposed = new Set<Config>();
@@ -664,7 +680,12 @@ describe('real startup activation owner cleanup', () => {
   it('leaves the owner active when the delete selection is empty', async () => {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
-    const boot = await bootstrapRuntimeAndConfig(settings, argv, directory);
+    const boot = await bootstrapRuntimeAndConfig(
+      settings,
+      argv,
+      directory,
+      new CredentialAuthority(),
+    );
     await handleSessionListAndDelete(
       { listSessions: false, deleteSession: '' },
       new Storage(directory).getProjectChatsDir(),
@@ -716,6 +737,7 @@ describe('real startup activation owner cleanup', () => {
       argv,
       directory,
       {
+        credentialAuthority: new CredentialAuthority(),
         onActivationBootstrapReady: (operation) => {
           siblingActivation = operation;
         },

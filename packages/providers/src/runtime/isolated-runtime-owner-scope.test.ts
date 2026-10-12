@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
@@ -33,6 +34,8 @@ describe('isolated runtime owner activation', () => {
       const capturedConfig17 = sameLabelOwner();
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           config: capturedConfig17.config,
           settingsOwner: capturedConfig17.settingsOwner,
           runtimeId: 'sdk-owner',
@@ -57,6 +60,8 @@ describe('isolated runtime owner activation', () => {
       const capturedConfig18 = sameLabelOwner();
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           config: capturedConfig18.config,
           settingsOwner: capturedConfig18.settingsOwner,
           runtimeId: 'shared-label',
@@ -69,6 +74,8 @@ describe('isolated runtime owner activation', () => {
       const capturedConfig19 = sameLabelOwner();
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           config: capturedConfig19.config,
           settingsOwner: capturedConfig19.settingsOwner,
           runtimeId: 'shared-label',
@@ -98,6 +105,8 @@ describe('isolated runtime owner activation', () => {
       const capturedConfig20 = sameLabelOwner();
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           config: capturedConfig20.config,
           settingsOwner: capturedConfig20.settingsOwner,
         },
@@ -108,6 +117,8 @@ describe('isolated runtime owner activation', () => {
       const capturedConfig21 = sameLabelOwner();
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           config: capturedConfig21.config,
           settingsOwner: capturedConfig21.settingsOwner,
         },
@@ -135,6 +146,8 @@ describe('isolated runtime owner activation', () => {
       const capturedConfig22 = sameLabelOwner();
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           config: capturedConfig22.config,
           settingsOwner: capturedConfig22.settingsOwner,
           runtimeId: 'same-label-abort',
@@ -147,6 +160,8 @@ describe('isolated runtime owner activation', () => {
       const capturedConfig23 = sameLabelOwner();
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           config: capturedConfig23.config,
           settingsOwner: capturedConfig23.settingsOwner,
           runtimeId: 'same-label-abort',
@@ -183,6 +198,8 @@ describe('isolated runtime owner activation', () => {
     const owner = sameLabelOwner();
     const handle = createIsolatedRuntimeContext(
       {
+        credentialAuthority: new CredentialAuthority(),
+
         config: owner.config,
         settingsOwner: owner.settingsOwner,
         runtimeId: 'callback-owner',

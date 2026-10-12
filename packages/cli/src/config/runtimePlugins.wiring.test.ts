@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../../providers/src/auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -121,6 +122,8 @@ function assemble(
   runtimeId: string,
 ): ReturnType<typeof assembleCliProviderRuntime> {
   return assembleCliProviderRuntime({
+    credentialAuthority: new CredentialAuthority(),
+
     settingsService: new SettingsService(),
     config: undefined,
     runtimeId,

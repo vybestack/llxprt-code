@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../../providers/src/auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -85,6 +86,8 @@ describe('Provider alias integration', () => {
       settingsService: new SettingsService(),
     });
     providerManager = createProviderManager(runtimeContext, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new NodeFileSystem(),
     }).manager;
   });

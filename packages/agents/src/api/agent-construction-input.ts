@@ -64,6 +64,7 @@ export function parseAgentConstruction(
     runtimeFactoryBindings,
     runtimeActivationBindings,
     tokenStore,
+    credentialAuthority: _credentialAuthority,
     mediaOwner: suppliedMediaOwner,
     ...validatable
   } = rawConfig;
@@ -101,9 +102,11 @@ export function parseAgentConstruction(
 export function agentMcpAssemblyOptions(
   raw: AgentConfig,
   construction: ReturnType<typeof parseAgentConstruction>,
-): McpAssemblyOptions & Pick<AgentConfig, 'imageOperation'> {
+): McpAssemblyOptions &
+  Pick<AgentConfig, 'imageOperation' | 'credentialAuthority'> {
   return {
     imageOperation: raw.imageOperation,
+    credentialAuthority: raw.credentialAuthority,
     trustPort: raw.trustPort,
     idePort: raw.idePort,
     mcpHost: { ...construction.hostInput },

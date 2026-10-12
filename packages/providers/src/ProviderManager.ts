@@ -1,3 +1,5 @@
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
+import type { CredentialAuthority } from './auth/proxy/credential-store-factory.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
@@ -115,6 +117,29 @@ export class ProviderManager implements IProviderManager {
   private tokenUsageTracker: TokenUsageTracker = new TokenUsageTracker();
   private capabilitiesService: ProviderCapabilitiesService;
   private aliasRefresher?: () => void;
+  private providerKeyStorage?: ProviderKeyStorageLike;
+  private closeProviderKeyStorage?: () => void;
+
+  bindProviderKeyStorage(
+    storage: ProviderKeyStorageLike,
+    close?: () => void,
+  ): void {
+    this.providerKeyStorage = storage;
+    this.closeProviderKeyStorage = close;
+    this.config?.bindProviderKeyStorage(storage);
+  }
+
+  peekProviderKeyStorage(): ProviderKeyStorageLike | undefined {
+    return this.providerKeyStorage;
+  }
+
+  getProviderKeys(): ProviderKeyStorageLike {
+    if (!this.providerKeyStorage)
+      throw new Error(
+        'Provider key storage requires an explicit credential owner',
+      );
+    return this.providerKeyStorage;
+  }
 
   registerAliasRefresher(refresh: () => void): void {
     this.aliasRefresher = refresh;
@@ -129,7 +154,10 @@ export class ProviderManager implements IProviderManager {
     this.aliasRefresher();
   }
 
-  constructor(init?: ProviderManagerInit | ProviderRuntimeContext) {
+  constructor(
+    init?: ProviderManagerInit | ProviderRuntimeContext,
+    credentialAuthority?: Pick<CredentialAuthority, 'createProviderKeyStorage'>,
+  ) {
     const resolved = this.resolveInit(init);
     this.providers = new Map<string, IProvider>();
     this.settingsService = resolved.settingsService;
@@ -140,6 +168,10 @@ export class ProviderManager implements IProviderManager {
     this.capabilitiesService = new ProviderCapabilitiesService(
       this.providerCapabilities,
     );
+    if (credentialAuthority) {
+      const storage = credentialAuthority.createProviderKeyStorage();
+      this.bindProviderKeyStorage(storage, () => storage.close());
+    }
   }
 
   /**
@@ -270,10 +302,15 @@ export class ProviderManager implements IProviderManager {
     const release = this.stopSettingsLifecycle;
     this.stopSettingsLifecycle = undefined;
     release?.();
+    const close = this.closeProviderKeyStorage;
+    this.closeProviderKeyStorage = undefined;
+    close?.();
   }
 
   setConfig(config: Config): void {
     this.config = config;
+    if (this.providerKeyStorage)
+      config.bindProviderKeyStorage(this.providerKeyStorage);
     this.runtime = this.runtime
       ? { ...this.runtime, config }
       : { settingsService: this.settingsService, config };
@@ -336,6 +373,7 @@ export class ProviderManager implements IProviderManager {
         baseProvider = baseProvider.bindOwnerAuthentication(
           this.settingsService,
           () => this.requestFetch,
+          this.providerKeyStorage,
         );
       this.syncProviderRuntime(baseProvider);
 
@@ -552,6 +590,7 @@ export class ProviderManager implements IProviderManager {
       provider = provider.bindOwnerAuthentication(
         this.settingsService,
         () => this.requestFetch,
+        this.providerKeyStorage,
       );
     this.syncProviderRuntime(provider);
 

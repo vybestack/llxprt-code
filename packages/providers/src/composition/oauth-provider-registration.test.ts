@@ -9,11 +9,13 @@ import {
   registerStandardOAuthProviders,
   isOAuthProviderRegistered,
 } from './oauth-provider-registration.js';
-import { OAuthManager, createTokenStore } from '../auth/index.js';
+import { OAuthManager, HostCredentialOwner } from '../auth/index.js';
 import type { OAuthManager as OAuthManagerType } from '../auth/index.js';
 
 function createFreshManager(): OAuthManagerType {
-  const tokenStore = createTokenStore();
+  const tokenStore = new HostCredentialOwner(
+    process.env,
+  ).authority.createTokenStore();
   return new OAuthManager(tokenStore);
 }
 
@@ -54,7 +56,9 @@ describe('registerStandardOAuthProviders', () => {
 
   it('registers providers when tokenStore is passed explicitly', () => {
     const oauthManager = createFreshManager();
-    const explicitTokenStore = createTokenStore();
+    const explicitTokenStore = new HostCredentialOwner(
+      process.env,
+    ).authority.createTokenStore();
 
     registerStandardOAuthProviders(oauthManager, explicitTokenStore);
 

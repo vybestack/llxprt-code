@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -40,6 +41,8 @@ describe('issue #2891: provider OAuth identity is owner-bound', () => {
     const first = firstRoot.config;
     const second = secondRoot.config;
     const a = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       config: first,
       settingsService: firstRoot.settingsService,
       runtimeId: 'oauth-identity-first',
@@ -53,7 +56,11 @@ describe('issue #2891: provider OAuth identity is owner-bound', () => {
     try {
       const b = createProviderManager(
         { config: second, settingsService: secondRoot.settingsService },
-        { config: second, fileSystem: new NodeFileSystem() },
+        {
+          credentialAuthority: new CredentialAuthority(),
+          config: second,
+          fileSystem: new NodeFileSystem(),
+        },
       );
       const boundB = new BoundManagerExposingProvider(
         undefined,

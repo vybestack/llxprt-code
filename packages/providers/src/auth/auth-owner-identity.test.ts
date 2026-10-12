@@ -1,3 +1,4 @@
+import { CredentialAuthority } from './proxy/credential-store-factory.js';
 import { createProviderConfigFixture } from '../runtime/__tests__/provider-config-fixture.js';
 /**
  * @license
@@ -50,6 +51,8 @@ describe('explicit OAuth owner identity', () => {
   ): IsolatedRuntimeContextHandle {
     const handle = createIsolatedRuntimeContext(
       {
+        credentialAuthority: new CredentialAuthority(),
+
         ...options,
         activationBindings,
       },
@@ -196,6 +199,8 @@ describe('explicit OAuth owner identity', () => {
   it('reads CLI manager identity changes without borrowing the active runtime', async () => {
     const isolated = owner('agent');
     const cli = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       config: isolated.config,
       settingsService: isolated.settingsService,
       runtimeId: 'foreground',

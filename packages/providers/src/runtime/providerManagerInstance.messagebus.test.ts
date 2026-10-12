@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 import { createProviderConfigFixture } from './__tests__/provider-config-fixture.js';
 /**
  * @license
@@ -38,6 +39,8 @@ describe('provider manager runtime OAuth MessageBus composition', () => {
       });
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           settingsOwner: capturedConfig24SettingsOwner,
           runtimeId: 'provider-manager-runtime-seam',
           config: capturedConfig24,
@@ -67,6 +70,8 @@ describe('provider manager runtime OAuth MessageBus composition', () => {
           metadata: { source: 'phase-07-provider-test' },
         },
         {
+          credentialAuthority: new CredentialAuthority(),
+
           fileSystem: new NodeFileSystem(),
           config: runtimeHandle.config,
           runtimeMessageBus: sessionMessageBus,

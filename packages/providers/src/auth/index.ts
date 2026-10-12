@@ -59,10 +59,8 @@ export {
 export {
   CredentialAuthority,
   HostCredentialOwner,
-  createTokenStore,
   createProviderKeyStorage,
   createGitHubBrokerSocketClient,
-  resetFactorySingletons,
 } from './proxy/credential-store-factory.js';
 
 // ─── Clipboard Service ───────────────────────────────────────────────────────

@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import {
+  type OAuthManager,
+  HostCredentialOwner,
+  type CredentialAuthority,
+} from '@vybestack/llxprt-code-providers/auth.js';
 import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 import { createOAuthSettingsAdapter } from './auth/oauth-settings-adapter.js';
@@ -71,7 +75,6 @@ if (wantWarningSuppression && !process.env.NODE_NO_WARNINGS) {
 import { parseArguments } from './config/cliArgParser.js';
 import { loadSettings, type LoadedSettings } from './config/settings.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { createTokenStore } from '@vybestack/llxprt-code-providers/auth.js';
 import { applySandboxBashrc } from './utils/sandbox-bashrc.js';
 import {
   runStartupMigration,
@@ -119,7 +122,7 @@ import {
 } from './cliSessionListAndDelete.js';
 import {
   type RuntimeConfigBootstrap,
-  bootstrapRuntimeAndConfig,
+  bootstrapRuntimeAndConfig as bootstrap,
   setupOwnerSessionRecording,
 } from './cliSessionBootstrap.js';
 import {
@@ -203,6 +206,7 @@ async function handleZedAcpIntegration(
   profileDefinitions: Pick<ProfileDefinitionReads, 'listProfiles'>,
   trustPort: WorkspaceTrustControlPort,
   providerContributions: ProviderContributionRegistry,
+  credentialAuthority: CredentialAuthority,
 ): Promise<boolean> {
   if (!config.getExperimentalZedIntegration()) {
     return false;
@@ -214,7 +218,10 @@ async function handleZedAcpIntegration(
     profileDefinitions,
     providerManager,
     onExitCleanup: runExitCleanup,
-    providerInputs: createZedProviderInputs(providerContributions),
+    providerInputs: createZedProviderInputs(
+      providerContributions,
+      credentialAuthority,
+    ),
     createSessionSettings: () => {
       const session = new SettingsService();
       session.restoreFromStateSnapshot(
@@ -234,9 +241,11 @@ async function handleZedAcpIntegration(
  */
 function createZedProviderInputs(
   providerContributions: ProviderContributionRegistry,
+  credentialAuthority: CredentialAuthority,
 ): ZedSessionProviderInputs {
   const oauthSettings = createOAuthSettingsAdapter();
   return {
+    credentialAuthority,
     providerContributions,
     ...(oauthSettings !== undefined ? { oauthSettings } : {}),
   };
@@ -271,6 +280,7 @@ async function constructForegroundAgentAndDispatch(
   policyOwner?: RuntimePolicyOwner,
   oauthManager?: OAuthManager,
   providerFileLifecycle?: ProviderFileLifecycle,
+  credentialAuthority?: CredentialAuthority,
 ): Promise<void> {
   // Configure Unicode rendering before any Ink render (including the MCP
   // initialization spinner inside constructAgentWithSpinner) so that Windows
@@ -303,6 +313,7 @@ async function constructForegroundAgentAndDispatch(
     oauthManager,
     providerFileLifecycle,
     argv,
+    credentialAuthority,
   );
   await connectIdeClientIfEnabled(agent.ide);
 
@@ -367,18 +378,18 @@ async function constructForegroundAgentAndDispatch(
  * Zed/ACP is the exception: it runs its own runtime and constructs per-session
  * Agents via `fromConfig` internally, so no foreground Agent is built for it.
  */
-function prepareSandboxCredentialStartup(workspaceRoot: string): void {
+function prepareSandboxCredentialStartup(
+  workspaceRoot: string,
+): HostCredentialOwner {
   const sandboxSocket = process.env.LLXPRT_CREDENTIAL_SOCKET;
-  const capabilityFd = process.env.LLXPRT_CAPABILITY_FD;
-  if (sandboxSocket !== undefined || capabilityFd !== undefined) {
-    createTokenStore();
-  }
+  const credentialOwner = new HostCredentialOwner(process.env);
   if (sandboxSocket !== undefined) {
     applySandboxBashrc(
       `${workspaceRoot}/.llxprt/sandbox.bashrc`,
       workspaceRoot,
     );
   }
+  return credentialOwner;
 }
 
 /**
@@ -467,6 +478,13 @@ async function exitIfAuthenticationFailed(authFailed: boolean): Promise<void> {
   }
 }
 
+async function stopIfUnconfigured(
+  config: Config,
+  manager: RuntimeProviderManager,
+): Promise<void> {
+  await guardUnconfiguredProvider(config, runExitCleanup, manager);
+}
+
 export async function main() {
   // Capture and scrub LLXPRT_JSP_BOOTSTRAP_FILE before any child-capable
   // startup. No file I/O; resolved later, validated at observation setup.
@@ -476,13 +494,14 @@ export async function main() {
 
   await handleVersionAndHelpFlags(process.argv.slice(2));
 
-  const { cleanupStdio, workspaceRoot, settings, argv } =
+  const { cleanupStdio, workspaceRoot, settings, argv, credentialOwner } =
     await prepareCliStartupInput(capturedEnvPath);
 
   const { bootstrapSelection, hasPipedInput, readStdinOnce } =
     await prepareValidatedStartup(argv, capturedEnvPath, settings);
 
-  const boot = await bootstrapRuntimeAndConfig(settings, argv, workspaceRoot);
+  const authority = credentialOwner.authority;
+  const boot = await bootstrap(settings, argv, workspaceRoot, authority);
   const { config, activationOperation } = boot;
 
   try {
@@ -520,7 +539,7 @@ export async function main() {
     // BEFORE any provider activation or Agent construction when no provider is
     // active and we are NOT in interactive mode. Uses the shared
     // guardUnconfiguredProvider helper (single message, single exit code).
-    await guardUnconfiguredProvider(config, runExitCleanup, providerManager);
+    await stopIfUnconfigured(config, providerManager);
 
     // Declarative provider-activation PREFLIGHT runs PRE-AGENT (#2374/#2378).
     const providerActivation = await activateConfiguredProvider(
@@ -529,8 +548,6 @@ export async function main() {
       argv,
       activationOperation,
     );
-    const initialAuthFailed = providerActivation.authFailed;
-
     // hop into sandbox if outside and sandboxing is enabled
     await maybeHopIntoSandbox({
       config,
@@ -538,13 +555,14 @@ export async function main() {
       argv,
       workspaceRoot,
       runtimeSettingsService: boot.runtimeSettingsService,
-      initialAuthFailed,
+      credentialAuthority: boot.credentialAuthority,
+      initialAuthFailed: providerActivation.authFailed,
       readStdin: readStdinOnce,
       hasPipedInput,
       bootstrapSelection,
     });
 
-    await exitIfAuthenticationFailed(initialAuthFailed);
+    await exitIfAuthenticationFailed(providerActivation.authFailed);
 
     // Direct image mode: detect after config/auth but BEFORE conversational
     // dispatch. Image mode runs the image-operation service directly and exits.
@@ -571,6 +589,7 @@ export async function main() {
       boot.policyOwner,
       boot.oauthManager,
       boot.providerFileLifecycle,
+      boot.credentialAuthority,
     );
   } finally {
     await activationOperation.dispose();
@@ -615,15 +634,16 @@ async function handleActivatedZedIntegration(
     activationOperation.workspaceDefinitions.profileReads,
     activationOperation.workspaceTrust,
     boot.providerContributions,
+    boot.credentialAuthority,
   );
 }
 
 async function prepareCliStartupInput(capturedEnvPath: string | undefined) {
   const cleanupStdio = setupProcessLifecycle();
   const workspaceRoot = process.cwd();
-  prepareSandboxCredentialStartup(workspaceRoot);
+  const credentialOwner = prepareSandboxCredentialStartup(workspaceRoot);
   const settings = loadSettings(workspaceRoot);
   await maybeRelaunchForMemory(settings, capturedEnvPath);
   const argv = await parseArguments(settings.merged);
-  return { cleanupStdio, workspaceRoot, settings, argv };
+  return { cleanupStdio, workspaceRoot, settings, argv, credentialOwner };
 }

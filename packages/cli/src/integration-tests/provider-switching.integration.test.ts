@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../../providers/src/auth/proxy/credential-store-factory.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 /**
  * @license
@@ -73,6 +74,8 @@ describe('Runtime Provider Switching Integration', () => {
     });
     settingsService = new SettingsService();
     const assembled = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService,
       config,
       runtimeId: 'provider-switch-test',
@@ -402,6 +405,8 @@ describe('First provider selection from no active provider (#2481)', () => {
     });
     settingsService = new SettingsService();
     const assembled = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService,
       config,
       runtimeId: 'first-select-test',

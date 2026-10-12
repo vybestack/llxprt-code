@@ -212,9 +212,9 @@ describe('Deprecation Guards (P36)', () => {
   });
 
   describe('Factory Module is Single Entry Point', () => {
-    it('createTokenStore is exported from credential-store-factory', () => {
+    it('CredentialAuthority is exported from credential-store-factory for owner acquisition', () => {
       const matches = grepFiles(
-        'export function createTokenStore',
+        'export class CredentialAuthority',
         '*.ts',
         providersAuthRoot,
         ['node_modules', 'dist', '__tests__'],
@@ -245,21 +245,21 @@ describe('Deprecation Guards (P36)', () => {
       // of creating a partial fallback manager.
 
       const runtimeMatches = grepFiles(
-        'createOwnedTokenStore',
+        '.createTokenStore(',
         '*.ts',
         path.resolve(providersSrcRoot, 'runtime'),
         ['node_modules', 'dist', '__tests__'],
       );
 
       const providerMatches = grepFiles(
-        'createTokenStore',
+        '.createTokenStore(',
         '*.ts',
         path.resolve(providersSrcRoot, 'composition'),
         ['node_modules', 'dist', '__tests__'],
       );
 
       const commandMatches = grepFiles(
-        'createTokenStore',
+        '.createTokenStore(',
         '*.ts',
         path.resolve(cliSrcRoot, 'ui/commands'),
         ['node_modules', 'dist', '__tests__'],

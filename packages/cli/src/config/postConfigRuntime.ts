@@ -262,7 +262,10 @@ async function setupRuntimeContext(
     '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js'
   );
   const providerContributions = input.runtimeOverrides.providerContributions;
+  if (input.runtimeOverrides.credentialAuthority === undefined)
+    throw new Error('CLI runtime requires a credential authority');
   const finalRuntime = assembleCliProviderRuntime({
+    credentialAuthority: input.runtimeOverrides.credentialAuthority,
     trustPort: input.workspaceTrust,
     settingsService,
     config,
@@ -437,6 +440,7 @@ async function reapplyCliOverrides(
       },
       bootstrapArgs,
       {
+        getProviderKeys: () => input.config.getProviderKeys(),
         setEphemeralSetting: (key, value) =>
           input.sessionSettings.writeUserParameter(key, value),
       },

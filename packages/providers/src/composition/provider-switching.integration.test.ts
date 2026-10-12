@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -15,6 +16,8 @@ function createManager() {
   const settingsService = new SettingsService();
   const runtime = createProviderRuntimeContext({ settingsService });
   const { manager } = createProviderManager(runtime, {
+    credentialAuthority: new CredentialAuthority(),
+
     fileSystem: new NodeFileSystem(),
     allowBrowserEnvironment: true,
   });

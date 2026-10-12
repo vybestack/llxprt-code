@@ -15,7 +15,7 @@ import { homedir } from 'node:os';
 import { readFile } from 'node:fs/promises';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { updateActiveProviderApiKey } from './providerMutations.js';
-import { createProviderKeyStorage } from '../auth/index.js';
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 
 /**
  * Apply the --key override (highest precedence). Returns true when a key
@@ -23,7 +23,10 @@ import { createProviderKeyStorage } from '../auth/index.js';
  */
 export async function resolveFromKeyArg(
   keyToUse: string | undefined,
-  config: { setEphemeralSetting(key: string, value: unknown): void },
+  config: {
+    setEphemeralSetting(key: string, value: unknown): void;
+    getProviderKeys?(): ProviderKeyStorageLike;
+  },
   settingsService: Pick<SettingsService, 'setProviderSetting'>,
   provider: ReturnType<RuntimeProviderManager['getActiveProvider']>,
 ): Promise<boolean> {
@@ -42,14 +45,20 @@ export async function resolveFromKeyArg(
  */
 export async function resolveFromKeyName(
   keyNameToUse: string | null,
-  config: { setEphemeralSetting(key: string, value: unknown): void },
+  config: {
+    setEphemeralSetting(key: string, value: unknown): void;
+    getProviderKeys?(): ProviderKeyStorageLike;
+  },
   settingsService: Pick<SettingsService, 'setProviderSetting'>,
   provider: ReturnType<RuntimeProviderManager['getActiveProvider']>,
 ): Promise<boolean> {
   if (!keyNameToUse) {
     return false;
   }
-  const resolvedKey = await resolveNamedKey(keyNameToUse);
+  const resolvedKey = await resolveNamedKey(
+    keyNameToUse,
+    config.getProviderKeys?.(),
+  );
   await updateActiveProviderApiKey(
     resolvedKey,
     config,
@@ -67,14 +76,20 @@ export async function resolveFromKeyName(
  */
 export async function resolveFromProfileKeyName(
   profileKeyName: string | undefined,
-  config: { setEphemeralSetting(key: string, value: unknown): void },
+  config: {
+    setEphemeralSetting(key: string, value: unknown): void;
+    getProviderKeys?(): ProviderKeyStorageLike;
+  },
   settingsService: Pick<SettingsService, 'setProviderSetting'>,
   provider: ReturnType<RuntimeProviderManager['getActiveProvider']>,
 ): Promise<boolean> {
   if (!profileKeyName) {
     return false;
   }
-  const resolvedKey = await resolveNamedKey(profileKeyName);
+  const resolvedKey = await resolveNamedKey(
+    profileKeyName,
+    config.getProviderKeys?.(),
+  );
   await updateActiveProviderApiKey(
     resolvedKey,
     config,
@@ -92,7 +107,10 @@ export async function resolveFromProfileKeyName(
  */
 export async function resolveFromKeyfile(
   keyfileToUse: string | undefined,
-  config: { setEphemeralSetting(key: string, value: unknown): void },
+  config: {
+    setEphemeralSetting(key: string, value: unknown): void;
+    getProviderKeys?(): ProviderKeyStorageLike;
+  },
   settingsService: Pick<SettingsService, 'setProviderSetting'>,
   provider: ReturnType<RuntimeProviderManager['getActiveProvider']>,
 ): Promise<void> {
@@ -118,8 +136,14 @@ export async function resolveFromKeyfile(
  * @returns The resolved key
  * @throws Error if key not found or invalid
  */
-export async function resolveNamedKey(name: string): Promise<string> {
-  const storage = createProviderKeyStorage();
+export async function resolveNamedKey(
+  name: string,
+  storage: Pick<ProviderKeyStorageLike, 'getKey'> | undefined,
+): Promise<string> {
+  if (!storage)
+    throw new Error(
+      'Named key resolution requires an explicit credential owner',
+    );
 
   let key: string | null;
   try {

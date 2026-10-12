@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @plan:PLAN-20260617-COREAPI.P25
  * @requirement:REQ-017
@@ -134,6 +135,7 @@ export function listProviders(): readonly ProviderInfo[] {
   };
   const { manager } = createProviderManager(context, {
     fileSystem: new NodeFileSystem(),
+    credentialAuthority: new CredentialAuthority(),
   });
   const names = manager.listProviders();
   return projectProviderInfos(names);

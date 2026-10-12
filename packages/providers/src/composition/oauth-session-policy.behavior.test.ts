@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/index.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -22,6 +23,7 @@ describe('Composed OAuth session policy', () => {
     const secondStore = new SettingsService();
     firstStore.set('auth.noBrowser', true);
     const options = {
+      credentialAuthority: new CredentialAuthority(),
       fileSystem: new NodeFileSystem(),
       activateConfiguredProvider: false,
     };

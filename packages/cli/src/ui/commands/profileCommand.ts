@@ -74,6 +74,7 @@ const saveCommand: SlashCommand = {
         parts,
         context.runtimeApi,
         context.services.agent,
+        context.oauthControl.listBuckets,
       );
     }
 

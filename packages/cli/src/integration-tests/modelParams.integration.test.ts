@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../../providers/src/auth/proxy/credential-store-factory.js';
 import { modelParamInputs } from '../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
 /**
  * @license
@@ -86,6 +87,8 @@ describe('CLI model parameter command integration', () => {
     });
     settingsService = new SettingsService();
     const assembled = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService,
       config,
       runtimeId: 'modelparams-test',

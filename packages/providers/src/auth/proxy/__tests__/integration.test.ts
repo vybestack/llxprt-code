@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../credential-store-factory.js';
 import { createProviderConfigFixture } from '../../../runtime/__tests__/provider-config-fixture.js';
 /**
  * @license
@@ -19,8 +20,7 @@ import {
 } from '@vybestack/llxprt-code-core';
 import {
   createProviderKeyStorage,
-  createTokenStore,
-  resetFactorySingletons,
+  HostCredentialOwner,
 } from '../credential-store-factory.js';
 import { CredentialProxyServer } from '../credential-proxy-server.js';
 import { createIsolatedRuntimeContext } from '../../../runtime/index.js';
@@ -173,7 +173,6 @@ describe('proxy integration (phase 31)', () => {
     priorCapabilityFdEnv = process.env.LLXPRT_CAPABILITY_FD;
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
     delete process.env.LLXPRT_CAPABILITY_FD;
-    resetFactorySingletons();
   });
 
   afterEach(async () => {
@@ -193,8 +192,6 @@ describe('proxy integration (phase 31)', () => {
     } else {
       process.env.LLXPRT_CAPABILITY_FD = priorCapabilityFdEnv;
     }
-
-    resetFactorySingletons();
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -218,7 +215,9 @@ describe('proxy integration (phase 31)', () => {
       tmpDir,
       'factory-proxy.sock',
     );
-    const store = createTokenStore();
+    const store = new HostCredentialOwner(
+      process.env,
+    ).authority.createTokenStore();
     expect(store).toBeInstanceOf(ProxyTokenStore);
   });
 
@@ -226,7 +225,9 @@ describe('proxy integration (phase 31)', () => {
     // @requirement R2.2
     // @scenario Factory should detect host mode and return direct token store.
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    const store = createTokenStore();
+    const store = new HostCredentialOwner(
+      process.env,
+    ).authority.createTokenStore();
     expect(store).not.toBeInstanceOf(ProxyTokenStore);
   });
 
@@ -243,6 +244,8 @@ describe('proxy integration (phase 31)', () => {
       });
     const owner = createIsolatedRuntimeContext(
       {
+        credentialAuthority: new CredentialAuthority(started.socketPath),
+
         runtimeId: 'proxy-owned-runtime',
         config,
       },
@@ -265,16 +268,20 @@ describe('proxy integration (phase 31)', () => {
     }
   });
 
-  it('returns the same token store instance across repeated factory calls', () => {
+  it('returns independent token stores across repeated authority acquisitions', () => {
     // @requirement R2.4
     // @scenario Token store factory should memoize and reuse singleton instance.
     process.env.LLXPRT_CREDENTIAL_SOCKET = path.join(
       tmpDir,
       'factory-singleton.sock',
     );
-    const first = createTokenStore();
-    const second = createTokenStore();
-    expect(first).toBe(second);
+    const first = new HostCredentialOwner(
+      process.env,
+    ).authority.createTokenStore();
+    const second = new HostCredentialOwner(
+      process.env,
+    ).authority.createTokenStore();
+    expect(first).not.toBe(second);
   });
 
   it('selects ProxyProviderKeyStorage when credential socket env var is present', () => {
@@ -284,7 +291,9 @@ describe('proxy integration (phase 31)', () => {
       tmpDir,
       'factory-keys.sock',
     );
-    const storage = createProviderKeyStorage();
+    const storage = createProviderKeyStorage(
+      new HostCredentialOwner(process.env).authority,
+    );
     expect(storage).toBeInstanceOf(ProxyProviderKeyStorage);
   });
 
@@ -342,10 +351,11 @@ describe('proxy integration (phase 31)', () => {
           new URL('../credential-store-factory.ts', import.meta.url),
         );
         const childScript = [
-          `const { createTokenStore, createProviderKeyStorage, resetFactorySingletons } = require(${JSON.stringify(factoryPath)});`,
-          'resetFactorySingletons();',
-          'const tokenStore = createTokenStore();',
-          'const keyStorage = createProviderKeyStorage();',
+          `const { HostCredentialOwner, createProviderKeyStorage } = require(${JSON.stringify(factoryPath)});`,
+
+          'const authority = new HostCredentialOwner(process.env).authority;',
+          'const tokenStore = authority.createTokenStore();',
+          'const keyStorage = createProviderKeyStorage(authority);',
           'Promise.all([tokenStore.getToken("openai"), keyStorage.getKey("openai")])',
           '  .then(([t, k]) => {',
           '    process.stdout.write(JSON.stringify({ token: t?.access_token, key: k, isProxy: tokenStore.constructor.name === "ProxyTokenStore" }));',

@@ -14,7 +14,7 @@ import {
   InMemoryProviderKeyStorage,
   makeToken,
 } from './__tests__/credential-proxy-server-helpers.js';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   CredentialAuthority,
@@ -107,6 +107,121 @@ describe('host credential authority', () => {
       rmSync(directory, { recursive: true });
     }
   });
+
+  it('keeps captured key and broker transports authenticated after host input changes', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'authority-keys-'));
+    const keys = new InMemoryProviderKeyStorage();
+    await keys.saveKey('primary', 'first-key');
+    const server = new CredentialProxyServer({
+      tokenStore: new InMemoryTokenStore(),
+      providerKeyStorage: keys,
+      socketDir: directory,
+      capabilityToken: 'c'.repeat(64),
+    });
+    const socket = await server.start();
+    const authority = new CredentialAuthority(socket, 'c'.repeat(64));
+    const storage = authority.createProviderKeyStorage();
+    const broker = authority.createGitHubBrokerSocketClient();
+    try {
+      expect(await storage.getKey('primary')).toBe('first-key');
+      expect(
+        await broker?.request('get_api_key', { name: 'primary' }),
+      ).toMatchObject({
+        ok: true,
+        data: { key: 'first-key' },
+      });
+      expect(JSON.stringify(authority)).not.toContain('c'.repeat(64));
+    } finally {
+      if ('close' in storage && typeof storage.close === 'function')
+        storage.close();
+      broker?.close();
+      await server.stop();
+      rmSync(directory, { recursive: true });
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'uses the captured descriptor capability for token, key, and broker requests after scrubbing',
+    async () => {
+      const directory = mkdtempSync(join(tmpdir(), 'fd-owner-'));
+      const tokens = new InMemoryTokenStore();
+      const keys = new InMemoryProviderKeyStorage();
+      await tokens.saveToken('test', makeToken());
+      await keys.saveKey('primary', 'captured-key');
+      const capability = 'd'.repeat(64);
+      const server = new CredentialProxyServer({
+        tokenStore: tokens,
+        providerKeyStorage: keys,
+        socketDir: directory,
+        capabilityToken: capability,
+      });
+      const socket = await server.start();
+      const script = `
+        const { HostCredentialOwner, closeOwnedTokenStore } = await import(${JSON.stringify(factoryPath)});
+        const authority = new HostCredentialOwner(process.env).authority;
+        const markerGone = process.env.LLXPRT_CAPABILITY_FD === undefined;
+        process.env.LLXPRT_CREDENTIAL_SOCKET = '/replacement.sock';
+        const store = authority.createTokenStore();
+        const keys = authority.createProviderKeyStorage();
+        const broker = authority.createGitHubBrokerSocketClient();
+        try {
+          const token = await store.getToken('test');
+          const key = await keys.getKey('primary');
+          const response = await broker.request('get_api_key', { name: 'primary' });
+          process.stdout.write(JSON.stringify({ markerGone, tokenType: token.token_type, key, brokerKey: response.data.key, serialized: JSON.stringify(authority) }));
+        } finally {
+          closeOwnedTokenStore(store);
+          keys.close();
+          broker.close();
+        }
+      `;
+      try {
+        const child = spawn(
+          'bash',
+          [
+            '--noprofile',
+            '--norc',
+            '-c',
+            `exec 3<<<"${capability}"
+exec bun -e ${JSON.stringify(script.split(String.fromCharCode(10)).join(' '))}`,
+          ],
+          {
+            env: {
+              ...process.env,
+              BASH_ENV: '',
+              LLXPRT_CREDENTIAL_SOCKET: socket,
+              LLXPRT_CAPABILITY_FD: '3',
+            },
+            stdio: ['ignore', 'pipe', 'pipe'],
+          },
+        );
+        let output = '';
+        let errors = '';
+        child.stdout.on('data', (chunk: Buffer) => {
+          output += chunk.toString();
+        });
+        child.stderr.on('data', (chunk: Buffer) => {
+          errors += chunk.toString();
+        });
+        const exit = await new Promise<number | null>((resolve, reject) => {
+          child.once('error', reject);
+          child.once('close', resolve);
+        });
+        expect(exit).toBe(0);
+        expect(errors).toBe('');
+        expect(JSON.parse(output)).toStrictEqual({
+          markerGone: true,
+          tokenType: 'Bearer',
+          key: 'captured-key',
+          brokerKey: 'captured-key',
+          serialized: '{}',
+        });
+      } finally {
+        await server.stop();
+        rmSync(directory, { recursive: true });
+      }
+    },
+  );
 
   it('creates separate direct stores from one immutable authority', () => {
     const owner = new HostCredentialOwner({});

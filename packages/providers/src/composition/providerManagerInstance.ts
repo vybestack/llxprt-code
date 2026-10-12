@@ -31,7 +31,8 @@ import type { IFileSystem } from './IFileSystem.js';
 import type { ProviderManagerFactoryOptions } from './providerManagerFactoryOptions.js';
 import stripJsonComments from 'strip-json-comments';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import { OAuthManager, createTokenStore } from '../auth/index.js';
+import { OAuthManager } from '../auth/index.js';
+import type { TokenStore } from '../auth/types.js';
 import { registerStandardOAuthProviders } from './oauth-provider-registration.js';
 import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
 
@@ -325,7 +326,7 @@ function resolveAuthOnlyFlag(
 /** Registers OAuth providers for authentication support. */
 function registerOAuthProviders(
   oauthManager: OAuthManager,
-  tokenStore: ReturnType<typeof createTokenStore>,
+  tokenStore: TokenStore,
   addItem: ProviderManagerFactoryOptions['addItem'],
 ): void {
   registerStandardOAuthProviders(oauthManager, tokenStore, addItem);
@@ -421,7 +422,7 @@ function registerAllProviders(
   openaiBaseUrl: string | undefined,
   openaiProviderConfig: IProviderConfig,
   oauthManager: OAuthManager,
-  tokenStore: ReturnType<typeof createTokenStore>,
+  tokenStore: TokenStore,
   config: Config | undefined,
   authOnlyEnabled: boolean,
   addItem: ProviderManagerFactoryOptions['addItem'],
@@ -521,30 +522,69 @@ function readOwnerAuthPolicy(
   };
 }
 
+function createOwnedOAuthManager(
+  tokenStore: TokenStore,
+  settings: ProviderManagerFactoryOptions['oauthSettings'],
+  messageBus: ProviderManagerFactoryOptions['runtimeMessageBus'],
+  config: Config | undefined,
+  manager: ProviderManager,
+  runtimeSettings: RuntimeSettingsState,
+): OAuthManager {
+  return new OAuthManager(
+    tokenStore,
+    settings,
+    {
+      messageBus,
+      config,
+      readAuthIdentity: () => manager.getAuthIdentity(),
+      readSessionAuthPolicy: () => readOwnerAuthPolicy(runtimeSettings),
+      invalidateAuthCaches: createOwnerAuthCacheInvalidator((name) =>
+        manager.getProviderByName(name),
+      ),
+    },
+    'owned',
+  );
+}
+
+function bindCredentialKeys(
+  manager: ProviderManager,
+  authority: ProviderManagerFactoryOptions['credentialAuthority'],
+): void {
+  if (manager.peekProviderKeyStorage() !== undefined) return;
+  const storage = authority.createProviderKeyStorage();
+  manager.bindProviderKeyStorage(storage, () => storage.close());
+}
+
 export function createProviderManager(
   context: RuntimeContextShape,
   options: ProviderManagerFactoryOptions,
+  borrowedOAuthManager?: OAuthManager,
 ): { manager: ProviderManager; oauthManager: OAuthManager } {
   const userSettings = resolveUserSettings(options.fileSystem);
   const manager = options.manager ?? new ProviderManager(context);
 
+  bindCredentialKeys(manager, options.credentialAuthority);
+
   // @plan:PLAN-20250214-CREDPROXY.P33
-  const tokenStore = createTokenStore();
+  const tokenStore =
+    borrowedOAuthManager?.getTokenStore() ??
+    options.credentialAuthority.createTokenStore();
   /**
    * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
    * @requirement REQ-D01-002
    * @requirement REQ-D01-003
    * @pseudocode lines 122-133
    */
-  const oauthManager = new OAuthManager(tokenStore, options.oauthSettings, {
-    messageBus: options.runtimeMessageBus,
-    config: options.config,
-    readAuthIdentity: () => manager.getAuthIdentity(),
-    readSessionAuthPolicy: () => readOwnerAuthPolicy(context.settingsService),
-    invalidateAuthCaches: createOwnerAuthCacheInvalidator((name) =>
-      manager.getProviderByName(name),
-    ),
-  });
+  const oauthManager =
+    borrowedOAuthManager ??
+    createOwnedOAuthManager(
+      tokenStore,
+      options.oauthSettings,
+      options.runtimeMessageBus,
+      options.config,
+      manager,
+      context.settingsService,
+    );
 
   bindOwnerRetryOperations(manager, oauthManager);
 
@@ -557,9 +597,7 @@ export function createProviderManager(
   } = options;
 
   const fakeResult = tryActivateFakeProvider(manager, config);
-  if (fakeResult) {
-    return { manager: fakeResult.manager, oauthManager };
-  }
+  if (fakeResult) return { manager: fakeResult.manager, oauthManager };
 
   logger.debug('createProviderManager config check', {
     hasConfig: config !== undefined,

@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../../../providers/src/auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -507,6 +508,8 @@ describe('interactive runtime owner bridge', () => {
         config: first.config,
       },
       {
+        credentialAuthority: new CredentialAuthority(),
+
         fileSystem: new NodeFileSystem(),
         config: first.config,
         manager: first.providerManager,
@@ -520,6 +523,8 @@ describe('interactive runtime owner bridge', () => {
         config: second.config,
       },
       {
+        credentialAuthority: new CredentialAuthority(),
+
         fileSystem: new NodeFileSystem(),
         config: second.config,
         manager: second.providerManager,

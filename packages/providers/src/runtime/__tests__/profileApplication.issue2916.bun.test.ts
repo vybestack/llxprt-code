@@ -37,14 +37,14 @@ let tempDir: string | null = null;
 
 function createProviderKeyStorageDouble() {
   return {
-    getKey(name: string): Promise<string | null | undefined> {
+    getKey(name: string): Promise<string | null> {
       if (keyStorage.mode === 'error') {
         return Promise.reject(
           keyStorage.error ?? new Error('key storage error'),
         );
       }
       if (keyStorage.mode === 'resolved') {
-        return Promise.resolve(keyStorage.resolvedValue);
+        return Promise.resolve(keyStorage.resolvedValue ?? null);
       }
       return Promise.resolve(keyStorage.entries.get(name) ?? null);
     },
@@ -127,6 +127,8 @@ function asError(value: unknown): Error | undefined {
 
 describe('issue #2916: unresolved auth-key-name rejects profile application', () => {
   beforeEach(() => {
+    const storage = root().manager.getProviderKeys();
+    storage.getKey = createProviderKeyStorageDouble().getKey;
     root().manager.setActiveProvider('openai');
     root().settingsOwner.initializeProviderSelection('openai', 'gpt-4o');
     keyStorage = {

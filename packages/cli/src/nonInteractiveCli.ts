@@ -1,6 +1,9 @@
+import type {
+  CredentialAuthority,
+  OAuthManager,
+} from '@vybestack/llxprt-code-providers/auth.js';
 import { cliSkillOperations } from './config/configBuilder.js';
 import { createGitHubBrokerClient } from './config/githubBrokerClient.js';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
@@ -76,6 +79,7 @@ import {
 import { runExitCleanup } from './utils/cleanup.js';
 
 interface RunNonInteractiveParams {
+  readonly credentialAuthority?: CredentialAuthority;
   readonly oauthManager?: OAuthManager;
   readonly providerFileLifecycle?: ProviderFileLifecycle;
   runtimeSettings?: {
@@ -553,8 +557,11 @@ async function createNonInteractiveAgent(
   params: RunNonInteractiveParams,
 ): Promise<Agent> {
   const { config } = params;
+  const broker = createGitHubBrokerClient(params.credentialAuthority);
   return fromConfig({
-    githubBrokerClient: createGitHubBrokerClient(),
+    credentialAuthority: params.credentialAuthority,
+    githubBrokerClient: broker,
+    disposeGitHubBroker: async () => broker.dispose(),
     oauthManager: params.oauthManager,
     providerFileLifecycle: params.providerFileLifecycle,
     settingsService: requireRuntimeSettings(params).store,

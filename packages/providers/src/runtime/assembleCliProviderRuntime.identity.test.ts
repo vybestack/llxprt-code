@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -34,6 +35,8 @@ describe('CLI foreground provider ownership', () => {
     const settings = new SettingsService();
     const { config: config } = createOwner(settings, 'bundle-owner');
     const bundle = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService: settings,
       config,
       runtimeId: 'bundle-owner',
@@ -57,6 +60,8 @@ describe('CLI foreground provider ownership', () => {
   it('preserves supplied OAuth bus and pending caller confirmation during final assembly', async () => {
     const settings = new SettingsService();
     const early = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService: settings,
       config: undefined,
       runtimeId: 'early-auth-owner',
@@ -74,6 +79,8 @@ describe('CLI foreground provider ownership', () => {
     const pending = bus.requestConfirmation({ name: 'privileged_unknown' }, {});
     const { config } = createOwner(settings, 'final-auth-owner');
     const final = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService: settings,
       config,
       runtimeId: early.registration.runtimeId,
@@ -102,11 +109,15 @@ describe('CLI foreground provider ownership', () => {
     const settingsA = new SettingsService();
     const settingsB = new SettingsService();
     const earlyA = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService: settingsA,
       config: undefined,
       runtimeId: 'same-cli-label',
     });
     const earlyB = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService: settingsB,
       config: undefined,
       runtimeId: 'same-cli-label',
@@ -116,12 +127,16 @@ describe('CLI foreground provider ownership', () => {
     settingsA.set('activeProvider', 'openai');
     settingsB.set('activeProvider', 'kimi');
     const runtimeB = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService: settingsB,
       config: configB,
       runtimeId: 'same-cli-label',
       registration: earlyB.registration,
     });
     const runtimeA = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService: settingsA,
       config: configA,
       runtimeId: 'same-cli-label',
@@ -146,6 +161,8 @@ describe('CLI foreground provider ownership', () => {
   it('rejects another Config from borrowing a pre-Config handle', () => {
     const settings = new SettingsService();
     const early = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService: settings,
       config: undefined,
       runtimeId: 'one-handle',
@@ -153,6 +170,8 @@ describe('CLI foreground provider ownership', () => {
     const { config: owner } = createOwner(settings, 'handle-owner');
     const { config: sibling } = createOwner(settings, 'handle-sibling');
     const bound = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService: settings,
       config: owner,
       runtimeId: 'one-handle',
@@ -160,6 +179,8 @@ describe('CLI foreground provider ownership', () => {
     });
     expect(() =>
       assembleCliProviderRuntime({
+        credentialAuthority: new CredentialAuthority(),
+
         settingsService: settings,
         config: sibling,
         runtimeId: 'one-handle',
@@ -174,6 +195,8 @@ describe('CLI foreground provider ownership', () => {
   it('restores Config and handle ownership on failed post-Config assembly, then retries on the exact Config', async () => {
     const settings = new SettingsService();
     const early = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService: settings,
       config: undefined,
       runtimeId: 'retry-label',
@@ -206,6 +229,8 @@ describe('CLI foreground provider ownership', () => {
 
     expect(() =>
       assembleCliProviderRuntime({
+        credentialAuthority: new CredentialAuthority(),
+
         settingsService: settings,
         config,
         runtimeId: 'retry-label',
@@ -224,6 +249,8 @@ describe('CLI foreground provider ownership', () => {
     });
     expect(() =>
       assembleCliProviderRuntime({
+        credentialAuthority: new CredentialAuthority(),
+
         settingsService: settings,
         config: sibling,
         runtimeId: 'retry-label',
@@ -233,6 +260,8 @@ describe('CLI foreground provider ownership', () => {
 
     settings.set('activeProvider', 'openai');
     const recovered = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService: settings,
       config,
       runtimeId: 'retry-label',
@@ -270,6 +299,8 @@ describe('CLI foreground provider ownership', () => {
       } = createOwner(new SettingsService(), 'shared-label');
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           runtimeId: 'shared-label',
           runtimeKind: 'agent',
           config: capturedConfig16,
@@ -283,6 +314,8 @@ describe('CLI foreground provider ownership', () => {
     const { config: config } = createOwner(settings, 'foreground-with-agent');
     try {
       const assembled = assembleCliProviderRuntime({
+        credentialAuthority: new CredentialAuthority(),
+
         settingsService: settings,
         config,
         runtimeId: 'shared-label',

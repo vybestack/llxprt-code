@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 import { createProviderConfigFixture } from './__tests__/provider-config-fixture.js';
 /**
  * @license
@@ -27,6 +28,8 @@ describe('isolated runtime messageBus ownership', () => {
       });
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           settingsOwner: capturedConfig29SettingsOwner,
           config: capturedConfig29,
           runtimeId: 'isolated-private-bus',
@@ -63,6 +66,8 @@ describe('isolated runtime messageBus ownership', () => {
       });
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           settingsOwner: capturedConfig30SettingsOwner,
           config: capturedConfig30,
           runtimeId: 'isolated-provided-bus',

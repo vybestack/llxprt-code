@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../../../providers/src/auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -224,6 +225,8 @@ describe('Explicit session client lifetime', () => {
     const built = await createWorkspaceEngineFixture();
     const handle = createIsolatedRuntimeContext(
       {
+        credentialAuthority: new CredentialAuthority(),
+
         runtimeId: 'engine-owned-preflight',
         config: built.config,
         messageBus: built.messageBus,

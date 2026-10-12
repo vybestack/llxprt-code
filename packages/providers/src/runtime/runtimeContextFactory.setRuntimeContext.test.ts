@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 import { createProviderConfigFixture } from './__tests__/provider-config-fixture.js';
 /**
  * @license
@@ -67,6 +68,8 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
       });
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           settingsOwner: capturedConfig31SettingsOwner,
           activationBindings,
           runtimeId: 'setRuntimeContext-scoped',
@@ -130,6 +133,8 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
       });
       return createIsolatedRuntimeContext(
         {
+          credentialAuthority: new CredentialAuthority(),
+
           settingsOwner: capturedConfig32SettingsOwner,
           activationBindings,
           runtimeId: 'setRuntimeContext-adopted',

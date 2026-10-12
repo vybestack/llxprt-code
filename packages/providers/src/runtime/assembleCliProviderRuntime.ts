@@ -1,3 +1,4 @@
+import type { CredentialAuthority } from '../auth/index.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
@@ -61,6 +62,7 @@ import { resolveRuntimeKind } from './runtimeKind.js';
  * MessageBus is accepted — bus ownership lives inside this helper.
  */
 export interface AssembleCliProviderRuntimeInput {
+  readonly credentialAuthority: CredentialAuthority;
   readonly settingsOwner?: SessionSettingsOwner;
   readonly trustPort?: WorkspaceTrustControlPort;
   /** The runtime SettingsService (resolved by the caller). */
@@ -187,6 +189,7 @@ export function assembleCliProviderRuntime(
       borrowedManager === undefined
         ? createProviderManager(runtime, {
             fileSystem: new NodeFileSystem(),
+            credentialAuthority: input.credentialAuthority,
             config: runtime.config,
             runtimeMessageBus,
             ...(resolvedOAuthSettings !== undefined

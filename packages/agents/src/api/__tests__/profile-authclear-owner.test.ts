@@ -6,7 +6,6 @@
 import { describe, expect, it, vi } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.js';
 import {
   standardProfile,
   useProfileOwner,
@@ -88,7 +87,7 @@ describe('Profile credential clearing at the transaction owner', () => {
   it('preserves explicit auth-key-name on the newly loaded profile', async () => {
     const { settings, application } = owner();
     const storage = vi
-      .spyOn(createProviderKeyStorage(), 'getKey')
+      .spyOn(owner().config.getProviderKeys(), 'getKey')
       .mockResolvedValue(' resolved-new-key ');
     try {
       owner().settingsOwner.writeUserParameter('auth-keyfile', 'stale-file');

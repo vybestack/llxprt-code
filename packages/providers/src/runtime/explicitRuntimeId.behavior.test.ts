@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -70,6 +71,8 @@ describe('explicit owner identity at composition boundaries (issue #2300)', () =
       expect(() =>
         createIsolatedRuntimeContext(
           {
+            credentialAuthority: new CredentialAuthority(),
+
             config,
             runtimeId,
           },

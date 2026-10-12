@@ -19,7 +19,8 @@ import type {
   ResolvedSubProfile,
 } from './loadBalancerTypes.js';
 
-import { createProviderKeyStorage } from '../runtime/index.js';
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
+const keyStorage = new CredentialAuthority().createProviderKeyStorage();
 
 const storedKeys = new Map<string, string>();
 
@@ -48,6 +49,7 @@ function createProjectionFixture(
     config,
     runtime,
   });
+  manager.bindProviderKeyStorage(keyStorage);
   const projections: GenerateChatOptions[] = [];
   let delegateRequests = 0;
   const delegate: IProvider = {
@@ -152,7 +154,7 @@ describe('load balancer projection credentials', () => {
     if (process.env.LLXPRT_TEST_STORAGE_ISOLATED !== '1') {
       throw new Error('Projection credential tests require isolated storage');
     }
-    const getKey = vi.spyOn(createProviderKeyStorage(), 'getKey');
+    const getKey = vi.spyOn(keyStorage, 'getKey');
     restoreStorage = () => getKey.mockRestore();
     getKey.mockImplementation(async (name) => storedKeys.get(name) ?? null);
   });

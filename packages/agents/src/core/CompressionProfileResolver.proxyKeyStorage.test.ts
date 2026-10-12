@@ -17,8 +17,8 @@ import type {
 } from '@vybestack/llxprt-code-core';
 import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import { resolveCompressionProfileAuthToken } from './CompressionProfileResolver.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { CredentialProxyServer } from '@vybestack/llxprt-code-providers/auth/proxy/credential-proxy-server.js';
-import { resetFactorySingletons } from '@vybestack/llxprt-code-providers/auth.js';
 
 const PROXY_SERVED_KEY = 'proxy-served-compression-key-2946';
 const NAMED_KEY = 'compression-named-key';
@@ -138,7 +138,6 @@ describe('#2946 CompressionProfileResolver proxy-aware key storage', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cpr-'));
     priorSocketEnv = process.env.LLXPRT_CREDENTIAL_SOCKET;
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
-    resetFactorySingletons();
   });
 
   afterEach(async () => {
@@ -147,7 +146,6 @@ describe('#2946 CompressionProfileResolver proxy-aware key storage', () => {
     } else {
       process.env.LLXPRT_CREDENTIAL_SOCKET = priorSocketEnv;
     }
-    resetFactorySingletons();
     if (server !== undefined) {
       // No catch: each test starts the server exactly once and never stops
       // it, so a failure here is a real teardown defect (an unreleased Unix
@@ -175,6 +173,7 @@ describe('#2946 CompressionProfileResolver proxy-aware key storage', () => {
     const result = await resolveCompressionProfileAuthToken(
       profileSettings,
       'gemini',
+      new CredentialAuthority(socketPath).createProviderKeyStorage(),
     );
 
     expect(result).toStrictEqual({ authToken: PROXY_SERVED_KEY });
@@ -198,6 +197,7 @@ describe('#2946 CompressionProfileResolver proxy-aware key storage', () => {
     const result = await resolveCompressionProfileAuthToken(
       profileSettings,
       'gemini',
+      new CredentialAuthority(socketPath).createProviderKeyStorage(),
     );
 
     expect(result).toStrictEqual({});

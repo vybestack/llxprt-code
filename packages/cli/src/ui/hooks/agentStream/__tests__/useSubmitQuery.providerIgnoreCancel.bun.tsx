@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../../../../../providers/src/auth/proxy/credential-store-factory.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
@@ -384,6 +385,8 @@ async function createEngineEnv(): Promise<EngineEnv> {
     const messageBus = policyOwner.session.messageBus;
     handle = createIsolatedRuntimeContext(
       {
+        credentialAuthority: new CredentialAuthority(),
+
         runtimeId: SESSION_ID,
         config,
         messageBus,

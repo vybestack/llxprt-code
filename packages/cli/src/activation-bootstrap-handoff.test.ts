@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -59,7 +60,12 @@ describe('CLI activation operation handoff', () => {
   it('uses the config bootstrap operation for auto auth and real foreground adoption', async () => {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
-    const boot = await bootstrapRuntimeAndConfig(settings, argv, directory);
+    const boot = await bootstrapRuntimeAndConfig(
+      settings,
+      argv,
+      directory,
+      new CredentialAuthority(),
+    );
     try {
       await writeFile(join(directory, 'discovery.txt'), 'workspace discovery');
       await writeFile(join(directory, '.llxprtignore'), 'discovery.txt\n');
@@ -80,6 +86,7 @@ describe('CLI activation operation handoff', () => {
       );
       const contentConfig = boot.config.getContentGeneratorConfig();
       const agent = await createForegroundAgent({
+        credentialAuthority: new CredentialAuthority(),
         policyOwner: boot.policyOwner,
         oauthManager: boot.oauthManager,
         providerFileLifecycle: boot.providerFileLifecycle,
@@ -129,7 +136,12 @@ describe('CLI activation operation handoff', () => {
     );
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
-    const boot = await bootstrapRuntimeAndConfig(settings, argv, directory);
+    const boot = await bootstrapRuntimeAndConfig(
+      settings,
+      argv,
+      directory,
+      new CredentialAuthority(),
+    );
     try {
       const extension = boot.config
         .getExtensions()
@@ -144,6 +156,7 @@ describe('CLI activation operation handoff', () => {
       );
       let restart: ((extension: LlxprtExtension) => Promise<void>) | undefined;
       const agent = await createForegroundAgent({
+        credentialAuthority: new CredentialAuthority(),
         policyOwner: boot.policyOwner,
         oauthManager: boot.oauthManager,
         providerFileLifecycle: boot.providerFileLifecycle,
@@ -180,7 +193,12 @@ describe('CLI activation operation handoff', () => {
   it('invalidates a transferred bootstrap on startup cleanup before Agent creation', async () => {
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);
-    const boot = await bootstrapRuntimeAndConfig(settings, argv, directory);
+    const boot = await bootstrapRuntimeAndConfig(
+      settings,
+      argv,
+      directory,
+      new CredentialAuthority(),
+    );
     try {
       await runExitCleanup();
       expect(
@@ -205,6 +223,7 @@ describe('CLI activation operation handoff', () => {
         argv,
         directory,
         {
+          credentialAuthority: new CredentialAuthority(),
           onActivationBootstrapReady: (operation) => {
             captured = operation;
             throw new Error('handoff failed');

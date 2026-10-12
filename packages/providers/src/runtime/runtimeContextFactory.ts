@@ -44,7 +44,6 @@ import { ProviderFileLifecycle } from '../providerFilePolicy.js';
 import { OAuthManager } from '../auth/index.js';
 import type { TokenStore } from '../auth/types.js';
 import {
-  createOwnedTokenStore,
   closeOwnedTokenStore,
   type CredentialAuthority,
 } from '../auth/proxy/credential-store-factory.js';
@@ -157,6 +156,7 @@ export interface IsolatedRuntimeContextOptions {
    */
   providerManager?: RuntimeProviderManager;
   prepare?: (context: {
+    readonly credentialAuthority?: CredentialAuthority;
     config: Config;
     settingsService: SettingsService;
     providerManager: RuntimeProviderManager;
@@ -309,17 +309,16 @@ function buildActivateClosure(
       }),
     );
 
-    if (options.prepare) {
-      await options.prepare({
-        config,
-        settingsService: resolvedSettingsService,
-        providerManager,
-        oauthManager,
-        providerFileLifecycle,
-        runtimeId: state.currentRuntimeId,
-        metadata: state.currentMetadata,
-      });
-    }
+    await options.prepare?.({
+      credentialAuthority: options.credentialAuthority,
+      config,
+      settingsService: resolvedSettingsService,
+      providerManager,
+      oauthManager,
+      providerFileLifecycle,
+      runtimeId: state.currentRuntimeId,
+      metadata: state.currentMetadata,
+    });
 
     await Promise.resolve(
       bindings.registerInfrastructure(providerManager, oauthManager, {
@@ -413,6 +412,16 @@ interface OwnedAuthResources {
   readonly tokenStore: TokenStore | undefined;
 }
 
+function requireCredentialAuthority(
+  authority: CredentialAuthority | undefined,
+): CredentialAuthority {
+  if (authority === undefined)
+    throw new Error(
+      'Owned runtime auth requires an explicit credential authority',
+    );
+  return authority;
+}
+
 function resolveOwnerOAuthManager(
   options: IsolatedRuntimeContextOptions,
   sessionMessageBus: MessageBus,
@@ -423,7 +432,9 @@ function resolveOwnerOAuthManager(
 ): { oauthManager: OAuthManager; ownedAuth: OwnedAuthResources } {
   const ownedTokenStore =
     options.oauthManager === undefined && options.tokenStore === undefined
-      ? createOwnedTokenStore()
+      ? requireCredentialAuthority(
+          options.credentialAuthority,
+        ).createTokenStore()
       : undefined;
   const oauthManager = resolveOAuthManager(
     sessionMessageBus,
@@ -537,13 +548,12 @@ export function createIsolatedRuntimeContext(
   validateRequiredOwnerOptions(options, settingsService);
   const runtimeId = isolatedRuntimeId(options.runtimeId);
 
-  const baseMetadata = initialRuntimeMetadata(options.metadata);
+  const metadata = initialRuntimeMetadata(options.metadata);
   const settingsOwner = adoptSessionSettings(
     options.settingsOwner,
     settingsService,
   );
   settingsOwner.bindTelemetry(options.config, options.borrowedTelemetry);
-  const ownerOptions = { ...options, settingsOwner };
   const providerFileLifecycle = createOwnerFileLifecycle(
     options.providerFileLifecycle,
   );
@@ -556,48 +566,45 @@ export function createIsolatedRuntimeContext(
     options.messageBus,
   );
 
-  const initialRuntimeContext = initialProviderContext(
-    ownerOptions,
-    settingsService,
-    providerFileLifecycle,
-    runtimeId,
-    baseMetadata,
-  );
-
-  const activationState = createActivationState(
-    runtimeId,
-    options.runtimeKind,
-    baseMetadata,
-  );
+  const state = createActivationState(runtimeId, options.runtimeKind, metadata);
 
   // @plan:PLAN-20260621-COREAPIREMED.P05 @requirement:REQ-005.2 @pseudocode lines 10-40
   // Adopt the caller-provided manager when supplied (mirrors the messageBus? adoption
   // at `options.messageBus ?? new MessageBus(...)`); otherwise construct a fresh one.
   const providerManager =
-    options.providerManager ?? new ProviderManager(initialRuntimeContext);
+    options.providerManager ??
+    new ProviderManager(
+      initialProviderContext(
+        { ...options, settingsOwner },
+        settingsService,
+        providerFileLifecycle,
+        runtimeId,
+        metadata,
+      ),
+      options.credentialAuthority,
+    );
   const selectedFactories = configureProviderRuntimeFactories(
     options.config,
     providerManager,
     options,
   );
-
   const { oauthManager, ownedAuth } = resolveOwnerOAuthManager(
     options,
     sessionMessageBus,
     options.config,
     providerManager,
-    activationState,
+    state,
     settingsService,
   );
 
   const { activate, cleanup } = assembleProviderLifetime(
     runtimeId,
-    baseMetadata,
-    activationState,
+    metadata,
+    state,
     settingsService,
     providerManager,
     oauthManager,
-    ownerOptions,
+    { ...options, settingsOwner },
     sessionMessageBus,
     providerFileLifecycle,
     ownedAuth,
@@ -606,8 +613,8 @@ export function createIsolatedRuntimeContext(
   return {
     runtimeId,
     ...selectedFactories,
-    readRuntimeKind: () => activationState.currentRuntimeKind,
-    metadata: baseMetadata,
+    readRuntimeKind: () => state.currentRuntimeKind,
+    metadata,
     settingsService,
     config: options.config,
     providerManager,

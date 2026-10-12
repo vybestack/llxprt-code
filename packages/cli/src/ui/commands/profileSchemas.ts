@@ -9,7 +9,6 @@ import {
   type CompleterFn,
 } from './schema/types.js';
 import type { RuntimeApi } from '../contexts/RuntimeContext.js';
-import { createTokenStore } from '@vybestack/llxprt-code-providers/auth.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import type { MessageActionReturn } from './types.js';
 
@@ -95,8 +94,7 @@ const bucketCompleter: CompleterFn = withFuzzyFilter(
       }
 
       // @plan:PLAN-20250214-CREDPROXY.P33
-      const tokenStore = createTokenStore();
-      const buckets = await tokenStore.listBuckets(provider);
+      const buckets = await ctx.oauthControl.listBuckets(provider);
 
       // tokens.tokens format: ["save", "model", "profile-name", "bucket1", "bucket2", ...]
       // Skip first 3 tokens (save, model, profile-name) to get already selected buckets

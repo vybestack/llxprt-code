@@ -1,3 +1,5 @@
+import { createTaskRegistration } from './runtimeFactories.js';
+import { HostCredentialOwner } from '@vybestack/llxprt-code-providers/auth.js';
 import { assertPreflightOwners } from './activationPreflightState.js';
 import {
   cleanupFailedFromConfig,
@@ -92,6 +94,10 @@ import {
 } from './host-github-broker-owner.js';
 
 export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
+  const credentialAuthority =
+    options.credentialAuthority ??
+    new HostCredentialOwner(process.env).authority;
+  options = { ...options, credentialAuthority };
   const images = prepareImageConstruction(options.imageOperation);
   const github = assembleHostGitHubBroker(options);
   let agent: Agent;
@@ -341,6 +347,7 @@ async function createAdoptedRuntime(
     return createIsolatedRuntimeContext(
       {
         runtimeId,
+        credentialAuthority: options.credentialAuthority,
         activationBindings:
           options.runtimeActivationBindings ??
           createRuntimeActivationBindings(),
@@ -396,7 +403,8 @@ function bindAdoptedDefinitions(
 ): void {
   sessionClient.bindMcpRuntime(
     mcpRuntime,
-    options.runtimeFactoryBindings?.taskToolRegistration(),
+    options.runtimeFactoryBindings?.taskToolRegistration() ??
+      createTaskRegistration(options.credentialAuthority),
     assembleAdoptedDefinitionOperations(
       mcpRuntime,
       options.definitionOwner,

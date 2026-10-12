@@ -36,7 +36,7 @@ import {
   updateActiveProviderBaseUrl,
 } from './providerMutations.js';
 import type { ProviderSwitcher } from './providerSwitch.js';
-import { createProviderKeyStorage } from '../auth/index.js';
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import {
   getProfileEphemeralSettings,
   getProfileModelParams,
@@ -72,6 +72,7 @@ function logger(): DebugLogger {
 type ProfileEphemeralWriter = (key: string, value: unknown) => void;
 
 interface AuthWiringDeps {
+  readonly getKeyStorage: () => Pick<ProviderKeyStorageLike, 'getKey'>;
   setEphemeral: ProfileEphemeralWriter;
   targetProviderName: string;
   warnings: string[];
@@ -109,6 +110,7 @@ interface NamedAuthResolution {
  */
 async function resolveNamedAuthKey(
   authKeyName: unknown,
+  getKeyStorage: () => Pick<ProviderKeyStorageLike, 'getKey'>,
 ): Promise<NamedAuthResolution> {
   if (typeof authKeyName !== 'string' || authKeyName.trim() === '') {
     return {
@@ -120,7 +122,7 @@ async function resolveNamedAuthKey(
   const trimmedKeyName = authKeyName.trim();
   let resolvedAuthKey: string | null;
   try {
-    resolvedAuthKey = await createProviderKeyStorage().getKey(trimmedKeyName);
+    resolvedAuthKey = await getKeyStorage().getKey(trimmedKeyName);
   } catch (error) {
     // A retrieval fault is not a missing key: the key may well be stored and
     // the keychain merely locked or unreadable. Suggesting '/key save' here
@@ -197,6 +199,7 @@ async function wireAuthBeforeSwitch(
 ): Promise<AuthWiringResult> {
   const namedAuth = await resolveNamedAuthKey(
     getProfileEphemeralSettings(sanitizedProfile)['auth-key-name'],
+    deps.getKeyStorage,
   );
   const setEphemeralSetting = deps.setEphemeral;
   clearProfileEphemerals(previousKeys, sanitizedProfile, setEphemeralSetting);
@@ -559,6 +562,14 @@ function buildProfileApplicationContext(
     targetProviderName,
     providerRecord,
     authDeps: {
+      getKeyStorage: () => {
+        const storage = providerManager.getProviderKeys?.();
+        if (!storage)
+          throw new Error(
+            'Profile key resolution requires an explicit credential owner',
+          );
+        return storage;
+      },
       setEphemeral,
       targetProviderName,
       warnings,

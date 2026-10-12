@@ -83,7 +83,7 @@ void vi.mock('./provider-usage-info.js', () => ({
 
 import { OAuthManager } from './oauth-manager.js';
 
-function createTokenStore(): TokenStore {
+function makeTokenStore(): TokenStore {
   return {
     saveToken: vi.fn(async () => undefined),
     getToken: vi.fn(async () => null),
@@ -198,7 +198,7 @@ describe('OAuthManager wiring', () => {
   });
 
   it('constructs submodules, passes shared instances, and wires authenticator/delegate', () => {
-    const tokenStore = createTokenStore();
+    const tokenStore = makeTokenStore();
     const config = {
       getEphemeralSetting: vi.fn(),
     } as unknown as import('@vybestack/llxprt-code-core').Config;
@@ -272,14 +272,14 @@ describe('OAuthManager wiring', () => {
       'authenticateMultipleBuckets',
     );
 
-    new OAuthManager(createTokenStore());
+    new OAuthManager(makeTokenStore());
 
     expect(getOAuthTokenSpy).not.toHaveBeenCalled();
     expect(authenticateMultipleBucketsSpy).not.toHaveBeenCalled();
   });
 
   it('delegates provider registry methods', async () => {
-    const tokenStore = createTokenStore();
+    const tokenStore = makeTokenStore();
     const manager = new OAuthManager(tokenStore);
     const provider = createProvider('claudecode');
 
@@ -314,7 +314,7 @@ describe('OAuthManager wiring', () => {
   });
 
   it('delegates coordinator, orchestrator, status service, and usage module methods', async () => {
-    const tokenStore = createTokenStore();
+    const tokenStore = makeTokenStore();
     // Issue #2616: the manager reads its settings reader via
     // config.getSettingsService() — the stub models that surface.
     const settingsService = new SettingsService();
@@ -521,7 +521,7 @@ describe('OAuthManager wiring', () => {
   });
 
   it('getAnthropicUsageInfo returns null when the claudecode provider is not registered', async () => {
-    const tokenStore = createTokenStore();
+    const tokenStore = makeTokenStore();
     const manager = new OAuthManager(tokenStore);
 
     const providerRegistry = wiring.state.providerRegistry as {
@@ -534,7 +534,7 @@ describe('OAuthManager wiring', () => {
   });
 
   it('satisfies BucketFailoverOAuthManagerLike at compile-time', () => {
-    const manager = new OAuthManager(createTokenStore());
+    const manager = new OAuthManager(makeTokenStore());
     const managerLike: BucketFailoverOAuthManagerLike = manager;
     expect(managerLike).toBeDefined();
   });

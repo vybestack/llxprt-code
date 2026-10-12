@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../../providers/src/auth/proxy/credential-store-factory.js';
 import {
   createContentGeneratorConfig,
   createContentGenerator,
@@ -117,6 +118,8 @@ describe('CLI provider manager creation uses concrete providers', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new NodeFileSystem(),
       allowBrowserEnvironment: true,
     });
@@ -167,6 +170,8 @@ describe('CLI provider manager creation uses concrete providers', () => {
           config: cfg,
         });
         const { manager } = createProviderManager(rt, {
+          credentialAuthority: new CredentialAuthority(),
+
           fileSystem: new NodeFileSystem(),
           allowBrowserEnvironment: true,
           config: cfg,
@@ -205,6 +210,8 @@ describe('CLI provider manager creation uses concrete providers', () => {
 
   it('CLI foreground assembly exposes the provider manager on its Config', () => {
     const assembled = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService: new SettingsService(),
       config,
       runtimeId: 'p13-consumer-test',
@@ -237,6 +244,8 @@ describe('CLI provider manager creation uses concrete providers', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new NodeFileSystem(),
       allowBrowserEnvironment: true,
     });
@@ -266,6 +275,8 @@ describe('CLI provider manager creation uses concrete providers', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new NodeFileSystem(),
       allowBrowserEnvironment: true,
     });
@@ -291,6 +302,8 @@ describe('CLI provider manager creation uses concrete providers', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new NodeFileSystem(),
       allowBrowserEnvironment: true,
     });
@@ -333,6 +346,8 @@ describe('CLI provider manager creation uses concrete providers', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new NodeFileSystem(),
       allowBrowserEnvironment: true,
     });
@@ -395,6 +410,8 @@ describe('Provider switching reachable through CLI/runtime flow', () => {
     });
     settingsService = new SettingsService();
     const assembled = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+
       settingsService,
       config,
       runtimeId: 'p13-switch-test',
@@ -546,6 +563,8 @@ describe('Provider-backed content generator path reachable through runtime', () 
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new NodeFileSystem(),
       allowBrowserEnvironment: true,
     });
@@ -606,6 +625,8 @@ describe('Provider-backed content generator path reachable through runtime', () 
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new NodeFileSystem(),
       allowBrowserEnvironment: true,
     });
@@ -681,6 +702,8 @@ describe('Provider-backed content generator path reachable through runtime', () 
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      credentialAuthority: new CredentialAuthority(),
+
       fileSystem: new NodeFileSystem(),
       allowBrowserEnvironment: true,
     });

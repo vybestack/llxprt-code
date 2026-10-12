@@ -1,3 +1,4 @@
+import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -8,6 +9,7 @@ import { parseEphemeralSettingValue } from './ephemeralSettings.js';
 import { parseModelParamValue } from './modelParamParser.js';
 
 export interface EphemeralSettingTarget {
+  getProviderKeys?(): ProviderKeyStorageLike;
   setEphemeralSetting(key: string, value: unknown): void;
 }
 

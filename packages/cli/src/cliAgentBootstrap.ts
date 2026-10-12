@@ -1,3 +1,7 @@
+import type {
+  CredentialAuthority,
+  OAuthManager,
+} from '@vybestack/llxprt-code-providers/auth.js';
 import { cliSkillOperations } from './config/configBuilder.js';
 /**
  * @license
@@ -6,7 +10,6 @@ import { cliSkillOperations } from './config/configBuilder.js';
  */
 import { createGitHubBrokerClient } from './config/githubBrokerClient.js';
 import type { GitHubBrokerClient } from '@vybestack/llxprt-code-tools';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
@@ -45,6 +48,7 @@ import {
 } from './config/profileAuthEphemerals.js';
 
 export interface ForegroundAgentOptions {
+  readonly credentialAuthority?: CredentialAuthority;
   readonly githubBrokerClient?: GitHubBrokerClient;
   readonly oauthManager?: OAuthManager;
   readonly providerFileLifecycle?: ProviderFileLifecycle;
@@ -90,8 +94,36 @@ export interface ForegroundAgentOptions {
  * provider is derived from config (or the agent fallback); the model is
  * reasserted when it is not the placeholder sentinel.
  */
+function notifyCliSkills(
+  onSkills: ForegroundAgentOptions['onSkills'],
+  skills: McpRuntimeOwner['workspaceSkills']['operations'],
+): void {
+  onSkills?.({
+    list: (all) => skills.list(all),
+    find: (name) => skills.find(name),
+    reload: () => skills.reload(),
+    isAdminEnabled: () => skills.isAdminEnabled(),
+  });
+}
+
+function selectForegroundBroker(
+  borrowed: GitHubBrokerClient | undefined,
+  authority: CredentialAuthority | undefined,
+): Pick<
+  Parameters<typeof fromConfig>[0],
+  'githubBrokerClient' | 'disposeGitHubBroker'
+> {
+  if (borrowed !== undefined) return { githubBrokerClient: borrowed };
+  const owned = createGitHubBrokerClient(authority);
+  return {
+    githubBrokerClient: owned,
+    disposeGitHubBroker: async () => owned.dispose(),
+  };
+}
+
 export async function createForegroundAgent({
   githubBrokerClient,
+  credentialAuthority,
   oauthManager,
   providerFileLifecycle,
   config,
@@ -143,7 +175,8 @@ export async function createForegroundAgent({
     cliSkillOperations(config),
   );
   const agent = await fromConfig({
-    githubBrokerClient: githubBrokerClient ?? createGitHubBrokerClient(),
+    ...selectForegroundBroker(githubBrokerClient, credentialAuthority),
+    credentialAuthority,
     oauthManager,
     providerFileLifecycle,
     settingsService,
@@ -162,13 +195,7 @@ export async function createForegroundAgent({
   onExtensionRestart?.((extension) =>
     mcpRuntime.extensionOperations.restart(extension),
   );
-  const skills = mcpRuntime.workspaceSkills.operations;
-  onSkills?.({
-    list: (all) => skills.list(all),
-    find: (name) => skills.find(name),
-    reload: () => skills.reload(),
-    isAdminEnabled: () => skills.isAdminEnabled(),
-  });
+  notifyCliSkills(onSkills, mcpRuntime.workspaceSkills.operations);
 
   // Wire the session policy engine to UPDATE_POLICY bus messages ("Allow for
   // this session/for all future sessions") against the exact Config engine

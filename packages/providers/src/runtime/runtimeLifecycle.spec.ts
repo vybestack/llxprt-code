@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -155,6 +156,8 @@ describe('explicit runtime lifecycle', () => {
       expect(() =>
         createIsolatedRuntimeContext(
           {
+            credentialAuthority: new CredentialAuthority(),
+
             config,
             runtimeId,
           },
