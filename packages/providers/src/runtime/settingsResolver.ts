@@ -113,6 +113,11 @@ async function resolveAndApplyApiKey(
     return;
   }
 
+  // Replay uses its own token and must not read real keyrings or keyfiles.
+  if (providerName === 'fake') {
+    return;
+  }
+
   // 2. --key-name (CLI flag, named key from keyring)
   const keyNameToUse = bootstrapArgs?.keyNameOverride ?? null;
   if (

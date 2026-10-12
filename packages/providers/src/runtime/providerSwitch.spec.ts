@@ -8,7 +8,15 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
  */
 
 import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
-import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
+import type { ModelProfileInfoPayload } from '@vybestack/llxprt-code-core/utils/events.js';
+
+function observeModelProfiles(): ModelProfileInfoPayload[] {
+  const profiles: ModelProfileInfoPayload[] = [];
+  switchInputs[6].subscribeModelChanges((profile) => {
+    if (profile !== undefined) profiles.push(profile);
+  });
+  return profiles;
+}
 
 const realProviderMutationsModule = {
   ...(await import('./providerMutations.js')),
@@ -235,14 +243,14 @@ describe('providerSwitch', () => {
 
     it('emits ModelProfileChanged with resolved model when modelToApply is empty', async () => {
       const { switchActiveProvider } = await import('./providerSwitch.js');
-      const emitSpy = vi.spyOn(coreEvents, 'emitModelProfileChanged');
+      const emittedProfiles = observeModelProfiles();
 
       // computeModelDefaults mock returns {} so modelToApply stays empty.
       // getActiveModelName mock returns 'gpt-4' as fallback.
       await switchActiveProvider('gemini', {}, ...stubSwitchInputs());
 
-      expect(emitSpy).toHaveBeenCalledTimes(1);
-      const emitted = emitSpy.mock.calls[0][0];
+      expect(emittedProfiles).toHaveLength(1);
+      const emitted = emittedProfiles[0];
       // Must NOT be empty string — should fall back to the active model
       expect(emitted.model).not.toBe('');
       expect(emitted.model).toBe('gpt-4');
@@ -251,8 +259,6 @@ describe('providerSwitch', () => {
 
     it('does not emit empty model/displayLabel even when no default model exists', async () => {
       const { switchActiveProvider } = await import('./providerSwitch.js');
-      const emitSpy = vi.spyOn(coreEvents, 'emitModelProfileChanged');
-
       // Make the provider return no default model so modelToApply resolves to ''
       const { config, settingsService, providerManager } = {
         config: new Config({
@@ -287,11 +293,12 @@ describe('providerSwitch', () => {
         async () => {},
         ownSettings(config, settingsService),
       ];
+      const emittedProfiles = observeModelProfiles();
 
       await switchActiveProvider('gemini', {}, ...stubSwitchInputs());
 
-      expect(emitSpy).toHaveBeenCalledTimes(1);
-      const emitted = emitSpy.mock.calls[0][0];
+      expect(emittedProfiles).toHaveLength(1);
+      const emitted = emittedProfiles[0];
       // Even with no default model, must not emit empty string
       expect(emitted.model).not.toBe('');
       expect(emitted.displayLabel).not.toBe('');
@@ -299,11 +306,11 @@ describe('providerSwitch', () => {
 
     it('does not emit empty displayLabel when no profile and no modelToApply', async () => {
       const { switchActiveProvider } = await import('./providerSwitch.js');
-      const emitSpy = vi.spyOn(coreEvents, 'emitModelProfileChanged');
+      const emittedProfiles = observeModelProfiles();
 
       await switchActiveProvider('gemini', {}, ...stubSwitchInputs());
 
-      const emitted = emitSpy.mock.calls[0][0];
+      const emitted = emittedProfiles[0];
       expect(emitted.displayLabel).not.toBe('');
       // Falls back to active model name when no profile
       expect(emitted.displayLabel).toBe('gpt-4');
@@ -311,8 +318,6 @@ describe('providerSwitch', () => {
 
     it('falls back to provider name when active model, config model, and provider default are all empty', async () => {
       const { switchActiveProvider } = await import('./providerSwitch.js');
-      const emitSpy = vi.spyOn(coreEvents, 'emitModelProfileChanged');
-
       // Override mocks so ALL model sources return empty.
       // Provider manager active name must differ from the target ('gemini')
       // so that switchActiveProvider actually performs a switch.
@@ -349,11 +354,12 @@ describe('providerSwitch', () => {
         async () => {},
         ownSettings(config, settingsService),
       ];
+      const emittedProfiles = observeModelProfiles();
 
       await switchActiveProvider('gemini', {}, ...stubSwitchInputs());
 
-      expect(emitSpy).toHaveBeenCalledTimes(1);
-      const emitted = emitSpy.mock.calls[0][0];
+      expect(emittedProfiles).toHaveLength(1);
+      const emitted = emittedProfiles[0];
       // model must NEVER be empty — fallback chain ends with provider name
       expect(emitted.model).not.toBe('');
       expect(emitted.model).toBe('gemini');
@@ -404,11 +410,11 @@ describe('providerSwitch', () => {
         },
         ownSettings(config, settingsService),
       ];
-      const emitSpy = vi.spyOn(coreEvents, 'emitModelProfileChanged');
+      const emittedProfiles = observeModelProfiles();
       await switchActiveProvider('gemini', {}, ...stubSwitchInputs());
 
-      expect(emitSpy).toHaveBeenCalledTimes(1);
-      const emitted = emitSpy.mock.calls[0][0];
+      expect(emittedProfiles).toHaveLength(1);
+      const emitted = emittedProfiles[0];
       // Must NOT use stale 'gpt-4-stale' from the global accessor.
       // Should use context-scoped config model 'gemini-2.0-flash'.
       expect(emitted.model).not.toBe('gpt-4-stale');
@@ -454,10 +460,10 @@ describe('providerSwitch', () => {
         },
         ownSettings(config, settingsService),
       ];
-      const emitSpy = vi.spyOn(coreEvents, 'emitModelProfileChanged');
+      const emittedProfiles = observeModelProfiles();
       await switchActiveProvider('anthropic', {}, ...stubSwitchInputs());
 
-      const emitted = emitSpy.mock.calls[0][0];
+      const emitted = emittedProfiles[0];
       // Must use context-scoped model, not stale global
       expect(emitted.model).toBe('claude-sonnet');
       expect(emitted.providerName).toBe('anthropic');

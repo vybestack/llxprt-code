@@ -45,8 +45,6 @@ const hoistedConfigMocks = {
     emitConsoleLog: vi.fn(),
   },
 } as HoistedConfigMocks;
-// Exposed for assertions / setup in the JIT context & model-change tests below.
-const mockCoreEvents = hoistedConfigMocks.coreEvents;
 
 const __actual2 = { ...(await import('fs')) };
 void vi.mock('fs', () => buildFsMockBody(__actual2));
@@ -328,15 +326,18 @@ describe('Session model selection with immutable Config declarations', () => {
       );
       config.setFallbackMode(true);
       expect(config.isInFallbackMode()).toBe(true);
-      mockCoreEvents.emitModelChanged.mockClear();
+      const selectedModels: Array<string | undefined> = [];
+      owner.subscribeModelChanges(() => {
+        selectedModels.push(owner.readSelectedModel());
+      });
       const publication = owner.beginModelPublication();
       owner.chooseModel(selected);
       publication.commit();
       expect(owner.readSelectedModel()).toBe(selected);
       expect(config.getModel()).toBe(initial);
       expect(config.isInFallbackMode()).toBe(true);
-      expect(mockCoreEvents.emitModelChanged.mock.calls).toStrictEqual(
-        initial === selected ? [] : [[selected]],
+      expect(selectedModels).toStrictEqual(
+        initial === selected ? [] : [selected],
       );
     });
   }

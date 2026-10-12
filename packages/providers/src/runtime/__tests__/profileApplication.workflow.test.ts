@@ -3,7 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { assembleModelSelection } from '../providerMutations.js';
+import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import { describe, expect, it, vi } from 'bun:test';
 import { writeFile } from 'node:fs/promises';

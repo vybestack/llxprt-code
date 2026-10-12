@@ -273,7 +273,12 @@ async function resolveSlashQuery(
             runtimeSettings.owner,
             runtimeSettings.store,
             agent.workspace,
+            agent.modelParameters,
+            agent.settings,
+            agent.toolFormat,
+            agent.providerReads,
           ),
+          agent.sessionClient.fetch,
         )
       : undefined,
     providerManager,

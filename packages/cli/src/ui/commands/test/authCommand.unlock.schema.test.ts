@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { beforeEach, describe, it, expect } from 'bun:test';
 import { createCompletionHandler } from '../schema/index.js';
 import { authCommand } from '../authCommand.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
@@ -36,7 +36,10 @@ function isLiteralNodeWithValue(
  * completion behavior, not just executor mock calls.
  */
 describe('authCommand unlock schema completion (Finding 8)', () => {
-  const mockContext = createMockCommandContext();
+  let mockContext: ReturnType<typeof createMockCommandContext>;
+  beforeEach(() => {
+    mockContext = createMockCommandContext();
+  });
 
   function getProviderSchema(): CommandArgumentSchema {
     const schema = authCommand.schema;

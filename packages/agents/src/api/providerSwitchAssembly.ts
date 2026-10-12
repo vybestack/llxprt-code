@@ -5,7 +5,7 @@
  */
 
 import { assembleSessionImages } from './session-image-assembly.js';
-import { assembleModelSelection } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { assembleModelSelection } from './model-selection.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';

@@ -87,26 +87,19 @@ export async function cancelAndJoinMcp(
 }
 
 export async function joinAgentWork(
-  agent: {
-    profiles: { cancelAndJoin(): Promise<void> };
-    mcp: { cancelAndJoin(): Promise<void> };
-  },
-  tasks: { hasPendingWork(): boolean; join(): Promise<void> },
-  ownership: Pick<OwnershipRecord, 'disposeMcpRuntime'>,
+  cancelAndJoinProfiles: () => Promise<void>,
+  cancelAndJoinMcpAuth: () => Promise<void>,
+  hasPendingTasks: () => boolean,
+  joinTasks: () => Promise<void>,
+  disposeMcpRuntime: () => Promise<void> | void,
   errors: unknown[],
 ): Promise<void> {
-  const joinedTasks = collectDisposalError(errors, () => tasks.join());
+  const joinedTasks = collectDisposalError(errors, joinTasks);
   const stopMcp = (): Promise<void> =>
-    collectDisposalError(errors, () => ownership.disposeMcpRuntime?.());
-  const stopping = tasks.hasPendingWork()
-    ? joinedTasks.then(stopMcp)
-    : stopMcp();
-  const authenticating = collectDisposalError(errors, () =>
-    agent.mcp.cancelAndJoin(),
-  );
-  const replacing = collectDisposalError(errors, () =>
-    agent.profiles.cancelAndJoin(),
-  );
+    collectDisposalError(errors, disposeMcpRuntime);
+  const stopping = hasPendingTasks() ? joinedTasks.then(stopMcp) : stopMcp();
+  const authenticating = collectDisposalError(errors, cancelAndJoinMcpAuth);
+  const replacing = collectDisposalError(errors, cancelAndJoinProfiles);
   await Promise.all([joinedTasks, stopping, authenticating, replacing]);
 }
 
@@ -186,10 +179,10 @@ export async function joinCapturedRun(
 }
 
 export async function finishOwnedHooks(
-  hooks: { finishSessionEnd(): Promise<void> },
-  client: { disposeHooks(): Promise<void> },
+  finishSessionEnd: () => Promise<void>,
+  disposeHooks: () => Promise<void>,
   errors: unknown[],
 ): Promise<void> {
-  await collectDisposalError(errors, () => hooks.finishSessionEnd());
-  await collectDisposalError(errors, () => client.disposeHooks());
+  await collectDisposalError(errors, finishSessionEnd);
+  await collectDisposalError(errors, disposeHooks);
 }

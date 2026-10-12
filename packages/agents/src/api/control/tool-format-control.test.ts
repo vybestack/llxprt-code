@@ -4,9 +4,25 @@
 
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { useRuntimeTestOwners } from './__tests__/runtime-owner-test-helpers.js';
+import { useRuntimeTestOwners } from '../../../../providers/src/runtime/__tests__/runtime-owner-test-helpers.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { setActiveToolFormatOverride } from './providerMutations.js';
+import {
+  assembleToolFormatControl,
+  type ToolFormatOverrideLiteral,
+} from './tool-format-control.js';
+async function setActiveToolFormatOverride(
+  format: ToolFormatOverrideLiteral | null,
+  owner: SessionSettingsOwner,
+  provider: typeof activeProvider,
+) {
+  return assembleToolFormatControl(
+    owner.readToolFormat.bind(owner),
+    owner.writeToolFormat.bind(owner),
+    () => provider,
+    () => {},
+    () => {},
+  ).setOverride(format);
+}
 
 const activeProvider = {
   name: 'openai',

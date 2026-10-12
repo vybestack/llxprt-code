@@ -1,9 +1,10 @@
+import { extractModelParams } from '@vybestack/llxprt-code-providers/model-parameter-data.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { ModelSelectionOperations } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import type { ModelSelectionOperations } from './model-selection.js';
 
 /**
  * Consolidated provider-activation / authentication executor (#2374, part of
@@ -46,8 +47,7 @@ import { setActiveModel } from '@vybestack/llxprt-code-providers/runtime/provide
 import {
   setActiveModelParam,
   clearActiveModelParam,
-  getActiveModelParams,
-} from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
+} from './model-parameters.js';
 import { applyCliArgumentOverrides } from '@vybestack/llxprt-code-providers/runtime/settingsResolver.js';
 import {
   setProviderApiKey,
@@ -622,10 +622,12 @@ async function applyModelAndParams(
   // clear all existing params — wiping profile defaults (#2374 CodeRabbit).
   if (intent.modelParams !== undefined) {
     const desiredParams = intent.modelParams;
-    const existingParams = getActiveModelParams(
-      settingsService,
-      activeProvider?.name,
-    );
+    const existingParams =
+      activeProvider === undefined
+        ? {}
+        : extractModelParams(
+            settingsService.getProviderSettings(activeProvider.name),
+          );
     for (const [key, value] of Object.entries(desiredParams)) {
       setActiveModelParam(key, value, settingsService, activeProvider?.name);
     }

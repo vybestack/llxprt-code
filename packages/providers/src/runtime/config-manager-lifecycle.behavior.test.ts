@@ -4,7 +4,7 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { listProviders } from './providerReadOperations.js';
+import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
 
 import { describe, expect, it, vi } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -139,8 +139,8 @@ describe('Config-independent provider owner lifecycle', () => {
   });
 
   it('rejects a missing listing owner without consulting another session', () => {
-    expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
-      'Provider listing requires an explicit owner',
+    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+      'Provider reads require an explicit session owner',
     );
   });
   it('keeps borrowed manager subscriptions usable after facade runtime cleanup', async () => {

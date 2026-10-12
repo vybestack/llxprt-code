@@ -1,9 +1,10 @@
 import { buildRuntimeProfileSnapshot } from '../../../../agents/src/api/profileSnapshot.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { assembleModelSelection } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
 import {
   assembleProfileApplication,
   assembleProviderSwitch,
+  SessionProviderReads,
 } from '@vybestack/llxprt-code-agents';
 import {
   providerSwitchInputs,
@@ -27,16 +28,14 @@ const definitionFixture = installDefinitionRuntimeFixture();
 import { afterEach, describe, expect, it } from 'bun:test';
 import { SettingsService, type Profile } from '@vybestack/llxprt-code-settings';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
+import { setActiveModelParam } from '../../../../agents/src/api/model-parameters.js';
 import {
   activateIsolatedRuntimeContext,
   createIsolatedRuntimeContext,
   setActiveModel,
-  setActiveModelParam,
   switchActiveProvider,
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
-  listProviders,
-  getEphemeralSettings,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import {
   Config,
@@ -48,7 +47,6 @@ import {
   cleanupTempDirectory,
   createTempDirectory,
 } from '../../integration-tests/test-utils.js';
-import { MissingProviderRuntimeError } from '../../../../providers/src/runtime/messages.js';
 
 interface RuntimeFixture {
   id: string;
@@ -516,13 +514,15 @@ describe('CLI runtime isolation', () => {
   });
 
   it('enforces runtime guard for ownerless provider queries @plan:PLAN-20251023-STATELESS-HARDENING.P07 @requirement:REQ-SP4-005 @pseudocode provider-runtime-handling.md lines 10-16', () => {
-    expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
-      'Provider listing requires an explicit owner',
+    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+      'Provider reads require an explicit session owner',
     );
   });
 
   it('enforces explicit SettingsService for ownerless settings queries @plan:PLAN-20251023-STATELESS-HARDENING.P08 @requirement:REQ-SP4-004', () => {
-    expect(() => getEphemeralSettings()).toThrow(MissingProviderRuntimeError);
+    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+      'Provider reads require an explicit session owner',
+    );
   });
 
   it('prepares a stateless invocation from the explicit runtime context', async () => {
@@ -560,8 +560,8 @@ describe('CLI runtime isolation', () => {
   });
 
   it('rejects ownerless provider queries without consulting process preference', () => {
-    expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
-      'Provider listing requires an explicit owner',
+    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+      'Provider reads require an explicit session owner',
     );
   });
 });

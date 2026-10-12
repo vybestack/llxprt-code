@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { applyProfileCascade } from './profileApplication.js';
-import { assembleModelSelection } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { assembleModelSelection } from './model-selection.js';
 import { buildCliStyleConfig } from './__tests__/helpers/buildCliStyleConfig.js';
 import { assembleProviderSwitch } from './providerSwitchAssembly.js';
 import type { Profile } from '@vybestack/llxprt-code-settings';

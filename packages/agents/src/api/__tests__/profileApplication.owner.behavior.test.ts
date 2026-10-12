@@ -17,10 +17,6 @@ import { ProfileManager, type Profile } from '@vybestack/llxprt-code-settings';
 import { FakeProvider } from '@vybestack/llxprt-code-providers';
 import { fileURLToPath } from 'node:url';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import {
-  getActiveModelName,
-  getActiveProviderName,
-} from '@vybestack/llxprt-code-providers/runtime.js';
 import type { TokenStore, OAuthToken } from '@vybestack/llxprt-code-auth';
 import {
   CoreEvent,
@@ -285,14 +281,10 @@ describe('public profile application ownership outside ALS', () => {
     await createSelection(a, 'a-next');
     await a.agent.profiles.apply('selected');
     expect(a.agent.getModel()).toBe('a-next');
-    expect(getActiveModelName(a.built.settingsOwner)).toBe('a-next');
-    expect(getActiveModelName(b.built.settingsOwner)).toBe('b-selected');
-    expect(
-      getActiveProviderName(a.built.settingsOwner, a.built.providerManager),
-    ).toBe('fake');
-    expect(
-      getActiveProviderName(b.built.settingsOwner, b.built.providerManager),
-    ).toBe('fake');
+    expect(a.agent.providerReads.getActiveModelName()).toBe('a-next');
+    expect(b.agent.providerReads.getActiveModelName()).toBe('b-selected');
+    expect(a.agent.providerReads.getActiveProviderName()).toBe('fake');
+    expect(b.agent.providerReads.getActiveProviderName()).toBe('fake');
     expect(
       a.built.settingsOwner.readNamedParameter('reasoning.enabled'),
     ).toBeUndefined();

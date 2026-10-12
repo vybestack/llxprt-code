@@ -16,10 +16,7 @@ import {
   getModelsDevProviderIds,
   type HydratedModel,
 } from '@vybestack/llxprt-code-core/models/hydration.js';
-import {
-  initializeModelRegistry,
-  getModelRegistry,
-} from '@vybestack/llxprt-code-core/models/registry.js';
+import { type ModelRegistry } from '@vybestack/llxprt-code-core/models/registry.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 
 const logger = new DebugLogger('llxprt:provider:manager');
@@ -30,6 +27,7 @@ const logger = new DebugLogger('llxprt:provider:manager');
  * returns none.
  */
 export async function resolveAvailableModels(
+  registry: ModelRegistry,
   provider: IProvider,
 ): Promise<HydratedModel[]> {
   // Step 1: Get models from provider (live API or fallback)
@@ -37,7 +35,7 @@ export async function resolveAvailableModels(
 
   // Step 2: Initialize registry if needed (non-blocking failure)
   try {
-    await initializeModelRegistry();
+    await registry.initialize();
   } catch {
     logger.debug(
       () =>
@@ -53,6 +51,7 @@ export async function resolveAvailableModels(
 
   // Step 4: If provider returned no models, fall back to registry-only models
   const registryModels = collectRegistryModels(
+    registry,
     baseModels,
     modelsDevProviderIds,
     provider.name,
@@ -68,6 +67,7 @@ export async function resolveAvailableModels(
 
   // Step 5: Hydrate with models.dev data
   const hydratedModels = await hydrateModelsWithRegistry(
+    registry,
     baseModels,
     modelsDevProviderIds,
   );
@@ -81,6 +81,7 @@ export async function resolveAvailableModels(
  * Returns the models array if found, or undefined to continue hydration.
  */
 function collectRegistryModels(
+  registry: ModelRegistry,
   baseModels: Awaited<ReturnType<IProvider['getModels']>>,
   modelsDevProviderIds: string[],
   providerName: string,
@@ -93,7 +94,6 @@ function collectRegistryModels(
     () =>
       `[getAvailableModels] Provider ${providerName} returned 0 models, falling back to registry`,
   );
-  const registry = getModelRegistry();
   if (!registry.isInitialized()) {
     return undefined;
   }
@@ -111,9 +111,7 @@ function collectRegistryModels(
  * Collect models that do not explicitly disable tool support.
  */
 function collectSupportedModels(
-  registryModels: ReturnType<
-    ReturnType<typeof getModelRegistry>['getByProvider']
-  >,
+  registryModels: ReturnType<ModelRegistry['getByProvider']>,
   providerName: string,
   output: HydratedModel[],
 ): void {

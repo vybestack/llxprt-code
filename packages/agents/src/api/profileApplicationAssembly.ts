@@ -5,7 +5,7 @@ import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { assembleModelSelection } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { assembleModelSelection } from './model-selection.js';
 
 import type {
   Config,
@@ -16,11 +16,11 @@ import type { ProfileDefinitionReads } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { applyProfileCascade } from './profileApplication.js';
 import {
+  captureProfileModelParams,
   finishProfileApplication,
   type ProfileLoadOptions,
   type ProfileLoadResult,
 } from './profileSnapshot.js';
-import { getActiveModelParams } from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
 
 import { checkpointProviderTransition } from './providerTransitionCheckpoint.js';
@@ -293,7 +293,9 @@ export function assembleAgentProfiles(
       settingsOwner,
       profiles,
       async (result, signal) => {
-        const modelParams = getActiveModelParams(settings, result.providerName);
+        const modelParams = captureProfileModelParams(
+          settings.getProviderSettings(result.providerName),
+        );
         const replacement = await prepareReplacement(
           result.providerChanged,
           signal,

@@ -1,3 +1,4 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -127,6 +128,7 @@ function buildCodexUsageEndpoints(baseUrl?: string): string[] {
  * @returns Usage info if available, null on error
  */
 export async function fetchCodexUsage(
+  requestFetch: NetworkFetch,
   accessToken: string,
   accountId: string,
   baseUrl?: string,
@@ -145,6 +147,7 @@ export async function fetchCodexUsage(
 
   for (const endpoint of endpoints) {
     const result = await tryFetchCodexEndpoint(
+      requestFetch,
       endpoint,
       accessToken,
       accountId,
@@ -233,12 +236,13 @@ export function formatCodexUsage(usage: CodexUsageInfo): string[] {
  * Returns parsed data on success, null on failure.
  */
 async function tryFetchCodexEndpoint(
+  requestFetch: NetworkFetch,
   endpoint: string,
   accessToken: string,
   accountId: string,
 ): Promise<CodexUsageInfo | null> {
   try {
-    const response = await fetch(endpoint, {
+    const response = await requestFetch(endpoint, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${accessToken}`,

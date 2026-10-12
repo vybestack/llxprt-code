@@ -1,3 +1,4 @@
+import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -5,11 +6,7 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { useRuntimeTestOwners } from './__tests__/runtime-owner-test-helpers.js';
-import {
-  activateIsolatedRuntimeContext,
-  getActiveProviderName,
-  listProviders,
-} from './index.js';
+import { activateIsolatedRuntimeContext } from './index.js';
 
 describe('isolated activation preserves explicit foreground ownership (issue #2300)', () => {
   const owners = useRuntimeTestOwners();
@@ -24,13 +21,16 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
         await activateIsolatedRuntimeContext(isolated);
       else await isolated.activate();
       expect(
-        getActiveProviderName(
+        new SessionProviderReads(
           foreground.settingsOwner,
           foreground.providerManager,
-        ),
+          () => foreground.config.getModel(),
+          (provider) =>
+            foreground.settingsService.getProviderSettings(provider),
+        ).getActiveProviderName(),
       ).toBe('kimi');
       expect('providerManager' in foreground.config).toBe(false);
-      expect(listProviders(foreground.providerManager)).toContain('openai');
+      expect(foreground.providerManager.listProviders()).toContain('openai');
       expect(isolated.oauthManager).not.toBe(foreground.oauthManager);
     },
   );
@@ -49,7 +49,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
     expect(foreground.oauthManager?.runtimeMessageBus).toBe(
       foreground.runtimeMessageBus,
     );
-    expect(listProviders(foreground.providerManager)).toContain('openai');
+    expect(foreground.providerManager.listProviders()).toContain('openai');
   });
 
   it('cleanup leaves a foreground owner created after isolated activation usable', async () => {
@@ -68,8 +68,8 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
     const first = owners.isolated({ runtimeId: 'same-label' });
     const second = owners.isolated({ runtimeId: 'same-label' });
     await Promise.all([first.activate(), second.activate()]);
-    expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
-      'Provider listing requires an explicit owner',
+    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+      'Provider reads require an explicit session owner',
     );
     expect(first.oauthManager).not.toBe(second.oauthManager);
     await first.cleanup();

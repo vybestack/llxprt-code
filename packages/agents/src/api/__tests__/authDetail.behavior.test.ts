@@ -28,7 +28,6 @@ import type {
   TokenStore,
 } from '@vybestack/llxprt-code-providers/auth.js';
 import { AuthControl } from '../control/authControl.js';
-import type { AuthControlDeps } from '../control/authControl.js';
 import { createAgentAuthState } from '../control/authState.js';
 import type { AuthStatus } from '../agent.js';
 
@@ -135,7 +134,7 @@ async function makeManager(): Promise<{
 }
 
 /** Builds a real AuthControlDeps over the live manager. */
-function makeDeps(mgr: OAuthManager): AuthControlDeps {
+function makeDeps(mgr: OAuthManager) {
   const authState = createAgentAuthState();
   return {
     authState,
@@ -157,7 +156,15 @@ function makeDeps(mgr: OAuthManager): AuthControlDeps {
 /** Builds the control directly over the real manager (direct-construction seam). */
 function makeControl(mgr: OAuthManager): AuthControl {
   const deps = makeDeps(mgr);
-  return new AuthControl(deps);
+  return new AuthControl(
+    deps.authState,
+    deps.getCurrentProvider,
+    deps.getStatus,
+    deps.onOAuthPrompt,
+    deps.setBaseUrl,
+    deps.keysDeps,
+    deps.getOAuthManager,
+  );
 }
 
 /** Deep-collects every object key reachable from a value (arrays + nested objs). */

@@ -9,7 +9,7 @@ import { ApprovalMode } from '@vybestack/llxprt-code-core';
 
 import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core';
 
-import { assembleModelSelection } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { assembleModelSelection } from '../api/model-selection.js';
 
 import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 

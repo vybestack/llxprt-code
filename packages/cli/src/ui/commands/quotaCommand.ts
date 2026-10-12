@@ -1,3 +1,4 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -221,7 +222,9 @@ async function creditsAction(context: CommandContext): Promise<void> {
   }
 
   try {
-    const creditsMap = await oauthManager.getAllCodexRateLimitResetCredits();
+    const creditsMap = await oauthManager.getAllCodexRateLimitResetCredits(
+      context.runtimeApi.fetch,
+    );
 
     if (creditsMap.size === 0) {
       addInfo(context, NO_RESET_CREDITS_MSG);
@@ -258,9 +261,11 @@ async function isCodexAuthed(
  * Find all buckets with a credit that can be redeemed.
  */
 async function findRedeemableCredits(
+  requestFetch: NetworkFetch,
   oauthManager: QuotaOAuthControl,
 ): Promise<readonly RedeemableCredit[]> {
-  const creditsMap = await oauthManager.getAllCodexRateLimitResetCredits();
+  const creditsMap =
+    await oauthManager.getAllCodexRateLimitResetCredits(requestFetch);
   const redeemableCredits: RedeemableCredit[] = [];
 
   for (const [bucket, raw] of creditsMap.entries()) {
@@ -360,6 +365,7 @@ async function redeemResetCredit(
   const baseUrl = resolveBaseUrl(context);
   const redeemRequestId = randomUUID();
   const consumeResult = await consumeCodexRateLimitResetCredit(
+    context.runtimeApi.fetch,
     accessToken,
     accountId,
     creditId,
@@ -425,7 +431,10 @@ async function resetAction(
       return undefined;
     }
 
-    const redeemableCredits = await findRedeemableCredits(oauthManager);
+    const redeemableCredits = await findRedeemableCredits(
+      context.runtimeApi.fetch,
+      oauthManager,
+    );
     if (redeemableCredits.length === 0) {
       addInfo(context, NO_REDEEMABLE_CREDITS_MSG);
       return undefined;

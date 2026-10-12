@@ -1,3 +1,4 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -71,6 +72,7 @@ const SYNTHETIC_USAGE_ENDPOINT = 'https://api.synthetic.new/v2/quotas';
  * @returns Usage info if available, null on error
  */
 export async function fetchSyntheticUsage(
+  requestFetch: NetworkFetch,
   apiKey: string,
 ): Promise<SyntheticUsageInfo | null> {
   if (!apiKey || typeof apiKey !== 'string') {
@@ -79,7 +81,7 @@ export async function fetchSyntheticUsage(
   }
 
   try {
-    const response = await fetch(SYNTHETIC_USAGE_ENDPOINT, {
+    const response = await requestFetch(SYNTHETIC_USAGE_ENDPOINT, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${apiKey}`,

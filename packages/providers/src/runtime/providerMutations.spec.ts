@@ -10,10 +10,8 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import {
-  computeModelDefaults,
-  normalizeProviderBaseUrl,
-} from './providerMutations.js';
+import { computeModelDefaults } from '../model-defaults.js';
+import { normalizeProviderBaseUrl } from './providerMutations.js';
 import type { ModelDefaultRule } from '../composition/index.js';
 import { loadProviderAliasEntries } from '../composition/providerAliases.js';
 

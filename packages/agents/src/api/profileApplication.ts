@@ -18,12 +18,12 @@ import type {
   ProfileManager,
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
+import type { ModelSelectionOperations } from './model-selection.js';
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { captureProfileModelParams } from './profileSnapshot.js';
 import {
-  type ModelSelectionOperations,
   setActiveModel,
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
@@ -336,11 +336,9 @@ function applyProfileModelParams(
   if (!providerName)
     throw new Error('No active provider available to set model parameters.');
   const profileParams = getProfileModelParams(sanitizedProfile);
-  const existingParams = providerName
-    ? captureProfileModelParams(
-        settingsService.getProviderSettings(providerName),
-      )
-    : {};
+  const existingParams = captureProfileModelParams(
+    settingsService.getProviderSettings(providerName),
+  );
   for (const [key, value] of Object.entries(profileParams)) {
     settingsService.setProviderSetting(providerName, key, value);
   }

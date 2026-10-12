@@ -5,30 +5,33 @@
  */
 import type { SubscribeModelChanges } from '@vybestack/llxprt-code-core/utils/events.js';
 
-export class ClientModelSubscriptions {
-  private releaseSubscription: (() => void) | undefined;
-
-  bind(
-    subscribe: SubscribeModelChanges,
-    modelChanged: () => void,
-    profileChanged: () => void,
-  ): void {
-    if (this.releaseSubscription !== undefined)
-      throw new Error('Client model notifications are already bound');
-    this.releaseSubscription = subscribe((profile) => {
-      if (profile === undefined) modelChanged();
-      else profileChanged();
-    });
-  }
-
-  release(): unknown[] {
-    const failures: unknown[] = [];
+export function subscribe(
+  subscribeChanges: SubscribeModelChanges,
+  modelChanged: () => void,
+  profileChanged: () => void,
+  currentRelease: (() => void) | undefined,
+  onRelease: () => void,
+): () => void {
+  if (currentRelease !== undefined)
+    throw new Error('Client model notifications are already bound');
+  const unsubscribe = subscribeChanges((profile) => {
+    if (profile === undefined) modelChanged();
+    else profileChanged();
+  });
+  return () => {
     try {
-      this.releaseSubscription?.();
-    } catch (error) {
-      failures.push(error);
+      unsubscribe();
+    } finally {
+      onRelease();
     }
-    this.releaseSubscription = undefined;
-    return failures;
+  };
+}
+
+export function release(unsubscribe: (() => void) | undefined): unknown[] {
+  try {
+    unsubscribe?.();
+    return [];
+  } catch (error) {
+    return [error];
   }
 }

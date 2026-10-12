@@ -135,3 +135,12 @@ export type {
 } from './agent.js';
 
 export { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
+
+export type { AgentSettingsControl } from './control/settings-control.js';
+export type {
+  AgentToolFormatControl,
+  ToolFormatState,
+  ToolFormatOverrideLiteral,
+} from './control/tool-format-control.js';
+
+export type { AgentModelParametersControl } from './model-parameters.js';

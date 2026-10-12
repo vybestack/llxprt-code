@@ -76,11 +76,6 @@
       "bun": "./src/runtime/runtimeActivationBindings.ts",
       "import": "./dist/src/runtime/runtimeActivationBindings.js"
     },
-    "./runtime/providerReadOperations.js": {
-      "types": "./dist/src/runtime/providerReadOperations.d.ts",
-      "bun": "./src/runtime/providerReadOperations.ts",
-      "import": "./dist/src/runtime/providerReadOperations.js"
-    },
     "./runtime/assembleCliProviderRuntime.js": {
       "types": "./dist/src/runtime/assembleCliProviderRuntime.d.ts",
       "bun": "./src/runtime/assembleCliProviderRuntime.ts",
@@ -95,21 +90,6 @@
       "types": "./dist/src/runtime/settingsResolver.d.ts",
       "bun": "./src/runtime/settingsResolver.ts",
       "import": "./dist/src/runtime/settingsResolver.js"
-    },
-    "./runtime/ownerSettingsOperations.js": {
-      "types": "./dist/src/runtime/ownerSettingsOperations.d.ts",
-      "bun": "./src/runtime/ownerSettingsOperations.ts",
-      "import": "./dist/src/runtime/ownerSettingsOperations.js"
-    },
-    "./runtime/providerModelParameters.js": {
-      "types": "./dist/src/runtime/providerModelParameters.d.ts",
-      "bun": "./src/runtime/providerModelParameters.ts",
-      "import": "./dist/src/runtime/providerModelParameters.js"
-    },
-    "./runtime/providerStatus.js": {
-      "types": "./dist/src/runtime/providerStatus.d.ts",
-      "bun": "./src/runtime/providerStatus.ts",
-      "import": "./dist/src/runtime/providerStatus.js"
     },
     "./runtime/providerSwitch.js": {
       "types": "./dist/src/runtime/providerSwitch.d.ts",
@@ -252,6 +232,16 @@
       "types": "./dist/src/utils/toolResponsePayload.d.ts",
       "bun": "./src/utils/toolResponsePayload.ts",
       "import": "./dist/src/utils/toolResponsePayload.js"
+    },
+    "./model-parameter-data.js": {
+      "types": "./dist/src/model-parameter-data.d.ts",
+      "bun": "./src/model-parameter-data.ts",
+      "import": "./dist/src/model-parameter-data.js"
+    },
+    "./model-defaults.js": {
+      "types": "./dist/src/model-defaults.d.ts",
+      "bun": "./src/model-defaults.ts",
+      "import": "./dist/src/model-defaults.js"
     }
   },
   "scripts": {

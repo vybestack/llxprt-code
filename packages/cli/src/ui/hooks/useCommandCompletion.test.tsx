@@ -211,7 +211,10 @@ const setupMocks = ({
 };
 
 describe('useCommandCompletion', () => {
-  const mockCommandContext = createMockCommandContext();
+  let mockCommandContext: ReturnType<typeof createMockCommandContext>;
+  beforeEach(() => {
+    mockCommandContext = createMockCommandContext();
+  });
   const mockConfig = new Config({
     sessionId: crypto.randomUUID(),
     cwd: process.cwd(),
