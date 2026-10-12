@@ -923,8 +923,7 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-010
    */
   async updateSystemInstruction(): Promise<void> {
-    const client = this.deps.resolveClient();
-    await client.updateSystemInstruction();
+    await this.deps.resolveClient().updateSystemInstruction();
   }
 
   /**
@@ -934,8 +933,7 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-010
    */
   async addDirectoryContext(): Promise<void> {
-    const client = this.deps.resolveClient();
-    await client.addDirectoryContext();
+    await this.deps.resolveClient().addDirectoryContext();
   }
 
   /**
@@ -1183,9 +1181,8 @@ export class AgentImpl implements Agent {
    * @plan:PLAN-20260617-COREAPI.P16
    * @requirement:REQ-005
    */
-  private restoreChatVisibility(): Promise<void> {
-    return restoreAgentChatVisibility(this.deps.resolveClient());
-  }
+  private readonly restoreChatVisibility = (): Promise<void> =>
+    restoreAgentChatVisibility(this.deps.resolveClient());
 
   /**
    * Applies a profile's modelParams onto the live agent via the lazy runtime
@@ -1323,9 +1320,11 @@ export class AgentImpl implements Agent {
       cancelAndJoinOwnedWork: [
         () =>
           joinAgentWork(
-            this,
-            this.deps.taskLaunchOwner,
-            this.ownership,
+            () => this.profiles.cancelAndJoin(),
+            () => this.mcp.cancelAndJoin(),
+            () => this.deps.taskLaunchOwner.hasPendingWork(),
+            () => this.deps.taskLaunchOwner.join(),
+            () => this.ownership.disposeMcpRuntime?.(),
             errors,
           ),
         () => joinCapturedRun(run, errors),
@@ -1337,7 +1336,11 @@ export class AgentImpl implements Agent {
       ],
       flushRecording: [
         async () => {
-          await finishOwnedHooks(this.hooks, this.deps.sessionClient, errors);
+          await finishOwnedHooks(
+            () => this.hooks.finishSessionEnd(),
+            () => this.deps.sessionClient.disposeHooks(),
+            errors,
+          );
           await disposeAgentObservers(
             this.ownership,
             this.hooks,
