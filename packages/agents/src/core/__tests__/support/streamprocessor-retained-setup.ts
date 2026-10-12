@@ -67,9 +67,8 @@ async function nativeOracle(
         if (count !== 0) yield sourcePending;
       },
     },
-    config: setup.config,
-    runtime: setup.runtime.providerRuntime,
-    settings: setup.settings,
+    invocation: setup.runtime.prepareProviderInvocation(setup.provider.name),
+    resolved: { model: 'gpt-5.6' },
     systemInstruction: projectionInstructions,
   });
   try {

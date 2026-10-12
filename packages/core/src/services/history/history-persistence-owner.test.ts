@@ -184,7 +184,14 @@ async function verifyFinishesAnInFlightJournalSnapshotBeforeDisposalSettles(): P
     }
   }
   await integration.dispose();
-  const persistence = new GatedPersistence(new Storage(directory), 'gated');
+  const storage = new Storage(directory);
+  const persistence = new GatedPersistence(
+    {
+      projectRoot: storage.getProjectRoot(),
+      chatsDir: storage.getProjectChatsDir(),
+    },
+    'gated',
+  );
   integration = new RecordingIntegration(old, persistence);
   void integration.subscribeToJournal(history);
   history.add(row('snapshot row'));
@@ -311,8 +318,12 @@ async function verifyDetachesADisabledIntegrationWithoutStoppingLiveHistoryOrWri
 async function verifyPersistsAddDensityDeletionSyntheticRepairCompressionAndClearOnlyToThe(): Promise<void> {
   const result = await candidate();
   const oldBytes = await readFile(old.getFilePath()!);
+  const storage = new Storage(directory);
   const persistence = new SessionPersistenceService(
-    new Storage(directory),
+    {
+      projectRoot: storage.getProjectRoot(),
+      chatsDir: storage.getProjectChatsDir(),
+    },
     'snapshot',
   );
   const next = new RecordingIntegration(result.recording, persistence);

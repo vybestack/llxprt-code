@@ -9,6 +9,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { deserialize } from 'node:v8';
+import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { serializeResponsesPromptEnvelope } from '../responses-source-serializer.js';
@@ -88,7 +89,7 @@ async function warmup(): Promise<void> {
     context: {
       includeReasoningInContext: false,
       mediaPdfEnabled: true,
-      outputLimiterConfig: { getEphemeralSettings: () => ({}) },
+      outputLimits: parseOutputLimits({}),
       debug: () => {},
     },
   });
@@ -105,7 +106,7 @@ const prompt = await serializeResponsesPromptEnvelope({
   context: {
     includeReasoningInContext: false,
     mediaPdfEnabled: true,
-    outputLimiterConfig: { getEphemeralSettings: () => ({}) },
+    outputLimits: parseOutputLimits({}),
     debug: () => {},
   },
 });

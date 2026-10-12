@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { withPublicHistory } from '../api/__tests__/helpers/public-history-fixture.js';
-import { internalConfig } from '../api/__tests__/helpers/agentHarness.js';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { historyDigest } from './__tests__/support/reinitialize-history-test-helpers.js';
 import { publicDefaultBounds } from './public-default-history-test-helpers.js';
@@ -16,9 +15,7 @@ for (const size of [512, 8192]) {
           throw new Error('Expected real SessionControl');
         await agent.session.setRecording({ enabled: true });
         await agent.session.clearHistory();
-        const result = await historyDigest(
-          internalConfig(agent).getAgentClient().getHistory(),
-        );
+        const result = await historyDigest(agent.agentClient.getHistory());
         const hash = createHash('sha256');
         for (let index = 0; index < 3; index++)
           hash.update(JSON.stringify(accountingRow(index)));
@@ -33,7 +30,7 @@ for (const size of [512, 8192]) {
 describe('stream reset contract', () => {
   it('consumes a cold source through resetChat and durably replaces the active history', async () => {
     await withPublicHistory(6, true, async (agent, _history, reader) => {
-      const client = internalConfig(agent).getAgentClient();
+      const client = agent.agentClient;
       async function* preserved() {
         yield accountingRow(0);
       }

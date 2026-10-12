@@ -5,41 +5,31 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
 
 function makeBodyRuntime() {
-  const settings = new SettingsService();
-  settings.setProviderSetting('openai-responses', 'model', 'o3-mini');
   const config = new Config({
     sessionId: 'critical-body',
     targetDir: process.cwd(),
     cwd: process.cwd(),
     debugMode: false,
     model: 'o3-mini',
-    settingsService: settings,
   });
-  const runtime = {
-    settingsService: settings,
-    config,
-    runtimeId: 'critical-body',
-  };
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: 'critical-body',
     providerName: 'openai-responses',
     ephemeralsSnapshot: { 'prompt-caching': 'off' },
   });
-  return { settings, config, runtime, invocation };
+  return { config, invocation };
 }
 
 async function transportBody(
   schema: Record<string, unknown>,
 ): Promise<unknown[]> {
-  const { settings, config, runtime, invocation } = makeBodyRuntime();
+  const { config, invocation } = makeBodyRuntime();
   let pulled = 0;
   let closed = false;
   const contents: AsyncIterable<IContent> = {
@@ -80,10 +70,8 @@ async function transportBody(
     );
     const stream = provider.generateChatCompletion({
       contents,
-      settings,
-      config,
-      runtime,
       invocation,
+      resolved: { model: 'o3-mini' },
       systemInstruction: 'You inspect values supplied by the user.',
       tools: [
         {

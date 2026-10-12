@@ -82,7 +82,10 @@ describe('SessionPersistenceService', () => {
         '/path/with spaces/and-dashes/and_underscores',
       );
       const specialService = new SessionPersistenceService(
-        specialStorage,
+        {
+          projectRoot: specialStorage.getProjectRoot(),
+          chatsDir: specialStorage.getProjectChatsDir(),
+        },
         'session',
       );
 

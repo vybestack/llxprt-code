@@ -10,9 +10,6 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { SemanticMediaPurgeStreamCoordinator } from '@vybestack/llxprt-code-core/services/history/semantic-purge-stream.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
@@ -117,23 +114,11 @@ function response(): Response {
 async function captureBody(rows: AsyncIterable<IContent>): Promise<string> {
   const settings = new SettingsService();
   settings.setProviderSetting('openai-responses', 'model', 'gpt-5.2');
-  const runtime = createProviderRuntimeContext({
-    settingsService: settings,
-    runtimeId: 'semantic-purge-body',
-    config: createRuntimeConfigStub(settings),
-  });
-  const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
-    providerName: 'openai-responses',
-    ephemeralsSnapshot: { 'prompt-caching': 'off' },
-  });
   const options = createProviderCallOptions({
     providerName: 'openai-responses',
     settings,
-    config: runtime.config,
-    runtime,
-    invocation,
+    runtimeId: 'semantic-purge-body',
+    ephemerals: { 'prompt-caching': 'off' },
     contents: rows,
   });
   const provider = new OpenAIResponsesProvider(

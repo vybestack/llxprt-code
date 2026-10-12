@@ -4,7 +4,6 @@ import {
   withPublicHistory,
   StreamOnlyHistory,
 } from '../api/__tests__/helpers/public-history-fixture.js';
-import { internalConfig } from '../api/__tests__/helpers/agentHarness.js';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { ChatSession } from './chatSession.js';
 import { publicDefaultBounds } from './public-default-history-test-helpers.js';
@@ -17,7 +16,7 @@ for (const size of [512, 8192]) {
           size,
           true,
           async (agent, history, reader, decoded) => {
-            const chat = internalConfig(agent).getAgentClient().getChat();
+            const chat = agent.agentClient.getChat();
             if (!(chat instanceof ChatSession))
               throw new Error('Expected real chat');
             const unused = explicitFalse
@@ -48,7 +47,7 @@ for (const size of [512, 8192]) {
 
       it('releases pinned readers after abort, source errors and consumer errors', async () => {
         await withPublicHistory(size, true, async (agent, history, reader) => {
-          const chat = internalConfig(agent).getAgentClient().getChat();
+          const chat = agent.agentClient.getChat();
           if (!(history instanceof StreamOnlyHistory))
             throw new Error('Expected controlled disk source');
           const controller = new AbortController();

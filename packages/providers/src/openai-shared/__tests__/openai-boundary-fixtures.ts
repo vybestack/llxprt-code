@@ -70,8 +70,8 @@ export function optionsFor(
     config,
   });
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
     providerName,
     ephemeralsSnapshot: { 'prompt-caching': 'off', streaming, retries: 1 },
   });

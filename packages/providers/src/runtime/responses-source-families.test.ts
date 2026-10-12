@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterAll, describe, expect, it } from 'bun:test';
+import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,7 +21,7 @@ import { serializeResponsesPromptEnvelope } from './responses-source-serializer.
 const context = {
   includeReasoningInContext: false,
   mediaPdfEnabled: true,
-  outputLimiterConfig: { getEphemeralSettings: () => ({}) },
+  outputLimits: parseOutputLimits({}),
   debug: (): void => {},
 };
 const scratch = mkdtempSync(join(tmpdir(), 'source-families-'));

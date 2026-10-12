@@ -14,6 +14,24 @@ import { GitService } from '@vybestack/llxprt-code-core/services/gitService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 
+function restoreContext(
+  client: Parameters<Parameters<typeof withCheckpoint>[2]>[0]['client'],
+  checkpointsDir: string,
+) {
+  const context = createMockCommandContext({
+    services: { agent: { agentClient: client } },
+  });
+  if (context.services.config === null)
+    throw new Error('Missing fixture runtime');
+  const runtime = {
+    ...context.services.config,
+    projectCheckpointsDir: checkpointsDir,
+    getCheckpointingEnabled: () => true,
+  };
+  context.services.config = runtime;
+  return { context, runtime };
+}
+
 async function oversized(): Promise<number> {
   return withCheckpoint(
     1,
@@ -21,22 +39,16 @@ async function oversized(): Promise<number> {
     async (fixture, dir) => {
       await saveCheckpoint(fixture, dir);
       const saved = await savedCheckpoint(dir);
-      vi.spyOn(
-        fixture.config.storage,
-        'getProjectTempCheckpointsDir',
-      ).mockReturnValue(dir);
-      vi.spyOn(fixture.config, 'getCheckpointingEnabled').mockReturnValue(true);
-      const client = fixture.config.getAgentClient();
+      const client = fixture.client;
       const owners = new RowOwnership();
       const admit = client.setHistoryFromSource.bind(client);
       vi.spyOn(client, 'setHistoryFromSource').mockImplementation(
         (source, options) => admit(source, { ...options, ownership: owners }),
       );
-      const context = createMockCommandContext();
-      context.services.config = fixture.config;
+      const { context, runtime } = restoreContext(client, dir);
       try {
         expect(
-          await restoreCommand(fixture.config)?.action?.(
+          await restoreCommand(runtime)?.action?.(
             context,
             basename(saved.path),
           ),
@@ -98,19 +110,13 @@ async function compatibleRestore(active: boolean): Promise<string> {
     const path = join(dir, 'legacy.json');
     const encoded = JSON.stringify(checkpoint, null, 2);
     await writeFile(path, encoded);
-    vi.spyOn(
-      fixture.config.storage,
-      'getProjectTempCheckpointsDir',
-    ).mockReturnValue(dir);
-    vi.spyOn(fixture.config, 'getCheckpointingEnabled').mockReturnValue(true);
-    const context = createMockCommandContext();
-    context.services.config = fixture.config;
+    const { context, runtime } = restoreContext(fixture.client, dir);
     let loaded: unknown;
     context.ui.loadHistory = (rows) => {
       loaded = rows;
     };
     const snapshots: string[] = [];
-    const git = new GitService(fixture.root, fixture.config.storage);
+    const git = new GitService(fixture.root, fixture.config.projectHistoryDir);
     vi.spyOn(git, 'restoreProjectFromSnapshot').mockImplementation(
       async (hash) => {
         snapshots.push(hash);
@@ -119,7 +125,7 @@ async function compatibleRestore(active: boolean): Promise<string> {
     context.services.git = git;
     const cwd = resolve(import.meta.dir, '../../..');
     try {
-      const outcome: unknown = await restoreCommand(fixture.config)?.action?.(
+      const outcome: unknown = await restoreCommand(runtime)?.action?.(
         context,
         'legacy',
       );
@@ -131,9 +137,7 @@ async function compatibleRestore(active: boolean): Promise<string> {
       expect(loaded).toStrictEqual(history);
       expect(snapshots.length).toBe(1);
       const actual: IContent[] = [];
-      for await (const restored of fixture.config
-        .getAgentClient()
-        .streamHistory())
+      for await (const restored of fixture.client.streamHistory())
         actual.push(restored);
       expect(actual).toStrictEqual([row]);
       expect(process.cwd()).toBe(cwd);

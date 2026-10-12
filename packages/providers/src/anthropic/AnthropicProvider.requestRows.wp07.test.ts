@@ -77,14 +77,6 @@ function setup(oauth: boolean, cache: boolean, streaming: boolean) {
   );
   const { provider, runtime, settingsService } = result;
   runtime.config ??= createRuntimeConfigStub(settingsService);
-  const ephemerals = {
-    ...settingsService.getAllGlobalSettings(),
-    ...settingsService.getProviderSettings(provider.name),
-  };
-  runtime.config.getEphemeralSettings = () => ({ ...ephemerals });
-  runtime.config.getEphemeralSetting = (key: string) =>
-    settingsService.getProviderSettings(provider.name)[key] ??
-    settingsService.get(key);
   return { provider, settings: settingsService, runtime };
 }
 
@@ -140,8 +132,8 @@ function arrayOptions(
   signal?: AbortSignal,
 ): GenerateChatOptions {
   const invocation = createRuntimeInvocationContext({
-    runtime: harness.runtime,
-    settings: harness.settings,
+    runtimeId: harness.runtime.runtimeId,
+    runtimeMetadata: harness.runtime.metadata,
     providerName: 'anthropic',
     ephemeralsSnapshot: {
       ...harness.settings.getAllGlobalSettings(),

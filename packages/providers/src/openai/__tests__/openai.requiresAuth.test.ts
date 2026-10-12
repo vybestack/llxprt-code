@@ -140,7 +140,6 @@ function buildNormalizedOptions(
     // The normalized contract carries the collected history array; this
     // auth-resolution probe needs no rows.
     contents: [],
-    settings,
     metadata: options.metadata ?? {},
     resolved: {
       model: 'auth-exemption-test-model',

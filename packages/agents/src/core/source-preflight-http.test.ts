@@ -2,11 +2,13 @@
 import { describe, expect, it } from 'bun:test';
 import { mkdir, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createTelemetryAdapterFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { createTelemetryAdapter } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import {
-  initializeTelemetry,
-  shutdownTelemetry,
-} from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
+  FileMetricExporter,
+  FileSpanExporter,
+} from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
+import { shutdownTelemetry } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { getRequestSignal } from '@vybestack/llxprt-code-providers/utils/abortSignal.js';
 import {
@@ -38,18 +40,38 @@ async function publication(large: boolean, fault: Fault) {
     true,
   );
   const oracle = await preflightOracle(setup, large);
-  await shutdownTelemetry(setup.config);
+  const outfile = join(root(), 'preflight.jsonl');
   const exporter = new PreflightExporter(
-    join(root(), 'preflight.jsonl'),
+    outfile,
     fault === 'abort' ? 'hold' : fault,
   );
-  initializeTelemetry(setup.config, exporter);
+  const telemetry = await RootTelemetry.create(
+    {
+      sessionId: 'source-preflight',
+      enabled: true,
+      outfile,
+      maxBytes: 256 * 1024 * 1024,
+      maxFiles: 1,
+      readPrivacySettings: () => ({
+        logPrompts: true,
+        logConversations: false,
+        logApiBodies: true,
+        maxChars: 32 * 1024 * 1024,
+      }),
+    },
+    () => ({
+      tracer: new FileSpanExporter(outfile),
+      logger: exporter,
+      meter: new FileMetricExporter(outfile),
+    }),
+  );
   const directory = join(root(), 'artifacts');
   await mkdir(directory);
   return {
     fixture,
     http,
     setup,
+    telemetry,
     oracle,
     exporter,
     directory,
@@ -79,7 +101,10 @@ async function publish(
       throw new Error('Missing projected estimate');
     input.estimates.push(prepared.estimate);
     try {
-      await createTelemetryAdapterFromConfig(input.setup.config).logApiRequest({
+      await createTelemetryAdapter(
+        input.setup.config,
+        input.telemetry,
+      ).logApiRequest({
         model: 'gpt-5.6',
         promptId: `preflight-${index}`,
         requestArtifact: {
@@ -99,13 +124,14 @@ async function publish(
 async function start(input: Publication, fault: Fault) {
   const stream = await enforceAndStreamSourcePromptEnvelopeRetries({
     provider: input.setup.provider,
+    tokenizerFactory: input.setup.tokenizerFactory,
     source: input.fixture.source,
     signal: input.controller.signal,
     buildOptions: (source) =>
       buildSourceProviderChatOptions(
         source,
         undefined,
-        input.setup.context,
+        { runtimeId: input.setup.context.runtimeId },
         input.setup.invocation,
         { requestId: 'source-preflight' },
         preflightInstructions,
@@ -231,7 +257,7 @@ async function runPublication(large: boolean, fault: Fault): Promise<number> {
     await send.settled;
     await send.stream.return?.();
     await input.http.server.stop(true);
-    await shutdownTelemetry(input.setup.config);
+    await shutdownTelemetry(input.telemetry);
     await input.setup.config.dispose();
   }
 }
@@ -305,7 +331,7 @@ describe('awaited source prepared preflight with actual Responses and validated 
       held.release();
       await stream.return?.();
       await input.http.server.stop(true);
-      await shutdownTelemetry(input.setup.config);
+      await shutdownTelemetry(input.telemetry);
       await input.setup.config.dispose();
     }
   }, 30000);

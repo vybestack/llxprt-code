@@ -8,9 +8,9 @@ import type {
   IContent,
   MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import type { GenerateChatOptions } from '../IProvider.js';
+import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import {
   promptDirs,
   startSourceRouteHarness,
@@ -48,25 +48,34 @@ describe('Responses source route stored media references', () => {
       semanticMetadata: { variantPolicy: 'admitted-v1' },
     });
 
-  function optionsWithBudget(
+  // The media resolver and aggregate budget are provider-bound state; the
+  // request options carry only the invocation.
+  function mediaProvider(budget: number): typeof harness.setup.provider {
+    return bindProviderMedia(harness.setup.provider, resolver, budget);
+  }
+
+  async function project(
     rows: readonly IContent[],
     budget: number,
     ephemerals: Record<string, unknown> = {},
-  ): GenerateChatOptions {
-    const base = harness.options(rows, ephemerals);
-    if (base.settings === undefined || base.config === undefined)
-      throw new Error('Missing fixture runtime');
-    return harness.options(
-      rows,
-      ephemerals,
-      createProviderRuntimeContext({
-        settingsService: base.settings,
-        config: base.config,
-        runtimeId: 'responses-source-media',
-        mediaResolver: resolver,
-        requestMediaBudgetBytes: budget,
-      }),
+  ): Promise<PromptEnvelopeProjection> {
+    return mediaProvider(budget).projectPromptEnvelope(
+      harness.options(rows, ephemerals),
     );
+  }
+
+  async function sendProjected(
+    rows: readonly IContent[],
+    budget: number,
+    ephemerals: Record<string, unknown> = {},
+  ): Promise<void> {
+    const provider = mediaProvider(budget);
+    const options = harness.options(rows, ephemerals);
+    const projection = await provider.projectPromptEnvelope(options);
+    for await (const _ of provider.generateChatCompletion({
+      ...options,
+      promptEnvelopeTransportToken: projection.transportToken,
+    }));
   }
 
   const idle = {
@@ -78,11 +87,9 @@ describe('Responses source route stored media references', () => {
   it('sends an admitted reference image as the inline data URI and releases its reservation', async () => {
     const image = await admit(PNG_BYTES);
     const before = promptDirs();
-    await harness.sendProjected(
-      optionsWithBudget(
-        [{ speaker: 'human', blocks: [{ type: 'text', text: 'see' }, image] }],
-        image.normalizedBase64Length,
-      ),
+    await sendProjected(
+      [{ speaker: 'human', blocks: [{ type: 'text', text: 'see' }, image] }],
+      image.normalizedBase64Length,
     );
     const body = JSON.parse(harness.bodies[0]) as { input: unknown[] };
     expect(body.input).toStrictEqual([
@@ -100,11 +107,9 @@ describe('Responses source route stored media references', () => {
 
   it('sends an enabled reference PDF as an input file', async () => {
     const pdf = await admit(PDF_BYTES, 'application/pdf');
-    await harness.sendProjected(
-      optionsWithBudget(
-        [{ speaker: 'human', blocks: [pdf] }],
-        pdf.normalizedBase64Length,
-      ),
+    await sendProjected(
+      [{ speaker: 'human', blocks: [pdf] }],
+      pdf.normalizedBase64Length,
     );
     const body = JSON.parse(harness.bodies[0]) as {
       input: Array<{ content: Array<Record<string, unknown>> }>;
@@ -136,13 +141,10 @@ describe('Responses source route stored media references', () => {
       },
       { speaker: 'human', blocks: [afterParent] },
     ];
-    await harness.sendProjected(
-      optionsWithBudget(
-        rows,
-        beforeParent.normalizedBase64Length +
-          afterParent.normalizedBase64Length,
-        { 'responses-stateful': true },
-      ),
+    await sendProjected(
+      rows,
+      beforeParent.normalizedBase64Length + afterParent.normalizedBase64Length,
+      { 'responses-stateful': true },
     );
     expect(harness.bodies).toHaveLength(1);
     expect(harness.bodies[0]).toContain('BAUG');
@@ -156,14 +158,12 @@ describe('Responses source route stored media references', () => {
     const second = await admit(OTHER_PNG_BYTES);
     const before = promptDirs();
     await expect(
-      harness.sendProjected(
-        optionsWithBudget(
-          [
-            { speaker: 'human', blocks: [first] },
-            { speaker: 'human', blocks: [second] },
-          ],
-          first.normalizedBase64Length + second.normalizedBase64Length - 1,
-        ),
+      sendProjected(
+        [
+          { speaker: 'human', blocks: [first] },
+          { speaker: 'human', blocks: [second] },
+        ],
+        first.normalizedBase64Length + second.normalizedBase64Length - 1,
       ),
     ).rejects.toThrow('aggregate budget');
     expect(resolver.accounting()).toStrictEqual({ ...idle, storeReadCount: 1 });
@@ -173,11 +173,9 @@ describe('Responses source route stored media references', () => {
 
   it('releases reservations when a projection is dropped unsent', async () => {
     const image = await admit(PNG_BYTES);
-    const projection = await harness.project(
-      optionsWithBudget(
-        [{ speaker: 'human', blocks: [image] }],
-        image.normalizedBase64Length,
-      ),
+    const projection = await project(
+      [{ speaker: 'human', blocks: [image] }],
+      image.normalizedBase64Length,
     );
     expect(resolver.accounting().reservedContentCount).toBe(1);
     await projection.releaseIfUnsent?.();

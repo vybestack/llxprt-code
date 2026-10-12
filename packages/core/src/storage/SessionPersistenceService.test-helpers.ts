@@ -26,7 +26,13 @@ export function createSessionPersistenceFixture(): {
   const storage = new Storage('/test/project');
   return {
     storage,
-    service: new SessionPersistenceService(storage, 'test-session-123'),
+    service: new SessionPersistenceService(
+      {
+        projectRoot: storage.getProjectRoot(),
+        chatsDir: storage.getProjectChatsDir(),
+      },
+      'test-session-123',
+    ),
   };
 }
 

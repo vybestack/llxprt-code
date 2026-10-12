@@ -522,10 +522,10 @@ async function captureAnthropicBody(
     config: createRuntimeConfigStub(settings),
   });
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
     providerName: 'anthropic',
-    ephemeralsSnapshot: { streaming: 'disabled' },
+    ephemeralsSnapshot: { streaming: 'disabled', 'prompt-caching': 'off' },
   });
   const contents = opLogStream(rows);
   const options = {
@@ -618,8 +618,8 @@ async function captureResponsesBodies(
     config: createRuntimeConfigStub(settings),
   });
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
     providerName: 'openai-responses',
     ephemeralsSnapshot: ephemerals,
   });
@@ -840,8 +840,8 @@ describe('P05b4 openai-responses retry body stability @plan:PLAN-20260917-ISSUE8
       config: createRuntimeConfigStub(settings),
     });
     const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings,
+      runtimeId: runtime.runtimeId,
+      runtimeMetadata: runtime.metadata,
       providerName: 'openai-responses',
       ephemeralsSnapshot: {
         'prompt-caching': 'off',

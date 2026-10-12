@@ -24,6 +24,8 @@ import {
   makeToken,
 } from './helpers/provider-auth-fixtures.js';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
+import { collectHistoryFixture } from '../../core/__tests__/support/collect-history-test-fixture.js';
+import { withFetchPreconnect } from '../../../../test-utils/src/fetch-test-helpers.js';
 
 const fixtureDirectories: string[] = [];
 
@@ -164,7 +166,7 @@ async function exercise(
   const agents: Agent[] = [];
   const pending: Array<Promise<unknown>> = [];
   const transport = spyOn(globalThis, 'fetch').mockImplementation(
-    async (input, init): Promise<Response> => {
+    withFetchPreconnect(async (input, init): Promise<Response> => {
       if (
         String(input) !== 'https://console.anthropic.com/v1/oauth/token' ||
         !(init?.body instanceof URLSearchParams) ||
@@ -205,7 +207,7 @@ async function exercise(
         refresh_token: 'rotated-refresh',
         expires_in: renewal ? 3600 : 120,
       });
-    },
+    }),
   );
   try {
     const label = `postcommit-${randomUUID()}`;
@@ -407,7 +409,9 @@ async function exercise(
       expect(
         (await oauth.getOAuthToken('claudecode', 'primary'))?.refresh_token,
       ).toBe('rotated-refresh');
-      await built.agentClient.startChat(await built.agentClient.getHistory());
+      await built.agentClient.startChat(
+        await collectHistoryFixture(built.agentClient.getHistory()),
+      );
       const successor = await fromConfig({
         settingsOwner: built.settingsOwner,
         settingsService: built.settingsService,

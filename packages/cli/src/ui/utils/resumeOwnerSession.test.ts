@@ -63,7 +63,7 @@ describe('interactive owner session replay', () => {
     const next = await build(root, 'second-owner');
     const replay = await resumeOwnerSession(next, 'first-owner', 'allowed');
     expect(
-      replay.history.some((item) =>
+      (await Array.fromAsync(next.streamHistory())).some((item) =>
         item.blocks.some(
           (block) =>
             block.type === 'text' && block.text.includes('replayed owner turn'),

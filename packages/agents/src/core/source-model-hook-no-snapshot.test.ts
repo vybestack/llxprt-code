@@ -1,6 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { HookSystem } from '@vybestack/llxprt-code-core/hooks/hookSystem.js';
+import { HookEventName } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { sourceBeforeModelHook } from './source-before-model-hook.js';
 import { fireSourceAfterModelHook } from './source-after-model-hook.js';
@@ -27,6 +29,27 @@ function system(calls: Calls): HookSystem {
   return fake as unknown as HookSystem;
 }
 
+/**
+ * Mirrors SessionHookOwner.execution: a model snapshot is fired only when the
+ * registry holds a hook for the event; otherwise the owner resolves undefined.
+ */
+function ownerOver(hooks: HookSystem): HookExecutionOwner {
+  return {
+    sessionId: () => 'no-snapshot',
+    transcriptPath: () => undefined,
+    beforeModelSnapshot: async (request, signal) =>
+      hooks.getRegistry().getHooksForEvent(HookEventName.BeforeModel).length ===
+      0
+        ? undefined
+        : hooks.fireBeforeModelSnapshotEvent(request, signal),
+    afterModelSnapshot: async (request, response, signal) =>
+      hooks.getRegistry().getHooksForEvent(HookEventName.AfterModel).length ===
+      0
+        ? undefined
+        : hooks.fireAfterModelSnapshotEvent(request, response, signal),
+  };
+}
+
 describe('calls with no registered model hooks', () => {
   it('BeforeModel passes the pinned snapshot through without a hook context', async () => {
     const calls: Calls = {
@@ -47,13 +70,9 @@ describe('calls with no registered model hooks', () => {
         calls.closed++;
       },
     };
-    const hooks = system(calls);
-    const config = {
-      getEnableHooks: () => true,
-      getHookSystem: () => hooks,
-    };
+    const owner = ownerOver(system(calls));
     const selection = await sourceBeforeModelHook({
-      config: config as never,
+      owner,
       snapshot,
       pending: [],
       model: 'm',
@@ -78,7 +97,7 @@ describe('calls with no registered model hooks', () => {
       closed: 0,
     };
     const result = await fireSourceAfterModelHook({
-      system: system(calls),
+      owner: ownerOver(system(calls)),
       request: {
         rows: () => {
           calls.rowsOpened++;

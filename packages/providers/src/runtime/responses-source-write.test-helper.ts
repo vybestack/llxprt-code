@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { spyOn } from 'bun:test';
 import * as fs from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -41,7 +42,7 @@ const pending = serializeResponsesPromptEnvelope({
   context: {
     includeReasoningInContext: false,
     mediaPdfEnabled: true,
-    outputLimiterConfig: { getEphemeralSettings: () => ({}) },
+    outputLimits: parseOutputLimits({}),
     debug: (): void => {},
   },
 });

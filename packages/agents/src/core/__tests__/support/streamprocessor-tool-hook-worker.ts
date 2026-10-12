@@ -2,6 +2,16 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import {
+  hookSessionRuntime,
+  readHookDefinitions,
+} from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
+import { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
@@ -49,9 +59,13 @@ async function oracle(
         yield sourcePending;
       },
     },
-    config: setup.config,
-    runtime: setup.runtime.providerRuntime,
-    settings: setup.settings,
+    invocation: captureProviderInvocation(
+      createProviderRuntimeContext({
+        settingsService: setup.settings,
+        runtimeId: setup.runtime.state.runtimeId,
+      }),
+      setup.provider.name,
+    ),
     systemInstruction: setup.generation.systemInstruction,
     tools,
   });
@@ -78,12 +92,27 @@ async function run(
     false,
     1,
   );
+  let hooks: SessionHookOwner | undefined;
   try {
     registerToolHook(setup.config, root, mode);
-    const system = setup.config.getHookSystem();
-    if (!system) throw new Error('Missing actual hook system');
-    await system.initialize();
-    if (mode === 'disabled') system.setHookEnabled('actual-tool-hook', false);
+    hooks = new SessionHookOwner(
+      readHookDefinitions(setup.config),
+      hookSessionRuntime(
+        setup.config,
+        new WorkspaceTrustLifecycle({
+          localTrust: setup.config.initialWorkspaceTrust,
+        }),
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: setup.config.getSessionId(),
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+      ),
+      true,
+      new MessageBus(),
+    );
+    if (mode === 'disabled') hooks.setDisabledHooks(['actual-tool-hook']);
     let error: string | undefined;
     const restrictions = [];
     let output = '';
@@ -94,6 +123,10 @@ async function run(
           config: {
             tools: toolHookTools,
           },
+          hookOwner: hooks.execution({
+            sessionId: () => setup.config.getSessionId(),
+            transcriptPath: () => undefined,
+          }),
         },
         'actual-hook-worker',
         sourcePending,
@@ -119,12 +152,17 @@ async function run(
       estimate: setup.processor.getPromptEnvelopeEstimate(),
       oracle: await oracle(setup, mode),
       owners: setup.history.owners,
-      registry: system.getAllHooks(),
+      registry: hooks.listHooks().map((hook) => ({
+        enabled: hook.enabled,
+        eventName: hook.eventName,
+        config: { command: hook.name },
+      })),
       activeBodies: activeRequestBodyCount(),
       ...observedHook(root),
     };
   } finally {
     setup.history.dispose();
+    await hooks?.dispose();
     await http.server.stop(true);
     await setup.config.dispose();
   }

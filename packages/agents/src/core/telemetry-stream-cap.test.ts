@@ -4,8 +4,8 @@ import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { createTelemetryAdapterFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { createTelemetryAdapter } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import {
   initializeTelemetry,
   shutdownTelemetry,
@@ -22,22 +22,23 @@ const cap32 = 32 * 1024 * 1024;
 const recordSchema = z.object({ attributes: z.record(z.unknown()) });
 const hash = (bytes: string | Buffer): string =>
   createHash('sha256').update(bytes).digest('hex');
-function config(cap?: number): Config {
-  return new Config({
-    cwd: root(),
-    targetDir: root(),
+function telemetry(cap?: number): RootTelemetry {
+  return RootTelemetry.prepare({
+    enabled: true,
     sessionId: 'cap32',
-    model: 'gpt-5.6',
-    debugMode: false,
-    telemetry: {
-      enabled: true,
+    outfile: join(root(), 'cap.jsonl'),
+    maxBytes: 256 * 1024 * 1024,
+    maxFiles: 10,
+    readPrivacySettings: () => ({
       logPrompts: true,
+      logConversations: false,
       logApiBodies: true,
-      ...(cap === undefined ? {} : { logApiBodyMaxChars: cap }),
-      outfile: join(root(), 'cap.jsonl'),
-      outfileMaxBytes: 256 * 1024 * 1024,
-    },
+      maxChars: cap ?? 4000,
+    }),
   });
+}
+function adapterFor(active: RootTelemetry) {
+  return createTelemetryAdapter({ getSessionId: () => 'cap32' }, active);
 }
 async function staged(large: boolean): Promise<RuntimeRequestArtifact> {
   return {
@@ -118,14 +119,14 @@ describe('real Config SDK FileLogExporter chunk-only cap contract', () => {
   it.each([false, true])(
     'preserves every legacy visible JSON string byte at 32MiB, large=%s',
     async (large) => {
-      const active = config(cap32);
+      const active = telemetry(cap32);
       const source = await staged(large);
       const oracle = getRequestTextFromContents(
         Array.from({ length: 64 }, (_, index) => telemetryCapRow(index, large)),
       ).slice(0, cap32);
-      initializeTelemetry(active);
+      await initializeTelemetry(active);
       try {
-        await createTelemetryAdapterFromConfig(active).logApiRequest({
+        await adapterFor(active).logApiRequest({
           model: 'gpt-5.6',
           promptId: 'full-cap',
           requestArtifact: source,
@@ -143,15 +144,15 @@ describe('real Config SDK FileLogExporter chunk-only cap contract', () => {
     120000,
   );
   it('uses the unchanged default 4000-character cap', async () => {
-    const active = config();
+    const active = telemetry();
     const source = await staged(true);
     const oracle = getRequestTextFromContents(
       Array.from({ length: 64 }, (_, index) => telemetryCapRow(index, true)),
     ).slice(0, 4000);
-    initializeTelemetry(active);
+    await initializeTelemetry(active);
     try {
-      expect(active.getTelemetryLogApiBodyMaxChars()).toBe(4000);
-      await createTelemetryAdapterFromConfig(active).logApiRequest({
+      expect(active.readPrivacySettings().maxChars).toBe(4000);
+      await adapterFor(active).logApiRequest({
         model: 'gpt-5.6',
         promptId: 'default',
         requestArtifact: source,
@@ -184,10 +185,10 @@ describe('chunk protocol UTF16 cap fidelity', () => {
           row_count: 0,
         },
       };
-      const active = config(cap);
-      initializeTelemetry(active);
+      const active = telemetry(cap);
+      await initializeTelemetry(active);
       try {
-        await createTelemetryAdapterFromConfig(active).logApiRequest({
+        await adapterFor(active).logApiRequest({
           model: 'gpt-5.6',
           promptId: 'unicode',
           requestArtifact: source,
@@ -204,14 +205,14 @@ describe('chunk protocol UTF16 cap fidelity', () => {
 
 describe('concurrent full-cap publication identities', () => {
   it('correlates two concurrent full-cap attempts with distinct prompt identities', async () => {
-    const active = config(cap32);
+    const active = telemetry(cap32);
     const source = await staged(true);
     const oracle = getRequestTextFromContents(
       Array.from({ length: 64 }, (_, index) => telemetryCapRow(index, true)),
     ).slice(0, cap32);
-    initializeTelemetry(active);
+    await initializeTelemetry(active);
     try {
-      const adapter = createTelemetryAdapterFromConfig(active);
+      const adapter = adapterFor(active);
       await Promise.all(
         ['first', 'second'].map((promptId) =>
           adapter.logApiRequest({
@@ -241,7 +242,7 @@ describe('concurrent full-cap publication identities', () => {
 
 describe('oversized row inside the configured visible prefix', () => {
   it('exports the complete >10MiB row when all 64 rows fit cap32', async () => {
-    const active = config(cap32);
+    const active = telemetry(cap32);
     const source: RuntimeRequestArtifact = {
       schema_version: 3,
       serialization: 'independent-safe-json-rows-v1',
@@ -256,8 +257,9 @@ describe('oversized row inside the configured visible prefix', () => {
     const fullLegacyVisiblePrefix = getRequestTextFromContents(
       Array.from({ length: 64 }, (_, index) => diskTextRow(index, true)),
     ).slice(0, cap32);
+    await initializeTelemetry(active);
     try {
-      await createTelemetryAdapterFromConfig(active).logApiRequest({
+      await adapterFor(active).logApiRequest({
         model: 'gpt-5.6',
         promptId: 'oversized-visible',
         requestArtifact: source,

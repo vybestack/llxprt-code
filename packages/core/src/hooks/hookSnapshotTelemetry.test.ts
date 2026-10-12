@@ -1,10 +1,17 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { logs, type Logger } from '@opentelemetry/api-logs';
-import * as sdk from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { logHookCall } from '@vybestack/llxprt-code-telemetry/telemetry/loggers.js';
 import { EVENT_HOOK_CALL } from '@vybestack/llxprt-code-telemetry/telemetry/constants.js';
 import { Config } from '../config/config.js';
 import { HookSystem } from './hookSystem.js';
+import {
+  fixtureHookDefinitions,
+  fixtureHookRuntime,
+} from './__tests__/hook-runtime-fixture.js';
 import { HookEventName, type HookConfig } from './types.js';
 import { command, fixture, rich } from './hookRunner-test-helpers.js';
 import { providerRequestRows } from '../services/history/provider-request-snapshot.js';
@@ -16,58 +23,86 @@ const rows = Array.from({ length: 3 }, (_, index) => ({
 }));
 
 interface EmittedRecord {
-  readonly attributes: Record<string, unknown>;
+  readonly attributes?: Record<string, unknown>;
 }
 
-function system(root: string, hooks: HookConfig[]): HookSystem {
-  return new HookSystem(
-    new Config({
-      sessionId: 'snapshot-hook-telemetry',
-      targetDir: root,
-      cwd: root,
-      debugMode: false,
-      model: 'test',
-      trustedFolder: true,
-      enableHooks: true,
-      hooks: {
-        [HookEventName.BeforeModel]: [{ sequential: true, hooks }],
-        [HookEventName.AfterModel]: [{ sequential: true, hooks }],
-      },
-    }),
-  );
+function system(
+  root: string,
+  hooks: HookConfig[],
+  telemetry: RootTelemetry,
+): HookSystem {
+  const config = new Config({
+    sessionId: 'snapshot-hook-telemetry',
+    targetDir: root,
+    cwd: root,
+    debugMode: false,
+    model: 'test',
+    trustedFolder: true,
+    enableHooks: true,
+    hooks: {
+      [HookEventName.BeforeModel]: [{ sequential: true, hooks }],
+      [HookEventName.AfterModel]: [{ sequential: true, hooks }],
+    },
+  });
+  return new HookSystem(fixtureHookDefinitions(config), {
+    ...fixtureHookRuntime(config),
+    logCall: (event) => logHookCall(config, event, telemetry),
+  });
 }
 
 describe('snapshot model hook telemetry', () => {
-  const emitted: EmittedRecord[] = [];
+  let telemetry: RootTelemetry;
+  let outfile: string;
 
-  beforeEach(() => {
-    emitted.length = 0;
-    vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(true);
-    vi.spyOn(logs, 'getLogger').mockReturnValue({
-      emit: (record: EmittedRecord) => {
-        emitted.push(record);
-      },
-    } as unknown as Logger);
+  beforeEach(async () => {
+    outfile = join(
+      mkdtempSync(join(tmpdir(), 'hook-snapshot-telemetry-')),
+      'events.jsonl',
+    );
+    telemetry = await RootTelemetry.create({
+      sessionId: 'snapshot-hook-telemetry',
+      enabled: true,
+      outfile,
+      maxBytes: 1048576,
+      maxFiles: 2,
+      readPrivacySettings: () => ({
+        logPrompts: true,
+        logConversations: false,
+        logApiBodies: false,
+        maxChars: 4000,
+      }),
+    });
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  afterEach(async () => {
+    await telemetry.close();
+    rmSync(dirname(outfile), { recursive: true, force: true });
   });
 
   function hookCalls(): Array<Record<string, unknown>> {
-    return emitted
-      .map((record) => record.attributes)
-      .filter((attributes) => attributes['event.name'] === EVENT_HOOK_CALL);
+    if (!existsSync(outfile)) return [];
+    return readFileSync(outfile, 'utf8')
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => (JSON.parse(line) as EmittedRecord).attributes)
+      .filter(
+        (attributes): attributes is Record<string, unknown> =>
+          attributes?.['event.name'] === EVENT_HOOK_CALL,
+      );
   }
 
   it('emits one hook_call per BeforeModel hook with bounded stdout and row counts', async () => {
     await fixture(rows, async (snapshot, _owners, root) => {
-      const hooksSystem = system(root, [
-        command(
-          `process.stdout.write(JSON.stringify({decision:'allow'}) + ' '.repeat(${HOOK_TELEMETRY_TEXT_MAX_CHARS * 2}));
+      const hooksSystem = system(
+        root,
+        [
+          command(
+            `process.stdout.write(JSON.stringify({decision:'allow'}) + ' '.repeat(${HOOK_TELEMETRY_TEXT_MAX_CHARS * 2}));
            process.stderr.write('diagnostic');`,
-        ),
-      ]);
+          ),
+        ],
+        telemetry,
+      );
       await hooksSystem.initialize();
       try {
         const result = await hooksSystem.fireBeforeModelSnapshotEvent({
@@ -101,11 +136,15 @@ describe('snapshot model hook telemetry', () => {
 
   it('emits hook_call for AfterModel and for a blocking decision that disposes output eagerly', async () => {
     await fixture(rows, async (snapshot, _owners, root) => {
-      const hooksSystem = system(root, [
-        command(
-          `process.stdout.write(JSON.stringify({decision:'deny',reason:'no'}));`,
-        ),
-      ]);
+      const hooksSystem = system(
+        root,
+        [
+          command(
+            `process.stdout.write(JSON.stringify({decision:'deny',reason:'no'}));`,
+          ),
+        ],
+        telemetry,
+      );
       await hooksSystem.initialize();
       try {
         const result = await hooksSystem.fireAfterModelSnapshotEvent(

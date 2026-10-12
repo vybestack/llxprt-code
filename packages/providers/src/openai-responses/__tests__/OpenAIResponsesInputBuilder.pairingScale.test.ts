@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { buildOpenAIResponsesInput } from '../OpenAIResponsesInputBuilder.js';
 
@@ -47,7 +48,7 @@ describe('OpenAIResponsesInputBuilder tool pairing scale', () => {
     const history = countedHistory(reads);
     const input = buildOpenAIResponsesInput(history, {
       includeReasoningInContext: true,
-      outputLimiterConfig: { getEphemeralSettings: () => ({}) },
+      outputLimits: parseOutputLimits({}),
       debug: () => {},
       mediaPdfEnabled: true,
     });

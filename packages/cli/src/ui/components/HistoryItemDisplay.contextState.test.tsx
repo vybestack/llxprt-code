@@ -23,6 +23,9 @@
  * requirement checked in the real-Ink lane.
  */
 
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+
 import { describe, it, expect, vi } from 'bun:test';
 import { HistoryItemDisplay } from './HistoryItemDisplay.js';
 import { type HistoryItem, MessageType } from '../types.js';
@@ -48,13 +51,12 @@ void vi.mock('./messages/ToolGroupMessage.js', () => ({
 }));
 
 describe('<HistoryItemDisplay /> contextState badge', () => {
-  const mockConfig = {} as unknown as Config;
+  const mockConfig = { getMcpServers: () => undefined } as unknown as Config;
   const baseItem = {
     id: 1,
     timestamp: 12345,
     isPending: false,
     terminalWidth: 80,
-    config: mockConfig,
   };
 
   function renderRow(contextState: HistoryContextState | undefined): string {
@@ -66,6 +68,7 @@ describe('<HistoryItemDisplay /> contextState badge', () => {
     const { lastFrame } = renderWithProviders(
       <HistoryItemDisplay
         {...baseItem}
+        config={composeFixtureRuntime(mockConfig)}
         item={item}
         contextState={contextState}
       />,

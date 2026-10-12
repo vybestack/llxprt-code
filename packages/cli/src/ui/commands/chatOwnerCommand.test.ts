@@ -123,7 +123,7 @@ describe('owner-backed /chat command route', () => {
         const restored = await action('restore')(context, '1');
         expect(restored).toBeUndefined();
         expect(setHistory).not.toHaveBeenCalled();
-        expect(JSON.stringify(await agent.getHistory())).not.toContain(
+        expect(JSON.stringify(await agent.session.getHistory())).not.toContain(
           'second',
         );
         expect(context.ui.loadHistory).toHaveBeenCalledWith([
@@ -132,7 +132,9 @@ describe('owner-backed /chat command route', () => {
         ]);
         await agent.setHistory([human('first'), ai('one'), human('third')]);
         expect(await action('clear')(context, '')).toBeUndefined();
-        expect(JSON.stringify(await agent.getHistory())).not.toContain('third');
+        expect(JSON.stringify(await agent.session.getHistory())).not.toContain(
+          'third',
+        );
         expect(context.ui.clear).toHaveBeenCalled();
       } finally {
         setHistory.mockRestore();
@@ -176,7 +178,9 @@ describe('owner-backed /chat command route', () => {
       const replay = await replaySession(path, basename(config.projectTempDir));
       if (!replay.ok) throw new Error(replay.error);
       expect(JSON.stringify(replay.history)).toContain('second');
-      expect(JSON.stringify(await agent.getHistory())).toContain('second');
+      expect(JSON.stringify(await agent.session.getHistory())).toContain(
+        'second',
+      );
       expect(context.ui.clear).not.toHaveBeenCalled();
     });
   }, 30000);
@@ -233,7 +237,9 @@ describe('owner-backed /chat command route', () => {
         expect.objectContaining({ type: 'gemini', text: 'first' }),
       ]);
       expect(context.ui.clear).not.toHaveBeenCalled();
-      expect(JSON.stringify(await agent.getHistory())).not.toContain('later');
+      expect(JSON.stringify(await agent.session.getHistory())).not.toContain(
+        'later',
+      );
       expect(
         (await readdir(chatsDir)).filter((file) => file.endsWith('.lock')),
       ).toHaveLength(1);

@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -26,7 +27,7 @@ function prepare(root: string): { bytes: number; sha256: string } {
   const input = buildOpenAIResponsesInput(rows, {
     includeReasoningInContext: false,
     mediaPdfEnabled: true,
-    outputLimiterConfig: { getEphemeralSettings: () => ({}) },
+    outputLimits: parseOutputLimits({}),
     debug: () => {},
   });
   const projection = projectOpenAIResponsesPromptEnvelope({

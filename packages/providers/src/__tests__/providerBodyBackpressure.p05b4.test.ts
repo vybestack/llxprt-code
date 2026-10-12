@@ -163,8 +163,8 @@ describe('P05b4 transport backpressure and cancellation @plan:PLAN-20260917-ISSU
       { preconnect: originalFetch.preconnect },
     );
     const invocation = createRuntimeInvocationContext({
-      runtime: harness.runtime,
-      settings: harness.settings,
+      runtimeId: harness.runtime.runtimeId,
+      runtimeMetadata: harness.runtime.metadata,
       providerName: 'openai-responses',
       ephemeralsSnapshot: { 'prompt-caching': 'off' },
     });
@@ -234,8 +234,8 @@ describe('P05b4 aborted transport and released rows @plan:PLAN-20260917-ISSUE854
       { preconnect: originalFetch.preconnect },
     );
     const invocation = createRuntimeInvocationContext({
-      runtime: harness.runtime,
-      settings: harness.settings,
+      runtimeId: harness.runtime.runtimeId,
+      runtimeMetadata: harness.runtime.metadata,
       providerName: 'openai-responses',
       ephemeralsSnapshot: { 'prompt-caching': 'off' },
     });

@@ -10,8 +10,14 @@ import {
 import { createAgentRuntimeState } from '../../../core/src/runtime/AgentRuntimeState.js';
 import { LocalMediaStore } from '../../../core/src/storage/local-media-store.js';
 import type { DetachedFixture } from '../../../core/src/services/history/detached-rollback-test-helpers.js';
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { AgentClient } from './client.js';
 import type { Config } from '../../../core/src/config/config.js';
+
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
 
 export async function withRetainedClient<T>(
   fixture: DetachedFixture,
@@ -28,10 +34,6 @@ export async function withRetainedClient<T>(
   });
   const { agent, cleanup } = await buildAgent('plain-text.jsonl');
   const config = internalConfig(agent);
-  Object.defineProperty(config, 'getLocalMediaStore', {
-    value: () => store,
-    configurable: true,
-  });
   const client = new AgentClient(
     config,
     createAgentRuntimeState({
@@ -39,6 +41,9 @@ export async function withRetainedClient<T>(
       provider: 'fake',
       model: 'fake-model',
     }),
+    () => undefined,
+    store,
+    fixturePaths(),
   );
   client.storeHistoryServiceForReuse(fixture.history);
   try {

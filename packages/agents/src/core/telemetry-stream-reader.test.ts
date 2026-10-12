@@ -5,11 +5,13 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { createTelemetryAdapterFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { createTelemetryAdapter } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import {
+  initializeTelemetry,
   shutdownTelemetry,
   readRequestArtifact,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import { stageTurnRequestArtifact } from './turn-request-artifact.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
@@ -35,6 +37,9 @@ async function published() {
       outfile: path,
     },
   });
+  const telemetry =
+    createSessionSettingsFixture(config).settingsOwner.telemetry;
+  await initializeTelemetry(telemetry);
   try {
     const source = await stageTurnRequestArtifact(
       root(),
@@ -42,7 +47,7 @@ async function published() {
         for (let index = 0; index < 64; index++) yield diskTextRow(index, true);
       })(),
     );
-    await createTelemetryAdapterFromConfig(config).logApiRequest({
+    await createTelemetryAdapter(config, telemetry).logApiRequest({
       model: 'gpt-5.6',
       promptId: 'reader',
       requestArtifact: {
@@ -52,7 +57,7 @@ async function published() {
       },
     });
   } finally {
-    await shutdownTelemetry(config);
+    await shutdownTelemetry(telemetry);
   }
   const records = (await readFile(path, 'utf8'))
     .trim()

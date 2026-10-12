@@ -85,6 +85,12 @@ const cases: readonly IContent[] = [
     ],
   },
 ];
+function dumpPolicy(stripFromContext: string): Record<string, unknown> {
+  return {
+    'reasoning.stripFromContext': stripFromContext,
+    'reasoning.includeInContext': true,
+  };
+}
 async function streamBytes(
   history: readonly IContent[],
   providerName: string,
@@ -98,10 +104,7 @@ async function streamBytes(
   const body = buildProviderDumpBodyStream({
     providerName,
     history: source,
-    settings: {
-      get: (key: string): unknown =>
-        key === 'reasoning.stripFromContext' ? policy : true,
-    },
+    policy: dumpPolicy(policy),
   });
 
   let bytes = '';
@@ -117,10 +120,7 @@ function eagerBytes(
     buildProviderDumpBody({
       providerName,
       history: structuredClone([...history]),
-      settings: {
-        get: (key: string): unknown =>
-          key === 'reasoning.stripFromContext' ? policy : true,
-      },
+      policy: dumpPolicy(policy),
     }),
     null,
     2,

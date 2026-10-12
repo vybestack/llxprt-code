@@ -277,38 +277,42 @@ describe('ChatSession forwards the journal path into compression (#2933)', () =>
   it('compresses an unbound chat without publishing a sibling transcript', async () => {
     const history = new HistoryService();
     const runtime = buildRuntimeContext(history, {
+      compressionStrategy: 'one-shot',
       contextLimit: 200_000,
       compressionThreshold: 0.8,
     });
-    for (const text of ['one', 'two', 'three', 'four']) {
-      history.add(textContent(text));
-    }
-    const chat = new ChatSession(runtime, {} as ContentGenerator, {}, []);
-    let seenContext: CompressionContext | undefined;
-    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockReturnValue({
-      name: 'one-shot',
-      requiresLLM: false,
-      trigger: { mode: 'threshold', defaultThreshold: 0.8 },
-      compress: async (context) => {
+    history.addAll(regressionHistory());
+    const transport = new SummaryTransport();
+    vi.spyOn(runtime.provider, 'getActiveProvider').mockReturnValue(transport);
+    const chat = new ChatSession(
+      runtime,
+      {} as unknown as ContentGenerator,
+      {},
+      [],
+    );
+    let seenContext: Omit<CompressionContext, 'history'> | undefined;
+    const compressDisk = OneShotStrategy.prototype.compressDisk;
+    vi.spyOn(OneShotStrategy.prototype, 'compressDisk').mockImplementation(
+      function (this: OneShotStrategy, context, candidate) {
         seenContext = context;
-        return {
-          kind: 'applied',
-          newHistory: [textContent('summary')],
-          metadata: {
-            originalMessageCount: context.history.length,
-            compressedMessageCount: 1,
-            strategyUsed: 'one-shot',
-            llmCallMade: false,
-          },
-        };
+        return compressDisk.call(this, context, candidate);
       },
-    });
+    );
 
     await chat.performCompression('unbound-compression');
 
+    expect(seenContext).toBeDefined();
     expect(seenContext?.transcriptPath).toBeUndefined();
-    expect(chat.getHistory().map((content) => content.blocks)).toStrictEqual([
-      textContent('summary').blocks,
-    ]);
+    const compressed: IContent[] = [];
+    for await (const content of chat.getHistory()) compressed.push(content);
+    expect(compressed.length).toBeLessThan(regressionHistory().length);
+    expect(
+      compressed.some((content) =>
+        content.blocks.some(
+          (block) =>
+            block.type === 'text' && block.text.includes('kept details'),
+        ),
+      ),
+    ).toBe(true);
   });
 });

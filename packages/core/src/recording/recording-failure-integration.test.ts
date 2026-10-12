@@ -39,7 +39,13 @@ async function withRecorder(
   if (failReportStorage) await writeFile(reportDirectory, 'blocked');
   const integration = new RecordingIntegration(
     recorder,
-    new SessionPersistenceService(storage, 'failure-contract'),
+    new SessionPersistenceService(
+      {
+        projectRoot: storage.getProjectRoot(),
+        chatsDir: storage.getProjectChatsDir(),
+      },
+      'failure-contract',
+    ),
     failReportStorage ? reportDirectory : undefined,
   );
   const history = new HistoryService();

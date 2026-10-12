@@ -5,7 +5,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
-import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { OpenAIResponsesProvider } from '@vybestack/llxprt-code-providers';
 import { createRuntimeTokenizerFactory } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
@@ -103,24 +103,20 @@ function runtime(baseURL: string, retries = 2) {
   settings.setProviderSetting('openai-responses', 'base-url', baseURL);
   settings.setProviderSetting('openai-responses', 'auth-key', 'test-key');
   settings.set('prompt-caching', 'off');
+  settings.set('retries', retries);
+  settings.set('retrywait', 0);
   const config = new Config({
     cwd: root(),
     targetDir: root(),
     sessionId: randomUUID(),
     model: 'o3-mini',
     debugMode: false,
-    settingsService: settings,
   });
-  config.setTokenizerFactory(createRuntimeTokenizerFactory());
+  const tokenizerFactory = createRuntimeTokenizerFactory();
   const provider = new OpenAIResponsesProvider('test-key', baseURL);
   const context = { config, settingsService: settings, runtimeId: root() };
-  const invocation = createRuntimeInvocationContext({
-    runtime: context,
-    settings,
-    providerName: provider.name,
-    ephemeralsSnapshot: { 'prompt-caching': 'off', retries, retrywait: 0 },
-  });
-  return { config, provider, context, invocation };
+  const invocation = captureProviderInvocation(context, provider.name);
+  return { config, provider, context, invocation, tokenizerFactory };
 }
 
 async function independentEstimate(
@@ -143,14 +139,15 @@ async function independentEstimate(
         };
     },
   };
-  const prepared = await prepareAtSendSeam(setup.provider, {
-    contents,
-    config: setup.config,
-    runtime: setup.context,
-    settings: setup.context.settingsService,
-    invocation: setup.invocation,
-    systemInstruction: systemText,
-  });
+  const prepared = await prepareAtSendSeam(
+    setup.provider,
+    {
+      contents,
+      invocation: setup.invocation,
+      systemInstruction: systemText,
+    },
+    setup.tokenizerFactory,
+  );
   try {
     if (prepared.estimate === null)
       throw new Error('Missing actual provider estimate');
@@ -171,12 +168,13 @@ async function runOracle(large: boolean): Promise<number> {
   try {
     stream = await enforceAndStreamSourcePromptEnvelopeRetries({
       provider: setup.provider,
+      tokenizerFactory: setup.tokenizerFactory,
       source: fixture.source,
       buildOptions: (source) =>
         buildSourceProviderChatOptions(
           source,
           undefined,
-          setup.context,
+          undefined,
           setup.invocation,
           { requestId: 'actual-source-http' },
           instructions,
@@ -247,12 +245,13 @@ async function testActualSeamRetry(): Promise<void> {
   try {
     stream = await enforceAndStreamSourcePromptEnvelopeRetries({
       provider: setup.provider,
+      tokenizerFactory: setup.tokenizerFactory,
       source: fixture.source,
       buildOptions: (source) =>
         buildSourceProviderChatOptions(
           source,
           undefined,
-          setup.context,
+          undefined,
           setup.invocation,
           retryContext,
           systemText,
@@ -315,13 +314,14 @@ async function actualResponseCancellation(
   try {
     stream = await enforceAndStreamSourcePromptEnvelopeRetries({
       provider: setup.provider,
+      tokenizerFactory: setup.tokenizerFactory,
       source: fixture.source,
       signal: controller.signal,
       buildOptions: (source) =>
         buildSourceProviderChatOptions(
           source,
           undefined,
-          setup.context,
+          undefined,
           setup.invocation,
           undefined,
           instructions,

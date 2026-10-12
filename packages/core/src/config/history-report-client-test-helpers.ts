@@ -11,6 +11,17 @@ export function createHistoryReportClient(
 ): AgentClientContract {
   let initialized = false;
   return {
+    get tools(): AgentClientContract['tools'] {
+      return unsupportedReportOperation();
+    },
+    bindToolSelection: unsupportedReportOperation,
+    assertConfig: unsupportedReportOperation,
+    assertProviderManager: unsupportedReportOperation,
+    bindProviderInvocation: unsupportedReportOperation,
+    bindTelemetry: unsupportedReportOperation,
+    bindRuntimeSettings: unsupportedReportOperation,
+    prepareHistoryRebind: unsupportedReportOperation,
+    getContentGeneratorConfig: unsupportedReportOperation,
     initialize: async (_config, options = {}) => {
       options.signal?.throwIfAborted();
       initialized = true;

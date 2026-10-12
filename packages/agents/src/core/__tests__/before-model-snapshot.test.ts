@@ -1,7 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, spyOn } from 'bun:test';
 import { readdirSync } from 'node:fs';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import {
+  hookSessionRuntime,
+  readHookDefinitions,
+} from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
+import { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 import {
   escapeShellArg,
   getShellConfiguration,
@@ -13,6 +21,7 @@ import {
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { HookDiskText } from '@vybestack/llxprt-code-core/hooks/hookOutputSnapshot.js';
 import { fireBeforeModelSnapshotHook } from '../beforeModelHookFire.js';
+import type { BoundarySnapshotResult } from '../boundary-recovery-snapshot.js';
 import {
   AgentExecutionBlockedError,
   AgentExecutionStoppedError,
@@ -49,11 +58,27 @@ function config(root: string, action: string): Config {
   });
 }
 
+function hookOwner(cfg: Config): SessionHookOwner {
+  return new SessionHookOwner(
+    readHookDefinitions(cfg),
+    hookSessionRuntime(
+      cfg,
+      new WorkspaceTrustLifecycle({ localTrust: cfg.initialWorkspaceTrust }),
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'boundary-snapshot',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    ),
+    true,
+    new MessageBus(),
+  );
+}
+
 async function runCaller(
   action: string,
-  consume: (
-    result: Awaited<ReturnType<typeof fireBeforeModelSnapshotHook>>,
-  ) => Promise<void>,
+  consume: (result: BoundarySnapshotResult) => Promise<void>,
 ): Promise<void> {
   const fixture = diskFixture({
     name: 'caller',
@@ -61,7 +86,7 @@ async function runCaller(
     after: [],
     pending: [row('pending')],
   });
-  const cfg = config(fixture.root, action);
+  const owner = hookOwner(config(fixture.root, action));
   const scratch = fixture.scratch();
   const eager = spyOn(HookDiskText.prototype, 'readText').mockImplementation(
     () => {
@@ -70,7 +95,10 @@ async function runCaller(
   );
   try {
     const result = await fireBeforeModelSnapshotHook({
-      configForHooks: cfg,
+      owner: owner.execution({
+        sessionId: () => 'boundary-snapshot',
+        transcriptPath: () => undefined,
+      }),
       requestContents: fixture.before,
       rawPending: fixture.rawPending,
       model: 'test',
@@ -78,6 +106,9 @@ async function runCaller(
       log: () => {},
       root: fixture.root,
     });
+    if (result === undefined) {
+      throw new Error('Expected the registered BeforeModel hook to run');
+    }
     try {
       await consume(result);
     } finally {
@@ -85,6 +116,7 @@ async function runCaller(
     }
   } finally {
     eager.mockRestore();
+    await owner.dispose();
     try {
       expect(fixture.active()).toBe(0);
       expect(readdirSync(fixture.root).sort()).toStrictEqual(scratch);
@@ -161,7 +193,7 @@ describe('snapshot BeforeModel preparation', () => {
 });
 
 describe('snapshot preparation without hooks', () => {
-  it('returns owned raw pending rows without invoking a hook system', async () => {
+  it('returns no snapshot and copies nothing to disk without a hook owner', async () => {
     const fixture = diskFixture({
       name: 'disabled',
       before: [row('h'), row('p')],
@@ -171,7 +203,7 @@ describe('snapshot preparation without hooks', () => {
     const scratch = readdirSync(fixture.root).sort();
     try {
       const result = await fireBeforeModelSnapshotHook({
-        configForHooks: undefined,
+        owner: undefined,
         requestContents: fixture.before,
         rawPending: fixture.rawPending,
         model: 'test',
@@ -179,18 +211,7 @@ describe('snapshot preparation without hooks', () => {
         log: () => {},
         root: fixture.root,
       });
-      try {
-        expect(result.classification).toBe('unchanged');
-        expect(await collectRows(result.pendingSelection)).toStrictEqual([
-          row('p'),
-        ]);
-        expect(await collectRows(result.contents)).toStrictEqual([
-          row('h'),
-          row('p'),
-        ]);
-      } finally {
-        result.close();
-      }
+      expect(result).toBeUndefined();
       expect(fixture.active()).toBe(0);
       expect(fixture.scratch()).toStrictEqual(scratch);
     } finally {

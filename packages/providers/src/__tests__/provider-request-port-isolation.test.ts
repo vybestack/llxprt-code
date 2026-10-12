@@ -15,6 +15,7 @@ import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProvi
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
+import { replayableContents } from '../utils/collectContents.js';
 
 describe('call-bound provider ports', () => {
   const directories: string[] = [];
@@ -80,7 +81,9 @@ describe('call-bound provider ports', () => {
     return {
       provider,
       options: {
-        contents: [{ speaker: 'human', blocks: [reference] }],
+        contents: replayableContents([
+          { speaker: 'human', blocks: [reference] },
+        ]),
         invocation,
         systemInstruction: 'Describe the image.',
       },

@@ -34,9 +34,7 @@ async function nativeEstimate(
         yield sourcePending;
       },
     },
-    config: setup.config,
-    runtime: setup.runtime.providerRuntime,
-    settings: setup.settings,
+    invocation: setup.runtime.prepareProviderInvocation(setup.provider.name),
     systemInstruction: projectionInstructions,
   });
   try {
@@ -161,8 +159,10 @@ describe('actual StreamProcessor disk history HTTP ownership', () => {
     const setup = await processorFixture(
       root(),
       `http://127.0.0.1:${http.server.port}/v1`,
+      false,
+      64,
+      { enabled: true, logPrompts: true },
     );
-    setup.config.updateTelemetrySettings({ enabled: true, logPrompts: true });
     http.readBody.release();
     http.respond.release();
     try {

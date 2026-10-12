@@ -1,10 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { admitDeferredHistorySource } from './deferredHistorySource.js';
-import {
-  buildAgent,
-  internalConfig,
-} from '../api/__tests__/helpers/agentHarness.js';
+import { buildAgent } from '../api/__tests__/helpers/agentHarness.js';
 import {
   withValueTransformFixture,
   transformProbes,
@@ -119,13 +116,12 @@ describe('deferred history uses disk value transform', () => {
       it(`bounds the complete streamed input and publication at ${size}, rollback=${rollback}`, async () => {
         const { agent, cleanup } = await buildAgent('plain-text.jsonl');
         try {
-          expect(
-            await observeDeferred(
-              size,
-              rollback,
-              internalConfig(agent).getLocalMediaStore(),
-            ),
-          ).toBe(rollback ? 3 : size);
+          const store = agent.agentClient.mediaStore;
+          if (store === undefined)
+            throw new Error('Agent client is missing its media store');
+          expect(await observeDeferred(size, rollback, store)).toBe(
+            rollback ? 3 : size,
+          );
         } finally {
           await cleanup();
         }

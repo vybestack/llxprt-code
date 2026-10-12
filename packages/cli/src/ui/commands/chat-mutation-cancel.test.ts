@@ -42,7 +42,7 @@ for (const name of ['clear', 'restore']) {
           );
           if (reference?.type !== 'media' || reference.encoding !== 'reference')
             throw new Error('Missing reference');
-          const store = context.services.config?.getLocalMediaStore();
+          const store = client.mediaStore;
           if (store === undefined) throw new Error('Missing store');
           const path = recording.getFilePath();
           if (path === null) throw new Error('Missing journal');

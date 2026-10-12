@@ -17,30 +17,40 @@ import { randomUUID } from 'node:crypto';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { accountingFactory } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { bindClientTokenization } from '../session/session-client-binding.js';
+import {
+  requireMediaStore,
+  type LocalMediaStore,
+} from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
 
 async function buildDeferredClient(): Promise<{
   client: AgentClient;
-  config: Config;
   store: LocalMediaStore;
   cleanup: () => Promise<void>;
 }> {
   const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-  const config = internalConfig(agent);
-  config.setTokenizerFactory(accountingFactory((text) => text.length));
+  const store = requireMediaStore(agent.agentClient);
   const client = new AgentClient(
-    config,
+    internalConfig(agent),
     createAgentRuntimeState({
       runtimeId: randomUUID(),
       provider: 'fake',
       model: 'fake-model',
     }),
+    () => undefined,
+    store,
+    fixturePaths(),
   );
+  bindClientTokenization(client, accountingFactory((text) => text.length));
   return {
     client,
-    config,
-    store: config.getLocalMediaStore(),
+    store,
     cleanup: async () => {
       await client.dispose();
       await cleanup();
@@ -223,7 +233,7 @@ describe('paused deferred source', () => {
 
 describe('streamed deferred media ownership', () => {
   it('keeps media usable after startup failure, transfers on retry, and releases on disposal', async () => {
-    const { client, config, store, cleanup } = await buildDeferredClient();
+    const { client, store, cleanup } = await buildDeferredClient();
     async function* source(): AsyncIterable<IContent> {
       yield {
         speaker: 'human',
@@ -246,7 +256,8 @@ describe('streamed deferred media ownership', () => {
       if (reference.type !== 'media' || reference.encoding !== 'reference')
         throw new Error('Expected admitted media');
       expect(await store.hasReservations(reference.contentId)).toBe(true);
-      config.setTokenizerFactory(
+      bindClientTokenization(
+        client,
         accountingFactory(() => {
           throw new Error('startup token failure');
         }),
@@ -256,7 +267,7 @@ describe('streamed deferred media ownership', () => {
       );
       expect(await store.hasReservations(reference.contentId)).toBe(true);
       expect(client.hasChatInitialized()).toBe(false);
-      config.setTokenizerFactory(accountingFactory((text) => text.length));
+      bindClientTokenization(client, accountingFactory((text) => text.length));
       await client.startChat([]);
       expect(await store.hasReservations(reference.contentId)).toBe(true);
       await client.dispose();

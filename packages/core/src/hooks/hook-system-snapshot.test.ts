@@ -10,6 +10,11 @@ import { Config } from '../config/config.js';
 import { HookSystem } from './hookSystem.js';
 
 import {
+  fixtureHookDefinitions,
+  fixtureHookRuntime,
+} from './__tests__/hook-runtime-fixture.js';
+
+import {
   HookEventName,
   BeforeModelHookOutput,
   type HookConfig,
@@ -42,20 +47,22 @@ function system(
   hooks: HookConfig[],
   sequential = true,
 ): HookSystem {
+  const config = new Config({
+    sessionId: 'snapshot-orchestration',
+    targetDir: root,
+    cwd: root,
+    debugMode: false,
+    model: 'test',
+    trustedFolder: true,
+    enableHooks: true,
+    hooks: {
+      [HookEventName.BeforeModel]: [{ sequential, hooks }],
+      [HookEventName.AfterModel]: [{ sequential, hooks }],
+    },
+  });
   return new HookSystem(
-    new Config({
-      sessionId: 'snapshot-orchestration',
-      targetDir: root,
-      cwd: root,
-      debugMode: false,
-      model: 'test',
-      trustedFolder: true,
-      enableHooks: true,
-      hooks: {
-        [HookEventName.BeforeModel]: [{ sequential, hooks }],
-        [HookEventName.AfterModel]: [{ sequential, hooks }],
-      },
-    }),
+    fixtureHookDefinitions(config),
+    fixtureHookRuntime(config),
   );
 }
 
@@ -441,7 +448,10 @@ describe('real HookSystem snapshot array callback', () => {
         debugMode: false,
         model: 'test',
       });
-      const hooksSystem = new ArrayCallbackSystem(config);
+      const hooksSystem = new ArrayCallbackSystem(
+        fixtureHookDefinitions(config),
+        fixtureHookRuntime(config),
+      );
       await hooksSystem.initialize();
       expect(
         (await hooksSystem.fireBeforeModelEvent()).getEffectiveReason(),
@@ -728,14 +738,16 @@ class ArrayAfterCallbackSystem extends HookSystem {
 describe('AfterModel snapshot callback contract', () => {
   it('rejects a missing AfterModel snapshot callback and preserves the old callback', async () => {
     await fixture(rows, async (snapshot, _owners, root) => {
+      const config = new Config({
+        sessionId: 'after-callback',
+        targetDir: root,
+        cwd: root,
+        debugMode: false,
+        model: 'test',
+      });
       const hooksSystem = new ArrayAfterCallbackSystem(
-        new Config({
-          sessionId: 'after-callback',
-          targetDir: root,
-          cwd: root,
-          debugMode: false,
-          model: 'test',
-        }),
+        fixtureHookDefinitions(config),
+        fixtureHookRuntime(config),
       );
       await hooksSystem.initialize();
       expect(

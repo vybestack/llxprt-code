@@ -135,6 +135,7 @@ function conversationDiagnostics(
     conversationLogPath,
     requestBodyLoggingEnabled: false,
     assertRequestArtifactExporter: () => undefined,
+    acknowledgeTerminalTelemetry: async () => () => undefined,
     redaction: {
       redactApiKeys: false,
       redactCredentials: false,

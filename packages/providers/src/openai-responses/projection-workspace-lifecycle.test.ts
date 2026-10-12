@@ -454,8 +454,9 @@ describe('actual Responses disabled media workspace', () => {
           };
         },
       };
-      const options = setup.options(rows);
-      options.settings?.set('media.pdf.enabled', false);
+      const options = setup.options(rows, undefined, {
+        'media.pdf.enabled': false,
+      });
       const eagerRows: IContent[] = [];
       for await (const row of rows.openReader()) eagerRows.push(row);
       const eager = await setup.provider.projectPromptEnvelope({

@@ -10,6 +10,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
   GenerateChatOptions,
@@ -55,7 +56,6 @@ describe('direct-message flat tools and replayable contents', () => {
       cwd: process.cwd(),
       debugMode: false,
       model: 'test',
-      settingsService: settings,
     });
     const history = new HistoryService();
     const providerRuntime = createProviderRuntimeContext({
@@ -64,6 +64,8 @@ describe('direct-message flat tools and replayable contents', () => {
       runtimeId: 'critical-direct',
     });
     const context = createAgentRuntimeContext({
+      prepareProviderInvocation: (name, parameters, signal) =>
+        captureProviderInvocation(providerRuntime, name, parameters, signal),
       state: createAgentRuntimeState({
         runtimeId: 'critical-direct',
         provider: provider.name,

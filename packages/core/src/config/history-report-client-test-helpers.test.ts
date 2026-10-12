@@ -1,28 +1,18 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
-import { tmpdir } from 'node:os';
 import type { AgentClientContract } from '../core/clientContract.js';
-import { Config } from './config.js';
 import { createHistoryReportClient } from './history-report-client-test-helpers.js';
 import { withCoreSuffixFixture } from '../services/history/__tests__/support/core-suffix-fixture-test-helpers.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 
 describe('source history report client fixture', () => {
-  it('publishes configuration state by traversing the real source journal and leaves it usable', async () => {
+  it('initializes the report client by traversing the real source journal and leaves it usable', async () => {
     await withCoreSuffixFixture(3, async (history, owner, counters) => {
       const client: AgentClientContract = createHistoryReportClient(history);
-      const config = new Config({
-        sessionId: 'source-history-report-witness',
-        targetDir: tmpdir(),
-        cwd: tmpdir(),
-        debugMode: false,
-        model: 'test-model',
-        agentClientFactory: () => client,
-      });
-      config.setFallbackMode(true);
-      await config.initializeContentGeneratorConfig();
-      expect(config.isInFallbackMode()).toBe(false);
-      expect(config.getContentGeneratorConfig()?.model).toBe('test-model');
+      await client.initialize({ model: 'test-model' });
+      let traversed = 0;
+      for await (const _row of client.streamHistory()) traversed++;
+      expect(traversed).toBe(3);
       expect(client.isInitialized()).toBe(true);
       expect(counters.snapshot().rowsDecoded).toBe(3);
       await client.dispose();

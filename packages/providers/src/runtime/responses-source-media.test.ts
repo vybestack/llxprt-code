@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
+import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { closeSync, openSync, readSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -10,7 +11,7 @@ import { serializeResponsesPromptEnvelope } from './responses-source-serializer.
 const context = {
   includeReasoningInContext: false,
   mediaPdfEnabled: true,
-  outputLimiterConfig: { getEphemeralSettings: () => ({}) },
+  outputLimits: parseOutputLimits({}),
   debug: (): void => {},
 };
 function row(index: number): IContent {

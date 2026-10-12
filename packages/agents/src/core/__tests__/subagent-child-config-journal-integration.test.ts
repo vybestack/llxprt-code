@@ -17,10 +17,19 @@ import {
 } from '@vybestack/llxprt-code-core/utils/events.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 import {
   createScopeFactory,
+  fixtureToolSelection,
   makeForegroundConfig,
 } from './subagentOrchestrator-test-helpers.js';
+
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
 
 describe('child Config and journal ownership', () => {
   it.each([false, true])(
@@ -42,7 +51,8 @@ describe('child Config and journal ownership', () => {
         'Inspect the supplied task.',
       );
       const foreground = makeForegroundConfig();
-      const chatsDir = foreground.storage.getProjectChatsDir();
+      const chatsDir = foreground.projectChatsDir;
+      const foregroundSettings = createSessionSettingsFixture(foreground);
       const failure = new Error('scope creation sentinel');
       const { factory } = createScopeFactory();
       if (scopeFails) factory.mockRejectedValue(failure);
@@ -51,6 +61,15 @@ describe('child Config and journal ownership', () => {
         CoreEvent.ModelChanged,
       );
       const orchestrator = new SubagentOrchestrator({
+        workspaceTrust: foregroundSettings.workspaceTrust,
+        createChildSettings: () =>
+          foregroundSettings.settingsOwner.createChildStore(),
+        readRunPolicy: () =>
+          foregroundSettings.settingsOwner.readSubagentRunPolicy(),
+        instructions: emptyInstructionReads,
+        toolRegistry: fixtureToolSelection(),
+        workspacePaths: fixturePaths(),
+        readMcpInstructions: () => undefined,
         subagentManager: subagents,
         profileManager: profiles,
         foregroundConfig: foreground,
@@ -61,7 +80,6 @@ describe('child Config and journal ownership', () => {
           if (!history)
             throw new Error('Child must use the real journal-backed history');
           const childConfig = options.profile.config;
-          childConfig.getAgentClient();
           expect(
             coreEvents.listenerCount(CoreEvent.ModelChanged),
           ).toBeGreaterThan(priorSubscriptions);

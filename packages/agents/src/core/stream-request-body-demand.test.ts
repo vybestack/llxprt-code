@@ -22,13 +22,22 @@ import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { OpenAIResponsesProvider } from '@vybestack/llxprt-code-providers';
 import { createRuntimeTokenizerFactory } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import {
+  hookSessionRuntime,
+  readHookDefinitions,
+} from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { CompressionHandler } from '../compression/CompressionHandler.js';
 import { ConversationManager } from './ConversationManager.js';
@@ -95,6 +104,8 @@ interface RuntimeFixture {
   tokenizer: RuntimeTokenizerFactory;
   provider: OpenAIResponsesProvider;
   providerRuntime: ProviderRuntimeContext;
+  hooks: SessionHookOwner;
+  hookOwner: HookExecutionOwner;
 }
 
 interface Fixture extends RuntimeFixture {
@@ -135,7 +146,6 @@ function setupRuntime(
     sessionId: randomUUID(),
     model: 'o3-mini',
     debugMode: false,
-    settingsService: settings,
     enableHooks: true,
     trustedFolder: true,
     hooks: {
@@ -152,14 +162,40 @@ function setupRuntime(
     },
   });
   const tokenizer = createRuntimeTokenizerFactory();
-  config.setTokenizerFactory(tokenizer);
   const provider = new OpenAIResponsesProvider('test-key', baseURL);
   const providerRuntime = {
     config,
     settingsService: settings,
     runtimeId: root,
   };
-  return { config, settings, tokenizer, provider, providerRuntime };
+  const hooks = new SessionHookOwner(
+    readHookDefinitions(config),
+    hookSessionRuntime(
+      config,
+      new WorkspaceTrustLifecycle({ localTrust: config.initialWorkspaceTrust }),
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: config.getSessionId(),
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    ),
+    true,
+    new MessageBus(),
+  );
+  const hookOwner = hooks.execution({
+    sessionId: () => config.getSessionId(),
+    transcriptPath: () => undefined,
+  });
+  return {
+    config,
+    settings,
+    tokenizer,
+    provider,
+    providerRuntime,
+    hooks,
+    hookOwner,
+  };
 }
 
 function buildProcessor(
@@ -169,8 +205,10 @@ function buildProcessor(
   const { config, provider, providerRuntime } = setup;
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.registerProvider(provider);
-  config.setProviderManager(manager);
   const view = createAgentRuntimeContext({
+    prepareProviderInvocation: (name, parameters, signal) =>
+      captureProviderInvocation(providerRuntime, name, parameters, signal),
+    promptEstimator: setup.tokenizer,
     state: createAgentRuntimeState({
       runtimeId: config.getSessionId(),
       sessionId: config.getSessionId(),
@@ -185,7 +223,15 @@ function buildProcessor(
       telemetry: { enabled: false, target: null },
     },
     provider: createProviderAdapterFromManager(manager),
-    telemetry: createTelemetryAdapterFromConfig(config),
+    telemetry: createTelemetryAdapter(
+      config,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: config.getSessionId(),
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    ),
     tools: createToolRegistryViewFromRegistry(),
     providerRuntime,
   });
@@ -262,6 +308,7 @@ async function createFixture(): Promise<Fixture> {
     async dispose(): Promise<void> {
       history.dispose();
       await recording.dispose();
+      await setup.hooks.dispose();
       await setup.config.dispose();
     },
   };
@@ -294,15 +341,10 @@ async function independentEstimate(fixture: Fixture): Promise<number> {
   };
   const projection = await fixture.provider.projectPromptEnvelope({
     contents,
-    config: fixture.config,
-    runtime: fixture.providerRuntime,
-    settings: fixture.settings,
-    invocation: createRuntimeInvocationContext({
-      runtime: fixture.providerRuntime,
-      settings: fixture.settings,
-      providerName: fixture.provider.name,
-      ephemeralsSnapshot: { 'prompt-caching': 'off' },
-    }),
+    invocation: captureProviderInvocation(
+      fixture.providerRuntime,
+      fixture.provider.name,
+    ),
     systemInstruction: instructions,
   });
   try {
@@ -330,7 +372,10 @@ async function runBodyFixture(fixture: Fixture): Promise<void> {
   );
   try {
     const stream = await fixture.processor.makeApiCallAndProcessStream(
-      { message: [{ type: 'text', text: 'pending' }] },
+      {
+        message: [{ type: 'text', text: 'pending' }],
+        hookOwner: fixture.hookOwner,
+      },
       'agent-body-demand',
       { speaker: 'human', blocks: [{ type: 'text', text: 'pending' }] },
     );
@@ -418,6 +463,7 @@ describe('issue854 real StreamProcessor Responses BODY demand', () => {
           {
             message: [{ type: 'text', text: 'pending' }],
             config: { abortSignal: controller.signal },
+            hookOwner: fixture.hookOwner,
           },
           'agent-disk-abort',
           { speaker: 'human', blocks: [{ type: 'text', text: 'pending' }] },

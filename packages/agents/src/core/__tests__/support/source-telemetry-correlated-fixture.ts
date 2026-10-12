@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import {
   getPerfPhaseObserver,
@@ -9,12 +10,20 @@ import {
 import { join } from 'node:path';
 import type { ReadableLogRecord } from '@opentelemetry/sdk-logs';
 import { ExportResultCode, type ExportResult } from '@opentelemetry/core';
-import { FileLogExporter } from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
+import {
+  FileLogExporter,
+  FileMetricExporter,
+  FileSpanExporter,
+} from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
 import {
   flushTelemetry,
   initializeTelemetry,
   shutdownTelemetry,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import type {
   IContent,
   UsageStats,
@@ -174,9 +183,6 @@ async function send(
               yield* disk.source.openReader();
             },
           },
-          config: input.setup.config,
-          runtime: input.setup.context,
-          settings: input.setup.context.settingsService,
           invocation: input.setup.invocation,
           systemInstruction: preflightInstructions,
           resolved: { model: 'gpt-5.6' },
@@ -191,7 +197,7 @@ async function send(
         ...buildSourceProviderChatOptions(
           rows,
           undefined,
-          input.setup.context,
+          undefined,
           input.setup.invocation,
           undefined,
           preflightInstructions,
@@ -229,12 +235,6 @@ async function prepareCorrelated(
     if (++uploadCount === 2) uploaded.release();
     await uploaded.wait;
   });
-  await shutdownTelemetry(assembled.setup.config);
-  assembled.setup.config.updateTelemetrySettings({
-    logConversations: options.conversations ?? true,
-    logApiBodies: options.apiBodies ?? true,
-    logPrompts: options.prompts ?? true,
-  });
   const path = join(root, 'correlated.jsonl');
   const logicalIds = new Map<string, string>();
   const starts: PerfProviderAttemptStartInfo[] = [];
@@ -256,22 +256,81 @@ async function prepareCorrelated(
     'corr-first',
     logicalIds,
   );
-  initializeTelemetry(assembled.setup.config, exporter);
+  const privacy = {
+    logPrompts: options.prompts ?? true,
+    logConversations: options.conversations ?? true,
+    logApiBodies: options.apiBodies ?? true,
+    maxChars: 32 * 1024 * 1024,
+  };
+  const config = new Config({
+    cwd: root,
+    targetDir: root,
+    sessionId: randomUUID(),
+    model: 'gpt-5.6',
+    debugMode: false,
+    telemetry: {
+      enabled: true,
+      logPrompts: privacy.logPrompts,
+      logApiBodies: privacy.logApiBodies,
+      logApiBodyMaxChars: privacy.maxChars,
+      logConversations: privacy.logConversations,
+      conversationLogPath: root,
+      outfile: path,
+    },
+  });
+  const settingsOwner = new SessionSettingsOwner(
+    assembled.setup.context.settingsService,
+  );
+  const telemetryOptions = {
+    enabled: true,
+    sessionId: config.getSessionId(),
+    outfile: path,
+    maxBytes: config.getTelemetryOutfileMaxBytes(),
+    maxFiles: config.getTelemetryOutfileMaxFiles(),
+    readPrivacySettings: () => privacy,
+  };
+  const telemetry = settingsOwner.bindTelemetry(
+    config,
+    RootTelemetry.prepare(telemetryOptions, () => ({
+      tracer: new FileSpanExporter(path, telemetryOptions),
+      logger: exporter,
+      meter: new FileMetricExporter(path, telemetryOptions),
+    })),
+  );
+  await initializeTelemetry(telemetry);
+  const manager = new ProviderManager({
+    config,
+    settingsService: assembled.setup.context.settingsService,
+    sessionSettings: settingsOwner,
+  });
+  manager.registerProvider(assembled.setup.provider);
+  const diagnostics = captureProviderRequestDiagnostics(
+    config,
+    settingsOwner,
+    (name, usage) => manager.accumulateSessionTokens(name, usage),
+  );
   const input = {
     ...assembled,
-    wrapper: external
-      ? new LoggingProviderWrapper(
-          new RetryOrchestrator(assembled.setup.provider, {
+    telemetry,
+    cleanup: async (): Promise<void> => {
+      manager.dispose();
+      await shutdownTelemetry(telemetry);
+      await settingsOwner.dispose();
+      await config.dispose();
+    },
+    wrapper: new LoggingProviderWrapper(
+      external
+        ? new RetryOrchestrator(assembled.setup.provider, {
             maxAttempts: 2,
             initialDelayMs: 0,
             maxDelayMs: 0,
-          }),
-        )
-      : assembled.wrapper,
+          })
+        : assembled.setup.provider,
+      undefined,
+      undefined,
+      () => diagnostics,
+    ),
   };
-  const manager = new ProviderManager(input.setup.context);
-  manager.registerProvider(input.setup.provider);
-  input.setup.config.setProviderManager(manager);
   const secondRoot = join(root, 'second');
   mkdirSync(secondRoot);
   const second = await preflightDisk(secondRoot, false);
@@ -306,7 +365,7 @@ export async function correlatedProbe(
     exporter.releaseLate();
     if (!firstSource) await input.fixture.source.close();
     if (!secondSource) await second.source.close();
-    await flushTelemetry();
+    await flushTelemetry(input.telemetry);
     const receipt = {
       first,
       other,
@@ -328,7 +387,7 @@ export async function correlatedProbe(
     setPerfPhaseObserver(previousObserver);
     exporter.releaseLate();
     await input.http.server.stop(true);
-    await shutdownTelemetry(input.setup.config);
+    await input.cleanup();
     await input.setup.config.dispose();
     resetConversationFileWriterForTesting();
   }

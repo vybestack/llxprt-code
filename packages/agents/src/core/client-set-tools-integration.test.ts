@@ -5,6 +5,9 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
@@ -23,6 +26,7 @@ import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-r
 import { ChatSession } from './chatSession.js';
 import { TodoContinuationService } from './TodoContinuationService.js';
 import { setClientTools } from './clientSetTools.js';
+import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-system.js';
 
 const schema = {
   type: 'object',
@@ -60,24 +64,26 @@ const generator: ContentGenerator = {
   },
 };
 
-function makeConfig(settings: SettingsService): Config {
+function makeConfig(): Config {
   return new Config({
     sessionId: 'flat-client-seam',
     targetDir: process.cwd(),
     cwd: process.cwd(),
     debugMode: false,
     model: 'test',
-    settingsService: settings,
   });
 }
 
 function makeHarness(names: string[], disabled: string[] = []) {
   const settings = new SettingsService();
-  const config = makeConfig(settings);
+  settings.set('tools.disabled', disabled);
+  const config = makeConfig();
+  const settingsOwner = new SessionSettingsOwner(settings);
+  settingsOwner.bindTelemetry(config);
   const registry = new ToolRegistry(
-    { getEphemeralSettings: () => ({ 'tools.disabled': disabled }) },
+    {},
     new MessageBus(),
-    settings,
+    assembleTaskSchemaPolicy(settings),
   );
   for (const name of names)
     registry.registerTool(
@@ -104,9 +110,17 @@ function makeHarness(names: string[], disabled: string[] = []) {
       };
     },
   };
+  const runtimeId = 'flat-client-seam';
   const context = createAgentRuntimeContext({
+    prepareProviderInvocation: (name, parameters, signal) =>
+      settingsOwner.prepareProviderInvocation(
+        runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
     state: createAgentRuntimeState({
-      runtimeId: 'flat-client-seam',
+      runtimeId,
       provider: provider.name,
       model: 'test',
       sessionId: config.getSessionId(),
@@ -145,6 +159,7 @@ function makeHarness(names: string[], disabled: string[] = []) {
     requests,
     async close(): Promise<void> {
       history.dispose();
+      await settingsOwner.dispose();
       await config.dispose();
     },
   };
@@ -166,6 +181,7 @@ describe('client flat declarations at initialization and provider boundaries', (
       try {
         await setClientTools(
           h.registry,
+          undefined,
           initialized ? h.chat : undefined,
           async () => h.chat,
           h.todos,
@@ -193,6 +209,7 @@ describe('client flat declarations at initialization and provider boundaries', (
       try {
         await setClientTools(
           h.registry,
+          undefined,
           initialized ? h.chat : undefined,
           async () => h.chat,
           h.todos,
@@ -217,6 +234,7 @@ describe('client flat declarations at initialization and provider boundaries', (
     try {
       h.chat.setTools(expected(['retained']));
       await setClientTools(
+        undefined,
         undefined,
         undefined,
         async () => {
@@ -245,6 +263,7 @@ describe('client declaration governance and hooks', () => {
       try {
         await setClientTools(
           h.registry,
+          undefined,
           initialized ? h.chat : undefined,
           async () => h.chat,
           h.todos,
@@ -266,28 +285,37 @@ describe('client declaration governance and hooks', () => {
   it('passes flat declarations with complete schemas through the BeforeModel envelope', async () => {
     const h = makeHarness(['todo_read']);
     const hooks: Array<Omit<HookLLMRequest, 'version'>> = [];
-    Object.defineProperties(h.config, {
-      getEnableHooks: { value: () => true },
-      getHookSystem: {
-        value: () => ({
-          initialize: async () => {},
-          isInitialized: () => true,
-          fireBeforeToolSelectionEvent: async () =>
-            new BeforeToolSelectionHookOutput({}),
-          fireAfterModelEvent: async () => new AfterModelHookOutput({}),
-          fireBeforeModelEvent: async (
-            request: Omit<HookLLMRequest, 'version'>,
-          ) => {
-            hooks.push(request);
-            return new BeforeModelHookOutput({});
-          },
-        }),
+    const snapshotEvents = withSnapshotModelEvents({
+      fireBeforeModelEvent: async (request) => {
+        hooks.push(request);
+        return new BeforeModelHookOutput({});
       },
+      fireAfterModelEvent: async () => new AfterModelHookOutput({}),
     });
+    const hookOwner: HookExecutionOwner = {
+      sessionId: () => 'flat-client-seam',
+      transcriptPath: () => undefined,
+      beforeToolSelection: async () => new BeforeToolSelectionHookOutput({}),
+      afterModel: async () => new AfterModelHookOutput({}),
+      beforeModel: async (request) => {
+        hooks.push(request);
+        return new BeforeModelHookOutput({});
+      },
+      beforeModelSnapshot: (request, signal) =>
+        snapshotEvents.fireBeforeModelSnapshotEvent(request, signal),
+      afterModelSnapshot: (request, response, signal) =>
+        snapshotEvents.fireAfterModelSnapshotEvent(request, response, signal),
+    };
     try {
-      await setClientTools(h.registry, h.chat, async () => h.chat, h.todos);
+      await setClientTools(
+        h.registry,
+        undefined,
+        h.chat,
+        async () => h.chat,
+        h.todos,
+      );
       await h.chat.generateDirectMessage(
-        { message: 'inspect' },
+        { message: 'inspect', hookOwner },
         'flat-client-seam',
       );
       expect(hooks.map((hook) => hook.tools)).toStrictEqual([

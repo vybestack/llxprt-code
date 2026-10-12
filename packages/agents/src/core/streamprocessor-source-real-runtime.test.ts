@@ -36,10 +36,9 @@ function realRuntimeFixture(root: string, baseURL: string, model: string) {
     sessionId: randomUUID(),
     model,
     debugMode: false,
-    settingsService: settings,
     telemetry: { enabled: false },
   });
-  configureProviderRuntimeFactories(
+  const { tokenizerFactory: factory } = configureProviderRuntimeFactories(
     config,
     new ProviderManager({ settingsService: settings, config }),
   );
@@ -47,9 +46,6 @@ function realRuntimeFixture(root: string, baseURL: string, model: string) {
   const history = new ObservedHistory();
   for (let index = 0; index < 8; index++)
     history.add(diskTextRow(index, false));
-  const factory = config.getTokenizerFactory();
-  if (factory === undefined)
-    throw new Error('Missing runtime tokenizer factory');
   return assembleProcessorFixture(
     config,
     settings,

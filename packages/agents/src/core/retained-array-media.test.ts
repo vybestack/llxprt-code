@@ -14,6 +14,7 @@ import type {
   IContent,
   MediaReferenceBlock,
 } from '../../../core/src/services/history/IContent.js';
+import { bindClientTokenization } from '../session/session-client-binding.js';
 import { withRetainedClient } from './retained-array-test-helpers.js';
 import {
   clientRows,
@@ -191,10 +192,11 @@ function registerFailure(): void {
   describe('registerFailure', () => {
     it('releases array-origin deferred media when startup tokenization fails', async () => {
       await withDetachedFixture((fixture) =>
-        withRetainedClient(fixture, async ({ client, store, config }) => {
+        withRetainedClient(fixture, async ({ client, store }) => {
           await client.storeHistoryForLaterUse(imageRows());
           const reference = await firstReference(client.streamHistory());
-          config.setTokenizerFactory(
+          bindClientTokenization(
+            client,
             exactTokenizer(() => {
               throw new Error('startup token fault');
             }),

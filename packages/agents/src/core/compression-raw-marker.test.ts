@@ -11,12 +11,13 @@ import {
   withSuffixFixture,
   suffixRow,
 } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { TokenUsageLogger } from './TokenUsageLogger.js';
@@ -38,7 +39,18 @@ for (const size of [512, 8192]) {
               provider: 'test-provider',
               model: 'test-model',
             });
+            const invocationOwner = new SessionSettingsOwner(
+              setup.settingsService,
+            );
+            invocationOwner.bindTelemetry(setup.config);
             const context = createAgentRuntimeContext({
+              prepareProviderInvocation: (name, parameters, signal) =>
+                invocationOwner.prepareProviderInvocation(
+                  state.runtimeId,
+                  name,
+                  parameters,
+                  signal,
+                ),
               state,
               history,
               settings: {
@@ -47,23 +59,28 @@ for (const size of [512, 8192]) {
                 preserveThreshold: 0.2,
                 telemetry: { enabled: false, target: null },
               },
-              provider: createProviderAdapterFromManager(
-                setup.config.getProviderManager(),
+              provider: createProviderAdapterFromManager(setup.providerManager),
+              telemetry: createTelemetryAdapter(
+                setup.config,
+                invocationOwner.telemetry,
               ),
-              telemetry: createTelemetryAdapterFromConfig(setup.config),
               tools: createToolRegistryViewFromRegistry(),
               providerRuntime: setup.runtime,
             });
             const logger = new TokenUsageLogger(true, file);
-            await emitCompressionLifecycleEvent(
-              logger,
-              context,
-              history,
-              () => ({ provider: setup.provider, runtime: setup.runtime }),
-              1000,
-              100,
-              undefined,
-            );
+            try {
+              await emitCompressionLifecycleEvent(
+                logger,
+                context,
+                history,
+                () => ({ provider: setup.provider, runtime: setup.runtime }),
+                1000,
+                100,
+                undefined,
+              );
+            } finally {
+              await invocationOwner.dispose();
+            }
             const record: unknown = JSON.parse(
               readFileSync(file, 'utf8').trim(),
             );

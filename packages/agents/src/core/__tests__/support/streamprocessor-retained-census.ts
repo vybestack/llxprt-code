@@ -256,7 +256,10 @@ function observeEnvelopeOwners(census: RetainedOwnerCensus): () => void {
     census.observe('source.options', prepared.options);
     census.observe('source.contents-closure', prepared.options.contents);
     census.observe('source.release-closure', prepared.releaseIfUnsent);
-    census.observe('source.runtime-builder-output', prepared.options.runtime);
+    census.observe(
+      'source.runtime-builder-output',
+      prepared.options.invocation,
+    );
     census.observe('source.metadata', prepared.options.metadata);
     census.observe('source.estimate', prepared.estimate);
     census.observe(

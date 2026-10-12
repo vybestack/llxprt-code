@@ -21,25 +21,30 @@
  */
 
 import { afterEach, describe, expect, it, vi, setSystemTime } from 'bun:test';
-import {
-  SettingsService,
-  type Profile,
-  type ProfileManager,
-} from '@vybestack/llxprt-code-settings';
+import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { AgentRuntimeLoaderOptions } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import * as runtimeModule from '@vybestack/llxprt-code-providers/runtime.js';
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { isValidSafeSessionId } from '@vybestack/llxprt-code-core/recording/janitor/sessionSafety.js';
 import { SESSION_FILE_ID_PREFIX_LENGTH } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import type { SubAgentScope } from '../subagent.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
-import { createRuntimeBundle } from './subagentOrchestrator-test-helpers.js';
-import { makeRecordingInputs } from './subagent-journal-fixture.js';
-import { readFile, readdir } from 'node:fs/promises';
+import {
+  createRuntimeBundle,
+  fixtureToolSelection,
+} from './subagentOrchestrator-test-helpers.js';
+import {
+  createSessionSettingsFixture,
+  subagentSessionPorts,
+} from '../../api/__tests__/helpers/session-settings-fixture.js';
+import { mkdtempSync } from 'node:fs';
+import { readFile, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 
@@ -79,22 +84,24 @@ const profiles: Record<string, Profile> = {
   },
 };
 
+const createWorkspaceFilesystem = installTestWorkspaceFilesystem();
+const launchRoots = new Set<string>();
+
 function makeForegroundConfig(
-  recording = true,
   sessionId = PARENT_SESSION_ID,
-  inputs = makeRecordingInputs(),
+  directory = mkdtempSync(join(tmpdir(), 'orchestrator-journal-')),
 ): Config {
-  const settingsService = new SettingsService();
-  return {
-    ...(recording ? inputs : {}),
-    getSessionId: () => sessionId,
-    getProvider: () => 'gemini',
-    getContentGeneratorConfig: () => undefined,
-    getModel: () => 'gemini-1.5-flash',
-    getToolRegistry: () => undefined,
-    getSettingsService: () => settingsService,
-    getEphemeralSetting: () => undefined,
-  } as unknown as Config;
+  const config = new Config({
+    sessionId,
+    provider: 'gemini',
+    model: 'gemini-1.5-flash',
+    targetDir: directory,
+    cwd: directory,
+    debugMode: false,
+  });
+  launchRoots.add(directory);
+  launchRoots.add(config.projectTempDir);
+  return config;
 }
 
 type RuntimeLoaderMock = {
@@ -141,7 +148,16 @@ function buildOrchestrator(
     onScope?.();
     return scope;
   });
+  const session = createSessionSettingsFixture(config);
   const orchestrator = new SubagentOrchestrator({
+    ...subagentSessionPorts(session),
+    instructions: emptyInstructionReads,
+    toolRegistry: fixtureToolSelection(),
+    workspacePaths: createWorkspaceFilesystem({
+      targetDir: config.getTargetDir(),
+      isTrusted: () => true,
+    }).paths,
+    readMcpInstructions: () => undefined,
     subagentManager: { loadSubagent } as unknown as SubagentManager,
     profileManager: { loadProfile } as unknown as ProfileManager,
     foregroundConfig: config,
@@ -167,10 +183,13 @@ async function launch(
   return result.dispose;
 }
 
-function resetRuntimeAfterTest(): void {
+async function resetRuntimeAfterTest(): Promise<void> {
   setSystemTime();
-  runtimeModule.resetRuntimeScopeForTesting();
-  runtimeModule.resetCliRuntimeRegistryForTesting();
+  const roots = [...launchRoots];
+  launchRoots.clear();
+  await Promise.all(
+    roots.map((root) => rm(root, { recursive: true, force: true })),
+  );
 }
 
 describe('P05c orchestrator allocates fs-safe child ids @plan:PLAN-20260917-ISSUE854.P05c', () => {
@@ -186,9 +205,11 @@ describe('P05c orchestrator allocates fs-safe child ids @plan:PLAN-20260917-ISSU
   });
 
   it('rejects launch when mandatory recording inputs are absent', async () => {
-    const { orchestrator } = buildOrchestrator(makeForegroundConfig(false));
+    const config = makeForegroundConfig();
+    Object.defineProperty(config, 'projectTempDir', { value: undefined });
+    const { orchestrator } = buildOrchestrator(config);
     await expect(orchestrator.launch({ name: 'helper' })).rejects.toThrow(
-      /getProjectTempDir/,
+      /must be of type string/,
     );
   });
 
@@ -235,7 +256,7 @@ describe('mandatory launch journal lifecycle', () => {
   it('keeps parallel and nested journals separate and preserves the parent', async () => {
     setSystemTime(new Date('2026-09-21T12:00:00Z'));
     const config = makeForegroundConfig();
-    const chatsDir = config.storage.getProjectChatsDir();
+    const chatsDir = config.projectChatsDir;
     const parent = await SessionRecordingService.createLocked({
       sessionId: PARENT_SESSION_ID,
       projectHash: 'parent',
@@ -277,10 +298,7 @@ describe('mandatory launch journal lifecycle', () => {
       payload: { kind: 'subagent', parentSessionId: PARENT_SESSION_ID },
     });
     const childId = capturedStates(runtimeLoader)[0].sessionId;
-    const nestedConfig = makeForegroundConfig(true, childId, {
-      storage: config.storage,
-      getWorkspaceContext: () => config.getWorkspaceContext(),
-    });
+    const nestedConfig = makeForegroundConfig(childId, config.getTargetDir());
     const nested = await buildOrchestrator(nestedConfig).orchestrator.launch({
       name: 'helper',
     });
@@ -321,9 +339,7 @@ describe('mandatory launch journal failure cleanup', () => {
     await expect(orchestrator.launch({ name: 'helper' })).rejects.toThrow(
       'scope startup failed',
     );
-    expect(await readdir(config.storage.getProjectChatsDir())).toStrictEqual(
-      [],
-    );
+    expect(await readdir(config.projectChatsDir)).toStrictEqual([]);
   });
 
   it.each(['failure', 'cancel', 'timeout'] as const)(
@@ -331,7 +347,7 @@ describe('mandatory launch journal failure cleanup', () => {
     async (mode) => {
       const config = makeForegroundConfig();
       const controller = new AbortController();
-      const chatsDir = config.storage.getProjectChatsDir();
+      const chatsDir = config.projectChatsDir;
       const { orchestrator } = buildOrchestrator(config, async () => {
         const files = await readdir(chatsDir);
         expect(files.filter((file) => file.endsWith('.jsonl'))).toHaveLength(1);

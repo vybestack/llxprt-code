@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import type { MediaReferenceBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { buildAgent, internalConfig } from './helpers/agentHarness.js';
+import { collectAgentHistory } from './helpers/collect-agent-history.js';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
 import { isMediaReferenceBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
@@ -19,7 +20,7 @@ import {
 } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { createRuntimeActivationBindings } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
 import { fromConfig } from '../fromConfig.js';
-import type { Agent } from '../agent.js';
+import type { Agent, AgentMessage } from '../agent.js';
 
 async function withSameLabelAgents(
   scenario: (first: Agent, second: Agent) => Promise<void>,
@@ -61,9 +62,7 @@ async function ingest(agent: Agent, data: string): Promise<void> {
   ]);
 }
 
-function firstMedia(
-  history: Awaited<ReturnType<Agent['getHistory']>>,
-): MediaReferenceBlock {
+function firstMedia(history: readonly AgentMessage[]): MediaReferenceBlock {
   const reference = history
     .flatMap((content) => content.blocks)
     .find(isMediaReferenceBlock);
@@ -80,9 +79,9 @@ describe('public Agent session media ownership closure', () => {
     await withSameLabelAgents(async (first, second) => {
       await ingest(first, 'AQIDBA==');
       await ingest(second, 'BQYHCA==');
-      const firstHistory = await first.getHistory();
+      const firstHistory = await collectAgentHistory(first);
       await expect(second.setHistory(firstHistory)).rejects.toThrow(/media/i);
-      expect(firstMedia(await second.getHistory()).contentId).toBe(
+      expect(firstMedia(await collectAgentHistory(second)).contentId).toBe(
         contentIdFor('BQYHCA=='),
       );
     });
@@ -94,7 +93,7 @@ describe('public Agent session media ownership closure', () => {
       await ingest(second, 'BQYHCA==');
       const firstStore = requireMediaStore(first.agentClient);
       const secondStore = requireMediaStore(second.agentClient);
-      const reference = firstMedia(await second.getHistory());
+      const reference = firstMedia(await collectAgentHistory(second));
       await secondStore.reserve(reference, 'external-test-lease');
       await first.setHistory([]);
       await first.dispose();
@@ -129,10 +128,10 @@ describe('public Agent session media ownership closure', () => {
       await ingest(first, 'AQIDBA==');
       await ingest(second, 'BQYHCA==');
       const store = requireMediaStore(first.agentClient);
-      const reference = firstMedia(await first.getHistory());
+      const reference = firstMedia(await collectAgentHistory(first));
       await first.dispose();
       await expect(store.readVerified(reference)).rejects.toThrow(/closed/i);
-      await second.setHistory(await second.getHistory());
+      await second.setHistory(await collectAgentHistory(second));
     });
   }, 30000);
 
@@ -140,12 +139,12 @@ describe('public Agent session media ownership closure', () => {
     await withSameLabelAgents(async (first, second) => {
       await ingest(first, 'AQIDBA==');
       await ingest(second, 'BQYHCA==');
-      const retained = await second.getHistory();
+      const retained = await collectAgentHistory(second);
       await first.session.setRecording({ enabled: true });
       await first.session.clearHistory();
       await first.dispose();
       await second.setHistory(retained);
-      expect(firstMedia(await second.getHistory()).contentId).toBe(
+      expect(firstMedia(await collectAgentHistory(second)).contentId).toBe(
         contentIdFor('BQYHCA=='),
       );
       await second.session.setRecording({ enabled: true });
@@ -164,13 +163,13 @@ describe('public Agent session media ownership closure', () => {
       const sessionId = sessions[0].id;
       await first.dispose();
       await second.session.resume(sessionId);
-      const resumedId = firstMedia(await second.getHistory()).contentId;
+      const resumedId = firstMedia(await collectAgentHistory(second)).contentId;
       const fork = await second.session.forkFromCheckpoint(
         checkpoint.checkpointId,
       );
       expect({
         resumedId,
-        forkedId: firstMedia(await second.getHistory()).contentId,
+        forkedId: firstMedia(await collectAgentHistory(second)).contentId,
         distinctFork: fork.id !== sessionId,
       }).toStrictEqual({
         resumedId: contentIdFor('AQIDBA=='),
@@ -201,7 +200,7 @@ describe('public Agent session media ownership closure', () => {
         retainedClient: built.agentClient === client,
       }).toStrictEqual({ retainedConfig: true, retainedClient: true });
       await ingest(agent, 'AQIDBA==');
-      const history = await agent.getHistory();
+      const history = await collectAgentHistory(agent);
       await agent.dispose();
       await client.setHistory(history);
       expect(await store.readVerified(firstMedia(history))).toStrictEqual(
@@ -252,8 +251,8 @@ describe('public Agent session media ownership closure', () => {
       await expect(failedStore.getStoredByteLength()).rejects.toThrow(
         /closed/i,
       );
-      await second.setHistory(await second.getHistory());
-      expect(firstMedia(await second.getHistory()).byteLength).toBe(4);
+      await second.setHistory(await collectAgentHistory(second));
+      expect(firstMedia(await collectAgentHistory(second)).byteLength).toBe(4);
     });
   }, 30000);
 });

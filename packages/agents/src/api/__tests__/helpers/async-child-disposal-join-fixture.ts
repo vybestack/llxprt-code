@@ -128,7 +128,10 @@ function createHeldFetch(
   const settled = gate();
   let workSettled = false;
   let signal: AbortSignal | undefined;
-  const heldFetch: typeof fetch = async (input, init) => {
+  const heldFetch = async (
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ): Promise<Response> => {
     const url = input instanceof Request ? input.url : String(input);
     if (url !== `${childUrl}/chat/completions`) return original(input, init);
     const body = z
@@ -157,7 +160,9 @@ function createHeldFetch(
       settled.release();
     }
   };
-  globalThis.fetch = heldFetch;
+  globalThis.fetch = Object.assign(heldFetch, {
+    preconnect: original.preconnect,
+  });
   return {
     entered,
     releaseWork: (): void => {

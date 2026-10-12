@@ -1,12 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { appendFileSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import {
-  buildAgent,
-  internalConfig,
-} from '../api/__tests__/helpers/agentHarness.js';
+import { buildAgent } from '../api/__tests__/helpers/agentHarness.js';
 import { LocalMediaStore } from '../../../core/src/storage/local-media-store.js';
 import { MediaAdmissionService } from '../../../core/src/storage/media-admission-service.js';
 import { exactTokenizer } from '../../../core/src/services/history/chronology-rollback-test-helpers.js';
@@ -25,27 +19,17 @@ export async function withArrayClient<T>(
   fixture: DetachedFixture,
   action: (client: ClientArrayFixture) => Promise<T>,
 ): Promise<T> {
-  const root = await mkdtemp(join(tmpdir(), 'client-array-media-'));
-  const store = new LocalMediaStore({
-    rootDirectory: root,
-    quotaBytes: 16 * 1024 * 1024,
-  });
   const { agent, cleanup } = await buildAgent('plain-text.jsonl');
   try {
-    const config = internalConfig(agent);
-    Object.defineProperty(config, 'getLocalMediaStore', {
-      value: () => store,
-      configurable: true,
-    });
-    const client = config.getAgentClient();
+    const client = agent.agentClient;
+    const store = client.mediaStore;
+    if (store === undefined) throw new Error('Missing session media store');
     client.storeHistoryServiceForReuse(fixture.history);
     await client.startChat([]);
     fixture.history.setTokenizerFactory(exactTokenizer());
     return await action({ client, store });
   } finally {
     await cleanup();
-    await store.close();
-    await rm(root, { recursive: true, force: true });
   }
 }
 export function forbidClientArrayRollback(fixture: DetachedFixture): void {

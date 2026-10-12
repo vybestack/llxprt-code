@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { OpenAIResponsesProvider } from '@vybestack/llxprt-code-providers';
 import { createRuntimeTokenizerFactory } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import { withGpt56DiskSources } from '@vybestack/llxprt-code-providers/tokenizers/gpt56-disk-tokenizer-factory.js';
@@ -95,13 +95,14 @@ export function preflightRuntime(
   settings.setProviderSetting('openai-responses', 'base-url', baseURL);
   settings.setProviderSetting('openai-responses', 'auth-key', 'test-key');
   settings.set('prompt-caching', 'off');
+  settings.set('retries', 1);
+  settings.set('retrywait', 0);
   const config = new Config({
     cwd: root,
     targetDir: root,
     sessionId: randomUUID(),
     model,
     debugMode: false,
-    settingsService: settings,
     telemetry: {
       enabled: logging,
       logPrompts: logging,
@@ -110,18 +111,14 @@ export function preflightRuntime(
       outfile: join(root, 'preflight.jsonl'),
     },
   });
-  config.setTokenizerFactory(
-    withGpt56DiskSources(createRuntimeTokenizerFactory(), root),
+  const tokenizerFactory = withGpt56DiskSources(
+    createRuntimeTokenizerFactory(),
+    root,
   );
   const provider = new OpenAIResponsesProvider('test-key', baseURL);
   const context = { config, settingsService: settings, runtimeId: root };
-  const invocation = createRuntimeInvocationContext({
-    runtime: context,
-    settings,
-    providerName: provider.name,
-    ephemeralsSnapshot: { 'prompt-caching': 'off', retries: 1, retrywait: 0 },
-  });
-  return { config, provider, context, invocation };
+  const invocation = captureProviderInvocation(context, provider.name);
+  return { config, provider, context, invocation, tokenizerFactory };
 }
 export async function preflightOracle(
   setup: ReturnType<typeof preflightRuntime>,
@@ -151,18 +148,19 @@ export async function preflightOracle(
     bytes: bytes.length,
     sha256: createHash('sha256').update(bytes).digest('hex'),
   };
-  const prepared = await prepareAtSendSeam(setup.provider, {
-    contents: {
-      async *[Symbol.asyncIterator](): AsyncGenerator<IContent> {
-        yield* contents;
+  const prepared = await prepareAtSendSeam(
+    setup.provider,
+    {
+      contents: {
+        async *[Symbol.asyncIterator](): AsyncGenerator<IContent> {
+          yield* contents;
+        },
       },
+      invocation: setup.invocation,
+      systemInstruction: preflightInstructions,
     },
-    config: setup.config,
-    runtime: setup.context,
-    settings: setup.context.settingsService,
-    invocation: setup.invocation,
-    systemInstruction: preflightInstructions,
-  });
+    setup.tokenizerFactory,
+  );
   try {
     if (prepared.estimate === null) throw new Error('Missing native estimate');
     return { body, estimate: prepared.estimate };

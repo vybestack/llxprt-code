@@ -9,6 +9,16 @@ import { SessionPersistenceService } from './SessionPersistenceService.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { createSessionPersistenceFixture } from './SessionPersistenceService.test-helpers.js';
 
+function paths(storage: Storage): {
+  readonly projectRoot: string;
+  readonly chatsDir: string;
+} {
+  return {
+    projectRoot: storage.getProjectRoot(),
+    chatsDir: storage.getProjectChatsDir(),
+  };
+}
+
 describe('SessionPersistenceService', () => {
   let storage: Storage;
   let service: SessionPersistenceService;
@@ -23,8 +33,14 @@ describe('SessionPersistenceService', () => {
 
   describe('project hash consistency', () => {
     it('should generate consistent hash for same project', () => {
-      const service1 = new SessionPersistenceService(storage, 'session1');
-      const service2 = new SessionPersistenceService(storage, 'session2');
+      const service1 = new SessionPersistenceService(
+        paths(storage),
+        'session1',
+      );
+      const service2 = new SessionPersistenceService(
+        paths(storage),
+        'session2',
+      );
 
       // Access private method via any
       const hash1 = (
@@ -41,8 +57,14 @@ describe('SessionPersistenceService', () => {
       const storage1 = new Storage('/project1');
       const storage2 = new Storage('/project2');
 
-      const service1 = new SessionPersistenceService(storage1, 'session');
-      const service2 = new SessionPersistenceService(storage2, 'session');
+      const service1 = new SessionPersistenceService(
+        paths(storage1),
+        'session',
+      );
+      const service2 = new SessionPersistenceService(
+        paths(storage2),
+        'session',
+      );
 
       const hash1 = (
         service1 as unknown as { getProjectHash(): string }

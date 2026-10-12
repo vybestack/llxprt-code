@@ -10,7 +10,6 @@ import type {
   ProviderRequestSelection,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeTokenizerFactory } from '../../../composition/runtimeTokenizerFactory.js';
 import { OpenAIResponsesProvider } from '../../OpenAIResponsesProvider.js';
@@ -49,6 +48,7 @@ export interface ProjectionRuntime {
   readonly options: (
     rows: ProviderRequestRows | ProviderRequestSelection,
     signal?: AbortSignal,
+    ephemerals?: Record<string, unknown>,
   ) => GenerateChatOptions;
 }
 
@@ -198,45 +198,38 @@ export async function projectionRuntime(
   baseURL: string,
   root: string,
 ): Promise<ProjectionRuntime> {
-  const settings = new SettingsService();
-  settings.setProviderSetting('openai-responses', 'model', projectionModel);
-  settings.setProviderSetting('openai-responses', 'base-url', baseURL);
-  settings.setProviderSetting('openai-responses', 'auth-key', 'test-key');
-  settings.set('prompt-caching', 'off');
   const config = new Config({
     cwd: root,
     targetDir: root,
     sessionId: randomUUID(),
     model: projectionModel,
     debugMode: false,
-    settingsService: settings,
   });
   const factory = createRuntimeTokenizerFactory();
   await factory.prepareTokenizer?.('openai-responses', projectionModel);
-  config.setTokenizerFactory(factory);
   const provider = new OpenAIResponsesProvider('test-key', baseURL);
-  const runtime = {
-    config,
-    settingsService: settings,
-    runtimeId: randomUUID(),
-  };
-  const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
-    providerName: provider.name,
-    ephemeralsSnapshot: { 'prompt-caching': 'off', retries: 2, retrywait: 0 },
-  });
+  const runtimeId = randomUUID();
+  const invocationFor = (ephemerals: Record<string, unknown>) =>
+    createRuntimeInvocationContext({
+      runtimeId,
+      providerName: provider.name,
+      ephemeralsSnapshot: {
+        'prompt-caching': 'off',
+        retries: 2,
+        retrywait: 0,
+        ...ephemerals,
+      },
+    });
   const options = (
     rows: ProviderRequestRows | ProviderRequestSelection,
     signal?: AbortSignal,
+    ephemerals: Record<string, unknown> = {},
   ): GenerateChatOptions => ({
     contents: { [Symbol.asyncIterator]: () => rows.openReader(signal) },
     ...('close' in rows ? { requestRows: rows } : {}),
     contentCount: rows.count,
-    config,
-    runtime,
-    settings,
-    invocation,
+    invocation: invocationFor(ephemerals),
+    resolved: { model: projectionModel, baseURL, authToken: 'test-key' },
     systemInstruction: projectionInstructions,
     metadata: {
       abortSignal: signal,

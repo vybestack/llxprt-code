@@ -1,4 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+
 import { describe, expect, it, vi } from 'bun:test';
 import { writeFile, readdir, truncate } from 'node:fs/promises';
 import { GitService } from '@vybestack/llxprt-code-core/services/gitService.js';
@@ -68,12 +71,13 @@ function failDurableWrite(): void {
 
 async function failure(fault: Fault, active: boolean): Promise<boolean> {
   return withCheckpoint(2, active, async (fixture, dir) => {
-    const client = fixture.config.getAgentClient();
+    const client = fixture.client;
     const before = expectedCleanupDigest(2, 2048, fixture.reference);
     const contentId =
       'sha256:' +
       createHash('sha256').update(Buffer.from(png, 'base64')).digest('hex');
-    const store = fixture.config.getLocalMediaStore();
+    const store = client.mediaStore;
+    if (store === undefined) throw new Error('Agent client has no media store');
     expect(await store.hasReservations(contentId)).toBe(false);
     const encoded = JSON.stringify({
       history: checkpointUiHistory,
@@ -85,11 +89,11 @@ async function failure(fault: Fault, active: boolean): Promise<boolean> {
       join(dir, 'restore.json'),
       fault === 'corrupt' ? encoded.slice(0, -2) : encoded,
     );
-    vi.spyOn(
-      fixture.config.storage,
-      'getProjectTempCheckpointsDir',
-    ).mockReturnValue(dir);
     vi.spyOn(fixture.config, 'getCheckpointingEnabled').mockReturnValue(true);
+    const runtime = {
+      ...composeFixtureRuntime(fixture.config),
+      projectCheckpointsDir: dir,
+    };
     const abort = new AbortController();
     if (fault === 'truncated') {
       const admit = client.setHistoryFromSource.bind(client);
@@ -100,9 +104,10 @@ async function failure(fault: Fault, active: boolean): Promise<boolean> {
         },
       );
     }
-    const context = createMockCommandContext();
+    const context = createMockCommandContext({
+      services: { config: runtime, agent: { agentClient: client } },
+    });
     context.signal = abort.signal;
-    context.services.config = fixture.config;
     let uiPublished = false;
     context.ui.loadHistory = () => {
       uiPublished = true;
@@ -114,7 +119,10 @@ async function failure(fault: Fault, active: boolean): Promise<boolean> {
       return 1;
     };
     if (fault === 'snapshot' || fault === 'abort') {
-      const git = new GitService(fixture.root, fixture.config.storage);
+      const git = new GitService(
+        fixture.root,
+        fixture.config.projectHistoryDir,
+      );
       vi.spyOn(git, 'restoreProjectFromSnapshot').mockImplementation(
         async () => {
           if (fault === 'abort') abort.abort(new Error('checkpoint abort'));
@@ -125,7 +133,7 @@ async function failure(fault: Fault, active: boolean): Promise<boolean> {
     }
     if (fault === 'write') failDurableWrite();
     try {
-      const outcome = await restoreCommand(fixture.config)?.action?.(
+      const outcome = await restoreCommand(runtime)?.action?.(
         context,
         'restore',
       );
@@ -159,16 +167,17 @@ describe('CLI checkpoint restoration atomic recovery', () => {
   }
   it('does not allow traversal outside the enumerated checkpoint directory', async () => {
     await withCheckpoint(1, false, async (fixture, dir) => {
-      vi.spyOn(
-        fixture.config.storage,
-        'getProjectTempCheckpointsDir',
-      ).mockReturnValue(dir);
       vi.spyOn(fixture.config, 'getCheckpointingEnabled').mockReturnValue(true);
+      const runtime = {
+        ...composeFixtureRuntime(fixture.config),
+        projectCheckpointsDir: dir,
+      };
       await writeFile(join(dir, 'restore.json'), '{}');
-      const context = createMockCommandContext();
-      context.services.config = fixture.config;
+      const context = createMockCommandContext({
+        services: { config: runtime },
+      });
       try {
-        const result = await restoreCommand(fixture.config)?.action?.(
+        const result = await restoreCommand(runtime)?.action?.(
           context,
           '../restore',
         );

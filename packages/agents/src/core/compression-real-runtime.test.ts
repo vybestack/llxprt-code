@@ -13,6 +13,8 @@ import { randomUUID } from 'node:crypto';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
@@ -140,30 +142,32 @@ describe('compression through the CLI runtime wiring on OpenAI chat', () => {
       sessionId: randomUUID(),
       model: MODEL,
       debugMode: false,
-      settingsService: settings,
       trustedFolder: true,
       telemetry: { enabled: false },
     });
     const manager = new ProviderManager({ settingsService: settings, config });
-    configureProviderRuntimeFactories(config, manager);
+    const { tokenizerFactory: factory } = configureProviderRuntimeFactories(
+      config,
+      manager,
+    );
     manager.registerProvider(new OpenAIProvider('test-key', baseURL));
     manager.setActiveProvider('openai');
     const provider = manager.getActiveProvider();
     if (provider === undefined) throw new Error('Missing active provider');
 
-    const factory = config.getTokenizerFactory();
-    if (factory === undefined)
-      throw new Error('Missing runtime tokenizer factory');
     const history = new HistoryService();
     history.setTokenizerFactory(factory);
-    const providerRuntime = {
+    const runtimeId = randomUUID();
+    const providerRuntime = createProviderRuntimeContext({
       config,
       settingsService: settings,
-      runtimeId: randomUUID(),
-    };
+      runtimeId,
+    });
     const runtime = createAgentRuntimeContext({
+      prepareProviderInvocation: (name, parameters, signal) =>
+        captureProviderInvocation(providerRuntime, name, parameters, signal),
       state: {
-        runtimeId: providerRuntime.runtimeId,
+        runtimeId,
         sessionId: config.getSessionId(),
         provider: provider.name,
         model: MODEL,

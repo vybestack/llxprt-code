@@ -318,6 +318,16 @@ type ControlledSave = {
   readonly reject: (error: unknown) => void;
 };
 
+function persistencePaths(storage: Storage): {
+  readonly projectRoot: string;
+  readonly chatsDir: string;
+} {
+  return {
+    projectRoot: storage.getProjectRoot(),
+    chatsDir: storage.getProjectChatsDir(),
+  };
+}
+
 class ControlledPersistenceService extends SessionPersistenceService {
   private readonly saves: ControlledSave[] = [];
 
@@ -714,7 +724,7 @@ describe('Awaitable commit protocol @plan:PLAN-20260917-ISSUE854.P05 @requiremen
   it('an observer failing after the append neither rolls back the journal nor rejects the resolved commit', async () => {
     const recording = new SessionRecordingService(makeConfig(chatsDir));
     const persistence = new ControlledPersistenceService(
-      new Storage(path.join(tempDir, 'persist-store')),
+      persistencePaths(new Storage(path.join(tempDir, 'persist-store'))),
       'commit-protocol-observer',
     );
     const history = new HistoryService();

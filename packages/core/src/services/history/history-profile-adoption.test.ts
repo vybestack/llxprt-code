@@ -6,6 +6,10 @@
 import { describe, expect, it } from 'bun:test';
 import { HistoryService } from './HistoryService.js';
 
+async function rawHistory(history: HistoryService) {
+  return Array.fromAsync(history.streamRawHistory());
+}
+
 describe('profile history adoption', () => {
   it('uses the candidate tokenizer and target for subsequent accounting without changing live preparation state', async () => {
     const live = new HistoryService();
@@ -27,7 +31,7 @@ describe('profile history adoption', () => {
     candidate.setBaseTokenOffset(17);
     const total = candidate.getTotalTokens();
     const commit = await live.prepareProfileAdoption(candidate);
-    expect(live.getAll()).toStrictEqual([]);
+    expect(await rawHistory(live)).toStrictEqual([]);
     expect(live.getBaseTokenOffset()).toBe(0);
     commit();
     expect(live.getTotalTokens()).toBe(total);
@@ -53,13 +57,13 @@ describe('profile history adoption', () => {
     await live.addBatch([
       { speaker: 'human', blocks: [{ type: 'text', text: 'untouched' }] },
     ]);
-    const before = live.getAll();
+    const before = await rawHistory(live);
     const candidate = new HistoryService();
     candidate.startCompression();
     await expect(live.prepareProfileAdoption(candidate)).rejects.toThrow(
       'idle histories',
     );
-    expect(live.getAll()).toStrictEqual(before);
+    expect(await rawHistory(live)).toStrictEqual(before);
   });
 
   it('adopts prepared contents and token accounting only at commit, retaining live subscribers', async () => {
@@ -68,30 +72,30 @@ describe('profile history adoption', () => {
       { speaker: 'human', blocks: [{ type: 'text', text: 'before' }] },
     ]);
     const candidate = new HistoryService();
-    await candidate.addBatch(structuredClone(live.getAll()));
+    await candidate.addBatch(structuredClone(await rawHistory(live)));
     await candidate.addBatch([
       { speaker: 'ai', blocks: [{ type: 'text', text: 'staged' }] },
     ]);
     candidate.syncTotalTokens(1234);
     await candidate.waitForTokenUpdates();
-    const before = live.getAll();
+    const before = await rawHistory(live);
     const beforeTokens = live.getTotalTokens();
-    const staged = candidate.getAll();
+    const staged = await rawHistory(candidate);
     const observed: number[] = [];
     live.on('tokensUpdated', ({ totalTokens }) => observed.push(totalTokens));
     const commit = await live.prepareProfileAdoption(candidate);
-    expect(live.getAll()).toStrictEqual(before);
+    expect(await rawHistory(live)).toStrictEqual(before);
     expect(live.getTotalTokens()).toBe(beforeTokens);
     expect(observed).toStrictEqual([]);
     commit();
-    expect(live.getAll()).toStrictEqual(staged);
+    expect(await rawHistory(live)).toStrictEqual(staged);
     expect(live.getTotalTokens()).toBe(1234);
     candidate.clear();
     await candidate.waitForTokenUpdates();
-    expect(live.getAll()).toStrictEqual(staged);
+    expect(await rawHistory(live)).toStrictEqual(staged);
     live.syncTotalTokens(2345);
     await live.waitForTokenUpdates();
     expect(observed).toContain(2345);
-    expect(candidate.getAll()).toStrictEqual([]);
+    expect(await rawHistory(candidate)).toStrictEqual([]);
   });
 });

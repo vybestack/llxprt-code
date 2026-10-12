@@ -16,13 +16,12 @@ function richOptions(
   base: GenerateChatOptions,
   providerName: string,
 ): GenerateChatOptions {
-  if (base.runtime === undefined || base.settings === undefined)
-    throw new Error('Missing fixture runtime');
+  if (base.invocation === undefined)
+    throw new Error('Missing fixture invocation');
   return {
     ...base,
     invocation: createRuntimeInvocationContext({
-      runtime: base.runtime,
-      settings: base.settings,
+      runtimeId: base.invocation.runtimeId,
       providerName,
       ephemeralsSnapshot: {
         'prompt-caching': 'off',
@@ -127,11 +126,10 @@ describe('source prepared options rejection', () => {
     const setup = await projectionRuntime('http://127.0.0.1:1/v1', disk.root);
     const options = setup.options(requestSelection(disk.rows));
     const projection = await setup.provider.projectPromptEnvelope(options);
-    if (options.runtime === undefined || options.settings === undefined)
-      throw new Error('Missing fixture runtime');
+    if (options.invocation === undefined)
+      throw new Error('Missing fixture invocation');
     const invocation = createRuntimeInvocationContext({
-      runtime: options.runtime,
-      settings: options.settings,
+      runtimeId: options.invocation.runtimeId,
       providerName: setup.provider.name,
       ephemeralsSnapshot: { 'responses-stateful': true },
     });

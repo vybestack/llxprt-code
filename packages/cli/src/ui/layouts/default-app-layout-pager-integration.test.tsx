@@ -28,6 +28,9 @@ const { createTestAgentClient } = await import(
 );
 const { Config } = await import('@vybestack/llxprt-code-core');
 const { DefaultAppLayout } = await import('./DefaultAppLayout.js');
+const { createUiSessionOwner } = await import(
+  '../../__tests__/uiSessionOwner.js'
+);
 const { buildSlashCommandRuntime, buildUiRuntimeFromSource } = await import(
   '../cliUiRuntime.js'
 );
@@ -85,7 +88,8 @@ function makeUiRuntime(dir: string) {
       showTodoPanel: false,
     },
   });
-  const base = buildUiRuntimeFromSource(config);
+  const owner = createUiSessionOwner(config);
+  const base = buildUiRuntimeFromSource(config, owner);
   const uiRuntime = {
     ...base,
     agentClientSource: {
@@ -93,7 +97,7 @@ function makeUiRuntime(dir: string) {
         createTestAgentClient({ hasChatInitialized: () => false }),
     },
   };
-  return { config, terminal, turn, settings, uiRuntime };
+  return { config, owner, terminal, turn, settings, uiRuntime };
 }
 
 describe('layout disk-pager integration', () => {
@@ -112,14 +116,15 @@ describe('layout disk-pager integration', () => {
       pageRows: 4,
       settings: { marginViewports: 0, byteFloorBytes: 256, purgeDebounceMs: 0 },
     });
-    const { config, terminal, turn, settings, uiRuntime } = makeUiRuntime(dir);
+    const { config, owner, terminal, turn, settings, uiRuntime } =
+      makeUiRuntime(dir);
     await store.resumeFromJournal();
     const view = renderWithProviders(
       <TerminalProvider store={terminal}>
         <TurnProvider store={turn}>
           <DefaultAppLayout
             uiRuntime={uiRuntime}
-            slashCommandRuntime={buildSlashCommandRuntime(config)}
+            slashCommandRuntime={buildSlashCommandRuntime(config, owner)}
             settings={settings}
             startupWarnings={[]}
             version="test"

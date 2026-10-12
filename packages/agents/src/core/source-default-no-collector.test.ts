@@ -11,6 +11,8 @@
  * leave no open reader or pinned snapshot behind once the send settles.
  */
 
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { Mock } from 'bun:test';
 import * as providerCollect from '@vybestack/llxprt-code-providers/utils/collectContents.js';
@@ -22,7 +24,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import type { ProviderCuratedStreamOptions } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
@@ -126,6 +128,10 @@ function createFixture(): Fixture {
   const history = new CountingHistory();
   seedHistory(history);
   const runtime = createAgentRuntimeContext({
+    ...createSessionPolicyFixture(
+      setup.settingsService,
+      'source-default-no-collector',
+    ),
     state: createAgentRuntimeState({
       runtimeId: 'source-default-no-collector',
       provider: provider.name,
@@ -139,10 +145,16 @@ function createFixture(): Fixture {
       preserveThreshold: 0.2,
       telemetry: { enabled: false, target: null },
     },
-    provider: createProviderAdapterFromManager(
-      setup.config.getProviderManager(),
+    provider: createProviderAdapterFromManager(setup.providerManager),
+    telemetry: createTelemetryAdapter(
+      setup.config,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'source-default-no-collector',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
     ),
-    telemetry: createTelemetryAdapterFromConfig(setup.config),
     tools: createToolRegistryViewFromRegistry(),
     providerRuntime: { ...setup.runtime, config: setup.config },
   });

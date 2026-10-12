@@ -5,8 +5,11 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { createTelemetryAdapterFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { createTelemetryAdapter } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
+  flushTelemetry,
   initializeTelemetry,
   shutdownTelemetry,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
@@ -425,10 +428,12 @@ async function capped(
     const source = await stageTurnRequestArtifact(root(), rows(owner, true));
     expect(source.content_sha256).toBe(expected.sha256);
     const active = runtimeConfig(cap);
-    initializeTelemetry(active);
+    const settingsOwner = new SessionSettingsOwner(new SettingsService());
+    const telemetry = settingsOwner.bindTelemetry(active);
+    await initializeTelemetry(telemetry);
     try {
       const baseline = await sourceHeap();
-      await createTelemetryAdapterFromConfig(active).logApiRequest({
+      await createTelemetryAdapter(active, telemetry).logApiRequest({
         model: 'gpt-5.6',
         runtimeId: 'boundary-runtime',
         requestArtifact: {
@@ -437,13 +442,15 @@ async function capped(
           source,
         },
       });
+      await flushTelemetry(telemetry);
       const settled = await sourceHeap();
       const records = await runtimeRecords();
       verifyRuntime(records, visible, source);
       expect(settled - baseline).toBeLessThan(1_048_576);
       return source;
     } finally {
-      await shutdownTelemetry(active);
+      await shutdownTelemetry(telemetry);
+      await settingsOwner.dispose();
     }
   } finally {
     owner.close();

@@ -5,12 +5,16 @@ import { join } from 'node:path';
 import type { ReadableLogRecord } from '@opentelemetry/sdk-logs';
 import { type ExportResult, ExportResultCode } from '@opentelemetry/core';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { createTelemetryAdapterFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { FileLogExporter } from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
+import { createTelemetryAdapter } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import {
-  initializeTelemetry,
-  shutdownTelemetry,
-} from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
+  FileLogExporter,
+  FileMetricExporter,
+  FileSpanExporter,
+} from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
+import {
+  createRootTelemetry,
+  type RootTelemetry,
+} from '@vybestack/llxprt-code-telemetry/telemetry/root-telemetry.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import { stageTurnRequestArtifact } from './turn-request-artifact.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
@@ -106,6 +110,33 @@ function active(): Config {
     },
   });
 }
+function activeRoot(
+  config: Config,
+  exporter: FileLogExporter,
+): Promise<RootTelemetry> {
+  const outfile = config.getTelemetryOutfile();
+  if (outfile === undefined) throw new Error('Expected a telemetry outfile');
+  return createRootTelemetry(
+    {
+      sessionId: config.getSessionId(),
+      enabled: config.getTelemetryEnabled(),
+      outfile,
+      maxBytes: config.getTelemetryOutfileMaxBytes(),
+      maxFiles: config.getTelemetryOutfileMaxFiles(),
+      readPrivacySettings: () => ({
+        logPrompts: config.getTelemetryLogPromptsEnabled(),
+        logConversations: false,
+        logApiBodies: config.getTelemetryLogApiBodiesEnabled(),
+        maxChars: config.getTelemetryLogApiBodyMaxChars(),
+      }),
+    },
+    () => ({
+      tracer: new FileSpanExporter(outfile),
+      logger: exporter,
+      meter: new FileMetricExporter(outfile),
+    }),
+  );
+}
 describe('actual FileLogExporter acknowledges only verified chunk protocol', () => {
   it.each([
     'corrupt',
@@ -120,8 +151,7 @@ describe('actual FileLogExporter acknowledges only verified chunk protocol', () 
     async (fault) => {
       const config = active();
       const controller = new AbortController();
-      await shutdownTelemetry(config);
-      initializeTelemetry(
+      const telemetry = await activeRoot(
         config,
         new FaultExporter(join(root(), 'fault.jsonl'), fault, controller),
       );
@@ -134,7 +164,7 @@ describe('actual FileLogExporter acknowledges only verified chunk protocol', () 
           })(),
         );
         await expect(
-          createTelemetryAdapterFromConfig(config).logApiRequest({
+          createTelemetryAdapter(config, telemetry).logApiRequest({
             model: 'gpt-5.6',
             promptId: fault,
             requestArtifact: {
@@ -158,7 +188,7 @@ describe('actual FileLogExporter acknowledges only verified chunk protocol', () 
         const text = await readFile(join(root(), 'fault.jsonl'), 'utf8');
         expect(text).not.toContain('api_request_complete');
       } finally {
-        await shutdownTelemetry(config);
+        await telemetry.close();
       }
     },
     120000,

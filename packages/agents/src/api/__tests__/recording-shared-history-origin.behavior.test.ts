@@ -7,6 +7,7 @@ import { describe, test, expect } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 import { drain } from './helpers/agentHarness.js';
+import { collectHistoryFixture } from '../../core/__tests__/support/collect-history-test-fixture.js';
 
 describe('shared history recording origin', () => {
   test('two recording facades on the same history append only their own turns', async () => {
@@ -58,6 +59,7 @@ describe('shared history recording origin', () => {
       ]);
       await agent.session.setRecording({ enabled: true });
       const history = agent.agentClient.getHistoryService();
+      if (!history) throw new Error('Missing history');
       await drain(agent.stream('A-before-profile-marker'));
       await agent.profiles.applySnapshot({
         version: 1,
@@ -67,15 +69,14 @@ describe('shared history recording origin', () => {
         ephemeralSettings: {},
       });
       expect(
-        history
-          ?.getAll()
-          .some((content) =>
+        (await collectHistoryFixture(history.streamRawHistory())).some(
+          (content) =>
             content.blocks.some(
               (block) =>
                 block.type === 'text' &&
                 block.text === 'A-before-profile-marker',
             ),
-          ),
+        ),
       ).toBe(true);
       await new Promise((resolve) => setTimeout(resolve, 1100));
       await sibling.session.setRecording({ enabled: true });
@@ -97,14 +98,14 @@ describe('shared history recording origin', () => {
       await drain(agent.stream('external-reuse-marker'));
       const history = agent.agentClient.getHistoryService();
       if (!history) throw new Error('Missing history');
-      const reused = history
-        .getAll()
-        .find((content) =>
-          content.blocks.some(
-            (block) =>
-              block.type === 'text' && block.text === 'external-reuse-marker',
-          ),
-        );
+      const reused = (
+        await collectHistoryFixture(history.streamRawHistory())
+      ).find((content) =>
+        content.blocks.some(
+          (block) =>
+            block.type === 'text' && block.text === 'external-reuse-marker',
+        ),
+      );
       if (!reused) throw new Error('Missing committed content');
       history.clear();
       history.add(reused);

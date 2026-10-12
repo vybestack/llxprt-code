@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { vi } from 'bun:test';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -38,7 +39,14 @@ export function buildRuntimeContext(
     model: 'test-model',
     sessionId: 'test-session',
   });
+  const providerRuntime = {
+    runtimeId: 'test-runtime',
+    settingsService: new SettingsService(),
+    config: {} as never,
+  };
   return createAgentRuntimeContext({
+    prepareProviderInvocation: (name, parameters, signal) =>
+      captureProviderInvocation(providerRuntime, name, parameters, signal),
     state,
     history: historyService,
     settings: {
@@ -51,11 +59,7 @@ export function buildRuntimeContext(
     provider: {} as never,
     telemetry: {} as never,
     tools: {} as never,
-    providerRuntime: {
-      runtimeId: 'test-runtime',
-      settingsService: { get: vi.fn(() => undefined) } as never,
-      config: {} as never,
-    } as never,
+    providerRuntime,
   });
 }
 

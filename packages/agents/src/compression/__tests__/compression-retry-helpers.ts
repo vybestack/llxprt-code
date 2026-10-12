@@ -210,7 +210,9 @@ export function installEmptySummaryDiskFailure(provider: RuntimeProvider): {
         contents: (async function* () {
           yield context.history.readRow(0);
         })(),
-        runtime: context.runtimeContext.providerRuntime,
+        invocation: context.runtimeContext.prepareProviderInvocation(
+          provider.name,
+        ),
       })) {
         throw new Error(
           'Empty-summary failure transport unexpectedly returned a row',

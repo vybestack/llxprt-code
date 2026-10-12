@@ -163,9 +163,9 @@ describe('invoked production streaming semantic purge session: cancels construct
         const controller = new AbortController();
         const reason = new Error('cancel purge');
         controller.abort(reason);
-        await expect(session.begin(false, controller.signal)).rejects.toBe(
-          reason,
-        );
+        await expect(
+          session.begin(false, undefined, controller.signal),
+        ).rejects.toBe(reason);
         expect(ownership.snapshot().peakRows).toBe(0);
         const attempt = await session.begin(false);
         if (!attempt) throw new Error('Missing attempt after cancellation');

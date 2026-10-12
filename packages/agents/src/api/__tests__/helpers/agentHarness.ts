@@ -1,4 +1,5 @@
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -88,6 +89,16 @@ export function internalConfig(agent: Agent): Config {
     throw new Error('Expected an AgentImpl with its owned Config dependency');
   }
   return agent.deps.config;
+}
+
+export function internalSettingsService(agent: Agent): SettingsService {
+  if (
+    !('deps' in agent) ||
+    !isRecord(agent.deps) ||
+    !(agent.deps.settingsService instanceof SettingsService)
+  )
+    throw new Error('Expected an Agent with its session SettingsService');
+  return agent.deps.settingsService;
 }
 
 export function internalSettingsOwner(agent: Agent): SessionSettingsOwner {

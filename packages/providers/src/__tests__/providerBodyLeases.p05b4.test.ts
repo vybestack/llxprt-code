@@ -64,8 +64,8 @@ function makeOptions(
   ephemerals: Record<string, unknown>,
 ): GenerateChatOptions {
   const invocation = createRuntimeInvocationContext({
-    runtime: harness.runtime,
-    settings: harness.settings,
+    runtimeId: harness.runtime.runtimeId,
+    runtimeMetadata: harness.runtime.metadata,
     providerName,
     ephemeralsSnapshot: ephemerals,
   });

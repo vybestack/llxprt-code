@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -13,6 +13,15 @@ import {
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { projectionEndpoint } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/projection-ownership-fixture.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import {
+  hookSessionRuntime,
+  readHookDefinitions,
+} from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
   processorFixture,
@@ -24,6 +33,45 @@ import { toolHookWorker } from './__tests__/support/streamprocessor-tool-hook-fi
 import { modelHookWorker } from './__tests__/support/streamprocessor-model-hook-fixture.js';
 
 const root = sourceRootSetup();
+const hookRoots: SessionHookOwner[] = [];
+afterEach(async () => {
+  await Promise.all(hookRoots.splice(0).map((owner) => owner.dispose()));
+});
+/** Builds the session hook owner from the hooks registered on the config so far. */
+function hookOwnerOf(config: Config): {
+  readonly hooks: SessionHookOwner;
+  readonly execution: HookExecutionOwner;
+} {
+  const hooks = new SessionHookOwner(
+    readHookDefinitions(config),
+    hookSessionRuntime(
+      config,
+      new WorkspaceTrustLifecycle({ localTrust: config.initialWorkspaceTrust }),
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: config.getSessionId(),
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    ),
+    true,
+    new MessageBus(),
+  );
+  hookRoots.push(hooks);
+  return {
+    hooks,
+    execution: hooks.execution({
+      sessionId: () => config.getSessionId(),
+      transcriptPath: () => undefined,
+    }),
+  };
+}
+function registeredCommand(config: Config, event: HookEventName): string {
+  const entry = config.getHooks()?.[event]?.[0]?.hooks[0];
+  if (entry === undefined || entry.type !== HookType.Command)
+    throw new Error('Missing registered command hook');
+  return entry.command;
+}
 function hook(
   config: Config,
   event: HookEventName,
@@ -83,6 +131,7 @@ describe('source tool-selection hook failures', () => {
           {
             message: 'Answer',
             config: {},
+            hookOwner: hookOwnerOf(setup.config).execution,
           },
           'failing-tool-hook',
           sourcePending,
@@ -129,6 +178,7 @@ describe('actual StreamProcessor source contract safety', () => {
           {
             message: 'Answer',
             config: {},
+            hookOwner: hookOwnerOf(setup.config).execution,
           },
           'after-model',
           sourcePending,
@@ -182,19 +232,16 @@ describe('actual source runtime-disabled hook', () => {
     );
     const observed = join(root(), 'disabled-hook.json');
     hook(setup.config, HookEventName.BeforeModel, observed);
-    const system = setup.config.getHookSystem();
-    if (system === undefined) throw new Error('Missing actual hook system');
-    await system.initialize();
-    for (const entry of system.getAllHooks()) {
-      system
-        .getRegistry()
-        .setHookEnabled(entry.config.name ?? entry.config.command, false);
-    }
+    const { hooks, execution } = hookOwnerOf(setup.config);
+    hooks.setDisabledHooks([
+      registeredCommand(setup.config, HookEventName.BeforeModel),
+    ]);
     try {
       const stream = await setup.processor.makeApiCallAndProcessStream(
         {
           message: 'Answer',
           config: {},
+          hookOwner: execution,
         },
         'disabled-model-hook',
         sourcePending,
@@ -300,6 +347,7 @@ describe('remaining full StreamProcessor source acceptance', () => {
         {
           message: 'Answer',
           config: {},
+          hookOwner: hookOwnerOf(setup.config).execution,
         },
         'required-before',
         sourcePending,
@@ -337,7 +385,6 @@ describe('required disk source full-context logging', () => {
       root(),
       `http://127.0.0.1:${http.server.port}/v1`,
     );
-    setup.config.updateTelemetrySettings({ enabled: true, logPrompts: true });
     try {
       const stream = await setup.processor.makeApiCallAndProcessStream(
         {

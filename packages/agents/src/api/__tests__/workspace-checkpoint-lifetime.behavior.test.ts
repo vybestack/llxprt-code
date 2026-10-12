@@ -9,8 +9,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import {
-  processRestorableToolCalls,
   getToolCallDataSchema,
+  type ToolCallData,
 } from '@vybestack/llxprt-code-core';
 import { fromConfig } from '../index.js';
 import { buildAgent } from './helpers/agentHarness.js';
@@ -92,25 +92,32 @@ describe('public Agent workspace checkpoint lifetime', () => {
       harness: { includeProcessCwd: false, forceConfirmations: false },
     });
     try {
-      const result = await processRestorableToolCalls(
-        [
-          {
-            callId: 'physical-call',
-            name: 'write_file',
-            args: {
-              file_path: join(project(), 'source.txt'),
-              content: 'replacement',
-            },
-            isClientInitiated: false,
-            prompt_id: 'physical-prompt',
-          },
-        ],
-        built.agent.workspace.checkpoints,
-        { getHistory: () => built.agent.getHistory() },
-      );
-      expect(result.errors).toStrictEqual([]);
-      expect(result.checkpointsToWrite.size).toBe(1);
-      for (const serialized of result.checkpointsToWrite.values()) {
+      // processRestorableToolCalls was replaced by the streamed checkpoint
+      // writer in the CLI; the same serialization is rebuilt here from the
+      // admitted workspace snapshot operation and the streamed Agent history.
+      const toolCall = {
+        name: 'write_file',
+        args: {
+          file_path: join(project(), 'source.txt'),
+          content: 'replacement',
+        },
+      };
+      const commitHash =
+        await built.agent.workspace.checkpoints.createFileSnapshot(
+          `Snapshot for ${toolCall.name}`,
+        );
+      const checkpointData: ToolCallData = {
+        history: [],
+        clientHistory: await Array.fromAsync(built.agent.streamHistory()),
+        toolCall,
+        commitHash,
+        messageId: 'physical-prompt',
+      };
+      const checkpointsToWrite = new Map([
+        ['physical-checkpoint.json', JSON.stringify(checkpointData, null, 2)],
+      ]);
+      expect(checkpointsToWrite.size).toBe(1);
+      for (const serialized of checkpointsToWrite.values()) {
         const checkpoint = getToolCallDataSchema().parse(
           JSON.parse(serialized),
         );

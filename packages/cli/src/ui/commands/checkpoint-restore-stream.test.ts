@@ -16,11 +16,7 @@ import { createMockCommandContext } from '../../__tests__/mockCommandContext.js'
 import { cleanupBounds } from '../../utils/__tests__/support/cleanup-history-test-helpers.js';
 
 function observeAdmission(
-  client: ReturnType<
-    Parameters<
-      Parameters<typeof withCheckpoint>[2]
-    >[0]['config']['getAgentClient']
-  >,
+  client: Parameters<Parameters<typeof withCheckpoint>[2]>[0]['client'],
 ): {
   owners: RowOwnership;
   external: RowOwnership;
@@ -67,24 +63,28 @@ async function boundedRestore(size: number, active: boolean): Promise<number> {
     const expected = createHash('sha256');
     for (const row of JSON.parse(saved.bytes).clientHistory)
       expected.update(JSON.stringify(row));
-    vi.spyOn(
-      fixture.config.storage,
-      'getProjectTempCheckpointsDir',
-    ).mockReturnValue(dir);
-    vi.spyOn(fixture.config, 'getCheckpointingEnabled').mockReturnValue(true);
-    const client = fixture.config.getAgentClient();
+    const client = fixture.client;
     vi.spyOn(client, 'setHistory').mockImplementation(async () => {
       throw new Error('eager checkpoint restore is forbidden');
     });
     const { owners, external, release } = observeAdmission(client);
     let uiHistory: unknown;
-    const context = createMockCommandContext();
-    context.services.config = fixture.config;
+    const context = createMockCommandContext({
+      services: { agent: { agentClient: client } },
+    });
+    if (context.services.config === null)
+      throw new Error('Missing fixture runtime');
+    const runtime = {
+      ...context.services.config,
+      projectCheckpointsDir: dir,
+      getCheckpointingEnabled: () => true,
+    };
+    context.services.config = runtime;
     context.ui.loadHistory = (rows) => {
       uiHistory = rows;
     };
     try {
-      const outcome = await restoreCommand(fixture.config)?.action?.(
+      const outcome = await restoreCommand(runtime)?.action?.(
         context,
         basename(saved.path),
       );

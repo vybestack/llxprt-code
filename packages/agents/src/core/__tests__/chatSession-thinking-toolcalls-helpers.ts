@@ -5,6 +5,10 @@
  */
 
 import { vi } from 'bun:test';
+import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { installModelToolFixture } from './model-tool-fixture.js';
 import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -21,7 +25,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import type {
@@ -29,6 +33,8 @@ import type {
   ThinkingBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createConfigParams } from '../chatSession-thinking-helpers.js';
+
+const modelTools = installModelToolFixture();
 
 void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((fn: () => unknown) => fn()),
@@ -82,7 +88,7 @@ export function createFixture(): {
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  config.setProviderManager(manager);
+  configureProviderRuntimeFactories(config, manager);
   return { config, manager, providerRuntime };
 }
 
@@ -111,6 +117,8 @@ export function createChat(
 
   const historyService = new HistoryService();
   const view = createAgentRuntimeContext({
+    prepareProviderInvocation: (name, parameters, signal) =>
+      captureProviderInvocation(providerRuntime, name, parameters, signal),
     state: runtimeState,
     history: historyService,
     settings: {
@@ -119,9 +127,12 @@ export function createChat(
       preserveThreshold: 0.2,
       telemetry: { enabled: true, target: null },
     },
-    provider: createProviderAdapterFromManager(config.getProviderManager()),
-    telemetry: createTelemetryAdapterFromConfig(config),
-    tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+    provider: createProviderAdapterFromManager(manager),
+    telemetry: createTelemetryAdapter(
+      config,
+      createSessionSettingsFixture(config).settingsOwner.telemetry,
+    ),
+    tools: createToolRegistryViewFromRegistry(modelTools()),
     providerRuntime: { ...providerRuntime },
   });
 

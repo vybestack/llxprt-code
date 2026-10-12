@@ -1,7 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ZedAgent } from './zedIntegration.js';
+import { createConnectionProviderManager } from './__tests__/connection-provider-fixture.js';
+import { installZedDefinitionFixture } from './__tests__/definition-fixture.js';
+import { unusedProfileApplication } from './test-profile-application.js';
 import {
   connectPeer,
   type InputKind,
@@ -14,6 +18,7 @@ import {
   modelMessage,
 } from './zedIntegration.loadSession.test-helpers.js';
 
+const definitionFixture = installZedDefinitionFixture();
 const kinds: InputKind[] = ['node', 'web'];
 for (const kind of kinds) {
   describe(`${kind} readable live Zed session resume`, () => {
@@ -28,10 +33,16 @@ for (const kind of kinds) {
       const peer = connectPeer(
         kind,
         (connection) => {
+          const config = buildBaseConfig();
+          const settingsService = new SettingsService();
           const agent = new ZedAgent(
-            buildBaseConfig(),
+            config,
             connection,
+            unusedProfileApplication,
+            createConnectionProviderManager(config, settingsService),
+            () => new SettingsService({ sessionSource: settingsService }),
             emptyChatsLister,
+            definitionFixture(),
           );
           agents.push(agent);
           return agent;

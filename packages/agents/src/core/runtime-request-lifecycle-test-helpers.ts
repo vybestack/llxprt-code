@@ -2,8 +2,8 @@
 import { expect } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { createTelemetryAdapterFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { createTelemetryAdapter } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import {
   initializeTelemetry,
   isTelemetrySdkInitialized,
@@ -18,20 +18,19 @@ export function runtimeConfig(
   directory: string,
   cap = 4000,
   enabled = true,
-): Config {
-  return new Config({
-    cwd: directory,
-    targetDir: directory,
+): RootTelemetry {
+  return RootTelemetry.prepare({
+    enabled: true,
     sessionId: 'artifact-runtime',
-    model: 'gpt-5.6',
-    debugMode: false,
-    telemetry: {
-      enabled: true,
+    outfile: join(directory, 'runtime.jsonl'),
+    maxBytes: 104857600,
+    maxFiles: 10,
+    readPrivacySettings: () => ({
       logPrompts: enabled,
+      logConversations: false,
       logApiBodies: enabled,
-      logApiBodyMaxChars: cap,
-      outfile: join(directory, 'runtime.jsonl'),
-    },
+      maxChars: cap,
+    }),
   });
 }
 export async function runtimeArtifact(
@@ -52,10 +51,13 @@ export async function runtimeArtifact(
 }
 export async function sendRuntimeArtifact(
   staged: RuntimeRequestArtifact,
-  active: Config,
+  active: RootTelemetry,
   signal?: AbortSignal,
 ): Promise<void> {
-  await createTelemetryAdapterFromConfig(active).logApiRequest({
+  await createTelemetryAdapter(
+    { getSessionId: () => 'artifact-runtime' },
+    active,
+  ).logApiRequest({
     model: 'gpt-5.6',
     runtimeId: 'runtime-fallback',
     requestArtifact: staged,
@@ -77,29 +79,27 @@ function expectNoOpenFixtureFiles(directory: string): void {
 }
 export async function runtimeWriteFailure(parent: string): Promise<void> {
   const directory = await mkdtemp(join(parent, 'runtime-write-'));
-  let active: Config | undefined;
+  const active = runtimeConfig(directory);
   try {
-    expect(isTelemetrySdkInitialized()).toBe(false);
+    expect(isTelemetrySdkInitialized(active)).toBe(false);
     await mkdir(join(directory, 'runtime.jsonl'));
-    active = runtimeConfig(directory);
-    initializeTelemetry(active);
+    await initializeTelemetry(active);
     await expect(
       sendRuntimeArtifact(await runtimeArtifact(directory), active),
     ).rejects.toThrow('EISDIR');
   } finally {
-    if (active !== undefined) await shutdownTelemetry(active);
-    expect(isTelemetrySdkInitialized()).toBe(false);
+    await shutdownTelemetry(active);
+    expect(isTelemetrySdkInitialized(active)).toBe(false);
     expectNoOpenFixtureFiles(directory);
     await rm(directory, { recursive: true });
   }
 }
 export async function runtimeRelease(parent: string): Promise<void> {
   const directory = await mkdtemp(join(parent, 'runtime-release-'));
-  let active: Config | undefined;
+  const active = runtimeConfig(directory);
   try {
-    expect(isTelemetrySdkInitialized()).toBe(false);
-    active = runtimeConfig(directory);
-    initializeTelemetry(active);
+    expect(isTelemetrySdkInitialized(active)).toBe(false);
+    await initializeTelemetry(active);
     await sendRuntimeArtifact(await runtimeArtifact(directory), active);
     const staged = await runtimeArtifact(directory, true);
     const baseline = await sourceHeap();
@@ -113,8 +113,8 @@ export async function runtimeRelease(parent: string): Promise<void> {
     };
     expect(facts.delta).toBeLessThan(1_048_576);
   } finally {
-    if (active !== undefined) await shutdownTelemetry(active);
-    expect(isTelemetrySdkInitialized()).toBe(false);
+    await shutdownTelemetry(active);
+    expect(isTelemetrySdkInitialized(active)).toBe(false);
     expectNoOpenFixtureFiles(directory);
     await rm(directory, { recursive: true });
   }

@@ -1,4 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+
 import { describe, expect, it, vi } from 'bun:test';
 import { writeFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -10,6 +13,7 @@ import {
 import { restoreCommand } from './restoreCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { requireMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 
 const png =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
@@ -32,18 +36,19 @@ async function lifecycle(active: boolean): Promise<boolean> {
         toolCall: checkpointTool.request,
       }),
     );
-    vi.spyOn(
-      fixture.config.storage,
-      'getProjectTempCheckpointsDir',
-    ).mockReturnValue(dir);
+    Object.defineProperty(fixture.config, 'projectCheckpointsDir', {
+      value: dir,
+    });
     vi.spyOn(fixture.config, 'getCheckpointingEnabled').mockReturnValue(true);
-    const context = createMockCommandContext();
-    context.services.config = fixture.config;
-    const client = fixture.config.getAgentClient();
-    const store = fixture.config.getLocalMediaStore();
+    const runtime = composeFixtureRuntime(fixture.config);
+    const client = fixture.client;
+    const context = createMockCommandContext({
+      services: { config: runtime, agent: { agentClient: client } },
+    });
+    const store = requireMediaStore(client);
     try {
       expect(
-        await restoreCommand(fixture.config)?.action?.(context, 'restore'),
+        await restoreCommand(runtime)?.action?.(context, 'restore'),
       ).toMatchObject({ type: 'tool' });
       expect(await store.hasReservations(contentId)).toBe(true);
       if (!active) await client.startChat([]);

@@ -15,7 +15,11 @@ import {
   type ProviderRequestSelection,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { useRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
@@ -30,6 +34,8 @@ import type { ConversationDataRedactor } from '../logging/ConfigBasedRedactor.js
 import { readFile } from 'node:fs/promises';
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
+const fixtureOwners = useRuntimeTestOwners();
+
 async function textRows(contents: AsyncIterable<IContent>): Promise<string[]> {
   const values: string[] = [];
   for await (const row of contents) {
@@ -91,27 +97,19 @@ describe('relocated stream options', () => {
   });
 });
 
-class IngressConfig extends Config {
-  constructor(
-    private readonly logging: boolean,
-    private readonly directory: string,
-    settings: SettingsService,
-  ) {
-    super({
-      sessionId: 'wrapper-ingress',
-      targetDir: directory,
-      cwd: directory,
-      debugMode: false,
-      model: 'ingress-model',
-      settingsService: settings,
-    });
-  }
-  override getConversationLoggingEnabled(): boolean {
-    return this.logging;
-  }
-  override getConversationLogPath(): string {
-    return this.directory;
-  }
+function createIngressConfig(logging: boolean, directory: string): Config {
+  return new Config({
+    sessionId: 'wrapper-ingress',
+    targetDir: directory,
+    cwd: directory,
+    debugMode: false,
+    model: 'ingress-model',
+    telemetry: {
+      enabled: false,
+      logConversations: logging,
+      conversationLogPath: directory,
+    },
+  });
 }
 
 function ingressRow(index: number): IContent {
@@ -178,19 +176,21 @@ async function withIngressFixture<T>(
     config: Config,
     settings: SettingsService,
     snapshot: NormalizedProviderRequestSnapshot,
+    settingsOwner: SessionSettingsOwner,
   ) => Promise<T>,
 ): Promise<T> {
   const root = mkdtempSync(join(tmpdir(), 'wrapper-ingress-fixture-'));
   const settings = new SettingsService();
   settings.set('retries', 2);
   settings.set('retrywait', 1);
-  const config = new IngressConfig(logging, root, settings);
+  const config = createIngressConfig(logging, root);
+  const { settingsOwner } = fixtureOwners.adopt(config, settings);
   const disk = new ProviderNormalizationDisk(root);
   for (let index = 0; index < 64; index++)
     disk.append('ordered', ingressRow(index));
   const snapshot = new NormalizedProviderRequestSnapshot(disk, 0);
   try {
-    return await action(root, config, settings, snapshot);
+    return await action(root, config, settings, snapshot, settingsOwner);
   } finally {
     snapshot.close();
     resetConversationFileWriterForTesting();
@@ -295,16 +295,19 @@ function observeIngressRows(
 function verifyIngressIdentities(
   entries: GenerateChatOptions[],
   tools: ProviderToolset,
-  config: Config,
 ): void {
   expect(entries).toHaveLength(2);
   expect(entries[0].tools).toBe(tools);
   expect(entries[1].tools).toBe(tools);
-  expect(entries[0].config).toBe(config);
-  expect(entries[1].runtime).toBe(entries[0].runtime);
-  expect(entries[1].invocation?.settings).toBe(entries[0].invocation?.settings);
+  expect(entries[0]).not.toHaveProperty('config');
+  expect(entries[0]).not.toHaveProperty('runtime');
+  expect(entries[0].invocation).toBeDefined();
+  expect(entries[1].invocation).toBe(entries[0].invocation);
+  expect(entries[1].invocation?.ephemerals).toBe(
+    entries[0].invocation?.ephemerals,
+  );
   expect(entries[1].metadata?.logicalRequestId).toBe('ingress-logical');
-  expect(entries[1].config).toBe(config);
+  expect(entries[1]).not.toHaveProperty('config');
   expect(entries[0].metadata?.[ATTEMPT_LIFECYCLE_KEY]).toBeDefined();
   expect(entries[1].metadata?.[ATTEMPT_LIFECYCLE_KEY]).toBe(
     entries[0].metadata?.[ATTEMPT_LIFECYCLE_KEY],
@@ -322,7 +325,7 @@ async function exerciseWrapperIngress(
 ): Promise<string> {
   return withIngressFixture(
     logging,
-    async (root, config, settings, snapshot) => {
+    async (root, config, settings, snapshot, settingsOwner) => {
       const observation: IngressObservation = {
         reads: 0,
         normalizedAtReads: -1,
@@ -337,6 +340,7 @@ async function exerciseWrapperIngress(
       const base = createIngressProvider(observation);
       const redactor = new StreamingRedactionWitness();
       const manager = new ProviderManager({
+        sessionSettings: settingsOwner,
         config,
         settingsService: settings,
       });
@@ -350,6 +354,8 @@ async function exerciseWrapperIngress(
       const wrapper = new LoggingProviderWrapper(
         installed.wrappedProvider,
         redactor,
+        undefined,
+        () => captureProviderRequestDiagnostics(config, settingsOwner),
       );
       wrapper.setRuntimeContextResolver(() => ({
         config,
@@ -378,7 +384,7 @@ async function exerciseWrapperIngress(
       const output = await textRows(wrapper.generateChatCompletion(options));
       expect(output).toStrictEqual([ingressDigest()]);
       expect(observation.firstRow).toBe(JSON.stringify(ingressRow(0)));
-      verifyIngressIdentities(entries, tools, config);
+      verifyIngressIdentities(entries, tools);
       expect(observation.normalizedAtReads).toBe(0);
       expect(observation.normalizedCount).toBe(64);
       expect(entries[0].contentCount).toBe(64);
@@ -402,72 +408,80 @@ describe('real provider wrapper disk ingress', () => {
     expect(await exerciseWrapperIngress(true)).toBe(ingressDigest());
   });
   it('disposes a one-shot request owner on cancellation', async () => {
-    await withIngressFixture(false, async (_root, config, settings) => {
-      const controller = new AbortController();
-      let sourceClosed = false;
-      let reads = 0;
-      let escaped: AsyncIterable<IContent> | undefined;
-      const source = (async function* (): AsyncGenerator<IContent> {
-        try {
-          for (let index = 0; index < 64; index++) {
-            reads++;
-            yield ingressRow(index);
+    await withIngressFixture(
+      false,
+      async (_root, config, settings, _snapshot, settingsOwner) => {
+        const controller = new AbortController();
+        let sourceClosed = false;
+        let reads = 0;
+        let escaped: AsyncIterable<IContent> | undefined;
+        const source = (async function* (): AsyncGenerator<IContent> {
+          try {
+            for (let index = 0; index < 64; index++) {
+              reads++;
+              yield ingressRow(index);
+            }
+          } finally {
+            sourceClosed = true;
           }
-        } finally {
-          sourceClosed = true;
-        }
-      })();
-      const base: IProvider = {
-        name: 'openai',
-        getModels: async () => [],
-        getDefaultModel: () => 'ingress-model',
-        async *generateChatCompletion(
-          input: GenerateChatOptions | AsyncIterable<IContent>,
-        ): AsyncIterableIterator<IContent> {
-          if (isAsyncIterableContents(input))
-            throw new Error('Expected options');
-          escaped = input.contents;
-          for await (const row of input.contents) {
-            yield row;
-            await new Promise<void>((resolve) =>
-              controller.signal.addEventListener('abort', () => resolve(), {
-                once: true,
-              }),
-            );
-          }
-        },
-      };
-      const wrapper = new LoggingProviderWrapper(new RetryOrchestrator(base));
-      const runtime = {
-        config,
-        settingsService: settings,
-        runtimeId: 'cancel-runtime',
-      };
-      const iterator = wrapper.generateChatCompletion({
-        contents: source,
-        config,
-        settings,
-        runtime,
-        metadata: { abortSignal: controller.signal },
-      });
-      const before = readdirSync(process.env.TMPDIR ?? '/tmp').filter((name) =>
-        name.startsWith('provider-normalization-'),
-      );
-      await iterator.next();
-      controller.abort(new Error('cancel owner'));
-      await iterator.return?.();
-      expect(sourceClosed).toBe(true);
-      expect(reads).toBe(1);
-      if (escaped === undefined) throw new Error('No request escaped');
-      await expect(escaped[Symbol.asyncIterator]().next()).rejects.toThrow(
-        /cancel owner|closed/,
-      );
-      expect(
-        readdirSync(process.env.TMPDIR ?? '/tmp').filter((name) =>
-          name.startsWith('provider-normalization-'),
-        ),
-      ).toStrictEqual(before);
-    });
+        })();
+        const base: IProvider = {
+          name: 'openai',
+          getModels: async () => [],
+          getDefaultModel: () => 'ingress-model',
+          async *generateChatCompletion(
+            input: GenerateChatOptions | AsyncIterable<IContent>,
+          ): AsyncIterableIterator<IContent> {
+            if (isAsyncIterableContents(input))
+              throw new Error('Expected options');
+            escaped = input.contents;
+            for await (const row of input.contents) {
+              yield row;
+              await new Promise<void>((resolve) =>
+                controller.signal.addEventListener('abort', () => resolve(), {
+                  once: true,
+                }),
+              );
+            }
+          },
+        };
+        const wrapper = new LoggingProviderWrapper(
+          new RetryOrchestrator(base),
+          undefined,
+          undefined,
+          () => captureProviderRequestDiagnostics(config, settingsOwner),
+        );
+        const iterator = wrapper.generateChatCompletion({
+          contents: source,
+          invocation: captureProviderInvocation(
+            {
+              config,
+              settingsService: settings,
+              runtimeId: 'cancel-runtime',
+            },
+            base.name,
+          ),
+          metadata: { abortSignal: controller.signal },
+        });
+        const before = readdirSync(process.env.TMPDIR ?? '/tmp').filter(
+          (name) => name.startsWith('provider-normalization-'),
+        );
+        await iterator.next();
+        controller.abort(new Error('cancel owner'));
+        await iterator.return?.();
+        expect(sourceClosed).toBe(true);
+        expect(reads).toBe(1);
+        if (escaped === undefined) throw new Error('No request escaped');
+        await expect(escaped[Symbol.asyncIterator]().next()).rejects.toThrow(
+          /cancel owner|closed/,
+        );
+        expect(
+          readdirSync(process.env.TMPDIR ?? '/tmp').filter((name) =>
+            name.startsWith('provider-normalization-'),
+          ),
+        ).toStrictEqual(before);
+      },
+    );
   });
 });
 

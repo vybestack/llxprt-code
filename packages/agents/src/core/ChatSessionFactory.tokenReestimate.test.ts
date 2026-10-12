@@ -25,6 +25,7 @@ import { join } from 'node:path';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
 import { withChatSessionFactoryMediaFixture } from './__tests__/support/chatSessionFactoryMediaTestHelper.js';
 
 const realHistoryServiceModule = {
@@ -335,7 +336,9 @@ describe('createChatSession explicit media input', () => {
           toolRegistry: undefined,
         });
 
-        const retained = historyService.getAll();
+        const retained = await collectHistoryFixture(
+          historyService.streamRawHistory(),
+        );
         expect(retained).toHaveLength(2);
         for (const entry of retained) {
           const block = entry.blocks[0];

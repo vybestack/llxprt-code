@@ -91,8 +91,16 @@ export class MemoryCommand {
       workspaceDirs: [],
       historyService: this.history,
       counters: this.counters.counters,
-      persistenceFactory: (sessionId) =>
-        new SessionPersistenceService(new Storage(directory), sessionId),
+      persistenceFactory: (sessionId) => {
+        const storage = new Storage(directory);
+        return new SessionPersistenceService(
+          {
+            projectRoot: storage.getProjectRoot(),
+            chatsDir: storage.getProjectChatsDir(),
+          },
+          sessionId,
+        );
+      },
       recordingCallbacks: {
         getCurrentRecording: () => this.recording,
         getCurrentIntegration: () => this.integration,

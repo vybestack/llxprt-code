@@ -1,6 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it, vi } from 'bun:test';
-import { internalConfig } from './helpers/agentHarness.js';
 import {
   carryBounds,
   expectedDigest,
@@ -41,31 +40,30 @@ for (const size of [512, 8192]) {
     }
 
     it('keeps durable rows readable after runtime startup fails', async () => {
-      await withAgentCarry(size, async (agent, replacement) => {
-        const config = internalConfig(agent);
-        const fault = vi
-          .spyOn(config, 'getToolRegistry')
-          .mockImplementation(() => {
-            throw new Error('Startup tool fault');
-          });
-        try {
+      await withAgentCarry(
+        size,
+        async (agent, replacement) => {
           await expect(agent.setModel('failed-start-model')).rejects.toThrow(
             'Startup tool fault',
           );
-        } finally {
-          fault.mockRestore();
-        }
-        const next = replacement();
-        expect(next.hasChatInitialized()).toBe(false);
-        expect(await historyDigest(next.streamHistory())).toStrictEqual(
-          expectedDigest(size),
-        );
-        expect(next.owners.snapshot().liveRows).toBe(0);
-        await next.startChat([]);
-        expect(await historyDigest(agent.streamHistory())).toStrictEqual(
-          expectedDigest(size),
-        );
-      });
+          const next = replacement();
+          expect(next.hasChatInitialized()).toBe(false);
+          expect(await historyDigest(next.streamHistory())).toStrictEqual(
+            expectedDigest(size),
+          );
+          expect(next.owners.snapshot().liveRows).toBe(0);
+          await next.startChat([]);
+          expect(await historyDigest(agent.streamHistory())).toStrictEqual(
+            expectedDigest(size),
+          );
+        },
+        2048,
+        (client) => {
+          vi.spyOn(client, 'startChat').mockRejectedValueOnce(
+            new Error('Startup tool fault'),
+          );
+        },
+      );
     }, 180000);
   });
 }

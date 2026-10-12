@@ -46,15 +46,20 @@ function restorePatterns(wire: unknown, source: unknown): unknown {
   };
 }
 
+type PatternFetch = NonNullable<GoogleGenerativeAIProviderSettings['fetch']>;
+
 export function createPatternPreservingFetch(
   tools: LanguageModelV4CallOptions['tools'],
-): NonNullable<GoogleGenerativeAIProviderSettings['fetch']> {
+): PatternFetch {
   const schemas = new Map(
     tools?.flatMap((tool) =>
       tool.type === 'function' ? [[tool.name, tool.inputSchema] as const] : [],
     ),
   );
-  return async (input, init): Promise<Response> => {
+  const patternFetch = async (
+    input: Parameters<PatternFetch>[0],
+    init?: Parameters<PatternFetch>[1],
+  ): Promise<Response> => {
     if (schemas.size === 0) {
       return globalThis.fetch(input, init);
     }
@@ -94,4 +99,9 @@ export function createPatternPreservingFetch(
       body: JSON.stringify({ ...body, tools: projected }),
     });
   };
+  return Object.assign(patternFetch, {
+    preconnect: (url: Parameters<PatternFetch['preconnect']>[0]) => {
+      globalThis.fetch.preconnect(url);
+    },
+  });
 }

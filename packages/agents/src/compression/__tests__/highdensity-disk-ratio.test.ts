@@ -23,6 +23,7 @@ async function ratio(size: number): Promise<number> {
     async (history) => {
       const { runtime: seed, transport } = highdensitySetup(history);
       const runtime = createAgentRuntimeContext({
+        prepareProviderInvocation: seed.prepareProviderInvocation,
         state: seed.state,
         history,
         provider: seed.provider,

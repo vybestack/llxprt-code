@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { appendFile, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -20,9 +21,18 @@ import {
 import { LOGICAL_REQUEST_ID_KEY } from '@vybestack/llxprt-code-providers/logging/attemptLifecycle.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import {
+  FileMetricExporter,
+  FileSpanExporter,
+} from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
+import {
   flushTelemetry,
+  initializeTelemetry,
   shutdownTelemetry,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import { assembleStrict } from './source-strict-logger-fixture.js';
 import {
@@ -113,7 +123,7 @@ async function sendSource(input: Input): Promise<Result> {
         ...buildSourceProviderChatOptions(
           rows,
           undefined,
-          input.setup.context,
+          undefined,
           input.setup.invocation,
           undefined,
           preflightInstructions,
@@ -139,9 +149,6 @@ function sendEager(
   return consume(
     input.wrapper.generateChatCompletion({
       contents: { [Symbol.asyncIterator]: () => disk.source.openReader() },
-      config: input.setup.config,
-      runtime: input.setup.context,
-      settings: input.setup.context.settingsService,
       invocation: input.setup.invocation,
       systemInstruction: preflightInstructions,
       resolved: { model: 'gpt-5.6' },
@@ -181,21 +188,82 @@ async function prepareMixed(
     }
     await uploaded.wait;
   });
+  const telemetryPath = join(root, 'strict.jsonl');
+  const privacy = {
+    logPrompts: true,
+    logConversations: true,
+    logApiBodies: true,
+    maxChars: 32 * 1024 * 1024,
+  };
+  const config = new Config({
+    cwd: root,
+    targetDir: root,
+    sessionId: randomUUID(),
+    model: 'gpt-5.6',
+    debugMode: false,
+    telemetry: {
+      enabled: true,
+      logPrompts: privacy.logPrompts,
+      logApiBodies: privacy.logApiBodies,
+      logApiBodyMaxChars: privacy.maxChars,
+      logConversations: privacy.logConversations,
+      conversationLogPath: root,
+      outfile: telemetryPath,
+    },
+  });
+  const settingsOwner = new SessionSettingsOwner(
+    assembled.setup.context.settingsService,
+  );
+  const telemetryOptions = {
+    enabled: true,
+    sessionId: config.getSessionId(),
+    outfile: telemetryPath,
+    maxBytes: config.getTelemetryOutfileMaxBytes(),
+    maxFiles: config.getTelemetryOutfileMaxFiles(),
+    readPrivacySettings: () => privacy,
+  };
+  const telemetry = settingsOwner.bindTelemetry(
+    config,
+    RootTelemetry.prepare(telemetryOptions, () => ({
+      tracer: new FileSpanExporter(telemetryPath, telemetryOptions),
+      logger: assembled.exporter,
+      meter: new FileMetricExporter(telemetryPath, telemetryOptions),
+    })),
+  );
+  await initializeTelemetry(telemetry);
+  const manager = new ProviderManager({
+    config,
+    settingsService: assembled.setup.context.settingsService,
+    sessionSettings: settingsOwner,
+  });
+  manager.registerProvider(assembled.setup.provider);
+  const diagnostics = captureProviderRequestDiagnostics(
+    config,
+    settingsOwner,
+    (name, usage) => manager.accumulateSessionTokens(name, usage),
+  );
   const input = {
     ...assembled,
-    wrapper: externalLifecycle
-      ? new LoggingProviderWrapper(
-          new RetryOrchestrator(assembled.setup.provider, {
+    telemetry,
+    cleanup: async (): Promise<void> => {
+      manager.dispose();
+      await shutdownTelemetry(telemetry);
+      await settingsOwner.dispose();
+      await config.dispose();
+    },
+    wrapper: new LoggingProviderWrapper(
+      externalLifecycle
+        ? new RetryOrchestrator(assembled.setup.provider, {
             maxAttempts: 2,
             initialDelayMs: 0,
             maxDelayMs: 0,
-          }),
-        )
-      : assembled.wrapper,
+          })
+        : assembled.setup.provider,
+      undefined,
+      undefined,
+      () => diagnostics,
+    ),
   };
-  const manager = new ProviderManager(input.setup.context);
-  manager.registerProvider(input.setup.provider);
-  input.setup.config.setProviderManager(manager);
   const eagerRoot = join(root, 'eager-disk');
   mkdirSync(eagerRoot);
   const disk = await preflightDisk(eagerRoot, false);
@@ -216,7 +284,7 @@ export async function mixedPostSendProbe(
       : [sendSource(input), sendEager(input, disk)];
     const results = await Promise.all(tasks);
     await disk.source.close();
-    await flushTelemetry();
+    await flushTelemetry(input.telemetry);
     const receipt = {
       source: results[eagerFirst ? 1 : 0],
       eager: results[eagerFirst ? 0 : 1],
@@ -250,7 +318,7 @@ export async function mixedPostSendProbe(
   } finally {
     attempts.close();
     await input.http.server.stop(true);
-    await shutdownTelemetry(input.setup.config);
+    await input.cleanup();
     await input.setup.config.dispose();
     resetConversationFileWriterForTesting();
   }

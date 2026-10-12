@@ -240,7 +240,6 @@ describe('prepareAnthropicRequest url-image guard by base URL (#3693)', () => {
         // prepareAnthropicRequest consumes the request-scoped array; the
         // stream on callOpts is only the transport-facing form.
         contents,
-        settings,
         metadata: callOpts.metadata ?? {},
         resolved: {
           model: 'claude-3-5-sonnet-20241022',

@@ -74,9 +74,6 @@ function eagerStream(
         yield* disk.source.openReader();
       },
     },
-    config: input.setup.config,
-    runtime: input.setup.context,
-    settings: input.setup.context.settingsService,
     invocation: input.setup.invocation,
     systemInstruction: preflightInstructions,
     resolved: { model: 'gpt-5.6' },
@@ -98,7 +95,7 @@ async function sourceStream(
         ...buildSourceProviderChatOptions(
           rows,
           undefined,
-          input.setup.context,
+          undefined,
           input.setup.invocation,
           undefined,
           preflightInstructions,
@@ -119,6 +116,7 @@ async function sourceStream(
           );
       },
       shouldRetryOnError: () => false,
+      tokenizerFactory: input.setup.tokenizerFactory,
     });
     return await consume(stream);
   } catch (error: unknown) {
@@ -141,7 +139,9 @@ export async function mixedPreSendProbe(
   if (fault === 'api-request') setupFault = 'api-request';
   const input = await assembleStrict(root, setupFault);
   if (fault === 'api-durable-request')
-    input.setup.config.updateTelemetrySettings({ logConversations: false });
+    await input.settingsOwner.updateTelemetrySettings({
+      logConversations: false,
+    });
   const eagerRoot = join(root, 'eager-disk');
   mkdirSync(eagerRoot);
   const disk = await preflightDisk(eagerRoot, false);
@@ -160,7 +160,7 @@ export async function mixedPreSendProbe(
     } finally {
       await disk.source.close();
     }
-    await flushTelemetry();
+    await flushTelemetry(input.telemetry);
     const receipt = {
       source: results[eagerFirst ? 1 : 0],
       eager: results[eagerFirst ? 0 : 1],
@@ -179,7 +179,7 @@ export async function mixedPreSendProbe(
     return receipt;
   } finally {
     await input.http.server.stop(true);
-    await shutdownTelemetry(input.setup.config);
+    await shutdownTelemetry(input.telemetry);
     await input.setup.config.dispose();
     resetConversationFileWriterForTesting();
   }

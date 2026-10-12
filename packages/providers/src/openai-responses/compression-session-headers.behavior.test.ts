@@ -16,6 +16,10 @@ import {
   internalSettingsOwner,
 } from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
 import { resolveCompressionProvider } from '../../../agents/src/core/CompressionProfileResolver.js';
+import {
+  isAsyncIterableContents,
+  replayableContents,
+} from '../utils/collectContents.js';
 import { buildResponsesHeaders } from './openAIResponsesHttpStream.js';
 import { buildWebSocketHandshakeHeaders } from './openAIResponsesRequestDump.js';
 import { captureResponsesRequest } from './responses-request.js';
@@ -136,18 +140,18 @@ describe('compression profile conversation identity', () => {
           this: FakeProvider,
           options,
         ) {
-          if (Array.isArray(options) || !options.invocation)
+          if (isAsyncIterableContents(options) || !options.invocation)
             throw new Error('Expected delegated invocation');
           delegatedHeaders.push(...(await sessionHeaders(options.invocation)));
           yield* original.call(this, options);
         });
         for await (const content of resolved.provider.generateChatCompletion({
-          contents: [
+          contents: replayableContents([
             {
               speaker: 'human',
               blocks: [{ type: 'text', text: 'compress this conversation' }],
             },
-          ],
+          ]),
           invocation: resolved.invocation,
           resolved: resolved.resolved,
         })) {

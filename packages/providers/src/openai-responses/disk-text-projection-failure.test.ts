@@ -11,7 +11,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -73,19 +73,11 @@ describe('Responses disk-text projection adaptation failure', () => {
     const rows: IContent[] = [
       { speaker: 'human', blocks: [{ type: 'text', text: 'see' }, image] },
     ];
-    const base = harness.options(rows, {});
-    if (base.settings === undefined || base.config === undefined)
-      throw new Error('Missing fixture runtime');
-    const options = harness.options(
-      rows,
-      {},
-      createProviderRuntimeContext({
-        settingsService: base.settings,
-        config: base.config,
-        runtimeId: 'responses-adapt-fail',
-        mediaResolver: resolver,
-        requestMediaBudgetBytes: image.normalizedBase64Length,
-      }),
+    const options = harness.options(rows, {});
+    const provider = bindProviderMedia(
+      harness.setup.provider,
+      resolver,
+      image.normalizedBase64Length,
     );
     const selection = options.requestRows;
     if (selection === undefined) throw new Error('Missing request selection');
@@ -106,8 +98,8 @@ describe('Responses disk-text projection adaptation failure', () => {
       openReader: (signal) =>
         corruptAfter(selection.openReader(signal), corruptLedgers),
     };
-    const failure = await harness
-      .project({ ...options, requestRows: corrupting })
+    const failure = await provider
+      .projectPromptEnvelope({ ...options, requestRows: corrupting })
       .then(
         () => undefined,
         (error: unknown) => error,

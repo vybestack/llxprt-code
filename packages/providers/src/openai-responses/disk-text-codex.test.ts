@@ -112,9 +112,7 @@ describe('Responses source route with Codex over the WebSocket', () => {
     rows: ProviderRequestRows | ReturnType<typeof requestSelection>,
   ): GenerateChatOptions {
     const base = setup.options(rows);
-    if (base.settings === undefined) throw new Error('Missing fixture');
-    base.settings.setProviderSetting(provider.name, 'model', 'gpt-5.6-sol');
-    return base;
+    return { ...base, resolved: { ...base.resolved, model: 'gpt-5.6-sol' } };
   }
 
   it('sends the same frame and handshake as the array route', async () => {

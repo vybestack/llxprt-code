@@ -1,6 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import {
+  hookSessionRuntime,
+  readHookDefinitions,
+} from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
+import { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 import {
   processorFixture,
   sourcePending,
@@ -11,16 +19,33 @@ import { sourceBeforeModelHook } from '../../source-before-model-hook.js';
 async function run(root: string): Promise<void> {
   const setup = await processorFixture(root, 'http://127.0.0.1:1/v1', false, 1);
   registerModelHook(setup.config, root, 'edit');
-  const system = setup.config.getHookSystem();
-  if (system === undefined) throw new Error('Missing hook system');
-  await system.initialize();
+  const hooks = new SessionHookOwner(
+    readHookDefinitions(setup.config),
+    hookSessionRuntime(
+      setup.config,
+      new WorkspaceTrustLifecycle({
+        localTrust: setup.config.initialWorkspaceTrust,
+      }),
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: setup.config.getSessionId(),
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    ),
+    true,
+    new MessageBus(),
+  );
   const snapshot = await setup.history.prepareCuratedForProviderSnapshot(
     [sourcePending],
     { root },
   );
   try {
     const source = await sourceBeforeModelHook({
-      config: setup.config,
+      owner: hooks.execution({
+        sessionId: () => setup.config.getSessionId(),
+        transcriptPath: () => undefined,
+      }),
       snapshot,
       pending: sourcePending,
       model: 'gpt-5.6',
@@ -59,7 +84,7 @@ async function run(root: string): Promise<void> {
   } finally {
     snapshot.close();
     setup.history.dispose();
-    await setup.config.dispose();
+    await hooks.dispose();
   }
 }
 

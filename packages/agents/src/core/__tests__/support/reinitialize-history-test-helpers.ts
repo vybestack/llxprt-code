@@ -14,8 +14,24 @@ import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clien
 import {
   buildAgent,
   internalConfig,
+  internalSettingsService,
 } from '../../../api/__tests__/helpers/agentHarness.js';
+import { bindClientTokenization } from '../../../session/session-client-binding.js';
+import { SessionClientOwner } from '../../../session/session-client-owner.js';
+import type { Agent } from '../../../api/agent.js';
 import { ControlledOrchestratorHistory } from './orchestrator-history-test-helpers.js';
+
+function requireSessionClient(agent: Agent): SessionClientOwner {
+  if (
+    !('deps' in agent) ||
+    typeof agent.deps !== 'object' ||
+    agent.deps === null ||
+    !('sessionClient' in agent.deps) ||
+    !(agent.deps.sessionClient instanceof SessionClientOwner)
+  )
+    throw new Error('Expected an owned session client');
+  return agent.deps.sessionClient;
+}
 
 export function reinitializeConfig(config: Config): ContentGeneratorConfig {
   const composed = config.getContentGeneratorConfig();
@@ -60,6 +76,7 @@ export async function withReinitializeHistory<T>(
     source: ControlledOrchestratorHistory,
     owners: RowOwnership,
     config: Config,
+    sessionClient: SessionClientOwner,
   ) => Promise<T>,
   bytes = 2048,
 ): Promise<T> {
@@ -70,13 +87,22 @@ export async function withReinitializeHistory<T>(
         throw new Error('Missing controlled journal');
       const { agent, cleanup } = await buildAgent('plain-text.jsonl');
       const config = internalConfig(agent);
-      config.setTokenizerFactory(accountingFactory((text) => text.length));
-      config.setEphemeralSetting('context-limit', 100_000_000);
-      const client = config.getAgentClient();
+      const client = agent.agentClient;
+      bindClientTokenization(
+        client,
+        accountingFactory((text) => text.length),
+      );
+      internalSettingsService(agent).set('context-limit', 100_000_000);
       client.storeHistoryServiceForReuse(history);
       try {
         await client.startChat([]);
-        return await action(client, history, owners, config);
+        return await action(
+          client,
+          history,
+          owners,
+          config,
+          requireSessionClient(agent),
+        );
       } finally {
         history.release.resolve();
         history.releaseConsumer();

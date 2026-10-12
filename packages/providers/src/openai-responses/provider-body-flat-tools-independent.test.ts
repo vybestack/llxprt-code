@@ -1,9 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
@@ -107,30 +107,16 @@ async function readWire(
 function makeBodyRuntime() {
   const settings = new SettingsService();
   settings.setProviderSetting('openai-responses', 'model', 'o3-mini');
-  const config = new Config({
-    sessionId: 'independent-flat-body',
-    cwd: process.cwd(),
-    targetDir: process.cwd(),
-    debugMode: false,
-    model: 'o3-mini',
+  settings.set('prompt-caching', 'off');
+  const runtime = createProviderRuntimeContext({
     settingsService: settings,
-  });
-  const runtime = {
-    settingsService: settings,
-    config,
     runtimeId: 'independent-flat-body',
-  };
-  const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
-    providerName: 'openai-responses',
-    ephemeralsSnapshot: { 'prompt-caching': 'off' },
   });
-  return { settings, config, runtime, invocation };
+  return { invocation: captureProviderInvocation(runtime, 'openai-responses') };
 }
 
 async function runBody(rows: number, padding: number): Promise<number> {
-  const { settings, config, runtime, invocation } = makeBodyRuntime();
+  const { invocation } = makeBodyRuntime();
   const history = source(rows, padding);
   const originalFetch = globalThis.fetch;
   let wire = '';
@@ -154,9 +140,6 @@ async function runBody(rows: number, padding: number): Promise<number> {
     );
     const request = provider.generateChatCompletion({
       contents: history.contents,
-      settings,
-      config,
-      runtime,
       invocation,
       systemInstruction: 'Inspect the supplied rows.',
       tools: [
@@ -193,7 +176,6 @@ async function runBody(rows: number, padding: number): Promise<number> {
     return history.state().pulled;
   } finally {
     globalThis.fetch = originalFetch;
-    await config.dispose();
   }
 }
 

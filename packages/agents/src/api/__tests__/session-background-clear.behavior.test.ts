@@ -12,6 +12,7 @@ import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
 import { ShellJobOwner } from '../../session/shell-job-owner.js';
 import { type Agent, buildAgent } from './helpers/agentHarness.js';
 import { deferred, deadline } from './helpers/shell-owner-gate.js';
+import { collectAgentHistory } from './helpers/collect-agent-history.js';
 
 function owners(agent: Agent): {
   tasks: TaskLaunchOwner;
@@ -59,7 +60,7 @@ describe('new sessions exclude background work', () => {
       channel.cancelAll();
       await channel.release();
       await agent.session.startNewSession();
-      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(await collectAgentHistory(agent)).toStrictEqual([]);
     } finally {
       await channel.release();
       await cleanup();
@@ -98,7 +99,7 @@ describe('new sessions exclude background work', () => {
       tasks.markNotified('old-task');
       await agent.session.startNewSession();
       expect(agent.session.getSessionId()).not.toBe(oldId);
-      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(await collectAgentHistory(agent)).toStrictEqual([]);
     } finally {
       await cleanup();
     }
@@ -139,7 +140,7 @@ describe('new sessions exclude background work', () => {
       consumed.resolve();
       await unsubscribe.drain();
       await agent.session.startNewSession();
-      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(await collectAgentHistory(agent)).toStrictEqual([]);
     } finally {
       consumed.resolve();
       unsubscribe();
@@ -168,7 +169,7 @@ describe('new sessions exclude background work', () => {
       );
       shell.markNotified([job.id]);
       await agent.session.startNewSession();
-      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(await collectAgentHistory(agent)).toStrictEqual([]);
     } finally {
       await cleanup();
     }

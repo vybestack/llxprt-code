@@ -4,6 +4,7 @@ import {
   accountingFactory,
   deferred,
 } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
+import { bindClientTokenization } from '../session/session-client-binding.js';
 import { expectedHistoryDigest } from './__tests__/support/orchestrator-history-test-helpers.js';
 import {
   historyDigest,
@@ -23,7 +24,8 @@ for (const size of [512, 8192]) {
           const release = deferred();
           const fault = new Error('candidate tokenizer consumer failed');
           let visited = 0;
-          config.setTokenizerFactory(
+          bindClientTokenization(
+            client,
             accountingFactory(async (text) => {
               visited++;
               if (text.startsWith('row:31:')) {

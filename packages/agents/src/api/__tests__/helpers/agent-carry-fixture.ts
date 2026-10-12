@@ -6,8 +6,6 @@ import type {
   AgentClientContract,
   DeferredHistorySourceOptions,
 } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
@@ -16,7 +14,8 @@ import {
   accountingFactory,
 } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { AgentClient } from '../../../core/client.js';
-import { buildAgent, internalConfig, type Agent } from './agentHarness.js';
+import { createAgentRuntimeFactoryBindings } from '../../runtimeFactories.js';
+import { buildAgent, type Agent } from './agentHarness.js';
 
 export const carryBounds = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
 
@@ -39,8 +38,8 @@ export class CarryProbeClient extends AgentClient {
   visited = 0;
   admissions = 0;
 
-  constructor(config: Config, runtime: AgentRuntimeState) {
-    super(config, runtime);
+  constructor(...args: ConstructorParameters<typeof AgentClient>) {
+    super(...args);
   }
 
   override getHistory(): AsyncGenerator<IContent, void, unknown> {
@@ -84,6 +83,25 @@ export class CarryProbeClient extends AgentClient {
   }
 }
 
+function createProbe(
+  ...[config, runtime, readMcp, store, paths, instr]: Parameters<
+    ReturnType<typeof createAgentRuntimeFactoryBindings>['agentClientFactory']
+  >
+): CarryProbeClient {
+  if (store === undefined || paths === undefined)
+    throw new Error('Carry probe requires the session media store and paths');
+  return new CarryProbeClient(
+    config,
+    runtime,
+    readMcp ?? (() => undefined),
+    store,
+    paths,
+    undefined,
+    undefined,
+    instr,
+  );
+}
+
 interface ReplacementAccessor {
   (): CarryProbeClient;
   readonly ready: Promise<void>;
@@ -104,13 +122,47 @@ export async function withAgentCarry<T>(
   return withSuffixFixture(
     size,
     async (history, input) => {
-      const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-      const config = internalConfig(agent);
-      config.setTokenizerFactory(accountingFactory((text) => text.length));
-      const previous = config.getAgentClient();
-      previous.storeHistoryServiceForReuse(history);
       let replacement: CarryProbeClient | undefined;
+      let armed = false;
       const ready = latch();
+      const defaults = createAgentRuntimeFactoryBindings();
+      const { agent, cleanup } = await buildAgent('plain-text.jsonl', {
+        runtimeFactoryBindings: {
+          ...defaults,
+          agentClientFactory: (
+            config,
+            runtime,
+            readMcp,
+            store,
+            paths,
+            instr,
+          ) => {
+            if (!armed)
+              return defaults.agentClientFactory(
+                config,
+                runtime,
+                readMcp,
+                store,
+                paths,
+                instr,
+              );
+            replacement = createProbe(
+              config,
+              runtime,
+              readMcp,
+              store,
+              paths,
+              instr,
+            );
+            configure(replacement);
+            ready.open();
+            return replacement;
+          },
+        },
+      });
+      const previous = agent.agentClient;
+      history.setTokenizerFactory(accountingFactory((text) => text.length));
+      previous.storeHistoryServiceForReuse(history);
       const access = Object.assign(
         () => {
           if (replacement === undefined)
@@ -119,12 +171,7 @@ export async function withAgentCarry<T>(
         },
         { ready: ready.promise },
       );
-      config.setAgentClientFactory((clientConfig, runtime) => {
-        replacement = new CarryProbeClient(clientConfig, runtime);
-        configure(replacement);
-        ready.open();
-        return replacement;
-      });
+      armed = true;
       try {
         return await action(agent, access, previous, input);
       } finally {

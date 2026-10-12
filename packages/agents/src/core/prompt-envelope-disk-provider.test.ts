@@ -24,13 +24,12 @@ function buildRetryOptions(
   candidate: PromptEnvelopeSource,
 ) {
   const options = setup.options(candidate);
-  if (options.runtime === undefined || options.settings === undefined)
-    throw new Error('Missing fixture runtime');
+  if (options.invocation === undefined)
+    throw new Error('Missing fixture invocation');
   return {
     ...options,
     invocation: createRuntimeInvocationContext({
-      runtime: options.runtime,
-      settings: options.settings,
+      runtimeId: options.invocation.runtimeId,
       providerName: setup.provider.name,
       ephemeralsSnapshot: { retries: 1, retrywait: 0, 'prompt-caching': 'off' },
     }),
@@ -49,14 +48,12 @@ describe('agent source enforcement with the actual disk Responses provider', () 
       `http://127.0.0.1:${http.server.port}/v1`,
       disk.root,
     );
-    setup.config.setTokenizerFactory(
-      withGpt56DiskSources(setup.factory, tmpdir()),
-    );
     const tokens: object[] = [];
     const estimates: number[] = [];
     const stream = await enforceAndStreamSourcePromptEnvelopeRetries({
       provider: setup.provider,
       source,
+      tokenizerFactory: withGpt56DiskSources(setup.factory, tmpdir()),
       buildOptions: (candidate) => buildRetryOptions(setup, candidate),
       enforce: async (candidate, estimate) => {
         estimates.push(await estimate(candidate));
@@ -99,7 +96,6 @@ describe('agent source enforcement with the actual disk Responses provider', () 
       await stream.return?.();
       disk.close();
       await http.server.stop(true);
-      await setup.config.dispose();
     }
   }, 120000);
 });

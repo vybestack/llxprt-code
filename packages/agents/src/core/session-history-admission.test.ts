@@ -15,7 +15,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -26,7 +26,9 @@ import {
   type MediaAdmissionContext,
 } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers/IProvider.js';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { ChatSession } from './chatSession.js';
+import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 import { RetainedHistoryAdmissions } from './retainedHistoryAdmissions.js';
 import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
 
@@ -101,6 +103,10 @@ function createSession(): ChatSession {
   });
   admission = new SpyAdmission(store);
   const runtime = createAgentRuntimeContext({
+    ...createSessionPolicyFixture(
+      setup.settingsService,
+      'session-admission-runtime',
+    ),
     state: createAgentRuntimeState({
       runtimeId: 'session-admission-runtime',
       provider: provider.name,
@@ -114,10 +120,16 @@ function createSession(): ChatSession {
       preserveThreshold: 0.2,
       telemetry: { enabled: false, target: null },
     },
-    provider: createProviderAdapterFromManager(
-      setup.config.getProviderManager(),
+    provider: createProviderAdapterFromManager(setup.providerManager),
+    telemetry: createTelemetryAdapter(
+      setup.config,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'session-admission-session',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
     ),
-    telemetry: createTelemetryAdapterFromConfig(setup.config),
     tools: createToolRegistryViewFromRegistry(),
     providerRuntime: { ...setup.runtime, config: setup.config },
     mediaStore: store,
@@ -281,7 +293,7 @@ describe('deferred array admission ownership handle', () => {
       rootDirectory: join(directory, 'deferred-media'),
       quotaBytes: 1024 * 1024,
     });
-    const admissions = new RetainedHistoryAdmissions(() => localStore);
+    const admissions = new RetainedHistoryAdmissions(localStore);
     const prepared = admissions.prepareDeferredArray(
       [imageRow(RED_PNG), imageRow(BLUE_PNG)],
       {},

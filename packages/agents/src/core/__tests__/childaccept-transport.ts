@@ -7,7 +7,7 @@ import {
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { SubagentLaunchResult } from '../subagentOrchestrator.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
@@ -93,26 +93,24 @@ export async function sendChildHistory(
   child: SubagentLaunchResult,
   contents: AsyncIterable<IContent> = child.runtime.history.getCuratedForProviderStream(),
 ): Promise<void> {
-  const runtime = child.runtime.runtimeContext.providerRuntime;
   const provider = child.runtime.providerAdapter.getActiveProvider();
-  if (runtime.config === undefined) throw new Error('No child config');
-  const options = createProviderCallOptions({
+  const admitted =
+    child.runtime.runtimeContext.prepareProviderInvocation('openai-responses');
+  const invocation = createRuntimeInvocationContext({
+    runtimeId: admitted.runtimeId,
     providerName: 'openai-responses',
-    runtime,
-    config: runtime.config,
-    settings: runtime.config.getSettingsService(),
-    systemInstruction: 'child acceptance',
-    ephemerals: {
+    ephemeralsSnapshot: {
+      ...admitted.ephemerals,
       'prompt-caching': 'off',
       'responses-stateful': true,
       retries: 2,
       retrywait: 0,
     },
-    contents,
   });
   for await (const _chunk of provider.generateChatCompletion({
-    ...options,
     contents,
+    invocation,
+    systemInstruction: 'child acceptance',
   })) {
     /* drain */
   }

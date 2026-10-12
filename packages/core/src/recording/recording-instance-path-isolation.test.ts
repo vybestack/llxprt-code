@@ -165,19 +165,20 @@ describe('recording instance pathname ownership', () => {
     ]);
   });
 
-  it('releases a rolled-back empty reservation so the next batch can publish', async () => {
+  it('releases a failed empty reservation so the next write can publish', async () => {
     vi.spyOn(crypto, 'randomUUID').mockReturnValue(INSTANCE_ID);
+    await mkdir(config.chatsDir, { recursive: true });
+    const occupiedPath = join(
+      config.chatsDir,
+      `session-2026-09-30T12-34-56-${INSTANCE_ID}-${SESSION_ID.substring(0, 12)}.jsonl`,
+    );
+    await writeFile(occupiedPath, '');
     const recording = owner();
-    const prepared = recording.prepareContentBatch([content('aborted')]);
-    prepared.publish();
-    const reservedPath = recordingPath(recording);
-    expect(await readFile(reservedPath, 'utf8')).toBe('');
-    prepared.rollback();
+    expect(() => recording.recordContent(content('aborted'))).toThrow(/EEXIST/);
     expect(recording.getFilePath()).toBeNull();
+    await rm(occupiedPath);
     expect(await readdir(config.chatsDir)).toStrictEqual([]);
-    const replacement = recording.prepareContentBatch([content('committed')]);
-    replacement.publish();
-    replacement.finalize();
+    recording.recordContent(content('committed'));
     await recording.flush();
     const replay = await replaySession(
       recordingPath(recording),

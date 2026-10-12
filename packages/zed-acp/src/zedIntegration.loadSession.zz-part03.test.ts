@@ -5,13 +5,12 @@
  */
 
 import { beforeEach, describe, expect, it } from 'bun:test';
-import type * as acp from '@agentclientprotocol/sdk';
 import { RecordingConnection } from './__tests__/zed-test-helpers.js';
 import {
   mockFromConfig,
   buildStubAgent,
-  buildBaseConfig,
   buildInitializeRequest,
+  makeUninitializedZedAgent,
   makeZedAgent,
 } from './zedIntegration.loadSession.test-helpers.js';
 
@@ -51,13 +50,9 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
 
   it('initialize() advertises loadSession: true', async () => {
     const connection = new RecordingConnection();
-    const mod = await import('./zedIntegration.js');
     // Reuse the shared typed constructor args (F15) rather than re-inlining the
     // ZedAgent setup; assert the capability from a fresh initialize() call.
-    const zedAgent = new mod.ZedAgent(
-      buildBaseConfig(),
-      connection as unknown as acp.AgentSideConnection,
-    );
+    const zedAgent = await makeUninitializedZedAgent(connection);
     const response = await zedAgent.initialize(buildInitializeRequest());
     expect(response.agentCapabilities?.loadSession).toBe(true);
     expect(response.agentCapabilities?.sessionCapabilities).toStrictEqual({

@@ -5,6 +5,9 @@ import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   initializeTelemetry,
@@ -19,12 +22,14 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { isAsyncIterableContents } from '../utils/collectContents.js';
 
 class RecoveryConfig extends Config {
+  readonly settings = new SettingsService();
+  readonly settingsOwner = new SessionSettingsOwner(this.settings);
   constructor(
     readonly root: string,
-    readonly conversation: boolean,
-    readonly bodies: boolean,
-    readonly prompts = true,
-    readonly telemetry = true,
+    conversation: boolean,
+    bodies: boolean,
+    prompts = true,
+    telemetry = true,
   ) {
     super({
       sessionId: 'recovery-session',
@@ -32,28 +37,16 @@ class RecoveryConfig extends Config {
       cwd: root,
       debugMode: false,
       model: 'recovery-model',
+      telemetry: {
+        enabled: telemetry,
+        outfile: join(root, 'telemetry.jsonl'),
+        logApiBodies: bodies,
+        logPrompts: prompts,
+        logApiBodyMaxChars: 7,
+        logConversations: conversation,
+        conversationLogPath: root,
+      },
     });
-  }
-  override getConversationLoggingEnabled(): boolean {
-    return this.conversation;
-  }
-  override getConversationLogPath(): string {
-    return this.root;
-  }
-  override getTelemetryEnabled(): boolean {
-    return this.telemetry;
-  }
-  override getTelemetryOutfile(): string {
-    return join(this.root, 'telemetry.jsonl');
-  }
-  override getTelemetryLogApiBodiesEnabled(): boolean {
-    return this.bodies;
-  }
-  override getTelemetryLogPromptsEnabled(): boolean {
-    return this.prompts;
-  }
-  override getTelemetryLogApiBodyMaxChars(): number {
-    return 7;
   }
 }
 
@@ -122,17 +115,26 @@ async function invoke(
   redactor = new ConfigBasedRedactor(redaction),
   signal?: AbortSignal,
 ): Promise<IContent[]> {
-  const settings = new SettingsService();
   const contents = (async function* (): AsyncGenerator<IContent> {
     for (let index = 0; index < 24; index++) yield row(index);
   })();
-  const wrapper = new LoggingProviderWrapper(provider(), redactor);
+  const wrapper = new LoggingProviderWrapper(
+    provider(),
+    redactor,
+    undefined,
+    () => captureProviderRequestDiagnostics(config, config.settingsOwner),
+  );
   const output: IContent[] = [];
   for await (const chunk of wrapper.generateChatCompletion({
     contents,
-    config,
-    settings,
-    runtime: { config, settingsService: settings, runtimeId: 'recovery' },
+    invocation: captureProviderInvocation(
+      {
+        config,
+        settingsService: config.settings,
+        runtimeId: 'recovery',
+      },
+      'recovery',
+    ),
     metadata: { __logicalRequestId: 'recovery-logical', abortSignal: signal },
   }))
     output.push(chunk);
@@ -205,7 +207,8 @@ async function fixture(
     telemetry,
   );
   activeConfig = config;
-  initializeTelemetry(config);
+  config.settingsOwner.bindTelemetry(config);
+  await initializeTelemetry(config.settingsOwner.telemetry);
   return config;
 }
 
@@ -215,7 +218,7 @@ async function verifyRecovery(
 ): Promise<Buffer> {
   const output = await invoke(config);
   expect(output[0].blocks).toStrictEqual([{ type: 'text', text: rawDigest() }]);
-  await flushTelemetry();
+  await flushTelemetry(config.settingsOwner.telemetry);
   const events = await records(config.root);
   const api = recover(events, 'llxprt_code.api_request');
   expect(JSON.parse(api.toString('utf8'))).toStrictEqual(expectedRows());
@@ -255,7 +258,10 @@ async function verifyRecovery(
 
 describe('complete bounded request logging', () => {
   afterEach(async () => {
-    if (activeConfig !== undefined) await shutdownTelemetry(activeConfig);
+    if (activeConfig !== undefined) {
+      await shutdownTelemetry(activeConfig.settingsOwner.telemetry);
+      await activeConfig.settingsOwner.dispose();
+    }
     resetConversationFileWriterForTesting();
     for (const directory of directories.splice(0))
       await rm(directory, { recursive: true, force: true });
@@ -284,7 +290,7 @@ describe('complete bounded request logging', () => {
     expect(output[0].blocks).toStrictEqual([
       { type: 'text', text: rawDigest() },
     ]);
-    await flushTelemetry();
+    await flushTelemetry(config.settingsOwner.telemetry);
     const events = await records(config.root);
     expect(
       events.filter((event) => String(event['event.name']).includes('_chunk')),
@@ -319,7 +325,7 @@ describe('complete bounded request logging', () => {
     await expect(
       invoke(config, new CancellingRedactor(redaction), controller.signal),
     ).rejects.toThrow('cancel redacted request');
-    await flushTelemetry();
+    await flushTelemetry(config.settingsOwner.telemetry);
     expect(redacted).toBe(3);
     expect(
       (await readdir(config.root)).filter(

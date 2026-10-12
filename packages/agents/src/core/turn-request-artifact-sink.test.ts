@@ -3,18 +3,21 @@ import { describe, expect, it } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { logs, type LogRecord } from '@opentelemetry/api-logs';
+import type { LogRecord } from '@opentelemetry/api-logs';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { createTelemetryAdapterFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { createTelemetryAdapter } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import type { ApiRequestEvent as RuntimeApiRequestEvent } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { ApiRequestEvent } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
 import { logApiRequest } from '@vybestack/llxprt-code-telemetry/telemetry/loggers.js';
 import { emitRequestArtifact } from '../../../telemetry/src/telemetry/request-artifact.js';
+import { recordEmitter } from '../../../telemetry/src/telemetry/log-record-emission.js';
 import {
   initializeTelemetry,
   flushTelemetry,
   shutdownTelemetry,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import { stageTurnRequestArtifact } from './turn-request-artifact.js';
@@ -27,8 +30,8 @@ const exportFailure = {
   truncated: 'Truncated request artifact',
   digest: 'digest mismatch',
 };
-function config(): Config {
-  return new Config({
+function runtime(): { active: Config; telemetry: RootTelemetry } {
+  const active = new Config({
     cwd: root(),
     targetDir: root(),
     sessionId: 'real-sink',
@@ -41,6 +44,10 @@ function config(): Config {
       outfile: join(root(), 'telemetry.jsonl'),
     },
   });
+  return {
+    active,
+    telemetry: createSessionSettingsFixture(active).settingsOwner.telemetry,
+  };
 }
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -104,15 +111,16 @@ describe('actual file exporter accepts turn artifacts below legacy adapter', () 
   it.each([false, true])(
     'exports every ordered byte and completion, oversized=%s',
     async (large) => {
-      const active = config();
-      initializeTelemetry(active);
+      const { active, telemetry } = runtime();
+      await initializeTelemetry(telemetry);
       try {
         const staged = await artifact(large);
         await logApiRequest(
           active,
           new ApiRequestEvent('gpt-5.6', 'direct-turn', undefined, staged),
+          telemetry,
         );
-        await flushTelemetry();
+        await flushTelemetry(telemetry);
         const events = await attributes(join(root(), 'telemetry.jsonl'));
         verifyChunks(events, await readFile(staged.artifact_path));
         expect(
@@ -126,7 +134,7 @@ describe('actual file exporter accepts turn artifacts below legacy adapter', () 
         });
         expect(events.every((event) => !('artifact_path' in event))).toBe(true);
       } finally {
-        await shutdownTelemetry(active);
+        await shutdownTelemetry(telemetry);
       }
     },
     60000,
@@ -135,8 +143,8 @@ describe('actual file exporter accepts turn artifacts below legacy adapter', () 
 
 describe('actual agent artifact protocol', () => {
   it('awaits versioned artifact completion at the runtime adapter', async () => {
-    const active = config();
-    initializeTelemetry(active);
+    const { active, telemetry } = runtime();
+    await initializeTelemetry(telemetry);
     try {
       const staged = await artifact();
       const widerEvent: RuntimeApiRequestEvent = {
@@ -148,10 +156,11 @@ describe('actual agent artifact protocol', () => {
           source: staged,
         },
       };
-      const returned =
-        createTelemetryAdapterFromConfig(active).logApiRequest(widerEvent);
+      const returned = createTelemetryAdapter(active, telemetry).logApiRequest(
+        widerEvent,
+      );
       await returned;
-      await flushTelemetry();
+      await flushTelemetry(telemetry);
       const events = await attributes(join(root(), 'telemetry.jsonl'));
       expect(
         events.filter(
@@ -170,7 +179,7 @@ describe('actual agent artifact protocol', () => {
         events.some((event) => event.artifact_id === staged.artifact_id),
       ).toBe(true);
     } finally {
-      await shutdownTelemetry(active);
+      await shutdownTelemetry(telemetry);
     }
   });
 });
@@ -179,8 +188,8 @@ describe('actual artifact export failure cleanup', () => {
   it.each(['abort', 'truncated', 'digest'] as const)(
     'never publishes completion for %s artifact export',
     async (mode) => {
-      const active = config();
-      initializeTelemetry(active);
+      const { active, telemetry } = runtime();
+      await initializeTelemetry(telemetry);
       try {
         const staged = await artifact();
         const controller = new AbortController();
@@ -194,17 +203,18 @@ describe('actual artifact export failure cleanup', () => {
           logApiRequest(
             active,
             new ApiRequestEvent('gpt-5.6', 'bad-turn', undefined, input),
+            telemetry,
             controller.signal,
           ),
         ).rejects.toThrow(exportFailure[mode]);
-        await flushTelemetry();
+        await flushTelemetry(telemetry);
         expect(
           (await attributes(join(root(), 'telemetry.jsonl'))).some(
             (event) => event.content_complete === true,
           ),
         ).toBe(false);
       } finally {
-        await shutdownTelemetry(active);
+        await shutdownTelemetry(telemetry);
       }
     },
   );
@@ -212,19 +222,19 @@ describe('actual artifact export failure cleanup', () => {
 
 describe('legacy string and descriptor protocols differ', () => {
   it('measures the legacy body cap rather than treating chunks as the same enabled event', async () => {
-    const active = config();
-    initializeTelemetry(active);
+    const { active, telemetry } = runtime();
+    await initializeTelemetry(telemetry);
     try {
       const rows = Array.from({ length: 64 }, (_, index) =>
         diskTextRow(index, false),
       );
       const text = getRequestTextFromContents(rows);
-      await createTelemetryAdapterFromConfig(active).logApiRequest({
+      await createTelemetryAdapter(active, telemetry).logApiRequest({
         model: 'gpt-5.6',
         promptId: 'legacy-capped',
         requestText: text,
       });
-      await flushTelemetry();
+      await flushTelemetry(telemetry);
       const events = await attributes(join(root(), 'telemetry.jsonl'));
       const request = events.find(
         (event) => event.prompt_id === 'legacy-capped',
@@ -240,7 +250,7 @@ describe('legacy string and descriptor protocols differ', () => {
         false,
       );
     } finally {
-      await shutdownTelemetry(active);
+      await shutdownTelemetry(telemetry);
     }
   });
 });
@@ -264,20 +274,20 @@ describe('request-wide identity protocol', () => {
 });
 
 async function measureChunkSinkRelease(trap: boolean) {
-  const active = config();
-  initializeTelemetry(active);
+  const { telemetry } = runtime();
+  await initializeTelemetry(telemetry);
   const retained: LogRecord[] = [];
   try {
     const staged = await artifact(true);
-    await flushTelemetry();
+    await flushTelemetry(telemetry);
     const baseline = await sourceHeap();
-    const logger = logs.getLogger('llxprt-code');
+    const sink = recordEmitter(telemetry, undefined, false);
     await emitRequestArtifact(
       staged,
       { 'event.name': 'llxprt_code.api_request', prompt_id: 'sink-release' },
-      (record) => {
+      async (record) => {
         if (trap) retained.push(record);
-        logger.emit(record);
+        await sink(record);
       },
     );
     const settled = await sourceHeap();
@@ -289,7 +299,7 @@ async function measureChunkSinkRelease(trap: boolean) {
     );
     return { delta, retained };
   } finally {
-    await shutdownTelemetry(active);
+    await shutdownTelemetry(telemetry);
   }
 }
 

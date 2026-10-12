@@ -37,7 +37,7 @@ describe('child facade real launch', () => {
         blocks: [{ type: 'text', text: 'child-only' }],
       });
       await history.waitForCommit();
-      const chats = fixture.config.storage.getProjectChatsDir();
+      const chats = fixture.config.projectChatsDir;
       const files = await readdir(chats);
       expect(files.filter((file) => file.endsWith('.lock'))).toHaveLength(1);
       const journals = files.filter((file) => file.endsWith('.jsonl'));

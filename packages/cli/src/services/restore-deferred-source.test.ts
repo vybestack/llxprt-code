@@ -20,11 +20,19 @@ import {
   admitResumeHistorySource,
 } from './restoreResumeBoot.js';
 import { AgentClient } from '../../../agents/src/core/client.js';
+import { bindClientTokenization } from '../../../agents/src/session/session-client-binding.js';
+import { requireMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { accountingFactory } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
+
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
 
 function phase(
   size: number,
@@ -95,16 +103,18 @@ async function withDiskResume(
   if (!result.ok) throw new Error(result.error);
   phase(size, 'opened');
   const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-  const config = internalConfig(agent);
-  config.setTokenizerFactory(accountingFactory((text) => text.length));
   const client = new AgentClient(
-    config,
+    internalConfig(agent),
     createAgentRuntimeState({
       runtimeId: randomUUID(),
       provider: 'fake',
       model: 'fake-model',
     }),
+    () => undefined,
+    requireMediaStore(agent.agentClient),
+    fixturePaths(),
   );
+  bindClientTokenization(client, accountingFactory((text) => text.length));
   try {
     await run(client, result, owners);
   } finally {

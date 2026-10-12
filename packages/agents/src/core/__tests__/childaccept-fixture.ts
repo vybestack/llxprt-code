@@ -4,13 +4,21 @@ import { mkdir, mkdtemp } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
-import { ProfileManager, Storage } from '@vybestack/llxprt-code-settings';
-import { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import {
+  createSessionSettingsFixture,
+  subagentSessionPorts,
+} from '../../api/__tests__/helpers/session-settings-fixture.js';
+import { fixtureToolSelection } from './subagentOrchestrator-test-helpers.js';
 import {
   SubagentOrchestrator,
   type SubagentLaunchResult,
 } from '../subagentOrchestrator.js';
+
+const createWorkspaceFilesystem = installTestWorkspaceFilesystem();
 
 export async function acceptanceDirectory(
   prefix: string,
@@ -18,38 +26,6 @@ export async function acceptanceDirectory(
 ): Promise<string> {
   await mkdir(parent, { recursive: true });
   return mkdtemp(join(parent, prefix));
-}
-
-class FixtureStorage extends Storage {
-  constructor(private readonly directory: string) {
-    super(directory);
-  }
-  override getProjectTempDir(): string {
-    return this.directory;
-  }
-  override getProjectChatsDir(): string {
-    return join(this.directory, 'chats');
-  }
-}
-
-class ForegroundConfig extends Config {
-  override readonly storage: Storage;
-  constructor(directory: string) {
-    super({
-      sessionId: 'childaccept-parent',
-      targetDir: directory,
-      cwd: directory,
-      debugMode: false,
-      model: 'gpt-5.2',
-      usageStatisticsEnabled: false,
-    });
-    this.storage = new FixtureStorage(directory);
-    this.toolRegistry = new ToolRegistry(
-      this,
-      new MessageBus(),
-      this.getSettingsService(),
-    );
-  }
 }
 
 export async function launchAcceptanceChild(
@@ -61,7 +37,19 @@ export async function launchAcceptanceChild(
   close(): Promise<void>;
 }> {
   await mkdir(directory, { recursive: true });
-  const config = new ForegroundConfig(directory);
+  const config = new Config({
+    sessionId: 'childaccept-parent',
+    targetDir: directory,
+    cwd: directory,
+    debugMode: false,
+    model: 'gpt-5.2',
+    usageStatisticsEnabled: false,
+  });
+  const session = createSessionSettingsFixture(config);
+  const workspace = createWorkspaceFilesystem({
+    targetDir: directory,
+    isTrusted: () => true,
+  });
   const profileManager = new ProfileManager(join(directory, 'profiles'));
   await profileManager.saveProfile('local', {
     version: 1,
@@ -81,6 +69,11 @@ export async function launchAcceptanceChild(
   );
   await subagentManager.saveSubagent('child', 'local', 'child acceptance');
   const orchestrator = new SubagentOrchestrator({
+    ...subagentSessionPorts(session),
+    instructions: emptyInstructionReads,
+    toolRegistry: fixtureToolSelection(),
+    workspacePaths: workspace.paths,
+    readMcpInstructions: () => undefined,
     subagentManager,
     profileManager,
     foregroundConfig: config,

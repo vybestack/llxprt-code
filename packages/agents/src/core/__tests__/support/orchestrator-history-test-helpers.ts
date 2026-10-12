@@ -12,6 +12,7 @@ import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership
 import {
   buildAgent,
   internalConfig,
+  internalSettingsOwner,
 } from '../../../api/__tests__/helpers/agentHarness.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -111,8 +112,11 @@ export async function withOrchestratorHistory<T>(
         throw new Error('Missing controlled history');
       const { agent, cleanup } = await buildAgent('plain-text.jsonl');
       const config = internalConfig(agent);
-      config.setEphemeralSetting('context-limit', 100_000_000);
-      const client = config.getAgentClient();
+      internalSettingsOwner(agent).writeSessionOverride(
+        'context-limit',
+        100_000_000,
+      );
+      const client = agent.agentClient;
       client.storeHistoryServiceForReuse(history);
       try {
         await client.startChat([]);

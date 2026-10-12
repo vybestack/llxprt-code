@@ -1,3 +1,5 @@
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+const fixtureOwners = installRuntimeTestOwners();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -15,6 +17,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
@@ -41,7 +44,7 @@ const sourceFactory = withGpt56DiskSources(factory, scratch);
 const context = {
   includeReasoningInContext: false,
   mediaPdfEnabled: true,
-  outputLimiterConfig: { getEphemeralSettings: () => ({}) },
+  outputLimits: parseOutputLimits({}),
   debug: (): void => {},
 };
 const rows: readonly IContent[] = [
@@ -153,7 +156,12 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
   beforeEach(() => {
     const settingsService = new SettingsService();
     const config: Config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({ settingsService, config });
+    providerManager = new ProviderManager({
+      sessionSettings: fixtureOwners.adopt(config, settingsService)
+        .settingsOwner,
+      settingsService,
+      config,
+    });
   });
 
   afterAll(() => rmSync(scratch, { recursive: true, force: true }));

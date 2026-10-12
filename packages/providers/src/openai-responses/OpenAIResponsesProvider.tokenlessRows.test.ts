@@ -50,13 +50,12 @@ async function setupWith(retries: unknown) {
     root,
   );
   const base = setup.options(trackedRequestRows(rows()));
-  if (base.runtime === undefined || base.settings === undefined)
-    throw new Error('Missing fixture runtime');
+  if (base.invocation === undefined)
+    throw new Error('Missing fixture invocation');
   const options: GenerateChatOptions = {
     ...base,
     invocation: createRuntimeInvocationContext({
-      runtime: base.runtime,
-      settings: base.settings,
+      runtimeId: base.invocation.runtimeId,
       providerName: setup.provider.name,
       ephemeralsSnapshot: {
         'prompt-caching': 'off',

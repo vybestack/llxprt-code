@@ -783,14 +783,17 @@ describe('slashCommandHandlers', () => {
               workspaceDirs: [...agent.workspace.getDirectories()],
               startTime: new Date().toISOString(),
             },
-            history: [
-              {
-                speaker: 'human',
+            history: (async function* () {
+              yield {
+                speaker: 'human' as const,
                 blocks: [
-                  { type: 'text', text: new TextDecoder().decode(bytes) },
+                  {
+                    type: 'text' as const,
+                    text: new TextDecoder().decode(bytes),
+                  },
                 ],
-              },
-            ],
+              };
+            })(),
           };
         };
         deps.commands = [

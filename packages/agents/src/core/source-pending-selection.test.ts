@@ -43,7 +43,7 @@ async function selection(signal?: AbortSignal) {
     signal,
   });
   const source = await sourceBeforeModelHook({
-    config: undefined,
+    owner: undefined,
     snapshot,
     pending,
     model: 'gpt-5.6',

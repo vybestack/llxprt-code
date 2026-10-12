@@ -15,11 +15,12 @@ import { estimateImageTokens } from '@vybestack/llxprt-code-tools/utils/imageTok
 import { requestScopedContents } from '../utils/requestScopedBody.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
 import { SyntheticToolResponseHandler } from '../openai/syntheticToolResponses.js';
+import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 const context: ResponsesInputBuildContext = {
   includeReasoningInContext: true,
-  outputLimiterConfig: { getEphemeralSettings: () => ({}) },
+  outputLimits: parseOutputLimits({}),
   debug: () => {},
   mediaPdfEnabled: true,
   // The oracle and the source route must stamp synthesized reasoning ids with

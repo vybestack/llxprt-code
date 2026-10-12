@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import {
   BaseProvider,
   type NormalizedGenerateChatOptions,
@@ -70,38 +70,31 @@ function callOptions(
   selection: ProviderRequestSelection,
   signal?: AbortSignal,
 ) {
-  const settings = new SettingsService();
-  const config = new Config({
-    sessionId: 'request-rows',
-    targetDir: process.cwd(),
-    debugMode: false,
-    cwd: process.cwd(),
-    model: 'neutral-model',
-  });
-  const runtime = {
-    settingsService: settings,
-    config,
+  const options = createProviderCallOptions({
+    providerName: 'neutral-rows',
     runtimeId: 'request-rows',
-  };
-  return {
-    contents: { [Symbol.asyncIterator]: () => selection.openReader(signal) },
-    requestRows: selection,
-    contentCount: selection.count,
-    settings,
-    config,
-    runtime,
-    invocation: createRuntimeInvocationContext({
-      runtime,
-      settings,
-      providerName: 'neutral-rows',
-      ephemeralsSnapshot: {},
-      ...(signal === undefined ? {} : { signal }),
-    }),
+    settings: new SettingsService(),
+    ephemerals: {},
     resolved: {
       model: 'neutral-model',
       baseURL: 'http://127.0.0.1:1',
       authToken: 'k',
     },
+  });
+  return {
+    ...options,
+    contents: { [Symbol.asyncIterator]: () => selection.openReader(signal) },
+    requestRows: selection,
+    contentCount: selection.count,
+    invocation:
+      signal === undefined
+        ? options.invocation
+        : createRuntimeInvocationContext({
+            runtimeId: 'request-rows',
+            providerName: 'neutral-rows',
+            ephemeralsSnapshot: {},
+            signal,
+          }),
   };
 }
 

@@ -41,9 +41,7 @@ async function legacyFinalized(
 ) {
   const projection = await setup.provider.projectPromptEnvelope({
     contents: setup.history.getCuratedForProviderStream([pending]),
-    config: setup.config,
-    runtime: setup.runtime.providerRuntime,
-    settings: setup.settings,
+    invocation: setup.runtime.prepareProviderInvocation(setup.provider.name),
     systemInstruction: projectionInstructions,
   });
   try {

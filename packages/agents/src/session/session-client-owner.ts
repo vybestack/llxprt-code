@@ -63,6 +63,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   AgentClientContract,
   AgentClientFactory,
+  DeferredHistorySourceOptions,
 } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
@@ -629,8 +630,11 @@ export class SessionClientOwner {
     return pending;
   }
 
-  refreshAuth(_authMethod?: string): Promise<void> {
-    return this.enqueue(() => this.replaceClient());
+  refreshAuth(
+    _authMethod?: string,
+    options: DeferredHistorySourceOptions = {},
+  ): Promise<void> {
+    return this.enqueue(() => this.replaceClient(options));
   }
 
   prepareNewSession(
@@ -658,7 +662,9 @@ export class SessionClientOwner {
     );
   }
 
-  private async replaceClient(): Promise<void> {
+  private async replaceClient(
+    options: DeferredHistorySourceOptions,
+  ): Promise<void> {
     const sessionId = this.runtimeState.sessionId;
     const previous = this.client;
     const canReuseBorrowed = previous === this.borrowedClient;
@@ -675,6 +681,7 @@ export class SessionClientOwner {
     const { history, historyService } = await extractExistingState(
       logger,
       previous,
+      options,
     );
     const prepared = buildNewContentGeneratorConfig(
       this.contentGeneratorFactory,
@@ -694,6 +701,7 @@ export class SessionClientOwner {
         historyService,
         prepared.contentGeneratorConfig,
         previous.getContentGeneratorConfig()?.vertexai,
+        options,
       );
     } catch (error) {
       await this.ownedClients.releaseFailedReplacement(next, error);

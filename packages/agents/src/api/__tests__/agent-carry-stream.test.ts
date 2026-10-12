@@ -1,7 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { internalConfig } from './helpers/agentHarness.js';
 import {
   carryBounds,
   expectedDigest,
@@ -18,7 +17,7 @@ for (const size of [512, 8192]) {
         async (agent, replacement, previous, input) => {
           await agent.setModel('carried-model');
           const next = replacement();
-          expect(internalConfig(agent).getAgentClient()).toBe(next);
+          expect(agent.agentClient).toBe(next);
           expect(next).not.toBe(previous);
           expect(next.hasChatInitialized()).toBe(true);
           expect(next.admissions).toBe(1);

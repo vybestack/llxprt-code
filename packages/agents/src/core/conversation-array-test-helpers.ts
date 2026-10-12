@@ -1,5 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { expect } from 'bun:test';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -7,7 +11,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -16,6 +20,8 @@ import { createConfigParams } from './chatSession-runtime-helpers.js';
 import { ConversationManager } from './ConversationManager.js';
 import type { RowOwnershipStats } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { appendFileSync } from 'node:fs';
+
+const modelTools = installModelToolFixture();
 
 export function conversationFor(history: HistoryService): ConversationManager {
   const settingsService = new SettingsService();
@@ -26,8 +32,11 @@ export function conversationFor(history: HistoryService): ConversationManager {
     runtimeId: 'conversation-array',
   });
   const manager = new TestRuntimeProviderManager(providerRuntime);
-  config.setProviderManager(manager);
+  manager.setConfig(config);
+  configureProviderRuntimeFactories(config, manager);
   const runtime = createAgentRuntimeContext({
+    prepareProviderInvocation: (name, parameters, signal) =>
+      captureProviderInvocation(providerRuntime, name, parameters, signal),
     state: createAgentRuntimeState({
       runtimeId: 'conversation-array',
       provider: 'test',
@@ -37,9 +46,12 @@ export function conversationFor(history: HistoryService): ConversationManager {
     history,
     settings: { contextLimit: 100_000_000 },
     provider: createProviderAdapterFromManager(manager),
-    telemetry: createTelemetryAdapterFromConfig(config),
-    tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
-    providerRuntime,
+    telemetry: createTelemetryAdapter(
+      config,
+      createSessionSettingsFixture(config).settingsOwner.telemetry,
+    ),
+    tools: createToolRegistryViewFromRegistry(modelTools()),
+    providerRuntime: { ...providerRuntime },
   });
   return new ConversationManager(history, runtime);
 }

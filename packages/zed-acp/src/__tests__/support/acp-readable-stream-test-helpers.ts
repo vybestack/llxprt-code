@@ -3,6 +3,8 @@ import * as acp from '@agentclientprotocol/sdk';
 import { Readable } from 'node:stream';
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 import type { Config } from '@vybestack/llxprt-code-core';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createHash } from 'node:crypto';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
@@ -13,6 +15,7 @@ import { readAgentHistoryForReplay } from '../../zed-session-loader.js';
 import { deliverHistoryUpdates } from '../../zed-session-replay.js';
 import { SessionTitleTracker } from '../../zed-session-info.js';
 import { ZedAgent } from '../../zedIntegration.js';
+import { unusedProfileApplication } from '../../test-profile-application.js';
 
 export function serializeUpdate(update: acp.SessionUpdate): string {
   return JSON.stringify(update, (_key, value: unknown): unknown => {
@@ -156,8 +159,18 @@ export function connectZed(
   kind: InputKind,
 ): ReturnType<typeof connectPeer> & { dispose: () => Promise<void> } {
   const agents: ZedAgent[] = [];
+  const settingsService = new SettingsService();
+  const providerManager = new ProviderManager({ config, settingsService });
   const peer = connectPeer(kind, (connection) => {
-    const agent = new ZedAgent(config, connection, async () => []);
+    const agent = new ZedAgent(
+      config,
+      connection,
+      unusedProfileApplication,
+      providerManager,
+      () => new SettingsService({ sessionSource: settingsService }),
+      async () => [],
+      { listProfiles: async () => [] },
+    );
     agents.push(agent);
     return agent;
   });
@@ -165,6 +178,7 @@ export function connectZed(
     ...peer,
     dispose: async () => {
       await Promise.all(agents.map((agent) => agent.disposeAll()));
+      providerManager.dispose();
     },
   };
 }

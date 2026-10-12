@@ -69,7 +69,7 @@ async function withIsolatedAgent<T>(
   const { agent, cleanup } = await buildAgent('multi-turn-text.jsonl', {
     workingDir,
   });
-  const projectTemp = internalConfig(agent).storage.getProjectTempDir();
+  const projectTemp = internalConfig(agent).getProjectTempDir();
   try {
     return await fn(agent);
   } finally {

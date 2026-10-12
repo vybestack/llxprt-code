@@ -1,8 +1,18 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { afterEach } from 'bun:test';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderAdapterFromManager } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+
+const owners: SessionSettingsOwner[] = [];
+afterEach(async () => {
+  for (const owner of owners.splice(0)) await owner.dispose();
+});
 
 export function makeRuntimeContext(
   includeThoughts: boolean,
@@ -13,6 +23,10 @@ export function makeRuntimeContext(
     model: 'test-model',
     sessionId: 'test-session',
   });
+  const settingsService = new SettingsService();
+  settingsService.set('reasoning.includeInContext', includeThoughts);
+  const owner = new SessionSettingsOwner(settingsService);
+  owners.push(owner);
   return createAgentRuntimeContext({
     state,
     history: new HistoryService(),
@@ -23,9 +37,23 @@ export function makeRuntimeContext(
       telemetry: { enabled: true, target: null },
       'reasoning.includeInContext': includeThoughts,
     },
-    provider: {} as never,
-    telemetry: {} as never,
-    tools: {} as never,
-    providerRuntime: {} as never,
+    provider: createProviderAdapterFromManager(undefined),
+    telemetry: {
+      logApiRequest: () => {},
+      logApiResponse: () => {},
+      logApiError: () => {},
+    },
+    tools: { listToolNames: () => [], getToolMetadata: () => undefined },
+    providerRuntime: createProviderRuntimeContext({
+      settingsService,
+      runtimeId: state.runtimeId,
+    }),
+    prepareProviderInvocation: (name, parameters, signal) =>
+      owner.prepareProviderInvocation(
+        state.runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
   });
 }

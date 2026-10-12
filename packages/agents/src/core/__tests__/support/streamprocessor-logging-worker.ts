@@ -9,7 +9,17 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { createTelemetryAdapterFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { createTelemetryAdapter } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import {
+  hookSessionRuntime,
+  readHookDefinitions,
+} from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
+import { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   initializeTelemetry,
@@ -134,9 +144,8 @@ async function oracle(setup: Setup, mode: Mode, large: boolean) {
         }
       },
     },
-    config: setup.config,
-    runtime: setup.runtime.providerRuntime,
-    settings: setup.settings,
+    invocation: setup.runtime.prepareProviderInvocation(setup.provider.name),
+    resolved: { model: 'gpt-5.6' },
     systemInstruction: setup.generation.systemInstruction,
   });
   try {
@@ -149,8 +158,8 @@ async function oracle(setup: Setup, mode: Mode, large: boolean) {
     await projection.releaseIfUnsent?.();
   }
 }
-function observeLegacy(setup: Setup): Trace {
-  const adapter = createTelemetryAdapterFromConfig(setup.config);
+function observeLegacy(setup: Setup, telemetry: RootTelemetry): Trace {
+  const adapter = createTelemetryAdapter(setup.config, telemetry);
   const trace: Trace = [];
   Object.assign(setup.runtime.telemetry, {
     logApiRequest(
@@ -182,24 +191,31 @@ function observeLegacy(setup: Setup): Trace {
 async function assemble(root: string, mode: Mode, large: boolean) {
   const controller = new AbortController();
   const http = httpEndpoint(mode, controller);
+  const prompts = !['disabled', 'conversation', 'shape'].includes(mode);
   const setup = await processorFixture(
     root,
     `http://127.0.0.1:${http.server.port}/v1`,
     large,
+    64,
+    {
+      enabled: true,
+      logPrompts: prompts,
+      logApiBodies: prompts,
+      logApiBodyMaxChars: 32 * 1024 * 1024,
+      logConversations: !['disabled', 'shape'].includes(mode),
+      conversationLogPath: root,
+      outfile: join(root, 'telemetry.jsonl'),
+    },
   );
-  await shutdownTelemetry(setup.config);
-  const prompts = !['disabled', 'conversation', 'shape'].includes(mode);
-  setup.config.updateTelemetrySettings({
-    enabled: true,
-    logPrompts: prompts,
-    logApiBodies: prompts,
-    logApiBodyMaxChars: 32 * 1024 * 1024,
-    logConversations: !['disabled', 'shape'].includes(mode),
-    conversationLogPath: root,
-    outfile: join(root, 'telemetry.jsonl'),
-  });
-  const trace = observeLegacy(setup);
-  const wrapper = new LoggingProviderWrapper(setup.provider);
+  const settingsOwner = new SessionSettingsOwner(setup.settings);
+  const telemetry = settingsOwner.bindTelemetry(setup.config);
+  const trace = observeLegacy(setup, telemetry);
+  const wrapper = new LoggingProviderWrapper(
+    setup.provider,
+    undefined,
+    undefined,
+    () => captureProviderRequestDiagnostics(setup.config, settingsOwner),
+  );
   const processor = new StreamProcessor(
     setup.runtime,
     new ConversationManager(setup.history, setup.runtime),
@@ -214,17 +230,39 @@ async function assemble(root: string, mode: Mode, large: boolean) {
       true,
       join(root, 'tokens.jsonl'),
     );
+  let hooks: SessionHookOwner | undefined;
   if (mode === 'hook') {
     registerModelHook(setup.config, root, 'none');
-    await setup.config.getHookSystem()?.initialize();
+    hooks = new SessionHookOwner(
+      readHookDefinitions(setup.config),
+      hookSessionRuntime(
+        setup.config,
+        new WorkspaceTrustLifecycle({
+          localTrust: setup.config.initialWorkspaceTrust,
+        }),
+        telemetry,
+      ),
+      true,
+      new MessageBus(),
+    );
   }
   setup.settings.set('token-usage-log', mode === 'shape');
   const chat =
     process.env.ISSUE854_LOGGING_ENTRY === 'chat'
       ? loggingChatSession(setup.runtime, wrapper, setup.generation)
       : undefined;
-  initializeTelemetry(setup.config);
-  return { setup, http, processor, chat, trace, controller };
+  await initializeTelemetry(telemetry);
+  return {
+    setup,
+    http,
+    processor,
+    chat,
+    trace,
+    controller,
+    telemetry,
+    settingsOwner,
+    hooks,
+  };
 }
 function collectFacts(
   root: string,
@@ -310,7 +348,8 @@ async function run(
   large: boolean,
 ): Promise<void> {
   const input = await assemble(root, mode, large);
-  const { setup, http, processor, controller } = input;
+  const { setup, http, processor, controller, telemetry, settingsOwner, hooks } =
+    input;
   let output = '';
   let failure: string | undefined;
   try {
@@ -321,6 +360,14 @@ async function run(
         config: {
           abortSignal: controller.signal,
         },
+        ...(hooks === undefined
+          ? {}
+          : {
+              hookOwner: hooks.execution({
+                sessionId: () => setup.config.getSessionId(),
+                transcriptPath: () => undefined,
+              }),
+            }),
       };
       if (input.chat !== undefined) {
         output = await readLoggingChatStream(
@@ -334,7 +381,7 @@ async function run(
     } catch (error) {
       failure = String(error);
     }
-    await flushTelemetry();
+    await flushTelemetry(telemetry);
     await DebugLogger.resetForTesting();
     await sourceHeap();
     writeFileSync(
@@ -358,7 +405,9 @@ async function run(
     resetConversationFileWriterForTesting();
     setup.history.dispose();
     await http.server.stop(true);
-    await shutdownTelemetry(setup.config);
+    await shutdownTelemetry(telemetry);
+    await hooks?.dispose();
+    await settingsOwner.dispose();
     await setup.config.dispose();
   }
 }

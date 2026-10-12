@@ -7,7 +7,10 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIProvider } from '../OpenAIProvider.js';
 import OpenAI from 'openai';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import {
+  createRuntimeInvocationContext,
+  type RuntimeInvocationContext,
+} from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import {
   createProviderCallOptions,
@@ -104,7 +107,7 @@ function buildCallOptions(
   overrides: Omit<ProviderCallOptionsInit, 'providerName' | 'contents'> & {
     contents?: readonly IContent[];
   } = {},
-): GenerateChatOptions {
+): GenerateChatOptions & { invocation: RuntimeInvocationContext } {
   const { contents = [], ...rest } = overrides;
   const stream = (async function* (): AsyncGenerator<IContent> {
     yield* contents;

@@ -7,6 +7,8 @@ import type { ProviderCuratedStreamOptions } from '@vybestack/llxprt-code-core/s
 import type { ApiRequestEvent } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { TelemetrySettings } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIResponsesProvider } from '@vybestack/llxprt-code-providers';
 import type { GenerateChatOptions } from '@vybestack/llxprt-code-providers/IProvider.js';
@@ -87,6 +89,7 @@ export async function processorFixture(
   baseURL: string,
   large: DiskTextTail = false,
   count = 64,
+  telemetry: TelemetrySettings = { enabled: true, logPrompts: false },
 ) {
   const settings = new SettingsService();
   settings.setProviderSetting('openai-responses', 'model', 'gpt-5.6');
@@ -102,15 +105,13 @@ export async function processorFixture(
     sessionId: randomUUID(),
     model: 'gpt-5.6',
     debugMode: false,
-    settingsService: settings,
     enableHooks: true,
     trustedFolder: true,
     hooks: {},
-    telemetry: { enabled: true, logPrompts: false },
+    telemetry,
   });
   const nativeFactory = createRuntimeTokenizerFactory();
   await nativeFactory.prepareTokenizer?.('openai-responses', 'gpt-5.6');
-  config.setTokenizerFactory(withGpt56DiskSources(nativeFactory, root));
   const provider = new ObservedResponsesProvider('test-key', baseURL);
   const history = new ObservedHistory();
   for (let index = 0; index < count; index++) {
@@ -126,6 +127,8 @@ export async function processorFixture(
     provider,
     history,
     baseURL,
+    'gpt-5.6',
+    withGpt56DiskSources(nativeFactory, root),
   );
 }
 
@@ -137,6 +140,7 @@ export function assembleProcessorFixture(
   history: ObservedHistory,
   baseURL: string,
   model = 'gpt-5.6',
+  promptEstimator?: RuntimeTokenizerFactory,
 ) {
   const requests: ApiRequestEvent[] = [];
   const providerRuntime = {
@@ -145,6 +149,9 @@ export function assembleProcessorFixture(
     runtimeId: randomUUID(),
   };
   const runtime = createAgentRuntimeContext({
+    prepareProviderInvocation: (name, parameters, signal) =>
+      captureProviderInvocation(providerRuntime, name, parameters, signal),
+    promptEstimator,
     state: {
       runtimeId: providerRuntime.runtimeId,
       sessionId: config.getSessionId(),

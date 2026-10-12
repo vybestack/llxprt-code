@@ -7,6 +7,7 @@ import { basename, dirname, join } from 'node:path';
 import { Config } from '../config/config.js';
 import { escapeShellArg, getShellConfiguration } from '../utils/shell-utils.js';
 import { HookRunner } from './hookRunner.js';
+import { fixtureHookRuntime } from './__tests__/hook-runtime-fixture.js';
 import { HookOutputOwner } from './hookOutputSnapshot.js';
 import { runHookSnapshot } from './hookSnapshotProcess.js';
 import type { HookModelRowsInput } from './hookModelInputStream.js';
@@ -73,7 +74,7 @@ let runner: HookRunner;
 describe('disk hook output scratch lifecycle', () => {
   beforeEach(() => {
     root = fs.mkdtempSync(join(tmpdir(), 'hook-lifecycle-'));
-    runner = new HookRunner(
+    const runtime = fixtureHookRuntime(
       new Config({
         sessionId: 'scratch-lifecycle',
         targetDir: root,
@@ -81,6 +82,11 @@ describe('disk hook output scratch lifecycle', () => {
         debugMode: false,
         model: 'test',
       }),
+    );
+    runner = new HookRunner(
+      runtime.process,
+      runtime.isTrustedFolder,
+      () => new AbortController().signal,
     );
   });
   afterEach(() => {

@@ -140,8 +140,10 @@ describe('provider switch transaction ownership', () => {
       for await (const event of b.stream('Continue on the committed sibling')) {
         if (event.type === 'error') throw new Error(event.error.message);
       }
-      expect(JSON.stringify(await a.getHistory())).toContain('restored owner');
-      expect(JSON.stringify(await b.getHistory())).toContain(
+      expect(JSON.stringify(await a.session.getHistory())).toContain(
+        'restored owner',
+      );
+      expect(JSON.stringify(await b.session.getHistory())).toContain(
         'committed sibling',
       );
     } finally {

@@ -218,9 +218,11 @@ async function exerciseOwners(sameLabel: boolean): Promise<void> {
     }
     const model = spyOn(provider, 'generateChatCompletion').mockImplementation(
       async function* (
-        options: GenerateChatOptions | IContent[],
+        options: GenerateChatOptions | AsyncIterable<IContent>,
       ): AsyncIterableIterator<IContent> {
-        const contents = Array.isArray(options) ? options : options.contents;
+        const contents = await Array.fromAsync(
+          'contents' in options ? options.contents : options,
+        );
         requests = [...requests, structuredClone(contents)];
         const request = requests.length;
         if (request === 1) {
@@ -339,7 +341,9 @@ async function exerciseOwners(sameLabel: boolean): Promise<void> {
       );
     }
     const historyA = JSON.stringify(await a.callerClient.getHistory());
-    const historyB = JSON.stringify(await b.agent.getHistory());
+    const historyB = JSON.stringify(
+      await Array.fromAsync(b.agent.streamHistory()),
+    );
     expect(historyA).toContain('alpha-external-output:alpha-invocation-1');
     expect(historyA).not.toContain('beta-external-output');
     expect(historyB).toContain('beta-external-output:beta-invocation-1');
@@ -351,9 +355,9 @@ async function exerciseOwners(sameLabel: boolean): Promise<void> {
     expect(JSON.stringify(b.requests()[3])).toContain(
       'beta-external-output:beta-invocation-2',
     );
-    expect(JSON.stringify(await b.agent.getHistory())).not.toContain(
-      'alpha-external-output',
-    );
+    expect(
+      JSON.stringify(await Array.fromAsync(b.agent.streamHistory())),
+    ).not.toContain('alpha-external-output');
   } finally {
     abort.abort();
     releases.forEach((release) => release());

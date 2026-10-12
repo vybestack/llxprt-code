@@ -6,6 +6,7 @@
 
 import { describe, expect, it, spyOn } from 'bun:test';
 import { readFile } from 'node:fs/promises';
+import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
 import {
   EmptySummaryError,
   type CompressionStrategy,
@@ -258,14 +259,12 @@ describe('shared history compression recording origin', () => {
         expect((await agent.compress()).status).toBe('compressed');
         const history = agent.agentClient.getHistoryService();
         if (!history) throw new Error('Missing shared history');
-        const summary = history
-          .getAll()
-          .find((entry) =>
-            entry.blocks.some(
-              (block) =>
-                block.type === 'text' && block.text === 'owned-summary-1',
-            ),
-          );
+        const summary = (await collectRawHistory(history)).find((entry) =>
+          entry.blocks.some(
+            (block) =>
+              block.type === 'text' && block.text === 'owned-summary-1',
+          ),
+        );
         if (!summary) throw new Error('Missing committed summary');
         const candidate = {
           speaker: 'ai' as const,
@@ -279,7 +278,7 @@ describe('shared history compression recording origin', () => {
             },
           }),
         ).rejects.toThrow('reject summary replacement');
-        expect(history.getAll()).toContain(summary);
+        expect(await collectRawHistory(history)).toContainEqual(summary);
         expect(history.getContentOrigin(summary)).toBe(agent.session);
         expect(history.getContentOrigin(candidate)).toBeUndefined();
         const aPath = recordingPath(agent.session.getRecording());

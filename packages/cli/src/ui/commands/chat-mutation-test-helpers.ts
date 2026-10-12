@@ -6,11 +6,9 @@ import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/S
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { withPublicHistory } from '../../../../agents/src/api/__tests__/helpers/public-history-fixture.js';
-import { internalConfig } from '../../../../agents/src/api/__tests__/helpers/agentHarness.js';
-import { publicCommandContext } from '../../__tests__/public-history-cursor.js';
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { CommandContext } from './types.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { ChatSession } from '../../../../agents/src/core/chatSession.js';
 
 export interface ChatMutationFixture {
   readonly context: CommandContext;
@@ -40,18 +38,12 @@ export async function withChatMutationFixture<T>(
       size,
       true,
       async (agent, history, reader) => {
-        const config = internalConfig(agent);
-        const client = config.getAgentClient();
-        const chat = client.getChat();
-        if (!(chat instanceof ChatSession))
-          throw new Error('Expected real chat');
-        const context = publicCommandContext(chat);
-        if (context.services.config === null)
-          throw new Error('Missing test config');
-        Object.assign(context.services.config, {
-          getAgentClient: () => client,
-          getLocalMediaStore: () => config.getLocalMediaStore(),
-          getEphemeralSetting: () => undefined,
+        const client = agent.agentClient;
+        const context = createMockCommandContext({
+          services: {
+            config: { getEphemeralSetting: () => undefined },
+            agent: { agentClient: client },
+          },
         });
         context.recordingIntegration = undefined;
         context.recordingSwapCallbacks = {

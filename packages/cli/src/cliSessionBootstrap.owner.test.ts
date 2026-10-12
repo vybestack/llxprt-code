@@ -10,7 +10,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
 import { Config } from '@vybestack/llxprt-code-core';
-import { setupOwnerSessionRecording } from './cliSessionBootstrap.js';
+import {
+  setupOwnerSessionRecording,
+  type OwnerResumedRows,
+} from './cliSessionBootstrap.js';
 import {
   __resetCleanupStateForTesting,
   registerCleanup,
@@ -23,6 +26,22 @@ const fixture = fileURLToPath(
     import.meta.url,
   ),
 );
+
+async function resumedRowsContain(
+  rows: OwnerResumedRows | null,
+  text: string,
+): Promise<boolean> {
+  if (rows === null) return false;
+  for await (const content of rows.streamRows()) {
+    if (
+      content.blocks.some(
+        (block) => block.type === 'text' && block.text.includes(text),
+      )
+    )
+      return true;
+  }
+  return false;
+}
 
 describe('foreground noninteractive recording owner', () => {
   const roots: string[] = [];
@@ -127,15 +146,9 @@ describe('foreground noninteractive recording owner', () => {
       null,
     );
     expect(duplicateAdoption).not.toHaveBeenCalled();
-    expect(
-      history?.some((content) =>
-        content.blocks.some(
-          (block) =>
-            block.type === 'text' &&
-            block.text.includes('cli-owner-resume-seed'),
-        ),
-      ),
-    ).toBe(true);
+    expect(await resumedRowsContain(history, 'cli-owner-resume-seed')).toBe(
+      true,
+    );
     expect(resumed.agent.session.getRecording().path).toBe(path);
     await runExitCleanup();
     expect(
@@ -280,15 +293,9 @@ describe('foreground noninteractive recording owner', () => {
       { listSessions: false, deleteSession: undefined },
       null,
     );
-    expect(
-      history?.some((content) =>
-        content.blocks.some(
-          (block) =>
-            block.type === 'text' &&
-            block.text.includes('cli-owner-checkpoint-seed'),
-        ),
-      ),
-    ).toBe(true);
+    expect(await resumedRowsContain(history, 'cli-owner-checkpoint-seed')).toBe(
+      true,
+    );
     expect(resumed.agent.session.getRecording().path).not.toBe(sourcePath);
     await runExitCleanup();
     expect(

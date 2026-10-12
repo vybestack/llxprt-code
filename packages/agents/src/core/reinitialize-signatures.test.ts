@@ -1,15 +1,24 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { transferHistoryToNewClient } from '@vybestack/llxprt-code-core/config/agentClientLifecycle.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { AgentClient } from './client.js';
 import {
   withReinitializeHistory,
   reinitializeConfig,
 } from './__tests__/support/reinitialize-history-test-helpers.js';
+
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
 
 function signatureRow(): IContent {
   return {
@@ -57,6 +66,12 @@ for (const previousVertexai of [false, true]) {
               provider: 'fake',
               model: 'fake-model',
             }),
+            () => undefined,
+            new LocalMediaStore({
+              rootDirectory: join(tmpdir(), `reinitialize-${randomUUID()}`),
+              quotaBytes: 1024 * 1024,
+            }),
+            fixturePaths(),
           );
           const row = signatureRow();
           async function* source(): AsyncGenerator<IContent, void, unknown> {

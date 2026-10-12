@@ -59,6 +59,7 @@ describe('interactive recording resources', () => {
         model: options.model,
         workspaceDirs: [],
         startTime: new Date().toISOString(),
+        kind: 'main',
       });
       expect(result.current.recordingSwapCallbacks?.getCurrentRecording()).toBe(
         second,

@@ -2,10 +2,7 @@
 import { describe, it, expect } from 'bun:test';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
-import {
-  buildAgent,
-  internalConfig,
-} from '../api/__tests__/helpers/agentHarness.js';
+import { buildAgent } from '../api/__tests__/helpers/agentHarness.js';
 import { assertDefaultHistory } from './public-default-history-test-helpers.js';
 
 const cases = [512, 8192].flatMap((size) =>
@@ -20,7 +17,7 @@ for (const { size, active, explicitFalse } of cases) {
         size,
         async (history, reader) => {
           const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-          const client = internalConfig(agent).getAgentClient();
+          const client = agent.agentClient;
           client.storeHistoryServiceForReuse(history);
           try {
             if (active) await client.startChat([]);
@@ -49,7 +46,7 @@ describe('client default history ownership lifetime', () => {
       async (history, reader) => {
         const { agent, cleanup } = await buildAgent('plain-text.jsonl');
         try {
-          const client = internalConfig(agent).getAgentClient();
+          const client = agent.agentClient;
           client.storeHistoryServiceForReuse(history);
           await assertDefaultHistory(client.getHistory(), 1, reader, bytes);
           expect(reader.snapshot().liveRows).toBe(0);
@@ -68,7 +65,7 @@ describe('client default history ownership lifetime', () => {
       async (history, reader, counters) => {
         const { agent, cleanup } = await buildAgent('plain-text.jsonl');
         try {
-          const client = internalConfig(agent).getAgentClient();
+          const client = agent.agentClient;
           client.storeHistoryServiceForReuse(history);
           const controller = new AbortController();
           const cursor = client.getHistory(false, controller.signal);

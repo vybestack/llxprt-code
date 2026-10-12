@@ -7,7 +7,8 @@ import {
   withCleanupHistory,
   cleanupBounds,
 } from '../../utils/__tests__/support/cleanup-history-test-helpers.js';
-import { SessionControl } from '../../../../agents/src/api/control/sessionControl.js';
+import { requireMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { assembleSessionControl } from '../../../../agents/src/api/session-control-assembly.js';
 
 for (const size of [512, 8192]) {
   describe(`contextual default client history ${size}`, () => {
@@ -19,12 +20,8 @@ for (const size of [512, 8192]) {
         const result = await debug?.action?.(
           createMockCommandContext({
             services: {
-              config: {
-                getAgentClient: () => fixture.fixture.client,
-                getModel: () => fixture.config.getModel(),
-                getSessionRecordingService: () =>
-                  fixture.config.getSessionRecordingService(),
-              },
+              config: { getModel: () => fixture.config.getModel() },
+              agent: { agentClient: fixture.client },
             },
           }),
           '',
@@ -45,12 +42,19 @@ for (const size of [512, 8192]) {
 describe('default clear rollback media lifetime', () => {
   it('keeps removed media reserved until rollback has consumed its disk snapshot', async () => {
     await withCleanupHistory(6, true, async (fixture) => {
-      const client = fixture.fixture.client;
-      const store = fixture.config.getLocalMediaStore();
-      const control = new SessionControl({
-        config: fixture.config,
-        resolveClient: () => client,
+      const client = fixture.client;
+      const store = requireMediaStore(client);
+      const control = assembleSessionControl(fixture.config, store, {
+        readRecordingQueueLimit: () => 1024 * 1024,
+        directories: () => [fixture.config.getTargetDir()],
+        sessionIdentityOwnership: 'config',
         sessionId: () => 'default-clear-media',
+        withSessionTransition: (operation) => operation(),
+        closeSessionAdmission: () => {},
+        prepareNewSessionClient: () => {
+          throw new Error('Clearing history must not start a new session');
+        },
+        resolveClient: () => client,
         getProvider: () => 'fake',
         getModel: () => fixture.config.getModel(),
       });

@@ -6,6 +6,7 @@
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 
 import { NodeFileSystem } from './IFileSystem.js';
+import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -156,19 +157,21 @@ describe('OAuth owner reads before registration', () => {
   ] as const)(
     '%s %s preserves owner browser policy and bucket routing without an identity scope',
     async (construction, providerName) => {
-      globalThis.fetch = vi.fn(
-        async () =>
-          new Response(
-            JSON.stringify({
-              id_token: `header.${Buffer.from(JSON.stringify({ account_id: 'owner-account' })).toString('base64url')}.signature`,
-              access_token: 'browser-token',
-              refresh_token: 'refresh',
-              expires_in: 3600,
-              token_type: 'Bearer',
-              scope: 'user:inference',
-            }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } },
-          ),
+      globalThis.fetch = withFetchPreconnect(
+        vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({
+                id_token: `header.${Buffer.from(JSON.stringify({ account_id: 'owner-account' })).toString('base64url')}.signature`,
+                access_token: 'browser-token',
+                refresh_token: 'refresh',
+                expires_in: 3600,
+                token_type: 'Bearer',
+                scope: 'user:inference',
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            ),
+        ),
       );
       const a = context(`browser-a-${construction}`);
       const b = context(`browser-b-${construction}`);
@@ -204,20 +207,22 @@ describe('OAuth owner reads before registration', () => {
         ).toStrictEqual(['Owner A', 'Owner B']);
         launches.length = 0;
         a.settingsService.set('auth.noBrowser', true);
-        globalThis.fetch = vi.fn(async (input: string | URL | Request) => {
-          if (String(input).includes('deviceauth'))
-            throw new Error('device-route');
-          return new Response(
-            JSON.stringify({
-              id_token: `header.${Buffer.from(JSON.stringify({ account_id: 'owner-account' })).toString('base64url')}.signature`,
-              access_token: 'browser-token',
-              expires_in: 3600,
-              token_type: 'Bearer',
-              scope: 'user:inference',
-            }),
-            { status: 200 },
-          );
-        });
+        globalThis.fetch = withFetchPreconnect(
+          vi.fn(async (input: string | URL | Request) => {
+            if (String(input).includes('deviceauth'))
+              throw new Error('device-route');
+            return new Response(
+              JSON.stringify({
+                id_token: `header.${Buffer.from(JSON.stringify({ account_id: 'owner-account' })).toString('base64url')}.signature`,
+                access_token: 'browser-token',
+                expires_in: 3600,
+                token_type: 'Bearer',
+                scope: 'user:inference',
+              }),
+              { status: 200 },
+            );
+          }),
+        );
         if (providerA instanceof AnthropicOAuthProvider) {
           providerA.setAddItem(() => {
             setImmediate(() => providerA.submitAuthCode('manual-code'));

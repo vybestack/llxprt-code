@@ -5,13 +5,13 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
-import type * as acp from '@agentclientprotocol/sdk';
 import { RecordingConnection } from './__tests__/zed-test-helpers.js';
 import {
   actual,
   emptyChatsLister,
   mockFromConfig,
   buildStubAgent,
+  modelMessage,
   makeZedAgent,
   makeUninitializedZedAgent,
   buildInitializeRequest,

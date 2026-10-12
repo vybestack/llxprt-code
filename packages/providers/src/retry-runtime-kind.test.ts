@@ -12,11 +12,18 @@ import {
   type RuntimeKind,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { RetryOrchestrator } from './RetryOrchestrator.js';
 import { AllBucketsExhaustedError } from './errors.js';
 import type { GenerateChatOptions, IProvider } from './IProvider.js';
 import { assembleCliProviderRuntime } from './runtime/assembleCliProviderRuntime.js';
+const noRows: AsyncIterable<IContent> = {
+  async *[Symbol.asyncIterator](): AsyncGenerator<IContent, void> {
+    yield* [];
+  },
+};
+
 describe('retry runtime kind', () => {
   const configs: Config[] = [];
   afterEach(async () => {
@@ -50,7 +57,7 @@ describe('retry runtime kind', () => {
       owner,
       root,
       options: {
-        contents: [],
+        contents: noRows,
         runtimeKind,
         tryBucketFailover: async () => false,
         readFailoverBuckets: () => ['work'],
@@ -137,7 +144,7 @@ describe('retry runtime kind', () => {
       if (!activeProvider) throw new Error('Missing fixture provider');
       try {
         for await (const content of activeProvider.generateChatCompletion({
-          contents: [],
+          contents: noRows,
         })) {
           throw new Error(`Unexpected content: ${JSON.stringify(content)}`);
         }

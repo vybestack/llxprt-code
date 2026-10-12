@@ -5,7 +5,6 @@ import {
   StreamOnlyHistory,
   withPublicHistory,
 } from '../api/__tests__/helpers/public-history-fixture.js';
-import { internalConfig } from '../api/__tests__/helpers/agentHarness.js';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { publicDefaultBounds } from './public-default-history-test-helpers.js';
 
@@ -19,7 +18,7 @@ for (const { size, active } of cases) {
         size,
         active,
         async (agent, history, reader, decoded) => {
-          const client = internalConfig(agent).getAgentClient();
+          const client = agent.agentClient;
           const cursor = client.getHistory();
           const first = await cursor.next();
           expect(first.value).toStrictEqual(accountingRow(0));
@@ -53,7 +52,7 @@ for (const { size, active } of cases) {
         async (agent, history, reader, decoded) => {
           if (!(history instanceof StreamOnlyHistory))
             throw new Error('Expected controlled history');
-          const client = internalConfig(agent).getAgentClient();
+          const client = agent.agentClient;
           history.failAfter = 3;
           let sourceRows = 0;
           async function consumeSource(): Promise<void> {

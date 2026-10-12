@@ -25,8 +25,12 @@ export function createCursorPersistence(
 ): SessionPersistenceService {
   const journal = history.journalPath();
   if (journal === null) throw new Error('Missing persistence fixture journal');
+  const storage = new SnapshotTestStorage(dirname(journal));
   return new SessionPersistenceService(
-    new SnapshotTestStorage(dirname(journal)),
+    {
+      projectRoot: storage.getProjectRoot(),
+      chatsDir: storage.getProjectChatsDir(),
+    },
     sessionId,
     options,
   );

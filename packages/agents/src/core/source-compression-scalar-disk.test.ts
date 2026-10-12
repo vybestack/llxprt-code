@@ -33,15 +33,17 @@ async function scalarSetup() {
       contents: { [Symbol.asyncIterator]: () => source.openReader() },
       requestRows: source,
       contentCount: source.count,
-      config: setup.config,
-      runtime: setup.runtime.providerRuntime,
-      settings: setup.settings,
+      invocation: setup.runtime.prepareProviderInvocation(setup.provider.name),
+      resolved: { model: 'gpt-5.6' },
       systemInstruction: projectionInstructions,
     }),
+    undefined,
+    undefined,
+    setup.runtime.promptEstimator,
   );
   const open = async () =>
     sourceBeforeModelHook({
-      config: undefined,
+      owner: undefined,
       snapshot: await setup.history.prepareCuratedForProviderSnapshot(
         [ladderPending],
         { root: root() },

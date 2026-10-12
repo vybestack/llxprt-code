@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { describe, expect, it } from 'bun:test';
 import {
   existsSync,
@@ -25,7 +26,7 @@ import { serializeResponsesPromptEnvelope } from './responses-source-serializer.
 const context = {
   includeReasoningInContext: false,
   mediaPdfEnabled: true,
-  outputLimiterConfig: { getEphemeralSettings: () => ({}) },
+  outputLimits: parseOutputLimits({}),
   debug: (): void => {},
 };
 const instructions = 'Independent 雪 \\ " \ud800';

@@ -77,7 +77,7 @@ describe('Agent session owner history restore and checkpoint names', () => {
       const result = await agent.session.restoreTurns(1);
       expect(result.itemsRemoved).toBe(2);
       expect(result.remainingHistory).toHaveLength(2);
-      expect(await agent.getHistory()).toHaveLength(2);
+      expect(await Array.fromAsync(agent.streamHistory())).toHaveLength(2);
       await agent.setHistory([human('first'), ai('one'), human('third')]);
       await agent.session.flushRecording();
       const replay = await replaySession(
@@ -169,7 +169,9 @@ describe('Agent session owner history restore and checkpoint names', () => {
       } finally {
         fault.mockRestore();
       }
-      expect(JSON.stringify(await agent.getHistory())).toContain('cut-reply');
+      expect(
+        JSON.stringify(await Array.fromAsync(agent.streamHistory())),
+      ).toContain('cut-reply');
       await agent.session.flushRecording();
       const replay = await replaySession(
         path,
@@ -183,9 +185,9 @@ describe('Agent session owner history restore and checkpoint names', () => {
       expect(JSON.stringify(replay.history)).toContain('cut-reply');
       const restored = await agent.session.restoreTurns(1);
       expect(restored.itemsRemoved).toBe(2);
-      expect(JSON.stringify(await agent.getHistory())).not.toContain(
-        'cut-reply',
-      );
+      expect(
+        JSON.stringify(await Array.fromAsync(agent.streamHistory())),
+      ).not.toContain('cut-reply');
     });
   }, 30000);
 
@@ -296,9 +298,9 @@ describe('Agent session owner history restore and checkpoint names', () => {
           [ownerCheckpoint.checkpointId, siblingCheckpoint.checkpointId].sort(),
         );
         await owner.session.restoreTurns(1);
-        expect(JSON.stringify(await owner.getHistory())).not.toContain(
-          'owner-last',
-        );
+        expect(
+          JSON.stringify(await Array.fromAsync(owner.streamHistory())),
+        ).not.toContain('owner-last');
         expect(sibling.session.getRecording().enabled).toBe(false);
         expect(await readFile(ownerPath ?? '', 'utf8')).toContain('"rewind"');
         expect(config.getSessionId()).toBeUndefined();

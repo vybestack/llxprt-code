@@ -87,7 +87,7 @@ for (const name of ['clear', 'restore']) {
           const before = await digest(client.getChat().getHistory());
           const tokens = history.getTotalTokens();
           history.setCacheAnchorSeq(1);
-          const store = context.services.config?.getLocalMediaStore();
+          const store = client.mediaStore;
           if (store === undefined) throw new Error('Missing media store');
           const settle = history.settleMediaOwnership.bind(history);
           let failNextSettle = true;

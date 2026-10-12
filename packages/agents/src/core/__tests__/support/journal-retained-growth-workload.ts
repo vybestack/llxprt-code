@@ -8,6 +8,9 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { ProviderCuratedStreamOptions } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { OpenAIResponsesProvider } from '@vybestack/llxprt-code-providers';
 import { createRuntimeTokenizerFactory } from '@vybestack/llxprt-code-providers/composition/runtimeTokenizerFactory.js';
@@ -104,7 +107,11 @@ async function createConfig(
   root: string,
   baseURL: string,
   contextLimit: number,
-): Promise<{ config: Config; settings: SettingsService }> {
+): Promise<{
+  config: Config;
+  settings: SettingsService;
+  tokenizerFactory: RuntimeTokenizerFactory;
+}> {
   const settings = new SettingsService();
   settings.setProviderSetting('openai-responses', 'model', MODEL);
   settings.setProviderSetting('openai-responses', 'base-url', baseURL);
@@ -121,14 +128,16 @@ async function createConfig(
     sessionId: randomUUID(),
     model: MODEL,
     debugMode: false,
-    settingsService: settings,
     trustedFolder: true,
     telemetry: { enabled: false },
   });
   const nativeFactory = createRuntimeTokenizerFactory();
   await nativeFactory.prepareTokenizer?.('openai-responses', MODEL);
-  config.setTokenizerFactory(withGpt56DiskSources(nativeFactory, root));
-  return { config, settings };
+  return {
+    config,
+    settings,
+    tokenizerFactory: withGpt56DiskSources(nativeFactory, root),
+  };
 }
 
 export interface Workload {
@@ -206,7 +215,12 @@ export async function createWorkload(
 ): Promise<Workload> {
   const http = startProviderServer();
   const baseURL = `http://127.0.0.1:${http.server.port}/v1`;
-  const { config, settings } = await createConfig(root, baseURL, contextLimit);
+  const { config, settings, tokenizerFactory } = await createConfig(
+    root,
+    baseURL,
+    contextLimit,
+  );
+  const settingsOwner = new SessionSettingsOwner(settings);
   const recording = await SessionRecordingService.createLocked({
     sessionId: config.getSessionId(),
     projectHash: basename(root),
@@ -219,15 +233,26 @@ export async function createWorkload(
     mode === 'normal'
       ? new HistoryService({ recording })
       : new RetainingHistory({ recording });
+  history.setTokenizerFactory(tokenizerFactory);
+  history.setActiveTokenizationTarget(MODEL, 'openai-responses');
   const provider = new OpenAIResponsesProvider('test-key', baseURL);
-  const providerRuntime = {
-    config,
+  const runtimeId = randomUUID();
+  const providerRuntime = createProviderRuntimeContext({
     settingsService: settings,
-    runtimeId: randomUUID(),
-  };
+    runtimeId,
+  });
   const runtime = createAgentRuntimeContext({
+    promptEstimator: tokenizerFactory,
+    readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
+    prepareProviderInvocation: (name, parameters, signal) =>
+      settingsOwner.prepareProviderInvocation(
+        runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
     state: {
-      runtimeId: providerRuntime.runtimeId,
+      runtimeId,
       sessionId: config.getSessionId(),
       provider: provider.name,
       model: MODEL,
@@ -271,6 +296,7 @@ export async function createWorkload(
       history.dispose();
       await recording.dispose();
       await http.server.stop(true);
+      await settingsOwner.dispose();
       await config.dispose();
     },
   };

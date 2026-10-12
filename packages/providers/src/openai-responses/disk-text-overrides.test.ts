@@ -56,15 +56,14 @@ function withEphemerals(
   options: GenerateChatOptions,
   ephemerals: Record<string, unknown>,
 ): GenerateChatOptions {
-  if (options.runtime === undefined || options.settings === undefined)
-    throw new Error('Missing fixture runtime');
+  if (options.invocation === undefined)
+    throw new Error('Missing fixture invocation');
   return {
     ...options,
     invocation: createRuntimeInvocationContext({
-      runtime: options.runtime,
-      settings: options.settings,
+      runtimeId: options.invocation.runtimeId,
       providerName: setup.provider.name,
-      ephemeralsSnapshot: ephemerals,
+      ephemeralsSnapshot: { ...options.invocation.ephemerals, ...ephemerals },
     }),
   };
 }

@@ -235,12 +235,11 @@ async function resume() {
       next.argv,
       null,
     );
-    const restoredHumanCount = restored?.filter(
-      (content) => content.speaker === 'human',
-    ).length;
-    const historyHumanCount = (await nextAgent.getHistory()).filter(
-      (content) => content.speaker === 'human',
-    ).length;
+    const restoredHumanCount =
+      restored === null
+        ? undefined
+        : await countHumanRows(restored.streamRows());
+    const historyHumanCount = await countHumanRows(nextAgent.streamHistory());
     const events = await stream(nextAgent, 'resumed next prompt');
     const path = nextAgent.session.getRecording().path;
     if (!path) throw new Error('Missing resumed transcript');
@@ -319,4 +318,12 @@ async function applyLocalProfile(
       'base-url': baseUrl,
     },
   });
+}
+
+async function countHumanRows(
+  rows: AsyncIterable<{ readonly speaker: string }>,
+): Promise<number> {
+  let count = 0;
+  for await (const row of rows) if (row.speaker === 'human') count++;
+  return count;
 }

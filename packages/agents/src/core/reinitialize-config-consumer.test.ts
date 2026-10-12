@@ -17,13 +17,13 @@ function registerConfigTransfer(size: number): void {
     it('streams the real active caller through replacement, paused startup, and a provider send', async () => {
       await withReinitializeHistory(
         size,
-        async (_old, _source, owners, config) => {
+        async (_old, _source, owners, _config, sessionClient) => {
           const counters = createRowCounters();
-          await config.initializeContentGeneratorConfig({
+          await sessionClient.refreshAuth(undefined, {
             ownership: owners,
             counters: { ...counters.counters, ownership: owners },
           });
-          const client = config.getAgentClient();
+          const client = sessionClient.getAgentClient();
           const stream = client.streamHistory();
           const next = await stream.next();
           if (next.done === true) throw new Error('Missing replacement row');
@@ -64,13 +64,13 @@ function registerConfigFailure(size: number): void {
       it('keeps the original client and rows while the source is paused and after rejection', async () => {
         await withReinitializeHistory(
           size,
-          async (old, source, owners, config) => {
+          async (old, source, owners, _config, sessionClient) => {
             source.pauseAfter = 31;
             const fault = new Error(`config source ${mode}`);
             const abort = new AbortController();
             if (mode === 'fault') source.fault = fault;
-            const result = config
-              .initializeContentGeneratorConfig({
+            const result = sessionClient
+              .refreshAuth(undefined, {
                 signal: abort.signal,
                 ownership: owners,
               })
@@ -85,7 +85,7 @@ function registerConfigFailure(size: number): void {
               }),
             ]);
             try {
-              expect(config.getAgentClient()).toBe(old);
+              expect(sessionClient.getAgentClient()).toBe(old);
               expect(owners.snapshot().liveRows).toBe(1);
               expect(owners.within(reinitializeBounds)).toBe(true);
               expect(source.scanned).toBe(31);
@@ -96,7 +96,7 @@ function registerConfigFailure(size: number): void {
             }
             expect(await result).toBe(fault);
             expect(
-              await historyDigest(config.getAgentClient().streamHistory()),
+              await historyDigest(sessionClient.getAgentClient().streamHistory()),
             ).toStrictEqual({
               count: size,
               digest: expectedHistoryDigest(size),
@@ -120,9 +120,9 @@ describe('large Config replacement source', () => {
   it('preserves a nine-MiB row through the actual rebuild and startup', async () => {
     await withReinitializeHistory(
       1,
-      async (_old, _source, owners, config) => {
-        await config.initializeContentGeneratorConfig({ ownership: owners });
-        const client = config.getAgentClient();
+      async (_old, _source, owners, _config, sessionClient) => {
+        await sessionClient.refreshAuth(undefined, { ownership: owners });
+        const client = sessionClient.getAgentClient();
         await client.startChat([]);
         expect(await historyDigest(client.streamHistory())).toStrictEqual({
           count: 1,

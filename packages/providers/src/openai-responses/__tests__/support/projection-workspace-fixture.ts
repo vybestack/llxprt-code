@@ -28,16 +28,20 @@ import {
 export function singleAttemptOptions(
   options: GenerateChatOptions,
 ): GenerateChatOptions {
-  if (options.runtime === undefined || options.settings === undefined) {
-    throw new Error('Workspace test requires explicit runtime and settings');
+  if (options.invocation === undefined) {
+    throw new Error('Workspace test requires an explicit invocation');
   }
   return {
     ...options,
     invocation: createRuntimeInvocationContext({
-      runtime: options.runtime,
-      settings: options.settings,
+      runtimeId: options.invocation.runtimeId,
       providerName: 'openai-responses',
-      ephemeralsSnapshot: { 'prompt-caching': 'off', retries: 1, retrywait: 0 },
+      ephemeralsSnapshot: {
+        ...options.invocation.ephemerals,
+        'prompt-caching': 'off',
+        retries: 1,
+        retrywait: 0,
+      },
     }),
   };
 }

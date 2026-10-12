@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
-import { deferred } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
+import {
+  accountingFactory,
+  deferred,
+} from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import {
   withCheckpoint,
   checkpointUiHistory,
@@ -51,9 +54,9 @@ async function pausedRestore(
   active = false,
 ): Promise<boolean> {
   return withCheckpoint(1, active, async (fixture, dir) => {
-    const factory = fixture.config.getTokenizerFactory();
-    if (!factory) throw new Error('Missing explicit token contract');
-    fixture.history.setTokenizerFactory(factory);
+    fixture.history.setTokenizerFactory(
+      accountingFactory((text) => text.length),
+    );
     fixture.history.setBaseTokenOffset(0);
     await fixture.history.recalculateTokens();
     const previousTokens = 2050;
@@ -73,14 +76,18 @@ async function pausedRestore(
         toolCall: checkpointTool.request,
       }),
     );
-    vi.spyOn(
-      fixture.config.storage,
-      'getProjectTempCheckpointsDir',
-    ).mockReturnValue(dir);
-    vi.spyOn(fixture.config, 'getCheckpointingEnabled').mockReturnValue(true);
-    const context = createMockCommandContext();
+    const context = createMockCommandContext({
+      services: { agent: { agentClient: fixture.client } },
+    });
     context.signal = abort.signal;
-    context.services.config = fixture.config;
+    if (context.services.config === null)
+      throw new Error('Missing fixture runtime');
+    const runtime = {
+      ...context.services.config,
+      projectCheckpointsDir: dir,
+      getCheckpointingEnabled: () => true,
+    };
+    context.services.config = runtime;
     let uiPublished = false;
     context.ui.loadHistory = () => {
       uiPublished = true;
@@ -88,7 +95,7 @@ async function pausedRestore(
     gateDurableWrite(gate, entered);
     let completed = false;
     const restoring = Promise.resolve(
-      restoreCommand(fixture.config)?.action?.(context, 'restore'),
+      restoreCommand(runtime)?.action?.(context, 'restore'),
     ).then((result) => {
       completed = true;
       return result;
@@ -106,9 +113,9 @@ async function pausedRestore(
       else
         // A restore into an inactive chat publishes a replacement journal and
         // disposes the fixture's original one, so read the live history.
-        expect(
-          fixture.config.getAgentClient().getHistoryService()?.getTotalTokens(),
-        ).toBe('acknowledged checkpoint row'.length);
+        expect(fixture.client.getHistoryService()?.getTotalTokens()).toBe(
+          'acknowledged checkpoint row'.length,
+        );
       return uiPublished;
     } finally {
       gate.resolve();

@@ -5,7 +5,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { withSuffixFixture } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { accountingRow } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
-import { buildAgent, internalConfig, type Agent } from './agentHarness.js';
+import { buildAgent, type Agent } from './agentHarness.js';
 
 export class StreamOnlyHistory extends HistoryService {
   failAfter: number | undefined;
@@ -40,7 +40,7 @@ export async function withPublicHistory<T>(
     size,
     async (history, reader, counters) => {
       const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-      const client = internalConfig(agent).getAgentClient();
+      const client = agent.agentClient;
       client.storeHistoryServiceForReuse(history);
       try {
         if (active) await client.startChat([]);

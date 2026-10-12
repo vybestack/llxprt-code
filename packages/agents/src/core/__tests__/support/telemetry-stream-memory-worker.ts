@@ -7,10 +7,14 @@ import type { ReadableLogRecord } from '@opentelemetry/sdk-logs';
 import type { ExportResult } from '@opentelemetry/core';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { createTelemetryAdapterFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { FileLogExporter } from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
+import { createTelemetryAdapter } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import {
-  initializeTelemetry,
+  FileLogExporter,
+  FileMetricExporter,
+  FileSpanExporter,
+} from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
+import {
   shutdownTelemetry,
   readRequestArtifact,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
@@ -90,9 +94,27 @@ const config = new Config({
     outfileMaxBytes: 256 * 1024 * 1024,
   },
 });
-await shutdownTelemetry(config);
-initializeTelemetry(config, new MeasuredExporter(output));
-const adapter = createTelemetryAdapterFromConfig(config);
+const root = await RootTelemetry.create(
+  {
+    sessionId: 'cap-memory',
+    enabled: true,
+    outfile: output,
+    maxBytes: 256 * 1024 * 1024,
+    maxFiles: 1,
+    readPrivacySettings: () => ({
+      logPrompts: true,
+      logConversations: false,
+      logApiBodies: true,
+      maxChars: 32 * 1024 * 1024,
+    }),
+  },
+  () => ({
+    tracer: new FileSpanExporter(output),
+    logger: new MeasuredExporter(output),
+    meter: new FileMetricExporter(output),
+  }),
+);
+const adapter = createTelemetryAdapter(config, root);
 async function send(promptId: string, large = true): Promise<void> {
   const source = await stage(large);
   await adapter.logApiRequest({
@@ -164,5 +186,5 @@ try {
     JSON.stringify(facts, null, 2),
   );
 } finally {
-  await shutdownTelemetry(config);
+  await shutdownTelemetry(root);
 }

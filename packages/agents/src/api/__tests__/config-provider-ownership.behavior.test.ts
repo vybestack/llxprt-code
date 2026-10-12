@@ -11,6 +11,7 @@ import {
 } from '@vybestack/llxprt-code-core/utils/events.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createTestAgentClient } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { collectHistoryFixture } from '../../core/__tests__/support/collect-history-test-fixture.js';
 import {
   MemoryTokenStore,
   createTestProvider,
@@ -176,6 +177,12 @@ describe('explicit provider owner construction', () => {
     }
   });
 });
+async function* historyStream(
+  rows: readonly IContent[],
+): AsyncGenerator<IContent, void, unknown> {
+  for (const row of rows) yield row;
+}
+
 describe('explicit session authentication lifecycle', () => {
   async function withSession(
     run: (built: BuiltCliConfig) => Promise<void>,
@@ -225,7 +232,9 @@ describe('explicit session authentication lifecycle', () => {
         ]);
         process.env.GOOGLE_API_KEY = 'local-vertex-metadata-only';
         await built.sessionClient.refreshAuth();
-        const retained = await built.agentClient.getHistory();
+        const retained = await collectHistoryFixture(
+          built.agentClient.getHistory(),
+        );
         expect(
           retained
             .flatMap((content) => content.blocks)
@@ -261,12 +270,16 @@ describe('explicit session authentication lifecycle', () => {
     await withSession(async (built) => {
       await built.agentClient.setHistory(history);
       await built.sessionClient.refreshAuth();
-      await built.agentClient.startChat(await built.agentClient.getHistory());
+      await built.agentClient.startChat(
+        await collectHistoryFixture(built.agentClient.getHistory()),
+      );
       expect(
-        (await built.agentClient.getHistory()).map(({ speaker, blocks }) => ({
-          speaker,
-          blocks,
-        })),
+        (await collectHistoryFixture(built.agentClient.getHistory())).map(
+          ({ speaker, blocks }) => ({
+            speaker,
+            blocks,
+          }),
+        ),
       ).toStrictEqual(history);
     });
   });
@@ -276,12 +289,16 @@ describe('explicit session authentication lifecycle', () => {
       expect(built.agentClient.hasChatInitialized()).toBe(false);
       await built.agentClient.storeHistoryForLaterUse(history);
       await built.sessionClient.refreshAuth();
-      await built.agentClient.startChat(await built.agentClient.getHistory());
+      await built.agentClient.startChat(
+        await collectHistoryFixture(built.agentClient.getHistory()),
+      );
       expect(
-        (await built.agentClient.getHistory()).map(({ speaker, blocks }) => ({
-          speaker,
-          blocks,
-        })),
+        (await collectHistoryFixture(built.agentClient.getHistory())).map(
+          ({ speaker, blocks }) => ({
+            speaker,
+            blocks,
+          }),
+        ),
       ).toStrictEqual(history);
     });
   });
@@ -290,17 +307,21 @@ describe('explicit session authentication lifecycle', () => {
       await built.agentClient.setHistory(history);
       const idleHistory = vi
         .spyOn(built.agentClient, 'getHistory')
-        .mockImplementation(async () => {
+        .mockImplementation(() => {
           throw new Error('Idle history must not be awaited');
         });
       try {
         await built.sessionClient.refreshAuth();
-        await built.agentClient.startChat(await built.agentClient.getHistory());
+        await built.agentClient.startChat(
+          await collectHistoryFixture(built.agentClient.getHistory()),
+        );
         expect(
-          (await built.agentClient.getHistory()).map(({ speaker, blocks }) => ({
-            speaker,
-            blocks,
-          })),
+          (await collectHistoryFixture(built.agentClient.getHistory())).map(
+            ({ speaker, blocks }) => ({
+              speaker,
+              blocks,
+            }),
+          ),
         ).toStrictEqual(history);
       } finally {
         idleHistory.mockRestore();
@@ -310,9 +331,13 @@ describe('explicit session authentication lifecycle', () => {
   it('initializes a replacement without conversation history', async () => {
     await withSession(async (built) => {
       await built.sessionClient.refreshAuth();
-      await built.agentClient.startChat(await built.agentClient.getHistory());
+      await built.agentClient.startChat(
+        await collectHistoryFixture(built.agentClient.getHistory()),
+      );
       expect(built.agentClient.isInitialized()).toBe(true);
-      expect(await built.agentClient.getHistory()).toStrictEqual([]);
+      expect(
+        await collectHistoryFixture(built.agentClient.getHistory()),
+      ).toStrictEqual([]);
     });
   });
   it('strips thought signatures when migrating from GenAI to Vertex', async () => {
@@ -332,13 +357,15 @@ describe('explicit session authentication lifecycle', () => {
     const stored: IContent[][] = [];
     const client = createTestAgentClient({
       storeHistoryForLaterUse: async (contents) => {
-        stored.push(structuredClone([...contents]));
+        const rows: IContent[] = [];
+        for await (const row of contents) rows.push(row);
+        stored.push(structuredClone(rows));
       },
     });
     await transferHistoryToNewClient(
       new DebugLogger('test'),
       client,
-      thoughts,
+      historyStream(thoughts),
       null,
       { model: 'vertex-model', vertexai: true },
       false,
@@ -366,13 +393,15 @@ describe('explicit session authentication lifecycle', () => {
     const stored: IContent[][] = [];
     const client = createTestAgentClient({
       storeHistoryForLaterUse: async (contents) => {
-        stored.push(structuredClone([...contents]));
+        const rows: IContent[] = [];
+        for await (const row of contents) rows.push(row);
+        stored.push(structuredClone(rows));
       },
     });
     await transferHistoryToNewClient(
       new DebugLogger('test'),
       client,
-      thoughts,
+      historyStream(thoughts),
       null,
       { model: 'genai-model', vertexai: false },
       true,
@@ -403,7 +432,9 @@ describe('explicit session authentication lifecycle', () => {
         (provider) => oauth.composeRetryOperations(provider),
       );
       await built.sessionClient.refreshAuth();
-      await built.agentClient.startChat(await built.agentClient.getHistory());
+      await built.agentClient.startChat(
+        await collectHistoryFixture(built.agentClient.getHistory()),
+      );
       expect(built.agentClient.isInitialized()).toBe(true);
       expect(logins).toBe(0);
     });
@@ -419,12 +450,16 @@ describe('explicit session authentication lifecycle', () => {
         (provider) => oauth.composeRetryOperations(provider),
       );
       await built.sessionClient.refreshAuth();
-      await built.agentClient.startChat(await built.agentClient.getHistory());
+      await built.agentClient.startChat(
+        await collectHistoryFixture(built.agentClient.getHistory()),
+      );
       expect(
-        (await built.agentClient.getHistory()).map(({ speaker, blocks }) => ({
-          speaker,
-          blocks,
-        })),
+        (await collectHistoryFixture(built.agentClient.getHistory())).map(
+          ({ speaker, blocks }) => ({
+            speaker,
+            blocks,
+          }),
+        ),
       ).toStrictEqual(history);
       expect(await oauth.getTokenStore().listProviders()).toStrictEqual([]);
     });
@@ -440,7 +475,9 @@ describe('explicit session authentication lifecycle', () => {
           .listeners(CoreEvent.ModelChanged)
           .filter((listener) => previousListeners.includes(listener)),
       ).toStrictEqual([]);
-      await built.agentClient.startChat(await built.agentClient.getHistory());
+      await built.agentClient.startChat(
+        await collectHistoryFixture(built.agentClient.getHistory()),
+      );
       expect(built.agentClient.isInitialized()).toBe(true);
     });
   });

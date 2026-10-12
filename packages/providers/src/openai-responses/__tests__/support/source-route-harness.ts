@@ -91,17 +91,19 @@ export async function startSourceRouteHarness(): Promise<SourceRouteHarness> {
         ? requestSelection({ ...rowsOf(list), close: () => {} })
         : rowsOf(list),
     );
-    const activeRuntime = runtime ?? base.runtime;
-    if (activeRuntime === undefined || base.settings === undefined)
-      throw new Error('Missing fixture runtime');
+    if (base.invocation === undefined)
+      throw new Error('Missing fixture invocation');
     return {
       ...base,
-      runtime: activeRuntime,
       invocation: createRuntimeInvocationContext({
-        runtime: activeRuntime,
-        settings: base.settings,
+        runtimeId: runtime?.runtimeId ?? base.invocation.runtimeId,
         providerName: setup.provider.name,
-        ephemeralsSnapshot: { retries: 2, retrywait: 0, ...ephemerals },
+        ephemeralsSnapshot: {
+          ...base.invocation.ephemerals,
+          retries: 2,
+          retrywait: 0,
+          ...ephemerals,
+        },
       }),
     };
   };
