@@ -14,6 +14,7 @@ import { historyOwnerIdFor } from '../storage/media-admission-service.js';
 import { collectMediaReferences } from '../storage/media-reference-lifecycle.js';
 import { MediaAdmissionService } from '../storage/media-admission-service.js';
 import { verifyHistoryMedia } from '../storage/media-reference-lifecycle.js';
+import { hydrateRecordedMedia } from '../storage/recorded-media-transfer.js';
 
 export class ResumeCursorBoot {
   private readonly reservationOwnerScope = `resume:${randomUUID()}`;
@@ -118,6 +119,9 @@ export class ResumeCursorBoot {
       preserveLegacyMimeParameters: true,
       reservationOwnerScope: this.reservationOwnerScope,
     };
+    // A fresh owner's store lacks the session's media; copy this row's
+    // objects from the recording archive before admission verifies them.
+    await hydrateRecordedMedia(this.mediaStore, content);
     const admission =
       this.mediaStore === undefined
         ? undefined
