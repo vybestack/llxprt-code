@@ -36,7 +36,9 @@ describe('session client stop admission', () => {
     });
     try {
       expect(() => built.agent.agentClient).toThrow(/disposed/);
-      expect(() => built.agent.sessionClient.refreshAuth()).toThrow(/disposed/);
+      await expect(built.agent.sessionClient.refreshAuth()).rejects.toThrow(
+        'Session settings owner is closed',
+      );
       expect(() =>
         built.agent.sessionClient.createDetachedAgentClient('late'),
       ).toThrow(/disposed/);

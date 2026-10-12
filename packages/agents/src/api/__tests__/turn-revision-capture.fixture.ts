@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { expect } from 'bun:test';
+import { afterAll, expect } from 'bun:test';
 import { once } from 'node:events';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer, type ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { json } from 'node:stream/consumers';
@@ -245,6 +245,15 @@ async function createOwner(
   return agent;
 }
 
+const promptRoot = await mkdtemp(join(tmpdir(), 'turn-prompts-'));
+const fixturePrompts = join(promptRoot, 'prompts');
+await mkdir(join(fixturePrompts, 'core'), { recursive: true });
+await writeFile(
+  join(fixturePrompts, 'core', 'default.md'),
+  'Test core prompt.',
+);
+afterAll(() => rm(promptRoot, { recursive: true, force: true }));
+
 export async function withOwners(
   run: (
     a: Agent,
@@ -271,6 +280,7 @@ export async function withOwners(
   );
   process.env.LLXPRT_CONFIG_HOME = join(directory, 'home');
   process.env.LLXPRT_DATA_HOME = join(directory, 'data');
+  process.env.LLXPRT_PROMPTS_DIR = fixturePrompts;
   delete process.env.LLXPRT_FAKE_RESPONSES;
   const endpointA = await transport(
     holdRequest,
