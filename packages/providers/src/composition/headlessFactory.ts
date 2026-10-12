@@ -68,7 +68,7 @@ export function createHeadlessProviderManager(
   };
 
   const { manager, oauthManager } = createProviderManager(
-    context.settingsService,
+    settingsService,
     context,
     undefined,
     options.credentialAuthority ??

@@ -507,7 +507,7 @@ describe('extracted provider helper behavior', () => {
       },
     };
 
-    const normalized = normalizeRuntimeInputs(rawOptions, {
+    const normalized = normalizeRuntimeInputs(rawOptions, settingsService, {
       getActiveProviderName: () => 'provider-a',
       getProvider: () => providerStub(),
     });
@@ -555,6 +555,7 @@ describe('extracted provider helper behavior', () => {
         },
         metadata: { abortSignal: controller.signal },
       },
+      settingsService,
       {
         getActiveProviderName: () => 'provider-a',
         getProvider: () => providerStub(),
@@ -595,10 +596,14 @@ describe('extracted provider helper behavior', () => {
       },
     };
 
-    const normalized = normalizeRuntimeInputs(rawOptions, {
-      getActiveProviderName: () => 'provider-a',
-      getProvider: () => providerStub(),
-    });
+    const normalized = normalizeRuntimeInputs(
+      rawOptions,
+      invocationSettingsService,
+      {
+        getActiveProviderName: () => 'provider-a',
+        getProvider: () => providerStub(),
+      },
+    );
 
     expect(normalized.resolved.model).toBe('settings-model');
     expect(normalized.resolved.baseURL).toBe('https://settings.example.test');
@@ -632,6 +637,7 @@ describe('extracted provider helper behavior', () => {
             metadata: {},
           },
         },
+        settingsService,
         {
           getActiveProviderName: () => 'provider-a',
           getProvider: () => cyclicProvider,
@@ -811,7 +817,7 @@ describe('normalizeRuntimeInputs: fail-closed when no provider (#2481)', () => {
     };
 
     expect(() =>
-      normalizeRuntimeInputs(rawOptions, {
+      normalizeRuntimeInputs(rawOptions, new SettingsService(), {
         getActiveProviderName: () => undefined,
         getProvider: () => undefined,
       }),
@@ -829,7 +835,7 @@ describe('normalizeRuntimeInputs: fail-closed when no provider (#2481)', () => {
     };
 
     const captured = captureThrown(() =>
-      normalizeRuntimeInputs(rawOptions, {
+      normalizeRuntimeInputs(rawOptions, new SettingsService(), {
         getActiveProviderName: () => undefined,
         getProvider: () => undefined,
       }),

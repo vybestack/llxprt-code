@@ -503,7 +503,7 @@ function registerProvidersOntoManager(
   if (!(isolatedManager instanceof ProviderManager))
     throw new Error('Expected concrete fixture manager');
   const { manager: registered } = createProviderManager(
-    context.settingsService,
+    source.settingsService,
     context,
     config,
     new CredentialAuthority(),

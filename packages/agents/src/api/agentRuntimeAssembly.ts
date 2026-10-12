@@ -144,8 +144,12 @@ export const prepareIsolatedProviders: NonNullable<
 > = (context): void => {
   registerProvidersOntoManager(
     context.providerManager,
-    context,
+    context.settingsService,
+    context.runtimeId,
+    context.metadata,
     context.config,
+    context.credentialAuthority,
+    context.oauthManager,
   );
 };
 

@@ -141,14 +141,12 @@ describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
     // The exact production seam under test.
     registerProvidersOntoManager(
       handle.providerManager,
-      {
-        settingsService: handle.settingsService,
-        runtimeId: handle.runtimeId,
-        metadata: handle.metadata,
-        credentialAuthority,
-        oauthManager: handle.oauthManager,
-      },
+      handle.settingsService,
+      handle.runtimeId,
+      handle.metadata,
       handle.config,
+      credentialAuthority,
+      handle.oauthManager,
     );
 
     const provider = handle.providerManager.getProviderByName(providerName) as

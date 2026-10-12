@@ -134,7 +134,7 @@ export function listProviders(): readonly ProviderInfo[] {
     metadata: { stage: 'static-discovery' },
   };
   const { manager } = createProviderManager(
-    context.settingsService,
+    settingsService,
     context,
     undefined,
     new CredentialAuthority(),

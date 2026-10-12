@@ -231,7 +231,15 @@ describe('Explicit session client lifetime', () => {
         config: built.config,
         messageBus: built.messageBus,
         prepare: (ctx) =>
-          registerProvidersOntoManager(ctx.providerManager, ctx, built.config),
+          registerProvidersOntoManager(
+            ctx.providerManager,
+            ctx.settingsService,
+            ctx.runtimeId,
+            ctx.metadata,
+            built.config,
+            ctx.credentialAuthority,
+            ctx.oauthManager,
+          ),
       },
       built.settingsService,
     );
