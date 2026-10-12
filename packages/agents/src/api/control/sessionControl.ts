@@ -189,6 +189,12 @@ export class SessionControl implements AgentSessionControl {
    * @requirement:REQ-010
    */
   private integrationNeedsSubscribe = false;
+  /**
+   * File of the last adopted (resumed) recording. Re-enabling recording after
+   * a resume continues that file instead of starting a second one for the same
+   * session; a new session clears it.
+   */
+  private adoptedPath: string | null = null;
   private checkpointService: CheckpointService | undefined;
 
   constructor(private readonly deps: SessionControlDeps) {
@@ -313,6 +319,7 @@ export class SessionControl implements AgentSessionControl {
     this.integrationNeedsSubscribe = false;
     this.currentLockHandle = result.lockHandle;
     this.recordingSessionId = result.recording.getSessionId();
+    this.adoptedPath = result.recording.getFilePath();
   }
 
   /**
@@ -662,6 +669,7 @@ export class SessionControl implements AgentSessionControl {
           retire: () => this.teardownActiveSession(),
           publish: (id, recording, integration) => {
             this.recordingSessionId = id;
+            this.adoptedPath = null;
             this.recording = recording;
             this.integration = integration;
           },
@@ -876,6 +884,7 @@ export class SessionControl implements AgentSessionControl {
       this.deps.persistence.forRecording(service.getSessionId()),
     );
     try {
+      await this.continueAdoptedRecording(service);
       const subscribed = await this.attachHistory(integration);
       await service.flush();
       this.recording = service;
@@ -901,6 +910,28 @@ export class SessionControl implements AgentSessionControl {
       }
       throw error;
     }
+  }
+
+  /**
+   * Points a fresh recorder at the adopted recording's file so the journal
+   * attachment replaces that file's history in one transaction, keeping one
+   * header and a monotonic sequence.
+   */
+  private async continueAdoptedRecording(
+    service: SessionRecordingService,
+  ): Promise<void> {
+    const filePath = this.adoptedPath;
+    if (filePath === null) return;
+    const { replay } = await scanResumeMetadata(
+      filePath,
+      service.getProjectHash(),
+      (await stat(filePath)).size,
+    );
+    if (!replay.ok) throw new Error(replay.error);
+    if (replay.sequenceCorrupt) {
+      throw new Error('Cannot restart recording: non-monotonic sequences');
+    }
+    service.initializeForResume(filePath, replay.lastSeq, replay.metadata.title);
   }
 
   async persistSemanticMediaPurge(
