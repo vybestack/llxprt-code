@@ -438,7 +438,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
 
   private bindProvider(
     provider: IProvider,
-    owner: ProviderRequestCollaborators,
+    config: Config | undefined,
   ): IProvider {
     return bindCompressionProvider(
       provider,
@@ -446,7 +446,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
       this.requestMediaBudgetBytes,
       this.providerFileBindings,
       this.providerFileLifecycle,
-      owner.config?.getTargetDir(),
+      config?.getTargetDir(),
     );
   }
 
@@ -479,7 +479,7 @@ export class MiddleOutStrategy implements CompressionStrategy {
     try {
       const stream = this.bindProvider(
         provider,
-        resolvedRuntime,
+        resolvedConfig,
       ).generateChatCompletion(
         await buildCompressionChatOptions({
           contents: request,

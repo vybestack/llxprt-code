@@ -276,7 +276,7 @@ export async function runVerificationPass(
       requestMediaBudgetBytes,
       providerFileBindings,
       providerFileLifecycle,
-      providerRuntime.config?.getTargetDir(),
+      resolvedConfig?.getTargetDir(),
     ).generateChatCompletion(
       await buildCompressionChatOptions({
         contents: verificationRequest,

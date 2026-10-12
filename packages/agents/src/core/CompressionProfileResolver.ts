@@ -39,7 +39,7 @@ import { deriveCompressionInteractionMode } from '../compression/compressionSyst
  */
 export interface CompressionProfileResolverContext {
   readonly profileDefinitions?: Pick<ProfileDefinitionReads, 'loadProfile'>;
-  /** The base provider-runtime snapshot (runtimeId, metadata, config). */
+  /** The base provider-runtime snapshot (runtimeId, metadata). */
   readonly providerRuntime: ProviderRequestCollaborators;
   readonly prepareProviderInvocation: PrepareProviderInvocation;
   /**
@@ -374,7 +374,6 @@ export async function resolveStandardCompressionProvider(
     model: profile.model,
   };
   const runtime: ProviderRequestCollaborators = {
-    config,
     runtimeId,
     metadata,
   };
@@ -515,7 +514,6 @@ export async function resolveLoadBalancedCompressionProvider(
     model: settings.get('model'),
   };
   const runtime: ProviderRequestCollaborators = {
-    config,
     runtimeId,
     metadata,
   };
@@ -554,6 +552,7 @@ export async function resolveCompressionProvider(
   requestMediaBudgetBytes: number | undefined,
   providerFileBindings: ProviderFileBindingStore | undefined,
   providerFileLifecycle: object | undefined,
+  config: Config | undefined,
 ): Promise<CompressionProviderResult> {
   if (!profileName) {
     const runtime = ctx.providerRuntime;
@@ -561,12 +560,11 @@ export async function resolveCompressionProvider(
     return {
       provider,
       runtime,
-      config: runtime.config,
+      config,
       invocation: ctx.prepareProviderInvocation(provider.name),
     };
   }
 
-  const config = ctx.providerRuntime.config;
   const profileManager = ctx.profileDefinitions;
   if (!profileManager) {
     throw new CompressionProfileNotFoundError(

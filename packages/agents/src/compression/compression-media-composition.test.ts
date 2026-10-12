@@ -1,4 +1,5 @@
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -36,12 +37,15 @@ describe('compression media composition', () => {
         new HistoryService(),
       );
       const lifecycle = {};
+      const selectedConfig = createRuntimeConfigStub(new SettingsService());
       let completedRequests = 0;
+      const requestDirectories: Array<string | undefined> = [];
       const provider: RuntimeProvider & {
         requestMediaResolver?: RequestMediaResolver;
         requestMediaBudgetBytes?: number;
         requestProviderFileBindings?: ProviderFileBindingStore;
         requestProviderFileLifecycle?: object;
+        requestWorkspaceDirectory?: string;
       } = {
         requestMediaResolver: undefined,
         requestMediaBudgetBytes: undefined,
@@ -63,6 +67,7 @@ describe('compression media composition', () => {
           )
             throw new Error('Compression admitted foreign media/file owners');
           completedRequests += 1;
+          requestDirectories.push(this.requestWorkspaceDirectory);
           yield {
             speaker: 'ai',
             blocks: [
@@ -79,6 +84,7 @@ describe('compression media composition', () => {
         resolveProvider: () => ({
           provider,
           runtime: testProviderRuntime,
+          config: selectedConfig,
           invocation: captureProviderInvocation(
             {
               runtimeId: testProviderRuntime.runtimeId,
@@ -91,16 +97,24 @@ describe('compression media composition', () => {
           ),
         }),
       });
-      const result = await new Strategy(
-        resolver,
-        1024,
-        bindings,
-        lifecycle,
-      ).compress({ ...context, compressionVerification: true });
-      expect({ kind: result.kind, completedRequests }).toStrictEqual({
-        kind: 'applied',
-        completedRequests: 2,
-      });
+      try {
+        const result = await new Strategy(
+          resolver,
+          1024,
+          bindings,
+          lifecycle,
+        ).compress({ ...context, compressionVerification: true });
+        expect({ kind: result.kind, completedRequests }).toStrictEqual({
+          kind: 'applied',
+          completedRequests: 2,
+        });
+        expect(requestDirectories).toStrictEqual([
+          selectedConfig.getTargetDir(),
+          selectedConfig.getTargetDir(),
+        ]);
+      } finally {
+        await selectedConfig.dispose();
+      }
     });
   }
 });

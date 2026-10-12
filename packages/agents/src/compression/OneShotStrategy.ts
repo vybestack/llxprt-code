@@ -316,7 +316,7 @@ export class OneShotStrategy implements CompressionStrategy {
 
   private bindProvider(
     provider: IProvider,
-    owner: ProviderRequestCollaborators,
+    config: Config | undefined,
   ): IProvider {
     return bindCompressionProvider(
       provider,
@@ -324,7 +324,7 @@ export class OneShotStrategy implements CompressionStrategy {
       this.requestMediaBudgetBytes,
       this.providerFileBindings,
       this.providerFileLifecycle,
-      owner.config?.getTargetDir(),
+      config?.getTargetDir(),
     );
   }
 
@@ -357,7 +357,7 @@ export class OneShotStrategy implements CompressionStrategy {
     try {
       const stream = this.bindProvider(
         provider,
-        resolvedRuntime,
+        resolvedConfig,
       ).generateChatCompletion(
         await buildCompressionChatOptions({
           contents: request,

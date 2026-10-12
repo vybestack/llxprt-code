@@ -561,6 +561,7 @@ export class ChatSession {
       this.requestMediaBudgetBytes,
       this.providerFileBindings,
       this.providerFileLifecycle,
+      this.getConfig(),
     );
   }
 

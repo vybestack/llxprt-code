@@ -91,7 +91,6 @@ describe('compression profile conversation identity', () => {
         const resolved = await resolveCompressionProvider(
           {
             providerRuntime: {
-              config,
               runtimeId: agent.getRuntimeId(),
               metadata: {},
             },
@@ -122,6 +121,7 @@ describe('compression profile conversation identity', () => {
           undefined,
           undefined,
           undefined,
+          config,
         );
         if (!resolved.invocation) throw new Error('Expected invocation');
         const outer = await sessionHeaders(resolved.invocation);
