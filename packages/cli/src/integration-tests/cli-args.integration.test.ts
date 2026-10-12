@@ -4,7 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import {
+  describe,
+  it,
+  expect,
+  beforeAll,
+  afterAll,
+  beforeEach,
+  afterEach,
+} from 'bun:test';
 import * as fs from 'fs/promises';
 import * as path from 'node:path';
 import type { Profile } from '@vybestack/llxprt-code-settings';
@@ -15,7 +23,10 @@ import {
   createTempKeyfile,
 } from './test-utils.js';
 import { Storage } from '@vybestack/llxprt-code-storage';
-import { runCli } from './__tests__/cli-args-test-helpers.js';
+import {
+  runCli,
+  type CliRunResult,
+} from './__tests__/cli-args-test-helpers.js';
 import { testRegex } from '../__tests__/regex.js';
 
 // Asserts that stdout contains a semantic-version string like "1.2.3".
@@ -561,22 +572,41 @@ describe('CLI --profile-load Integration Tests', () => {
   });
 });
 
+const INVALID_SETTINGS_FIXTURE = JSON.stringify({
+  telemetry: { logConversations: true },
+});
+
+/**
+ * Writes the invalid-settings fixture below an explicitly named config
+ * directory (issue #3581). The directory is always passed in, never resolved
+ * from the ambient environment, so the write cannot reach a real config dir.
+ */
+async function writeInvalidSettingsFixture(configDir: string): Promise<void> {
+  await fs.mkdir(configDir, { recursive: true });
+  await fs.writeFile(
+    path.join(configDir, 'settings.json'),
+    INVALID_SETTINGS_FIXTURE,
+  );
+}
+
 describe('CLI --version and --help flags', () => {
   let tempDir: string;
+  let configHome: string;
   let originalHome: string | undefined;
   let originalConfigHome: string | undefined;
 
   beforeEach(async () => {
     tempDir = await createTempDirectory();
+    configHome = path.join(tempDir, 'config-home');
     originalHome = process.env.HOME;
     process.env.HOME = tempDir;
-    // Point Storage at a per-test config root (issue #3581): the
-    // invalid-settings.json cases below write through
-    // Storage.getGlobalConfigDir(), which reads this env at call time. Without
-    // the override, a direct (non-preloaded) run resolves the developer's
-    // real config dir and the fixture lands in the real home.
+    // Point Storage at a per-test config root (issue #3581) so any code in the
+    // test process that resolves the global config dir lands in the temp dir.
+    // The invalid-settings.json cases below do not depend on this: they write
+    // the fixture to `configHome` explicitly and hand the same directory to
+    // the spawned CLI.
     originalConfigHome = process.env.LLXPRT_CONFIG_HOME;
-    process.env.LLXPRT_CONFIG_HOME = path.join(tempDir, 'config-home');
+    process.env.LLXPRT_CONFIG_HOME = configHome;
   });
 
   afterEach(async () => {
@@ -629,14 +659,12 @@ describe('CLI --version and --help flags', () => {
 
   it('should print help even with invalid settings.json (--help)', async () => {
     // Write an invalid settings file with an unrecognized key
-    const settingsDir = Storage.getGlobalConfigDir();
-    await fs.mkdir(settingsDir, { recursive: true });
-    await fs.writeFile(
-      path.join(settingsDir, 'settings.json'),
-      JSON.stringify({ telemetry: { logConversations: true } }),
-    );
+    await writeInvalidSettingsFixture(configHome);
 
-    const result = await runCli(['--help'], { HOME: tempDir });
+    const result = await runCli(['--help'], {
+      HOME: tempDir,
+      LLXPRT_CONFIG_HOME: configHome,
+    });
     expect(result.exitCode).toBe(0);
     const output = result.stdout + result.stderr;
     expect(output).toContain('llxprt');
@@ -648,19 +676,106 @@ describe('CLI --version and --help flags', () => {
 
   it('should show config error (not silently fail) with invalid settings.json and no args', async () => {
     // Write an invalid settings file with an unrecognized key
-    const settingsDir = Storage.getGlobalConfigDir();
-    await fs.mkdir(settingsDir, { recursive: true });
-    await fs.writeFile(
-      path.join(settingsDir, 'settings.json'),
-      JSON.stringify({ telemetry: { logConversations: true } }),
-    );
+    await writeInvalidSettingsFixture(configHome);
 
-    const result = await runCli([], { HOME: tempDir });
+    const result = await runCli([], {
+      HOME: tempDir,
+      LLXPRT_CONFIG_HOME: configHome,
+    });
     // Should exit with non-zero exit code
     expect(result.exitCode).not.toBe(0);
     const output = result.stdout + result.stderr;
     // Should contain the config error, not silently fail
     expect(output).toContain('Invalid configuration');
+  });
+
+  describe('invalid settings fixtures vs ambient LLXPRT_CONFIG_HOME', () => {
+    const SENTINEL_SETTINGS = '{ }\n';
+    let envAtStart: { home?: string; configHome?: string };
+
+    beforeAll(() => {
+      envAtStart = {
+        home: process.env.HOME,
+        configHome: process.env.LLXPRT_CONFIG_HOME,
+      };
+    });
+
+    afterAll(() => {
+      // The enclosing afterEach has run for every case by now. Throwing keeps
+      // this a hook failure rather than an assertion outside a test block.
+      if (process.env.HOME !== envAtStart.home) {
+        throw new Error(`HOME not restored: ${process.env.HOME}`);
+      }
+      if (process.env.LLXPRT_CONFIG_HOME !== envAtStart.configHome) {
+        throw new Error(
+          `LLXPRT_CONFIG_HOME not restored: ${process.env.LLXPRT_CONFIG_HOME}`,
+        );
+      }
+    });
+
+    // The enclosing afterEach restores the original value; the afterAll above
+    // verifies that it did.
+    function setAmbientConfigHome(ambient: string | undefined): void {
+      if (ambient === undefined) {
+        delete process.env.LLXPRT_CONFIG_HOME;
+      } else {
+        process.env.LLXPRT_CONFIG_HOME = ambient;
+      }
+    }
+
+    async function runInvalidSettingsFlows(): Promise<{
+      help: CliRunResult;
+      bare: CliRunResult;
+    }> {
+      await writeInvalidSettingsFixture(configHome);
+      const env = { HOME: tempDir, LLXPRT_CONFIG_HOME: configHome };
+      const help = await runCli(['--help'], env);
+      const bare = await runCli([], env);
+      return { help, bare };
+    }
+
+    function expectInvalidSettingsOutcome(flows: {
+      help: CliRunResult;
+      bare: CliRunResult;
+    }): void {
+      expect(flows.help.exitCode).toBe(0);
+      const helpOutput = flows.help.stdout + flows.help.stderr;
+      expect(helpOutput).toContain('--help');
+      expect(helpOutput).not.toContain('Invalid configuration');
+      expect(flows.bare.exitCode).not.toBe(0);
+      expect(flows.bare.stdout + flows.bare.stderr).toContain(
+        'Invalid configuration',
+      );
+    }
+
+    it('leaves ambient settings.json byte-for-byte untouched and uses the test config dir', async () => {
+      const ambientRoot = path.join(tempDir, 'ambient-config');
+      const ambientSettings = path.join(ambientRoot, 'settings.json');
+      await fs.mkdir(ambientRoot, { recursive: true });
+      await fs.writeFile(ambientSettings, SENTINEL_SETTINGS);
+      setAmbientConfigHome(ambientRoot);
+
+      const flows = await runInvalidSettingsFlows();
+
+      expect(await fs.readFile(ambientSettings, 'utf8')).toBe(
+        SENTINEL_SETTINGS,
+      );
+      expect(
+        await fs.readFile(path.join(configHome, 'settings.json'), 'utf8'),
+      ).toBe(INVALID_SETTINGS_FIXTURE);
+      expectInvalidSettingsOutcome(flows);
+    });
+
+    it('works when the ambient LLXPRT_CONFIG_HOME is unset', async () => {
+      setAmbientConfigHome(undefined);
+
+      const flows = await runInvalidSettingsFlows();
+
+      expect(
+        await fs.readFile(path.join(configHome, 'settings.json'), 'utf8'),
+      ).toBe(INVALID_SETTINGS_FIXTURE);
+      expectInvalidSettingsOutcome(flows);
+    });
   });
 });
 
