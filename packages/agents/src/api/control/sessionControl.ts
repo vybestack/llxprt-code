@@ -931,7 +931,11 @@ export class SessionControl implements AgentSessionControl {
     if (replay.sequenceCorrupt) {
       throw new Error('Cannot restart recording: non-monotonic sequences');
     }
-    service.initializeForResume(filePath, replay.lastSeq, replay.metadata.title);
+    service.initializeForResume(
+      filePath,
+      replay.lastSeq,
+      replay.metadata.title,
+    );
   }
 
   async persistSemanticMediaPurge(

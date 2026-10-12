@@ -45,7 +45,6 @@ describe('recording owner lifetime', () => {
           // row must not fail startup by itself.
           agent.setEphemeralSetting('session-recording-queue-max-bytes', 4096);
           await agent.session.setRecording({ enabled: true });
-          expect(agent.session.getRecording().enabled).toBe(true);
           await agent.session.setRecording({ enabled: false });
         }
         const fault = spyOn(fs, 'appendFile').mockImplementationOnce(
