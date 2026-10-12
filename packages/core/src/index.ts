@@ -630,6 +630,12 @@ export { createAgentRuntimeContext } from './runtime/createAgentRuntimeContext.j
 export * from './profiles/index.js';
 
 export type {
+  ProviderSwitcher,
+  ProviderSwitchOptions,
+  ProviderSwitchResult,
+  ApiKeyUpdateResult,
+  BaseUrlUpdateResult,
+  ModelChangeResult,
   RuntimeProvider,
   RuntimeProviderManager,
   RuntimeSessionTokenUsage,

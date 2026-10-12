@@ -332,6 +332,7 @@ function buildRenderElement(
       agent.settings,
       agent.toolFormat,
       agent.providerReads,
+      agent.auth.keys,
     );
   return (
     <React.StrictMode>

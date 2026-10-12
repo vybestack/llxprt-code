@@ -532,7 +532,8 @@ export class AgentImpl implements Agent {
         this.providerState.keyName = keyName;
       },
       updateProviderApiKey: async (apiKey: string | null) => {
-        await updateActiveProviderApiKey(
+        this.coordinator.assertSettingsAdmission();
+        return updateActiveProviderApiKey(
           apiKey,
           {
             setEphemeralSetting: (key, value) =>

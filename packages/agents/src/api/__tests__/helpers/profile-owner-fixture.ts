@@ -19,7 +19,7 @@ import type {
   ProfileDefinitionReads,
   ProfileDefinitionWrites,
 } from '@vybestack/llxprt-code-core';
-import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 import { FakeProvider } from '../../../../../providers/src/fake/FakeProvider.js';
 import {
   buildCliStyleConfig,

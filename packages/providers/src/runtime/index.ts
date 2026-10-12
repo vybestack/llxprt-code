@@ -41,21 +41,11 @@ export {
   switchActiveProvider,
   DEFAULT_PRESERVE_EPHEMERALS,
 } from './providerSwitch.js';
-export type {
-  ProviderSwitchResult,
-  ProviderSwitchOptions,
-  ProviderSwitcher,
-} from './providerSwitch.js';
 
 export {
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
   setActiveModel,
-} from './providerMutations.js';
-export type {
-  ApiKeyUpdateResult,
-  BaseUrlUpdateResult,
-  ModelChangeResult,
 } from './providerMutations.js';
 
 export {

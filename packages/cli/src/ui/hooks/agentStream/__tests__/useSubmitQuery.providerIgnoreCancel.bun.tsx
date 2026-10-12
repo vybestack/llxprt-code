@@ -78,8 +78,8 @@ import type { Todo } from '@vybestack/llxprt-code-tools';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
-import { createIsolatedRuntimeContext } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
-import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type {
   GenerateChatOptions,
   IModel,
@@ -367,7 +367,8 @@ async function createEngineEnv(): Promise<EngineEnv> {
   };
 
   let config: Config | undefined;
-  let handle: IsolatedRuntimeContextHandle | undefined;
+  let providerManager: ProviderManager | undefined;
+  let settingsOwner: SessionSettingsOwner | undefined;
   let agent: Agent | undefined;
   let policyOwner: RuntimePolicyOwner | undefined;
   try {
@@ -383,29 +384,31 @@ async function createEngineEnv(): Promise<EngineEnv> {
     const settingsService = new SettingsService();
     policyOwner = new RuntimePolicyOwner(config);
     const messageBus = policyOwner.session.messageBus;
-    handle = createIsolatedRuntimeContext(
-      {
-        credentialAuthority: new CredentialAuthority(),
-
-        runtimeId: SESSION_ID,
-        config,
-        messageBus,
-        prepare: (ctx) => {
-          ctx.providerManager.registerProvider(transport);
-          void ctx.providerManager.setActiveProvider(transport.name);
-        },
-      },
+    const credentialAuthority = new CredentialAuthority();
+    settingsOwner = new SessionSettingsOwner(settingsService);
+    settingsOwner.bindTelemetry(config);
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
+      config,
+      undefined,
+      credentialAuthority,
+      settingsOwner,
     );
-    await handle.activate();
+    providerManager.registerProvider(transport);
+    providerManager.setActiveProvider(transport.name);
     // No explicit config.initialize() here: fromConfig installs the default
     // agent runtime factories (agentClientFactory et al.) and runs
     // ensureInitialized during adoption — the factory-less Config idiom.
     agent = await fromConfig({
       settingsService,
-      settingsOwner: handle.settingsOwner,
+      credentialAuthority,
+      settingsOwner,
       config,
-      providerManager: handle.providerManager,
+      providerManager,
       sessionId: SESSION_ID,
       messageBus,
       policyOwner,
@@ -413,7 +416,8 @@ async function createEngineEnv(): Promise<EngineEnv> {
     });
 
     const builtConfig = config;
-    const builtHandle = handle;
+    const builtManager = providerManager;
+    const builtSettings = settingsOwner;
     const builtAgent = agent;
     const startedPrompts: string[] = [];
     const streamConcurrency = createStreamConcurrencyProbe();
@@ -431,7 +435,8 @@ async function createEngineEnv(): Promise<EngineEnv> {
       routedEvents: [],
       dispose: async (): Promise<void> => {
         await builtAgent.dispose().catch(() => undefined);
-        await Promise.resolve(builtHandle.cleanup()).catch(() => undefined);
+        builtManager.dispose();
+        await builtSettings.dispose();
         await policyOwner?.dispose();
         await builtConfig.dispose().catch(() => undefined);
         restoreEnv();
@@ -439,9 +444,8 @@ async function createEngineEnv(): Promise<EngineEnv> {
     };
   } catch (error) {
     await agent?.dispose().catch(() => undefined);
-    if (handle !== undefined) {
-      await Promise.resolve(handle.cleanup()).catch(() => undefined);
-    }
+    providerManager?.dispose();
+    await settingsOwner?.dispose();
     await policyOwner?.dispose();
     await config?.dispose().catch(() => undefined);
     restoreEnv();

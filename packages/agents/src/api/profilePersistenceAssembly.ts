@@ -1,7 +1,4 @@
 import { LoadBalancingProvider } from '@vybestack/llxprt-code-providers';
-import { setActiveModel } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
-import { assembleModelSelection } from './model-selection.js';
-import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 /**
  * @license
@@ -149,22 +146,6 @@ export async function restoreAgentChatVisibility(
       carriedHistory.length > 0 ? carriedHistory : undefined,
     );
   }
-}
-
-export function setAgentSelectedModel(
-  model: string,
-  roots: {
-    readonly settingsOwner: SessionSettingsOwner;
-    readonly settingsService: SettingsService;
-    readonly providerManager: RuntimeProviderManager;
-  },
-): ReturnType<typeof setActiveModel> {
-  return setActiveModel(
-    model,
-    assembleModelSelection(roots.settingsOwner),
-    roots.settingsService,
-    roots.providerManager.getActiveProvider(),
-  );
 }
 
 function assembleProfilePersistenceReads(

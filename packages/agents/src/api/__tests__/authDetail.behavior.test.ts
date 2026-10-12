@@ -147,7 +147,11 @@ function makeDeps(mgr: OAuthManager) {
       authState,
       getKeyName: () => undefined,
       setKeyName: () => {},
-      updateProviderApiKey: async () => {},
+      updateProviderApiKey: async () => ({
+        changed: false,
+        providerName: PROVIDER,
+        message: 'No credential mutation',
+      }),
     },
     getOAuthManager: () => mgr,
   };

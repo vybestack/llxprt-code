@@ -11,6 +11,7 @@ import {
   type SessionSettingsOwner,
   type RuntimePolicyOwner,
   type RuntimeProviderManager,
+  type ProviderSwitcher,
   FatalError,
   type MessageBus,
   type Config,
@@ -35,7 +36,6 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { parseProfileJson } from '@vybestack/llxprt-code-settings';
 import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
-import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 
 export const DEFAULT_RUNTIME_ID = 'cli.runtime.bootstrap';

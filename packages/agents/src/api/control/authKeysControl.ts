@@ -3,6 +3,7 @@
  * @requirement:REQ-008
  */
 
+import type { ApiKeyUpdateResult } from '@vybestack/llxprt-code-core';
 import type { AgentAuthKeysControl, KeyInfo } from '../agent.js';
 import type { AgentAuthState } from './authState.js';
 
@@ -24,12 +25,9 @@ export interface AuthKeysControlDeps {
    * truth for the keyName winner). Called by use(name)/delete(name).
    */
   readonly setKeyName: (keyName: string | undefined) => void;
-  /**
-   * Pushes a raw key value to the live provider via the real runtime mutator
-   * updateActiveProviderApiKey. Wrapped in try/catch by the caller — safe
-   * no-op under the fake seam.
-   */
-  readonly updateProviderApiKey: (apiKey: string | null) => Promise<void>;
+  readonly updateProviderApiKey: (
+    apiKey: string | null,
+  ) => Promise<ApiKeyUpdateResult>;
 }
 
 /**
@@ -116,33 +114,13 @@ export class AuthKeysControl implements AgentAuthKeysControl {
     }
   }
 
-  /**
-   * Sets/clears the raw-key flag. A non-null value marks a raw key present
-   * (highest precedence winner) and pushes the value to the live provider via
-   * the real mutator (try/catch). null clears the raw-key flag (and pushes null
-   * to clear the live provider key). NEVER stores the raw value on status.
-   * @plan:PLAN-20260617-COREAPI.P18
-   * @requirement:REQ-008
-   */
   async setRaw(
     apiKey: string | null,
     _opts?: { readonly provider?: string },
-  ): Promise<void> {
-    if (apiKey !== null) {
-      this.deps.authState.rawKeyPresent = true;
-      try {
-        await this.deps.updateProviderApiKey(apiKey);
-      } catch {
-        // No-op under the fake seam.
-      }
-    } else {
-      this.deps.authState.rawKeyPresent = false;
-      try {
-        await this.deps.updateProviderApiKey(null);
-      } catch {
-        // No-op under the fake seam.
-      }
-    }
+  ): Promise<ApiKeyUpdateResult> {
+    const result = await this.deps.updateProviderApiKey(apiKey);
+    this.deps.authState.rawKeyPresent = Boolean(apiKey?.trim());
+    return result;
   }
 
   /**

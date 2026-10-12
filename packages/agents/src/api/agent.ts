@@ -58,6 +58,7 @@ import type {
 import type {
   RuntimeProviderManager,
   RuntimeModel,
+  ApiKeyUpdateResult,
   PolicyDecision,
   DiscoveredMCPResource,
   ContinueTarget,
@@ -701,7 +702,7 @@ export interface AgentAuthKeysControl {
   setRaw(
     apiKey: string | null,
     opts?: { readonly provider?: string },
-  ): Promise<void>;
+  ): Promise<ApiKeyUpdateResult>;
   setKeyFile(
     path: string | null,
     opts?: { readonly provider?: string },

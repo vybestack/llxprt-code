@@ -15,7 +15,7 @@ import { assembleModelSelection } from '../../../../agents/src/api/model-selecti
  * and every subsequent prompt was swallowed with no error.
  */
 
-import type { ProviderSwitcher } from '../index.js';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import type { Profile } from '@vybestack/llxprt-code-settings';
 import {

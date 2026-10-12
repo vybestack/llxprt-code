@@ -58,6 +58,7 @@ describe('CLI profile operation projection', () => {
           agent.settings,
           agent.toolFormat,
           agent.providerReads,
+          agent.auth.keys,
         ),
         agent.sessionClient.fetch,
       );

@@ -59,7 +59,7 @@ import {
   validateAgentRuntimeId,
 } from './agentBootstrap.js';
 import { assembleProviderSwitch } from './providerSwitchAssembly.js';
-import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 import { executeProviderActivation } from './providerActivationExecutor.js';
 import { AgentActivationBootstrap } from './activationPreflightState.js';
 import {

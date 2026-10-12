@@ -42,7 +42,7 @@ import os from 'node:os';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
-import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 import { setActiveModel } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
 import {
   setActiveModelParam,
