@@ -16,6 +16,17 @@ export function hasExportReceipt(
 ): boolean {
   return typeof record.attributes[receiptAttribute] === 'string';
 }
+/**
+ * A receipt-carrying export that never reported back. The request that awaited
+ * the receipt already receives this rejection, so the root only releases its
+ * join on the export and does not queue a second failure for flush or close.
+ */
+export class ExportAcknowledgementMissingError extends Error {
+  constructor() {
+    super('Telemetry record export acknowledgement missing');
+    this.name = 'ExportAcknowledgementMissingError';
+  }
+}
 export interface LogExportReceipt {
   readonly record: LogRecord;
   readonly acknowledged: Promise<void>;
@@ -53,9 +64,7 @@ export class AcknowledgedLogExporter implements LogRecordExporter {
       };
       const abort = (): void => settle(signal?.reason);
       const timeout = setTimeout(() => {
-        const missing = new Error(
-          'Telemetry record export acknowledgement missing',
-        );
+        const missing = new ExportAcknowledgementMissingError();
         settle(missing);
         // An export that never reports back would otherwise keep the root's
         // accepted-export join, and so its flush and close, waiting forever.
