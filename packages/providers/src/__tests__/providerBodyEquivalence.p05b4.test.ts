@@ -760,10 +760,10 @@ function retryReasoningRows(): IContent[] {
 
 function expectStableRetryBodies(bodies: readonly string[]): void {
   const capturedBodies = bodies.filter((text) => text.length > 0);
-  // Two forced 401s plus one success: every capture is a distinct
+  // One forced 401 plus one success: every capture is a distinct
   // orchestrator attempt with a physically rebuilt body, and the run
-  // must have settled successfully on the third attempt.
-  expect(capturedBodies.length).toBe(3);
+  // must have settled successfully on the second attempt.
+  expect(capturedBodies.length).toBe(2);
   // Coverage guard: the rebuilds must actually synthesize reasoning ids
   // (no stored provider metadata), or the stability claim is vacuous.
   const firstParsed = JSON.parse(capturedBodies[0] ?? '{}') as {
@@ -802,10 +802,11 @@ function retryingFetch(): typeof fetch {
       // false), so fetchStreamWithRetries rethrows it instead of internally
       // retrying — a 5xx would be retried INSIDE the transport over the same
       // already-materialized body, and the orchestrator would never rebuild.
-      // The orchestrator treats auth failures as retryable (no auth-recovery
-      // handler is configured here), so each attempt is a fresh provider
+      // The orchestrator retries an auth failure only after the auth-recovery
+      // handler produced a different token, and only for the first failure of
+      // a consecutive auth run, so the refreshed retry is a fresh provider
       // call with a freshly built body.
-      if (index < 2) {
+      if (index < 1) {
         return new Response(
           JSON.stringify({
             error: {
@@ -850,6 +851,7 @@ describe('P05b4 openai-responses retry body stability @plan:PLAN-20260917-ISSUE8
       },
     });
     const contents = opLogStream(rows);
+    let retryToken = 'stale-token';
     const options = {
       ...createProviderCallOptions({
         providerName: 'openai-responses',
@@ -860,6 +862,10 @@ describe('P05b4 openai-responses retry body stability @plan:PLAN-20260917-ISSUE8
         contents,
       }),
       contents,
+      readRetryAuthToken: async () => retryToken,
+      handleAuthError: async () => {
+        retryToken = 'refreshed-token';
+      },
     };
     const provider = new OpenAIResponsesProvider(
       'test-api-key',

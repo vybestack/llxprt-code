@@ -303,11 +303,21 @@ function verifyIngressIdentities(
   expect(entries[1].tools).toBe(tools);
   expect(entries[0]).not.toHaveProperty('config');
   expect(entries[0]).not.toHaveProperty('runtime');
-  expect(entries[0].invocation).toBeDefined();
-  expect(entries[1].invocation).toBe(entries[0].invocation);
-  expect(entries[1].invocation?.ephemerals).toBe(
-    entries[0].invocation?.ephemerals,
-  );
+  const first = entries[0].invocation;
+  const second = entries[1].invocation;
+  if (first === undefined || second === undefined)
+    throw new Error('Both attempts must carry the admitted invocation');
+  // The retry orchestrator binds each attempt's linked abort signal into a
+  // shallow copy of the admitted invocation (withRequestSignal), so identity
+  // is per attempt. Everything admitted stays the same values: the copies are
+  // equal apart from the signal, and the admitted snapshots are shared.
+  expect(second).not.toBe(first);
+  expect(second.signal).not.toBe(first.signal);
+  expect({ ...second, signal: undefined }).toStrictEqual({
+    ...first,
+    signal: undefined,
+  });
+  expect(second.ephemerals).toBe(first.ephemerals);
   expect(entries[1].metadata?.logicalRequestId).toBe('ingress-logical');
   expect(entries[1]).not.toHaveProperty('config');
   expect(entries[0].metadata?.[ATTEMPT_LIFECYCLE_KEY]).toBeDefined();

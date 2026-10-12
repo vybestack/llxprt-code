@@ -10,7 +10,6 @@ import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/r
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
-  initializeTelemetry,
   flushTelemetry,
   shutdownTelemetry,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
@@ -208,7 +207,7 @@ async function fixture(
   );
   activeConfig = config;
   config.settingsOwner.bindTelemetry(config);
-  await initializeTelemetry(config.settingsOwner.telemetry);
+  await config.settingsOwner.startTelemetry(config);
   return config;
 }
 
