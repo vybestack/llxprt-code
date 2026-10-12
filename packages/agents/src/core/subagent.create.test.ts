@@ -1,3 +1,4 @@
+import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
@@ -136,7 +137,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
       expect(scope).toBeInstanceOf(SubAgentScope);
     });
@@ -185,7 +186,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         toolConfig,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       expect(scope).toBeInstanceOf(SubAgentScope);
@@ -231,7 +232,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         toolConfig,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       expect(scope).toBeInstanceOf(SubAgentScope);
@@ -295,7 +296,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         toolConfig,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       expect(scope).toBeInstanceOf(SubAgentScope);
@@ -395,7 +396,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -458,9 +459,11 @@ describe('subagent.ts', () => {
           defaultRunConfig,
           undefined,
           undefined,
-          createRuntimeOverrides(mcpRuntime.workspaceFilesystem.paths, {
-            runtimeBundle,
-          }).overrides,
+          ...scopeInputs(
+            createRuntimeOverrides(mcpRuntime.workspaceFilesystem.paths, {
+              runtimeBundle,
+            }).overrides,
+          ),
         );
 
         await scope.runNonInteractive(new ContextState());
@@ -511,7 +514,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -597,13 +600,13 @@ describe('subagent.ts', () => {
           defaultRunConfig,
           { tools: ['read_file'] },
           undefined,
-          {
+          ...scopeInputs({
             ...createRuntimeOverrides(mcpRuntime.workspaceFilesystem.paths, {
               runtimeBundle,
               toolRegistry,
             }).overrides,
             messageBus,
-          },
+          }),
         );
         try {
           if (mode === 'interactive') {
@@ -649,7 +652,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       mockSendMessageStream.mockImplementation(

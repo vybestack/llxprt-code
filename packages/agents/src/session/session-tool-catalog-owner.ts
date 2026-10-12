@@ -157,20 +157,32 @@ export class SessionToolCatalogOwner {
       workspace.workspaceLsp.diagnostics,
       {
         ...registration,
-        create: (config, args) =>
-          registration.create(config, {
-            ...args,
-            toolSelection: this.selection,
-            hookOwner,
-            workspaceTrust: workspace.trust,
+        create: (
+          config,
+          profiles,
+          subagents,
+          messageBus,
+          paths,
+          readMcpInstructions,
+        ) =>
+          registration.create(
+            config,
+            profiles,
+            subagents,
+            messageBus,
+            paths,
+            readMcpInstructions,
             instructions,
             createChildSettings,
-            requestInteractiveAuth,
-            telemetry,
             readTaskPolicy,
             readRunPolicy,
-            readGovernance: () => this.readGovernance(),
-          }),
+            () => this.readGovernance(),
+            this.selection,
+            hookOwner,
+            workspace.trust,
+            telemetry,
+            requestInteractiveAuth,
+          ),
       },
       workspace.readInstructions,
       false,
@@ -182,19 +194,31 @@ export class SessionToolCatalogOwner {
       this.imageOperation,
       telemetry,
       this.requestFetch,
-    ).then(({ registry, allPotentialTools }) => {
-      this.admission.assertOpen();
-      this.configuration = allPotentialTools.map(
-        ({ displayName, isRegistered, reason }) => ({
-          displayName,
-          isRegistered,
-          reason,
-        }),
-      );
-      this.builtins = registry;
-      this.workspace = workspace.toolSelection;
-    });
+    ).then(({ registry, allPotentialTools }) =>
+      this.publishRegistry(
+        registry,
+        allPotentialTools,
+        workspace.toolSelection,
+      ),
+    );
     return this.initialization;
+  }
+
+  private publishRegistry(
+    registry: ToolRegistry,
+    records: readonly ConfigurationEntry[],
+    workspace: ToolSelection,
+  ): void {
+    this.admission.assertOpen();
+    this.configuration = records.map(
+      ({ displayName, isRegistered, reason }) => ({
+        displayName,
+        isRegistered,
+        reason,
+      }),
+    );
+    this.builtins = registry;
+    this.workspace = workspace;
   }
 
   initializeInherited(

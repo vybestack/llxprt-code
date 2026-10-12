@@ -1,3 +1,4 @@
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { buildToolGovernance } from '@vybestack/llxprt-code-tools';
 /**
  * @license
@@ -38,7 +39,6 @@ import type {
   ToolRegistryView,
   ToolMetadata,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import {
   canonicalizeToolName,
@@ -247,7 +247,9 @@ export function buildEphemeralSettings(
  *
  */
 export function createToolExecutionConfig(
-  runtimeBundle: AgentRuntimeLoaderResult,
+  telemetry: RootTelemetry,
+  readExecutionPolicy: ToolExecutionConfig['readExecutionPolicy'],
+  getSessionId: () => string,
   toolRegistry: ToolSelection,
   settingsSnapshot?: ReadonlySettingsSnapshot,
   toolConfig?: ToolConfig,
@@ -260,11 +262,10 @@ export function createToolExecutionConfig(
   }
 
   return {
-    telemetry: runtimeBundle.telemetryRoot,
+    telemetry,
     readApprovalMode,
     getToolRegistry: () => toolRegistry,
-    readExecutionPolicy: () =>
-      runtimeBundle.runtimeContext.readToolExecutionPolicy(),
+    readExecutionPolicy,
     readGovernance: () =>
       buildToolGovernance({
         getEphemeralSettings: () => ({
@@ -277,7 +278,7 @@ export function createToolExecutionConfig(
     // tools (task/list_subagents) so they can never be executed by a subagent
     // runtime, regardless of registry resolution or ephemeral whitelist state.
     getExcludeTools: () => Array.from(SUBAGENT_EXCLUDED_TOOL_NAMES),
-    getSessionId: () => runtimeBundle.runtimeContext.state.sessionId,
+    getSessionId,
     getTelemetryLogPromptsEnabled: () =>
       Boolean(settingsSnapshot?.telemetry?.enabled),
   };

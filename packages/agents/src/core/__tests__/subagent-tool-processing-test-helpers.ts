@@ -97,7 +97,10 @@ export async function dispatch(
   );
   registry.registerTool(new DivideTool());
   const toolExecutorContext = createToolExecutionConfig(
-    createStatelessRuntimeBundle(),
+    createStatelessRuntimeBundle().telemetryRoot,
+    () =>
+      createStatelessRuntimeBundle().runtimeContext.readToolExecutionPolicy(),
+    () => createStatelessRuntimeBundle().runtimeContext.state.sessionId,
     registry,
   );
   // The processing context object is the scheduler registry owner for this

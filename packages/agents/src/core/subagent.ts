@@ -1,3 +1,6 @@
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import type { ToolSelection } from '@vybestack/llxprt-code-tools';
+import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -90,7 +93,6 @@ import {
   type PromptConfig,
   type ToolConfig,
   type OutputConfig,
-  type SubAgentRuntimeOverrides,
   type EnvironmentContextLoader,
   type ModelConfig,
   type RunConfig,
@@ -190,98 +192,77 @@ export class SubAgentScope {
     runConfig: RunConfig,
     toolConfig: ToolConfig | undefined,
     outputConfig: OutputConfig | undefined,
-    overrides: SubAgentRuntimeOverrides,
+    admittedRuntime: AgentRuntimeContext | undefined,
+    contentGenerator: ContentGenerator | undefined,
+    telemetry: RootTelemetry | undefined,
+    toolRegistry: ToolSelection | undefined,
+    toolsView: ToolRegistryView | undefined,
+    instructions: InstructionReadOperations,
+    workspacePaths: WorkspacePathOperations,
+    readMcpInstructions: () => string | undefined,
+    messageBus: MessageBus | undefined,
+    settingsSnapshot: ReadonlySettingsSnapshot | undefined,
+    environmentContextLoader: EnvironmentContextLoader | undefined,
+    readApprovalMode: (() => ApprovalMode) | undefined,
+    admitModelParameters: (() => AdmittedModelParameters) | undefined,
+    hookOwner: HookExecutionOwner | undefined,
     parentSignal?: AbortSignal,
     dependencies: SubAgentDependencies = {},
   ): Promise<SubAgentScope> {
-    const runtimeBundle = overrides.runtimeBundle;
-    if (!runtimeBundle) {
+    if (
+      admittedRuntime === undefined ||
+      contentGenerator === undefined ||
+      telemetry === undefined
+    )
       throw new Error(
         'SubAgentScope.create requires a runtime bundle after initialization.',
       );
-    }
-
-    // Persisted subagent config may omit tools/toolsView despite the
-    // declared-required type; validate at the boundary.
-    const toolsView = SubAgentScope.requireToolsView(runtimeBundle);
-
-    const toolRegistry = overrides.toolRegistry ?? runtimeBundle.toolRegistry;
-    if (!toolRegistry) {
+    if (toolsView === undefined)
+      throw new Error(
+        'SubAgentScope.create requires a ToolRegistryView from the runtime bundle.',
+      );
+    if (toolRegistry === undefined)
       throw new Error(
         'SubAgentScope.create requires a ToolRegistry in the runtime bundle or overrides.',
       );
-    }
 
-    if (toolConfig) {
-      const filteredToolConfig = await filterToolsAgainstRuntime({
-        toolConfig,
-        toolsView,
-      });
-      // Preserve explicit empty/fail-closed semantics: an explicit toolConfig
-      // that filters to zero tools must remain { tools: [] } so the runtime
-      // produces no normal declarations. Only undefined toolConfig means
-      // runtime/profile defaults.
-      toolConfig = filteredToolConfig;
-    }
+    toolConfig =
+      toolConfig === undefined
+        ? undefined
+        : await filterToolsAgainstRuntime({ toolConfig, toolsView });
 
-    const settingsSnapshot =
-      overrides.settingsSnapshot ?? runtimeBundle.settingsSnapshot;
-
-    const readApprovalMode = overrides.readApprovalMode;
     const toolExecutorContext = createToolExecutionConfig(
-      runtimeBundle,
+      telemetry,
+      () => admittedRuntime.readToolExecutionPolicy(),
+      () => admittedRuntime.state.sessionId,
       toolRegistry,
       settingsSnapshot,
       toolConfig,
       readApprovalMode,
     );
 
-    const runtimeContext: AgentRuntimeContext = Object.freeze({
-      ...runtimeBundle.runtimeContext,
-      tools: toolsView,
-    });
-
     return new SubAgentScope(
       name,
-      runtimeContext,
+      Object.freeze({ ...admittedRuntime, tools: toolsView }),
       modelConfig,
       runConfig,
       promptConfig,
-      runtimeBundle.contentGenerator,
+      contentGenerator,
       toolExecutorContext,
-      overrides.environmentContextLoader ?? defaultEnvironmentContextLoader,
+      environmentContextLoader ?? defaultEnvironmentContextLoader,
       foregroundConfig,
-      overrides.workspacePaths,
-      overrides.readMcpInstructions,
-      overrides.instructions,
-      overrides.messageBus,
+      workspacePaths,
+      readMcpInstructions,
+      instructions,
+      messageBus,
       toolConfig,
       outputConfig,
       settingsSnapshot,
       parentSignal,
       dependencies,
-      overrides.admitModelParameters,
-      overrides.hookOwner,
+      admitModelParameters,
+      hookOwner,
     );
-  }
-
-  private static requireToolsView(
-    runtimeBundle: NonNullable<SubAgentRuntimeOverrides['runtimeBundle']>,
-  ): ToolRegistryView {
-    const contextTools = runtimeBundle.runtimeContext.tools as
-      | ToolRegistryView
-      | undefined;
-    const bundleToolsView = runtimeBundle.toolsView as
-      | ToolRegistryView
-      | undefined;
-    const toolsCandidate: ToolRegistryView | undefined =
-      contextTools ?? bundleToolsView;
-    if (toolsCandidate == null) {
-      throw new Error(
-        'SubAgentScope.create requires a ToolRegistryView from the runtime bundle.',
-      );
-    }
-    return toolsCandidate;
   }
 
   private bindParentSignal(abortController: AbortController): void {
