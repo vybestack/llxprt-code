@@ -9,6 +9,11 @@
       "bun": "./src/index.ts",
       "import": "./dist/index.js"
     },
+    "./fetch-test-helpers.js": {
+      "types": "./dist/src/fetch-test-helpers.d.ts",
+      "bun": "./src/fetch-test-helpers.ts",
+      "import": "./dist/src/fetch-test-helpers.js"
+    },
     "./core/config.js": {
       "types": "./dist/src/core/config.d.ts",
       "bun": "./src/core/config.ts",

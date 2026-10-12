@@ -19,7 +19,6 @@ import { tmpdir } from 'node:os';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import type { CompressionStrategy } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import {
   MessageBusType,
   type HookExecutionRequest,
@@ -29,7 +28,7 @@ import {
   HookEventName,
   HookType,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
-import * as compressionFactory from '../../compression/compressionStrategyFactory.js';
+import { OneShotStrategy } from '../../compression/OneShotStrategy.js';
 import { createRecordingExecution } from '../recordingExecution.js';
 import { SessionControl } from '../control/sessionControl.js';
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
@@ -67,27 +66,22 @@ async function inputsAt(path: string): Promise<CommandInput[]> {
     .map((line) => JSON.parse(line));
 }
 
-const strategy: CompressionStrategy = {
-  name: 'one-shot',
-  requiresLLM: false,
-  trigger: { mode: 'threshold', defaultThreshold: 0.8 },
-  compress: async (context) => ({
-    kind: 'applied',
-    newHistory: [
-      {
+/**
+ * Compression publishes through the disk runners, so the short summary the
+ * provider would write is injected at the strategy's disk entry point.
+ */
+function spyOnSummaryStrategy() {
+  return spyOn(OneShotStrategy.prototype, 'compressDisk').mockImplementation(
+    async (_context, candidate) => {
+      candidate.append({
         speaker: 'ai',
         blocks: [{ type: 'text', text: 'short summary' }],
         metadata: { reason: 'compression-state-snapshot' },
-      },
-    ],
-    metadata: {
-      originalMessageCount: context.history.length,
-      compressedMessageCount: 1,
-      strategyUsed: 'one-shot',
-      llmCallMade: false,
+      });
+      return { kind: 'applied', top: 0 };
     },
-  }),
-};
+  );
+}
 
 async function exerciseFacades(
   event: HookEventName,
@@ -176,10 +170,7 @@ describe('shared client non-stream and context-size 413 hook owner', () => {
   }, 30000);
 
   it('routes non-stream automatic provider-content PreCompress through the invoking facade', async () => {
-    const strategySpy = spyOn(
-      compressionFactory,
-      'getCompressionStrategy',
-    ).mockReturnValue(strategy);
+    const strategySpy = spyOnSummaryStrategy();
     try {
       expect(
         await exerciseFacades(HookEventName.PreCompress, async (agent) => {
@@ -205,10 +196,7 @@ describe('shared client non-stream and context-size 413 hook owner', () => {
   }, 30000);
 
   it('attributes PreCompress on real 413 context recovery and retries the original facade stream', async () => {
-    const strategySpy = spyOn(
-      compressionFactory,
-      'getCompressionStrategy',
-    ).mockReturnValue(strategy);
+    const strategySpy = spyOnSummaryStrategy();
     let transportRequests = 0;
     let surfaced413 = 0;
     let returnedContent = 0;

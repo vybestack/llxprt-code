@@ -12,7 +12,7 @@ import { get } from 'node:http';
 import { buildAgent } from './helpers/agentHarness.js';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
 import { fromConfig } from '../fromConfig.js';
-import { withFetchPreconnect } from '../../../../test-utils/src/fetch-test-helpers.js';
+import { withFetchPreconnect } from '@vybestack/llxprt-code-test-utils/fetch-test-helpers.js';
 
 function gate(): { promise: Promise<void>; release: () => void } {
   let release = (): void => {};

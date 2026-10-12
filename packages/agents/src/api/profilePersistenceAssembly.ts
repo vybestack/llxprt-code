@@ -162,15 +162,13 @@ export function snapshotModelParams(
 }
 
 export async function restoreAgentChatVisibility(
-  client: Pick<
-    AgentClientContract,
-    'hasChatInitialized' | 'setHistoryFromSource' | 'streamHistory' | 'startChat'
-  >,
+  client: Pick<AgentClientContract, 'hasChatInitialized' | 'startChat'>,
 ): Promise<void> {
-  if (!client.hasChatInitialized()) {
-    await client.setHistoryFromSource(client.streamHistory());
-    await client.startChat();
-  }
+  // The client already holds its carried history (the live HistoryService a
+  // profile adoption rebound, or deferred rows). Starting the chat adopts that
+  // service as is: copying it through a source would replace the service the
+  // session recording is attached to.
+  if (!client.hasChatInitialized()) await client.startChat();
 }
 
 export function setAgentSelectedModel(

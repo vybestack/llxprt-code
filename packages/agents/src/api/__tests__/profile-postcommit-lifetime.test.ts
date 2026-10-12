@@ -25,7 +25,7 @@ import {
 } from './helpers/provider-auth-fixtures.js';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
 import { collectHistoryFixture } from '../../core/__tests__/support/collect-history-test-fixture.js';
-import { withFetchPreconnect } from '../../../../test-utils/src/fetch-test-helpers.js';
+import { withFetchPreconnect } from '@vybestack/llxprt-code-test-utils/fetch-test-helpers.js';
 
 const fixtureDirectories: string[] = [];
 

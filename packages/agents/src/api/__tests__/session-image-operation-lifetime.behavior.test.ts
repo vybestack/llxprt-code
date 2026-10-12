@@ -25,7 +25,7 @@ import { validatePngStructure } from '@vybestack/llxprt-code-core/services/image
 import { CodexImageBackend } from '@vybestack/llxprt-code-providers/openai/codexImageBackend.js';
 import { createAgent } from '../createAgent.js';
 import { fromConfig } from '../fromConfig.js';
-import { withFetchPreconnect } from '../../../../test-utils/src/fetch-test-helpers.js';
+import { withFetchPreconnect } from '@vybestack/llxprt-code-test-utils/fetch-test-helpers.js';
 import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import {

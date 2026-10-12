@@ -17,7 +17,7 @@ import {
   CoreEvent,
 } from '@vybestack/llxprt-code-core/utils/events.js';
 import type { OAuthToken } from '@vybestack/llxprt-code-auth';
-import { withFetchPreconnect } from '../../../../test-utils/src/fetch-test-helpers.js';
+import { withFetchPreconnect } from '@vybestack/llxprt-code-test-utils/fetch-test-helpers.js';
 import {
   MemoryTokenStore,
   makeExpiredToken,

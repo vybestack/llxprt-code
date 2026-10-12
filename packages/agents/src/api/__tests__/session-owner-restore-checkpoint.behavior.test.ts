@@ -155,8 +155,8 @@ describe('Agent session owner history restore and checkpoint names', () => {
         'non-negative integer',
       );
       const client = agent.agentClient;
-      const original = client.restoreHistory.bind(client);
-      const fault = spyOn(client, 'restoreHistory').mockImplementationOnce(
+      const original = client.resetChat.bind(client);
+      const fault = spyOn(client, 'resetChat').mockImplementationOnce(
         async (...args) => {
           await original(...args);
           throw new Error('restore interrupted');

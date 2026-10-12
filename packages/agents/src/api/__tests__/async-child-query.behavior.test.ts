@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { z } from 'zod';
-import { withFetchPreconnect } from '../../../../test-utils/src/fetch-test-helpers.js';
+import { withFetchPreconnect } from '@vybestack/llxprt-code-test-utils/fetch-test-helpers.js';
 import { withDisposalJoinFixture } from './helpers/async-child-disposal-join-fixture.js';
 
 function response(query: boolean): Response {
