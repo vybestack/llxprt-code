@@ -43,7 +43,13 @@ import {
 } from './profileApplicationAssembly.js';
 import type { AgentActivationOperation } from './activationPreflightState.js';
 
-export class AgentProfilePreflight {
+export interface AgentPostConfigSettings {
+  writeUserParameter(key: string, value: unknown): void;
+  readNamedParameter(key: string): unknown;
+  chooseModel(model: string): void;
+}
+
+export class AgentProfilePreflight implements AgentPostConfigSettings {
   readonly #host: AgentPreflightHostInput;
   readonly #settings: SettingsService;
   readonly #authority: CredentialAuthority;
@@ -51,6 +57,12 @@ export class AgentProfilePreflight {
   readonly #oauthSettings: IOAuthSettingsProvider | undefined;
   #runtime: AssembledCliProviderRuntime;
   #closed = false;
+  #sessionSettings: SessionSettingsOwner | undefined;
+  #activation: AgentActivationOperation | undefined;
+  #switch: ProviderSwitcher | undefined;
+  #profiles: AgentProfileApplication | undefined;
+  #ownsSettings = false;
+  #activationTransferred = false;
 
   constructor(
     host: AgentPreflightHostInput,
@@ -136,7 +148,7 @@ export class AgentProfilePreflight {
     );
   }
 
-  async bindConfig(
+  private async bindConfig(
     config: Config,
     trust: WorkspaceTrustControlPort,
     owner: SessionSettingsOwner,
@@ -172,12 +184,115 @@ export class AgentProfilePreflight {
     onProviderFilesReady?.(this.#runtime.registration.providerFileLifecycle);
   }
 
-  createSettingsOwner(): SessionSettingsOwner {
+  async preparePostConfiguration(
+    config: Config,
+    filesystem: WorkspaceFilesystemOwner,
+    memory: WorkspaceMemoryOwner,
+    trust: WorkspaceTrustControlPort,
+    trustCleanup: (() => Promise<void>) | undefined,
+    suppliedSettings?: SessionSettingsOwner,
+    onPolicyOwnerReady?: (policy: RuntimePolicyOwner) => void,
+    onProviderManagerReady?: (manager: RuntimeProviderManager) => void,
+    onOAuthManagerReady?: (oauth: OAuthManager | undefined) => void,
+    onProviderFilesReady?: (files: ProviderFileLifecycle) => void,
+  ): Promise<void> {
     this.#assertOpen();
-    return new SessionSettingsOwner(this.#settings);
+    if (this.#sessionSettings !== undefined)
+      throw new Error('Post-config preflight is already prepared');
+    this.#ownsSettings = suppliedSettings === undefined;
+    this.#sessionSettings =
+      suppliedSettings ?? new SessionSettingsOwner(this.#settings);
+    try {
+      await this.bindConfig(
+        config,
+        trust,
+        this.#sessionSettings,
+        onPolicyOwnerReady,
+        onProviderManagerReady,
+        onOAuthManagerReady,
+        onProviderFilesReady,
+      );
+      await this.#prepareActivation(
+        config,
+        filesystem,
+        memory,
+        this.#sessionSettings,
+        this.#ownsSettings ? 'transferred' : 'borrowed',
+        trust,
+        trustCleanup,
+      );
+    } catch (error) {
+      try {
+        await this.dispose();
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          'Post-config preflight cleanup failed',
+        );
+      }
+      throw error;
+    }
   }
 
-  async prepareActivation(
+  writeUserParameter(key: string, value: unknown): void {
+    this.#assertOpen();
+    if (this.#sessionSettings === undefined)
+      throw new Error('Post-config preflight is not prepared');
+    this.#sessionSettings.writeUserParameter(key, value);
+  }
+
+  readNamedParameter(key: string): unknown {
+    this.#assertOpen();
+    if (this.#sessionSettings === undefined)
+      throw new Error('Post-config preflight is not prepared');
+    return this.#sessionSettings.readNamedParameter(key);
+  }
+
+  chooseModel(model: string): void {
+    this.#assertOpen();
+    if (this.#sessionSettings === undefined)
+      throw new Error('Post-config preflight is not prepared');
+    this.#sessionSettings.chooseModel(model);
+  }
+
+  preflight(
+    intent: Parameters<AgentActivationOperation['preflight']>[0],
+  ): ReturnType<AgentActivationOperation['preflight']> {
+    this.#assertOpen();
+    if (this.#activation === undefined)
+      throw new Error('Post-config preflight is not prepared');
+    return this.#activation.preflight(intent);
+  }
+
+  captureSwitchOperation(): ProviderSwitcher {
+    this.#assertOpen();
+    if (this.#switch === undefined)
+      throw new Error('Post-config preflight is not prepared');
+    return this.#switch;
+  }
+
+  captureProfileOperation(): AgentProfileApplication {
+    this.#assertOpen();
+    if (this.#profiles === undefined)
+      throw new Error('Post-config preflight is not prepared');
+    return this.#profiles;
+  }
+
+  transferActivation(
+    ready: (operation: AgentActivationOperation) => void,
+  ): void {
+    this.#assertOpen();
+    if (this.#activation === undefined || this.#activationTransferred)
+      throw new Error('Post-config activation is unavailable for transfer');
+    ready(this.#activation);
+    this.#activationTransferred = true;
+  }
+
+  async finishPostConfiguration(): Promise<void> {
+    if (!this.#activationTransferred) await this.#activation?.dispose();
+  }
+
+  async #prepareActivation(
     config: Config,
     filesystem: WorkspaceFilesystemOwner,
     memory: WorkspaceMemoryOwner,
@@ -185,34 +300,47 @@ export class AgentProfilePreflight {
     settingsOwnership: 'borrowed' | 'transferred',
     trust: WorkspaceTrustControlPort,
     trustCleanup: (() => Promise<void>) | undefined,
-    ready: (operation: AgentActivationOperation) => void,
   ): Promise<void> {
     this.#assertOpen();
-    ready(
-      await assembleAgentActivationBootstrap(
-        config,
-        this.#settings,
-        this.#runtime.providerManager,
-        this.#runtime.oauthManager ?? null,
-        () => this.#runtime.runtime.runtimeKind,
-        undefined,
-        undefined,
-        filesystem,
-        memory,
-        settingsOwner,
-        settingsOwnership,
-        trust,
-        trustCleanup,
-        undefined,
-        undefined,
-        this.#runtime.registration.providerFileLifecycle,
-        this.#runtime.runtimeMessageBus,
-        'transferred',
-      ),
+    this.#activation = await assembleAgentActivationBootstrap(
+      config,
+      this.#settings,
+      this.#runtime.providerManager,
+      this.#runtime.oauthManager ?? null,
+      () => this.#runtime.runtime.runtimeKind,
+      undefined,
+      undefined,
+      filesystem,
+      memory,
+      settingsOwner,
+      settingsOwnership,
+      trust,
+      trustCleanup,
+      undefined,
+      undefined,
+      this.#runtime.registration.providerFileLifecycle,
+      this.#runtime.runtimeMessageBus,
+      'transferred',
+    );
+    this.#switch = this.prepareSwitch(
+      config,
+      () => this.refreshAuth(),
+      settingsOwner,
+    );
+    this.#profiles = this.prepareProfile(
+      this.#activation.workspaceDefinitions.profileReads,
+      this.#switch,
+      settingsOwner,
     );
   }
 
-  prepareSwitch(
+  private refreshAuth(): Promise<void> {
+    if (this.#activation === undefined)
+      throw new Error('Post-config preflight is not prepared');
+    return this.#activation.sessionClient.refreshAuth();
+  }
+
+  private prepareSwitch(
     config: Config,
     refreshAuth: () => Promise<void>,
     owner: SessionSettingsOwner,
@@ -229,7 +357,7 @@ export class AgentProfilePreflight {
     );
   }
 
-  prepareProfile(
+  private prepareProfile(
     profiles: AgentActivationOperation['workspaceDefinitions']['profileReads'],
     switchProvider: ProviderSwitcher,
     owner: SessionSettingsOwner,
@@ -248,6 +376,9 @@ export class AgentProfilePreflight {
   async dispose(): Promise<void> {
     if (this.#closed) return;
     this.#closed = true;
+    await this.finishPostConfiguration();
+    if (this.#activation === undefined && this.#ownsSettings)
+      await this.#sessionSettings?.dispose();
     await this.#runtime.policyOwner?.dispose();
     this.#runtime.registration.dispose();
   }

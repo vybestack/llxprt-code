@@ -24,7 +24,10 @@ export interface SessionImageSelection {
 }
 
 export function assembleSessionImages(
-  client: SessionClientOwner,
+  client: Pick<
+    SessionClientOwner,
+    'hasImageComposition' | 'bindImageOperation'
+  >,
   workspaceRoot: string,
   manager: RuntimeProviderManager,
   oauthManager: OAuthManager | undefined,

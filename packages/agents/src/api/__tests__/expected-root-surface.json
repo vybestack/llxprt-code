@@ -49,6 +49,7 @@
   "AgentNoticeEvent",
   "AgentOAuthUIEvent",
   "AgentPolicyControl",
+  "AgentPostConfigSettings",
   "AgentPreflightBrowserHost",
   "AgentPreflightData",
   "AgentPreflightHostInput",

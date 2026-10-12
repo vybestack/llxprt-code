@@ -48,4 +48,5 @@ export {
 export {
   prepareAgentPreflight,
   AgentProfilePreflight,
+  type AgentPostConfigSettings,
 } from './src/api/profile-preflight.js';

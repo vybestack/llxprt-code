@@ -296,7 +296,11 @@ async function bindActivationClient(
 ): Promise<ReturnType<typeof assembleActivationExecutor>> {
   try {
     assembleSessionImages(
-      sessionClient,
+      {
+        hasImageComposition: () => sessionClient.hasImageComposition(),
+        bindImageOperation: (run, dispose) =>
+          sessionClient.bindImageOperation(run, dispose),
+      },
       config.getTargetDir(),
       manager,
       oauth ?? undefined,

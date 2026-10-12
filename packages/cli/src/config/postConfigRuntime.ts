@@ -6,7 +6,6 @@
 
 import {
   type WorkspaceTrustControlPort,
-  type SessionSettingsOwner,
   type WorkspaceMemoryOwner,
   type WorkspaceFilesystemOwner,
   ApprovalMode,
@@ -23,6 +22,7 @@ import {
   type AgentProfileApplication,
   type AgentActivationOperation,
   type AgentProfilePreflight,
+  type AgentPostConfigSettings,
 } from '@vybestack/llxprt-code-agents';
 import {
   READ_ONLY_TOOL_NAMES,
@@ -73,7 +73,12 @@ type SetupRuntimeContextInput = Pick<
   | 'profileSettingsWithTools'
   | 'runtimeOverrides'
   | 'workspaceTrust'
-> & { readonly sessionSettings: SessionSettingsOwner };
+> & {
+  readonly sessionSettings: Pick<
+    AgentPostConfigSettings,
+    'writeUserParameter' | 'readNamedParameter' | 'chooseModel'
+  >;
+};
 
 /** Fields consumed by reapplyCliOverrides (step 14). */
 type ReapplyCliOverridesInput = Pick<
@@ -101,7 +106,7 @@ export type StreamTimeoutSettingsInput = Pick<
 >;
 
 function applyStreamTimeoutSetting(
-  config: Pick<SessionSettingsOwner, 'writeUserParameter'>,
+  config: Pick<AgentPostConfigSettings, 'writeUserParameter'>,
   value: number | undefined,
   key: 'stream-idle-timeout-ms' | 'stream-first-response-timeout-ms',
 ): void {
@@ -111,7 +116,7 @@ function applyStreamTimeoutSetting(
 }
 
 export function applyStreamIdleTimeoutSettings(
-  config: Pick<SessionSettingsOwner, 'writeUserParameter'>,
+  config: Pick<AgentPostConfigSettings, 'writeUserParameter'>,
   settings: StreamTimeoutSettingsInput,
 ): void {
   applyStreamTimeoutSetting(
@@ -122,7 +127,7 @@ export function applyStreamIdleTimeoutSettings(
 }
 
 export function applyStreamFirstResponseTimeoutSettings(
-  config: Pick<SessionSettingsOwner, 'writeUserParameter'>,
+  config: Pick<AgentPostConfigSettings, 'writeUserParameter'>,
   settings: StreamTimeoutSettingsInput,
 ): void {
   applyStreamTimeoutSetting(
@@ -133,7 +138,7 @@ export function applyStreamFirstResponseTimeoutSettings(
 }
 
 interface ProfileEphemeralSettingsInput {
-  readonly config: Pick<SessionSettingsOwner, 'writeUserParameter'>;
+  readonly config: Pick<AgentPostConfigSettings, 'writeUserParameter'>;
   readonly bootstrapArgs: Pick<BootstrapProfileArgs, 'profileJson'>;
   readonly argv: Pick<CliArgs, 'provider'>;
   readonly settings: StreamTimeoutSettingsInput;
@@ -222,29 +227,13 @@ function applyDisabledHooks(input: SetupRuntimeContextInput): void {
   }
 }
 
-/** Recompose the pre-Config runtime on the exact Config's policy bus. */
-async function setupRuntimeContext(
-  input: SetupRuntimeContextInput,
-): Promise<void> {
-  applyDisabledHooks(input);
-  await input.runtimeState.bindConfig(
-    input.config,
-    input.workspaceTrust,
-    input.sessionSettings,
-    input.runtimeOverrides.onPolicyOwnerReady,
-    input.runtimeOverrides.onProviderManagerReady,
-    input.runtimeOverrides.onOAuthManagerReady,
-    input.runtimeOverrides.onProviderFilesReady,
-  );
-}
-
 /**
  * Steps 12-13: Apply profile snapshot to runtime, then switch active provider.
  */
 async function activateProviderAndProfile(
   input: PostConfigInput,
   profileApplication: AgentProfileApplication,
-  activationOperation: AgentActivationOperation,
+  activationOperation: Pick<AgentActivationOperation, 'preflight'>,
 ): Promise<string | undefined> {
   const { bootstrapArgs, argv, profileLoadResult, providerModelResult } = input;
 
@@ -309,7 +298,10 @@ function hasCliArgumentOverrides(args: BootstrapProfileArgs): boolean {
  */
 async function reapplyCliOverrides(
   input: ReapplyCliOverridesInput & {
-    readonly sessionSettings: SessionSettingsOwner;
+    readonly sessionSettings: Pick<
+      AgentPostConfigSettings,
+      'writeUserParameter' | 'readNamedParameter' | 'chooseModel'
+    >;
   },
   finalProvider: string | undefined,
 ): Promise<void> {
@@ -361,7 +353,10 @@ async function reapplyCliOverrides(
  */
 function applyToolPolicies(
   input: ApplyToolPoliciesInput & {
-    readonly sessionSettings: SessionSettingsOwner;
+    readonly sessionSettings: Pick<
+      AgentPostConfigSettings,
+      'writeUserParameter' | 'readNamedParameter' | 'chooseModel'
+    >;
   },
 ): void {
   const { argv, profileSettingsWithTools, approvalMode, interactive } = input;
@@ -426,7 +421,12 @@ function applyToolPolicies(
  * Step 16: Apply emojifilter, profile ephemeral settings, CLI /set args, disabled hooks.
  */
 function applyEphemeralSettings(
-  input: PostConfigInput & { readonly sessionSettings: SessionSettingsOwner },
+  input: PostConfigInput & {
+    readonly sessionSettings: Pick<
+      AgentPostConfigSettings,
+      'writeUserParameter' | 'readNamedParameter' | 'chooseModel'
+    >;
+  },
 ): void {
   const { config, argv, profileSettingsWithTools, runtimeOverrides } = input;
 
@@ -500,7 +500,12 @@ function applyEphemeralSettings(
  * Step 17: Seed default disabled tools, store profile model params, store bootstrap args, log warnings.
  */
 function finalizeMetadata(
-  input: PostConfigInput & { readonly sessionSettings: SessionSettingsOwner },
+  input: PostConfigInput & {
+    readonly sessionSettings: Pick<
+      AgentPostConfigSettings,
+      'writeUserParameter' | 'readNamedParameter' | 'chooseModel'
+    >;
+  },
 ): void {
   const { config, profileLoadResult, defaultDisabledTools } = input;
 
@@ -550,9 +555,7 @@ function finalizeMetadata(
 export async function finalizeConfig(
   original: PostConfigInput,
 ): Promise<Config> {
-  const sessionSettings =
-    original.runtimeOverrides.sessionSettingsOwner ??
-    original.runtimeState.createSettingsOwner();
+  const sessionSettings = original.runtimeState;
   const input = { ...original, sessionSettings };
   // Propagate security.disableOsKeyring into the storage package's process-wide
   // opt-out (issue #2928 R3.2) BEFORE any profile/auth application. Profile
@@ -566,39 +569,22 @@ export async function finalizeConfig(
     input.profileSettingsWithTools.security?.disableOsKeyring === true,
   );
 
-  // Step 10-11: Set runtime context + re-register provider infra
-  await setupRuntimeContext(input);
-
-  // Steps 12-13: Apply profile + switch provider
-  let preparedActivation: AgentActivationOperation | undefined;
-  await input.runtimeState.prepareActivation(
+  applyDisabledHooks(input);
+  await input.runtimeState.preparePostConfiguration(
     input.config,
     input.filesystem,
     input.memory,
-    sessionSettings,
-    original.runtimeOverrides.sessionSettingsOwner === undefined
-      ? 'transferred'
-      : 'borrowed',
     input.workspaceTrust,
     input.trustCleanup,
-    (operation) => {
-      preparedActivation = operation;
-    },
+    input.runtimeOverrides.sessionSettingsOwner,
+    input.runtimeOverrides.onPolicyOwnerReady,
+    input.runtimeOverrides.onProviderManagerReady,
+    input.runtimeOverrides.onOAuthManagerReady,
+    input.runtimeOverrides.onProviderFilesReady,
   );
-  if (preparedActivation === undefined)
-    throw new Error('Agent preflight did not prepare activation');
-  const activationOperation = preparedActivation;
-  const switchProvider = input.runtimeState.prepareSwitch(
-    input.config,
-    () => activationOperation.sessionClient.refreshAuth(),
-    sessionSettings,
-  );
-  const profileApplication = input.runtimeState.prepareProfile(
-    activationOperation.workspaceDefinitions.profileReads,
-    switchProvider,
-    sessionSettings,
-  );
-  let transferred = false;
+  const activationOperation = input.runtimeState;
+  const switchProvider = activationOperation.captureSwitchOperation();
+  const profileApplication = activationOperation.captureProfileOperation();
   try {
     input.runtimeOverrides.onProviderSwitchReady?.(switchProvider);
     input.runtimeOverrides.onProfileApplicationReady?.(profileApplication);
@@ -621,18 +607,19 @@ export async function finalizeConfig(
     finalizeMetadata(input);
 
     if (input.runtimeOverrides.onActivationBootstrapReady !== undefined) {
-      input.runtimeOverrides.onActivationBootstrapReady(activationOperation);
-      transferred = true;
+      activationOperation.transferActivation(
+        input.runtimeOverrides.onActivationBootstrapReady,
+      );
     }
     return input.config;
   } finally {
-    if (!transferred) await activationOperation.dispose();
+    await activationOperation.finishPostConfiguration();
   }
 }
 
 async function activateUnprofiledProvider(
   finalProvider: string,
-  activationOperation: AgentActivationOperation,
+  activationOperation: Pick<AgentActivationOperation, 'preflight'>,
 ): Promise<void> {
   try {
     // The preflight's authMode 'none' path swallows the provider-switch error
