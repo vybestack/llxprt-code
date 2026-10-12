@@ -191,7 +191,7 @@ const createInitialTimingMetrics = (): SessionTimingMetrics => ({
   accumulatedWorkMs: 0,
 });
 
-const createInitialMetrics = (): SessionMetrics => ({
+export const createSessionMetrics = (): SessionMetrics => ({
   models: {},
   tools: {
     totalCalls: 0,
@@ -252,11 +252,13 @@ export class UiTelemetryService
   extends EventEmitter
   implements SessionMetricOperations, SessionMetricEventSink
 {
-  #metrics: SessionMetrics = createInitialMetrics();
+  #metrics: SessionMetrics = createSessionMetrics();
   #lastPromptTokenCount = 0;
+  #closed = false;
   #aggregator = new SessionMetricsAggregator();
 
   addEvent(event: UiEvent) {
+    this.assertOpen();
     let changed = true;
     switch (event['event.name']) {
       case EVENT_API_RESPONSE:
@@ -281,6 +283,7 @@ export class UiTelemetryService
   }
 
   subscribe(listener: (update: SessionMetricUpdate) => void): () => void {
+    this.assertOpen();
     this.on('update', listener);
     return () => {
       this.off('update', listener);
@@ -305,8 +308,9 @@ export class UiTelemetryService
    * last prompt token count.
    */
   reset(): void {
+    this.assertOpen();
     this.#aggregator.reset();
-    this.#metrics = createInitialMetrics();
+    this.#metrics = createSessionMetrics();
     this.#lastPromptTokenCount = 0;
     this.emit('update', {
       metrics: this.#metrics,
@@ -319,6 +323,7 @@ export class UiTelemetryService
   }
 
   setLastPromptTokenCount(lastPromptTokenCount: number): void {
+    this.assertOpen();
     this.#lastPromptTokenCount = lastPromptTokenCount;
     this.emit('update', {
       metrics: this.#metrics,
@@ -340,6 +345,7 @@ export class UiTelemetryService
       total: number;
     };
   }) {
+    this.assertOpen();
     // Preserve the canonical session TPM from the aggregator — the polling
     // source only provides throttle/timing/session usage data.
     const canonicalTpm = this.#aggregator.getSnapshot().completeTokensPerMinute;
@@ -384,6 +390,15 @@ export class UiTelemetryService
       };
     }
     this.#metrics.models = newModels;
+  }
+
+  close(): void {
+    this.#closed = true;
+    this.removeAllListeners();
+  }
+
+  private assertOpen(): void {
+    if (this.#closed) throw new Error('Session metrics are closed');
   }
 
   private processApiResponse(
@@ -579,5 +594,3 @@ export class UiTelemetryService
     }
   }
 }
-
-export const uiTelemetryService = new UiTelemetryService();

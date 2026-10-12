@@ -293,17 +293,8 @@ function projectUiSessionOwner(
     getEphemeralSettings: () => settings.captureNamedParameters(),
     setEphemeralSetting: settings.writeUserParameter.bind(settings),
     getActiveProfileName: () => settingsService.getCurrentProfileName(),
-    onStats: (listener) => {
-      const unsubscribe = subscribeSessionStats(
-        () => sessionClient.getAgentClient().getHistoryService(),
-        listener,
-      );
-      subscriptions.add(unsubscribe);
-      return () => {
-        subscriptions.delete(unsubscribe);
-        unsubscribe();
-      };
-    },
+    onStats: (listener) =>
+      subscribeUiStats(sessionClient, settings, subscriptions, listener),
     memory: sessionClient.memoryOperations,
     tools: {
       get: (name) => {
@@ -337,6 +328,24 @@ function projectUiSessionOwner(
     get agentClient() {
       return sessionClient.getAgentClient();
     },
+  };
+}
+
+function subscribeUiStats(
+  sessionClient: SessionClientOwner,
+  settings: SessionSettingsOwner,
+  subscriptions: Set<() => void>,
+  listener: Parameters<Agent['onStats']>[0],
+): () => void {
+  const unsubscribe = subscribeSessionStats(
+    () => sessionClient.getAgentClient().getHistoryService(),
+    listener,
+    settings.telemetry.localMetrics,
+  );
+  subscriptions.add(unsubscribe);
+  return () => {
+    subscriptions.delete(unsubscribe);
+    unsubscribe();
   };
 }
 

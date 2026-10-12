@@ -6,7 +6,7 @@
 
 /**
  * Reads cache statistics from the canonical session snapshot
- * (SessionMetricsAggregator via uiTelemetryService.getSessionSnapshot()).
+ * (SessionMetricsAggregator via session metric snapshot).
  * This is the single source of truth — not the provider tracker.
  */
 

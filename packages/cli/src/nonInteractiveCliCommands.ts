@@ -1,3 +1,4 @@
+import { createSessionMetrics } from '@vybestack/llxprt-code-telemetry';
 type SessionSettingsOwner = NonNullable<FromConfigOptions['settingsOwner']>;
 /**
  * @license
@@ -137,11 +138,11 @@ function buildHeadlessCommandContext(
   readOAuthManager: () => OAuthManager | undefined,
   telemetrySettings?: SessionSettingsOwner,
 ): CommandContext {
-  if (!agent) throw new Error('Headless commands require an Agent');
   const sessionStats: SessionStatsState = {
     sessionId: firstNonEmptyString(config.getSessionId(), 'unknown'),
     sessionStartTime: new Date(),
-    metrics: agent.metrics.getMetrics(),
+    metrics:
+      agent === undefined ? createSessionMetrics() : agent.metrics.getMetrics(),
     lastPromptTokenCount: 0,
     historyTokenCount: 0,
     promptCount: 1,
@@ -168,6 +169,10 @@ function buildHeadlessCommandContext(
     signal,
     services: {
       get config() {
+        if (agent === undefined)
+          throw new Error(
+            'Headless command requires an Agent-owned runtime API.',
+          );
         return buildSlashCommandRuntime(
           config,
           agent,
@@ -179,7 +184,7 @@ function buildHeadlessCommandContext(
           telemetrySettings,
         );
       },
-      agent,
+      agent: agent ?? null,
       settings,
       git: undefined,
       logger,

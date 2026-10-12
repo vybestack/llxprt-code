@@ -1,6 +1,7 @@
 import { resolvePerfSettings } from '../config/configConstructor.js';
 import {
   RootTelemetry,
+  UiTelemetryService,
   logCliConfiguration,
   StartSessionEvent,
 } from '@vybestack/llxprt-code-telemetry';
@@ -104,22 +105,26 @@ export class SessionSettingsOwner {
     this.ownsTelemetry = borrowedRoot === undefined;
     this.telemetryRoot =
       borrowedRoot ??
-      RootTelemetry.prepare({
-        sessionId: config.getSessionId(),
-        enabled: config.getTelemetryEnabled(),
-        outfile: config.getTelemetryOutfile(),
-        maxBytes: config.getTelemetryOutfileMaxBytes(),
-        maxFiles: config.getTelemetryOutfileMaxFiles(),
-        readPrivacySettings: () => {
-          const settings = this.readTelemetrySettings();
-          return {
-            logPrompts: settings.logPrompts === true,
-            logConversations: this.readConversationLoggingEnabled(),
-            logApiBodies: settings.logApiBodies === true,
-            maxChars: settings.logApiBodyMaxChars ?? 4000,
-          };
+      RootTelemetry.prepare(
+        {
+          sessionId: config.getSessionId(),
+          enabled: config.getTelemetryEnabled(),
+          outfile: config.getTelemetryOutfile(),
+          maxBytes: config.getTelemetryOutfileMaxBytes(),
+          maxFiles: config.getTelemetryOutfileMaxFiles(),
+          readPrivacySettings: () => {
+            const settings = this.readTelemetrySettings();
+            return {
+              logPrompts: settings.logPrompts === true,
+              logConversations: this.readConversationLoggingEnabled(),
+              logApiBodies: settings.logApiBodies === true,
+              maxChars: settings.logApiBodyMaxChars ?? 4000,
+            };
+          },
         },
-      });
+        undefined,
+        new UiTelemetryService(),
+      );
     return this.telemetryRoot;
   }
 

@@ -1,3 +1,5 @@
+import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+let metricSource: UiTelemetryService;
 import { createStreamSettingsFixture } from './stream-settings-fixture.js';
 /**
  * @license
@@ -29,7 +31,6 @@ import {
   EmojiFilter,
   StreamJsonFormatter,
   JsonStreamEventType,
-  uiTelemetryService,
 } from '@vybestack/llxprt-code-core';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import { describe, it, expect, beforeEach, afterEach, spyOn } from 'bun:test';
@@ -118,6 +119,7 @@ describe('processAgentStream — retry discard (REQ-3048-010)', () => {
   let stderrSpy: ReturnType<typeof spyOn<typeof process.stderr, 'write'>>;
 
   beforeEach(() => {
+    metricSource = new UiTelemetryService();
     stdoutSpy = spyOn(process.stdout, 'write').mockImplementation(() => true);
     stderrSpy = spyOn(process.stderr, 'write').mockImplementation(() => true);
   });
@@ -139,7 +141,7 @@ describe('processAgentStream — retry discard (REQ-3048-010)', () => {
       streamFromEvents(events),
       createContext({ jsonOutput: true }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const result = parseJsonResult(stdoutSpy);
@@ -159,7 +161,7 @@ describe('processAgentStream — retry discard (REQ-3048-010)', () => {
       streamFromEvents(events),
       createContext({ quiet: true }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const output = callsToText(stdoutSpy);
@@ -182,7 +184,7 @@ describe('processAgentStream — retry discard (REQ-3048-010)', () => {
       streamFromEvents(events),
       createContext(),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const output = callsToText(stdoutSpy);
@@ -207,7 +209,7 @@ describe('processAgentStream — retry discard (REQ-3048-010)', () => {
       streamFromEvents(events),
       createContext({ jsonOutput: true, emojiFilter }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const result = parseJsonResult(stdoutSpy);
@@ -228,7 +230,7 @@ describe('processAgentStream — retry discard (REQ-3048-010)', () => {
       streamFromEvents(events),
       createContext({ quiet: true, streamFormatter }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const streamEvents = parseStreamEvents(stdoutSpy);

@@ -1,3 +1,5 @@
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
 const fixtureOwners = installRuntimeTestOwners();
@@ -101,16 +103,19 @@ export function buildStack(
   transport: IProvider,
   config: Config,
   retryConfig?: { maxAttempts?: number; initialDelayMs?: number },
-): LoggingProviderWrapper {
+  selectedOwner?: SessionSettingsOwner,
+): LoggingProviderWrapper & {
+  metrics: UiTelemetryService;
+  settingsOwner: SessionSettingsOwner;
+} {
   const retry = new RetryOrchestrator(transport, {
     maxAttempts: retryConfig?.maxAttempts ?? 3,
     initialDelayMs: retryConfig?.initialDelayMs ?? 1,
     maxDelayMs: 10,
   });
-  const wrapperSettings1 = fixtureOwners.adopt(
-    config,
-    new SettingsService(),
-  ).settingsOwner;
+  const wrapperSettings1 =
+    selectedOwner ??
+    fixtureOwners.adopt(config, new SettingsService()).settingsOwner;
   const wrapper = new LoggingProviderWrapper(retry, config, undefined, () =>
     captureProviderRequestDiagnostics(config, wrapperSettings1),
   );
@@ -120,7 +125,10 @@ export function buildStack(
     config,
     metadata: {},
   }));
-  return wrapper;
+  return Object.assign(wrapper, {
+    metrics: wrapperSettings1.telemetry.localMetrics,
+    settingsOwner: wrapperSettings1,
+  });
 }
 
 export class SuccessProvider implements IProvider {

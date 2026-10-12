@@ -1,4 +1,3 @@
-import { createAgentMetrics } from './agentMetrics.js';
 import { AuxiliaryWork } from '../core/auxiliary-work.js';
 /**
  * @license
@@ -279,6 +278,7 @@ export class AgentImpl implements Agent {
   readonly listAvailableModels: Agent['listAvailableModels'];
 
   constructor(private readonly deps: AgentDeps) {
+    this.metrics = deps.settingsOwner.telemetry.localMetrics;
     this.sessionClient = deps.sessionClient.operations;
     const reads = assembleProviderReads(
       deps.providerManager,
@@ -956,19 +956,19 @@ export class AgentImpl implements Agent {
 
   /**
    * Returns a populated SessionStats snapshot projected from the in-process
-   * uiTelemetryService singleton and the HistoryService. Every field is
+   * session-owned metric source and the HistoryService. Every field is
    * guaranteed to be a number (defaulting to 0 via ?? 0).
    * @plan:PLAN-20260617-COREAPI.P20
    * @requirement:REQ-010
    */
-  readonly metrics = createAgentMetrics();
+  readonly metrics: Agent['metrics'];
 
   readonly getStats = (): SessionStats =>
-    projectSessionStats(this.historyService);
+    projectSessionStats(this.historyService, this.metrics);
 
   /**
    * Subscribes to live SessionStats updates. Stats are sourced from the
-   * uiTelemetryService 'update' event (fired during a stream turn). A single
+   * session metric subscription (fired during a stream turn). A single
    * immediate projection is also delivered at subscription time so callers are
    * guaranteed at least one stats frame even if no turn runs before the
    * subscription is torn down.
@@ -976,7 +976,7 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-010
    */
   readonly onStats = (cb: (stats: SessionStats) => void): Unsubscribe =>
-    subscribeSessionStats(() => this.historyService, cb);
+    subscribeSessionStats(() => this.historyService, cb, this.metrics);
 
   /**
    * Side-channel single-shot generation. Delegates to the client's detached

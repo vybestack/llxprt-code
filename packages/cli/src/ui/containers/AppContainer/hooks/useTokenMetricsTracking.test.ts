@@ -32,9 +32,6 @@ void vi.mock('@vybestack/llxprt-code-telemetry', () => {
   return {
     ...actual,
     DebugLogger: DebugLoggerStub,
-    uiTelemetryService: {
-      setTokenTrackingMetrics: () => {},
-    },
   };
 });
 

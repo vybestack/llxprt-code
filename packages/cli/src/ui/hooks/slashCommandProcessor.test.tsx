@@ -101,12 +101,6 @@ const coreMocks = (() => {
   class StubLogger {
     debug = vi.fn();
   }
-  const uiTelemetryService = {
-    on: vi.fn(),
-    off: vi.fn(),
-    getMetrics: vi.fn(() => ({})),
-    getLastPromptTokenCount: vi.fn(() => 0),
-  };
   return {
     Config: actualCore.Config,
     GitService: vi.fn(),
@@ -128,7 +122,6 @@ const coreMocks = (() => {
     Storage: class {},
     ProfileManager: class {},
     SubagentManager: class {},
-    uiTelemetryService,
     SessionMetrics: class {},
     ModelMetrics: class {},
     DebugLogger: class {

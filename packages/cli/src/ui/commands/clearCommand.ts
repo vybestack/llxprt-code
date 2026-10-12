@@ -26,7 +26,6 @@ export const clearCommand: SlashCommand = {
 
       try {
         await agent.session.startNewSession();
-        agent.metrics.reset();
       } catch (error) {
         if (!(error instanceof AgentBusyError)) throw error;
         return {
