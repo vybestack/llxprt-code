@@ -462,10 +462,8 @@ export class AgentClient
   }
 
   async addHistory(content: IContent) {
-    // Ensure chat is initialized before adding history
-    if (!this.hasChatInitialized()) {
-      await this.resetChat();
-    }
+    // Start the chat on any stored history; resetting would discard it.
+    this.chat ??= await this.startChat([]);
     await this.getChat().admitAndAddHistory(content);
   }
 

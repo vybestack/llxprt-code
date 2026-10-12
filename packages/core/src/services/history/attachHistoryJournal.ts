@@ -253,9 +253,15 @@ export async function appendHistoryJournal(
           destinationRewound: true,
         };
       }
-      let watermark = await destination.commit('rewind', {
-        itemsRemoved: count,
-      });
+      // A zero-length rewind on a destination that was never materialized
+      // removes nothing, and committing it would write an empty session file
+      // that --continue and the session list would then treat as a session.
+      // The file stays unwritten until the first content row, as before the
+      // journal model.
+      let watermark: CommitWatermark =
+        destination.getFilePath() === null
+          ? { seq: destination.getLastEnqueuedSequence(), byteOffset: 0 }
+          : await destination.commit('rewind', { itemsRemoved: count });
       for await (const entry of acceptedEntries(resolver, staged, accept)) {
         requireLiveSource(isCancelled);
         watermark = await destination.commit('content', {

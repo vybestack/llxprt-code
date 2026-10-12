@@ -76,9 +76,16 @@ describe('source-backed prompt envelope seam', () => {
 
 async function testSource1(): Promise<void> {
   const fixture = await diskSource(root(), 64, true);
-  const { provider, events, buildOptions } = lifecycleProvider();
+  const { provider, events, buildOptions, tokenizerFactory } =
+    lifecycleProvider();
   const expected = await digest(fixture.source);
-  const preparer = createSourcePromptEnvelopePreparer(provider, buildOptions);
+  const preparer = createSourcePromptEnvelopePreparer(
+    provider,
+    buildOptions,
+    undefined,
+    undefined,
+    tokenizerFactory,
+  );
   try {
     const prepared = await preparer.prepare(fixture.source);
     expect(prepared).toBe(await preparer.prepare(fixture.source));
@@ -99,12 +106,14 @@ async function testSource1(): Promise<void> {
 async function testSource2(): Promise<void> {
   const full = await diskSource(root());
   const reduced = await diskSource(root(), 2);
-  const { provider, events, buildOptions } = lifecycleProvider();
+  const { provider, events, buildOptions, tokenizerFactory } =
+    lifecycleProvider();
   const estimates: number[] = [];
   const result = await prepareSourcePromptEnvelopeAfterEnforcement({
     provider,
     source: full.source,
     buildOptions,
+    tokenizerFactory,
     enforce: async (_source, estimate) => {
       estimates.push(await estimate(full.source));
       estimates.push(await estimate(reduced.source));
@@ -123,12 +132,14 @@ async function testSource2(): Promise<void> {
 
 async function testSource3(): Promise<void> {
   const fixture = await diskSource(root());
-  const { provider, events, buildOptions } = lifecycleProvider();
+  const { provider, events, buildOptions, tokenizerFactory } =
+    lifecycleProvider();
   await expect(
     prepareSourcePromptEnvelopeAfterEnforcement({
       provider,
       source: fixture.source,
       buildOptions,
+      tokenizerFactory,
       enforce: async (source, estimate) => {
         await estimate(source);
         throw new Error('context limit');
@@ -141,7 +152,7 @@ async function testSource3(): Promise<void> {
 
 async function testSource4(): Promise<void> {
   const fixture = await diskSource(root());
-  const { provider, buildOptions } = lifecycleProvider();
+  const { provider, buildOptions, tokenizerFactory } = lifecycleProvider();
   const unsupported = {
     ...provider,
     projectPromptEnvelope: async () => undefined,
@@ -151,6 +162,7 @@ async function testSource4(): Promise<void> {
       provider: unsupported,
       source: fixture.source,
       buildOptions,
+      tokenizerFactory,
       enforce: async (source, estimate) => {
         await estimate(source);
         return source;
@@ -164,7 +176,8 @@ async function testSource4(): Promise<void> {
 
 async function testSource5(): Promise<void> {
   const fixture = await diskSource(root());
-  const { provider, events, buildOptions } = lifecycleProvider();
+  const { provider, events, buildOptions, tokenizerFactory } =
+    lifecycleProvider();
   const retryContext = { requestId: 'retry-source', observedTokens: 27 };
   let temperature = 0;
   const attempts: number[] = [];
@@ -176,6 +189,7 @@ async function testSource5(): Promise<void> {
       resolved: { temperature },
       metadata: { _retryRequestContext: retryContext },
     }),
+    tokenizerFactory,
     enforce: async (source, estimate) => {
       await estimate(source);
       return source;
@@ -210,13 +224,14 @@ async function testSource6(
   mode: 'complete' | 'return' | 'abort',
 ): Promise<void> {
   const fixture = await diskSource(root());
-  const { provider, buildOptions } = lifecycleProvider();
+  const { provider, buildOptions, tokenizerFactory } = lifecycleProvider();
   const controller = new AbortController();
   let responseClosed = false;
   const stream = await enforceAndStreamSourcePromptEnvelopeRetries({
     provider,
     source: fixture.source,
     buildOptions,
+    tokenizerFactory,
     signal: controller.signal,
     enforce: async (source, estimate) => {
       await estimate(source);
@@ -254,12 +269,14 @@ async function testSource7(
   mode: 'complete' | 'return' | 'abort',
 ): Promise<void> {
   const fixture = await diskSource(root());
-  const { provider, events, buildOptions } = lifecycleProvider();
+  const { provider, events, buildOptions, tokenizerFactory } =
+    lifecycleProvider();
   const controller = new AbortController();
   const stream = await enforceAndStreamSourcePromptEnvelopeRetries({
     provider,
     source: fixture.source,
     buildOptions,
+    tokenizerFactory,
     signal: controller.signal,
     enforce: async (source, estimate) => {
       await estimate(source);
@@ -280,13 +297,15 @@ async function testSource7(
 
 async function testSource8(): Promise<void> {
   const fixture = await diskSource(root());
-  const { provider, events, buildOptions } = lifecycleProvider();
+  const { provider, events, buildOptions, tokenizerFactory } =
+    lifecycleProvider();
   const controller = new AbortController();
   await expect(
     prepareSourcePromptEnvelopeAfterEnforcement({
       provider,
       source: fixture.source,
       buildOptions,
+      tokenizerFactory,
       signal: controller.signal,
       enforce: async (source, estimate) => {
         await estimate(source);
@@ -322,6 +341,7 @@ describe('source prompt cancellation and ownership', () => {
         provider,
         source: fixture.source,
         buildOptions: setup.buildOptions,
+        tokenizerFactory: setup.tokenizerFactory,
         signal: controller.signal,
         enforce: async (source, estimate) => {
           await estimate(source);
@@ -336,8 +356,14 @@ describe('source prompt cancellation and ownership', () => {
 
   it('does not retain projected disk rows while the source lease is alive', async () => {
     const fixture = await diskSource(root(), 64, true);
-    const { provider, buildOptions } = lifecycleProvider();
-    const preparer = createSourcePromptEnvelopePreparer(provider, buildOptions);
+    const { provider, buildOptions, tokenizerFactory } = lifecycleProvider();
+    const preparer = createSourcePromptEnvelopePreparer(
+      provider,
+      buildOptions,
+      undefined,
+      undefined,
+      tokenizerFactory,
+    );
     try {
       const prepared = await preparer.prepare(fixture.source);
       await Promise.all(
@@ -357,11 +383,13 @@ describe('source prompt cancellation and ownership', () => {
 
   it('releases owner and projection after a non-retryable first-chunk failure', async () => {
     const fixture = await diskSource(root());
-    const { provider, events, buildOptions } = lifecycleProvider();
+    const { provider, events, buildOptions, tokenizerFactory } =
+      lifecycleProvider();
     const stream = await enforceAndStreamSourcePromptEnvelopeRetries({
       provider,
       source: fixture.source,
       buildOptions,
+      tokenizerFactory,
       enforce: async (source, estimate) => {
         await estimate(source);
         return source;
@@ -417,8 +445,15 @@ async function finishResponse(
 describe('source prompt envelope cleanup and retry (issue 3507 equivalents)', () => {
   it('immutably binds the timeout signal while preserving the prepared projection and disk identity', async () => {
     const fixture = await diskSource(root());
-    const { provider, events, buildOptions } = lifecycleProvider();
-    const preparer = createSourcePromptEnvelopePreparer(provider, buildOptions);
+    const { provider, events, buildOptions, tokenizerFactory } =
+      lifecycleProvider();
+    const preparer = createSourcePromptEnvelopePreparer(
+      provider,
+      buildOptions,
+      undefined,
+      undefined,
+      tokenizerFactory,
+    );
     try {
       const prepared = await preparer.prepare(fixture.source);
       const callerSignal = new AbortController().signal;
@@ -442,13 +477,14 @@ describe('source prompt envelope cleanup and retry (issue 3507 equivalents)', ()
 
   it('uses the contents-only fallback estimate when the provider cannot project an envelope', async () => {
     const fixture = await diskSource(root());
-    const { provider, buildOptions } = lifecycleProvider();
+    const { provider, buildOptions, tokenizerFactory } = lifecycleProvider();
     const withoutProjection = { ...provider, projectPromptEnvelope: undefined };
     const fallbackSources: unknown[] = [];
     const result = await prepareSourcePromptEnvelopeAfterEnforcement({
       provider: withoutProjection,
       source: fixture.source,
       buildOptions,
+      tokenizerFactory,
       fallbackEstimate: async (source) => {
         fallbackSources.push(source);
         return 901;
@@ -469,7 +505,7 @@ describe('source prompt envelope cleanup and retry (issue 3507 equivalents)', ()
 
   it('uses the contents-only fallback estimate when the provider resolves an undefined projection', async () => {
     const fixture = await diskSource(root());
-    const { provider, buildOptions } = lifecycleProvider();
+    const { provider, buildOptions, tokenizerFactory } = lifecycleProvider();
     const unprojected = {
       ...provider,
       projectPromptEnvelope: async () => undefined,
@@ -478,6 +514,7 @@ describe('source prompt envelope cleanup and retry (issue 3507 equivalents)', ()
       provider: unprojected,
       source: fixture.source,
       buildOptions,
+      tokenizerFactory,
       fallbackEstimate: async () => 902,
       enforce: async (source) => source,
     });
@@ -491,11 +528,13 @@ describe('source prompt envelope cleanup and retry (issue 3507 equivalents)', ()
   it('keeps the selected projection reserved for transport and reuses it on the first attempt', async () => {
     const full = await diskSource(root());
     const reduced = await diskSource(root(), 2);
-    const { provider, events, buildOptions } = lifecycleProvider();
+    const { provider, events, buildOptions, tokenizerFactory } =
+      lifecycleProvider();
     const result = await prepareSourcePromptEnvelopeAfterEnforcement({
       provider,
       source: full.source,
       buildOptions,
+      tokenizerFactory,
       enforce: async (_source, estimate) => {
         await estimate(full.source);
         await estimate(reduced.source);
@@ -512,7 +551,8 @@ describe('source prompt envelope cleanup and retry (issue 3507 equivalents)', ()
 
   it('awaits projection cleanup before an enforcement failure escapes', async () => {
     const fixture = await diskSource(root());
-    const { provider, events, buildOptions } = lifecycleProvider();
+    const { provider, events, buildOptions, tokenizerFactory } =
+      lifecycleProvider();
     const cleanupEvents: string[] = [];
     const slowRelease = {
       ...provider,
@@ -538,6 +578,7 @@ describe('source prompt envelope cleanup and retry (issue 3507 equivalents)', ()
       provider: slowRelease,
       source: fixture.source,
       buildOptions,
+      tokenizerFactory,
       enforce: async (source, estimate) => {
         await estimate(source);
         throw new Error('enforcement failed');
@@ -552,7 +593,8 @@ describe('source prompt envelope cleanup and retry (issue 3507 equivalents)', ()
 
   it('does not project or send when enforcement rejects before estimating', async () => {
     const fixture = await diskSource(root());
-    const { provider, events, buildOptions } = lifecycleProvider();
+    const { provider, events, buildOptions, tokenizerFactory } =
+      lifecycleProvider();
     let sendCount = 0;
 
     await expect(
@@ -560,6 +602,7 @@ describe('source prompt envelope cleanup and retry (issue 3507 equivalents)', ()
         provider,
         source: fixture.source,
         buildOptions,
+        tokenizerFactory,
         enforce: () => Promise.reject(new Error('enforcement failed')),
         shouldRetryOnError: () => false,
         async *send() {
@@ -576,11 +619,13 @@ describe('source prompt envelope cleanup and retry (issue 3507 equivalents)', ()
 
   it('keeps the projection reserved while a send is consuming it and discharges it once afterwards', async () => {
     const fixture = await diskSource(root());
-    const { provider, events, buildOptions } = lifecycleProvider();
+    const { provider, events, buildOptions, tokenizerFactory } =
+      lifecycleProvider();
     const stream = await enforceAndStreamSourcePromptEnvelopeRetries({
       provider,
       source: fixture.source,
       buildOptions,
+      tokenizerFactory,
       enforce: async (source, estimate) => {
         await estimate(source);
         return source;
@@ -606,7 +651,8 @@ describe('source prompt envelope cleanup and retry (issue 3507 equivalents)', ()
 
   it('hands each retry attempt a fresh projection and releases only the prior unsent one', async () => {
     const fixture = await diskSource(root());
-    const { provider, events, buildOptions } = lifecycleProvider();
+    const { provider, events, buildOptions, tokenizerFactory } =
+      lifecycleProvider();
     const observedAttempts: Array<{
       readonly attemptIndex: number;
       readonly transportToken: object | undefined;
@@ -616,6 +662,7 @@ describe('source prompt envelope cleanup and retry (issue 3507 equivalents)', ()
       provider,
       source: fixture.source,
       buildOptions,
+      tokenizerFactory,
       enforce: async (source, estimate) => {
         await estimate(source);
         return source;
@@ -653,8 +700,15 @@ describe('source prompt envelope cleanup and retry (issue 3507 equivalents)', ()
 
   it('prepares a fresh projection after discarding the prior projection for the same source', async () => {
     const fixture = await diskSource(root());
-    const { provider, events, buildOptions } = lifecycleProvider();
-    const preparer = createSourcePromptEnvelopePreparer(provider, buildOptions);
+    const { provider, events, buildOptions, tokenizerFactory } =
+      lifecycleProvider();
+    const preparer = createSourcePromptEnvelopePreparer(
+      provider,
+      buildOptions,
+      undefined,
+      undefined,
+      tokenizerFactory,
+    );
     try {
       const first = await preparer.prepare(fixture.source);
       await preparer.discardProjection();
@@ -673,7 +727,7 @@ describe('source prompt envelope cleanup and retry (issue 3507 equivalents)', ()
 
   it('releases every unsent projection and owner and aggregates cleanup failures', async () => {
     const fixture = await diskSource(root());
-    const { provider, buildOptions } = lifecycleProvider();
+    const { provider, buildOptions, tokenizerFactory } = lifecycleProvider();
     const failingRelease = {
       ...provider,
       projectPromptEnvelope: async (
@@ -701,6 +755,9 @@ describe('source prompt envelope cleanup and retry (issue 3507 equivalents)', ()
     const preparer = createSourcePromptEnvelopePreparer(
       failingRelease,
       buildOptions,
+      undefined,
+      undefined,
+      tokenizerFactory,
     );
     await preparer.prepare(failingClose);
 

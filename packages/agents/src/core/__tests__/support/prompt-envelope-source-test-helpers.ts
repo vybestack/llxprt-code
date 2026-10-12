@@ -9,6 +9,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { BoundarySnapshotDisk } from '../../boundary-snapshot-disk.js';
 import type { PromptEnvelopeSource } from '../../promptEnvelopeSendSeam.js';
@@ -125,7 +126,16 @@ export function lifecycleProvider() {
     contents: { [Symbol.asyncIterator]: () => source.openReader() },
     requestRows: source,
     contentCount: source.count,
-    config: runtime.config,
+    invocation: createRuntimeInvocationContext({
+      runtimeId: 'source-lifecycle-runtime',
+      providerName: provider.name,
+      ephemeralsSnapshot: {},
+    }),
   });
-  return { provider, events, buildOptions };
+  return {
+    provider,
+    events,
+    buildOptions,
+    tokenizerFactory: runtime.tokenizerFactory,
+  };
 }
