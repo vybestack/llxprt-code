@@ -77,7 +77,9 @@ describe('Agent recording identity transitions', () => {
       const owner = await build('identity-owner');
       const config = internalConfig(owner.agent);
       const restored = await owner.agent.session.resume('identity-source');
-      expect(JSON.stringify(restored)).toContain('identity-seed');
+      expect(JSON.stringify(await Array.fromAsync(restored))).toContain(
+        'identity-seed',
+      );
       expect(config.getSessionId()).toBe('identity-source');
       expect(owner.agent.getRuntimeId()).toBe('identity-owner');
       expect(owner.agent.session.getRecording().path).toBe(sourcePath);
