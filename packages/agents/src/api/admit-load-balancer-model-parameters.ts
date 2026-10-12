@@ -6,7 +6,7 @@
 
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
-import { LoadBalancingProvider } from '../LoadBalancingProvider.js';
+import { LoadBalancingProvider } from '@vybestack/llxprt-code-providers';
 
 export function admitLoadBalancerModelParameters(
   provider: unknown,

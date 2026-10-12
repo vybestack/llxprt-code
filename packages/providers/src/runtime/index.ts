@@ -5,7 +5,6 @@
  */
 
 export { admitModelParameters } from './admitModelParameters.js';
-export { admitLoadBalancerModelParameters } from './admitLoadBalancerModelParameters.js';
 export { createProviderKeyStorage } from '../auth/index.js';
 export {
   createRuntimeActivationBindings,

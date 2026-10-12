@@ -8,7 +8,7 @@ import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { AdmittedProviderRoute } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import { admitModelParameters } from '@vybestack/llxprt-code-providers/runtime/admitModelParameters.js';
-import { admitLoadBalancerModelParameters } from '@vybestack/llxprt-code-providers/runtime/admitLoadBalancerModelParameters.js';
+import { admitLoadBalancerModelParameters } from './admit-load-balancer-model-parameters.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { LoopHolder } from './loop/rebuildLoop.js';
 import {

@@ -56,11 +56,6 @@
       "bun": "./src/runtime/admitModelParameters.ts",
       "import": "./dist/src/runtime/admitModelParameters.js"
     },
-    "./runtime/admitLoadBalancerModelParameters.js": {
-      "types": "./dist/src/runtime/admitLoadBalancerModelParameters.d.ts",
-      "bun": "./src/runtime/admitLoadBalancerModelParameters.ts",
-      "import": "./dist/src/runtime/admitLoadBalancerModelParameters.js"
-    },
     "./runtime/runtimeLifecycle.js": {
       "types": "./dist/src/runtime/runtimeLifecycle.d.ts",
       "bun": "./src/runtime/runtimeLifecycle.ts",
