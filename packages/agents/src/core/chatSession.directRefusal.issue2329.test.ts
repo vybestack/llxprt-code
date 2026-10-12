@@ -127,6 +127,7 @@ describe('Issue 2329: direct-path refusal preservation @issue:2329', () => {
     });
     return new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,

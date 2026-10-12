@@ -134,6 +134,7 @@ function buildFallbackCompression(
     const context = await buildCompressionContext(
       promptId,
       runtimeContext,
+      undefined,
       historyService,
       () =>
         Promise.resolve({
@@ -247,6 +248,7 @@ describe('ProviderContentEnforcer compression-callback escalation (issue #3499)'
     const pending = makePending();
     const chat = new ChatSession(
       runtimeContext,
+      undefined,
       undefined,
       undefined,
       undefined,

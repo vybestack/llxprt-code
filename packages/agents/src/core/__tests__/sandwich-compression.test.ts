@@ -196,6 +196,7 @@ describe('Sandwich Compression (Issue #1011)', () => {
           undefined,
           undefined,
           undefined,
+          undefined,
           mockContentGenerator,
           {},
           [],
@@ -251,6 +252,7 @@ describe('Sandwich Compression (Issue #1011)', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -290,6 +292,7 @@ describe('Sandwich Compression (Issue #1011)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
         undefined,
         undefined,
         undefined,
@@ -360,6 +363,7 @@ describe('Sandwich Compression (Issue #1011)', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -419,6 +423,7 @@ describe('Sandwich Compression (Issue #1011)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
         undefined,
         undefined,
         undefined,

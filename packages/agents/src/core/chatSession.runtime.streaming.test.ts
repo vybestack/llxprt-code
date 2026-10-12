@@ -158,6 +158,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
 
     const chat = new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,
@@ -268,6 +269,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
 
       const chat = new ChatSession(
         view,
+        config,
         undefined,
         undefined,
         undefined,
@@ -389,6 +391,7 @@ describe('ChatSession runtime streaming and abort behavior', () => {
 
       const chat = new ChatSession(
         view,
+        config,
         undefined,
         undefined,
         undefined,

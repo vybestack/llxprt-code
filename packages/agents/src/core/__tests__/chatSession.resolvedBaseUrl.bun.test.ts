@@ -90,6 +90,7 @@ function createChatSession(options: {
     undefined,
     undefined,
     undefined,
+    undefined,
     UNUSED_CONTENT_GENERATOR,
     {},
     [],

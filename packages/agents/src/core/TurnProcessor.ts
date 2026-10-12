@@ -9,6 +9,7 @@ import {
   StreamEventType,
   type StreamEvent,
 } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
@@ -149,6 +150,7 @@ export class TurnProcessor {
 
   constructor(
     private runtimeContext: AgentRuntimeContext,
+    private readonly config: Config | undefined,
     private readonly mediaResolver: RequestMediaResolutionService | undefined,
     private readonly requestMediaBudgetBytes: number | undefined,
     private providerFileBindings: ProviderFileBindingStore | undefined,
@@ -579,7 +581,7 @@ export class TurnProcessor {
       this.requestMediaBudgetBytes,
       this.providerFileBindings,
       this.providerFileLifecycle,
-      runtimeContext.config?.getTargetDir(),
+      this.config?.getTargetDir(),
     );
     return enforceAndSendWithPromptEnvelopeRetries({
       provider,

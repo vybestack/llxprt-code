@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type {
   ModelOutput,
@@ -124,6 +125,7 @@ export class StreamProcessor {
 
   constructor(
     private runtimeContext: AgentRuntimeContext,
+    private readonly config: Config | undefined,
     private readonly mediaResolver: RequestMediaResolutionService | undefined,
     private readonly requestMediaBudgetBytes: number | undefined,
     private providerFileBindings: ProviderFileBindingStore | undefined,
@@ -344,17 +346,14 @@ export class StreamProcessor {
     );
   }
 
-  private _bindProviderMediaAndFiles(
-    provider: IProvider,
-    runtimeContext: ProviderRequestCollaborators,
-  ): IProvider {
+  private _bindProviderMediaAndFiles(provider: IProvider): IProvider {
     return bindProviderMediaAndFiles(
       provider,
       this.mediaResolver,
       this.requestMediaBudgetBytes,
       this.providerFileBindings,
       this.providerFileLifecycle,
-      runtimeContext.config?.getTargetDir(),
+      this.config?.getTargetDir(),
     );
   }
 
@@ -373,7 +372,7 @@ export class StreamProcessor {
     const { requestPayload, baseRuntimeContext, runtimeContext } =
       this._prepareRequestPayload(requestContents, toolSelection, params);
 
-    provider = this._bindProviderMediaAndFiles(provider, runtimeContext);
+    provider = this._bindProviderMediaAndFiles(provider);
 
     try {
       const { contents: finalContents, pendingContents } =

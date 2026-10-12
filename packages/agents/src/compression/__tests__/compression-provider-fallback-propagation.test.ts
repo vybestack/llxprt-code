@@ -194,6 +194,7 @@ describe('Finding 1: provider fallback failure propagation through real Compress
     const providerResult: CompressionProviderResult = { provider };
     handler = new CompressionHandler(
       runtimeContext,
+      undefined,
       historyService,
       undefined,
       undefined,

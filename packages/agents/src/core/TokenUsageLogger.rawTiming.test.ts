@@ -273,6 +273,7 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
 
     const chat = new ChatSession(
       view,
+      fixture.mockConfig,
       undefined,
       undefined,
       undefined,
@@ -360,6 +361,7 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
 
     const chat = new ChatSession(
       view,
+      fixture.mockConfig,
       undefined,
       undefined,
       undefined,
@@ -445,6 +447,7 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
 
     const chat = new ChatSession(
       view,
+      fixture.mockConfig,
       undefined,
       undefined,
       undefined,
@@ -491,6 +494,7 @@ describe('TokenUsageLogger raw token-delta timing (#3493)', () => {
     const view = buildTokenSyncView(fixture, mockProvider, sessionId);
     const chat = new ChatSession(
       view,
+      fixture.mockConfig,
       undefined,
       undefined,
       undefined,

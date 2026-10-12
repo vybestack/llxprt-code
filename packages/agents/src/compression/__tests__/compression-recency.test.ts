@@ -99,6 +99,7 @@ function makeChatSession(
 
   return new ChatSession(
     view,
+    runtimeSetup.config,
     undefined,
     undefined,
     undefined,

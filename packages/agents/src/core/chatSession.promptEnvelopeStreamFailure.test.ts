@@ -184,6 +184,7 @@ function buildChatSession(fixture: TestFixture): ChatSession {
 
   return new ChatSession(
     view,
+    fixture.mockConfig,
     undefined,
     undefined,
     undefined,

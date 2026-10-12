@@ -122,6 +122,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
 
     const chat = new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,
@@ -225,6 +226,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
 
     const chat = new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,
@@ -361,6 +363,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
 
     const chat = new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,
@@ -541,6 +544,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
 
     const chat = new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,
@@ -644,6 +648,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
 
     const chat = new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,
@@ -754,6 +759,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
 
     const chat = new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,
@@ -841,6 +847,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
 
       const chat = new ChatSession(
         view,
+        config,
         undefined,
         undefined,
         undefined,

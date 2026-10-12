@@ -303,6 +303,7 @@ async function createFixture(
   return {
     chat: new ChatSession(
       runtime,
+      setup.config,
       undefined,
       undefined,
       undefined,

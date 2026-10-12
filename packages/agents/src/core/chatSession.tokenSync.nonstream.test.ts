@@ -133,6 +133,7 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
 
       chat = new ChatSession(
         view,
+        mockConfig,
         undefined,
         undefined,
         undefined,
@@ -245,6 +246,7 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
 
       chat = new ChatSession(
         view,
+        mockConfig,
         undefined,
         undefined,
         undefined,
@@ -345,6 +347,7 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
 
       chat = new ChatSession(
         view,
+        mockConfig,
         undefined,
         undefined,
         undefined,
@@ -435,6 +438,7 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
 
       chat = new ChatSession(
         view,
+        mockConfig,
         undefined,
         undefined,
         undefined,
@@ -514,6 +518,7 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
 
       chat = new ChatSession(
         view,
+        mockConfig,
         undefined,
         undefined,
         undefined,

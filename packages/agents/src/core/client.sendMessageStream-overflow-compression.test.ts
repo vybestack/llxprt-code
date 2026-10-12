@@ -435,6 +435,7 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
         undefined,
         undefined,
         undefined,
+        undefined,
         buildMockContentGenerator(),
         { maxOutputTokens: 100 },
         [],

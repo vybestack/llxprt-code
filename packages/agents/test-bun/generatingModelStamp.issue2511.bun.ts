@@ -329,6 +329,7 @@ function buildChatSessionWithLiveProvider(
 
   const chat = new ChatSession(
     view,
+    config,
     undefined,
     undefined,
     undefined,

@@ -84,9 +84,13 @@ describe('ChatSession media history boundaries', () => {
 
   it('materializes selected local media across non-streaming, streaming and direct requests', async () => {
     const encodings: string[] = [];
-    const chat = createChat(async (_request, _bindings, contents) => {
-      encodings.push(...mediaEncodings(contents));
-    });
+    const workspaces: Array<string | undefined> = [];
+    const chat = createChat(
+      async (_request, _bindings, contents, workspace) => {
+        encodings.push(...mediaEncodings(contents));
+        workspaces.push(workspace);
+      },
+    );
     await chat.setHistory(mediaHistory());
     await chat.sendMessage({ message: 'inspect image' }, 'selected-nonstream');
     for await (const event of await chat.sendMessageStream(
@@ -101,6 +105,11 @@ describe('ChatSession media history boundaries', () => {
     );
     expect(encodings.filter((encoding) => encoding === 'base64')).toHaveLength(
       3,
+    );
+    const selectedConfig = chat.getConfig();
+    assertDefined(selectedConfig);
+    expect(workspaces).toStrictEqual(
+      Array(3).fill(selectedConfig.getTargetDir()),
     );
     await chat.clearHistory();
   });
@@ -466,6 +475,7 @@ describe('ChatSession media history boundaries', () => {
     return {
       chat: new ChatSession(
         runtime,
+        setup.config,
         undefined,
         undefined,
         undefined,

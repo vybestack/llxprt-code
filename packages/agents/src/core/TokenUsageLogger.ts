@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { appendFile, mkdir } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -723,9 +724,9 @@ export class TokenUsageLogger {
 
 export function createTokenUsageLogger(
   view: AgentRuntimeContext,
+  config: Config | undefined,
 ): TokenUsageLogger {
   const tokenUsageEnabled = view.tokenUsageLoggingEnabled;
-  const config = view.providerRuntime.config;
   const sessionId = view.state.sessionId;
   let logFilePath: string | undefined;
   if (tokenUsageEnabled && config) {

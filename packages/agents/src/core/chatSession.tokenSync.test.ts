@@ -136,6 +136,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
 
       chat = new ChatSession(
         view,
+        mockConfig,
         undefined,
         undefined,
         undefined,
@@ -235,6 +236,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
 
       chat = new ChatSession(
         view,
+        mockConfig,
         undefined,
         undefined,
         undefined,
@@ -334,6 +336,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
 
       chat = new ChatSession(
         view,
+        mockConfig,
         undefined,
         undefined,
         undefined,
@@ -440,6 +443,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
 
       chat = new ChatSession(
         view,
+        mockConfig,
         undefined,
         undefined,
         undefined,
@@ -531,6 +535,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
 
       chat = new ChatSession(
         view,
+        mockConfig,
         undefined,
         undefined,
         undefined,
@@ -623,6 +628,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
 
       chat = new ChatSession(
         view,
+        mockConfig,
         undefined,
         undefined,
         undefined,

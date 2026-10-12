@@ -279,11 +279,11 @@ describe('buildSystemInstruction', () => {
   });
 });
 
-/** The generation config is the seventh ChatSession constructor argument. */
+/** The generation config is the eighth ChatSession constructor argument. */
 function chatSessionGenerationConfig(): unknown {
   const call = (ChatSession as unknown as Mock<(...args: unknown[]) => unknown>)
     .mock.calls[0];
-  return call[6];
+  return call[7];
 }
 
 describe('createChatSession', () => {

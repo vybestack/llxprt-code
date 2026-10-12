@@ -221,6 +221,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
     const chat = new ChatSession(
       view,
+      fixture.mockConfig,
       undefined,
       undefined,
       undefined,
@@ -312,6 +313,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
     const chat = new ChatSession(
       view,
+      fixture.mockConfig,
       undefined,
       undefined,
       undefined,
@@ -390,6 +392,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
     const chat = new ChatSession(
       view,
+      fixture.mockConfig,
       undefined,
       undefined,
       undefined,
@@ -501,6 +504,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
     const chat = new ChatSession(
       view,
+      fixture.mockConfig,
       undefined,
       undefined,
       undefined,
@@ -597,6 +601,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
     const chat = new ChatSession(
       view,
+      fixture.mockConfig,
       undefined,
       undefined,
       undefined,
@@ -674,6 +679,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
     const chat = new ChatSession(
       view,
+      fixture.mockConfig,
       undefined,
       undefined,
       undefined,
@@ -778,6 +784,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
 
     const chat = new ChatSession(
       view,
+      fixture.mockConfig,
       undefined,
       undefined,
       undefined,
@@ -876,6 +883,7 @@ describe('TokenUsageLogger integration — ChatSession streaming', () => {
     );
     const chat = new ChatSession(
       view,
+      fixture.mockConfig,
       undefined,
       undefined,
       undefined,

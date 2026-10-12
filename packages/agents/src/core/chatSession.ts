@@ -246,6 +246,7 @@ export class ChatSession {
 
   constructor(
     private runtimeContext: AgentRuntimeContext,
+    private readonly config: Config | undefined,
     private readonly mediaResolver: RequestMediaResolutionService | undefined,
     private readonly requestMediaBudgetBytes: number | undefined,
     private providerFileBindings: ProviderFileBindingStore | undefined,
@@ -281,16 +282,15 @@ export class ChatSession {
     logChatInitialization(this.logger, model, initialHistory.length);
 
     // Create composed modules
-    const providerResolver = (ctx: string) =>
-      this.resolveProviderForRuntime(ctx);
-    const providerRuntimeBuilder = (s: string, m?: Record<string, unknown>) =>
-      this.buildProviderRuntime(s, m);
     const resolveBaseUrl = (p: IProvider) =>
       resolveProviderBaseUrl(p, this.runtimeState.baseUrl);
 
     this.compressionHandler = this.createCompression(triggerCompressionHook);
 
-    this.tokenUsageLogger = createTokenUsageLogger(this.runtimeContext);
+    this.tokenUsageLogger = createTokenUsageLogger(
+      this.runtimeContext,
+      this.config,
+    );
     this.compressionHandler.tokenUsageLogger = this.tokenUsageLogger;
 
     // Resolve the Anthropic default base URL at construction time so that
@@ -312,20 +312,22 @@ export class ChatSession {
 
     this.streamProcessor = new StreamProcessor(
       this.runtimeContext,
+      this.config,
       this.mediaResolver,
       this.requestMediaBudgetBytes,
       this.providerFileBindings,
       this.providerFileLifecycle,
       this.conversationManager,
       this.compressionHandler,
-      providerResolver,
-      providerRuntimeBuilder,
+      this.resolveProviderForRuntime.bind(this),
+      this.buildProviderRuntime.bind(this),
       this.historyService,
       this.generationConfig,
     );
 
     this.turnProcessor = new TurnProcessor(
       this.runtimeContext,
+      this.config,
       this.mediaResolver,
       this.requestMediaBudgetBytes,
       this.providerFileBindings,
@@ -344,6 +346,7 @@ export class ChatSession {
   private createDirectMessageProcessor(): DirectMessageProcessor {
     return new DirectMessageProcessor(
       this.runtimeContext,
+      this.config,
       this.mediaResolver,
       this.requestMediaBudgetBytes,
       this.providerFileBindings,
@@ -403,6 +406,7 @@ export class ChatSession {
   ): CompressionHandler {
     return new CompressionHandler(
       this.runtimeContext,
+      this.config,
       this.historyService,
       this.mediaResolver,
       this.requestMediaBudgetBytes,
@@ -1041,6 +1045,6 @@ export class ChatSession {
   }
 
   getConfig(): Config | undefined {
-    return this.runtimeContext.providerRuntime.config;
+    return this.config;
   }
 }

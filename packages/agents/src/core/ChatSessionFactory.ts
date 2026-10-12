@@ -283,6 +283,7 @@ async function buildChatFromRuntime(
         prepareProviderInvocation,
         profileDefinitions,
       },
+      config,
       runtimeBundle.runtimeContext.mediaResolver,
       config.getImagePayloadBudgetBytes(),
       createHistoryProviderFileBindingStore(historyService),

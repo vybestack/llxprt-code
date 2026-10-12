@@ -5,6 +5,7 @@
  */
 
 import { isSchemaDepthError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   AgentChatRecordingExecution,
   AgentClientGenerateConfig,
@@ -156,6 +157,7 @@ export class DirectMessageProcessor {
 
   constructor(
     private runtimeContext: AgentRuntimeContext,
+    private readonly config: Config | undefined,
     private readonly mediaResolver: RequestMediaResolutionService | undefined,
     private readonly requestMediaBudgetBytes: number | undefined,
     private providerFileBindings: ProviderFileBindingStore | undefined,
@@ -521,7 +523,7 @@ export class DirectMessageProcessor {
       this.requestMediaBudgetBytes,
       this.providerFileBindings,
       this.providerFileLifecycle,
-      runtimeContext.config?.getTargetDir(),
+      this.config?.getTargetDir(),
     ).generateChatCompletion({
       contents: contentsForApi,
       tools: effectiveToolsFromConfig,
@@ -564,7 +566,7 @@ export class DirectMessageProcessor {
     const requestTools = this._selectRequestTools(params);
     const toolsFromConfig = Array.isArray(requestTools) ? requestTools : [];
 
-    const configForHooks = this.runtimeContext.providerRuntime.config;
+    const configForHooks = this.config;
     let contentsForApi: IContent[] = userIContents;
     const toolSelection =
       configForHooks !== undefined

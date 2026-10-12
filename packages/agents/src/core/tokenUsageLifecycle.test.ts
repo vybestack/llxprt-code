@@ -184,6 +184,7 @@ function buildCompressionHandler(logFile: string): {
 
   const handler = new CompressionHandler(
     view,
+    runtimeSetup.config,
     historyService,
     undefined,
     undefined,

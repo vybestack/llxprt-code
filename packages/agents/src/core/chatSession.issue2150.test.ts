@@ -136,6 +136,7 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
 
     return new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,

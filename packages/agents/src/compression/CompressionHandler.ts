@@ -1,3 +1,4 @@
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 /**
@@ -127,6 +128,7 @@ export class CompressionHandler {
 
   constructor(
     private runtimeContext: AgentRuntimeContext,
+    private readonly config: Config | undefined,
     private historyService: HistoryService,
     private readonly mediaResolver: RequestMediaResolutionService | undefined,
     private readonly requestMediaBudgetBytes: number | undefined,
@@ -1030,6 +1032,7 @@ export class CompressionHandler {
     return buildContext(
       promptId,
       this.runtimeContext,
+      this.config,
       this.historyService,
       (profileName?) => Promise.resolve(this.providerResolver(profileName)),
       this.activeTodosProvider,

@@ -213,6 +213,7 @@ export function createFullLoopHarness(
 
   const chat = new ChatSession(
     view,
+    config,
     undefined,
     undefined,
     undefined,

@@ -124,6 +124,7 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
 
     return new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,

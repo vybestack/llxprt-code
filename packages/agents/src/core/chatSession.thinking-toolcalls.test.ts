@@ -182,6 +182,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     const chat = new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,
@@ -316,6 +317,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     const chat = new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,
@@ -444,6 +446,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     const chat = new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,
@@ -583,6 +586,7 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
 
     const chat = new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -29,6 +30,7 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 export async function buildCompressionContext(
   promptId: string,
   runtimeContext: AgentRuntimeContext,
+  config: Config | undefined,
   historyService: HistoryService,
   providerResolver: (
     profileName?: string,
@@ -52,8 +54,6 @@ export async function buildCompressionContext(
   // Resolved on every build so a recording service that is enabled, disabled,
   // or swapped mid-session (resume) is reflected at the next compression.
   const transcriptPath = transcriptPathProvider?.();
-
-  const config = runtimeContext.providerRuntime.config;
 
   return {
     history: historyService.getCurated(),

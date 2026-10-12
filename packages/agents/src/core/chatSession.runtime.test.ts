@@ -165,11 +165,12 @@ describe('ChatSession runtime context', () => {
         createSessionSettingsFixture(config).settingsOwner.telemetry,
       ),
       tools: createToolRegistryViewFromRegistry(modelTools()),
-      providerRuntime: { ...providerRuntime },
+      providerRuntime: { ...providerRuntime, config: undefined },
     });
 
     const chat = new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,
@@ -184,6 +185,7 @@ describe('ChatSession runtime context', () => {
       'prompt-123',
     );
 
+    expect(chat.getConfig()?.getTargetDir()).toBe(config.getTargetDir());
     expect(response).toBeDefined();
     expect(generateChatCompletionMock).toHaveBeenCalledTimes(1);
     expect(retryWithBackoff).toHaveBeenCalled();
@@ -317,6 +319,7 @@ describe('ChatSession runtime context', () => {
 
     const chat = new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,
@@ -448,6 +451,7 @@ describe('ChatSession runtime context', () => {
 
     const chat = new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,

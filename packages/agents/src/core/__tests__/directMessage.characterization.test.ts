@@ -201,6 +201,7 @@ function createDirectHarness(
 
   const chat = new ChatSession(
     view,
+    config,
     undefined,
     undefined,
     undefined,

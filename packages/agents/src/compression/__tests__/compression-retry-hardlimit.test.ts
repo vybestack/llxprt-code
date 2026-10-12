@@ -142,6 +142,7 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
 
     return new ChatSession(
       view,
+      runtimeSetup.config,
       undefined,
       undefined,
       undefined,

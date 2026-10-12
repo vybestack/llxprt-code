@@ -302,6 +302,7 @@ function createEnforcementSession(options: {
     undefined,
     undefined,
     undefined,
+    undefined,
     buildMockContentGenerator(),
     {},
     [],

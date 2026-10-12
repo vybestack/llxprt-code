@@ -672,6 +672,7 @@ export async function createChatObject(
     combinedDeclarations,
     startHistory,
     runtimeContext,
+    config,
     contentGenerator,
     logger,
     systemPromptAssembler,
@@ -757,6 +758,7 @@ function instantiateChat(
   combinedDeclarations: ToolDeclaration[],
   startHistory: IContent[],
   runtimeContext: AgentRuntimeContext,
+  config: Config,
   contentGenerator: ContentGenerator,
   _logger: { debug: (fn: () => string) => void },
   systemPromptAssembler: SystemPromptAssembler | undefined,
@@ -773,6 +775,7 @@ function instantiateChat(
 
     return new ChatSession(
       runtimeContext,
+      config,
       runtimeContext.mediaResolver,
       requestMediaBudgetBytes,
       createHistoryProviderFileBindingStore(runtimeContext.history),

@@ -190,6 +190,7 @@ describe('ChatSession - Runtime State Integration', () => {
           undefined,
           undefined,
           undefined,
+          undefined,
           contentGenerator,
           { systemInstruction: 'test' },
           [],
@@ -211,6 +212,7 @@ describe('ChatSession - Runtime State Integration', () => {
       expect(() => {
         new ChatSession(
           view,
+          undefined,
           undefined,
           undefined,
           undefined,
@@ -249,6 +251,7 @@ describe('ChatSession - Runtime State Integration', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
@@ -274,6 +277,7 @@ describe('ChatSession - Runtime State Integration', () => {
 
       const chat = new ChatSession(
         view,
+        undefined,
         undefined,
         undefined,
         undefined,
@@ -307,6 +311,7 @@ describe('ChatSession - Runtime State Integration', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
@@ -333,6 +338,7 @@ describe('ChatSession - Runtime State Integration', () => {
 
       const chat = new ChatSession(
         view,
+        undefined,
         undefined,
         undefined,
         undefined,
@@ -375,6 +381,7 @@ describe('ChatSession - Runtime State Integration', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
@@ -396,6 +403,7 @@ describe('ChatSession - Runtime State Integration', () => {
 
       const chat = new ChatSession(
         view,
+        undefined,
         undefined,
         undefined,
         undefined,
@@ -434,6 +442,7 @@ describe('ChatSession - Runtime State Integration', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
@@ -456,6 +465,7 @@ describe('ChatSession - Runtime State Integration', () => {
       const view = createTestRuntimeContext(runtimeState, root, historyService);
       const chat = new ChatSession(
         view,
+        undefined,
         undefined,
         undefined,
         undefined,
@@ -497,6 +507,7 @@ describe('ChatSession - Runtime State Integration', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
         contentGenerator,
         { systemInstruction: 'test' },
         [],
@@ -523,6 +534,7 @@ describe('ChatSession - Runtime State Integration', () => {
 
       new ChatSession(
         view,
+        undefined,
         undefined,
         undefined,
         undefined,

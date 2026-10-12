@@ -146,6 +146,7 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
 
     const chat = new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,

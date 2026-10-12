@@ -262,7 +262,7 @@ describe('subagent.ts', () => {
       const callArgs = (
         ChatSession as unknown as Mock<(...args: never[]) => unknown>
       ).mock.calls[callIndex];
-      const generationConfig = callArgs[6] as ChatSessionConfig | undefined;
+      const generationConfig = callArgs[7] as ChatSessionConfig | undefined;
       expect(generationConfig).toBeDefined();
       if (generationConfig === undefined)
         throw new Error('generationConfig is undefined');
@@ -366,7 +366,7 @@ describe('subagent.ts', () => {
       const callArgs = (
         ChatSession as unknown as Mock<(...args: never[]) => unknown>
       ).mock.calls[0];
-      const history = callArgs[7];
+      const history = callArgs[8];
       expect(history).toStrictEqual([]);
     });
 

@@ -115,6 +115,7 @@ function buildHandler(opts: {
 
   const handler = new CompressionHandler(
     runtimeContext,
+    undefined,
     historyService,
     undefined,
     undefined,

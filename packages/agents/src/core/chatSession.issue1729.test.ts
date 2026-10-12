@@ -110,6 +110,7 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
 
     new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,

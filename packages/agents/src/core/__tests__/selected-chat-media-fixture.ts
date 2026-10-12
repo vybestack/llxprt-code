@@ -35,6 +35,7 @@ type MediaHistoryRequest = (
   request: GenerateChatOptions,
   bindings: ProviderFileBindingStore | undefined,
   materialized: readonly IContent[],
+  workspaceDirectory: string | undefined,
 ) => Promise<void>;
 function createMediaHistoryProvider(
   onRequest: MediaHistoryRequest | undefined,
@@ -43,6 +44,7 @@ function createMediaHistoryProvider(
     requestProviderFileBindings?: ProviderFileBindingStore;
     requestMediaResolver?: RequestMediaResolver;
     requestMediaBudgetBytes?: number;
+    requestWorkspaceDirectory?: string;
   } = {
     requestProviderFileBindings: undefined,
     requestMediaResolver: undefined,
@@ -67,7 +69,12 @@ function createMediaHistoryProvider(
       });
       try {
         await resolved.withContents((contents) =>
-          onRequest?.(request, this.requestProviderFileBindings, contents),
+          onRequest?.(
+            request,
+            this.requestProviderFileBindings,
+            contents,
+            this.requestWorkspaceDirectory,
+          ),
         );
         yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
       } finally {
@@ -127,7 +134,7 @@ export function createMediaHistoryChat(
     tools: createToolRegistryViewFromRegistry(),
     providerRuntime: {
       ...setup.runtime,
-      config: setup.config,
+      config: undefined,
     },
     mediaStore: store,
     mediaAdmission: new MediaAdmissionService(store),
@@ -140,6 +147,7 @@ export function createMediaHistoryChat(
   };
   return new ChatSession(
     runtime,
+    setup.config,
     new RequestMediaResolver(store),
     1024 * 1024,
     createHistoryProviderFileBindingStore(history),

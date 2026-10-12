@@ -184,6 +184,7 @@ function buildFixture(
 
   const chat = new ChatSession(
     view,
+    config,
     undefined,
     undefined,
     undefined,
@@ -450,6 +451,7 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
 
     const chat = new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,

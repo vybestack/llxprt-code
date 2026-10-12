@@ -147,6 +147,7 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
 
     const chat = new ChatSession(
       view,
+      config,
       undefined,
       undefined,
       undefined,

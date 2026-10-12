@@ -153,6 +153,7 @@ describe('ChatSession hook execution control', () => {
 
     chat = new ChatSession(
       view,
+      mockConfig,
       undefined,
       undefined,
       undefined,
@@ -383,6 +384,7 @@ describe('ChatSession hook execution control', () => {
           runtimeContext: ConstructorParameters<typeof ChatSession>[0];
         }
       ).runtimeContext,
+      chat.getConfig(),
       undefined,
       undefined,
       undefined,

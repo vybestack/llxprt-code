@@ -99,6 +99,7 @@ describe('CompressionHandler chronology survival (#1721 C2)', () => {
     const providerResult: CompressionProviderResult = { provider };
     handler = new CompressionHandler(
       runtimeContext,
+      undefined,
       historyService,
       undefined,
       undefined,
