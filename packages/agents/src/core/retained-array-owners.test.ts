@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { withRetainedClient } from './__tests__/support/retained-array-test-helpers.js';
-import type { AgentClient } from './client.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { describe, expect, it } from 'bun:test';
 import {
   detachedDigest,
@@ -46,7 +46,7 @@ async function assertPendingRollback(
 }
 async function pendingCheckpoint(
   fixture: DetachedFixture,
-  clientFixture: { client: AgentClient },
+  clientFixture: { client: AgentClientContract },
   size: number,
   cancel: boolean,
 ): Promise<number> {
