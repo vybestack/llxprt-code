@@ -59,6 +59,12 @@ function isBunToken(token: string): boolean {
  *   args=` renders those unquoted. A path whose interior directory
  *   segment itself ends in `bun` fails to match and is simply not reaped;
  *   failing closed there is correct.
+ * - the final argv token is exactly the owner token this checkout's runner
+ *   appends to every `bun test` it spawns (issue #3514). PPID 1 and the
+ *   argv shape say nothing about which checkout, user, or CI job started
+ *   the process, so an orphan without this checkout's token is left alone.
+ *   That includes this checkout's own orphans from a runner that predates
+ *   the token and manual `bun test` runs: they need a one-time manual kill.
  *
  * Exposed as a standalone function for testability.
  */
@@ -68,28 +74,40 @@ function isOrphanedTestProcess(
   args: string,
   executable: string | undefined,
   ownPid: number,
+  ownerToken: string,
 ): boolean {
   if (ppid !== 1 || pid === ownPid) return false;
   if (executable === undefined || !isBunToken(executable)) return false;
   const tokens = args.trim().split(/\s+/);
+  if (tokens.at(-1) !== ownerToken) return false;
   const bunIndex = tokens.findIndex((token) => isBunToken(token));
   if (bunIndex < 0) return false;
   return tokens[bunIndex + 1] === 'test';
 }
 
-export function reapStaleBunTestProcesses(
+/** How long SIGTERM'd orphans get to exit before ownership is revalidated. */
+const TERM_GRACE_MS = 2_000;
+/** How long SIGKILL'd orphans get to disappear before they are left uncounted. */
+const KILL_GRACE_MS = 1_000;
+const EXIT_POLL_INTERVAL_MS = 50;
+
+/**
+ * Pids of the orphans that currently pass `isOrphanedTestProcess` for this
+ * checkout's owner token. A failing `ps` yields none, so nothing is signalled
+ * on evidence that could not be gathered.
+ */
+function findOwnedOrphans(
   spawnSync: (cmd: readonly string[]) => { stdout: string | null },
-  kill: (pid: number, signal: string) => void,
   ownPid: number,
-  stderr?: (line: string) => void,
-): number {
+  ownerToken: string,
+): number[] {
   let commOutput: string;
   let output: string;
   try {
     commOutput = spawnSync(['ps', '-eo', 'pid=,comm=']).stdout ?? '';
     output = spawnSync(['ps', '-eo', 'pid=,ppid=,args=']).stdout ?? '';
   } catch {
-    return 0;
+    return [];
   }
 
   // The comm table maps each pid to its kernel-reported executable. comm
@@ -106,7 +124,7 @@ export function reapStaleBunTestProcesses(
     }
   }
 
-  let killed = 0;
+  const owned: number[] = [];
   for (const line of output.split('\n')) {
     const parts = line.trim().split(/\s+/);
     const pid = parseInt(parts[0] ?? '', 10);
@@ -115,23 +133,104 @@ export function reapStaleBunTestProcesses(
     if (
       Number.isFinite(pid) &&
       Number.isFinite(ppid) &&
-      isOrphanedTestProcess(ppid, pid, args, executables.get(pid), ownPid)
+      isOrphanedTestProcess(
+        ppid,
+        pid,
+        args,
+        executables.get(pid),
+        ownPid,
+        ownerToken,
+      )
     ) {
-      try {
-        kill(pid, 'SIGTERM');
-        killed++;
-      } catch {
-        // Process may have already exited
-      }
+      owned.push(pid);
     }
   }
+  return owned;
+}
 
-  if (killed > 0 && stderr) {
+function trySignal(
+  kill: (pid: number, signal: string | number) => void,
+  pid: number,
+  signal: 'SIGTERM' | 'SIGKILL',
+): boolean {
+  try {
+    kill(pid, signal);
+    return true;
+  } catch {
+    // Process may have already exited, or we may not be permitted to signal
+    // it; either way this reaper did not terminate it.
+    return false;
+  }
+}
+
+/** Signal 0 raising ESRCH is the only evidence that a process is gone. */
+function hasExited(
+  kill: (pid: number, signal: string | number) => void,
+  pid: number,
+): boolean {
+  try {
+    kill(pid, 0);
+    return false;
+  } catch (error) {
+    return error instanceof Error && 'code' in error && error.code === 'ESRCH';
+  }
+}
+
+/**
+ * Polls until every pid has exited or the grace elapses, and returns the pids
+ * still running. Sleeps only while something is pending.
+ */
+function awaitExits(
+  pids: readonly number[],
+  graceMs: number,
+  kill: (pid: number, signal: string | number) => void,
+  sleep: (ms: number) => void,
+): number[] {
+  let pending = [...pids];
+  for (let waitedMs = 0; ; waitedMs += EXIT_POLL_INTERVAL_MS) {
+    pending = pending.filter((pid) => !hasExited(kill, pid));
+    if (pending.length === 0 || waitedMs >= graceMs) return pending;
+    sleep(EXIT_POLL_INTERVAL_MS);
+  }
+}
+
+/**
+ * SIGTERMs this checkout's owned orphans, escalates to SIGKILL for those still
+ * running after the grace (revalidating ownership first), and returns how many
+ * signal 0 confirmed gone. `sleep` blocks synchronously; it is injected so
+ * callers own the clock.
+ */
+export function reapStaleBunTestProcesses(
+  spawnSync: (cmd: readonly string[]) => { stdout: string | null },
+  kill: (pid: number, signal: string | number) => void,
+  ownPid: number,
+  ownerToken: string,
+  sleep: (ms: number) => void,
+  stderr?: (line: string) => void,
+): number {
+  const terminated = findOwnedOrphans(spawnSync, ownPid, ownerToken).filter(
+    (pid) => trySignal(kill, pid, 'SIGTERM'),
+  );
+  const survivors = awaitExits(terminated, TERM_GRACE_MS, kill, sleep);
+  let confirmed = terminated.length - survivors.length;
+
+  if (survivors.length > 0) {
+    // The pid may have been reused during the grace; SIGKILL only what is
+    // still an owned orphan.
+    const stillOwned = new Set(findOwnedOrphans(spawnSync, ownPid, ownerToken));
+    const killed = survivors.filter(
+      (pid) => stillOwned.has(pid) && trySignal(kill, pid, 'SIGKILL'),
+    );
+    confirmed +=
+      killed.length - awaitExits(killed, KILL_GRACE_MS, kill, sleep).length;
+  }
+
+  if (confirmed > 0 && stderr) {
     stderr(
-      `[run_bun_tests] Reaped ${killed} stale orphaned test process(es) (PPID=1) before run.`,
+      `[run_bun_tests] Reaped ${confirmed} stale orphaned test process(es) (PPID=1) before run.`,
     );
   }
-  return killed;
+  return confirmed;
 }
 
 export interface CoreReapOptions {

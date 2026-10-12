@@ -31,6 +31,7 @@
 
 import './tests/browser-launch-guard.js';
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   assertRunnerActive,
   isRunnerActive,
@@ -375,6 +376,22 @@ export function buildSpawnArgs(
 }
 
 /**
+ * Token that marks a `bun test` child as spawned by this checkout's runner.
+ * It is appended to every spawn as the final argv element, where `bun test`
+ * reads it as one more path filter that matches no file, and the pre-run
+ * reaper requires it as the final token of any orphan it kills (issue #3514).
+ * Orphans from a runner that predates the token carry none and are never
+ * reaped; they need a one-time manual kill.
+ */
+function ownerToken(repoRoot: string): string {
+  const rootDigest = createHash('sha256')
+    .update(resolve(repoRoot))
+    .digest('hex')
+    .slice(0, 16);
+  return `llxprt-bun-runner-owner-${rootDigest}`;
+}
+
+/**
  * Per-file process timeout, scaled so a file whose per-test timeout exceeds
  * the default process budget is not killed while a legitimately slow test is
  * still running. E2E roots declare `timeout: 300000`, which alone can exceed
@@ -406,14 +423,17 @@ async function spawnTestFileOnce(
 }> {
   try {
     const child = await dependencies.spawn(
-      buildSpawnArgs(
-        dependencies.executable,
-        entry,
-        run.tsconfig,
-        run.timeout,
-        junitOutfile,
-        run.testNamePattern,
-      ),
+      [
+        ...buildSpawnArgs(
+          dependencies.executable,
+          entry,
+          run.tsconfig,
+          run.timeout,
+          junitOutfile,
+          run.testNamePattern,
+        ),
+        ownerToken(dependencies.repoRoot),
+      ],
       {
         cwd: entry.cwd,
         env: sessionEnv,
@@ -915,6 +935,8 @@ async function main(): Promise<void> {
     },
     (pid, signal) => process.kill(pid, signal),
     process.pid,
+    ownerToken(repoRoot),
+    (ms) => Bun.sleepSync(ms),
     console.error,
   );
 
