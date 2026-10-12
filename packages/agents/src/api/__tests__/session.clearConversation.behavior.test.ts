@@ -291,7 +291,9 @@ describe('starting a new conversation session', () => {
             enabled: true,
             path: oldPath,
           });
-          expect((await collectAgentHistory(agent)).map(itemText)).toStrictEqual([
+          expect(
+            (await collectAgentHistory(agent)).map(itemText),
+          ).toStrictEqual([
             'first question',
             'first answer',
             'second question',
@@ -537,7 +539,9 @@ describe('starting a new conversation session', () => {
       expect(
         (await agent.session.listSessions()).map((session) => session.id),
       ).toHaveLength(2);
-      const restored = await collectRows(await agent.session.resume(oldSession.id));
+      const restored = await collectRows(
+        await agent.session.resume(oldSession.id),
+      );
       expect(restored.map(itemText)).toStrictEqual([
         'first question',
         'first answer',
@@ -548,7 +552,9 @@ describe('starting a new conversation session', () => {
         (session) => session.id !== oldSession.id,
       );
       if (newSession === undefined) throw new Error('Expected new session');
-      const postClear = await collectRows(await agent.session.resume(newSession.id));
+      const postClear = await collectRows(
+        await agent.session.resume(newSession.id),
+      );
       expect(postClear.map(itemText)).not.toContain('first question');
       expect(postClear.map(itemText)[0]).toBe('fresh start');
     });

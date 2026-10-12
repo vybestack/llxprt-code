@@ -43,7 +43,8 @@ export async function* resolveRowsMedia(
   owner: ResolvedMediaRequest,
   signal: AbortSignal | undefined,
 ): AsyncGenerator<IContent, void> {
-  const budget = media.aggregateBudgetBytes ?? DEFAULT_REQUEST_MEDIA_BUDGET_BYTES;
+  const budget =
+    media.aggregateBudgetBytes ?? DEFAULT_REQUEST_MEDIA_BUDGET_BYTES;
   let used = 0;
   for await (const row of rows) {
     const bytes = rowMediaBytes(row);

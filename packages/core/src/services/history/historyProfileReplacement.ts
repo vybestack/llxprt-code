@@ -220,7 +220,10 @@ export class StagedProfileReplacement {
   async rollback(): Promise<void> {
     this.assertUnsettled();
     const plan = this.plan;
-    if (plan.kind !== 'replace' || !this.journal.isCurrentMutationMark(this.mark))
+    if (
+      plan.kind !== 'replace' ||
+      !this.journal.isCurrentMutationMark(this.mark)
+    )
       return;
     await this.record({
       kind: 'replaceAbort',

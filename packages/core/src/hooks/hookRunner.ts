@@ -155,10 +155,7 @@ export class HookRunner {
       if (input.hook_event_name !== eventName)
         throw new Error('Hook input event mismatch');
       const { ConfigSource } = await import('./hookRegistry.js');
-      if (
-        hookConfig.source === ConfigSource.Project &&
-        !this.isTrustedFolder()
-      )
+      if (hookConfig.source === ConfigSource.Project && !this.isTrustedFolder())
         throw new Error('Project hook blocked - folder not trusted');
       if (!hookConfig.command) throw new Error('Command hook missing command');
     } catch (error) {

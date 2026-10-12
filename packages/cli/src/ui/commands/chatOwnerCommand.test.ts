@@ -159,12 +159,13 @@ describe('owner-backed /chat command route', () => {
       const context = createMockCommandContext({ services: { agent } });
       const client = agent.agentClient;
       const original = client.setHistoryFromSource.bind(client);
-      const fault = spyOn(client, 'setHistoryFromSource').mockImplementationOnce(
-        async (...args) => {
-          await original(...args);
-          throw new Error('restore interrupted');
-        },
-      );
+      const fault = spyOn(
+        client,
+        'setHistoryFromSource',
+      ).mockImplementationOnce(async (...args) => {
+        await original(...args);
+        throw new Error('restore interrupted');
+      });
       try {
         expect(await action('restore')(context, '1')).toMatchObject({
           messageType: 'error',

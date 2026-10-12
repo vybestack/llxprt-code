@@ -26,7 +26,10 @@ async function buildDeferredClient(): Promise<{
   const { agent, cleanup } = await buildAgent('plain-text.jsonl');
   const client = await agent.sessionClient.createDetachedAgentClient();
   const store = requireMediaStore(client);
-  bindClientTokenization(client, accountingFactory((text) => text.length));
+  bindClientTokenization(
+    client,
+    accountingFactory((text) => text.length),
+  );
   return {
     client,
     store,
@@ -246,7 +249,10 @@ describe('streamed deferred media ownership', () => {
       );
       expect(await store.hasReservations(reference.contentId)).toBe(true);
       expect(client.hasChatInitialized()).toBe(false);
-      bindClientTokenization(client, accountingFactory((text) => text.length));
+      bindClientTokenization(
+        client,
+        accountingFactory((text) => text.length),
+      );
       await client.startChat([]);
       expect(await store.hasReservations(reference.contentId)).toBe(true);
       await client.dispose();

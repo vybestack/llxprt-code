@@ -79,7 +79,10 @@ describe('real SDK concurrent per-chunk acknowledgement', () => {
           yield diskTextRow(index, false);
       })(),
     );
-    const adapter = createTelemetryAdapter({ getSessionId: () => 'ack' }, telemetry);
+    const adapter = createTelemetryAdapter(
+      { getSessionId: () => 'ack' },
+      telemetry,
+    );
     let completed = 0;
     const attempts = ['first', 'second'].map((promptId) =>
       Promise.resolve(

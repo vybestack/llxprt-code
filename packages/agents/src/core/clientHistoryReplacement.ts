@@ -37,7 +37,6 @@ export async function replaceDeferredClientSource(
   );
 }
 
-
 /** The live chat's array replacement, which carries the publishing origin. */
 interface ChatHistoryReplacement {
   setHistory(

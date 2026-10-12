@@ -96,7 +96,9 @@ function registerConfigFailure(size: number): void {
             }
             expect(await result).toBe(fault);
             expect(
-              await historyDigest(sessionClient.getAgentClient().streamHistory()),
+              await historyDigest(
+                sessionClient.getAgentClient().streamHistory(),
+              ),
             ).toStrictEqual({
               count: size,
               digest: expectedHistoryDigest(size),

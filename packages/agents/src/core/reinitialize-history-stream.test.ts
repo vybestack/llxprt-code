@@ -25,57 +25,53 @@ function expectedTokens(size: number): number {
 function registerTransfer(size: number): void {
   describe('registerTransfer', () => {
     it('transfers the invoked raw caller to disk, pins a paused consumer, and sends after startup', async () => {
-      await withReinitializeHistory(
-        size,
-        async (client, _source, owners) => {
-          const counters = createRowCounters();
-          await client.initialize(reinitializeConfig(client), {
-            ownership: owners,
-            counters: { ...counters.counters, ownership: owners },
-          });
-          expect(client.hasChatInitialized()).toBe(false);
-          expect(owners.snapshot().liveRows).toBe(0);
-          expect(owners.within(reinitializeBounds)).toBe(true);
-          const service = client.getHistoryService();
-          if (service === null) throw new Error('Missing deferred journal');
-          const admittedTokenCount =
-            service.getTotalTokens() - service.getBaseTokenOffset();
-          const stream = client.streamHistory();
-          const first = await stream.next();
-          if (first.done === true)
-            throw new Error('Missing transferred history');
-          owners.retain(first.value);
-          try {
-            const paused = counters.snapshot();
-            await Promise.resolve();
-            expect(counters.snapshot().rowsDecoded).toBe(paused.rowsDecoded);
-            await client.startChat([]);
-            expect(owners.snapshot().liveRows).toBe(1);
-            recordReinitializeOwners(size, 'paused-output', owners);
-          } finally {
-            await stream.return();
-            owners.release(first.value);
-          }
-          expect(await historyDigest(client.streamHistory())).toStrictEqual({
-            count: size,
-            digest: expectedHistoryDigest(size),
-          });
-          expect({
-            admitted: admittedTokenCount,
-            started: service.getTotalTokens() - service.getBaseTokenOffset(),
-          }).toStrictEqual({
-            admitted: expectedTokens(size),
-            started: expectedTokens(size),
-          });
-          expect(await sendHistoryTurn(client)).toBe('a plain text reply');
-          expect((await historyDigest(client.streamHistory())).count).toBe(
-            size + 2,
-          );
-          expect(owners.snapshot().liveRows).toBe(0);
-          expect(owners.within(reinitializeBounds)).toBe(true);
-          recordReinitializeOwners(size, 'settled', owners);
-        },
-      );
+      await withReinitializeHistory(size, async (client, _source, owners) => {
+        const counters = createRowCounters();
+        await client.initialize(reinitializeConfig(client), {
+          ownership: owners,
+          counters: { ...counters.counters, ownership: owners },
+        });
+        expect(client.hasChatInitialized()).toBe(false);
+        expect(owners.snapshot().liveRows).toBe(0);
+        expect(owners.within(reinitializeBounds)).toBe(true);
+        const service = client.getHistoryService();
+        if (service === null) throw new Error('Missing deferred journal');
+        const admittedTokenCount =
+          service.getTotalTokens() - service.getBaseTokenOffset();
+        const stream = client.streamHistory();
+        const first = await stream.next();
+        if (first.done === true) throw new Error('Missing transferred history');
+        owners.retain(first.value);
+        try {
+          const paused = counters.snapshot();
+          await Promise.resolve();
+          expect(counters.snapshot().rowsDecoded).toBe(paused.rowsDecoded);
+          await client.startChat([]);
+          expect(owners.snapshot().liveRows).toBe(1);
+          recordReinitializeOwners(size, 'paused-output', owners);
+        } finally {
+          await stream.return();
+          owners.release(first.value);
+        }
+        expect(await historyDigest(client.streamHistory())).toStrictEqual({
+          count: size,
+          digest: expectedHistoryDigest(size),
+        });
+        expect({
+          admitted: admittedTokenCount,
+          started: service.getTotalTokens() - service.getBaseTokenOffset(),
+        }).toStrictEqual({
+          admitted: expectedTokens(size),
+          started: expectedTokens(size),
+        });
+        expect(await sendHistoryTurn(client)).toBe('a plain text reply');
+        expect((await historyDigest(client.streamHistory())).count).toBe(
+          size + 2,
+        );
+        expect(owners.snapshot().liveRows).toBe(0);
+        expect(owners.within(reinitializeBounds)).toBe(true);
+        recordReinitializeOwners(size, 'settled', owners);
+      });
     }, 180000);
   });
 }
@@ -83,43 +79,40 @@ function registerTransfer(size: number): void {
 function registerSourceFailure(size: number): void {
   describe('registerSourceFailure', () => {
     it('does not advance a paused source and preserves active membership on source failure', async () => {
-      await withReinitializeHistory(
-        size,
-        async (client, source, owners) => {
-          source.pauseAfter = 31;
-          const fault = new Error('active disk source failed');
-          source.fault = fault;
-          const operation = client.initialize(reinitializeConfig(client));
-          const result = operation.then(
-            () => undefined,
-            (error: unknown) => error,
-          );
-          await Promise.race([
-            source.paused.promise,
-            result.then(() => {
-              throw new Error('Transfer ended before pause');
-            }),
-          ]);
-          try {
-            expect(source.scanned).toBe(31);
-            expect(owners.snapshot().liveRows).toBe(1);
-            expect(owners.within(reinitializeBounds)).toBe(true);
-            await Promise.resolve();
-            expect(source.scanned).toBe(31);
-            expect(client.hasChatInitialized()).toBe(true);
-            recordReinitializeOwners(size, 'paused-source', owners);
-          } finally {
-            source.release.resolve();
-          }
-          expect(await result).toBe(fault);
+      await withReinitializeHistory(size, async (client, source, owners) => {
+        source.pauseAfter = 31;
+        const fault = new Error('active disk source failed');
+        source.fault = fault;
+        const operation = client.initialize(reinitializeConfig(client));
+        const result = operation.then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        await Promise.race([
+          source.paused.promise,
+          result.then(() => {
+            throw new Error('Transfer ended before pause');
+          }),
+        ]);
+        try {
+          expect(source.scanned).toBe(31);
+          expect(owners.snapshot().liveRows).toBe(1);
+          expect(owners.within(reinitializeBounds)).toBe(true);
+          await Promise.resolve();
+          expect(source.scanned).toBe(31);
           expect(client.hasChatInitialized()).toBe(true);
-          expect(await historyDigest(client.streamHistory())).toStrictEqual({
-            count: size,
-            digest: expectedHistoryDigest(size),
-          });
-          expect(owners.snapshot().liveRows).toBe(0);
-        },
-      );
+          recordReinitializeOwners(size, 'paused-source', owners);
+        } finally {
+          source.release.resolve();
+        }
+        expect(await result).toBe(fault);
+        expect(client.hasChatInitialized()).toBe(true);
+        expect(await historyDigest(client.streamHistory())).toStrictEqual({
+          count: size,
+          digest: expectedHistoryDigest(size),
+        });
+        expect(owners.snapshot().liveRows).toBe(0);
+      });
     }, 180000);
   });
 }
@@ -127,37 +120,34 @@ function registerSourceFailure(size: number): void {
 function registerCancellation(size: number): void {
   describe('registerCancellation', () => {
     it('propagates cancellation without replacing the active chat', async () => {
-      await withReinitializeHistory(
-        size,
-        async (client, source, owners) => {
-          const abort = new AbortController();
-          source.pauseAfter = 31;
-          const operation = client.initialize(reinitializeConfig(client), {
-            signal: abort.signal,
-            ownership: owners,
-          });
-          const result = operation.then(
-            () => undefined,
-            (error: unknown) => error,
-          );
-          await Promise.race([
-            source.paused.promise,
-            result.then(() => {
-              throw new Error('Transfer ended before pause');
-            }),
-          ]);
-          const fault = new Error('active transfer cancelled');
-          abort.abort(fault);
-          source.release.resolve();
-          expect(await result).toBe(fault);
-          expect(client.hasChatInitialized()).toBe(true);
-          expect(await historyDigest(client.streamHistory())).toStrictEqual({
-            count: size,
-            digest: expectedHistoryDigest(size),
-          });
-          expect(owners.snapshot().liveRows).toBe(0);
-        },
-      );
+      await withReinitializeHistory(size, async (client, source, owners) => {
+        const abort = new AbortController();
+        source.pauseAfter = 31;
+        const operation = client.initialize(reinitializeConfig(client), {
+          signal: abort.signal,
+          ownership: owners,
+        });
+        const result = operation.then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        await Promise.race([
+          source.paused.promise,
+          result.then(() => {
+            throw new Error('Transfer ended before pause');
+          }),
+        ]);
+        const fault = new Error('active transfer cancelled');
+        abort.abort(fault);
+        source.release.resolve();
+        expect(await result).toBe(fault);
+        expect(client.hasChatInitialized()).toBe(true);
+        expect(await historyDigest(client.streamHistory())).toStrictEqual({
+          count: size,
+          digest: expectedHistoryDigest(size),
+        });
+        expect(owners.snapshot().liveRows).toBe(0);
+      });
     }, 180000);
   });
 }
@@ -166,20 +156,17 @@ function registerControls(size: number): void {
   describe('registerControls', () => {
     for (const retaining of ['borrowed', 'copy'] as const) {
       it(`charges ${retaining} consumer identities instead of excusing retention`, async () => {
-        await withReinitializeHistory(
-          size,
-          async (client, source) => {
-            source.retaining = retaining;
-            await client.initialize(reinitializeConfig(client));
-            expect(source.consumer.snapshot().liveRows).toBe(size);
-            recordReinitializeOwners(size, retaining, source.consumer);
-            expect(source.consumer.within(reinitializeBounds)).toBe(
-              process.env.REINITIALIZE_HISTORY_RETAINING_TRAP === '1',
-            );
-            source.releaseConsumer();
-            expect(source.consumer.snapshot().liveRows).toBe(0);
-          },
-        );
+        await withReinitializeHistory(size, async (client, source) => {
+          source.retaining = retaining;
+          await client.initialize(reinitializeConfig(client));
+          expect(source.consumer.snapshot().liveRows).toBe(size);
+          recordReinitializeOwners(size, retaining, source.consumer);
+          expect(source.consumer.within(reinitializeBounds)).toBe(
+            process.env.REINITIALIZE_HISTORY_RETAINING_TRAP === '1',
+          );
+          source.releaseConsumer();
+          expect(source.consumer.snapshot().liveRows).toBe(0);
+        });
       }, 180000);
     }
   });
