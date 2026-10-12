@@ -83,7 +83,7 @@ export function createAgentRuntimeFactoryBindings(
 ): AgentRuntimeFactoryBindings {
   return {
     agentClientFactory: buildAgentClientFactory(mediaStore),
-    taskToolRegistration: () => createTaskRegistration(),
+    taskToolRegistration: (registration) => registration,
   };
 }
 

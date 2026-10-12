@@ -224,7 +224,8 @@ function selectTasks(
   factories: AgentRuntimeFactoryBindings | undefined,
   authority: AgentConfig['credentialAuthority'],
 ): ReturnType<typeof createTaskRegistration> {
-  return factories?.taskToolRegistration() ?? createTaskRegistration(authority);
+  const registration = createTaskRegistration(authority);
+  return factories?.taskToolRegistration(registration) ?? registration;
 }
 
 type CreatedAgentMcpOptions = McpAssemblyOptions &

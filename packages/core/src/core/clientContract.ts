@@ -285,5 +285,7 @@ export type AgentClientFactory = (
  */
 export interface AgentRuntimeFactoryBindings {
   agentClientFactory: AgentClientFactory;
-  taskToolRegistration: () => TaskToolRegistration;
+  taskToolRegistration: (
+    defaultRegistration: TaskToolRegistration,
+  ) => TaskToolRegistration;
 }

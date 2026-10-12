@@ -147,8 +147,9 @@ function bindAdoptedSessionHooks(
   );
   client.bindMcpRuntime(
     mcp,
-    options.runtimeFactoryBindings?.taskToolRegistration() ??
+    options.runtimeFactoryBindings?.taskToolRegistration(
       createTaskRegistration(options.credentialAuthority),
+    ) ?? createTaskRegistration(options.credentialAuthority),
     definitions.profileDefinitions,
     definitions.subagentDefinitions,
   );
