@@ -86,12 +86,11 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
     vi.useFakeTimers();
     settingsService = new SettingsService();
     runtimeConfig = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(runtimeConfig, settingsService)
-        .settingsOwner,
-      settingsService,
-      config: runtimeConfig,
-    });
+    providerManager = new ProviderManager(
+      { settingsService, config: runtimeConfig },
+      undefined,
+      fixtureOwners.adopt(runtimeConfig, settingsService).settingsOwner,
+    );
     config = {
       profileName: 'test-lb',
       strategy: 'failover',

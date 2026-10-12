@@ -128,12 +128,11 @@ describe('LoadBalancingProvider attempt telemetry (issue #2532)', () => {
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(config, settingsService)
-        .settingsOwner,
-      settingsService,
-      config,
-    });
+    providerManager = new ProviderManager(
+      { settingsService, config },
+      undefined,
+      fixtureOwners.adopt(config, settingsService).settingsOwner,
+    );
   });
 
   it('reports taxonomy, commitment, and shared budget for failed then successful backend attempts', async () => {

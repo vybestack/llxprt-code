@@ -1,4 +1,3 @@
-import type { SessionSettingsOwner } from '../session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -83,7 +82,6 @@ export interface ProviderRequestCollaborators extends ProviderRetryOperations {
 }
 
 export interface ProviderRuntimeContext extends ProviderRetryOperations {
-  readonly sessionSettings?: SessionSettingsOwner;
   settingsService: RuntimeSettingsState;
   config?: Config;
   runtimeId?: string;
@@ -102,7 +100,6 @@ export interface ProviderRuntimeContext extends ProviderRetryOperations {
  * @pseudocode lines 122-133
  */
 export interface ProviderRuntimeContextInit extends ProviderRetryOperations {
-  readonly sessionSettings?: SessionSettingsOwner;
   settingsService?: RuntimeSettingsState | null;
   config?: Config;
   runtimeId?: string;
@@ -133,7 +130,6 @@ export function createProviderRuntimeContext(
   }
 
   return {
-    sessionSettings: init.sessionSettings,
     settingsService,
     readRetryAuthToken: init.readRetryAuthToken,
     handleAuthError: init.handleAuthError,

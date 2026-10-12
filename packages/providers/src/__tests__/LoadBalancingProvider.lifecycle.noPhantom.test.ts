@@ -98,12 +98,11 @@ describe('LoadBalancingProvider lifecycle (finding #2): no phantom starts', () =
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(config, settingsService)
-        .settingsOwner,
-      settingsService,
-      config,
-    });
+    providerManager = new ProviderManager(
+      { settingsService, config },
+      undefined,
+      fixtureOwners.adopt(config, settingsService).settingsOwner,
+    );
   });
 
   it('setup failure (missing provider) emits zero lifecycle start/end events', async () => {

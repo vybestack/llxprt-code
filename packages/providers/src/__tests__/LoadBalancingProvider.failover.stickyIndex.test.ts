@@ -106,12 +106,11 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(config, settingsService)
-        .settingsOwner,
-      settingsService,
-      config,
-    });
+    providerManager = new ProviderManager(
+      { settingsService, config },
+      undefined,
+      fixtureOwners.adopt(config, settingsService).settingsOwner,
+    );
   });
 
   it('should failover from sticky index 2 to healthy index 0', async () => {

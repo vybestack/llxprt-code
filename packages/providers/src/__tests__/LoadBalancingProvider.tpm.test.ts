@@ -72,12 +72,11 @@ describe('LoadBalancingProvider TPM Tracking - Phase 4', () => {
     {
       const settingsService = new SettingsService();
       const config = createRuntimeConfigStub(settingsService);
-      providerManager = new ProviderManager({
-        sessionSettings: fixtureOwners.adopt(config, settingsService)
-          .settingsOwner,
-        settingsService,
-        config,
-      });
+      providerManager = new ProviderManager(
+        { settingsService, config },
+        undefined,
+        fixtureOwners.adopt(config, settingsService).settingsOwner,
+      );
     }
     config = {
       profileName: 'test-lb',

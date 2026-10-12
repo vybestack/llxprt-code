@@ -1,3 +1,4 @@
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -555,9 +556,11 @@ export function createProviderManager(
   context: RuntimeContextShape,
   options: ProviderManagerFactoryOptions,
   borrowedOAuthManager?: OAuthManager,
+  sessionSettings?: SessionSettingsOwner,
 ): { manager: ProviderManager; oauthManager: OAuthManager } {
   const userSettings = resolveUserSettings(options.fileSystem);
-  const manager = options.manager ?? new ProviderManager(context);
+  const manager =
+    options.manager ?? new ProviderManager(context, undefined, sessionSettings);
 
   bindCredentialKeys(manager, options.credentialAuthority);
 
@@ -617,10 +620,9 @@ export function createProviderManager(
       allowBrowserEnvironment,
     );
 
-  const aliasEntries = loadProviderAliasEntries();
   registerAllProviders(
     manager,
-    aliasEntries,
+    loadProviderAliasEntries(),
     openaiApiKey,
     openaiBaseUrl,
     openaiProviderConfig,
@@ -637,7 +639,7 @@ export function createProviderManager(
   }
   attachAddItemToOAuthProviders(oauthManager, addItem);
 
-  const openAIContext: OpenAIRegistrationContext = {
+  registerAliasRefresher(manager, {
     apiKey: openaiApiKey ?? undefined,
     baseUrl: openaiBaseUrl ?? undefined,
     providerConfig: openaiProviderConfig,
@@ -645,8 +647,7 @@ export function createProviderManager(
     config,
     authOnlyEnabled,
     providerContributions,
-  };
-  registerAliasRefresher(manager, openAIContext);
+  });
 
   return { manager, oauthManager };
 }

@@ -155,7 +155,6 @@ export function assembleCliProviderRuntime(
     if (input.registration && config) undoAdoption = registration.adopt(config);
     if (config !== undefined) input.settingsOwner?.bindTelemetry(config);
     const runtime = {
-      sessionSettings: input.settingsOwner,
       settingsService,
       config,
       runtimeId,
@@ -165,12 +164,10 @@ export function assembleCliProviderRuntime(
     } as ProviderRuntimeContext;
 
     const runtimeMessageBus = registration.messageBus;
-    if (
-      input.oauthManager !== undefined &&
-      input.oauthManager.runtimeMessageBus !== runtimeMessageBus
-    )
-      throw new Error(
-        'Supplied OAuth manager belongs to a different runtime message bus',
+    if (input.oauthManager !== undefined)
+      assertOAuthMessageBus(
+        input.oauthManager.runtimeMessageBus,
+        runtimeMessageBus,
       );
     policyOwner = bindCliPolicy(config, input.trustPort, registration);
 
@@ -185,31 +182,32 @@ export function assembleCliProviderRuntime(
 
     // 3. Construct the ProviderManager + OAuthManager on that bus.
     const borrowedManager = input.registration?.providerManager;
-    const { manager: providerManager, oauthManager } =
+    const { manager, oauthManager } =
       borrowedManager === undefined
-        ? createProviderManager(runtime, {
-            fileSystem: new NodeFileSystem(),
-            credentialAuthority: input.credentialAuthority,
-            config: runtime.config,
-            runtimeMessageBus,
-            ...(resolvedOAuthSettings !== undefined
-              ? { oauthSettings: resolvedOAuthSettings }
-              : {}),
-            ...(providerContributions !== undefined
-              ? { providerContributions }
-              : {}),
-          })
+        ? createProviderManager(
+            runtime,
+            {
+              fileSystem: new NodeFileSystem(),
+              credentialAuthority: input.credentialAuthority,
+              config,
+              runtimeMessageBus,
+              oauthSettings: resolvedOAuthSettings,
+              providerContributions,
+            },
+            undefined,
+            input.settingsOwner,
+          )
         : { manager: borrowedManager, oauthManager: input.oauthManager };
     if (borrowedManager !== undefined && config !== undefined)
-      bindFinalProviderOwner(providerManager, config, runtime);
+      bindFinalProviderOwner(manager, config, runtime, input.settingsOwner);
 
-    registration.expectManager(providerManager);
+    registration.expectManager(manager);
 
     return {
       runtime,
       runtimeMessageBus,
       policyOwner,
-      providerManager,
+      providerManager: manager,
       oauthManager,
       registration,
     };
@@ -219,6 +217,16 @@ export function assembleCliProviderRuntime(
     if (!input.registration) registration.rollback();
     throw error;
   }
+}
+
+function assertOAuthMessageBus(
+  actual: MessageBus | undefined,
+  expected: MessageBus,
+): void {
+  if (actual !== expected)
+    throw new Error(
+      'Supplied OAuth manager belongs to a different runtime message bus',
+    );
 }
 
 function bindCliPolicy(
@@ -244,6 +252,7 @@ function bindFinalProviderOwner(
   manager: RuntimeProviderManager,
   config: Config,
   runtime: ProviderRuntimeContext,
+  settingsOwner: SessionSettingsOwner | undefined,
 ): void {
   if (!(manager instanceof ProviderManager))
     throw new Error('CLI provider runtime requires a ProviderManager owner');
@@ -261,7 +270,7 @@ function bindFinalProviderOwner(
       );
     }
   }
-  manager.setRuntimeContext(runtime);
+  manager.setRuntimeContext(runtime, settingsOwner);
   manager.setConfig(config);
   configureProviderRuntimeFactories(config, manager);
 }

@@ -1,3 +1,4 @@
+import type { SessionSettingsOwner } from '../../session/session-settings-owner.js';
 import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import type { ModelRegistry } from '../../models/registry.js';
 /**
@@ -76,7 +77,10 @@ export interface RuntimeProviderManager {
   getProviderMetrics(): RuntimeProviderMetrics;
   getSessionTokenUsage(): RuntimeSessionTokenUsage;
   setConfig(config: Config): void;
-  setRuntimeContext(runtimeContext: ProviderRuntimeContext): void;
+  setRuntimeContext(
+    runtimeContext: ProviderRuntimeContext,
+    sessionSettings: SessionSettingsOwner | undefined,
+  ): void;
   fetchNetwork?(
     input: RequestInfo | URL,
     init?: RequestInit,

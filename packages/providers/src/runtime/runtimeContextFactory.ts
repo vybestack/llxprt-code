@@ -284,7 +284,6 @@ function buildActivateClosure(
       activationOptions?.runtimeKind ?? options.runtimeKind ?? 'agent';
 
     const scopedRuntime = createProviderRuntimeContext({
-      sessionSettings: options.settingsOwner,
       settingsService: resolvedSettingsService,
       config,
       providerFileLifecycle,
@@ -298,7 +297,7 @@ function buildActivateClosure(
         profileId ? { profileId } : undefined,
       ),
     );
-    providerManager.setRuntimeContext(scopedRuntime);
+    providerManager.setRuntimeContext(scopedRuntime, options.settingsOwner);
 
     await Promise.resolve(
       bindings.resetInfrastructure(state.currentRuntimeId, config),
@@ -542,7 +541,6 @@ function initialProviderContext(
   return createProviderRuntimeContext({
     settingsService,
     config: options.config,
-    sessionSettings: options.settingsOwner,
     providerFileLifecycle,
     runtimeId,
     runtimeKind: options.runtimeKind ?? 'agent',
@@ -591,6 +589,7 @@ export function createIsolatedRuntimeContext(
         metadata,
       ),
       options.credentialAuthority,
+      settingsOwner,
     );
   const selectedFactories = configureProviderRuntimeFactories(
     options.config,

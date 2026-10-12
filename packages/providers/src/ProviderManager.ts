@@ -58,7 +58,6 @@ function asSettingsService(
 }
 
 interface ProviderManagerInit {
-  readonly sessionSettings?: SessionSettingsOwner;
   runtime?: ProviderRuntimeContext;
   config?: Config;
   settingsService?: SettingsService;
@@ -161,13 +160,14 @@ export class ProviderManager implements IProviderManager {
   constructor(
     init?: ProviderManagerInit | ProviderRuntimeContext,
     credentialAuthority?: Pick<CredentialAuthority, 'createProviderKeyStorage'>,
+    sessionSettings?: SessionSettingsOwner,
   ) {
     const resolved = this.resolveInit(init);
     this.providers = new Map<string, IProvider>();
     this.settingsService = resolved.settingsService;
     this.config = resolved.config ?? this.config;
     this.runtime = resolved.runtime;
-    this.sessionSettings = resolved.sessionSettings;
+    this.sessionSettings = sessionSettings;
     this.bindSettingsLifecycle();
     this.capabilitiesService = new ProviderCapabilitiesService(
       this.providerCapabilities,
@@ -189,7 +189,6 @@ export class ProviderManager implements IProviderManager {
   private resolveInit(init?: ProviderManagerInit | ProviderRuntimeContext): {
     settingsService: SettingsService;
     config?: Config;
-    sessionSettings?: SessionSettingsOwner;
     runtime?: ProviderRuntimeContext;
   } {
     // Identity/settings must be supplied explicitly by the caller. The manager
@@ -202,7 +201,6 @@ export class ProviderManager implements IProviderManager {
       return {
         settingsService: asSettingsService(init.settingsService),
         config: init.config,
-        sessionSettings: init.sessionSettings,
         runtime: init,
       };
     }
@@ -227,7 +225,6 @@ export class ProviderManager implements IProviderManager {
     }
 
     return {
-      sessionSettings: init?.sessionSettings ?? runtime?.sessionSettings,
       settingsService,
       config: init?.config ?? runtime?.config,
       runtime,
@@ -330,10 +327,13 @@ export class ProviderManager implements IProviderManager {
    * @plan PLAN-20250218-STATELESSPROVIDER.P05
    * @requirement REQ-SP4-004
    */
-  setRuntimeContext(runtime: ProviderRuntimeContext): void {
+  setRuntimeContext(
+    runtime: ProviderRuntimeContext,
+    sessionSettings: SessionSettingsOwner | undefined,
+  ): void {
     const currentActiveProvider = this.getActiveProviderName();
     this.runtime = runtime;
-    this.sessionSettings = runtime.sessionSettings;
+    this.sessionSettings = sessionSettings;
     this.stopSettingsLifecycle?.();
     this.settingsService = asSettingsService(runtime.settingsService);
     this.bindSettingsLifecycle();
