@@ -64,6 +64,7 @@ describe('CLI retained session model commands', () => {
           first.settingsOwner,
           first.settingsService,
           agentA.workspace,
+          agentA.modelParameters,
           agentA.settings,
           agentA.toolFormat,
           agentA.providerReads,
@@ -80,6 +81,7 @@ describe('CLI retained session model commands', () => {
           second.settingsOwner,
           second.settingsService,
           agentB.workspace,
+          agentB.modelParameters,
           agentB.settings,
           agentB.toolFormat,
           agentB.providerReads,
@@ -104,6 +106,8 @@ describe('CLI retained session model commands', () => {
       ]);
       firstApi.setActiveModelParam('temperature', 0.2);
       secondApi.setActiveModelParam('temperature', 0.8);
+      expect(agentA.getModelParams().temperature).toBe(0.2);
+      expect(agentB.getModelParams().temperature).toBe(0.8);
       await Promise.all([
         firstApi.updateActiveProviderApiKey('first-key'),
         secondApi.updateActiveProviderApiKey('second-key'),

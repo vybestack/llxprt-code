@@ -3,7 +3,6 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 
 /**
@@ -21,31 +20,9 @@ import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { ModelDefaultRule } from '../composition/index.js';
-import { getProviderSettingsSnapshot } from './providerModelParameters.js';
 
 function logger(): DebugLogger {
   return new DebugLogger('llxprt:runtime:providerMutations');
-}
-
-/**
- * Compute merged ephemeral settings from modelDefaults rules that match a model name.
- * Rules are applied in order — later rules override earlier for the same key.
- * Returns a flat Record of the merged settings.
- */
-export function computeModelDefaults(
-  modelName: string,
-  modelDefaultRules: readonly ModelDefaultRule[],
-): Record<string, unknown> {
-  const merged: Record<string, unknown> = {};
-  for (const rule of modelDefaultRules) {
-    const regex = new RegExp(rule.pattern, 'i');
-    if (regex.test(modelName)) {
-      for (const [key, value] of Object.entries(rule.ephemeralSettings)) {
-        merged[key] = value;
-      }
-    }
-  }
-  return merged;
 }
 
 /**
@@ -191,22 +168,6 @@ export interface ModelSelectionOperations {
   selectModel(model: string, rules: readonly ModelDefaultRule[]): void;
 }
 
-export function assembleModelSelection(
-  owner: SessionSettingsOwner,
-): ModelSelectionOperations {
-  return {
-    readModel: () => owner.readSelectedModel(),
-    selectModel: (model, rules) => {
-      const previous = owner.readSelectedModel();
-      owner.selectModel(model, {
-        departing:
-          previous === undefined ? {} : computeModelDefaults(previous, rules),
-        arriving: computeModelDefaults(model, rules),
-      });
-    },
-  };
-}
-
 export async function updateActiveProviderApiKey(
   apiKey: string | null,
   config: { setEphemeralSetting(key: string, value: unknown): void },
@@ -333,8 +294,7 @@ export async function setActiveModel(
     throw new Error('No active provider is available.');
   }
 
-  const providerSettings = getProviderSettingsSnapshot(
-    settingsService,
+  const providerSettings = settingsService.getProviderSettings(
     activeProvider.name,
   );
   // #2534 Domain C2: read the previous model from the store this

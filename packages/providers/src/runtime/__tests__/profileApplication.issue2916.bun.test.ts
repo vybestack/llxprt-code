@@ -52,7 +52,7 @@ function createProviderKeyStorageDouble() {
 }
 
 import { useProfileOwner as installProfileOwner } from './profile-workflow-owner-fixture.js';
-import { assembleModelSelection } from '../providerMutations.js';
+import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
 const root = installProfileOwner();
 
 await mock.module('../../auth/index.js', () => ({

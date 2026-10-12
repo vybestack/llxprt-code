@@ -31,7 +31,7 @@ function settingsControl(owner: SessionSettingsOwner) {
 import {
   setActiveModelParam,
   clearActiveModelParam,
-} from '../../../providers/src/runtime/providerModelParameters.js';
+} from './model-parameters.js';
 
 /**
  * Test suite for runtimeAccessors module

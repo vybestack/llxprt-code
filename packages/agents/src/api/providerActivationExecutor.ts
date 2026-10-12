@@ -4,7 +4,7 @@ import { extractModelParams } from '@vybestack/llxprt-code-providers/model-param
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { ModelSelectionOperations } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import type { ModelSelectionOperations } from './model-selection.js';
 
 /**
  * Consolidated provider-activation / authentication executor (#2374, part of
@@ -47,7 +47,7 @@ import { setActiveModel } from '@vybestack/llxprt-code-providers/runtime/provide
 import {
   setActiveModelParam,
   clearActiveModelParam,
-} from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
+} from './model-parameters.js';
 import { applyCliArgumentOverrides } from '@vybestack/llxprt-code-providers/runtime/settingsResolver.js';
 import {
   setProviderApiKey,

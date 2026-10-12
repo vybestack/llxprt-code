@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { ProviderAliasConfig } from '../composition/providerAliases.js';
-import { computeModelDefaults } from './providerMutations.js';
+import { computeModelDefaults } from '../model-defaults.js';
 import {
   REASONING_OBJECT_VALUED_EPHEMERAL_KEYS,
   USER_OWNED_SWITCH_PRESERVED_KEYS,

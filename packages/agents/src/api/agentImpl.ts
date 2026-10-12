@@ -32,10 +32,7 @@ import {
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
 } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
-import {
-  setActiveModelParam,
-  clearActiveModelParam,
-} from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
+import { assembleModelParameterControl } from './model-parameters.js';
 import {
   setAgentSelectedModel,
   restoreAgentChatVisibility,
@@ -287,6 +284,13 @@ export class AgentImpl implements Agent {
   readonly listAvailableModels: Agent['listAvailableModels'];
 
   readonly providerReads: Agent['providerReads'];
+  readonly modelParameters: Agent['modelParameters'] =
+    assembleModelParameterControl(
+      () => this.deps.settingsService,
+      () => this.deps.providerManager.getActiveProviderName(),
+      () => this.providerState.modelParams,
+      () => this.coordinator.assertNoCommit(),
+    );
   readonly settings: Agent['settings'] = assembleSettingsControl(
     () => this.deps.settingsOwner,
     () => this.coordinator.assertSettingsAdmission(),
@@ -832,11 +836,7 @@ export class AgentImpl implements Agent {
    * @pseudocode switch-rebind.md steps 90-94
    */
   setModelParam(key: string, value: unknown): void {
-    this.coordinator.assertNoCommit();
-    const { providerManager, settingsService } = this.deps;
-    const providerName = providerManager.getActiveProviderName();
-    setActiveModelParam(key, value, settingsService, providerName);
-    this.providerState.modelParams[key] = value;
+    this.modelParameters.set(key, value);
   }
 
   /**
@@ -846,11 +846,7 @@ export class AgentImpl implements Agent {
    * @pseudocode switch-rebind.md steps 100-103
    */
   clearModelParam(key: string): void {
-    this.coordinator.assertNoCommit();
-    const { providerManager, settingsService } = this.deps;
-    const providerName = providerManager.getActiveProviderName();
-    clearActiveModelParam(key, settingsService, providerName);
-    delete this.providerState.modelParams[key];
+    this.modelParameters.clear(key);
   }
 
   async getHistory(): Promise<readonly AgentMessage[]> {

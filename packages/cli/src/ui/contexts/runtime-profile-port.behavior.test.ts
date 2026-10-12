@@ -54,6 +54,7 @@ describe('CLI profile operation projection', () => {
           owner.settingsOwner,
           owner.settingsService,
           agent.workspace,
+          agent.modelParameters,
           agent.settings,
           agent.toolFormat,
           agent.providerReads,

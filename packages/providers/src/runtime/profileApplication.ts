@@ -27,10 +27,6 @@ import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import {
-  clearActiveModelParam,
-  setActiveModelParam,
-} from './providerModelParameters.js';
-import {
   setActiveModel,
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
@@ -338,17 +334,18 @@ function applyProfileModelParams(
   settingsService: SettingsService,
   providerName: string | undefined,
 ): void {
+  if (!providerName)
+    throw new Error('No active provider available to set model parameters.');
   const profileParams = getProfileModelParams(sanitizedProfile);
-  const existingParams =
-    providerName === undefined
-      ? {}
-      : extractModelParams(settingsService.getProviderSettings(providerName));
+  const existingParams = extractModelParams(
+    settingsService.getProviderSettings(providerName),
+  );
   for (const [key, value] of Object.entries(profileParams)) {
-    setActiveModelParam(key, value, settingsService, providerName);
+    settingsService.setProviderSetting(providerName, key, value);
   }
   for (const key of Object.keys(existingParams)) {
     if (!(key in profileParams)) {
-      clearActiveModelParam(key, settingsService, providerName);
+      settingsService.setProviderSetting(providerName, key, undefined);
     }
   }
 }

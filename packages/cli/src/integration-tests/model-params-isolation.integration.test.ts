@@ -33,6 +33,8 @@ import type { IProvider } from '@vybestack/llxprt-code-providers';
 import {
   setActiveModelParam,
   clearActiveModelParam,
+} from '../../../agents/src/api/model-parameters.js';
+import {
   switchActiveProvider,
   buildRuntimeProfileSnapshot,
   setActiveModel,

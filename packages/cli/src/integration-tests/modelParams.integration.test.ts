@@ -22,9 +22,9 @@ import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
 import { setCommand } from '../ui/commands/setCommand.js';
 import {
   setActiveModelParam,
-  buildRuntimeProfileSnapshot,
   clearActiveModelParam,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+} from '../../../agents/src/api/model-parameters.js';
+import { buildRuntimeProfileSnapshot } from '@vybestack/llxprt-code-providers/runtime.js';
 import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
 import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
 import { assertDefined } from '../__tests__/assertions.js';

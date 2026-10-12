@@ -12,7 +12,7 @@ import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/cor
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { loadProviderAliasEntries } from '../composition/providerAliases.js';
-import { computeModelDefaults } from '../runtime/providerMutations.js';
+import { computeModelDefaults } from '../model-defaults.js';
 import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
 
 const PROVIDER_NAME = 'anthropic';

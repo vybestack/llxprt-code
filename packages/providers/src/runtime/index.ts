@@ -27,11 +27,6 @@ export type { StatelessHardeningPreference } from './statelessHardening.js';
 
 export { validateRuntimeId } from './runtimeIdValidation.js';
 
-export {
-  setActiveModelParam,
-  clearActiveModelParam,
-} from './providerModelParameters.js';
-
 export { activateIsolatedRuntimeContext } from './runtimeLifecycle.js';
 export { beginCliRuntimeRegistration } from './cliForegroundRuntime.js';
 export type { CliRuntimeRegistrationHandle } from './cliForegroundRuntime.js';

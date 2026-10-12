@@ -1,8 +1,6 @@
 import { extractModelParams } from '@vybestack/llxprt-code-providers/model-parameter-data.js';
-import {
-  setActiveModel,
-  assembleModelSelection,
-} from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { setActiveModel } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { assembleModelSelection } from './model-selection.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 /**

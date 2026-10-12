@@ -142,3 +142,5 @@ export type {
   ToolFormatState,
   ToolFormatOverrideLiteral,
 } from './control/tool-format-control.js';
+
+export type { AgentModelParametersControl } from './model-parameters.js';

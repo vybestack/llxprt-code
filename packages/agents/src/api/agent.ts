@@ -1,3 +1,4 @@
+import type { AgentModelParametersControl } from './model-parameters.js';
 import type { AgentSettingsControl } from './control/settings-control.js';
 import type { AgentToolFormatControl } from './control/tool-format-control.js';
 import type { SessionProviderReads } from './session-provider-reads.js';
@@ -1065,6 +1066,7 @@ export interface AgentLspControl {
 }
 
 export interface Agent {
+  readonly modelParameters: AgentModelParametersControl;
   readonly settings: AgentSettingsControl;
   readonly toolFormat: AgentToolFormatControl;
   readonly providerReads: SessionProviderReads;

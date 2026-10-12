@@ -5,7 +5,7 @@ import { extractModelParams } from '@vybestack/llxprt-code-providers/model-param
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { assembleModelSelection } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { assembleModelSelection } from './model-selection.js';
 
 import type {
   Config,

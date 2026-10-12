@@ -25,10 +25,6 @@ import type {
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { getOpenAIProviderInfo } from '@vybestack/llxprt-code-providers';
 import { refreshAliasProviders } from '@vybestack/llxprt-code-providers/composition.js';
-import {
-  clearActiveModelParam,
-  setActiveModelParam,
-} from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
 import { updateActiveProviderApiKey } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
 import { getProfileByName } from '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js';
 import type { RuntimeOwnerFeatures } from '../ui/contexts/RuntimeContext.js';
@@ -52,6 +48,7 @@ function bindProviderMutations(
   >,
   manager: RuntimeProviderManager,
   changeModel: RuntimeOwnerFeatures['setActiveModel'],
+  modelParameters: Agent['modelParameters'],
 ): Pick<
   RuntimeOwnerFeatures,
   | 'setActiveModel'
@@ -61,19 +58,8 @@ function bindProviderMutations(
 > {
   return {
     setActiveModel: changeModel,
-    setActiveModelParam: (key, value) =>
-      setActiveModelParam(
-        key,
-        value,
-        settingsService,
-        manager.getActiveProviderName(),
-      ),
-    clearActiveModelParam: (key) =>
-      clearActiveModelParam(
-        key,
-        settingsService,
-        manager.getActiveProviderName(),
-      ),
+    setActiveModelParam: (key, value) => modelParameters.set(key, value),
+    clearActiveModelParam: (key) => modelParameters.clear(key),
     updateActiveProviderApiKey: (key) =>
       updateActiveProviderApiKey(
         key,
@@ -95,6 +81,7 @@ export function createRuntimeOwnerFeatures(
   sessionSettings: SessionSettingsOwner,
   settingsService: SettingsService,
   definitions: Pick<Agent['workspace'], 'profileDefinitions' | 'profileWrites'>,
+  modelParameters: Agent['modelParameters'],
   settings: Agent['settings'],
   toolFormat: Agent['toolFormat'],
   reads: Pick<
@@ -147,6 +134,7 @@ export function createRuntimeOwnerFeatures(
       settingsService,
       manager,
       changeModel,
+      modelParameters,
     ),
     getWorkspaceDirectories: () => [...directories()],
     getDefaultProfileName: () =>

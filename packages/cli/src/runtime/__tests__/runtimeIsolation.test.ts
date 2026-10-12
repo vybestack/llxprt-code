@@ -1,5 +1,5 @@
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { assembleModelSelection } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
 import {
   assembleProfileApplication,
   assembleProviderSwitch,
@@ -27,12 +27,12 @@ const definitionFixture = installDefinitionRuntimeFixture();
 import { afterEach, describe, expect, it } from 'bun:test';
 import { SettingsService, type Profile } from '@vybestack/llxprt-code-settings';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
+import { setActiveModelParam } from '../../../../agents/src/api/model-parameters.js';
 import {
   activateIsolatedRuntimeContext,
   buildRuntimeProfileSnapshot,
   createIsolatedRuntimeContext,
   setActiveModel,
-  setActiveModelParam,
   switchActiveProvider,
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,

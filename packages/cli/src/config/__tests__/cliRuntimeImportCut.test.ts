@@ -202,6 +202,14 @@ describe('CLI provider bootstrap across owners', () => {
             item.settingsOwner,
             item.settingsService,
             definitionFixture(),
+            {
+              set: () => {
+                throw new Error('Unexpected model parameter mutation');
+              },
+              clear: () => {
+                throw new Error('Unexpected model parameter clear');
+              },
+            },
             assembleSettingsControl(
               () => item.settingsOwner,
               () => {},

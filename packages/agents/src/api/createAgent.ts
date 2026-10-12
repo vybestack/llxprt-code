@@ -10,7 +10,7 @@ import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js'
 import {
   assembleModelSelection,
   type ModelSelectionOperations,
-} from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+} from './model-selection.js';
 
 import {
   prepareAgentShellOwner,

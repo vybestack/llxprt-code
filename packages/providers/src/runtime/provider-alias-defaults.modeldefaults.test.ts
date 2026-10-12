@@ -1,7 +1,7 @@
 import { Config as RealConfig } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService as RealSettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { assembleModelSelection } from './providerMutations.js';
+import { assembleModelSelection } from '../../../agents/src/api/model-selection.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC

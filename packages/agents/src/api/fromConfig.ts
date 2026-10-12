@@ -17,7 +17,7 @@ import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/s
 import {
   assembleModelSelection,
   type ModelSelectionOperations,
-} from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+} from './model-selection.js';
 import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 /**
  * @plan:PLAN-20260621-COREAPIREMED.P09

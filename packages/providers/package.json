@@ -91,11 +91,6 @@
       "bun": "./src/runtime/settingsResolver.ts",
       "import": "./dist/src/runtime/settingsResolver.js"
     },
-    "./runtime/providerModelParameters.js": {
-      "types": "./dist/src/runtime/providerModelParameters.d.ts",
-      "bun": "./src/runtime/providerModelParameters.ts",
-      "import": "./dist/src/runtime/providerModelParameters.js"
-    },
     "./runtime/providerSwitch.js": {
       "types": "./dist/src/runtime/providerSwitch.d.ts",
       "bun": "./src/runtime/providerSwitch.ts",
@@ -267,6 +262,11 @@
       "types": "./dist/src/model-parameter-data.d.ts",
       "bun": "./src/model-parameter-data.ts",
       "import": "./dist/src/model-parameter-data.js"
+    },
+    "./model-defaults.js": {
+      "types": "./dist/src/model-defaults.d.ts",
+      "bun": "./src/model-defaults.ts",
+      "import": "./dist/src/model-defaults.js"
     }
   },
   "scripts": {
