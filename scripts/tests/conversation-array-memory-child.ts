@@ -20,7 +20,7 @@ import {
   conversationWithOwners,
   forbidArrayRollback,
   gate,
-} from '../../packages/agents/src/core/conversation-array-core-helpers.js';
+} from '../../packages/agents/src/core/conversation-array-core-test-helpers.js';
 import { createModelToolFixture } from '../../packages/agents/src/core/__tests__/model-tool-fixture.js';
 import { SessionSettingsOwner } from '../../packages/core/src/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';

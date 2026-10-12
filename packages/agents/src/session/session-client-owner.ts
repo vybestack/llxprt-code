@@ -449,12 +449,12 @@ export class SessionClientOwner {
     this.ownsSessionPolicy =
       this.borrowedClient === undefined && this.borrowedBus === undefined;
     this.sessionPolicy = policy;
-    const sessionApproval = createSessionMcpApproval({
+    const sessionApproval = createSessionMcpApproval(
       policy,
-      upstream: workspace.policyOwner.session,
-      writes: this.policyWrites,
-      getClient: () => this.getAgentClient(),
-    });
+      workspace.policyOwner.session,
+      this.policyWrites,
+      () => this.getAgentClient(),
+    );
     return { policy, sessionApproval };
   }
 

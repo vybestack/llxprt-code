@@ -10,18 +10,18 @@ import { persistPolicyToToml } from '@vybestack/llxprt-code-core/policy/config.j
 import { PolicyDecision } from '@vybestack/llxprt-code-policy';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 
-interface SessionMcpApprovalInput {
-  readonly policy: SessionPolicyOwner;
-  /** The workspace-level session policy, whose DENY decisions outrank this session's approvals. */
-  readonly upstream: Pick<SessionPolicyOwner, 'decisions'>;
-  /** Tracks in-flight policy writes so session disposal can await them. */
-  readonly writes: Set<Promise<void>>;
-  readonly getClient: () => AgentClientContract;
-}
-
-/** MCP approval policy for one session: persists rules, and defers to an upstream DENY. */
-export function createSessionMcpApproval(input: SessionMcpApprovalInput) {
-  const { policy, upstream, writes, getClient } = input;
+/**
+ * MCP approval policy for one session: persists rules, and defers to an
+ * upstream DENY. `upstream` is the workspace-level session policy, whose DENY
+ * decisions outrank this session's approvals; `writes` tracks in-flight policy
+ * writes so session disposal can await them.
+ */
+export function createSessionMcpApproval(
+  policy: SessionPolicyOwner,
+  upstream: Pick<SessionPolicyOwner, 'decisions'>,
+  writes: Set<Promise<void>>,
+  getClient: () => AgentClientContract,
+) {
   const approval = createMcpApprovalPolicy(
     { ...policy.decisions, ...policy.confirmation },
     (message) => {

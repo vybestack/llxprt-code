@@ -17,6 +17,7 @@ import {
   createEmojiFilter,
   filterHistoryItems,
   resolveEmojiFilterMode,
+  type EmojiFilterSettingsSource,
 } from '../utils/iContentToHistoryItems.js';
 import type { CommandContext, MessageActionReturn } from './types.js';
 
@@ -91,23 +92,22 @@ function displayRow(content: IContent): HistoryItemWithoutId {
 }
 
 async function displayPrefix(
-  context: CommandContext,
+  ui: CommandContext['ui'],
+  emojiSettings: EmojiFilterSettingsSource | null,
   rows: HistoryDensityRows,
   cut: number,
   restoring: boolean,
 ): Promise<void> {
-  context.ui.clear();
+  ui.clear();
   if (!restoring) {
-    context.ui.updateHistoryTokenCount(0);
+    ui.updateHistoryTokenCount(0);
     return;
   }
-  const emojiFilter = createEmojiFilter(
-    resolveEmojiFilterMode(context.services.config),
-  );
+  const emojiFilter = createEmojiFilter(resolveEmojiFilterMode(emojiSettings));
   let index = 0;
   for await (const row of prefix(rows, cut)) {
     for (const item of filterHistoryItems([displayRow(row)], emojiFilter))
-      context.ui.addItem(item, index++);
+      ui.addItem(item, index++);
   }
 }
 
@@ -186,12 +186,13 @@ async function releaseMedia(media: SnapshotMedia): Promise<void> {
 }
 
 export async function mutateChatHistory(
-  context: CommandContext,
+  client: AgentClientContract,
+  ui: CommandContext['ui'],
+  emojiSettings: EmojiFilterSettingsSource | null,
+  signal: AbortSignal,
   recording: SessionRecordingService,
   turns?: number,
 ): Promise<MessageActionReturn | void> {
-  const client = context.services.agent?.agentClient;
-  if (client === undefined) throw new Error('Chat client is unavailable');
   const media: SnapshotMedia = {
     references: new HistoryMediaIndex(),
     store: clientMediaStore(client),
@@ -201,10 +202,10 @@ export async function mutateChatHistory(
   const operation = turns === undefined ? 'clear' : 'restore';
   try {
     await captureRows(
-      client.getChat().getHistory(false, context.signal),
+      client.getChat().getHistory(false, signal),
       rows,
       media,
-      context.signal,
+      signal,
     );
     const cut = cutIndex(rows, turns);
     if (cut === rows.length)
@@ -216,15 +217,15 @@ export async function mutateChatHistory(
             ? 'No conversation to clear.'
             : 'Not enough history to restore the requested number of turns.',
       };
-    await preflightPrefix(rows, cut, media.store, context.signal);
-    context.signal.throwIfAborted();
+    await preflightPrefix(rows, cut, media.store, signal);
+    signal.throwIfAborted();
     await assertRecordingWritable(recording);
     await publishPrefix(client, rows, cut);
     client.getHistoryService()?.resetCacheAnchorSeq();
-    await displayPrefix(context, rows, cut, turns !== undefined);
+    await displayPrefix(ui, emojiSettings, rows, cut, turns !== undefined);
     return undefined;
   } catch (error) {
-    context.signal.throwIfAborted();
+    signal.throwIfAborted();
     const detail = error instanceof Error ? error.message : String(error);
     return {
       type: 'message',

@@ -5,13 +5,13 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import type { RowOwnershipStats } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { ConversationManager } from './ConversationManager.js';
 import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
-import { conversationWithOwners } from './conversation-array-core-helpers.js';
+import { conversationWithOwners } from './conversation-array-core-test-helpers.js';
 
 export {
   forbidArrayRollback,
   gate,
   recordArrayProof,
-} from './conversation-array-core-helpers.js';
+} from './conversation-array-core-test-helpers.js';
 
 const selectTools = installModelToolFixture();
 

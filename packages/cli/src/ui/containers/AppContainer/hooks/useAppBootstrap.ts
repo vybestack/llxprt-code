@@ -314,14 +314,15 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
   const h = useBootstrapHistory(props);
   const t = useBootstrapTodo();
   const e = useBootstrapEvents(props, h.addItem, h.setUpdateInfo);
+  const { session: agentSession } = props.agent;
   const agentJournalSource = useMemo(
     () => ({
       getCurrentRecording: () => {
-        const path = props.agent.session.getRecording().path;
+        const path = agentSession.getRecording().path;
         return path ? { getFilePath: () => path } : null;
       },
     }),
-    [props.agent],
+    [agentSession],
   );
   const sb = useScrollbackBootstrap({
     settings: props.settings,

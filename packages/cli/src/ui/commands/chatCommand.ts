@@ -453,7 +453,13 @@ const clearCommand: SlashCommand = {
       };
     }
 
-    return mutateChatHistory(context, recording);
+    return mutateChatHistory(
+      client,
+      context.ui,
+      context.services.config,
+      context.signal,
+      recording,
+    );
   },
 };
 
@@ -489,7 +495,14 @@ const restoreHistory = async (
     };
   }
 
-  return mutateChatHistory(context, recording, turnsToRestore);
+  return mutateChatHistory(
+    client,
+    context.ui,
+    context.services.config,
+    context.signal,
+    recording,
+    turnsToRestore,
+  );
 };
 
 const restoreCommand: SlashCommand = {

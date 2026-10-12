@@ -362,14 +362,19 @@ function useContextRangeSnapshot(uiRuntime: UiRuntime): ContextRange | null {
 
 function PagerTranscript({
   pager,
-  ...props
-}: TranscriptProps & { pager: ScrollbackPagerLayoutBinding }) {
+  uiRuntime,
+  slashCommandRuntime,
+}: {
+  pager: ScrollbackPagerLayoutBinding;
+  uiRuntime: UiRuntime;
+  slashCommandRuntime: SlashCommandRuntime;
+}) {
   const { store } = useTerminalStore();
   const availableHeight = useStoreSelector(
     store,
     (s) => s.availableTerminalHeight,
   );
-  const contextRange = useContextRangeSnapshot(props.uiRuntime);
+  const contextRange = useContextRangeSnapshot(uiRuntime);
   return (
     <ScrollbackViewport
       store={pager.store}
@@ -377,7 +382,7 @@ function PagerTranscript({
       viewportLines={Math.max(1, availableHeight)}
       pollMs={SCROLLBACK_VIEWPORT_POLL_MS}
       range={contextRange ?? undefined}
-      config={props.slashCommandRuntime}
+      config={slashCommandRuntime}
     />
   );
 }
@@ -405,7 +410,11 @@ function TranscriptViewport(props: TranscriptProps) {
   );
   if (usesAlternateBuffer(props)) {
     return props.scrollbackPager ? (
-      <PagerTranscript {...props} pager={props.scrollbackPager} />
+      <PagerTranscript
+        pager={props.scrollbackPager}
+        uiRuntime={props.uiRuntime}
+        slashCommandRuntime={props.slashCommandRuntime}
+      />
     ) : (
       <AlternateTranscript {...props} />
     );

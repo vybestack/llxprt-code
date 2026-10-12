@@ -114,12 +114,6 @@ type RuntimeLoader = (
 
 type ScopeFactory = typeof SubAgentScope.create;
 
-/** The isolated runtime pieces a launch must clean up together. */
-interface RuntimeBundle {
-  runtimeResult: AgentRuntimeLoaderResult;
-  isolatedHandle: IsolatedRuntimeContextHandle;
-}
-
 const createAbortError = (message: string): Error => {
   const error = new Error(message);
   error.name = 'AbortError';
@@ -383,31 +377,21 @@ export class SubagentOrchestrator {
   }): Promise<SubagentLaunchResult> {
     const {
       subagent,
-      runtimeProfile,
       promptConfig,
       modelConfig,
       runConfig,
       request,
       profile,
       agentRuntimeId,
-      childSessionId,
       childJournal,
       signal,
     } = params;
-    let bundle: RuntimeBundle | undefined;
+    const { runtimeResult, isolatedHandle } = await this.createRuntimeBundle(
+      params,
+      signal,
+    );
     let scope: SubAgentScopeInstance | undefined;
     try {
-      bundle = await this.createRuntimeBundle(
-        {
-          subagent,
-          runtimeProfile,
-          modelConfig,
-          agentRuntimeId,
-          childSessionId,
-          childJournal,
-        },
-        signal,
-      );
       this.throwIfAborted(
         signal,
         'Subagent launch aborted after runtime assembly completed.',
@@ -419,8 +403,8 @@ export class SubagentOrchestrator {
         modelConfig,
         runConfig,
         request,
-        bundle.runtimeResult,
-        bundle.isolatedHandle,
+        runtimeResult,
+        isolatedHandle,
         signal,
       );
       this.throwIfAborted(signal, 'Subagent launch aborted before completion.');
@@ -435,42 +419,44 @@ export class SubagentOrchestrator {
         prompt: promptConfig,
         profile,
         config: subagent,
-        runtime: bundle.runtimeResult,
+        runtime: runtimeResult,
         dispose: this.buildScopeDispose(
           scope,
-          bundle.runtimeResult,
-          bundle.isolatedHandle,
+          runtimeResult,
+          isolatedHandle,
           childJournal,
         ),
       };
     } catch (error) {
       return cleanupAfterFailure(error, () =>
-        this.cleanupAfterLaunchFailure(scope, bundle, childJournal),
+        this.cleanupAfterLaunchFailure(
+          scope,
+          runtimeResult,
+          isolatedHandle,
+          childJournal,
+        ),
       );
     }
   }
 
   private async cleanupAfterLaunchFailure(
     scope: SubAgentScopeInstance | undefined,
-    bundle: RuntimeBundle | undefined,
+    runtimeResult: AgentRuntimeLoaderResult,
+    isolatedHandle: IsolatedRuntimeContextHandle,
     childJournal: ChildSessionJournal,
   ): Promise<void> {
-    if (bundle === undefined) {
-      await childJournal.dispose();
-      return;
-    }
     if (scope !== undefined) {
       await this.buildScopeDispose(
         scope,
-        bundle.runtimeResult,
-        bundle.isolatedHandle,
+        runtimeResult,
+        isolatedHandle,
         childJournal,
       )();
       return;
     }
     await this.cleanupRuntimeArtifacts(
-      bundle.runtimeResult,
-      bundle.isolatedHandle,
+      runtimeResult,
+      isolatedHandle,
       childJournal,
     );
   }
@@ -600,65 +586,75 @@ export class SubagentOrchestrator {
       childJournal: ChildSessionJournal;
     },
     signal?: AbortSignal,
-  ): Promise<RuntimeBundle> {
+  ): Promise<{
+    runtimeResult: AgentRuntimeLoaderResult;
+    isolatedHandle: IsolatedRuntimeContextHandle;
+  }> {
     const { runtimeProfile, modelConfig, agentRuntimeId, subagent } = params;
     const { effectiveProfile } = runtimeProfile;
     const activationProfile = getActivationProfile(runtimeProfile);
     const runtimeStateProfile = getRuntimeStateProfile(runtimeProfile);
     const isLoadBalancerActivation = isLoadBalancerProfile(activationProfile);
 
-    this.throwIfAborted(
-      signal,
-      'Subagent launch aborted before runtime state.',
-    );
-    const runtimeState = this.createRuntimeState(
-      runtimeStateProfile,
-      modelConfig,
-      agentRuntimeId,
-      subagent.name,
-      params.childSessionId,
-    );
-    const settingsService = this.options.createChildSettings();
-    if (!isLoadBalancerActivation) {
-      populatePreActivationSettings(
+    try {
+      this.throwIfAborted(
+        signal,
+        'Subagent launch aborted before runtime state.',
+      );
+      const runtimeState = this.createRuntimeState(
+        runtimeStateProfile,
+        modelConfig,
+        agentRuntimeId,
+        subagent.name,
+        params.childSessionId,
+      );
+      const settingsService = this.options.createChildSettings();
+      if (!isLoadBalancerActivation) {
+        populatePreActivationSettings(
+          settingsService,
+          runtimeStateProfile,
+          subagent.profile,
+        );
+      } else {
+        settingsService.setCurrentProfileName(subagent.profile);
+        settingsService.set('activeProvider', LOAD_BALANCER_PROVIDER_NAME);
+        settingsService.set(
+          `providers.${LOAD_BALANCER_PROVIDER_NAME}.model`,
+          LOAD_BALANCER_PROVIDER_NAME,
+        );
+      }
+
+      const isolatedHandle = await this.createIsolatedRuntime(
         settingsService,
+        activationProfile,
         runtimeStateProfile,
         subagent.profile,
+        subagent.name,
+        agentRuntimeId,
+        isLoadBalancerActivation,
       );
-    } else {
-      settingsService.setCurrentProfileName(subagent.profile);
-      settingsService.set('activeProvider', LOAD_BALANCER_PROVIDER_NAME);
-      settingsService.set(
-        `providers.${LOAD_BALANCER_PROVIDER_NAME}.model`,
-        LOAD_BALANCER_PROVIDER_NAME,
-      );
-    }
-
-    const isolatedHandle = await this.createIsolatedRuntime(
-      settingsService,
-      activationProfile,
-      runtimeStateProfile,
-      subagent.profile,
-      subagent.name,
-      agentRuntimeId,
-      isLoadBalancerActivation,
-    );
-    try {
-      const runtimeResult = await this.loadRuntimeInIsolatedScope({
-        subagentName: subagent.name,
-        isolatedHandle,
-        runtimeState,
-        runtimeStateProfile,
-        effectiveProfile,
-        modelConfig,
-        childJournal: params.childJournal,
-        signal,
-      });
-      return { runtimeResult, isolatedHandle };
+      try {
+        const runtimeResult = await this.loadRuntimeInIsolatedScope({
+          subagentName: subagent.name,
+          isolatedHandle,
+          runtimeState,
+          runtimeStateProfile,
+          effectiveProfile,
+          modelConfig,
+          childJournal: params.childJournal,
+          signal,
+        });
+        return { runtimeResult, isolatedHandle };
+      } catch (error) {
+        return await cleanupAfterFailure(error, () =>
+          runCleanupSteps([() => closeIsolatedSessionRuntime(isolatedHandle)]),
+        );
+      }
     } catch (error) {
-      return cleanupAfterFailure(error, () =>
-        runCleanupSteps([() => closeIsolatedSessionRuntime(isolatedHandle)]),
-      );
+      // The child journal is opened before this runs; dispose it for any
+      // assembly failure, including the pre-activation steps above the
+      // isolated-runtime cleanup (#854 P05c).
+      return cleanupAfterFailure(error, () => params.childJournal.dispose());
     }
   }
 

@@ -14,7 +14,7 @@ import {
   rejectedValue,
 } from '../../packages/core/src/services/history/chronology-rollback-test-helpers.js';
 import { RowOwnership } from '../../packages/core/src/recording/rowOwnership.js';
-import { gate } from '../../packages/agents/src/core/conversation-array-core-helpers.js';
+import { gate } from '../../packages/agents/src/core/conversation-array-core-test-helpers.js';
 import {
   clientArrayRows,
   forbidClientArrayRollback,
