@@ -6,8 +6,11 @@ function unsupportedReportOperation(): never {
   throw new Error('History report fixture does not support agent operations');
 }
 
+// Overrides are applied inside the literal because spreading a finished client
+// would read its unsupported `tools` accessor.
 export function createHistoryReportClient(
   history: HistoryService,
+  overrides: Partial<Omit<AgentClientContract, 'tools'>> = {},
 ): AgentClientContract {
   let initialized = false;
   return {
@@ -58,5 +61,6 @@ export function createHistoryReportClient(
     generateEmbedding: unsupportedReportOperation,
     sendMessageStream: unsupportedReportOperation,
     getCurrentSequenceModel: unsupportedReportOperation,
+    ...overrides,
   };
 }

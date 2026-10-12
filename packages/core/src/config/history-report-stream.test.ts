@@ -22,19 +22,21 @@ for (const size of [512, 8192]) {
           expect(previous.isInitialized()).toBe(true);
           let replacementInitialized = false;
           let storedRows = 0;
-          const replacement: AgentClientContract = {
-            ...createHistoryReportClient(history),
-            storeHistoryForLaterUse: async (rows) => {
-              for await (const _row of rows) storedRows++;
+          const replacement: AgentClientContract = createHistoryReportClient(
+            history,
+            {
+              storeHistoryForLaterUse: async (rows) => {
+                for await (const _row of rows) storedRows++;
+              },
+              initialize: async () => {
+                replacementInitialized = true;
+              },
+              isInitialized: () => replacementInitialized,
+              dispose: async () => {
+                replacementInitialized = false;
+              },
             },
-            initialize: async () => {
-              replacementInitialized = true;
-            },
-            isInitialized: () => replacementInitialized,
-            dispose: async () => {
-              replacementInitialized = false;
-            },
-          };
+          );
           const existing = await extractExistingState(logger, previous);
           const transferred = await prepareAgentClientReplacement(
             logger,
