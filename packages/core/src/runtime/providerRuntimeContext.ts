@@ -28,7 +28,6 @@
 import type { ProviderRetryOperations } from './contracts/ProviderRetryOperations.js';
 import type { Config } from '../config/config.js';
 import { MissingRuntimeProviderError } from './errors/MissingRuntimeProviderError.js';
-import type { RequestMediaResolutionService } from '../storage/request-media-resolver.js';
 import type { ProviderFileReferenceMetadata } from '../services/history/IContent.js';
 
 export interface ProviderFileBindingStore {
@@ -75,10 +74,6 @@ export interface ProviderRequestCollaborators extends ProviderRetryOperations {
   readonly runtimeId?: string;
   readonly runtimeKind?: RuntimeKind;
   readonly metadata?: Readonly<Record<string, unknown>>;
-  readonly mediaResolver?: RequestMediaResolutionService;
-  readonly requestMediaBudgetBytes?: number;
-  readonly providerFileBindings?: ProviderFileBindingStore;
-  readonly providerFileLifecycle?: object;
 }
 
 export interface ProviderRuntimeContext extends ProviderRetryOperations {
@@ -87,10 +82,6 @@ export interface ProviderRuntimeContext extends ProviderRetryOperations {
   runtimeId?: string;
   runtimeKind?: RuntimeKind;
   metadata?: Record<string, unknown>;
-  mediaResolver?: RequestMediaResolutionService;
-  requestMediaBudgetBytes?: number;
-  providerFileBindings?: ProviderFileBindingStore;
-  providerFileLifecycle?: object;
 }
 
 /**
@@ -105,10 +96,6 @@ export interface ProviderRuntimeContextInit extends ProviderRetryOperations {
   runtimeId?: string;
   runtimeKind?: RuntimeKind;
   metadata?: Record<string, unknown>;
-  mediaResolver?: RequestMediaResolutionService;
-  requestMediaBudgetBytes?: number;
-  providerFileBindings?: ProviderFileBindingStore;
-  providerFileLifecycle?: object;
 }
 
 export function createProviderRuntimeContext(
@@ -142,9 +129,5 @@ export function createProviderRuntimeContext(
     runtimeId: init.runtimeId,
     runtimeKind: init.runtimeKind,
     metadata: init.metadata,
-    mediaResolver: init.mediaResolver,
-    requestMediaBudgetBytes: init.requestMediaBudgetBytes,
-    providerFileBindings: init.providerFileBindings,
-    providerFileLifecycle: init.providerFileLifecycle,
   };
 }

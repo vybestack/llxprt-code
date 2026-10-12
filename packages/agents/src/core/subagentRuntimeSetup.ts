@@ -805,7 +805,6 @@ export function createSubagentProviderRuntime(
     ...handle.oauthManager.composeRetryOperations(provider, { profileId }),
     settingsService: handle.settingsService,
     config: handle.config,
-    providerFileLifecycle: handle.providerFileLifecycle,
     runtimeId: handle.runtimeId,
     metadata: { source: 'SubagentOrchestrator', subagent },
   });

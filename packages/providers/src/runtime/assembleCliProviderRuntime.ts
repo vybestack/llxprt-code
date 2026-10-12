@@ -159,7 +159,6 @@ export function assembleCliProviderRuntime(
       runtimeId,
       runtimeKind: resolveRuntimeKind(undefined, metadata, 'cli-interactive'),
       metadata,
-      providerFileLifecycle: registration.providerFileLifecycle,
     };
 
     const runtimeMessageBus = registration.messageBus;

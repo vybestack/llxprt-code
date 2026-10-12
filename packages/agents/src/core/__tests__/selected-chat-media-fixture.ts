@@ -21,7 +21,7 @@ import { createHistoryProviderFileBindingStore } from '@vybestack/llxprt-code-co
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type {
   GenerateChatOptions,
   IProvider,
@@ -128,15 +128,6 @@ export function createMediaHistoryChat(
     providerRuntime: {
       ...setup.runtime,
       config: setup.config,
-      mediaResolver: foreignMediaResolver(directory),
-      requestMediaBudgetBytes: 0,
-      providerFileBindings: createHistoryProviderFileBindingStore(
-        new HistoryService(),
-      ),
-      providerFileLifecycle: new ProviderFileLifecycle({
-        maxFiles: 100,
-        maxBytes: 512 * 1024 * 1024,
-      }),
     },
     mediaStore: store,
     mediaAdmission: new MediaAdmissionService(store),
@@ -154,14 +145,5 @@ export function createMediaHistoryChat(
     createHistoryProviderFileBindingStore(history),
     lifecycle,
     contentGenerator,
-  );
-}
-
-function foreignMediaResolver(directory: string): RequestMediaResolver {
-  return new RequestMediaResolver(
-    new LocalMediaStore({
-      rootDirectory: join(directory, 'foreign-media'),
-      quotaBytes: 1024 * 1024,
-    }),
   );
 }

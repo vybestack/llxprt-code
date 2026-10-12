@@ -193,14 +193,12 @@ async function readActiveTodosPrompt(
 function chatRuntime(
   config: Config,
   runtimeState: AgentRuntimeState,
-  lifecycle: object | undefined,
   composeRetryOperations: CreateChatSessionDeps['composeRetryOperations'],
 ) {
   const retryOperations = composeRetryOperations?.(runtimeState.provider) ?? {};
   return {
     ...retryOperations,
     config,
-    providerFileLifecycle: lifecycle,
     runtimeId: runtimeState.runtimeId,
     metadata: { source: 'AgentClient.startChat' },
   };
@@ -259,7 +257,7 @@ async function buildChatFromRuntime(
       state: runtimeState,
       settings: readRuntimeSettings(),
       promptEstimator,
-      providerRuntime: chatRuntime(config, runtimeState, lifecycle, retry),
+      providerRuntime: chatRuntime(config, runtimeState, retry),
       readRuntimeSettings,
       readToolGovernance,
       prepareProviderInvocation,

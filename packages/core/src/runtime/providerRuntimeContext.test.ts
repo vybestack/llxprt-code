@@ -48,15 +48,16 @@ describe('createProviderRuntimeContext', () => {
     );
   });
 
-  it('carries the optional carrier fields it is given', () => {
-    const settings = new SettingsService();
+  it('does not publish media or file services through the runtime context', () => {
     const context = createProviderRuntimeContext({
-      settingsService: settings,
-      runtimeId: 'carrier-fields',
-      requestMediaBudgetBytes: 1024,
+      settingsService: new SettingsService(),
+      runtimeId: 'request-data',
     });
 
-    expect(context.requestMediaBudgetBytes).toBe(1024);
+    expect('mediaResolver' in context).toBe(false);
+    expect('requestMediaBudgetBytes' in context).toBe(false);
+    expect('providerFileBindings' in context).toBe(false);
+    expect('providerFileLifecycle' in context).toBe(false);
   });
 
   it('exposes no ambient surface on the module namespace', async () => {
