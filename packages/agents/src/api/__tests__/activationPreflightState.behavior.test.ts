@@ -20,9 +20,14 @@ import {
   fixturesDir,
 } from './helpers/buildCliStyleConfig.js';
 
-async function setup() {
+async function setup(providerName = 'fake') {
   const built = await buildCliStyleConfig('plain-text.jsonl');
   const manager = built.providerManager;
+  if (providerName !== 'fake') {
+    const provider = new FakeProvider(join(fixturesDir, 'plain-text.jsonl'));
+    provider.name = providerName;
+    manager.registerProvider(provider);
+  }
 
   const operation = await assembleAgentActivationBootstrap(
     built.config,
@@ -517,19 +522,23 @@ describe('preflight adoption boundaries', () => {
   });
 
   it('adopts a keyfile activation after the source keyfile is gone', async () => {
-    const built = await setup();
+    const built = await setup('keyfile-fixture');
     const directory = await mkdtemp(join(tmpdir(), 'preflight-owner-key-'));
     try {
       const keyfile = join(directory, 'provider.key');
       await writeFile(keyfile, 'local-test-key');
-      const activation = { ...intent, cliOverrides: { keyfile } };
+      const activation = {
+        ...intent,
+        provider: 'keyfile-fixture',
+        cliOverrides: { keyfile },
+      };
       const result = await built.operation.preflight(activation);
       if (!result.token) throw new Error('Missing receipt');
-      const client = built.agentClient;
+      const client = built.operation.sessionClient.getAgentClient();
       await rm(keyfile);
       const agent = await fromConfig({
         settingsService: built.settingsService,
-        agentClient: built.agentClient,
+        agentClient: client,
         providerManager: built.providerManager,
         config: built.config,
         mcpRuntime: built.mcpRuntime,
@@ -540,7 +549,9 @@ describe('preflight adoption boundaries', () => {
         },
       });
       expect(
-        built.settingsService.getProviderSettings('fake')['auth-key'],
+        built.settingsService.getProviderSettings('keyfile-fixture')[
+          'auth-key'
+        ],
       ).toBe('local-test-key');
       expect(agent.agentClient).toBe(client);
       await agent.dispose();
@@ -552,11 +563,15 @@ describe('preflight adoption boundaries', () => {
   });
 
   it('recovers after an external keyfile read throws', async () => {
-    const built = await setup();
+    const built = await setup('keyfile-fixture');
     const directory = await mkdtemp(join(tmpdir(), 'preflight-owner-retry-'));
     try {
       const keyfile = join(directory, 'missing.key');
-      const activation = { ...intent, cliOverrides: { keyfile } };
+      const activation = {
+        ...intent,
+        provider: 'keyfile-fixture',
+        cliOverrides: { keyfile },
+      };
       const failed = await built.operation.preflight(activation);
       expect(failed.authFailed).toBe(true);
       expect(failed.authError).toBeInstanceOf(Error);
@@ -564,9 +579,10 @@ describe('preflight adoption boundaries', () => {
       await writeFile(keyfile, 'recovered-local-key');
       const result = await built.operation.preflight(activation);
       if (!result.token) throw new Error('Missing retry receipt');
+      const client = built.operation.sessionClient.getAgentClient();
       const agent = await fromConfig({
         settingsService: built.settingsService,
-        agentClient: built.agentClient,
+        agentClient: client,
         providerManager: built.providerManager,
         config: built.config,
         mcpRuntime: built.mcpRuntime,
@@ -577,7 +593,9 @@ describe('preflight adoption boundaries', () => {
         },
       });
       expect(
-        built.settingsService.getProviderSettings('fake')['auth-key'],
+        built.settingsService.getProviderSettings('keyfile-fixture')[
+          'auth-key'
+        ],
       ).toBe('recovered-local-key');
       await agent.dispose();
     } finally {

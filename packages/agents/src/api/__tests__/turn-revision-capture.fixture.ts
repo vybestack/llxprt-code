@@ -262,12 +262,9 @@ export async function withOwners(
 ): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), 'turn-capture-'));
   const environment = Object.fromEntries(
-    [
-      'LLXPRT_CONFIG_HOME',
-      'LLXPRT_DATA_HOME',
-      'LLXPRT_FAKE_RESPONSES',
-      'LLXPRT_PROMPTS_DIR',
-    ].map((key) => [key, process.env[key]]),
+    ['LLXPRT_CONFIG_HOME', 'LLXPRT_DATA_HOME', 'LLXPRT_FAKE_RESPONSES'].map(
+      (key) => [key, process.env[key]],
+    ),
   );
   process.env.LLXPRT_CONFIG_HOME = join(directory, 'home');
   process.env.LLXPRT_DATA_HOME = join(directory, 'data');

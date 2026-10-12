@@ -48,7 +48,12 @@ export function assembleModelParameterControl(
         { setProviderSetting: writeProviderSetting },
         readProvider(),
       );
-      readParameters()[key] = value;
+      Object.defineProperty(readParameters(), key, {
+        value,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
     },
     clear: (key) => {
       assertAdmission();

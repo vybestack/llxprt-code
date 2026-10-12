@@ -9,6 +9,7 @@ import { AgentBusyError } from '@vybestack/llxprt-code-agents';
 import {
   ProfileManager,
   type LoadBalancerProfile,
+  type Profile,
 } from '@vybestack/llxprt-code-settings';
 import {
   collect,
@@ -16,13 +17,17 @@ import {
   withOwners,
 } from './turn-revision-capture.fixture.js';
 
+import { usePromptFixture } from './helpers/prompt-fixture.js';
+
 describe('Foreground admitted provider and model binding additions on the HTTP wire', () => {
-  it('keeps a tool-result continuation on the admitted endpoint after replacement', async () => {
+  usePromptFixture();
+
+  it('keeps a tool-result continuation on the admitted endpoint until safe-boundary replacement', async () => {
     await withOwners(
       async (a, b, original, replacement, start) => {
         const admitted = start(a, 'Read an allowed file');
         await original.entered;
-        await a.profiles.applySnapshot({
+        const replacementProfile: Profile = {
           version: 1,
           provider: 'openai',
           model: 'capture-tool-replacement',
@@ -31,10 +36,14 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
             'base-url': replacement.url,
             'auth-key': 'turn-capture-local-only',
           },
-        });
+        };
+        await expect(
+          a.profiles.applySnapshot(replacementProfile),
+        ).rejects.toBeInstanceOf(AgentBusyError);
         successful(await start(b, 'Unchanged sibling'));
         original.release();
         successful(await admitted);
+        await a.profiles.applySnapshot(replacementProfile);
         expect(
           original
             .requests()
@@ -61,7 +70,7 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
     await withOwners(async (a, b, original, sibling, start) => {
       const admitted = start(a, 'Original model');
       await original.entered;
-      await a.profiles.applySnapshot({
+      const replacementProfile: Profile = {
         version: 1,
         provider: 'openai',
         model: 'capture-next-model',
@@ -70,12 +79,16 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
           'base-url': original.url,
           'auth-key': 'turn-capture-local-only',
         },
-      });
+      };
+      await expect(
+        a.profiles.applySnapshot(replacementProfile),
+      ).rejects.toBeInstanceOf(AgentBusyError);
       a.injectSteer('Same provider continuation');
       successful(await start(b, 'Independent owner'));
       original.release();
       const completed = await admitted;
       successful(completed);
+      await a.profiles.applySnapshot(replacementProfile);
       expect(
         completed.events
           .filter((event) => event.type === 'model-info')
@@ -106,7 +119,7 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
     await withOwners(async (a, b, original, replacement, start) => {
       const admitted = start(a, 'Original endpoint');
       await original.entered;
-      await a.profiles.applySnapshot({
+      const replacementProfile: Profile = {
         version: 1,
         provider: 'openai',
         model: 'capture-a',
@@ -115,11 +128,15 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
           'base-url': replacement.url,
           'auth-key': 'turn-capture-local-only',
         },
-      });
+      };
+      await expect(
+        a.profiles.applySnapshot(replacementProfile),
+      ).rejects.toBeInstanceOf(AgentBusyError);
       a.injectSteer('Stay on admitted endpoint');
       successful(await start(b, 'Independent sibling'));
       original.release();
       successful(await admitted);
+      await a.profiles.applySnapshot(replacementProfile);
       successful(await start(a, 'Use replacement endpoint'));
       expect(
         original
@@ -222,7 +239,7 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
       async (a, b, original, replacement, start) => {
         const admitted = start(a, 'Unauthorized original request');
         await original.entered;
-        await a.profiles.applySnapshot({
+        const replacementProfile: Profile = {
           version: 1,
           provider: 'openai',
           model: 'capture-authorized-next',
@@ -231,10 +248,15 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
             'base-url': replacement.url,
             'auth-key': 'authorized-next-secret',
           },
-        });
+        };
+        await expect(
+          a.profiles.applySnapshot(replacementProfile),
+        ).rejects.toBeInstanceOf(AgentBusyError);
+        await a.auth.keys.setRaw('authorized-next-secret');
         successful(await start(b, 'Still authorized sibling'));
         original.release();
         const first = await admitted;
+        await a.profiles.applySnapshot(replacementProfile);
         expect(original.requests().map(({ model }) => model)).toStrictEqual([
           'capture-a',
         ]);
@@ -258,7 +280,7 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
     await withOwners(async (a, _b, original, replacement, start) => {
       const admitted = start(a, 'Original credentials');
       await original.entered;
-      await a.profiles.applySnapshot({
+      const replacementProfile: Profile = {
         version: 1,
         provider: 'openai',
         model: 'capture-new-auth',
@@ -267,10 +289,15 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
           'base-url': replacement.url,
           'auth-key': 'different-replacement-secret',
         },
-      });
+      };
+      await expect(
+        a.profiles.applySnapshot(replacementProfile),
+      ).rejects.toBeInstanceOf(AgentBusyError);
+      await a.auth.keys.setRaw('different-replacement-secret');
       a.injectSteer('Do not leak the new secret to the old endpoint');
       original.release();
       const completed = await admitted;
+      await a.profiles.applySnapshot(replacementProfile);
       expect(completed.events.some((event) => event.type === 'error')).toBe(
         true,
       );
@@ -294,7 +321,7 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
       original.release();
       const first = await iterator.next();
       expect(first.done).toBe(false);
-      await a.profiles.applySnapshot({
+      const replacementProfile: Profile = {
         version: 1,
         provider: 'openai',
         model: 'capture-after-pause',
@@ -303,7 +330,10 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
           'base-url': replacement.url,
           'auth-key': 'turn-capture-local-only',
         },
-      });
+      };
+      await expect(
+        a.profiles.applySnapshot(replacementProfile),
+      ).rejects.toBeInstanceOf(AgentBusyError);
       await a.dispose();
       expect((await iterator.next()).done).toBe(true);
     });
@@ -313,7 +343,7 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
     await withOwners(async (a, b, original, replacement, start) => {
       const admitted = start(a, 'Held request for disposal');
       await original.entered;
-      await a.profiles.applySnapshot({
+      const replacementProfile: Profile = {
         version: 1,
         provider: 'openai',
         model: 'capture-after-disposal',
@@ -322,7 +352,10 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
           'base-url': replacement.url,
           'auth-key': 'turn-capture-local-only',
         },
-      });
+      };
+      await expect(
+        a.profiles.applySnapshot(replacementProfile),
+      ).rejects.toBeInstanceOf(AgentBusyError);
       await a.dispose();
       original.release();
       await admitted;
@@ -333,7 +366,7 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
     });
   }, 30_000);
 
-  it('releases a replaced binding after aborting its held request', async () => {
+  it('releases an aborted binding before applying its safe-boundary replacement', async () => {
     await withOwners(async (a, b, original, replacement, start) => {
       const controller = new AbortController();
       const admitted = collect(
@@ -344,7 +377,7 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
         }),
       );
       await original.entered;
-      await a.profiles.applySnapshot({
+      const replacementProfile: Profile = {
         version: 1,
         provider: 'openai',
         model: 'capture-after-abort',
@@ -353,10 +386,14 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
           'base-url': replacement.url,
           'auth-key': 'turn-capture-local-only',
         },
-      });
+      };
+      await expect(
+        a.profiles.applySnapshot(replacementProfile),
+      ).rejects.toBeInstanceOf(AgentBusyError);
       controller.abort();
       original.release();
       await admitted;
+      await a.profiles.applySnapshot(replacementProfile);
       successful(await start(a, 'After aborted request'));
       successful(await start(b, 'Independent request'));
       expect(replacement.requests().map(({ model }) => model)).toStrictEqual([
@@ -406,7 +443,10 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
             'auth-key': 'same-label-new-secret',
           },
         });
-        await a.profiles.applySnapshot(lb);
+        await expect(a.profiles.applySnapshot(lb)).rejects.toBeInstanceOf(
+          AgentBusyError,
+        );
+        a.setEphemeralSetting('auth-key', 'same-label-new-secret');
         successful(await start(b, 'Unchanged sibling'));
         original.release();
         expect(
@@ -415,6 +455,7 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
         expect(original.requests().map(({ model }) => model)).toStrictEqual([
           'same-label-old',
         ]);
+        await a.profiles.applySnapshot(lb);
         successful(await start(a, 'New LB authorization'));
         expect(replacement.requests().map(({ model }) => model)).toStrictEqual([
           'capture-b',
@@ -430,7 +471,7 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
     );
   }, 30_000);
 
-  it('does not reuse a revoked inline LB member credential after replacement', async () => {
+  it('does not reuse an admitted LB credential after explicit revocation and safe-boundary replacement', async () => {
     await withOwners(async (a, _b, original, replacement, start) => {
       const profiles = new ProfileManager();
       await profiles.saveProfile('old-auth-member', {
@@ -466,7 +507,10 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
       await a.profiles.applySnapshot(lb('old-auth-member'));
       const admitted = start(a, 'Before LB auth change');
       await original.entered;
-      await a.profiles.applySnapshot(lb('new-auth-member'));
+      await expect(
+        a.profiles.applySnapshot(lb('new-auth-member')),
+      ).rejects.toBeInstanceOf(AgentBusyError);
+      a.setEphemeralSetting('auth-key', 'new-member-secret');
       a.injectSteer('Revoked credential must not be reused');
       original.release();
       expect(
@@ -475,6 +519,7 @@ describe('Foreground admitted provider and model binding additions on the HTTP w
       expect(original.requests().map(({ model }) => model)).toStrictEqual([
         'old-auth-model',
       ]);
+      await a.profiles.applySnapshot(lb('new-auth-member'));
       successful(await start(a, 'New LB key admission'));
       expect(replacement.requests().map(({ model }) => model)).toStrictEqual([
         'new-auth-model',
