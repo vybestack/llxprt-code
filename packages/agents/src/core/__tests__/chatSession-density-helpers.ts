@@ -1,3 +1,7 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { afterEach as closePolicyFixtures } from 'bun:test';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -28,6 +32,11 @@ import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentG
 // ---------------------------------------------------------------------------
 
 let callIdCounter = 0;
+
+const policyRoots: SessionSettingsOwner[] = [];
+closePolicyFixtures(async () => {
+  for (const owner of policyRoots.splice(0)) await owner.dispose();
+});
 
 function nextCallId(): string {
   return `call-${++callIdCounter}`;
@@ -135,7 +144,18 @@ export function buildRuntimeContext(
     getToolRegistry: vi.fn(() => undefined),
   } as never;
 
+  const settingsService = new SettingsService();
+  const settingsOwner = new SessionSettingsOwner(settingsService);
+  policyRoots.push(settingsOwner);
   return createAgentRuntimeContext({
+    readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
+    prepareProviderInvocation: (name, parameters, signal) =>
+      settingsOwner.prepareProviderInvocation(
+        runtimeState.runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
     state: runtimeState,
     history: historyService,
     settings: {
@@ -158,11 +178,10 @@ export function buildRuntimeContext(
     provider: mockProviderAdapter,
     telemetry: mockTelemetryAdapter,
     tools: mockToolsView,
-    providerRuntime: {
-      runtimeId: 'test-runtime',
-      settingsService: { get: vi.fn(() => undefined) } as never,
-      config: {} as never,
-    },
+    providerRuntime: createProviderRuntimeContext({
+      settingsService,
+      runtimeId: runtimeState.runtimeId,
+    }),
   });
 }
 

@@ -96,8 +96,7 @@ describe('session browser resume with an unreadable recording present (issue #37
       getSessionId: () => 'current-session',
       getProvider: () => 'test-provider',
       getModel: () => 'test-model',
-      getWorkspaceContext: () => ({ getDirectories: () => [root] }),
-      getAgentClient: () => ({ getHistoryService: () => undefined }),
+      directories: () => [root],
       adoptSessionId: () => {},
     } as never;
     const { result, unmount } = renderHook(() =>
@@ -108,6 +107,12 @@ describe('session browser resume with an unreadable recording present (issue #37
             clear: commands.clearItems,
             addItem: commands.addItem,
             pendingItem: null,
+            loadHistory: commands.loadHistory,
+          },
+          services: {
+            agent: {
+              agentClient: { getHistoryService: () => undefined },
+            } as never,
           },
           recordingSwapCallbacks: {
             getCurrentRecording: () => null,

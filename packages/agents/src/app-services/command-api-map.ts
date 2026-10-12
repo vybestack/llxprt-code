@@ -240,7 +240,7 @@ export const COMMAND_API_MAP: readonly CommandApiMapping[] = [
   ),
   runtime(
     '/image',
-    'config.getRunImageOperation',
+    'agent.sessionClient.runImageOperation',
     'Resolves the auxiliary image capability from the live composition root; it performs a provider request but never changes the active conversational provider or model',
   ),
   cliLocal('/help', 'help rendering (UI)', 'Pure UI with no core dependency'),

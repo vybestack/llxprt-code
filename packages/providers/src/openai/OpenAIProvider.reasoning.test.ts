@@ -4,6 +4,8 @@
  * @plan PLAN-20251202-THINKING.P10
  * @requirement REQ-THINK-003
  */
+
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { parseStreamingReasoningDelta } from './OpenAIResponseParser.js';
@@ -164,13 +166,11 @@ describe('OpenAIProvider reasoning parsing @plan:PLAN-20251202-THINKING.P10', ()
       settingsMap: Record<string, unknown>,
     ): NormalizedGenerateChatOptions =>
       ({
-        settings: {
-          get: (key: string) => settingsMap[key],
-        },
-        invocation: {
-          requestId: 'test-request',
-          timestamp: Date.now(),
-        },
+        invocation: createRuntimeInvocationContext({
+          runtimeId: 'test-request',
+          providerName: 'openai',
+          ephemeralsSnapshot: settingsMap,
+        }),
         resolved: {
           model: 'gpt-4o',
           authToken: { token: 'test-token', type: 'api-key' },

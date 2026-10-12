@@ -47,8 +47,8 @@ function optionsFrom(
   baseURL: string | undefined,
 ): NormalizedGenerateChatOptions {
   const invocation = createRuntimeInvocationContext({
-    runtime: { settingsService: settings, runtimeId: 'test-runtime' },
-    settings,
+    runtimeId: 'test-runtime',
+
     providerName: PROVIDER,
     ephemeralsSnapshot: buildEphemeralsSnapshot(settings, PROVIDER),
   });
@@ -56,8 +56,7 @@ function optionsFrom(
     contents: [],
     tools: undefined,
     metadata: {},
-    settings,
-    config: undefined,
+
     invocation,
     resolved: {
       model: 'zai-org/GLM-5.2',

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type OpenAI from 'openai';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
@@ -14,6 +15,7 @@ import type { ProviderMediaTransportCapabilities } from '../providerMediaTranspo
 import {
   finishMediaRequest,
   resolveRequestMedia,
+  captureRequestMediaInput,
 } from '../utils/request-media-resolution.js';
 
 export interface OpenAIMediaSupport {
@@ -104,6 +106,8 @@ export function registerOpenAIChatRequestCleanup(
 export async function prepareOpenAIChatProjection(
   options: NormalizedGenerateChatOptions,
   deps: ChatProjectionPreparationDeps,
+  mediaResolver?: RequestMediaResolutionService,
+  mediaBudgetBytes?: number,
 ): Promise<{
   options: NormalizedGenerateChatOptions;
   requestContext: Awaited<ReturnType<typeof prepareRequest>>;
@@ -113,7 +117,12 @@ export async function prepareOpenAIChatProjection(
   const needsClient =
     support?.fileUpload === true || support?.videoSupport === true;
   const mediaRequest = await resolveRequestMedia(
-    options.runtime,
+    captureRequestMediaInput(
+      options.metadata['logicalRequestId'],
+      options.invocation.runtimeId,
+      mediaBudgetBytes,
+      mediaResolver,
+    ),
     options.contents,
     options.invocation.signal,
   );
@@ -140,7 +149,7 @@ export async function prepareOpenAIChatProjection(
     const requestContext = await prepareRequest(
       preparedOptions,
       deps.defaultModel,
-      preparedOptions.config,
+      undefined,
       deps.logger,
       deps.providerName,
       deps.mediaTransportCapabilities,

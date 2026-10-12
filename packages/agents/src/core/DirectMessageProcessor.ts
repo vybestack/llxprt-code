@@ -5,8 +5,9 @@
  */
 
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
-
+import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
@@ -15,9 +16,8 @@ import type {
   ContentMetadata,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
   ModelOutput,
@@ -34,7 +34,6 @@ import {
   aggregateTextWithSpacing,
 } from './MessageConverter.js';
 import {
-  resolveUserMemory,
   applyRequestModifications,
   extractSystemInstructionText,
 } from './streamRequestHelpers.js';
@@ -43,8 +42,8 @@ import {
   nextStreamEventWithIdleTimeout,
   resolveStreamIdleTimeoutMs,
 } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
-import type { HookSystem } from '@vybestack/llxprt-code-core/hooks/hookSystem.js';
 import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { HookLLMResponse } from '@vybestack/llxprt-code-core/hooks/hookTranslator.js';
 
 interface ToolSelectionHookResult {
@@ -54,7 +53,6 @@ interface ToolSelectionHookResult {
 
 import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   filterHookRestrictedBlocks,
   filterAfcByHookRestrictions,
@@ -71,6 +69,10 @@ import {
 } from './hookEnvelopeHelpers.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
+import {
+  ensureResponseText,
+  extractResponseText,
+} from './directResponseText.js';
 
 /**
  * Reads the next chunk from the stream iterator, applying idle-timeout
@@ -105,25 +107,6 @@ async function readNextStreamChunk(
  * Configs may omit it, so validate `typeof === 'function'` (mirrors main's
  * optional-call `getEnableHooks?.()` short-circuit).
  */
-function resolveHooksEnabled(config: Config | undefined): boolean {
-  if (config && typeof config.getEnableHooks === 'function') {
-    return config.getEnableHooks() === true;
-  }
-  return false;
-}
-
-/**
- * Boundary-validation helper: resolves the HookSystem instance.
- * `Config.getHookSystem()` is declared required, but test-doubles / partial
- * Configs may omit it, so validate `typeof === 'function'` (mirrors main's
- * optional-call `getHookSystem?.()` short-circuit).
- */
-function resolveHookSystem(config: Config | undefined): HookSystem | undefined {
-  if (config && typeof config.getHookSystem === 'function') {
-    return config.getHookSystem();
-  }
-  return undefined;
-}
 
 /**
  * @plan:PLAN-20260707-AGENTNEUTRAL.P13
@@ -156,15 +139,20 @@ function buildBlockingModelOutput(
 export class DirectMessageProcessor {
   private logger = new DebugLogger('llxprt:direct-message-processor');
 
+  rebindHistory(runtimeContext: AgentRuntimeContext): void {
+    this.runtimeContext = runtimeContext;
+    this.historyService = runtimeContext.history;
+  }
+
   constructor(
-    private readonly runtimeContext: AgentRuntimeContext,
+    private runtimeContext: AgentRuntimeContext,
     private readonly providerResolver: (contextLabel: string) => IProvider,
     private readonly providerRuntimeBuilder: (
       source: string,
       extras?: Record<string, unknown>,
-    ) => ProviderRuntimeContext,
+    ) => ProviderRequestCollaborators,
     private readonly generationConfig: ChatSessionConfig,
-    private readonly historyService: HistoryService,
+    private historyService: HistoryService,
     private readonly retry: typeof retryWithBackoff = retryWithBackoff,
   ) {}
 
@@ -176,6 +164,7 @@ export class DirectMessageProcessor {
   async generateDirectMessage(
     params: SendMessageParams,
     prompt_id: string,
+    execution?: AgentChatRecordingExecution,
   ): Promise<ModelOutput> {
     const provider = this.providerResolver('DirectMessageProcessor');
     const providerRuntime: unknown = provider;
@@ -217,6 +206,7 @@ export class DirectMessageProcessor {
         provider,
         params,
         userIContents,
+        params.hookOwner ?? execution?.hookOwner,
       );
 
       const durationMs = Date.now() - startTime;
@@ -280,6 +270,7 @@ export class DirectMessageProcessor {
     provider: IProvider,
     params: SendMessageParams,
     userIContents: IContent[],
+    owner?: HookExecutionOwner,
   ): Promise<ModelOutput> {
     const requestParams: SendMessageParams = {
       ...params,
@@ -290,7 +281,12 @@ export class DirectMessageProcessor {
     };
     return this.retry(
       async () =>
-        this._executeDirectProviderCall(provider, requestParams, userIContents),
+        this._executeDirectProviderCall(
+          provider,
+          requestParams,
+          userIContents,
+          owner,
+        ),
       {
         shouldRetryOnError: (error: unknown) => {
           if (isTerminalRetryError(error)) return false;
@@ -424,6 +420,7 @@ export class DirectMessageProcessor {
     provider: IProvider,
     params: SendMessageParams,
     userIContents: IContent[],
+    owner?: HookExecutionOwner,
   ): Promise<ModelOutput> {
     params.config?.abortSignal?.throwIfAborted();
     const {
@@ -431,7 +428,7 @@ export class DirectMessageProcessor {
       contentsForApi,
       blockedOutput,
       allowedFunctionNames,
-    } = await this._applyPreSendHooks(params, userIContents);
+    } = await this._applyPreSendHooks(params, userIContents, owner);
 
     if (blockedOutput) {
       return blockedOutput;
@@ -457,7 +454,7 @@ export class DirectMessageProcessor {
       timeoutController,
       timeoutSignal,
       upstreamAbortSignal,
-      resolveStreamIdleTimeoutMs(runtimeContext.config),
+      resolveStreamIdleTimeoutMs(this.runtimeContext.readStreamTimeoutPolicy()),
       onAbort,
       allowedFunctionNames,
     );
@@ -465,12 +462,12 @@ export class DirectMessageProcessor {
     return this._processDirectResponse(
       lastResponse,
       aggregatedText,
-      runtimeContext.config,
       {
         contents: contentsForApi,
         tools: effectiveToolsFromConfig,
       },
       allowedFunctionNames,
+      owner,
     );
   }
 
@@ -489,7 +486,7 @@ export class DirectMessageProcessor {
     provider: IProvider,
     contentsForApi: IContent[],
     effectiveToolsFromConfig: ToolDeclaration[] | undefined,
-    runtimeContext: ProviderRuntimeContext,
+    runtimeContext: ProviderRequestCollaborators,
     timeoutSignal: AbortSignal,
     requestContext: Record<string, unknown> | undefined,
   ): AsyncIterable<IContent> {
@@ -504,27 +501,25 @@ export class DirectMessageProcessor {
       },
     );
 
-    if (typeof provider.generateChatCompletion !== 'function') {
-      throw new Error(
-        `Provider ${provider.name} does not support IContent generation`,
-      );
-    }
-
-    return provider.generateChatCompletion({
+    return bindProviderMediaAndFiles(
+      provider,
+      runtimeContext.mediaResolver,
+      runtimeContext.requestMediaBudgetBytes,
+      runtimeContext.providerFileBindings,
+      runtimeContext.providerFileLifecycle,
+      runtimeContext.config?.getTargetDir(),
+    ).generateChatCompletion({
       contents: contentsForApi,
       tools: effectiveToolsFromConfig,
-      config: runtimeContext.config,
-      runtime: runtimeContext,
-      invocation: {
-        signal: timeoutSignal,
-      } as unknown as GenerateChatOptions['invocation'],
-      settings:
-        runtimeContext.settingsService as GenerateChatOptions['settings'],
+      invocation: this.runtimeContext.prepareProviderInvocation(
+        provider.name,
+        undefined,
+        timeoutSignal,
+      ),
       metadata: {
         ...runtimeContext.metadata,
         _retryRequestContext: requestContext,
       },
-      userMemory: resolveUserMemory(runtimeContext.config),
       systemInstruction: extractSystemInstructionText(
         this.generationConfig.systemInstruction,
       ),
@@ -545,6 +540,7 @@ export class DirectMessageProcessor {
   private async _applyPreSendHooks(
     params: SendMessageParams,
     userIContents: IContent[],
+    owner?: HookExecutionOwner,
   ): Promise<{
     effectiveToolsFromConfig: ToolDeclaration[] | undefined;
     contentsForApi: IContent[];
@@ -558,7 +554,7 @@ export class DirectMessageProcessor {
     let contentsForApi: IContent[] = userIContents;
     const toolSelection =
       configForHooks !== undefined
-        ? await this._applyToolSelectionHook(configForHooks, toolsFromConfig)
+        ? await this._applyToolSelectionHook(toolsFromConfig, owner)
         : { tools: toolsFromConfig, allowedFunctionNames: undefined };
     const effectiveToolsFromConfig =
       requestTools === undefined ||
@@ -569,9 +565,9 @@ export class DirectMessageProcessor {
 
     if (configForHooks) {
       const hookResult = await this._handleBeforeModelHook(
-        configForHooks,
         userIContents,
         effectiveToolsFromConfig,
+        owner,
       );
       if (hookResult.blockedOutput) {
         return {
@@ -595,19 +591,14 @@ export class DirectMessageProcessor {
   }
 
   private async _applyToolSelectionHook(
-    configForHooks: Config,
     toolsFromConfig: ToolDeclaration[],
+    owner?: HookExecutionOwner,
   ): Promise<ToolSelectionHookResult> {
-    if (!resolveHooksEnabled(configForHooks)) {
+    if (owner?.beforeToolSelection === undefined)
       return { tools: toolsFromConfig, allowedFunctionNames: undefined };
-    }
-    const hookSystem = resolveHookSystem(configForHooks);
-    if (!hookSystem) {
-      return { tools: toolsFromConfig, allowedFunctionNames: undefined };
-    }
-    await hookSystem.initialize();
-    const toolSelectionResult = await hookSystem.fireBeforeToolSelectionEvent(
+    const toolSelectionResult = await owner.beforeToolSelection(
       toolSelectionRequest(this.runtimeContext.state.model, toolsFromConfig),
+      owner.signal,
     );
     const modifiedConfig = toolSelectionResult?.applyToolChoiceModifications({
       tools: toolsFromConfig,
@@ -638,9 +629,9 @@ export class DirectMessageProcessor {
    * @pseudocode lines 20-22
    */
   private async _handleBeforeModelHook(
-    configForHooks: Config,
     userIContents: IContent[],
     effectiveToolsFromConfig: ToolDeclaration[] | undefined,
+    owner?: HookExecutionOwner,
   ): Promise<{
     blockedOutput?: ModelOutput;
     modifiedContents?: IContent[];
@@ -651,15 +642,10 @@ export class DirectMessageProcessor {
       effectiveToolsFromConfig,
     );
 
-    let beforeModelResult = undefined;
-    if (resolveHooksEnabled(configForHooks)) {
-      const hookSystem = resolveHookSystem(configForHooks);
-      if (hookSystem) {
-        await hookSystem.initialize();
-        beforeModelResult =
-          await hookSystem.fireBeforeModelEvent(requestForHook);
-      }
-    }
+    const beforeModelResult = await owner?.beforeModel?.(
+      requestForHook,
+      owner.signal,
+    );
 
     if (beforeModelResult?.isBlockingDecision() === true) {
       return {
@@ -728,9 +714,9 @@ export class DirectMessageProcessor {
   private async _processDirectResponse(
     lastResponse: IContent,
     aggregatedText: string,
-    config: Config | undefined,
     llmRequest?: { contents: IContent[]; tools?: ToolDeclaration[] },
     allowedFunctionNames?: string[],
+    owner?: HookExecutionOwner,
   ): Promise<ModelOutput> {
     const baseOutput = toModelStreamChunk(lastResponse);
 
@@ -758,8 +744,8 @@ export class DirectMessageProcessor {
     const afterModel = await this._fireAfterModelAndApply(
       directOutput,
       llmRequest,
-      config,
       allowedFunctionNames,
+      owner,
     );
     directOutput = afterModel.directOutput;
     aggregatedText = afterModel.aggregatedText ?? aggregatedText;
@@ -769,7 +755,7 @@ export class DirectMessageProcessor {
       (!afterModel.responseModified || afterModel.aggregatedText !== undefined);
 
     if (canAppendAggregatedText) {
-      this._ensureResponseText(directOutput, aggregatedText);
+      ensureResponseText(directOutput, aggregatedText);
     }
 
     return directOutput;
@@ -786,41 +772,32 @@ export class DirectMessageProcessor {
   private async _fireAfterModelAndApply(
     directOutput: ModelOutput,
     llmRequest: { contents: IContent[]; tools?: ToolDeclaration[] } | undefined,
-    config: Config | undefined,
     allowedFunctionNames: string[] | undefined,
+    owner?: HookExecutionOwner,
   ): Promise<{
     directOutput: ModelOutput;
     responseModified: boolean;
     aggregatedText: string | undefined;
   }> {
-    if (!resolveHooksEnabled(config)) {
+    if (owner?.afterModel === undefined)
       return {
         directOutput,
         responseModified: false,
         aggregatedText: undefined,
       };
-    }
-    const hookSystem = resolveHookSystem(config);
-    if (!hookSystem) {
-      return {
-        directOutput,
-        responseModified: false,
-        aggregatedText: undefined,
-      };
-    }
-    await hookSystem.initialize();
     const filteredBlocks = filterHookRestrictedBlocks(
       directOutput.content.blocks,
       allowedFunctionNames,
     );
     const filteredIContent = iContentFromBlocks(filteredBlocks, 'ai');
-    const afterModelResult = await hookSystem.fireAfterModelEvent(
+    const afterModelResult = await owner.afterModel(
       afterModelRequestEnvelope(
         this.runtimeContext.state.model,
         llmRequest?.contents,
         llmRequest?.tools,
       ),
       afterModelResponseEnvelope(filteredIContent, directOutput),
+      owner.signal,
     );
     if (!afterModelResult) {
       return {
@@ -881,72 +858,9 @@ export class DirectMessageProcessor {
         ),
       },
     };
-    const modifiedText = this._extractResponseText(directOutput);
+    const modifiedText = extractResponseText(directOutput);
     const aggregatedText = modifiedText !== '' ? modifiedText : undefined;
     return { directOutput, responseModified: true, aggregatedText };
-  }
-
-  /**
-   * Ensures the output's visible text equals the aggregated stream text.
-   *
-   * On the streaming direct path, the last IContent chunk only carries the
-   * final fragment's text blocks. The aggregated text across ALL chunks is
-   * the authoritative visible text (preserves the pre-P13 `.text`-getter
-   * semantics that always returned the full aggregated text). Non-text
-   * blocks (tool calls, thinking) are preserved; text blocks are replaced
-   * with a single block carrying the aggregated text.
-   *
-   * @plan:PLAN-20260707-AGENTNEUTRAL.P13
-   * @requirement:REQ-004.2
-   * @pseudocode lines 31-36
-   */
-  private _ensureResponseText(output: ModelOutput, text: string): void {
-    const blocks = output.content.blocks;
-    const hasText = blocks.some((b) => b.type === 'text');
-    if (hasText) {
-      // Replace existing text blocks in-place, preserving the position of
-      // the first text block and removing subsequent text blocks so the
-      // aggregated text occupies the correct position in the interleaved
-      // order.
-      let textPlaced = false;
-      output.content.blocks = blocks
-        .filter((b) => {
-          if (b.type === 'text') {
-            if (!textPlaced) {
-              textPlaced = true;
-              return true;
-            }
-            return false;
-          }
-          return true;
-        })
-        .map((b) => (b.type === 'text' ? { type: 'text' as const, text } : b));
-    } else {
-      // No text block present — append at end, preserving all existing blocks.
-      output.content.blocks = [...blocks, { type: 'text' as const, text }];
-    }
-  }
-
-  /**
-   * Concatenates visible (non-thought) text from the output's content
-   * blocks WITHOUT trimming — preserves the pre-P13 getResponseTextFromParts
-   * semantics (exact text join, no whitespace stripping) so hook-modified
-   * text with leading/trailing whitespace survives to the aggregated text.
-   *
-   * @plan:PLAN-20260707-AGENTNEUTRAL.P13
-   * @requirement:REQ-004.2
-   * @pseudocode lines 31-36
-   */
-  private _extractResponseText(output: ModelOutput): string {
-    return output.content.blocks
-      .filter(
-        (block) =>
-          block.type === 'text' &&
-          typeof block.text === 'string' &&
-          block.text !== '',
-      )
-      .map((block) => (block as { text: string }).text)
-      .join('');
   }
 
   /**

@@ -64,6 +64,7 @@ export const useAgentStream = (
   removeItems?: RemoveHistoryItems,
   operationLifecycle?: OperationLifecycleRegistry,
   cancelActiveSlashCommand?: () => boolean,
+  recordingOwner?: 'agent' | 'raw',
 ) => {
   const orchestration = useAgentStreamOrchestration({
     agent,
@@ -84,6 +85,7 @@ export const useAgentStream = (
     terminalHeight,
     onEditorOpen,
     recordingIntegration,
+    recordingOwner,
     runtimeMessageBus,
     subagentManager,
     operationLifecycle,
@@ -118,7 +120,7 @@ function useAgentStreamReturn(
     orchestration.st.gitService,
     history,
     agent,
-    runtime.storage,
+    runtime.projectCheckpointsDir,
     onDebugMessage,
   );
 

@@ -19,17 +19,13 @@ import type { StreamRuntime } from '../../cliUiRuntime.js';
  */
 export function getTokenLimitForConfiguredContext(
   runtime: StreamRuntime,
+  providerLimit: number | undefined,
 ): number {
   return resolveEffectiveContextLimit(
     runtime.model.getModel(),
     resolveUserContextLimit(
       runtime.ephemeral.getEphemeralSetting('context-limit'),
     ),
-    resolveProviderReportedLimit(
-      runtime.model
-        .getContentGeneratorConfig()
-        ?.providerManager?.getActiveProvider?.()
-        ?.getContextLimit?.(),
-    ),
+    resolveProviderReportedLimit(providerLimit),
   );
 }

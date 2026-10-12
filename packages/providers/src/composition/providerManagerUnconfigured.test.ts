@@ -12,12 +12,11 @@
  * active and issues no implicit requests.
  */
 
+import type { Config } from '@vybestack/llxprt-code-core';
+import { createProviderConfigFixture } from '../runtime/__tests__/provider-config-fixture.js';
 import { restoreGlobals } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import {
-  createProviderManager,
-  setFileSystem,
-} from './providerManagerInstance.js';
+import { createProviderManager } from './providerManagerInstance.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { MockFileSystem } from './IFileSystem.js';
@@ -27,21 +26,15 @@ import { MockFileSystem } from './IFileSystem.js';
  * `config` option is passed. Only the methods called by ProviderManager.setConfig
  * and the composition layer are provided.
  */
-function makeMinimalConfig(
-  overrides: Record<string, unknown> = {},
-): import('@vybestack/llxprt-code-core').Config {
-  return {
-    getConversationLoggingEnabled: () => false,
-    setProviderManager: () => {},
-    setContentGeneratorFactory: () => {},
-    setTokenizerFactory: () => {},
-    getRedactionConfig: () => undefined,
-    getModel: () => 'placeholder-model',
-    getProxy: () => undefined,
-    getEphemeralSettings: () => ({}),
-    getDebugMode: () => false,
-    ...overrides,
-  } as unknown as import('@vybestack/llxprt-code-core').Config;
+function makeMinimalConfig(provider: string): Config {
+  return createProviderConfigFixture({
+    provider,
+    sessionId: 'unconfigured-provider-authority',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    model: 'placeholder-model',
+    debugMode: false,
+  }).config;
 }
 
 function captureThrown(fn: () => unknown): { error: unknown } {
@@ -56,8 +49,6 @@ function captureThrown(fn: () => unknown): { error: unknown } {
 describe('createProviderManager: unconfigured state (#2481)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    const mockFs = new MockFileSystem();
-    setFileSystem(mockFs);
   });
 
   afterEach(() => {
@@ -68,6 +59,7 @@ describe('createProviderManager: unconfigured state (#2481)', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
     return manager;
@@ -109,14 +101,13 @@ describe('createProviderManager: unconfigured state (#2481)', () => {
 describe('createProviderManager: explicit provider activation unchanged (#2481)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    const mockFs = new MockFileSystem();
-    setFileSystem(mockFs);
   });
 
   it('activates openai when explicitly set via setActiveProvider after creation', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
 
@@ -134,6 +125,7 @@ describe('createProviderManager: explicit provider activation unchanged (#2481)'
     settingsService.set('activeProvider', 'openai');
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
 
@@ -148,8 +140,6 @@ describe('createProviderManager: explicit provider activation unchanged (#2481)'
 describe('createProviderManager: invalid configured provider (#2481)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    const mockFs = new MockFileSystem();
-    setFileSystem(mockFs);
   });
 
   it('throws when an explicitly-configured provider name is invalid (typo)', () => {
@@ -159,6 +149,7 @@ describe('createProviderManager: invalid configured provider (#2481)', () => {
     // Build a valid unconfigured manager first, then test that a typo'd
     // explicit provider name surfaces as a structured error.
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
 
@@ -171,6 +162,7 @@ describe('createProviderManager: invalid configured provider (#2481)', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
 
@@ -191,6 +183,7 @@ describe('createProviderManager: invalid configured provider (#2481)', () => {
 
     const captured = captureThrown(() =>
       createProviderManager(runtime, {
+        fileSystem: new MockFileSystem(),
         allowBrowserEnvironment: true,
       }),
     );
@@ -203,8 +196,6 @@ describe('createProviderManager: invalid configured provider (#2481)', () => {
 describe('createProviderManager: explicit provider trimming (#2481)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    const mockFs = new MockFileSystem();
-    setFileSystem(mockFs);
   });
 
   it('trims whitespace from settingsService activeProvider', () => {
@@ -212,6 +203,7 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
     settingsService.set('activeProvider', '  openai  ');
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
 
@@ -224,6 +216,7 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
     settingsService.set('activeProvider', '   ');
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
 
@@ -235,6 +228,7 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
     settingsService.set('activeProvider', '   ');
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
 
@@ -246,6 +240,7 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
     settingsService.set('activeProvider', '   ');
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
 
@@ -256,8 +251,6 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
 describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#2481)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    const mockFs = new MockFileSystem();
-    setFileSystem(mockFs);
   });
 
   it('treats UNCONFIGURED_PROVIDER sentinel in settingsService as absent', () => {
@@ -265,6 +258,7 @@ describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#248
     settingsService.set('activeProvider', 'unconfigured');
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new MockFileSystem(),
       allowBrowserEnvironment: true,
     });
 
@@ -279,8 +273,9 @@ describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#248
     const settingsService = new SettingsService();
     settingsService.set('activeProvider', 'openai');
     const runtime = createProviderRuntimeContext({ settingsService });
-    const config = makeMinimalConfig({ getProvider: () => 'unconfigured' });
+    const config = makeMinimalConfig('unconfigured');
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new MockFileSystem(),
       config,
       allowBrowserEnvironment: true,
     });
@@ -293,8 +288,9 @@ describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#248
     const settingsService = new SettingsService();
     settingsService.set('activeProvider', 'openai');
     const runtime = createProviderRuntimeContext({ settingsService });
-    const config = makeMinimalConfig({ getProvider: () => '   ' });
+    const config = makeMinimalConfig('   ');
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new MockFileSystem(),
       config,
       allowBrowserEnvironment: true,
     });

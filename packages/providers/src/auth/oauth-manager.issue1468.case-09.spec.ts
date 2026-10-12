@@ -6,16 +6,15 @@
 
 import { describe, expect, it } from 'bun:test';
 import {
-  mockGetCurrentProfileName,
   createIssue1468Fixture,
   mockLoadProfile,
 } from './__tests__/oauth-manager.issue1468.test-helpers.js';
 
 describe('Issue #1468 getProfileBuckets case 9', () => {
   it('falls back to the unscoped foreground session bucket in auth status when no scoped bucket exists', async () => {
-    const { tokenStore, manager } = createIssue1468Fixture();
+    const { tokenStore, manager, settingsService } = createIssue1468Fixture();
 
-    mockGetCurrentProfileName.mockReturnValue('opusthinkingbucketed');
+    settingsService.setCurrentProfileName('opusthinkingbucketed');
     mockLoadProfile.mockResolvedValue({
       provider: 'anthropic',
       auth: {

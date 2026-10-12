@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 
 /**
  * AgentClient method tests: generateEmbedding, updateSystemInstruction,
@@ -23,6 +24,7 @@ import {
 import type { ContentBlock } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { AgentClient } from './client.js';
+import { createAgentDefinitionFixture } from '../api/__tests__/helpers/agent-definition-fixture.js';
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
@@ -133,8 +135,8 @@ void vi.mock('@vybestack/llxprt-code-tools', () => ({
   ...actual,
   LocalTodoStore: mockTodoStoreConstructor,
 }));
-const __actual = { ...(await import('./turn')) };
-void vi.mock('./turn', () => {
+const __actual = { ...(await import('./turn.js')) };
+void vi.mock('./turn.js', () => {
   const result = __actual as
     | typeof import('./turn.js')
     | Promise<typeof import('./turn.js')>;
@@ -218,6 +220,13 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
 
 describe('AgentClient (client.ts)', () => {
   let client: AgentClient;
+  let definitions: Awaited<ReturnType<typeof createAgentDefinitionFixture>>;
+  let instructionReads: InstructionReadOperations;
+  let instructionData: {
+    userMemory: string;
+    coreMemory: string;
+    jitMemory: string;
+  };
 
   beforeEach(async () => {
     const ctx = await setupAgentClient({
@@ -226,6 +235,13 @@ describe('AgentClient (client.ts)', () => {
       mockEmbedContentFn,
     });
     client = ctx.client;
+    definitions = await createAgentDefinitionFixture();
+    client.bindWorkspaceDefinitions(
+      definitions.definitions.profileReads,
+      definitions.definitions.subagentReads,
+    );
+    instructionData = ctx.instructionData;
+    instructionReads = ctx.instructionReads;
 
     mockTodoStoreConstructor.mockImplementation(() => ({
       readTodos: todoStoreReadMock,
@@ -252,6 +268,7 @@ describe('AgentClient (client.ts)', () => {
 
   afterEach(async () => {
     await client.dispose();
+    await definitions.dispose();
     vi.restoreAllMocks();
   });
 
@@ -350,10 +367,7 @@ describe('AgentClient (client.ts)', () => {
         countTokens: vi.fn(),
       } as unknown as ContentGenerator;
 
-      const config = client['config'] as unknown as {
-        getUserMemory: () => string;
-      };
-      vi.spyOn(config, 'getUserMemory').mockReturnValue('new memory');
+      instructionData.userMemory = 'new memory';
 
       (
         getEnabledToolNamesForPrompt as Mock<
@@ -414,14 +428,8 @@ describe('AgentClient (client.ts)', () => {
         countTokens: vi.fn(),
       } as unknown as ContentGenerator;
 
-      const config = client['config'] as unknown as {
-        getUserMemory: () => string;
-        getCoreMemory: () => string;
-      };
-      vi.spyOn(config, 'getUserMemory').mockReturnValue('');
-      vi.spyOn(config, 'getCoreMemory').mockReturnValue(
-        'Always respond in JSON',
-      );
+      instructionData.userMemory = '';
+      instructionData.coreMemory = 'Always respond in JSON';
 
       (
         getEnabledToolNamesForPrompt as Mock<
@@ -472,13 +480,11 @@ describe('AgentClient (client.ts)', () => {
         getJitMemoryForPath: (path: string) => Promise<string>;
         getWorkingDir: () => string;
       };
-      vi.spyOn(config, 'getUserMemory').mockReturnValue('base memory');
-      vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
-      vi.spyOn(config, 'getJitMemoryForPath').mockResolvedValue(
-        `--- JIT Context from: sub/LLXPRT.md ---
+      instructionData.userMemory = 'base memory';
+      instructionData.coreMemory = '';
+      instructionData.jitMemory = `--- JIT Context from: sub/LLXPRT.md ---
 sub memory
---- End of JIT Context from: sub/LLXPRT.md ---`,
-      );
+--- End of JIT Context from: sub/LLXPRT.md ---`;
       vi.spyOn(config, 'getWorkingDir').mockReturnValue('/test/dir');
 
       (
@@ -498,7 +504,7 @@ sub memory
 
       await client.updateSystemInstruction();
 
-      expect(config.getJitMemoryForPath).toHaveBeenCalledWith('/test/dir');
+      expect(instructionReads.jit).toHaveBeenCalledWith('/test/dir');
       expect(getCoreSystemPromptAsync).toHaveBeenCalledWith(
         expect.objectContaining({
           userMemory: expect.stringContaining('base memory'),
@@ -536,9 +542,9 @@ sub memory
         getJitMemoryForPath: (path: string) => Promise<string>;
         getWorkingDir: () => string;
       };
-      vi.spyOn(config, 'getUserMemory').mockReturnValue('base memory');
-      vi.spyOn(config, 'getCoreMemory').mockReturnValue('');
-      vi.spyOn(config, 'getJitMemoryForPath').mockResolvedValue('');
+      instructionData.userMemory = 'base memory';
+      instructionData.coreMemory = '';
+      instructionData.jitMemory = '';
       vi.spyOn(config, 'getWorkingDir').mockReturnValue('/test/dir');
 
       (
@@ -565,7 +571,15 @@ sub memory
       );
     });
 
-    it('uses config.getModel() for the system prompt, not the stale runtimeState snapshot (issue #3138)', async () => {
+    it('uses the immutable admitted model for prompt assembly and token estimation (issue #3138)', async () => {
+      client = (
+        await setupAgentClient({
+          mockChatCreateFn,
+          mockGenerateContentFn,
+          mockEmbedContentFn,
+          model: 'glm-5.2',
+        })
+      ).client;
       const setSystemInstruction = vi.fn();
       const estimateTokensForText = vi.fn().mockResolvedValue(100);
       const setBaseTokenOffset = vi.fn();
@@ -584,14 +598,7 @@ sub memory
         countTokens: vi.fn(),
       } as unknown as ContentGenerator;
 
-      // runtimeState.model is 'test-model' (from setup), but the live config
-      // returns a different model after a profile or provider switch.
-      const config = client['config'] as unknown as {
-        getModel: () => string;
-        getUserMemory: () => string;
-      };
-      vi.spyOn(config, 'getUserMemory').mockReturnValue('memory');
-      vi.spyOn(config, 'getModel').mockReturnValue('glm-5.2');
+      instructionData.userMemory = 'memory';
 
       (
         getEnabledToolNamesForPrompt as Mock<
@@ -621,7 +628,7 @@ sub memory
       );
     });
 
-    it('throws when config has no model rather than substituting a vendor default (issue #3138)', async () => {
+    it('propagates a finite session policy failure before publishing a prompt', async () => {
       const mockChat = {
         setSystemInstruction: vi.fn(),
         getHistoryService: vi.fn().mockReturnValue({
@@ -635,13 +642,20 @@ sub memory
         countTokens: vi.fn(),
       } as unknown as ContentGenerator;
 
-      const config = client['config'] as unknown as {
-        getModel: () => string;
-      };
-      vi.spyOn(config, 'getModel').mockReturnValue('');
+      client.bindRuntimeSettings(
+        () => {
+          throw new Error('Induced session policy failure');
+        },
+        () => ({
+          allowed: new Set<string>(),
+          allowedExplicit: false,
+          disabled: new Set<string>(),
+          excluded: new Set<string>(),
+        }),
+      );
 
       await expect(client.updateSystemInstruction()).rejects.toThrow(
-        /no model identity/i,
+        /Induced session policy failure/,
       );
     });
   });
@@ -746,20 +760,30 @@ sub memory
     });
 
     it('should not change models when consecutive 429 errors occur', async () => {
-      const { generatedErrorMessage, configInstance, retryErrorMessages } =
+      const { generatedErrorMessage, submittedModels, retryErrorMessages } =
         await observeNotChangeModelsWhenConsecutive429ErrorsOccur();
       expect(generatedErrorMessage).toContain('Rate limited');
       expect(retryErrorMessages[0]).toContain('Rate limited');
       expect(retryErrorMessages[1]).toContain('Rate limited');
-      expect(configInstance.setModel).not.toHaveBeenCalled();
-      expect(configInstance.setFallbackMode).not.toHaveBeenCalled();
+      expect(submittedModels.length).toBeGreaterThan(1);
+      expect(new Set(submittedModels).size).toBe(1);
     });
 
     const observeNotChangeModelsWhenConsecutive429ErrorsOccur = async () => {
-      const error429 = new Error('Rate limited') as Error & { status?: number };
-      error429.status = 429;
-
-      mockGenerateContentFn.mockRejectedValue(error429);
+      const error429 = Object.assign(new Error('Rate limited'), {
+        status: 429,
+      });
+      let submittedModels: ReadonlyArray<string | undefined> = [];
+      const transport = vi
+        .spyOn(client.getContentGenerator(), 'generateContent')
+        .mockImplementation(
+          async (
+            request: Parameters<ContentGenerator['generateContent']>[0],
+          ): Promise<never> => {
+            submittedModels = [...submittedModels, request.model];
+            throw error429;
+          },
+        );
 
       const retrySpy = retryWithBackoff as Mock<typeof retryWithBackoff>;
       const originalImpl = retrySpy.getMockImplementation();
@@ -782,11 +806,6 @@ sub memory
       const schema = { type: 'string' };
       const abortSignal = new AbortController().signal;
 
-      const configInstance = client['config'] as unknown as {
-        setModel: ReturnType<typeof vi.fn>;
-        setFallbackMode: ReturnType<typeof vi.fn>;
-      };
-
       let generatedError: unknown;
       try {
         await client.generateJson(contents, schema, abortSignal, 'test-model');
@@ -794,6 +813,7 @@ sub memory
         generatedError = error;
       } finally {
         retrySpy.mockImplementation(originalImpl ?? ((apiCall) => apiCall()));
+        transport.mockRestore();
       }
 
       const generatedErrorMessage =
@@ -804,7 +824,7 @@ sub memory
         error instanceof Error ? error.message : String(error),
       );
 
-      return { generatedErrorMessage, configInstance, retryErrorMessages };
+      return { generatedErrorMessage, submittedModels, retryErrorMessages };
     };
   });
 

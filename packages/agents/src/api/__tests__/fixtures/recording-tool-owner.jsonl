@@ -1,0 +1,6 @@
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"owner-a-1","name":"write_file","parameters":{"file_path":"{{CWD}}/tmp/recording-tool-hook-owner/a.txt","content":"A"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"owner-b-1","name":"write_file","parameters":{"file_path":"{{CWD}}/tmp/recording-tool-hook-owner/b.txt","content":"B"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"A completed"}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"B completed"}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"tool_call","id":"owner-a-2","name":"write_file","parameters":{"file_path":"{{CWD}}/tmp/recording-tool-hook-owner/resumed.txt","content":"resumed"}}]}]}
+{"chunks":[{"speaker":"ai","blocks":[{"type":"text","text":"A resumed"}]}]}

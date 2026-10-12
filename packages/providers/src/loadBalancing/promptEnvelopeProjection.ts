@@ -6,7 +6,7 @@
 
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { GenerateChatOptions } from '../IProvider.js';
+import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { ProviderManager } from '../ProviderManager.js';
 import type { CircuitBreakerManager } from './circuitBreakerManager.js';
 import type { FailoverState } from './failoverState.js';
@@ -50,6 +50,7 @@ const projectionLogger = new DebugLogger(
  * project — capability unavailability is never an error at this seam.
  */
 export async function projectNextSubProfilePromptEnvelope(input: {
+  readonly bindDelegateProvider: (provider: IProvider) => IProvider;
   readonly config: LoadBalancingProviderConfig;
   readonly providerManager: ProviderManager;
   readonly failoverState: FailoverState;
@@ -63,6 +64,7 @@ export async function projectNextSubProfilePromptEnvelope(input: {
   readonly buildDelegateResolvedOptions: (
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
     options: GenerateChatOptions,
+    selectedSubProfile: ResolvedSubProfile | LoadBalancerSubProfile,
   ) => GenerateChatOptions;
   readonly options: GenerateChatOptions;
 }): Promise<PromptEnvelopeProjection | undefined> {
@@ -92,9 +94,11 @@ export async function projectNextSubProfilePromptEnvelope(input: {
   const resolvedOptions = input.buildDelegateResolvedOptions(
     authenticatedSubProfile,
     targetOptions,
+    subProfile,
   );
-  const delegateProjection =
-    await delegateProvider.projectPromptEnvelope(resolvedOptions);
+  const delegateProjection = await input
+    .bindDelegateProvider(delegateProvider)
+    .projectPromptEnvelope?.(resolvedOptions);
   if (delegateProjection === undefined) {
     return undefined;
   }
@@ -176,6 +180,7 @@ export async function toEstimateOnlyPromptEnvelopeProjection(
  * closes over that threshold instead of re-extracting it per member.
  */
 export async function projectLoadBalancerPromptEnvelope(input: {
+  readonly bindDelegateProvider: (provider: IProvider) => IProvider;
   readonly config: LoadBalancingProviderConfig;
   readonly providerManager: ProviderManager;
   readonly failoverState: FailoverState;
@@ -186,10 +191,12 @@ export async function projectLoadBalancerPromptEnvelope(input: {
   readonly buildDelegateResolvedOptions: (
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
     options: GenerateChatOptions,
+    selectedSubProfile: ResolvedSubProfile | LoadBalancerSubProfile,
   ) => GenerateChatOptions;
   readonly options: GenerateChatOptions;
 }): Promise<PromptEnvelopeProjection | undefined> {
   return projectNextSubProfilePromptEnvelope({
+    bindDelegateProvider: input.bindDelegateProvider,
     config: input.config,
     providerManager: input.providerManager,
     failoverState: input.failoverState,

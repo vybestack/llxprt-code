@@ -1,3 +1,5 @@
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+const fixtureOwners = installRuntimeTestOwners();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -209,7 +211,12 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({ settingsService, config });
+    providerManager = new ProviderManager({
+      sessionSettings: fixtureOwners.adopt(config, settingsService)
+        .settingsOwner,
+      settingsService,
+      config,
+    });
   });
 
   describe('Round-robin', () => {

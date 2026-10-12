@@ -5,49 +5,16 @@
  */
 
 import { DebugLogger } from '../debug/DebugLogger.js';
-import { GitService } from '../services/gitService.js';
-import type { AsyncTaskManager } from '../services/asyncTaskManager.js';
-import type { ShellJobManager } from '../services/shellJobManager.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { assertSessionScopedKey } from '@vybestack/llxprt-code-settings';
-import { createToolRegistry as _createToolRegistry } from './toolRegistryFactory.js';
-import { reconcileTaskToolRegistration as _reconcileTaskToolRegistration } from './toolRegistryFactory.js';
-import type { AgentClientContract } from '../core/clientContract.js';
 import { TELEMETRY_OUTFILE_BOUND_DEFAULTS } from './configConstructor.js';
-import { shutdownLsp } from './lspIntegration.js';
-import type { LspServiceClient } from '@vybestack/llxprt-code-ide-integration';
 import type { LspConfig } from '@vybestack/llxprt-code-ide-integration';
-import {
-  normalizeStreamingValue,
-  normalizeContextLimit,
-} from './ephemeralSettingsHelpers.js';
-import type { MessageBus } from '../confirmation-bus/message-bus.js';
-import type { SchedulerPurpose } from '../session/sessionSchedulerRegistry.js';
-import type { SessionSchedulerRegistry } from '../session/sessionSchedulerRegistry.js';
-import {
-  type ShellReplacementMode,
-  normalizeShellReplacement,
-} from './configTypes.js';
+import type { ShellReplacementMode } from './configTypes.js';
 import { ConfigBaseCore } from './configBaseCore.js';
-import {
-  normalizeMaxAsyncTasks,
-  normalizeShellMaxBackgroundJobs,
-} from './asyncTaskServices.js';
+import type { ApprovalMode } from './configTypes.js';
 
 export abstract class ConfigBase extends ConfigBaseCore {
-  // Abstract methods implemented by Config subclass
-  abstract initializeContentGeneratorConfig: () => Promise<void>;
   abstract getExcludeTools(): string[] | undefined;
-  abstract getAsyncTaskManager(): AsyncTaskManager | undefined;
-  abstract getShellJobManager(): ShellJobManager | undefined;
-
-  async refreshAuth(authMethod?: string) {
-    const logger = new DebugLogger('llxprt:config:refreshAuth');
-    logger.debug(
-      () => `refreshAuth invoked (authMethod=${authMethod ?? 'default'})`,
-    );
-    await this.initializeContentGeneratorConfig();
-  }
+  abstract setApprovalMode(mode: ApprovalMode): void;
+  abstract getConversationLoggingEnabled(): boolean;
 
   getSessionId(): string {
     return this.adoptedSessionId ?? this.sessionId;
@@ -64,14 +31,6 @@ export abstract class ConfigBase extends ConfigBaseCore {
       `adoptSessionId: adopting ${sessionId} (was ${this.sessionId})`,
     );
     this.adoptedSessionId = sessionId;
-  }
-
-  resetModelToDefault(): void {
-    this.contentGeneratorConfig.model = this.originalModel;
-    this.inFallbackMode = false;
-    // #2534 Domain C2: keep the providerless terminal fallback in sync with
-    // the reset so getModel() reflects the default model in every scope.
-    this.model = this.originalModel;
   }
 
   // #3315 outfile-bound telemetry getters. They read the protected
@@ -103,204 +62,18 @@ export abstract class ConfigBase extends ConfigBaseCore {
     );
   }
 
-  getGlobalMemory(): string {
-    if (this.isJitContextEnabled() && this.contextManager) {
-      return this.contextManager.getGlobalMemory();
-    }
-    return this.userMemory;
-  }
-
-  getEnvironmentMemory(): string {
-    if (this.isJitContextEnabled() && this.contextManager) {
-      return this.contextManager.getEnvironmentMemory();
-    }
-    return '';
-  }
-
-  getCoreMemory(): string | undefined {
-    if (this.isJitContextEnabled() && this.contextManager) {
-      return this.contextManager.getCoreMemory();
-    }
-    return undefined;
-  }
-
-  getLlxprtMdFileCount(): number {
-    if (this.isJitContextEnabled() && this.contextManager) {
-      return this.contextManager.getContextFileCount();
-    }
-    return this.llxprtMdFileCount;
-  }
-
-  getCoreMemoryFileCount(): number {
-    if (this.isJitContextEnabled() && this.contextManager) {
-      return this.contextManager.getCoreMemoryFileCount();
-    }
-    return 0;
-  }
-
-  getLlxprtMdFilePaths(): string[] {
-    if (this.isJitContextEnabled() && this.contextManager) {
-      return Array.from(this.contextManager.getLoadedPaths());
-    }
-    return this.llxprtMdFilePaths;
-  }
-
-  async getGitService(): Promise<GitService> {
-    if (!this.gitService) {
-      this.gitService = new GitService(this.targetDir, this.storage);
-      await this.gitService.initialize();
-    }
-    return this.gitService;
-  }
-
-  /**
-   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
-   * @requirement REQ-D01-002
-   * @requirement REQ-D01-003
-   * @pseudocode lines 122-133
-   */
-  async createToolRegistry(messageBus: MessageBus): Promise<ToolRegistry> {
-    const result = await _createToolRegistry(this, this, messageBus);
-    this.allPotentialTools = result.allPotentialTools;
-    return result.registry;
-  }
-
-  /**
-   * Carries a task-tool registration installed after initialization into the
-   * already-built tool registry (issue #3222).
-   *
-   * The registration is consumed only at tool-registry construction, and
-   * ensureInitialized is a no-op for a Config the caller already initialized,
-   * so a registration installed on such a Config (for example the shipped
-   * default fromConfig installs during adoption) would otherwise never be
-   * consumed. This registers the missing task tool against the LIVE registry
-   * under the same coreTools/excludeTools governance as build time — never
-   * overriding an existing task tool or any other registry contents — and
-   * pushes the updated declarations to a ready agent client, mirroring
-   * Config.refreshSkills.
-   */
-  async reconcileTaskToolRegistration(): Promise<void> {
-    const messageBus = this.getRuntimeMessageBus();
-    if (messageBus === undefined) {
-      return;
-    }
-    const registered = _reconcileTaskToolRegistration(
-      this,
-      this,
-      this.getToolRegistry(),
-      this.allPotentialTools,
-      messageBus,
-    );
-    if (!registered) {
-      return;
-    }
-    // Registry changes do not reach the model on their own: the chat session
-    // caches the declarations it was last given.
-    const client = this.getAgentClientIfReady();
-    if (client) {
-      await client.setTools();
-    }
-  }
-
-  /**
-   * The agent client when present and initialized, else undefined. The
-   * backing field is definite-assignment, so it is runtime-undefined before
-   * initialize() despite the non-optional declared type. Protected so
-   * subclasses (Config.refreshSkills et al.) share the one ready-check.
-   */
-  protected getAgentClientIfReady(): AgentClientContract | undefined {
-    const client = this.agentClient as AgentClientContract | undefined;
-    if (client === undefined) {
-      return undefined;
-    }
-    if (!client.isInitialized()) {
-      return undefined;
-    }
-    return client;
-  }
-
-  disposeScheduler(
-    owner: object,
-    purpose: SchedulerPurpose,
-    handle?: object,
-  ): void {
-    // No lazy creation here: disposing before any acquisition is a no-op,
-    // matching the unknown-key release semantics of the registry itself.
-    this.schedulerRegistry?.release(owner, purpose, handle);
-  }
-
-  /**
-   * TEMPORARY (#2615 slice E): per-Config scheduler registry backing the
-   * getOrCreateScheduler/disposeScheduler delegates. DELETION CRITERION: the
-   * E-wave PR that lands SessionRuntime ownership of the registry deletes
-   * this field and both Config delegate methods. Instance state, not a
-   * module global; the process-global scheduler maps died with the deleted
-   * scheduler singleton module. The lazy getter lives on Config next to
-   * getOrCreateScheduler.
-   */
-  protected schedulerRegistry: SessionSchedulerRegistry | undefined;
-
   setDisabledHooks(hooks: string[]): void {
     this.disabledHooks = hooks;
-    // Persist to settings service under the split-schema key
-    this.settingsService.set('hooksConfig.disabled', hooks);
   }
 
-  /**
-   * Get LSP service client if available.
-   * @plan PLAN-20250212-LSP.P33
-   * @requirement REQ-DIAG-010, REQ-CFG-010, REQ-CFG-015, REQ-CFG-020
-   * @returns LspServiceClient instance or undefined if not initialized or disabled
-   */
-  getLspServiceClient(): LspServiceClient | undefined {
-    return this._lspState.lspServiceClient;
-  }
-
-  /**
-   * Get LSP configuration.
-   * @plan PLAN-20250212-LSP.P33
-   * @requirement REQ-DIAG-010, REQ-CFG-010, REQ-CFG-015, REQ-CFG-020
-   * @returns LspConfig or undefined (undefined means LSP disabled)
-   */
   getLspConfig(): LspConfig | undefined {
-    return this._lspState.lspConfig;
-  }
-
-  async shutdownLspService(): Promise<void> {
-    await shutdownLsp(this._lspState, this.toolRegistry);
-  }
-
-  // ---- Ephemeral settings ----
-
-  private normalizeAndPersistStreaming(value: unknown): unknown {
-    const normalized = normalizeStreamingValue(value);
-    if (normalized !== value && normalized !== undefined) {
-      this.settingsService.set('streaming', normalized);
-      return normalized;
-    }
-    return normalized;
-  }
-
-  getEphemeralSetting(key: string): unknown {
-    const rawValue = this.settingsService.get(key);
-    if (key === 'streaming') {
-      return this.normalizeAndPersistStreaming(rawValue);
-    }
-    if (key === 'context-limit') {
-      const normalized = normalizeContextLimit(rawValue);
-      if (normalized !== undefined) {
-        if (normalized !== rawValue) {
-          this.settingsService.set(key, normalized);
-        }
-        return normalized;
-      }
-      return undefined;
-    }
-    return rawValue;
+    return this.lspConfig === undefined
+      ? undefined
+      : structuredClone(this.lspConfig);
   }
 
   private resolveByteLimit(key: string, defaultValue: number): number {
-    const value = this.getEphemeralSetting(key) ?? defaultValue;
+    const value = this.initialSettings[key] ?? defaultValue;
     if (
       typeof value !== 'number' ||
       !Number.isSafeInteger(value) ||
@@ -339,139 +112,7 @@ export abstract class ConfigBase extends ConfigBaseCore {
     );
   }
 
-  setEphemeralSetting(key: string, value: unknown): void {
-    let settingValue = value;
-    if (key === 'streaming') {
-      settingValue = normalizeStreamingValue(value);
-    }
-    if (key === 'context-limit') {
-      settingValue =
-        value === undefined ? undefined : normalizeContextLimit(value);
-    }
-
-    if (
-      key === 'streaming' &&
-      settingValue !== undefined &&
-      typeof settingValue !== 'string'
-    ) {
-      throw new Error(
-        'Streaming setting must resolve to "enabled" or "disabled"',
-      );
-    }
-
-    this.settingsService.set(key, settingValue);
-
-    // @plan PLAN-20260130-ASYNCTASK.P21
-    // @requirement REQ-ASYNC-012
-    // Propagate task-max-async changes to AsyncTaskManager
-    if (key === 'task-max-async') {
-      const normalizedValue = normalizeMaxAsyncTasks(settingValue);
-      const asyncTaskManager = this.getAsyncTaskManager();
-      if (asyncTaskManager) {
-        asyncTaskManager.setMaxAsyncTasks(normalizedValue);
-      }
-    }
-
-    // #1995 slice 2 — propagate shell job settings
-    if (key === 'shell-max-background-jobs') {
-      const shellJobManager = this.getShellJobManager();
-      if (shellJobManager) {
-        const normalized = normalizeShellMaxBackgroundJobs(settingValue);
-        shellJobManager.setMaxBackgroundJobs(normalized);
-      }
-    }
-
-    // Clear provider caches when auth settings or base-url change
-    const cacheClearKeys = new Set([
-      'auth-key',
-      'auth-keyfile',
-      'base-url',
-      'socket-timeout',
-      'socket-keepalive',
-      'socket-nodelay',
-      'streaming',
-    ]);
-    if (cacheClearKeys.has(key)) {
-      if (!this.providerManager) {
-        return;
-      }
-
-      const activeProvider = this.providerManager.getActiveProvider();
-      if (activeProvider === undefined) {
-        return;
-      }
-
-      if (
-        'clearClientCache' in activeProvider &&
-        typeof activeProvider.clearClientCache === 'function'
-      ) {
-        const providerWithClearCache = activeProvider as {
-          clearClientCache: () => void;
-        };
-        providerWithClearCache.clearClientCache();
-      }
-      if (
-        'clearAuthCache' in activeProvider &&
-        typeof activeProvider.clearAuthCache === 'function'
-      ) {
-        const providerWithClearAuth = activeProvider as {
-          clearAuthCache: () => void;
-        };
-        providerWithClearAuth.clearAuthCache();
-      }
-    }
-  }
-
-  getEphemeralSettings(): Record<string, unknown> {
-    const allSettings = this.settingsService.getAllGlobalSettings();
-    if ('streaming' in allSettings) {
-      const normalized = this.normalizeAndPersistStreaming(
-        allSettings.streaming,
-      );
-      if (normalized !== undefined) {
-        allSettings.streaming = normalized;
-      }
-    }
-    return allSettings;
-  }
-
-  // ---- Session-scoped settings ----
-
-  /**
-   * Reads the effective value of a registry-classified session setting. The
-   * overlay is consulted first, with profile/local fallback. Unlike
-   * {@link getEphemeralSetting}, this accessor does not apply key-specific
-   * normalization.
-   */
-  getSessionSetting(key: string): unknown {
-    return this.settingsService.get(assertSessionScopedKey(key));
-  }
-
-  /**
-   * Writes a session-scoped override that survives profile application and is
-   * shared by reference with child services (subagents). Use this for
-   * session-wide settings like `/dumpcontext` that must not be erased when a
-   * profile is loaded.
-   */
-  setSessionSetting(key: string, value: unknown): void {
-    this.settingsService.setSessionScoped(key, value);
-  }
-
-  /**
-   * Clears a session-scoped override so subsequent reads fall back to the
-   * profile/local value.
-   */
-  clearSessionSetting(key: string): void {
-    this.settingsService.clearSessionScoped(key);
-  }
-
   getShellReplacement(): ShellReplacementMode {
-    const ephemeralValue = this.getEphemeralSetting('shell-replacement');
-    if (ephemeralValue !== undefined) {
-      return normalizeShellReplacement(
-        ephemeralValue as ShellReplacementMode | boolean,
-      );
-    }
     return this.shellReplacement;
   }
 }

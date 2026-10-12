@@ -4,29 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * @plan:PLAN-20260622-MCPOAUTHTRUTH.P06
- * @requirement:REQ-003,REQ-004,REQ-INT-002
- *
- * Locks the wiring invariant that buildMcpControlDeps' getRequiresAuth and
- * getOAuthStatus closures derive requiredness from ONE shared predicate, so a
- * server that requires OAuth can never simultaneously report oauthStatus
- * 'not-required'. Before the shared-predicate refactor the two closures
- * diverged (getRequiresAuth used `mcpServerRequiresOAuth.has(server)` while the
- * getOAuthStatus hint passed only `oauth.enabled === true`, relying on the
- * engine helper's internal `mcpServerRequiresOAuth.get(server) === true`
- * re-check). That asymmetry allowed the impossible
- * (requiresAuth:true, oauthStatus:'not-required') combination when the runtime
- * map held `server -> false`. This behavioral test drives that exact divergence
- * out and would fail if the closures are ever wired from two predicates again.
- *
- * The test is hermetic: it swaps an empty token store into MCPOAuthTokenStorage
- * (so the real getMcpServerOAuthStatus resolves a required-but-uncredentialed
- * server to 'none' rather than reaching the OS keychain) and restores the prior
- * store in teardown.
- */
-
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import fc from 'fast-check';
 import { buildMcpControlDeps } from '../control/mcpControlWiring.js';
 import type {
@@ -35,8 +13,8 @@ import type {
 } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
-  mcpServerRequiresOAuth,
-  MCPOAuthTokenStorage,
+  MCPDiscoveryState,
+  MCPServerStatus,
 } from '@vybestack/llxprt-code-core';
 
 // ─── Empty token store ─────────────────────────────────────────────────────
@@ -53,8 +31,8 @@ class EmptyTokenStorage {
   async listServers(): Promise<string[]> {
     return [];
   }
-  async getAllCredentials(): Promise<Map<string, unknown>> {
-    return new Map();
+  async getAllCredentials(): Promise<Map<string, never>> {
+    return new Map<string, never>();
   }
   async clearAll(): Promise<void> {}
 }
@@ -63,6 +41,7 @@ class EmptyTokenStorage {
 // The `unknown` cast is the established agents test idiom for a narrow Config
 // seam (cf. fakeToolControlDeps / fakeHookControlDeps).
 interface FakeConfigParts {
+  readonly required?: ReadonlyMap<string, boolean>;
   readonly blocked?: ReadonlyArray<{ name: string; extensionName: string }>;
   readonly promptsByServer?: ReadonlyArray<{
     name: string;
@@ -82,12 +61,6 @@ function fakeConfig(
   return {
     getMcpServers: () => servers,
     getBlockedMcpServers: () => extra.blocked,
-    getPromptRegistry: () => ({
-      getPromptsByServer: (_s: string) => extra.promptsByServer ?? [],
-    }),
-    getResourceRegistry: () => ({
-      getAllResources: () => extra.resources ?? [],
-    }),
   } as unknown as Config;
 }
 
@@ -107,6 +80,48 @@ function buildDeps(
 ) {
   return buildMcpControlDeps({
     config: fakeConfig(servers, extra),
+    readServerSettings: () => ({
+      mcpServers: servers ?? {},
+      settingsMcpServers: servers ?? {},
+      blockedMcpServers: [...(extra.blocked ?? [])],
+    }),
+    toolSelection: {
+      getTool: () => undefined,
+      getAllTools: () => [],
+      getEnabledTools: () => [],
+      getAllToolNames: () => [],
+      getFunctionDeclarations: () => [],
+      getFunctionDeclarationsFiltered: () => [],
+    },
+    listPrompts: (server) =>
+      (extra.promptsByServer ?? []).map((prompt) => ({
+        ...prompt,
+        serverName: server,
+        invoke: async () => ({ messages: [] }),
+      })),
+    listResources: () =>
+      (extra.resources ?? []).map((resource) => ({
+        ...resource,
+        name: resource.name ?? resource.uri,
+        discoveredAt: 1,
+      })),
+    readOAuthCredentials: () => new EmptyTokenStorage().getCredentials(),
+    performOAuth: async () => {
+      throw new Error('OAuth not configured for status test');
+    },
+    getMcpRuntimeStatus: () => ({
+      servers: servers ?? {},
+      discoveryFailures: new Map(),
+      discoveryState: MCPDiscoveryState.COMPLETED,
+      serverStates: new Map(
+        [...(extra.required ?? [])].map(([name, requiresOAuth]) => [
+          name,
+          { status: MCPServerStatus.DISCONNECTED, requiresOAuth },
+        ]),
+      ),
+    }),
+    refreshMcpServers: async () => {},
+    reloadMcpServers: async () => {},
     isMcpAuthenticated: () => false,
     markAuthenticated: () => {},
     resolveClient: () => ({}) as unknown as AgentClientContract,
@@ -114,20 +129,16 @@ function buildDeps(
 }
 
 describe('buildMcpControlDeps requires-OAuth consistency @plan:PLAN-20260622-MCPOAUTHTRUTH.P06 @requirement:REQ-003,REQ-004,REQ-INT-002', () => {
-  let savedStore: ReturnType<typeof MCPOAuthTokenStorage.getTokenStore>;
-
-  beforeEach(() => {
-    savedStore = MCPOAuthTokenStorage.getTokenStore();
-    MCPOAuthTokenStorage.setTokenStore(
-      new EmptyTokenStorage() as unknown as Parameters<
-        typeof MCPOAuthTokenStorage.setTokenStore
-      >[0],
-    );
-  });
-
-  afterEach(() => {
-    MCPOAuthTokenStorage.setTokenStore(savedStore);
-    mcpServerRequiresOAuth.clear();
+  it('isolates same-name same-URL owners with explicit auth observations and storage', async () => {
+    const servers: Record<string, MCPServerConfig> = {
+      same: { url: 'http://same.invalid/mcp', type: 'http' },
+    };
+    const a = buildDeps(servers, { required: new Map([['same', true]]) });
+    const b = buildDeps(servers, { required: new Map([['same', false]]) });
+    expect(await a.getOAuthStatus?.('same')).toBe('none');
+    expect(b.getRequiresAuth?.('same')).toBe(false);
+    expect(await b.getOAuthStatus?.('same')).toBe('not-required');
+    expect(a.getRequiresAuth?.('same')).toBe(true);
   });
 
   // E1: an oauth-enabled config server requires auth and must not report
@@ -139,7 +150,7 @@ describe('buildMcpControlDeps requires-OAuth consistency @plan:PLAN-20260622-MCP
     expect(await deps.getOAuthStatus?.('db')).not.toBe('not-required');
   });
 
-  // E2: a server that neither has oauth.enabled nor is in the runtime map does
+  // E2: a server that neither has oauth.enabled nor is in the owner state does
   // not require auth and resolves to 'not-required'.
   it('reports requiresAuth:false and oauthStatus:not-required for an unconfigured server', async () => {
     const deps = buildDeps({ db: serverWithOAuth(false) });
@@ -159,12 +170,12 @@ describe('buildMcpControlDeps requires-OAuth consistency @plan:PLAN-20260622-MCP
     expect(await deps.getOAuthStatus?.('db')).toBe('not-required');
   });
 
-  // PROP-1: the consistency invariant across arbitrary config + runtime-map
+  // PROP-1: the consistency invariant across arbitrary config + owner-state
   // states — getRequiresAuth(s) === true implies getOAuthStatus(s) is never
   // 'not-required', and === false implies exactly 'not-required'. This fails on
   // the pre-fix divergent closures (config absent + map holding `s -> false`
   // yields requiresAuth:true but oauthStatus:'not-required').
-  it('keeps getRequiresAuth and getOAuthStatus consistent for any config/map state (property)', async () => {
+  it('keeps getRequiresAuth and getOAuthStatus consistent for any config/owner state (property)', async () => {
     const {
       keepsGetRequiresAuthAndGetOAuthStatusConsistentForAnyConfigMapStatePropertyProperty,
       observations,
@@ -189,18 +200,18 @@ describe('buildMcpControlDeps requires-OAuth consistency @plan:PLAN-20260622-MCP
           fc.string({ minLength: 1 }),
           // oauth.enabled: true | false | (no config entry)
           fc.option(fc.boolean(), { nil: undefined }),
-          // runtime map: true | false | (key absent)
+          // owner state: true | false | (key absent)
           fc.option(fc.boolean(), { nil: undefined }),
           async (server, configEnabled, mapValue) => {
-            mcpServerRequiresOAuth.clear();
-            if (mapValue !== undefined) {
-              mcpServerRequiresOAuth.set(server, mapValue);
-            }
             const servers =
               configEnabled === undefined
                 ? undefined
                 : { [server]: serverWithOAuth(configEnabled) };
-            const deps = buildDeps(servers);
+            const deps = buildDeps(servers, {
+              required: new Map(
+                mapValue === undefined ? [] : [[server, mapValue]],
+              ),
+            });
 
             const requires = deps.getRequiresAuth?.(server);
             const status = await deps.getOAuthStatus?.(server);
@@ -217,21 +228,16 @@ describe('buildMcpControlDeps requires-OAuth consistency @plan:PLAN-20260622-MCP
       };
     };
 
-  // PROP-2: the exact pre-fix adversarial subspace — for ANY server name, a
-  // runtime map entry of `name -> false` with no oauth config still requires
-  // auth (via .has) AND resolves through the shared predicate to 'none', never
-  // 'not-required'. Directly locks the .has()/.get()===true asymmetry closed.
-  it('treats a map entry of false as still-required and never not-required for any name (property)', async () => {
+  it('respects an explicit false owner requirement for any name (property)', async () => {
     await fc.assert(
       fc.asyncProperty(fc.string({ minLength: 1 }), async (server) => {
-        mcpServerRequiresOAuth.clear();
-        mcpServerRequiresOAuth.set(server, false);
-        const deps = buildDeps(undefined);
+        const deps = buildDeps(undefined, {
+          required: new Map([[server, false]]),
+        });
 
-        expect(deps.getRequiresAuth?.(server)).toBe(true);
+        expect(deps.getRequiresAuth?.(server)).toBe(false);
         const status = await deps.getOAuthStatus?.(server);
-        expect(status).not.toBe('not-required');
-        expect(status).toBe('none');
+        expect(status).toBe('not-required');
       }),
     );
   });
@@ -265,8 +271,11 @@ describe('buildMcpControlDeps discovery passthrough closures @plan:PLAN-20260622
     const prompts = [{ name: 'p1', description: 'd1' }];
     const deps = buildDeps(undefined, { promptsByServer: prompts });
 
-    const view = deps.getPromptRegistry?.();
-    expect(view?.getPromptsByServer('srv')).toStrictEqual(prompts);
+    expect(
+      deps
+        .listPrompts?.('srv')
+        .map(({ name, description }) => ({ name, description })),
+    ).toStrictEqual(prompts);
   });
 
   // getResourceRegistry forwards all resources from Config.
@@ -274,7 +283,10 @@ describe('buildMcpControlDeps discovery passthrough closures @plan:PLAN-20260622
     const resources = [{ serverName: 'srv', name: 'r1', uri: 'mcp://r1' }];
     const deps = buildDeps(undefined, { resources });
 
-    const view = deps.getResourceRegistry?.();
-    expect(view?.getAllResources()).toStrictEqual(resources);
+    expect(
+      deps
+        .listResources?.()
+        .map(({ serverName, name, uri }) => ({ serverName, name, uri })),
+    ).toStrictEqual(resources);
   });
 });

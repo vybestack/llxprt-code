@@ -4,24 +4,61 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { physicalFiles } from '../__tests__/helpers/physical-files.js';
+import path from 'node:path';
+import { promises as fixtureFs } from 'node:fs';
+
 import { describe, it, expect } from 'bun:test';
-import type { IToolHost, IIdeService } from '../interfaces/index.js';
-import {
-  hasWorkspaceContextCap,
-  hasIdeCap,
-  hasLspCap,
-} from '../interfaces/host-capabilities.js';
+import type {
+  IToolHost,
+  IIdeService,
+  Diagnostic,
+  LspConfig,
+} from '../interfaces/index.js';
+import { hasIdeCap, hasLspCap } from '../interfaces/host-capabilities.js';
 import {
   getWorkspaceRootsCompat,
   getLegacyIdeService,
   getLegacyLspService,
   getEmojiFilter,
-  createDefaultToolHost,
 } from './edit-utils.js';
 
 /** A minimal host with only the required IToolHost surface. */
 function plainHost(overrides: Partial<IToolHost> = {}): IToolHost {
-  return { ...createDefaultToolHost(), ...overrides };
+  return {
+    readTextFile: (filePath) => fixtureFs.readFile(filePath, 'utf8'),
+    writeTextFile: (filePath, content) =>
+      fixtureFs.writeFile(filePath, content),
+    getTargetDir: () => process.cwd(),
+    getWorkspaceRoots: () => [path.parse(process.cwd()).root],
+    getApprovalMode: () => 'auto',
+    setApprovalMode: () => {},
+    isInteractive: () => false,
+
+    runSearch: <T>(
+      _directories: readonly string[],
+      operation: () => Promise<T>,
+    ): Promise<T> => operation(),
+    getFileService: () => ({
+      shouldGitIgnoreFile: () => false,
+      shouldLlxprtIgnoreFile: () => false,
+      shouldIgnoreFile: () => false,
+      filterFiles: (paths) => paths,
+    }),
+    getFileFilteringOptions: () => ({
+      respectGitIgnore: true,
+      respectLlxprtIgnore: true,
+    }),
+    getFileExclusions: () => [],
+    getReadManyFilesExclusions: () => [],
+    getFileFilteringRespectLlxprtIgnore: () => true,
+    getLlxprtIgnoreFilePath: () => null,
+    recordFileRead: () => {},
+    getLlxprtIgnorePatterns: () => [],
+    readExecutionPolicy: () => ({}),
+    getDebugMode: () => false,
+    ...overrides,
+  };
 }
 
 /** A host that also has the IDE capability. */
@@ -37,27 +74,35 @@ function ideCapableHost(
 }
 
 /** A host that also has the LSP capability. */
-function lspCapableHost(lspClient: unknown, lspConfig?: unknown): IToolHost {
+function lspCapableHost(
+  diagnostics:
+    | ((file: string, timeout: number) => Promise<Diagnostic[]>)
+    | undefined,
+  lspConfig?: LspConfig,
+): IToolHost {
   const host = plainHost();
   return Object.assign(host, {
-    getLspServiceClient: () => lspClient,
+    checkFileDiagnostics: diagnostics,
     getLspConfig: lspConfig !== undefined ? () => lspConfig : undefined,
   });
 }
 
 describe('host capability type guards', () => {
-  describe('hasWorkspaceContextCap', () => {
-    it('returns true for host with getWorkspaceContext', () => {
+  describe('required workspace root operations', () => {
+    it('reads explicitly supplied workspace roots', () => {
       const host = plainHost();
       Object.assign(host, {
-        getWorkspaceContext: () => ({ getDirectories: () => ['/root'] }),
+        ...physicalFiles,
+        getWorkspaceRoots: () => ['/root'],
       });
-      expect(hasWorkspaceContextCap(host)).toBe(true);
+      expect(getWorkspaceRootsCompat(host)).toStrictEqual(['/root']);
     });
 
-    it('returns false for plain host without getWorkspaceContext', () => {
+    it('does not add an undeclared directory to plain host roots', () => {
       const host = plainHost();
-      expect(hasWorkspaceContextCap(host)).toBe(false);
+      expect(getWorkspaceRootsCompat(host)).not.toContain(
+        '/undeclared-workspace',
+      );
     });
   });
 
@@ -74,8 +119,8 @@ describe('host capability type guards', () => {
   });
 
   describe('hasLspCap', () => {
-    it('returns true for host with getLspServiceClient', () => {
-      const host = lspCapableHost({ isAlive: () => true });
+    it('returns true for host with checkFileDiagnostics', () => {
+      const host = lspCapableHost(async () => []);
       expect(hasLspCap(host)).toBe(true);
     });
 
@@ -90,9 +135,8 @@ describe('getWorkspaceRootsCompat', () => {
   it('uses getWorkspaceContext when available', () => {
     const host = plainHost();
     Object.assign(host, {
-      getWorkspaceContext: () => ({
-        getDirectories: () => ['/ws1', '/ws2'],
-      }),
+      ...physicalFiles,
+      getWorkspaceRoots: () => ['/ws1', '/ws2'],
     });
     expect(getWorkspaceRootsCompat(host)).toStrictEqual(['/ws1', '/ws2']);
   });
@@ -107,6 +151,7 @@ describe('getWorkspaceRootsCompat', () => {
 
   it('uses getWorkspaceRoots from the required IToolHost surface', () => {
     const host = plainHost({
+      ...physicalFiles,
       getWorkspaceRoots: () => ['/root1', '/root2'],
     });
     expect(getWorkspaceRootsCompat(host)).toStrictEqual(['/root1', '/root2']);
@@ -115,7 +160,8 @@ describe('getWorkspaceRootsCompat', () => {
   it('returns empty array when workspace context has no directories', () => {
     const host = plainHost();
     Object.assign(host, {
-      getWorkspaceContext: () => ({ getDirectories: () => [] }),
+      ...physicalFiles,
+      getWorkspaceRoots: () => [],
     });
     expect(getWorkspaceRootsCompat(host)).toStrictEqual([]);
   });
@@ -177,32 +223,28 @@ describe('getLegacyLspService', () => {
     expect(getLegacyLspService(host)).toBeUndefined();
   });
 
-  it('returns undefined when lsp client is null', () => {
-    const host = lspCapableHost(null);
+  it('returns undefined when diagnostic operation is absent', () => {
+    const host = lspCapableHost(undefined);
     expect(getLegacyLspService(host)).toBeUndefined();
   });
 
-  it('returns undefined when lsp client is not an object', () => {
-    const host = lspCapableHost('not-an-object');
+  it('returns undefined when diagnostic operation is explicitly undefined', () => {
+    const host = lspCapableHost(undefined);
     expect(getLegacyLspService(host)).toBeUndefined();
   });
 
-  it('builds an ILspService adapter when client has isAlive', () => {
-    const lspClient = {
-      isAlive: () => true,
-    };
-    const host = lspCapableHost(lspClient, { tabSize: 2 });
+  it('builds a diagnostics-only adapter without exposing a client', () => {
+    const host = lspCapableHost(async () => [], {
+      includeSeverities: ['error'],
+    });
     const service = getLegacyLspService(host);
     expect(service).toBeDefined();
     // Legacy adapter always returns [] for getDiagnostics
     expect(service!.getDiagnostics('/test.ts')).toStrictEqual([]);
   });
 
-  it('waitForDiagnostics returns [] when client is not alive', async () => {
-    const lspClient = {
-      isAlive: () => false,
-    };
-    const host = lspCapableHost(lspClient);
+  it('waitForDiagnostics preserves empty diagnostics for a clean file', async () => {
+    const host = lspCapableHost(async () => []);
     const service = getLegacyLspService(host)!;
     const diags = await service.waitForDiagnostics('/test.ts', 1000);
     expect(diags).toStrictEqual([]);
@@ -212,7 +254,7 @@ describe('getLegacyLspService', () => {
 describe('getEmojiFilter', () => {
   it('reads emojifilter from ephemeral settings', () => {
     const host = plainHost({
-      getEphemeralSettings: () => ({ emojifilter: 'allowed' }),
+      readExecutionPolicy: () => ({ emojifilter: 'allowed' }),
     });
     const filter = getEmojiFilter(host);
     // 'allowed' mode passes emoji text through unchanged
@@ -223,7 +265,7 @@ describe('getEmojiFilter', () => {
 
   it('defaults to error mode when no emojifilter setting is present', () => {
     const host = plainHost({
-      getEphemeralSettings: () => ({}),
+      readExecutionPolicy: () => ({}),
     });
     const filter = getEmojiFilter(host);
     // Default maps to 'error', which blocks emoji-containing text

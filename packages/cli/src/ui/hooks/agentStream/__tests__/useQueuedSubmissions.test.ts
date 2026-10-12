@@ -29,6 +29,48 @@ function hasText(part: unknown): part is { text: string } {
 }
 
 describe('useQueuedSubmissions', () => {
+  it('keeps a background notice pending across dequeue and retry until explicitly discarded', () => {
+    const { result } = renderHook(() => useQueuedSubmissions());
+    let consumed = false;
+    act(() =>
+      result.current.enqueueSubmission({
+        query: 'completion',
+        onConsumed: () => {
+          consumed = true;
+        },
+      }),
+    );
+    let notice: QueuedSubmission | undefined;
+    act(() => {
+      notice = result.current.dequeueSubmission();
+    });
+    const consumedAfterDequeue = consumed;
+    expect(consumedAfterDequeue).toBe(false);
+    if (notice === undefined) throw new Error('Expected queued notice');
+    const retry = notice;
+    act(() => result.current.requeueSubmission(retry));
+    const consumedAfterRetry = consumed;
+    expect(consumedAfterRetry).toBe(false);
+    act(() => result.current.clearSubmissions());
+    expect(consumed).toBe(true);
+    expect(result.current.queuedSubmissions).toStrictEqual([]);
+  });
+
+  it('releases queued notification deliveries when the UI unmounts', () => {
+    const { result, unmount } = renderHook(() => useQueuedSubmissions());
+    let consumed = false;
+    act(() =>
+      result.current.enqueueSubmission({
+        query: 'completion',
+        onConsumed: () => {
+          consumed = true;
+        },
+      }),
+    );
+    unmount();
+    expect(consumed).toBe(true);
+  });
+
   describe('initial state', () => {
     it('starts with an empty queue', () => {
       const { result } = renderHook(() => useQueuedSubmissions());

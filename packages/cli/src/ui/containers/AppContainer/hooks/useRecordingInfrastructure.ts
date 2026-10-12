@@ -4,89 +4,75 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef, type MutableRefObject } from 'react';
 import type {
   RecordingIntegration,
   SessionRecordingService,
   LockHandle,
-  SessionMetadata,
 } from '@vybestack/llxprt-code-core';
 import type { RecordingSwapCallbacks } from '../../../../services/performResume.js';
 
-/**
- * @hook useRecordingInfrastructure
- * @description Recording refs and swap callbacks
- * @inputs initialRecordingService, recordingIntegration, initialLockHandle
- * @outputs recordingServiceRef, recordingIntegrationRef, recordingSwapCallbacks
- * @sideEffects Ref synchronization effects
- * @cleanup Clears refs on unmount
- * @strictMode Safe - ref updates are idempotent
- * @subscriptionStrategy Stable (useRef + useMemo)
- */
-
 export interface UseRecordingInfrastructureResult {
-  recordingIntegrationRef: React.MutableRefObject<RecordingIntegration | null>;
-  recordingSwapCallbacks: RecordingSwapCallbacks;
+  recordingIntegrationRef?: MutableRefObject<RecordingIntegration | null>;
+  recordingSwapCallbacks?: RecordingSwapCallbacks;
+}
+
+function createRawResources(
+  initialRecordingService?: SessionRecordingService,
+  recordingIntegration?: RecordingIntegration,
+  initialLockHandle?: LockHandle | null,
+) {
+  const recordingServiceRef = { current: initialRecordingService ?? null };
+  const recordingIntegrationRef = { current: recordingIntegration ?? null };
+  const lockHandleRef = { current: initialLockHandle ?? null };
+  const recordingSwapCallbacks: RecordingSwapCallbacks = {
+    getCurrentRecording: () => recordingServiceRef.current,
+    getCurrentIntegration: () => recordingIntegrationRef.current,
+    getCurrentLockHandle: () => lockHandleRef.current,
+    setRecording: (recording, integration, lock) => {
+      recordingServiceRef.current = recording;
+      recordingIntegrationRef.current = integration;
+      lockHandleRef.current = lock;
+    },
+  };
+  return {
+    recordingServiceRef,
+    recordingIntegrationRef,
+    lockHandleRef,
+    recordingSwapCallbacks,
+  };
 }
 
 export function useRecordingInfrastructure(
   initialRecordingService?: SessionRecordingService,
   recordingIntegration?: RecordingIntegration,
   initialLockHandle?: LockHandle | null,
+  recordingOwner?: 'agent' | 'raw',
 ): UseRecordingInfrastructureResult {
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P23
-   * Recording infrastructure refs for session resume (performResume swap callbacks).
-   * These refs hold the current recording service, integration, and lock handle,
-   * allowing performResume to swap them during session resume.
-   */
-  const recordingServiceRef = useRef<SessionRecordingService | null>(
-    initialRecordingService ?? null,
+  const rawRef = useRef<ReturnType<typeof createRawResources> | undefined>(
+    undefined,
   );
-  const recordingIntegrationRef = useRef<RecordingIntegration | null>(
-    recordingIntegration ?? null,
-  );
-  const lockHandleRef = useRef<LockHandle | null>(initialLockHandle ?? null);
-
-  // Keep recording refs in sync with props
-  useEffect(() => {
-    recordingServiceRef.current = initialRecordingService ?? null;
-  }, [initialRecordingService]);
+  if (recordingOwner === 'agent') rawRef.current = undefined;
+  else
+    rawRef.current ??= createRawResources(
+      initialRecordingService,
+      recordingIntegration,
+      initialLockHandle,
+    );
+  const raw = rawRef.current;
 
   useEffect(() => {
-    recordingIntegrationRef.current = recordingIntegration ?? null;
-  }, [recordingIntegration]);
-
+    if (raw) raw.recordingServiceRef.current = initialRecordingService ?? null;
+  }, [raw, initialRecordingService]);
   useEffect(() => {
-    lockHandleRef.current = initialLockHandle ?? null;
-  }, [initialLockHandle]);
-
-  /**
-   * @plan PLAN-20260214-SESSIONBROWSER.P23
-   * RecordingSwapCallbacks for performResume - provides ref-based access to
-   * current recording infrastructure and setters for swapping during resume.
-   */
-  const recordingSwapCallbacks = useMemo(
-    (): RecordingSwapCallbacks => ({
-      getCurrentRecording: () => recordingServiceRef.current,
-      getCurrentIntegration: () => recordingIntegrationRef.current,
-      getCurrentLockHandle: () => lockHandleRef.current,
-      setRecording: (
-        recording: SessionRecordingService,
-        integration: RecordingIntegration,
-        lock: LockHandle | null,
-        _metadata: SessionMetadata,
-      ) => {
-        recordingServiceRef.current = recording;
-        recordingIntegrationRef.current = integration;
-        lockHandleRef.current = lock;
-      },
-    }),
-    [],
-  );
+    if (raw) raw.recordingIntegrationRef.current = recordingIntegration ?? null;
+  }, [raw, recordingIntegration]);
+  useEffect(() => {
+    if (raw) raw.lockHandleRef.current = initialLockHandle ?? null;
+  }, [raw, initialLockHandle]);
 
   return {
-    recordingIntegrationRef,
-    recordingSwapCallbacks,
+    recordingIntegrationRef: raw?.recordingIntegrationRef,
+    recordingSwapCallbacks: raw?.recordingSwapCallbacks,
   };
 }

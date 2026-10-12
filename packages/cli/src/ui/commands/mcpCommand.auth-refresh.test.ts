@@ -4,14 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { mcpCommand } from './mcpCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { MessageActionReturn } from './types.js';
-import {
-  MCPServerStatus,
-  getMCPServerStatus,
-} from '@vybestack/llxprt-code-mcp';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 
 // Mock external dependencies
@@ -22,8 +18,6 @@ void vi.mock('open', () => ({
 const actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
 void vi.mock('@vybestack/llxprt-code-mcp', () => ({
   ...actual,
-  getMCPServerStatus: vi.fn(),
-  mcpServerRequiresOAuth: new Map<string, boolean>(),
   MCPOAuthProvider: {
     authenticate: vi.fn(),
   },
@@ -67,6 +61,8 @@ describe('mcpCommand', () => {
     options: {
       refresh?: ReturnType<typeof vi.fn>;
       reload?: ReturnType<typeof vi.fn>;
+      authenticate?: Agent['mcp']['authenticate'];
+      servers?: ReadonlyArray<ReturnType<Agent['mcp']['listServers']>[number]>;
     } = {},
   ): Agent => {
     const refresh = options.refresh ?? vi.fn().mockResolvedValue(undefined);
@@ -77,11 +73,12 @@ describe('mcpCommand', () => {
         refresh,
         reload,
         status: vi.fn(),
-        listServers: vi.fn().mockReturnValue([]),
+        listServers: () => options.servers ?? [],
+        listBlockedServers: () => [],
         toolsByServer: vi.fn().mockReturnValue({}),
         auth: vi.fn(),
         discoveryState: vi.fn().mockReturnValue('ready'),
-        authenticate: vi.fn(),
+        authenticate: options.authenticate ?? vi.fn(),
       },
       // Partial tools mock: the /mcp command path never accesses tools.keys,
       // so it is intentionally omitted rather than stubbed with an `as never`
@@ -101,9 +98,6 @@ describe('mcpCommand', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.SANDBOX;
-    (getMCPServerStatus as Mock<typeof getMCPServerStatus>).mockReturnValue(
-      MCPServerStatus.CONNECTED,
-    );
     mockConfig = {
       getMcpServers: vi.fn().mockReturnValue({}),
       getBlockedMcpServers: vi.fn().mockReturnValue([]),
@@ -118,13 +112,21 @@ describe('mcpCommand', () => {
     it('should list OAuth-enabled servers when no server name is provided', async () => {
       const context = createMockCommandContext({
         services: {
-          config: {
-            getMcpServers: vi.fn().mockReturnValue({
-              'oauth-server': { oauth: { enabled: true } },
-              'regular-server': {},
-              'another-oauth': { oauth: { enabled: true } },
-            }),
-          },
+          agent: createMockAgent({
+            servers: [
+              {
+                name: 'oauth-server',
+                config: { oauth: { enabled: true } },
+                status: 'disconnected',
+              },
+              { name: 'regular-server', config: {}, status: 'disconnected' },
+              {
+                name: 'another-oauth',
+                config: { oauth: { enabled: true } },
+                status: 'disconnected',
+              },
+            ],
+          }),
         },
       });
 
@@ -167,85 +169,102 @@ describe('mcpCommand', () => {
       );
     });
 
-    it('should authenticate with a specific server', async () => {
-      const mockMcpClientManager = {
-        restartServer: vi.fn(),
-      };
-      const mockAgentClient = {
-        setTools: vi.fn(),
-      };
-
+    it('publishes success and reloads commands only after owner authentication completes', async () => {
+      let release = (): void => {};
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const agent = createMockAgent({
+        servers: [
+          {
+            name: 'test-server',
+            config: { url: 'http://localhost:3000', oauth: { enabled: true } },
+            status: 'disconnected',
+          },
+        ],
+        authenticate: async (server, display) => {
+          display?.('Open the owner authorization URL');
+          await pending;
+          return {
+            server,
+            authenticated: true,
+            requiresAuth: true,
+            oauthStatus: 'authenticated',
+            sessionAuthenticated: true,
+          };
+        },
+      });
       const context = createMockCommandContext({
         services: {
+          agent,
           config: {
-            getMcpServers: vi.fn().mockReturnValue({
+            getMcpServers: () => ({
               'test-server': {
                 url: 'http://localhost:3000',
                 oauth: { enabled: true },
               },
             }),
-            getMcpClientManager: vi.fn().mockReturnValue(mockMcpClientManager),
-            getAgentClient: vi.fn().mockReturnValue(mockAgentClient),
-            getPromptRegistry: vi.fn().mockReturnValue({
-              removePromptsByServer: vi.fn(),
-            }),
           },
         },
       });
-      // Mock the reloadCommands function
-      context.ui.reloadCommands = vi.fn();
-
-      const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-mcp');
-
-      const authCommand = mcpCommand.subCommands?.find(
-        (cmd) => cmd.name === 'auth',
+      let reloads = 0;
+      const messages: unknown[] = [];
+      context.ui.reloadCommands = () => {
+        reloads++;
+      };
+      context.ui.addItem = (item) => {
+        messages.push(item);
+        return 1;
+      };
+      const work = requireCommandAction('auth')(context, 'test-server');
+      expect(reloads).toBe(0);
+      expect(JSON.stringify(messages)).not.toContain(
+        'Successfully authenticated',
       );
-      const result = await authCommand!.action!(context, 'test-server');
-
-      expect(MCPOAuthProvider.authenticate).toHaveBeenCalledWith(
-        'test-server',
-        { enabled: true },
-        'http://localhost:3000',
-        expect.any(Object),
-      );
-      expect(mockMcpClientManager.restartServer).toHaveBeenCalledWith(
-        'test-server',
-      );
-      expect(mockAgentClient.setTools).toHaveBeenCalled();
-      expect(context.ui.reloadCommands).toHaveBeenCalledTimes(1);
-
+      release();
+      const result = await work;
       assertMessageAction(result);
-
       expect(result.messageType).toBe('info');
       expect(result.content).toContain('Successfully authenticated');
+      expect(reloads).toBe(1);
+      expect(messages).toContainEqual({
+        type: 'info',
+        text: 'Open the owner authorization URL',
+      });
     });
 
-    it('should handle authentication errors', async () => {
+    it('reports owner authentication failures without publishing success', async () => {
       const context = createMockCommandContext({
         services: {
+          agent: createMockAgent({
+            servers: [
+              {
+                name: 'test-server',
+                config: { oauth: { enabled: true } },
+                status: 'disconnected',
+              },
+            ],
+            authenticate: async () => {
+              throw new Error('Auth failed');
+            },
+          }),
           config: {
-            getMcpServers: vi.fn().mockReturnValue({
+            getMcpServers: () => ({
               'test-server': { oauth: { enabled: true } },
             }),
           },
         },
       });
-
-      const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-mcp');
-      (
-        MCPOAuthProvider.authenticate as ReturnType<typeof vi.fn>
-      ).mockRejectedValue(new Error('Auth failed'));
-
-      const authCommand = mcpCommand.subCommands?.find(
-        (cmd) => cmd.name === 'auth',
-      );
-      const result = await authCommand!.action!(context, 'test-server');
-
+      let reloads = 0;
+      context.ui.reloadCommands = () => {
+        reloads++;
+      };
+      const result = await requireCommandAction('auth')(context, 'test-server');
       assertMessageAction(result);
-
       expect(result.messageType).toBe('error');
       expect(result.content).toContain('Failed to authenticate');
       expect(result.content).toContain('Auth failed');
+      expect(reloads).toBe(0);
     });
 
     it('should handle non-existent server', async () => {
@@ -280,7 +299,10 @@ describe('mcpCommand', () => {
             getMcpServers: vi.fn().mockReturnValue({ server1: {} }),
             getBlockedMcpServers: vi.fn().mockReturnValue([]),
           },
-          agent: createMockAgent({ reload }),
+          agent: createMockAgent({
+            reload,
+            servers: [{ name: 'server1', config: {}, status: 'disconnected' }],
+          }),
         },
       });
       context.ui.reloadCommands = vi.fn();
@@ -381,7 +403,10 @@ describe('mcpCommand', () => {
             getMcpServers: vi.fn().mockReturnValue({ server1: {} }),
             getBlockedMcpServers: vi.fn().mockReturnValue([]),
           },
-          agent: createMockAgent({ refresh }),
+          agent: createMockAgent({
+            refresh,
+            servers: [{ name: 'server1', config: {}, status: 'disconnected' }],
+          }),
         },
       });
       context.ui.reloadCommands = vi.fn();

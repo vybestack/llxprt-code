@@ -1,0 +1,28 @@
+{
+  "counts": {
+    "a2a-server": {
+      "runtime-service-bag-parameter": 3,
+      "runtime-service-bundle": 12
+    },
+    "agents": {
+      "runtime-service-bag-parameter": 102,
+      "runtime-service-bundle": 244
+    },
+    "cli": {
+      "runtime-service-bag-parameter": 553,
+      "runtime-service-bundle": 775
+    },
+    "core": {
+      "runtime-service-bag-parameter": 6,
+      "runtime-service-bundle": 9
+    },
+    "providers": {
+      "runtime-service-bag-parameter": 27,
+      "runtime-service-bundle": 83
+    },
+    "zed-acp": {
+      "runtime-service-bag-parameter": 7,
+      "runtime-service-bundle": 32
+    }
+  }
+}

@@ -1,3 +1,5 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -307,17 +309,24 @@ describe('Git Statistics Tracking', () => {
         model: 'gemini-flash',
         telemetry: { logConversations: false },
       });
-      const tracker = new GitStatsTracker(config);
+      const owner = new SessionSettingsOwner(new SettingsService());
+      owner.bindTelemetry(config);
+      const tracker = new GitStatsTracker({
+        getSessionId: () => config.getSessionId(),
+        getConversationLoggingEnabled: () =>
+          owner.readConversationLoggingEnabled(),
+      });
 
       expect(tracker.isEnabled()).toBe(false);
 
       // Toggle on
-      config.updateTelemetrySettings({ logConversations: true });
+      await owner.updateTelemetrySettings({ logConversations: true });
       expect(tracker.isEnabled()).toBe(true);
 
       // Toggle off
-      config.updateTelemetrySettings({ logConversations: false });
+      await owner.updateTelemetrySettings({ logConversations: false });
       expect(tracker.isEnabled()).toBe(false);
+      await owner.dispose();
     });
 
     it('should maintain state consistency across toggles', async () => {
@@ -329,14 +338,20 @@ describe('Git Statistics Tracking', () => {
         model: 'gemini-flash',
         telemetry: { logConversations: true },
       });
-      const tracker = new GitStatsTracker(config);
+      const owner = new SessionSettingsOwner(new SettingsService());
+      owner.bindTelemetry(config);
+      const tracker = new GitStatsTracker({
+        getSessionId: () => config.getSessionId(),
+        getConversationLoggingEnabled: () =>
+          owner.readConversationLoggingEnabled(),
+      });
 
       // Track some stats
       await tracker.trackFileEdit('file1.ts', 'a', 'a\nb');
       expect(tracker.getSummary().filesChanged).toBe(1);
 
       // Toggle off - should not track new edits
-      config.updateTelemetrySettings({ logConversations: false });
+      await owner.updateTelemetrySettings({ logConversations: false });
       const result = await tracker.trackFileEdit('file2.ts', 'x', 'x\ny');
       expect(result).toBeNull();
 
@@ -344,9 +359,10 @@ describe('Git Statistics Tracking', () => {
       expect(tracker.getSummary().filesChanged).toBe(1);
 
       // Toggle back on - should resume tracking
-      config.updateTelemetrySettings({ logConversations: true });
+      await owner.updateTelemetrySettings({ logConversations: true });
       await tracker.trackFileEdit('file3.ts', 'm', 'm\nn');
       expect(tracker.getSummary().filesChanged).toBe(2); // Previous + new
+      await owner.dispose();
     });
 
     it('should validate configuration simplicity', async () => {

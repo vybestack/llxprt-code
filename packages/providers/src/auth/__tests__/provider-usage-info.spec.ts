@@ -441,7 +441,7 @@ describe('getAllCodexUsageInfo', () => {
 
     await getAllCodexUsageInfo(
       store,
-      mockConfig as unknown as import('@vybestack/llxprt-code-core').Config,
+      mockConfig.getEphemeralSetting('base-url'),
     );
 
     expect(mockFetchCodexUsage).toHaveBeenCalledWith(
@@ -470,7 +470,7 @@ describe('getAllCodexUsageInfo', () => {
 
     await getAllCodexUsageInfo(
       store,
-      mockConfig as unknown as import('@vybestack/llxprt-code-core').Config,
+      mockConfig.getEphemeralSetting('base-url'),
     );
 
     expect(mockFetchCodexUsage).toHaveBeenCalledWith(
@@ -644,7 +644,7 @@ describe('getAllCodexRateLimitResetCredits', () => {
 
     await getAllCodexRateLimitResetCredits(
       store,
-      mockConfig as unknown as import('@vybestack/llxprt-code-core').Config,
+      mockConfig.getEphemeralSetting('base-url'),
     );
 
     expect(mockFetchCodexRateLimitResetCredits).toHaveBeenCalledWith(
@@ -675,7 +675,7 @@ describe('getAllCodexRateLimitResetCredits', () => {
 
     await getAllCodexRateLimitResetCredits(
       store,
-      mockConfig as unknown as import('@vybestack/llxprt-code-core').Config,
+      mockConfig.getEphemeralSetting('base-url'),
     );
 
     expect(mockFetchCodexRateLimitResetCredits).toHaveBeenCalledWith(

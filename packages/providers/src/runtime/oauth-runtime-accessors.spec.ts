@@ -3,61 +3,92 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-/**
- * @plan PLAN-20260827-ISSUE2562.P03
- * @requirement REQ-2562-4
- */
-
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { oauthRuntimeBridge } from '../auth/index.js';
-import { ProviderManager } from '../ProviderManager.js';
-import { buildOAuthRuntimeAccessors } from './oauth-runtime-accessors.js';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
+import { useRuntimeTestOwners } from './__tests__/runtime-owner-test-helpers.js';
+import { OAuthManager } from '../auth/oauth-manager.js';
 import {
-  resetCliRuntimeRegistryForTesting,
-  upsertRuntimeEntry,
-} from './runtimeRegistry.js';
-import { setCliRuntimeContext } from './runtimeLifecycle.js';
+  MemoryTokenStore,
+  createTestProvider,
+} from '../auth/__tests__/behavioral/test-utils.js';
+import { interactiveAuthCoordinator } from '../auth/interactive-auth-coordinator.js';
 
-const RUNTIME_ID = 'oauth-runtime-accessors-test';
-
-describe('buildOAuthRuntimeAccessors interactive authentication timeout', () => {
-  let settingsService: SettingsService;
-
-  beforeEach(() => {
-    resetCliRuntimeRegistryForTesting();
-    settingsService = new SettingsService();
-    const config = createRuntimeConfigStub(settingsService);
-    const providerManager = new ProviderManager({ settingsService, config });
-    setCliRuntimeContext(settingsService, config, { runtimeId: RUNTIME_ID });
-    upsertRuntimeEntry(RUNTIME_ID, { providerManager });
+describe('owner OAuth interactive authentication timeout', () => {
+  const owners = useRuntimeTestOwners();
+  afterEach(async () => {
+    await interactiveAuthCoordinator.dispose();
+    interactiveAuthCoordinator.unbindHost();
+    vi.restoreAllMocks();
   });
 
-  afterEach(() => {
-    resetCliRuntimeRegistryForTesting();
-    oauthRuntimeBridge.setAccessors(undefined);
+  async function pendingAuth(
+    timeout: number | undefined,
+    withConfig = true,
+  ): Promise<number[]> {
+    const root = withConfig ? owners.config() : undefined;
+    const config = root?.config;
+    root?.settingsOwner.writeUserParameter(
+      'auth.interactiveTimeoutMs',
+      timeout,
+    );
+    const manager = new OAuthManager(new MemoryTokenStore(), undefined, {
+      config,
+      readSessionAuthPolicy: () => ({
+        noBrowser: false,
+        authOnly: false,
+        profileName: null,
+        bucketPrompt: undefined,
+        bucketDelay: undefined,
+        interactiveTimeoutMs: root?.settingsOwner.readNamedParameter(
+          'auth.interactiveTimeoutMs',
+        ),
+      }),
+      readAuthIdentity: () => ({
+        runtimeId: 'timeout-owner',
+        runtimeKind: 'subagent',
+      }),
+    });
+    manager.registerProvider(createTestProvider('timeout-provider'));
+    await manager.toggleOAuthEnabled('timeout-provider');
+    let started = (): void => {};
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    interactiveAuthCoordinator.bindHost(async () => {
+      started();
+      await new Promise<void>(() => {});
+    });
+    const delays: number[] = [];
+    const setTimeout = globalThis.setTimeout;
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(
+      new Proxy(setTimeout, {
+        apply(
+          target,
+          receiver: unknown,
+          args: Parameters<typeof setTimeout>,
+        ): ReturnType<typeof setTimeout> {
+          if (typeof args[1] === 'number') delays.push(args[1]);
+          return Reflect.apply(target, receiver, args);
+        },
+      }),
+    );
+    const result = manager
+      .getToken('timeout-provider', 'work')
+      .catch((error: unknown) => error);
+    await ready;
+    interactiveAuthCoordinator.cancelActiveSessions();
+    expect(await result).toMatchObject({ outcomeKind: 'cancelled' });
+    return delays;
+  }
+
+  it('schedules the timeout from the supplied owner settings', async () => {
+    expect(await pendingAuth(45000)).toContain(45000);
   });
 
-  it('returns the configured interactive authentication timeout', () => {
-    settingsService.set('auth.interactiveTimeoutMs', 45_000);
-
-    const accessors = buildOAuthRuntimeAccessors();
-
-    expect(accessors.getInteractiveAuthTimeoutMs()).toBe(45_000);
+  it('uses the interactive default when the owner has no timeout setting', async () => {
+    expect(await pendingAuth(undefined)).toContain(1200000);
   });
 
-  it('returns the default when the setting is absent', () => {
-    const accessors = buildOAuthRuntimeAccessors();
-
-    expect(accessors.getInteractiveAuthTimeoutMs()).toBe(1_200_000);
-  });
-
-  it('returns the default when runtime settings are unavailable', () => {
-    resetCliRuntimeRegistryForTesting();
-    const accessors = buildOAuthRuntimeAccessors();
-
-    expect(accessors.getInteractiveAuthTimeoutMs()).toBe(1_200_000);
+  it('uses the interactive default when no Config was supplied to the OAuth manager', async () => {
+    expect(await pendingAuth(undefined, false)).toContain(1200000);
   });
 });

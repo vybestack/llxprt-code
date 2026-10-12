@@ -8,6 +8,7 @@ import { describe, expect, it } from 'bun:test';
 import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
@@ -96,7 +97,7 @@ async function prepare(fixture: RequestFixture): Promise<PreparedFixture> {
     isOAuth: false,
     placement: 'system-field',
     providerName: PROVIDER_NAME,
-    config: options.config,
+    config: parseOutputLimits(options.invocation.ephemerals),
     getMaxTokensForModel: () => 32000,
     unprefixToolName: (name: string) => name,
     providerConfig: undefined,

@@ -9,11 +9,8 @@
  * session journal's path on the CompressionContext it builds.
  *
  * These drive the real CompressionHandler against a real HistoryService and a
- * real SessionRecordingService writing to a real temp directory, so
- * materialization (the point at which getFilePath() stops returning null) is
- * genuine rather than simulated. The recording service is held in a mutable
- * holder that stands in for the Config seam the production wiring reads, which
- * is what lets a swap (resume) be exercised.
+ * real SessionRecordingService writing to a real temp directory. The injected
+ * execution path follows a mutable recorder through materialization and swap.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
@@ -31,10 +28,8 @@ import type {
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
 import { CompressionHandler } from '../CompressionHandler.js';
-import { resolveTranscriptPath } from '../../core/ChatSessionFactory.js';
 import { ChatSession } from '../../core/chatSession.js';
 import * as compressionFactory from '../compressionStrategyFactory.js';
 
@@ -77,7 +72,6 @@ describe('CompressionHandler transcriptPath wiring (#2933)', () => {
   let tempDir: string;
   let historyService: HistoryService;
   let handler: CompressionHandler;
-  /** Stands in for the Config seam the production provider closure reads. */
   let installed: SessionRecordingService | undefined;
   const created: SessionRecordingService[] = [];
 
@@ -124,15 +118,13 @@ describe('CompressionHandler transcriptPath wiring (#2933)', () => {
     return service;
   }
 
-  /**
-   * Installs the production resolution rule over the holder, so these tests
-   * exercise the same code the factory wires rather than a copy of it.
-   */
   function installLiveProvider(): void {
-    const config = {
-      getSessionRecordingService: () => installed,
-    } as unknown as Config;
-    handler.setTranscriptPathProvider(() => resolveTranscriptPath(config));
+    handler.setTranscriptPathProvider(() => {
+      const recording = installed;
+      return recording?.isActive() === true
+        ? (recording.getFilePath() ?? undefined)
+        : undefined;
+    });
   }
 
   it('omits transcriptPath entirely when no provider is injected', async () => {
@@ -269,5 +261,43 @@ describe('ChatSession forwards the journal path into compression (#2933)', () =>
     await chat.performCompression('prompt-1');
 
     expect(seenContext?.transcriptPath).toBe('/chats/live-session.jsonl');
+  });
+
+  it('compresses an unbound chat without publishing a sibling transcript', async () => {
+    const history = new HistoryService();
+    const runtime = buildRuntimeContext(history, {
+      contextLimit: 200_000,
+      compressionThreshold: 0.8,
+    });
+    for (const text of ['one', 'two', 'three', 'four']) {
+      history.add(textContent(text));
+    }
+    const chat = new ChatSession(runtime, {} as ContentGenerator, {}, []);
+    let seenContext: CompressionContext | undefined;
+    vi.spyOn(compressionFactory, 'getCompressionStrategy').mockReturnValue({
+      name: 'one-shot',
+      requiresLLM: false,
+      trigger: { mode: 'threshold', defaultThreshold: 0.8 },
+      compress: async (context) => {
+        seenContext = context;
+        return {
+          kind: 'applied',
+          newHistory: [textContent('summary')],
+          metadata: {
+            originalMessageCount: context.history.length,
+            compressedMessageCount: 1,
+            strategyUsed: 'one-shot',
+            llmCallMade: false,
+          },
+        };
+      },
+    });
+
+    await chat.performCompression('unbound-compression');
+
+    expect(seenContext?.transcriptPath).toBeUndefined();
+    expect(chat.getHistory().map((content) => content.blocks)).toStrictEqual([
+      textContent('summary').blocks,
+    ]);
   });
 });

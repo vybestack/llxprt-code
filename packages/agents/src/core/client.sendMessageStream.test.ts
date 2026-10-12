@@ -29,7 +29,7 @@ import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentEventType, Turn } from './turn.js';
-import { ideContext } from '@vybestack/llxprt-code-ide-integration';
+import { createClientIdeFixture } from './__tests__/client-ide-fixture.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import {
   fromAsync,
@@ -179,17 +179,6 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
 void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
-const actual3 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ...actual3,
-  ideContext: {
-    ...actual3.ideContext,
-    getIdeContext: vi.fn(),
-    subscribeToIdeContext: vi.fn(),
-    setIdeContext: vi.fn(),
-    clearIdeContext: vi.fn(),
-  },
-}));
 const actual4 = {
   ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
 };
@@ -261,6 +250,7 @@ function findHumanTextBlock(
 
 describe('Agent Client (client.ts)', () => {
   let client: AgentClient;
+  let ide: Awaited<ReturnType<typeof createClientIdeFixture>>;
 
   beforeEach(async () => {
     const ctx = await setupAgentClient({
@@ -269,6 +259,7 @@ describe('Agent Client (client.ts)', () => {
       mockEmbedContentFn,
     });
     client = ctx.client;
+    ide = await createClientIdeFixture(client);
 
     mockTodoStoreConstructor.mockImplementation(() => ({
       readTodos: todoStoreReadMock,
@@ -282,6 +273,7 @@ describe('Agent Client (client.ts)', () => {
 
   afterEach(async () => {
     await client.dispose();
+    await ide.dispose();
     vi.restoreAllMocks();
   });
 
@@ -344,7 +336,7 @@ describe('Agent Client (client.ts)', () => {
         })();
       });
 
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+      ide.setEnabled(false);
 
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
@@ -402,7 +394,7 @@ describe('Agent Client (client.ts)', () => {
         })();
       });
 
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+      ide.setEnabled(false);
 
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
@@ -446,7 +438,7 @@ describe('Agent Client (client.ts)', () => {
         })(),
       );
 
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+      ide.setEnabled(false);
 
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
@@ -539,7 +531,7 @@ describe('Agent Client (client.ts)', () => {
         })(),
       );
 
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+      ide.setEnabled(false);
 
       const mockChat: Partial<ChatSession> = {
         addHistory: vi.fn(),
@@ -569,9 +561,7 @@ describe('Agent Client (client.ts)', () => {
 
     it('should add context if ideMode is enabled and there are open files but no active file', async () => {
       // Arrange
-      (
-        ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
-      ).mockReturnValue({
+      await ide.update({
         workspaceState: {
           openFiles: [
             {
@@ -586,7 +576,7 @@ describe('Agent Client (client.ts)', () => {
         },
       });
 
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
+      ide.setEnabled(true);
 
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Hello' };
@@ -690,7 +680,7 @@ describe('Agent Client (client.ts)', () => {
       vi.spyOn(client['config'], 'getMaxSessionTurns').mockReturnValue(
         MAX_SESSION_TURNS,
       );
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
+      ide.setEnabled(true);
 
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Hello' };

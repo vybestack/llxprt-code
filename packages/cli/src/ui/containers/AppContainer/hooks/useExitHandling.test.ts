@@ -10,19 +10,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { renderHook } from '../../../../__tests__/render.js';
 import { SessionEndReason } from '@vybestack/llxprt-code-core';
 import { useExitHandling } from './useExitHandling.js';
-
-const realLlxprtCodeCoreModule = {
-  ...(await import('@vybestack/llxprt-code-core')),
-};
-
-void vi.mock('@vybestack/llxprt-code-core', () => {
-  const actual = realLlxprtCodeCoreModule;
-
-  return {
-    ...actual,
-    triggerSessionEndHook: vi.fn().mockResolvedValue(undefined),
-  };
-});
+import type { HookSkillState } from '../../../cliUiRuntime.js';
+import type { HistoryItem } from '../../../types.js';
 
 void vi.mock('../../../utils/terminalProtocolCleanup.js', () => ({
   restoreTerminalProtocolsSync: vi.fn(),
@@ -30,13 +19,28 @@ void vi.mock('../../../utils/terminalProtocolCleanup.js', () => ({
 
 interface ExitHarness {
   handleSlashCommand: ReturnType<typeof vi.fn>;
-  config: Record<string, unknown>;
+  config: HookSkillState;
+  events: string[];
 }
 
-const createHarness = (): ExitHarness => ({
-  handleSlashCommand: vi.fn(),
-  config: { id: 'config' },
-});
+const createHarness = (): ExitHarness => {
+  const events: string[] = [];
+  return {
+    handleSlashCommand: vi.fn(),
+    events,
+    config: {
+      endHookSession: async (reason) => {
+        events.push(`hook:${reason}`);
+      },
+      getEnableHooks: () => true,
+      getDisabledHooks: () => [],
+      setDisabledHooks: () => {},
+      isSkillsSupportEnabled: () => false,
+      getEnableHooksUI: () => false,
+      isAdminSkillsEnabled: () => false,
+    },
+  };
+};
 
 describe('useExitHandling', () => {
   beforeEach(() => {
@@ -46,6 +50,7 @@ describe('useExitHandling', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('requires a second key press within timeout before dispatching /quit', () => {
@@ -54,7 +59,7 @@ describe('useExitHandling', () => {
     const { result } = renderHook(() =>
       useExitHandling({
         handleSlashCommand: harness.handleSlashCommand,
-        config: harness.config as never,
+        config: harness.config,
       }),
     );
 
@@ -86,7 +91,7 @@ describe('useExitHandling', () => {
     const { result } = renderHook(() =>
       useExitHandling({
         handleSlashCommand: harness.handleSlashCommand,
-        config: harness.config as never,
+        config: harness.config,
       }),
     );
 
@@ -113,11 +118,11 @@ describe('useExitHandling', () => {
     const { result } = renderHook(() =>
       useExitHandling({
         handleSlashCommand: harness.handleSlashCommand,
-        config: harness.config as never,
+        config: harness.config,
       }),
     );
 
-    const messages = [{ type: 'info', text: 'bye' }] as never;
+    const messages: HistoryItem[] = [{ id: 1, type: 'info', text: 'bye' }];
 
     act(() => {
       result.current.setQuittingMessages(messages);
@@ -134,7 +139,7 @@ describe('useExitHandling', () => {
     const { result, unmount } = renderHook(() =>
       useExitHandling({
         handleSlashCommand: harness.handleSlashCommand,
-        config: harness.config as never,
+        config: harness.config,
       }),
     );
 
@@ -159,28 +164,25 @@ describe('useExitHandling', () => {
   it('invokes session end hook then restores terminal protocols before exiting', async () => {
     const harness = createHarness();
 
-    const { triggerSessionEndHook } = await import(
-      '@vybestack/llxprt-code-core'
-    );
     const { restoreTerminalProtocolsSync } = await import(
       '../../../utils/terminalProtocolCleanup.js'
     );
 
     const processExitSpy = vi
       .spyOn(process, 'exit')
-      .mockImplementation(() => undefined as never);
+      .mockImplementation(vi.fn<typeof process.exit>());
 
     const { result } = renderHook(() =>
       useExitHandling({
         handleSlashCommand: harness.handleSlashCommand,
-        config: harness.config as never,
+        config: harness.config,
       }),
     );
 
     act(() => {
       result.current.setQuittingMessages([
-        { type: 'info', text: 'bye' },
-      ] as never);
+        { id: 1, type: 'info', text: 'bye' },
+      ]);
     });
 
     await act(async () => {
@@ -189,11 +191,107 @@ describe('useExitHandling', () => {
       await Promise.resolve();
     });
 
-    expect(triggerSessionEndHook).toHaveBeenCalledWith(
-      harness.config,
-      SessionEndReason.Exit,
-    );
+    expect(harness.events).toStrictEqual([`hook:${SessionEndReason.Exit}`]);
     expect(restoreTerminalProtocolsSync).toHaveBeenCalledTimes(1);
     expect(processExitSpy).toHaveBeenCalledWith(0);
   });
+  it('waits for recording owner cleanup before process exit', async () => {
+    const harness = createHarness();
+    let finishCleanup: () => void = () => undefined;
+    const cleanupPending = new Promise<void>((resolve) => {
+      finishCleanup = resolve;
+    });
+    let cleanupStarted = false;
+    const processExitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation(vi.fn<typeof process.exit>());
+
+    const { result } = renderHook(() =>
+      useExitHandling({
+        handleSlashCommand: harness.handleSlashCommand,
+        config: harness.config,
+        onBeforeExit: async () => {
+          cleanupStarted = true;
+          await cleanupPending;
+        },
+      }),
+    );
+
+    act(() => {
+      result.current.setQuittingMessages([
+        { id: 1, type: 'info', text: 'bye' },
+      ]);
+    });
+
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(cleanupStarted).toBe(true);
+    expect(processExitSpy).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishCleanup();
+      await cleanupPending;
+      await Promise.resolve();
+    });
+    expect(processExitSpy).toHaveBeenCalledWith(0);
+  });
+  it.each([
+    { hookFails: false, cleanupFails: false, exitCode: 0 },
+    { hookFails: true, cleanupFails: false, exitCode: 0 },
+    { hookFails: false, cleanupFails: true, exitCode: 1 },
+  ])(
+    'orders hook, cleanup, terminal restoration and exit for %j',
+    async ({ hookFails, cleanupFails, exitCode }) => {
+      const harness = createHarness();
+      const terminalCleanup = await import(
+        '../../../utils/terminalProtocolCleanup.js'
+      );
+      vi.spyOn(
+        terminalCleanup,
+        'restoreTerminalProtocolsSync',
+      ).mockImplementation(() => {
+        harness.events.push('terminal');
+      });
+      const exit = vi.fn<typeof process.exit>();
+      vi.spyOn(process, 'exit').mockImplementation((code) => {
+        harness.events.push(`exit:${code}`);
+        return exit(code);
+      });
+      vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+      const { result } = renderHook(() =>
+        useExitHandling({
+          handleSlashCommand: harness.handleSlashCommand,
+          config: {
+            ...harness.config,
+            endHookSession: async (reason) => {
+              harness.events.push(`hook:${reason}`);
+              if (hookFails) throw new Error('hook execution failure');
+            },
+          },
+          onBeforeExit: async () => {
+            harness.events.push('cleanup');
+            if (cleanupFails) throw new Error('recording cleanup failure');
+          },
+        }),
+      );
+      act(() => {
+        result.current.setQuittingMessages([
+          { id: 1, type: 'info', text: 'bye' },
+        ]);
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(100);
+        for (let index = 0; index < 8; index++) await Promise.resolve();
+      });
+      expect(harness.events).toStrictEqual([
+        `hook:${SessionEndReason.Exit}`,
+        'cleanup',
+        'terminal',
+        `exit:${exitCode}`,
+      ]);
+    },
+  );
 });

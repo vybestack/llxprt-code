@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 
 import { act } from 'react';
 import { describe, expect, it, vi } from 'bun:test';
@@ -14,7 +15,7 @@ const runtimeContext = await import('../contexts/RuntimeContext.js');
 void vi.mock('../contexts/RuntimeContext.js', () => ({
   ...runtimeContext,
   useRuntimeApi: () => ({
-    getActiveProviderStatus: () => ({ providerName: 'test' }),
+    providerStatus: () => ({ providerName: 'test' }),
   }),
 }));
 const { renderWithProviders, createMockSettings } = await import(
@@ -50,12 +51,25 @@ function mountFooter(trustedFolder = true) {
   const settingsStore = createSettingsProfileStore();
   const store = createDialogStore();
   const dialogs = createDialogOpeners(store);
-  const uiRuntime = buildUiRuntimeFromSource(config);
-  const slashCommandRuntime = buildSlashCommandRuntime(config);
+  const owner = createUiSessionOwner(config);
+  const uiRuntime = buildUiRuntimeFromSource(config, owner);
+  const slashCommandRuntime = buildSlashCommandRuntime(config, owner);
+  const trustRuntime = {
+    getWorkingDir: () => config.getWorkingDir(),
+    isTrustedFolder: () => owner.ide.isTrustedFolder(),
+    setTrustedFolderLive: (trusted: boolean) =>
+      owner.ide.setTrustedFolderLive(trusted),
+  };
   let ownerRenders = 0;
   function Owner() {
     ownerRenders++;
-    useFolderTrust({ settings, config, store, dialogs, settingsStore });
+    useFolderTrust({
+      settings,
+      config: trustRuntime,
+      store,
+      dialogs,
+      settingsStore,
+    });
     return (
       <FooterRegion
         uiRuntime={uiRuntime}

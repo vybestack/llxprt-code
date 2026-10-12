@@ -10,17 +10,24 @@
  * exact same host as the in-process tests instead of duplicating the stub.
  */
 
+import { physicalFiles } from '../../../__tests__/helpers/physical-files.js';
+
 import type { IToolHost } from '../../../interfaces/IToolHost.js';
 
 /** Build the minimal real IToolHost used by every ast_read_file fixture. */
 export function createAstReadToolHost(targetDir: string): IToolHost {
   return {
+    ...physicalFiles,
     getTargetDir: () => targetDir,
     getWorkspaceRoots: () => [targetDir],
     getApprovalMode: () => 'auto',
     setApprovalMode: () => {},
     isInteractive: () => false,
-    hasFeatureFlag: () => false,
+
+    runSearch: <T>(
+      _directories: readonly string[],
+      operation: () => Promise<T>,
+    ): Promise<T> => operation(),
     getFileService: () => ({
       shouldGitIgnoreFile: () => false,
       shouldLlxprtIgnoreFile: () => false,
@@ -37,7 +44,7 @@ export function createAstReadToolHost(targetDir: string): IToolHost {
     getLlxprtIgnoreFilePath: () => null,
     recordFileRead: () => {},
     getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({}),
+    readExecutionPolicy: () => ({}),
     getDebugMode: () => false,
   };
 }

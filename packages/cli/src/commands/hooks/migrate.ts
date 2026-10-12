@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { configureCommandOptions } from '../command-configuration.js';
 import type { CommandModule } from 'yargs';
 import { loadSettings } from '../../config/settings.js';
 import { exitCli } from '../utils.js';
@@ -193,21 +194,23 @@ async function migrateHooks(options: MigrateOptions): Promise<void> {
   writeProjectSettings(projectSettings, projectSettingsPath);
 }
 
-export const migrateCommand: CommandModule<object, MigrateOptions> = {
+export const migrateCommand: CommandModule<MigrateOptions, MigrateOptions> = {
   command: 'migrate',
   describe: 'Migrate hooks from user settings to project-level config',
   builder: (yargs) =>
-    yargs
-      .option('dry-run', {
-        type: 'boolean',
-        description: 'Show what would be migrated without making changes',
-        default: false,
-      })
-      .option('confirm', {
-        type: 'boolean',
-        description: 'Confirm migration and apply changes',
-        default: false,
-      }),
+    configureCommandOptions(yargs, (configuration) =>
+      configuration
+        .option('dry-run', {
+          type: 'boolean',
+          description: 'Show what would be migrated without making changes',
+          default: false,
+        })
+        .option('confirm', {
+          type: 'boolean',
+          description: 'Confirm migration and apply changes',
+          default: false,
+        }),
+    ),
   handler: async (argv) => {
     await migrateHooks(argv);
     await exitCli();

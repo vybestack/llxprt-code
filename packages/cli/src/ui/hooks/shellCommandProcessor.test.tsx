@@ -20,6 +20,7 @@ import {
   type Mock,
 } from 'bun:test';
 
+const mockShellPathExists = vi.fn();
 const realFsModule = { ...(await import('fs')) };
 const realCryptoModule = { ...(await import('crypto')) };
 const realTextUtilsModule = { ...(await import('../utils/textUtils.js')) };
@@ -38,7 +39,20 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
   },
   isBinary: mockIsBinary,
 }));
-void vi.mock('fs', () => automock(realFsModule));
+void vi.mock('fs', () => {
+  const mocked = {
+    ...automock(realFsModule),
+    mkdtempSync: realFsModule.mkdtempSync,
+    existsSync: (filePath: Parameters<typeof realFsModule.existsSync>[0]) =>
+      String(filePath) === process.cwd()
+        ? realFsModule.existsSync(filePath)
+        : mockShellPathExists(filePath),
+    statSync: realFsModule.statSync,
+    realpathSync: realFsModule.realpathSync,
+    accessSync: realFsModule.accessSync,
+  };
+  return { ...mocked, default: mocked };
+});
 // Mock os to always return 'linux' for consistent testing across platforms
 const actual = { ...(await import('os')) };
 void vi.mock('os', () => {
@@ -53,7 +67,12 @@ void vi.mock('os', () => {
     default: mockedOs,
   };
 });
-void vi.mock('crypto', () => automock(realCryptoModule));
+const randomBytes = vi.fn<typeof crypto.randomBytes>();
+void vi.mock('crypto', () => ({
+  ...realCryptoModule,
+  randomBytes,
+  default: { ...realCryptoModule, randomBytes },
+}));
 void vi.mock('../utils/textUtils.js', () => automock(realTextUtilsModule));
 
 import {
@@ -136,7 +155,7 @@ describe('useShellCommandProcessor', () => {
       > as unknown as Mock<(...args: never[]) => unknown>
     ).mockReturnValue(Buffer.from('abcdef', 'hex'));
     mockIsBinary.mockReturnValue(false);
-    (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(false);
+    mockShellPathExists.mockReturnValue(false);
     mockIsActivePty.mockReturnValue(false);
     mockGetLastActivePtyId.mockReturnValue(null);
 
@@ -153,23 +172,25 @@ describe('useShellCommandProcessor', () => {
     );
   });
 
-  const renderProcessorHook = () =>
-    renderHook(() =>
+  const renderProcessorHook = () => {
+    const agent = createFakeAgentFromMockClient(
+      mockAgentClient as unknown as Record<string, unknown>,
+    );
+    return renderHook(() =>
       useShellCommandProcessor(
         addItemToHistoryMock,
         setPendingHistoryItemMock,
         onExecMock,
         onDebugMessageMock,
         mockConfig,
-        createFakeAgentFromMockClient(
-          mockAgentClient as unknown as Record<string, unknown>,
-        ),
+        agent,
         setShellInputFocusedMock,
         80,
         24,
         pendingHistoryItemRef,
       ),
     );
+  };
 
   const createMockServiceResult = (
     overrides: Partial<ShellExecutionResult> = {},
@@ -706,7 +727,7 @@ describe('useShellCommandProcessor', () => {
       throw testError;
     });
     // Mock that the temp file was created before the error was thrown
-    (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+    mockShellPathExists.mockReturnValue(true);
 
     const { result } = renderProcessorHook();
 
@@ -737,7 +758,7 @@ describe('useShellCommandProcessor', () => {
       const tmpFile = expect.stringMatching(
         testRegex('.*shell_pwd_abcdef\\.tmp$', ''),
       );
-      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      mockShellPathExists.mockReturnValue(true);
       (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
         '/test/dir/new',
       ); // A different directory
@@ -767,7 +788,7 @@ describe('useShellCommandProcessor', () => {
     });
 
     it('should NOT show a warning if the directory does not change', async () => {
-      (fs.existsSync as Mock<typeof fs.existsSync>).mockReturnValue(true);
+      mockShellPathExists.mockReturnValue(true);
       (fs.readFileSync as Mock<typeof fs.readFileSync>).mockReturnValue(
         '/test/dir',
       ); // The same directory

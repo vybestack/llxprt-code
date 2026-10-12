@@ -23,7 +23,7 @@ import React, { act } from 'react';
 import { SettingsContext } from '../contexts/SettingsContext.js';
 import { LoadedSettings } from '../../config/settings.js';
 import type { PermissionsTrustRuntime } from '../hooks/usePermissionsModifyTrust.js';
-import { ideContext } from '@vybestack/llxprt-code-core';
+import type { IdeClient } from '@vybestack/llxprt-code-core';
 import { TrustLevel } from '../../config/trustedFolders.js';
 import { MessageType } from '../types.js';
 
@@ -128,7 +128,6 @@ describe('PermissionsModifyTrustDialog', () => {
         mockedTrustedConfig[folderPath] = trustLevel;
       }
     });
-    ideContext.clearIdeContext();
     mockedResolvePathTrust.mockReturnValue(undefined);
     mockedCwd.mockReturnValue('/test/dir');
     mockConfig = {
@@ -509,7 +508,12 @@ describe('PermissionsModifyTrustDialog', () => {
   });
 
   it('shows an IDE false override and distinguishes saved fallback from effective trust', async () => {
-    ideContext.setIdeContext({ workspaceState: { isTrusted: false } });
+    mockConfig.getIdeClient = () =>
+      ({
+        getWorkspaceTrust: () => false,
+        addTrustChangeListener: vi.fn(),
+        removeTrustChangeListener: vi.fn(),
+      }) as unknown as IdeClient;
     const { stdin, lastFrame } = renderWithProviders(
       <Wrapper>
         <PermissionsModifyTrustDialog

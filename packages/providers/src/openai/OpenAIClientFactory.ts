@@ -131,7 +131,9 @@ export function extractModelParamsFromOptions(
   }
 
   // Translate generic maxOutputTokens ephemeral to OpenAI's max_tokens
-  const rawMaxOutput = options.settings.get('maxOutputTokens');
+  const rawMaxOutput = options.modelParameters
+    ? options.modelParameters.genericMaxOutputTokens
+    : options.invocation.ephemerals['maxOutputTokens'];
   const genericMaxOutput =
     typeof rawMaxOutput === 'number' &&
     Number.isFinite(rawMaxOutput) &&
@@ -156,8 +158,8 @@ export function extractModelParamsFromOptions(
 export function resolveRuntimeKey(
   options: NormalizedGenerateChatOptions,
 ): string {
-  if (options.runtime?.runtimeId) {
-    return options.runtime.runtimeId;
+  if (options.invocation.runtimeId) {
+    return options.invocation.runtimeId;
   }
 
   const metadataRuntimeId = options.metadata.runtimeId as string | undefined;
@@ -165,7 +167,7 @@ export function resolveRuntimeKey(
     return metadataRuntimeId.trim();
   }
 
-  const callId = options.settings.get('call-id');
+  const callId = options.invocation.getEphemeral('call-id');
   if (typeof callId === 'string' && callId.trim()) {
     return `call:${callId.trim()}`;
   }

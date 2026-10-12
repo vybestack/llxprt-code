@@ -7,12 +7,10 @@
 /**
  * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P05
  *
- * AgentLspControl implementation. Delegates to the bound Config's LSP surface
- * (getLspConfig/getLspServiceClient) so clients inspect LSP status without a
- * Config escape hatch. Avoids leaking the raw LspServiceClient.
+ * AgentLspControl implementation. Reads the explicit workspace inspection operation without exposing a service client.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { WorkspaceLspInspection } from '@vybestack/llxprt-code-core/lsp/workspace-lsp-owner.js';
 import type {
   LspServerConfig,
   ServerStatus,
@@ -25,12 +23,11 @@ import type {
 import { formatError } from './errorUtils.js';
 
 /**
- * Deps bundle injected by AgentImpl so LspControl can read the live Config
- * LSP surface.
+ * Inspection port supplied by the retained workspace runtime.
  * @plan:PLAN-20260626-RUNTIMEBOUNDARY.P05
  */
 export interface LspControlDeps {
-  readonly config: Config;
+  readonly inspection: WorkspaceLspInspection;
 }
 
 function unavailableServerStatus(
@@ -99,9 +96,8 @@ export class LspControl implements AgentLspControl {
   }
 
   private async readStatus(): Promise<LspStatusSnapshot> {
-    const config = this.deps.config;
-    const lspConfig = config.getLspConfig();
-    const client = config.getLspServiceClient();
+    const health = await this.deps.inspection.read();
+    const lspConfig = health.configured;
 
     if (lspConfig === undefined) {
       return {
@@ -111,18 +107,8 @@ export class LspControl implements AgentLspControl {
       };
     }
 
-    if (client === undefined) {
-      return {
-        disabled: true,
-        servers: lspConfig.servers.map((server) =>
-          unavailableServerStatus(server),
-        ),
-        unavailableReason: 'LSP service unavailable',
-      };
-    }
-
-    if (!client.isAlive()) {
-      const reason = client.getUnavailableReason();
+    if (!health.alive) {
+      const reason = health.reason;
       return {
         disabled: true,
         servers: lspConfig.servers.map((server) =>
@@ -133,7 +119,7 @@ export class LspControl implements AgentLspControl {
     }
 
     try {
-      const rawStatuses = await client.status();
+      const rawStatuses = health.statuses;
       return {
         disabled: false,
         servers: projectConfiguredStatuses(lspConfig.servers, rawStatuses),

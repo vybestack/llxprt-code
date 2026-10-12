@@ -4,38 +4,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { automock } from '@vybestack/llxprt-code-test-utils';
-import {
-  describe,
-  it,
-  expect,
-  beforeEach,
-  vi,
-  afterEach,
-  type Mock,
-} from 'bun:test';
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+
+import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'bun:test';
 import { act, useEffect, useState, useCallback } from 'react';
 import { renderHook, waitFor } from '../../__tests__/render.js';
 import { useCommandCompletion } from './useCommandCompletion.js';
-import type { CommandContext } from '../commands/types.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+import { Config } from '@vybestack/llxprt-code-core';
 import { useTextBuffer } from '../components/shared/text-buffer.js';
 import type { Suggestion } from '../components/SuggestionsDisplay.js';
 import type { UseAtCompletionProps } from './useAtCompletion.js';
 import { useAtCompletion } from './useAtCompletion.js';
 import { useSlashCompletion } from './useSlashCompletion.js';
 
-const realUseSlashCompletionModule = {
-  ...(await import('./useSlashCompletion')),
-};
-
-void vi.mock('./useAtCompletion', () => ({
-  useAtCompletion: vi.fn(),
+const atCompletionMock = vi.fn<typeof useAtCompletion>();
+const slashCompletionMock = vi.fn<typeof useSlashCompletion>();
+void vi.mock('./useAtCompletion.js', () => ({
+  useAtCompletion: atCompletionMock,
 }));
-
-void vi.mock('./useSlashCompletion', () =>
-  automock(realUseSlashCompletionModule),
-);
+void vi.mock('./useSlashCompletion.js', () => ({
+  useSlashCompletion: slashCompletionMock,
+}));
 
 void vi.mock('./useCompletion', () => ({
   useCompletion: vi.fn(() => {
@@ -77,6 +68,10 @@ void vi.mock('./useCompletion', () => ({
 
     return {
       suggestions,
+      activeHint: '',
+      getCommandFromSuggestion: () => null,
+      isArgumentCompletion: false,
+      leafCommand: null,
       activeSuggestionIndex,
       visibleStartIndex,
       showSuggestions,
@@ -127,7 +122,7 @@ const setupMocks = ({
   isPerfectMatch?: boolean;
 }) => {
   // Mock for @-completions
-  (useAtCompletion as Mock<(...args: never[]) => unknown>).mockImplementation(
+  atCompletionMock.mockImplementation(
     ({
       enabled,
       setSuggestions,
@@ -143,9 +138,7 @@ const setupMocks = ({
   );
 
   // Mock for /-completions with proper state management
-  (
-    useSlashCompletion as Mock<(...args: never[]) => unknown>
-  ).mockImplementation((buffer) => {
+  slashCompletionMock.mockImplementation((buffer) => {
     const [suggestions, setSuggestions] =
       useState<Suggestion[]>(slashSuggestions);
     const [activeSuggestionIndex, setActiveSuggestionIndex] = useState<number>(
@@ -186,17 +179,22 @@ const setupMocks = ({
     const handleAutocomplete = useCallback(
       (indexToUse: number) => {
         if (indexToUse < 0 || indexToUse >= suggestions.length) {
-          return;
+          return undefined;
         }
         const suggestion = suggestions[indexToUse].value;
         // For slash commands, replace the entire line
         buffer.setText(`/${suggestion} `);
+        return suggestion;
       },
       [suggestions, buffer],
     );
 
     return {
       suggestions,
+      activeHint: '',
+      getCommandFromSuggestion: () => null,
+      isArgumentCompletion: false,
+      leafCommand: null,
       activeSuggestionIndex,
       visibleStartIndex,
       showSuggestions,
@@ -213,15 +211,15 @@ const setupMocks = ({
 };
 
 describe('useCommandCompletion', () => {
-  const mockCommandContext = {} as CommandContext;
-  const mockConfig = {
-    getEnablePromptCompletion: () => false,
-    getUtilityModel: () => undefined,
-    getAgentClient: vi.fn(),
-    getWorkspaceContext: () => ({
-      getDirectories: () => [],
-    }),
-  } as Config;
+  const mockCommandContext = createMockCommandContext();
+  const mockConfig = new Config({
+    sessionId: crypto.randomUUID(),
+    cwd: process.cwd(),
+    targetDir: process.cwd(),
+    debugMode: false,
+    model: 'completion-model',
+    enablePromptCompletion: false,
+  });
   const testRootDir = '/';
 
   // Helper to create real TextBuffer objects within renderHook
@@ -246,7 +244,7 @@ describe('useCommandCompletion', () => {
         mockCommandContext,
         false,
         false,
-        mockConfig,
+        composeFixtureRuntime(mockConfig),
       );
       return { ...completion, textBuffer };
     });
@@ -277,7 +275,7 @@ describe('useCommandCompletion', () => {
           mockCommandContext,
           false,
           false,
-          mockConfig,
+          composeFixtureRuntime(mockConfig),
         );
         return { ...completion, textBuffer };
       });
@@ -307,7 +305,7 @@ describe('useCommandCompletion', () => {
           mockCommandContext,
           false,
           false,
-          mockConfig,
+          composeFixtureRuntime(mockConfig),
         );
         return { ...completion, textBuffer };
       });
@@ -340,7 +338,7 @@ describe('useCommandCompletion', () => {
           mockCommandContext,
           false,
           false,
-          mockConfig,
+          composeFixtureRuntime(mockConfig),
         );
         return { ...completion, textBuffer };
       });
@@ -372,7 +370,7 @@ describe('useCommandCompletion', () => {
           mockCommandContext,
           false,
           false,
-          mockConfig,
+          composeFixtureRuntime(mockConfig),
         );
         return { ...completion, textBuffer };
       });
@@ -404,7 +402,7 @@ describe('useCommandCompletion', () => {
           mockCommandContext,
           false,
           false,
-          mockConfig,
+          composeFixtureRuntime(mockConfig),
         );
         return { ...completion, textBuffer };
       });
@@ -422,13 +420,14 @@ describe('useCommandCompletion', () => {
   });
   describe('prompt completion filtering', () => {
     it('should not trigger prompt completion for line comments', async () => {
-      const mockConfig = {
-        getEnablePromptCompletion: () => true,
-        getUtilityModel: () => undefined,
-        getWorkspaceContext: () => ({
-          getDirectories: () => [],
-        }),
-      } as Config;
+      const mockConfig = new Config({
+        sessionId: crypto.randomUUID(),
+        cwd: process.cwd(),
+        targetDir: process.cwd(),
+        debugMode: false,
+        model: 'completion-model',
+        enablePromptCompletion: true,
+      });
 
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('// This is a line comment');
@@ -439,7 +438,7 @@ describe('useCommandCompletion', () => {
           mockCommandContext,
           false,
           false,
-          mockConfig,
+          composeFixtureRuntime(mockConfig),
         );
         return { ...completion, textBuffer };
       });
@@ -449,13 +448,14 @@ describe('useCommandCompletion', () => {
     });
 
     it('should not trigger prompt completion for block comments', async () => {
-      const mockConfig = {
-        getEnablePromptCompletion: () => true,
-        getUtilityModel: () => undefined,
-        getWorkspaceContext: () => ({
-          getDirectories: () => [],
-        }),
-      } as Config;
+      const mockConfig = new Config({
+        sessionId: crypto.randomUUID(),
+        cwd: process.cwd(),
+        targetDir: process.cwd(),
+        debugMode: false,
+        model: 'completion-model',
+        enablePromptCompletion: true,
+      });
 
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest(
@@ -468,7 +468,7 @@ describe('useCommandCompletion', () => {
           mockCommandContext,
           false,
           false,
-          mockConfig,
+          composeFixtureRuntime(mockConfig),
         );
         return { ...completion, textBuffer };
       });
@@ -478,13 +478,14 @@ describe('useCommandCompletion', () => {
     });
 
     it('should trigger prompt completion for regular text when enabled', async () => {
-      const mockConfig = {
-        getEnablePromptCompletion: () => true,
-        getUtilityModel: () => undefined,
-        getWorkspaceContext: () => ({
-          getDirectories: () => [],
-        }),
-      } as Config;
+      const mockConfig = new Config({
+        sessionId: crypto.randomUUID(),
+        cwd: process.cwd(),
+        targetDir: process.cwd(),
+        debugMode: false,
+        model: 'completion-model',
+        enablePromptCompletion: true,
+      });
 
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest(
@@ -497,7 +498,7 @@ describe('useCommandCompletion', () => {
           mockCommandContext,
           false,
           false,
-          mockConfig,
+          composeFixtureRuntime(mockConfig),
         );
         return { ...completion, textBuffer };
       });

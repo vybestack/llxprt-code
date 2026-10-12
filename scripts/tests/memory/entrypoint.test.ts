@@ -45,6 +45,28 @@ describe('memory entrypoint path matching', () => {
     ).toBe(true);
   });
 
+  it('normalizes Windows case aliases after resolving the actual files', () => {
+    root = mkdtempSync(join(tmpdir(), 'memprofile-entrypoint-case-'));
+    const target = join(root, 'MixedCase.ts');
+    const alias = join(root, 'mixedcase.ts');
+    writeFileSync(target, 'export {};');
+    writeFileSync(alias, 'export {};');
+
+    expect(entryPathsMatch(alias, pathToFileURL(target).href, 'win32')).toBe(
+      true,
+    );
+  });
+
+  it('does not match different existing entries', () => {
+    root = mkdtempSync(join(tmpdir(), 'memprofile-entrypoint-distinct-'));
+    const target = join(root, 'target.ts');
+    const other = join(root, 'other.ts');
+    writeFileSync(target, 'export {};');
+    writeFileSync(other, 'export {};');
+
+    expect(entryPathsMatch(other, pathToFileURL(target).href)).toBe(false);
+  });
+
   it('does not throw or match when an entry path is absent', () => {
     root = mkdtempSync(join(tmpdir(), 'memprofile-entrypoint-missing-'));
 

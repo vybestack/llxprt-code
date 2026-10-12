@@ -23,10 +23,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import {
+  ToolConfirmationOutcome,
+  PolicyDecision,
+} from '@vybestack/llxprt-code-core';
 import { ACTIVATE_SKILL_TOOL_NAME } from '@vybestack/llxprt-code-tools';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
-import { internalConfig } from './helpers/agentHarness.js';
 
 interface ProviderToolDeclaration {
   readonly name: string;
@@ -39,8 +42,8 @@ interface ProviderToolDeclaration {
  * rather than returning empty if the shape moves, so a refactor of
  * `ChatSession.setTools` cannot turn this green by accident.
  */
-function modelVisibleSkillNames(config: Config): string[] {
-  const chat = config.getAgentClient().getChat() as unknown as {
+function modelVisibleSkillNames(agent: Agent): string[] {
+  const chat = agent.agentClient.getChat() as unknown as {
     generationConfig?: {
       tools?: ProviderToolDeclaration[];
     };
@@ -89,13 +92,36 @@ describe('fromConfig gives the model the skills the config discovered @issue:338
     });
     let agent: Agent | undefined;
     try {
-      agent = await fromConfig({ config: built.config });
+      agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        config: built.config,
+        mcpRuntime: built.mcpRuntime,
+      });
       for await (const _event of agent.stream('hello')) {
         // Drain the turn so the chat session and its tool list exist.
       }
 
       expect(agent.skills.list().map((skill) => skill.name)).toContain('alpha');
-      expect(modelVisibleSkillNames(internalConfig(agent))).toContain('alpha');
+      expect(modelVisibleSkillNames(agent)).toContain('alpha');
+      const tool = built.mcpRuntime.toolSelection.getTool(
+        ACTIVATE_SKILL_TOOL_NAME,
+      );
+      if (!tool) throw new Error('Missing published activation tool');
+      const confirmation = await tool
+        .build({ name: 'alpha' })
+        .shouldConfirmExecute(new AbortController().signal);
+      if (confirmation === false)
+        throw new Error('Missing activation confirmation');
+      await confirmation.onConfirm(ToolConfirmationOutcome.ProceedAlways);
+      expect(built.mcpRuntime.policyInspection.getRules()).toContainEqual(
+        expect.objectContaining({
+          toolName: ACTIVATE_SKILL_TOOL_NAME,
+          decision: PolicyDecision.ALLOW,
+        }),
+      );
     } finally {
       await agent?.dispose().catch(() => {
         /* disposed via cleanup regardless of impl state */

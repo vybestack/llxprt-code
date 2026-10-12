@@ -97,10 +97,15 @@ async function captureRequestBody(
   });
 
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
+
     providerName: provider.name,
-    ephemeralsSnapshot: ephemerals,
+    ephemeralsSnapshot: {
+      ...settings.getAllGlobalSettings(),
+      [provider.name]: { ...settings.getProviderSettings(provider.name) },
+      ...ephemerals,
+    },
   });
 
   const options = createProviderCallOptions({

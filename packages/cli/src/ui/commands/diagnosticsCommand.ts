@@ -6,6 +6,7 @@
  * @plan PLAN-20250909-TOKTRACK.P16
  * @requirement REQ-INT-001.3
  */
+import { KeychainTokenStorage } from '@vybestack/llxprt-code-mcp';
 
 import type {
   SlashCommand,
@@ -13,7 +14,8 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import type { RuntimeApi } from '../contexts/RuntimeContext.js';
+import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import path from 'node:path';
@@ -28,8 +30,7 @@ import type {
 } from '@vybestack/llxprt-code-providers';
 import { appendOAuthTokens } from './diagnosticsTokens.js';
 
-type RuntimeApi = ReturnType<typeof getRuntimeApi>;
-type RuntimeOAuthManager = ReturnType<RuntimeApi['maybeGetCliOAuthManager']>;
+type RuntimeOAuthManager = OAuthControl | null;
 
 interface RuntimeSessionTokenUsage {
   input: number;
@@ -38,73 +39,6 @@ interface RuntimeSessionTokenUsage {
   tool: number;
   thought: number;
   total: number;
-}
-
-interface BucketFailoverDiagnosticsHandler {
-  getBuckets: () => string[];
-  getCurrentBucket: () => string | undefined;
-  isEnabled: () => boolean;
-}
-
-function getBucketFailoverDiagnosticsHandler(
-  config: unknown,
-): BucketFailoverDiagnosticsHandler | undefined {
-  if (
-    config === null ||
-    typeof config !== 'object' ||
-    !('getBucketFailoverHandler' in config) ||
-    typeof (config as { getBucketFailoverHandler?: unknown })
-      .getBucketFailoverHandler !== 'function'
-  ) {
-    return undefined;
-  }
-
-  const handler = (
-    config as {
-      getBucketFailoverHandler: () => unknown;
-    }
-  ).getBucketFailoverHandler();
-  if (!isBucketFailoverHandler(handler)) {
-    return undefined;
-  }
-
-  return handler as BucketFailoverDiagnosticsHandler;
-}
-
-function isBucketFailoverHandler(handler: unknown): boolean {
-  if (handler === null || typeof handler !== 'object') {
-    return false;
-  }
-  const candidate = handler as {
-    getBuckets?: unknown;
-    getCurrentBucket?: unknown;
-    isEnabled?: unknown;
-  };
-  return (
-    typeof candidate.getBuckets === 'function' &&
-    typeof candidate.getCurrentBucket === 'function' &&
-    typeof candidate.isEnabled === 'function'
-  );
-}
-
-function isLoadBalancingProvider(provider: unknown): provider is {
-  getStats: () => ExtendedLoadBalancerStats;
-  getTokenAccountingDiagnostics?: () => TokenAccountingDiagnostics;
-} {
-  return (
-    provider !== null &&
-    typeof provider === 'object' &&
-    'getStats' in provider &&
-    typeof (provider as { getStats?: unknown }).getStats === 'function'
-  );
-}
-
-function supportsTokenAccountingDiagnostics(provider: {
-  getTokenAccountingDiagnostics?: () => TokenAccountingDiagnostics;
-}): provider is {
-  getTokenAccountingDiagnostics: () => TokenAccountingDiagnostics;
-} {
-  return typeof provider.getTokenAccountingDiagnostics === 'function';
 }
 
 interface OptionalDiagnosticField {
@@ -156,16 +90,15 @@ function appendFailoverInfo(
   providerName: string | undefined,
   oauthMgr: RuntimeOAuthManager,
 ): void {
-  const failoverHandler = getBucketFailoverDiagnosticsHandler(config);
-  if (failoverHandler === undefined) {
+  const buckets = config.readFailoverBuckets?.() ?? [];
+  if (buckets.length === 0) {
     if (oauthMgr && providerName) {
       diagnostics.push(`- Bucket Failover: Not configured`);
     }
     return;
   }
-  const buckets = failoverHandler.getBuckets();
-  const currentBucket = failoverHandler.getCurrentBucket();
-  const isEnabled = failoverHandler.isEnabled();
+  const currentBucket = config.readCurrentBucket?.();
+  const isEnabled = buckets.length > 1;
   diagnostics.push(`- Bucket Failover: ${isEnabled ? 'Enabled' : 'Disabled'}`);
   if (buckets.length === 0) {
     return;
@@ -198,12 +131,9 @@ function appendProfileDistribution(
 
 function appendTokenAccountingDiagnostics(
   diagnostics: string[],
-  runtimeApi: ReturnType<typeof getRuntimeApi>,
-  lbProvider: {
-    getTokenAccountingDiagnostics: () => TokenAccountingDiagnostics;
-  },
+  runtimeApi: RuntimeApi,
+  tokenAccounting: TokenAccountingDiagnostics,
 ): void {
-  const tokenAccounting = lbProvider.getTokenAccountingDiagnostics();
   const sessionTokens = runtimeApi.getSessionTokenUsage();
   appendOptionalDiagnostics(diagnostics, [
     {
@@ -252,19 +182,15 @@ function appendTokenAccountingDiagnostics(
 function appendLoadBalancerStats(
   diagnostics: string[],
   logger: DebugLogger,
+  runtimeApi: RuntimeApi,
 ): void {
-  const runtimeApi = getRuntimeApi();
-  const providerStatus = runtimeApi.getActiveProviderStatus();
+  const providerStatus = runtimeApi.providerStatus();
   if (providerStatus.providerName !== 'load-balancer') {
     return;
   }
   try {
-    const providerManager = runtimeApi.getCliProviderManager();
-    const lbProvider = providerManager.getProviderByName('load-balancer');
-    if (!isLoadBalancingProvider(lbProvider)) {
-      return;
-    }
-    const lbStats = lbProvider.getStats();
+    const lbStats = runtimeApi.getLoadBalancerStats();
+    if (lbStats === undefined) return;
     diagnostics.push('\n## Load Balancer Stats');
     diagnostics.push(
       '_Note: "Current Profile" above is runtime profile state (the profile loaded by the CLI); "Load Balancer Profile" below is provider stats/config state (reported by the load-balancer provider). They commonly share the same value._',
@@ -280,8 +206,9 @@ function appendLoadBalancerStats(
     diagnostics.push(`- Total Requests: ${lbStats.totalRequests}`);
     appendProfileDistribution(diagnostics, lbStats);
 
-    if (supportsTokenAccountingDiagnostics(lbProvider)) {
-      appendTokenAccountingDiagnostics(diagnostics, runtimeApi, lbProvider);
+    const accounting = runtimeApi.getLoadBalancerTokenAccounting();
+    if (accounting !== undefined) {
+      appendTokenAccountingDiagnostics(diagnostics, runtimeApi, accounting);
     }
   } catch (error) {
     logger.debug(
@@ -481,11 +408,13 @@ export const diagnosticsCommand: SlashCommand = {
         };
       }
 
-      const runtimeApi = getRuntimeApi();
+      const runtimeApi = context.runtimeApi;
       const snapshot = runtimeApi.getRuntimeDiagnosticsSnapshot();
       let runtimeOAuthManager: RuntimeOAuthManager = null;
       try {
-        runtimeOAuthManager = runtimeApi.maybeGetCliOAuthManager();
+        runtimeOAuthManager = context.oauthControl.isAvailable()
+          ? context.oauthControl
+          : null;
       } catch (oauthError) {
         logger.debug(
           () =>
@@ -513,7 +442,7 @@ export const diagnosticsCommand: SlashCommand = {
         snapshot.providerName ?? undefined,
         runtimeOAuthManager,
       );
-      appendLoadBalancerStats(diagnostics, logger);
+      appendLoadBalancerStats(diagnostics, logger, context.runtimeApi);
 
       diagnostics.push('\n## Model Parameters');
       const modelParams = snapshot.modelParams;
@@ -530,7 +459,13 @@ export const diagnosticsCommand: SlashCommand = {
       appendDumpContextInfo(diagnostics, ephemeralSettings);
       appendStaticSections(diagnostics, config, settings, ephemeralSettings);
       appendToolsAndTelemetry(diagnostics, context.services.agent, settings);
-      await appendOAuthTokens(diagnostics, logger);
+      await appendOAuthTokens(
+        () =>
+          new KeychainTokenStorage('llxprt-cli-mcp-oauth').getAllCredentials(),
+        diagnostics,
+        logger,
+        context.oauthControl,
+      );
 
       return {
         type: 'message',

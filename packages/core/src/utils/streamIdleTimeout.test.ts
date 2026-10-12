@@ -7,6 +7,7 @@
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import {
+  type StreamTimeoutPolicy,
   nextStreamEventWithIdleTimeout,
   StreamIdleTimeoutError,
   resolveStreamIdleTimeoutMs,
@@ -19,21 +20,18 @@ import {
   STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY,
 } from './streamIdleTimeout.js';
 
-function timeoutConfigFor(
-  key: string,
-  value: unknown,
-): { getEphemeralSetting: (settingKey: string) => unknown } {
-  return {
-    getEphemeralSetting: (settingKey: string) =>
-      settingKey === key ? value : undefined,
-  };
+function timeoutConfigFor(key: string, value: unknown): StreamTimeoutPolicy {
+  return timeoutConfigForMany({ [key]: value });
 }
 
-function timeoutConfigForMany(values: Record<string, unknown>): {
-  getEphemeralSetting: (settingKey: string) => unknown;
-} {
+function timeoutConfigForMany(
+  values: Readonly<Record<string, unknown>>,
+): StreamTimeoutPolicy {
   return {
-    getEphemeralSetting: (settingKey: string) => values[settingKey],
+    ...values,
+    [STREAM_IDLE_TIMEOUT_SETTING_KEY]: values[STREAM_IDLE_TIMEOUT_SETTING_KEY],
+    [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]:
+      values[STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY],
   };
 }
 
@@ -217,7 +215,8 @@ describe('resolveStreamIdleTimeoutMs', () => {
   it('env var overrides config setting', () => {
     process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV] = '240000';
     const mockConfig = {
-      getEphemeralSetting: () => 120000,
+      [STREAM_IDLE_TIMEOUT_SETTING_KEY]: 120000,
+      [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]: 120000,
     };
     const result = resolveStreamIdleTimeoutMs(mockConfig);
     expect(result).toBe(240_000); // env wins
@@ -246,7 +245,8 @@ describe('resolveStreamIdleTimeoutMs', () => {
 
   it('config string value is parsed correctly', () => {
     const mockConfig = {
-      getEphemeralSetting: () => '90000',
+      [STREAM_IDLE_TIMEOUT_SETTING_KEY]: '90000',
+      [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]: '90000',
     };
     const result = resolveStreamIdleTimeoutMs(mockConfig);
     expect(result).toBe(90_000);
@@ -254,7 +254,8 @@ describe('resolveStreamIdleTimeoutMs', () => {
 
   it('returns 0 when config setting is 0 (disabled)', () => {
     const mockConfig = {
-      getEphemeralSetting: () => 0,
+      [STREAM_IDLE_TIMEOUT_SETTING_KEY]: 0,
+      [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]: 0,
     };
     const result = resolveStreamIdleTimeoutMs(mockConfig);
     expect(result).toBe(0);
@@ -262,7 +263,8 @@ describe('resolveStreamIdleTimeoutMs', () => {
 
   it('returns 0 when config setting is negative (disabled)', () => {
     const mockConfig = {
-      getEphemeralSetting: () => -5,
+      [STREAM_IDLE_TIMEOUT_SETTING_KEY]: -5,
+      [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]: -5,
     };
     const result = resolveStreamIdleTimeoutMs(mockConfig);
     expect(result).toBe(0);
@@ -277,7 +279,8 @@ describe('resolveStreamIdleTimeoutMs', () => {
   it('falls back to config when env var is invalid', () => {
     process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV] = 'invalid';
     const mockConfig = {
-      getEphemeralSetting: () => 150_000,
+      [STREAM_IDLE_TIMEOUT_SETTING_KEY]: 150_000,
+      [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]: 150_000,
     };
     const result = resolveStreamIdleTimeoutMs(mockConfig);
     expect(result).toBe(150_000);
@@ -285,7 +288,8 @@ describe('resolveStreamIdleTimeoutMs', () => {
 
   it('falls back to default when config value is invalid', () => {
     const mockConfig = {
-      getEphemeralSetting: () => 'not-a-number',
+      [STREAM_IDLE_TIMEOUT_SETTING_KEY]: 'not-a-number',
+      [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]: 'not-a-number',
     };
     const result = resolveStreamIdleTimeoutMs(mockConfig);
     expect(result).toBe(DEFAULT_STREAM_IDLE_TIMEOUT_MS);
@@ -300,7 +304,8 @@ describe('resolveStreamIdleTimeoutMs', () => {
   it('config setting takes precedence when env var is not set', () => {
     delete process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV];
     const mockConfig = {
-      getEphemeralSetting: () => 300_000,
+      [STREAM_IDLE_TIMEOUT_SETTING_KEY]: 300_000,
+      [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]: 300_000,
     };
     const result = resolveStreamIdleTimeoutMs(mockConfig);
     expect(result).toBe(300_000);
@@ -310,7 +315,8 @@ describe('resolveStreamIdleTimeoutMs', () => {
     it('empty string env var falls through to config/default (not parsed as 0)', () => {
       process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV] = '';
       const mockConfig = {
-        getEphemeralSetting: () => 150_000,
+        [STREAM_IDLE_TIMEOUT_SETTING_KEY]: 150_000,
+        [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]: 150_000,
       };
       const result = resolveStreamIdleTimeoutMs(mockConfig);
       expect(result).toBe(150_000); // Falls through to config, not 0
@@ -319,7 +325,8 @@ describe('resolveStreamIdleTimeoutMs', () => {
     it('whitespace-only env var falls through to config/default', () => {
       process.env[LLXPRT_STREAM_IDLE_TIMEOUT_MS_ENV] = '   ';
       const mockConfig = {
-        getEphemeralSetting: () => 120_000,
+        [STREAM_IDLE_TIMEOUT_SETTING_KEY]: 120_000,
+        [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]: 120_000,
       };
       const result = resolveStreamIdleTimeoutMs(mockConfig);
       expect(result).toBe(120_000); // Falls through to config, not 0
@@ -339,7 +346,8 @@ describe('resolveStreamIdleTimeoutMs', () => {
 
     it('config empty string value falls through to default', () => {
       const mockConfig = {
-        getEphemeralSetting: () => '',
+        [STREAM_IDLE_TIMEOUT_SETTING_KEY]: '',
+        [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]: '',
       };
       const result = resolveStreamIdleTimeoutMs(mockConfig);
       expect(result).toBe(DEFAULT_STREAM_IDLE_TIMEOUT_MS);
@@ -347,7 +355,8 @@ describe('resolveStreamIdleTimeoutMs', () => {
 
     it('config whitespace-only string falls through to default', () => {
       const mockConfig = {
-        getEphemeralSetting: () => '   ',
+        [STREAM_IDLE_TIMEOUT_SETTING_KEY]: '   ',
+        [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]: '   ',
       };
       const result = resolveStreamIdleTimeoutMs(mockConfig);
       expect(result).toBe(DEFAULT_STREAM_IDLE_TIMEOUT_MS);
@@ -355,7 +364,8 @@ describe('resolveStreamIdleTimeoutMs', () => {
 
     it('config string "0" is parsed as 0 (explicitly disabled)', () => {
       const mockConfig = {
-        getEphemeralSetting: () => '0',
+        [STREAM_IDLE_TIMEOUT_SETTING_KEY]: '0',
+        [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]: '0',
       };
       const result = resolveStreamIdleTimeoutMs(mockConfig);
       expect(result).toBe(0);
@@ -499,7 +509,8 @@ describe('resolveStreamIdleTimeoutMs', () => {
 
     it('falls through to default when both keys are absent', () => {
       const mockConfig = {
-        getEphemeralSetting: () => undefined,
+        [STREAM_IDLE_TIMEOUT_SETTING_KEY]: undefined,
+        [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]: undefined,
       };
       const result = resolveStreamIdleTimeoutMs(mockConfig);
       expect(result).toBe(DEFAULT_STREAM_IDLE_TIMEOUT_MS);

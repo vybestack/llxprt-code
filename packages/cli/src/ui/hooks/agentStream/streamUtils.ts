@@ -526,9 +526,8 @@ export function handleSubmissionError(
  */
 export function buildApiErrorInfo(runtime: StreamRuntime): ApiErrorRuntimeInfo {
   return {
-    getProviderManager: () => runtime.model.getProviderManager(),
     getProvider: () => runtime.model.getProvider(),
-    getSettingsService: () => runtime.settings.getSettingsService(),
+    readSelectedProvider: () => runtime.settings.readSelectedProvider(),
     getModel: () => runtime.model.getModel(),
   };
 }
@@ -545,9 +544,7 @@ export function showCitations(
   runtime: StreamRuntime,
 ): boolean {
   try {
-    const enabled = runtime.settings
-      .getSettingsService()
-      .get('ui.showCitations');
+    const enabled = runtime.settings.readCitations();
     if (enabled !== undefined) {
       return enabled as boolean;
     }
@@ -566,9 +563,7 @@ export function showCitations(
  */
 export function getCurrentProfileName(runtime: StreamRuntime): string | null {
   try {
-    return (
-      runtime.settings.getSettingsService().getCurrentProfileName() ?? null
-    );
+    return runtime.settings.readProfileName() ?? null;
   } catch {
     // Fall through if settings service unavailable
   }

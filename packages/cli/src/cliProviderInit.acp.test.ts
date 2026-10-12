@@ -43,16 +43,15 @@ import { ensureAcpProviderActivated } from './cliProviderInit.js';
 
 interface FakeProviderManager {
   hasActiveProvider: () => boolean;
-  setActiveProvider: (provider: string) => unknown;
+  setActiveProvider: (provider: string) => void | Promise<void>;
 }
 
 function makeConfig(
   provider: string | undefined,
-  providerManager: FakeProviderManager | undefined,
+  _providerManager: FakeProviderManager | undefined,
 ): Config {
   return {
     getProvider: () => provider,
-    getProviderManager: () => providerManager,
   } as unknown as Config;
 }
 
@@ -62,7 +61,10 @@ function makeProviderManager(
 ): FakeProviderManager {
   return {
     hasActiveProvider: () => hasActive,
-    setActiveProvider: () => activateImpl(),
+    setActiveProvider: () => {
+      const result = activateImpl();
+      return result instanceof Promise ? result : undefined;
+    },
   };
 }
 
@@ -87,15 +89,16 @@ describe('ensureAcpProviderActivated', () => {
     const pm = makeProviderManager(false, () => undefined);
     const config = makeConfig(undefined, pm);
 
-    ensureAcpProviderActivated(config);
+    ensureAcpProviderActivated(config, pm);
 
     expect(pm.hasActiveProvider()).toBe(false);
   });
 
   it('is a no-op when provider manager is absent', () => {
-    const config = makeConfig('gemini', undefined);
+    const pm = undefined;
+    const config = makeConfig('gemini', pm);
 
-    expect(() => ensureAcpProviderActivated(config)).not.toThrow();
+    expect(() => ensureAcpProviderActivated(config, pm)).not.toThrow();
   });
 
   it('is a no-op when a provider is already active', () => {
@@ -105,7 +108,7 @@ describe('ensureAcpProviderActivated', () => {
     });
     const config = makeConfig('gemini', pm);
 
-    ensureAcpProviderActivated(config);
+    ensureAcpProviderActivated(config, pm);
 
     expect(activationCalled).toBe(false);
   });
@@ -117,7 +120,7 @@ describe('ensureAcpProviderActivated', () => {
     });
     const config = makeConfig('anthropic', pm);
 
-    ensureAcpProviderActivated(config);
+    ensureAcpProviderActivated(config, pm);
 
     expect(activated).toBe(true);
   });
@@ -129,7 +132,7 @@ describe('ensureAcpProviderActivated', () => {
     });
     const config = makeConfig('anthropic', pm);
 
-    expect(() => ensureAcpProviderActivated(config)).not.toThrow();
+    expect(() => ensureAcpProviderActivated(config, pm)).not.toThrow();
     expect(debugLoggerMock.warn).toHaveBeenCalledTimes(1);
     expect(activationWarningMessage()).toContain('sync activation failed');
   });
@@ -142,7 +145,7 @@ describe('ensureAcpProviderActivated', () => {
     const config = makeConfig('anthropic', pm);
 
     // Must not throw synchronously...
-    expect(() => ensureAcpProviderActivated(config)).not.toThrow();
+    expect(() => ensureAcpProviderActivated(config, pm)).not.toThrow();
 
     // ...and must not leave an unhandled rejection. Drain microtasks so any
     // attached .catch handlers run before we assert.
@@ -156,7 +159,7 @@ describe('ensureAcpProviderActivated', () => {
     const pm = makeProviderManager(false, async () => undefined);
     const config = makeConfig('anthropic', pm);
 
-    ensureAcpProviderActivated(config);
+    ensureAcpProviderActivated(config, pm);
 
     // Drain microtasks; if the promise is not handled this would cause an
     // unhandledRejection event (vitest fails on those by default).

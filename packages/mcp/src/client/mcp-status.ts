@@ -30,77 +30,12 @@ export enum MCPDiscoveryState {
   COMPLETED = 'completed',
 }
 
-/**
- * Map to track the status of each MCP server within the core package
- */
-const serverStatuses: Map<string, MCPServerStatus> = new Map();
+export interface McpServerRuntimeState {
+  readonly status: MCPServerStatus;
+  readonly requiresOAuth: boolean;
+}
 
-/**
- * Map to track which MCP servers have been discovered to require OAuth
- */
-export const mcpServerRequiresOAuth: Map<string, boolean> = new Map();
-
-/**
- * Event listeners for MCP server status changes
- */
-type StatusChangeListener = (
+export type McpStatusListener = (
   serverName: string,
   status: MCPServerStatus,
 ) => void;
-const statusChangeListeners: StatusChangeListener[] = [];
-
-/**
- * Add a listener for MCP server status changes
- */
-export function addMCPStatusChangeListener(
-  listener: StatusChangeListener,
-): void {
-  statusChangeListeners.push(listener);
-}
-
-/**
- * Remove a listener for MCP server status changes
- */
-export function removeMCPStatusChangeListener(
-  listener: StatusChangeListener,
-): void {
-  const index = statusChangeListeners.indexOf(listener);
-  if (index !== -1) {
-    statusChangeListeners.splice(index, 1);
-  }
-}
-
-/**
- * Update the status of an MCP server
- */
-export function updateMCPServerStatus(
-  serverName: string,
-  status: MCPServerStatus,
-  failures?: unknown[],
-): void {
-  serverStatuses.set(serverName, status);
-  for (const listener of statusChangeListeners) {
-    try {
-      listener(serverName, status);
-    } catch (error) {
-      if (failures === undefined) {
-        throw error;
-      }
-      failures.push(error);
-    }
-  }
-}
-
-/**
- * Get the current status of an MCP server
- */
-export function getMCPServerStatus(serverName: string): MCPServerStatus {
-  return serverStatuses.get(serverName) ?? MCPServerStatus.DISCONNECTED;
-}
-
-/**
- * Get all MCP server statuses
- */
-export function getAllMCPServerStatuses(): Map<string, MCPServerStatus> {
-  return new Map(serverStatuses);
-}

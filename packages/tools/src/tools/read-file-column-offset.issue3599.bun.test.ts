@@ -20,6 +20,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { IToolHost } from '../interfaces/index.js';
+import { physicalFiles } from '../__tests__/helpers/physical-files.js';
 import { processSingleFileContent } from '../utils/fileUtils.js';
 import { ReadFileTool, type ReadFileToolParams } from './read-file.js';
 import { ReadLineRangeTool } from './read_line_range.js';
@@ -32,12 +33,13 @@ const LONE_SURROGATE =
 
 function createHost(targetDir: string): IToolHost {
   return {
+    ...physicalFiles,
     getTargetDir: () => targetDir,
     getWorkspaceRoots: () => [targetDir],
     getApprovalMode: () => 'auto',
     setApprovalMode: () => {},
     isInteractive: () => false,
-    hasFeatureFlag: () => false,
+    runSearch: (_directories, operation) => operation(),
     getFileService: () => ({
       shouldGitIgnoreFile: () => false,
       shouldLlxprtIgnoreFile: () => false,
@@ -53,9 +55,8 @@ function createHost(targetDir: string): IToolHost {
     getFileFilteringRespectLlxprtIgnore: () => true,
     getLlxprtIgnoreFilePath: () => null,
     recordFileRead: () => {},
-    getFileSystemService: () => undefined,
     getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({}),
+    readExecutionPolicy: () => ({}),
     getDebugMode: () => false,
   };
 }

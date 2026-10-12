@@ -17,7 +17,12 @@
  * - T15 ide.* current/detected IDE + trust; editor open/close fire (fake IDE).
  */
 
-import { describe, it, expect } from 'bun:test';
+import { Config } from '@vybestack/llxprt-code-core';
+import {
+  WorkspaceIdeOwner,
+  WorkspaceTrustLifecycle,
+} from './helpers/agentHarness.js';
+import { describe, it, expect, afterEach } from 'bun:test';
 import { buildAgent } from './helpers/agentHarness.js';
 import {
   createFakeIdeEnvironment,
@@ -27,7 +32,7 @@ import {
   writeDanglingCurrentFixture,
   type FakeIdeEnvironment,
 } from './helpers/fakeIde.js';
-import { IdeControl } from '../control/ideControl.js';
+import { IdeControl, type IdeControlDeps } from '../control/ideControl.js';
 import type { EditorCallbacks } from '../config-types.js';
 
 describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
@@ -171,6 +176,43 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
    * and editor open/close firing the shared editor callbacks.
    */
   describe('IdeControl unit @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-014', () => {
+    let roots: Array<() => Promise<void>> = [];
+    afterEach(async () => {
+      const retiring = roots;
+      roots = [];
+      for (const close of retiring) await close();
+    });
+    function createControl(
+      deps: Partial<
+        Pick<IdeControlDeps, 'ideModeEnabled' | 'getEditorCallbacks'>
+      > = {},
+    ): IdeControl {
+      const config = new Config({
+        sessionId: 'ide-control',
+        targetDir: process.cwd(),
+        cwd: process.cwd(),
+        debugMode: false,
+        model: 'offline',
+      });
+      const trust = new WorkspaceTrustLifecycle({ localTrust: false });
+      const ide = new WorkspaceIdeOwner(config, trust, trust);
+      roots.push(async () => {
+        await ide.dispose();
+        await trust.dispose();
+        await config.dispose();
+      });
+      return new IdeControl({
+        trust,
+        ide,
+        ideModeEnabled: () => false,
+        getEditorCallbacks: () => ({
+          getPreferredEditor: () => undefined,
+          onEditorOpen: () => {},
+          onEditorClose: () => {},
+        }),
+        ...deps,
+      });
+    }
     it('current() resolves the named current entry and projects its trusted flag @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-014', () => {
       // Use a non-vscode current so the fake-seam result is distinguishable from
       // the real-environment fallback (which defaults to vscode).
@@ -178,7 +220,7 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
         { name: 'zed', version: '0.140.0', trusted: true },
         { name: 'intellij', version: '2024.1', trusted: false },
       ]);
-      const control = new IdeControl();
+      const control = createControl();
       const current = control.current();
       expect(current).not.toBeNull();
       expect(current?.name).toBe('zed');
@@ -190,7 +232,7 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
       const env = createFakeIdeEnvironment();
       env.addDetected({ name: 'vscode', version: '1.0', trusted: false });
       env.setCurrent(null);
-      const control = new IdeControl();
+      const control = createControl();
       expect(control.current()).toBeNull();
     });
 
@@ -198,7 +240,7 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
       const env = createFakeIdeEnvironment();
       env.addDetected({ name: 'vscode', version: '1.90.0', trusted: true });
       env.addDetected({ name: 'zed' }); // no trusted → defaults to false
-      const control = new IdeControl();
+      const control = createControl();
       const detected = control.detected();
       const byName = new Map(detected.map((d) => [d.name, d]));
       expect(byName.get('vscode')?.trusted).toBe(true);
@@ -211,7 +253,7 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
       fakeIdeWithCurrent('zed', [
         { name: 'zed', version: '0.1', trusted: true },
       ]);
-      const enabled = new IdeControl({
+      const enabled = createControl({
         ideModeEnabled: () => true,
         getEditorCallbacks: () => ({
           getPreferredEditor: () => undefined,
@@ -230,7 +272,7 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
       writeDanglingCurrentFixture('phantom', [
         { name: 'zed', version: '0.1', trusted: false },
       ]);
-      const control = new IdeControl();
+      const control = createControl();
       expect(control.current()).toBeNull();
     });
 
@@ -238,7 +280,7 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
       fakeIdeWithCurrent('vscode', [
         { name: 'vscode', version: '1.0', trusted: false },
       ]);
-      const depless = new IdeControl();
+      const depless = createControl();
       expect(depless.status().modeEnabled).toBe(false);
     });
 
@@ -246,7 +288,7 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
       fakeIdeWithCurrent('vscode', [
         { name: 'vscode', version: '1.0', trusted: false },
       ]);
-      const control = new IdeControl({
+      const control = createControl({
         ideModeEnabled: () => false,
         getEditorCallbacks: () => ({
           getPreferredEditor: () => undefined,
@@ -261,12 +303,12 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
       const env = createFakeIdeEnvironment();
       env.addDetected({ name: 'vscode', version: '1.0', trusted: false });
       env.setCurrent({ name: 'vscode', version: '1.0', trusted: false });
-      const control = new IdeControl();
+      const control = createControl();
       expect(control.current()?.trusted).toBe(false);
 
       await control.trust('vscode');
 
-      const after = new IdeControl();
+      const after = createControl();
       expect(after.current()?.trusted).toBe(true);
       expect(after.detected().find((d) => d.name === 'vscode')?.trusted).toBe(
         true,
@@ -282,7 +324,7 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
           opens += 1;
         },
       };
-      const control = new IdeControl({
+      const control = createControl({
         ideModeEnabled: () => true,
         getEditorCallbacks: () => callbacks,
       });
@@ -299,7 +341,7 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
         },
         onEditorOpen: () => {},
       };
-      const control = new IdeControl({
+      const control = createControl({
         ideModeEnabled: () => true,
         getEditorCallbacks: () => callbacks,
       });
@@ -308,7 +350,7 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
     });
 
     it('openEditor()/closeEditor() are no-ops (do not throw) when no deps are wired @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-014', async () => {
-      const control = new IdeControl();
+      const control = createControl();
       await expect(control.openEditor()).resolves.toBeUndefined();
       await expect(control.closeEditor()).resolves.toBeUndefined();
     });
@@ -318,7 +360,7 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
       // no version, explicit trusted=true → projects {name, trusted:true} w/o version
       env.addDetected({ name: 'novers', trusted: true });
       env.setCurrent({ name: 'novers', trusted: true });
-      const control = new IdeControl();
+      const control = createControl();
       const current = control.current();
       expect(current?.name).toBe('novers');
       expect(current?.version).toBeUndefined();
@@ -328,7 +370,7 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
 
     it('current() falls back to the real-environment detector when the fake seam is inactive @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-014', () => {
       deactivateFakeIde();
-      const control = new IdeControl();
+      const control = createControl();
       const current = control.current();
       // real-env detection always resolves a concrete IDE (vscode by default)
       expect(current).not.toBeNull();
@@ -339,7 +381,7 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
 
     it('detected() falls back to a single real-environment entry when the fake seam is inactive @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-014', () => {
       deactivateFakeIde();
-      const control = new IdeControl();
+      const control = createControl();
       const detected = control.detected();
       expect(detected).toHaveLength(1);
       expect(detected[0].name).toBe(realEnvDetectedName());
@@ -348,7 +390,7 @@ describe('IDE @plan:PLAN-20260617-COREAPI.P12 @requirement:REQ-014', () => {
 
     it('trust() is a silent no-op on the real-environment path (no seam to mutate) @plan:PLAN-20260617-COREAPI.P22 @requirement:REQ-014', async () => {
       deactivateFakeIde();
-      const control = new IdeControl();
+      const control = createControl();
       await expect(control.trust('vscode')).resolves.toBeUndefined();
       // detection is unchanged by a trust call outside the seam
       expect(control.detected()[0].trusted).toBe(false);

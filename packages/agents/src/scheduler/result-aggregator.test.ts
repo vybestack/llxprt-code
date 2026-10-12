@@ -1,3 +1,5 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createSessionPolicyFixture } from '../core/__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -22,9 +24,11 @@ function makeCallbacks(
   const setSuccess = vi.fn();
   const setError = vi.fn();
   const getFallbackOutputConfig = vi.fn().mockReturnValue({
-    getEphemeralSettings: () => ({
-      'tool-output-max-tokens': DEFAULT_MAX_TOKENS,
-    }),
+    readExecutionPolicy: createSessionPolicyFixture(
+      createFixtureSettings({
+        'tool-output-max-tokens': DEFAULT_MAX_TOKENS,
+      }),
+    ).readExecutionPolicy,
   } as ToolOutputSettingsProvider);
 
   return {
@@ -333,7 +337,9 @@ describe('ResultAggregator', () => {
     it('creates a reduced per-tool budget for multi-tool batches', async () => {
       // Override fallback to return a known token limit
       const base: ToolOutputSettingsProvider = {
-        getEphemeralSettings: () => ({ 'tool-output-max-tokens': 10000 }),
+        readExecutionPolicy: createSessionPolicyFixture(
+          createFixtureSettings({ 'tool-output-max-tokens': 10000 }),
+        ).readExecutionPolicy,
       };
       (
         callbacks.getFallbackOutputConfig as ReturnType<typeof vi.fn>
@@ -540,7 +546,9 @@ describe('ResultAggregator', () => {
       (
         callbacks.getFallbackOutputConfig as ReturnType<typeof vi.fn>
       ).mockReturnValue({
-        getEphemeralSettings: () => ({ 'tool-output-max-tokens': 2000 }),
+        readExecutionPolicy: createSessionPolicyFixture(
+          createFixtureSettings({ 'tool-output-max-tokens': 2000 }),
+        ).readExecutionPolicy,
       } as ToolOutputSettingsProvider);
 
       agg.beginBatch(2); // per-tool budget floored at 1000 tokens
@@ -580,3 +588,11 @@ describe('ResultAggregator', () => {
     });
   });
 });
+
+function createFixtureSettings(
+  values: Readonly<Record<string, unknown>>,
+): SettingsService {
+  const settings = new SettingsService();
+  for (const [key, value] of Object.entries(values)) settings.set(key, value);
+  return settings;
+}

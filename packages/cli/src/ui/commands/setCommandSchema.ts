@@ -11,8 +11,7 @@ import type {
   ValueArgument,
 } from './schema/types.js';
 import type { CommandContext } from './types.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import { ephemeralSettingHelp } from '@vybestack/llxprt-code-providers/runtime.js';
+import { ephemeralSettingHelp } from '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js';
 import { getDirectSettingSpecs } from '@vybestack/llxprt-code-settings';
 import {
   filterStrings,
@@ -99,7 +98,7 @@ function buildModelParamSchemaNext(): CommandArgumentSchema {
       options: commonParamOptions,
       completer: async (ctx, partial) => {
         const enableFuzzy = getFuzzyEnabled(ctx);
-        const modelParams = getRuntimeApi().getActiveModelParams();
+        const modelParams = ctx.runtimeApi.getActiveModelParams();
         const paramNames = Object.keys(modelParams);
         if (paramNames.length > 0) {
           const matches = filterStrings(paramNames, partial, { enableFuzzy });
@@ -181,7 +180,7 @@ function buildSettingValueCompleter(): NonNullable<ValueArgument['completer']> {
     }
 
     if (setting === 'custom-headers') {
-      const headers = getRuntimeApi().getEphemeralSettings()[
+      const headers = ctx.runtimeApi.getEphemeralSettings()[
         'custom-headers'
       ] as Record<string, string> | undefined;
       if (headers) {
@@ -208,7 +207,7 @@ function buildUnsetSubkeyCompleter(): NonNullable<ValueArgument['completer']> {
     const enableFuzzy = getFuzzyEnabled(ctx);
 
     if (key === 'modelparam') {
-      const params = getRuntimeApi().getActiveModelParams();
+      const params = ctx.runtimeApi.getActiveModelParams();
       const paramNames = Object.keys(params);
       const filtered = filterStrings(paramNames, partial, {
         enableFuzzy,
@@ -220,7 +219,7 @@ function buildUnsetSubkeyCompleter(): NonNullable<ValueArgument['completer']> {
     }
 
     if (key === 'custom-headers') {
-      const headers = getRuntimeApi().getEphemeralSettings()[
+      const headers = ctx.runtimeApi.getEphemeralSettings()[
         'custom-headers'
       ] as Record<string, string> | undefined;
       if (headers) {
@@ -241,7 +240,7 @@ function buildUnsetSubkeyCompleter(): NonNullable<ValueArgument['completer']> {
 
 function buildUnsetKeyCompleter(): NonNullable<ValueArgument['completer']> {
   return async (ctx, partial) => {
-    const ephemeralSettings = getRuntimeApi().getEphemeralSettings();
+    const ephemeralSettings = ctx.runtimeApi.getEphemeralSettings();
     const ephemeralKeys = Object.keys(ephemeralSettings).filter(
       (key) => ephemeralSettings[key] !== undefined,
     );

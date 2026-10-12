@@ -48,10 +48,14 @@ async function generate(
     config,
   });
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
+
     providerName: provider.name,
-    ephemeralsSnapshot: {},
+    ephemeralsSnapshot: {
+      ...settings.getAllGlobalSettings(),
+      [provider.name]: { ...settings.getProviderSettings(provider.name) },
+    },
   });
   const contents: IContent[] = [];
   for await (const content of provider.generateChatCompletion(

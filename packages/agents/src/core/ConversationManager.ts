@@ -105,9 +105,14 @@ function mergeTurnMetadata(
  * and managing conversation state.
  */
 export class ConversationManager {
-  private readonly historyService: HistoryService;
-  private readonly runtimeContext: AgentRuntimeContext;
+  private historyService: HistoryService;
+  private runtimeContext: AgentRuntimeContext;
   private readonly baseURL: string | undefined;
+
+  rebindHistory(runtimeContext: AgentRuntimeContext): void {
+    this.runtimeContext = runtimeContext;
+    this.historyService = runtimeContext.history;
+  }
 
   constructor(
     historyService: HistoryService,
@@ -237,6 +242,7 @@ export class ConversationManager {
     usageMetadata?: UsageStats | null,
     options?: RecordHistoryOptions,
     afterPublication?: () => void | Promise<void>,
+    origin?: object,
   ): Promise<void> {
     const newHistoryEntries: IContent[] = [];
 
@@ -285,6 +291,7 @@ export class ConversationManager {
     );
 
     await this.historyService.addBatch(newHistoryEntries, generatingModel, {
+      origin,
       ...(afterPublication === undefined ? {} : { afterPublication }),
     });
   }
@@ -582,7 +589,10 @@ export class ConversationManager {
   /**
    * Sets the full chat history, replacing any existing history.
    */
-  async setHistory(history: readonly IContent[]): Promise<void> {
+  async setHistory(
+    history: readonly IContent[],
+    historyOrigin?: object,
+  ): Promise<void> {
     // The second argument to historyService.add is only a logging/token-
     // estimation hint, not attribution. This is a restore path that may run
     // before any provider is active, so read the runtime-state model directly
@@ -595,7 +605,9 @@ export class ConversationManager {
         metadata: { ...content.metadata, turnId: turnKey },
       };
     });
-    await this.historyService.replaceBatch(restored, generatingModel);
+    await this.historyService.replaceBatch(restored, generatingModel, {
+      origin: historyOrigin,
+    });
     this.historyService.resetCacheAnchorSeq();
   }
 

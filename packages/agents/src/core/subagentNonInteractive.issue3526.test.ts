@@ -1,3 +1,5 @@
+import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -99,7 +101,7 @@ async function runDirectNonInteractive(params: {
   readonly responses: readonly IContent[];
   readonly emittedVars?: Readonly<Record<string, string>>;
 }): Promise<{ readonly output: OutputObject; readonly requestCount: number }> {
-  const { config } = await createMockConfig();
+  const { config, toolRegistry } = await createMockConfig();
   const baseBundle = createStatelessRuntimeBundle();
   const output: OutputObject = {
     terminate_reason: SubagentTerminateMode.ERROR,
@@ -117,6 +119,7 @@ async function runDirectNonInteractive(params: {
   };
   let requestCount = 0;
   const chat = {
+    ...createChatPolicyFixture(),
     sendMessageStream: async () => {
       const response = params.responses[requestCount] ?? stopped();
       requestCount += 1;
@@ -129,6 +132,7 @@ async function runDirectNonInteractive(params: {
     },
   } as unknown as ChatSession;
 
+  const settingsRoot = createSessionSettingsFixture(config);
   await executeNonInteractiveRun(
     chat,
     [...params.declarations],
@@ -145,7 +149,20 @@ async function runDirectNonInteractive(params: {
       config,
       runConfig: defaultRunConfig,
       outputConfig: params.outputConfig,
-      toolExecutorContext: config,
+      toolExecutorContext: {
+        telemetry: settingsRoot.settingsOwner.telemetry,
+        getToolRegistry: () => toolRegistry,
+        getTelemetryLogPromptsEnabled: () =>
+          config.getTelemetryLogPromptsEnabled(),
+        readExecutionPolicy: () =>
+          settingsRoot.settingsOwner.readToolExecutionPolicy(),
+        readGovernance: () =>
+          settingsRoot.settingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        getExcludeTools: () => config.getExcludeTools(),
+        getSessionId: () => config.getSessionId(),
+      },
     },
     () => undefined,
   );

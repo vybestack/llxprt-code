@@ -21,15 +21,15 @@
 
 import { assertNotNull } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect } from 'bun:test';
-import { GithubTool, type GitHubBrokerClient } from './github.js';
+import { GithubTool } from './github.js';
+import type { GitHubReportOperations } from '../interfaces/github-report-operations.js';
 import { validateGithubOpParams } from './github-ops.js';
 
-function stubClient(): GitHubBrokerClient {
-  return {
-    async runOperation() {
-      return { ok: true };
-    },
-  };
+function stubClient(): GitHubReportOperations {
+  const readReport = async (): Promise<Record<string, unknown>> => ({
+    ok: true,
+  });
+  return { readReport, submitReport: readReport };
 }
 
 /**

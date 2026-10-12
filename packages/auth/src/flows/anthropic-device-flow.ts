@@ -242,8 +242,12 @@ export class AnthropicDeviceFlow {
   /**
    * Refreshes an expired access token using a refresh token.
    */
-  async refreshToken(refreshToken: string): Promise<OAuthToken> {
+  async refreshToken(
+    refreshToken: string,
+    signal?: AbortSignal,
+  ): Promise<OAuthToken> {
     const response = await fetch(this.config.tokenEndpoint, {
+      signal,
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',

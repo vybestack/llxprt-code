@@ -11,7 +11,8 @@
  * async-task-auto-trigger effect.
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { createStreamEventAgent } from './streamEventAgent.js';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import {
@@ -71,9 +72,9 @@ export type SubmissionExecutor = (
  * Shared content-prefix identity resolver for the AgentEvent dispatcher. Reads
  * fresh runtime state at call time so a single stable reference can be reused.
  */
-function defaultGetContentPrefixIdentity(): string | null {
+function defaultGetContentPrefixIdentity(agent: Agent): string | null {
   try {
-    return resolveContentPrefixIdentity(createCliModelIdentityRuntime());
+    return resolveContentPrefixIdentity(createCliModelIdentityRuntime(agent));
   } catch {
     return null;
   }
@@ -93,6 +94,7 @@ export interface UseSubmitQueryDeps {
   onCancelSubmit: (shouldRestorePrompt?: boolean) => void;
   onAuthError: () => void;
   recordingIntegration?: RecordingIntegration;
+  recordingOwner?: 'agent' | 'raw';
   sanitizeContent: (text: string) => {
     text: string;
     blocked: boolean;
@@ -193,10 +195,14 @@ export interface UseSubmitQueryReturn {
 export function useSubmitQuery(deps: UseSubmitQueryDeps): UseSubmitQueryReturn {
   const { startNewPrompt, getPromptCount } = useSessionStats();
   const activeTurnRef = useRef(false);
+  const eventAgent = useMemo(
+    () => createStreamEventAgent(deps.agent),
+    [deps.agent],
+  );
 
   const handlers = useStreamEventHandlers({
     runtime: deps.runtime,
-    agent: deps.agent,
+    agent: eventAgent,
     settings: deps.settings,
     addItem: deps.addItem,
     removeItems: deps.removeItems,
@@ -326,7 +332,8 @@ function useProcessAgentEvent(
           setPendingHistoryItem: latestDeps.current.setPendingHistoryItem,
           setLastAgentActivityTime: latestDeps.current.setLastAgentActivityTime,
           setThought: latestDeps.current.setThought,
-          getContentPrefixIdentity: defaultGetContentPrefixIdentity,
+          getContentPrefixIdentity: () =>
+            defaultGetContentPrefixIdentity(latestDeps.current.agent),
           ...latestHandlers.current,
         },
         agentBufferRef.current,
@@ -343,7 +350,8 @@ function useSubmitQueryEffects(
   submitQuery: ReturnType<typeof useSubmitQueryCallback>,
   scheduleNextQueuedSubmission: () => void,
 ) {
-  const { submitQueryRef, streamingState, runtime, enqueueSubmission } = deps;
+  const { submitQueryRef, streamingState, runtime, agent, enqueueSubmission } =
+    deps;
   useEffect(() => {
     submitQueryRef.current = submitQuery;
   }, [submitQuery, submitQueryRef]);
@@ -365,14 +373,16 @@ function useSubmitQueryEffects(
 
   useEffect(() => {
     const isAgentBusy = () => streamingState !== StreamingState.Idle;
-    const triggerAgentTurn = async (message: string) => {
-      enqueueSubmission({
-        query: [{ type: 'text', text: message }],
+    const triggerAgentTurn = (message: string): Promise<void> =>
+      new Promise<void>((resolve) => {
+        enqueueSubmission({
+          query: [{ type: 'text', text: message }],
+          onConsumed: resolve,
+        });
+        scheduleNextQueuedSubmission();
       });
-      scheduleNextQueuedSubmission();
-    };
 
-    const unsubscribe = runtime.asyncTasks.setupAsyncTaskAutoTrigger(
+    const unsubscribe = agent.tasks.subscribeNotifications(
       isAgentBusy,
       triggerAgentTurn,
     );
@@ -380,26 +390,26 @@ function useSubmitQueryEffects(
     return () => {
       unsubscribe();
     };
-  }, [
-    runtime,
-    streamingState,
-    scheduleNextQueuedSubmission,
-    enqueueSubmission,
-  ]);
+  }, [agent, streamingState, scheduleNextQueuedSubmission, enqueueSubmission]);
+}
+
+interface DrainLifecycle {
+  mounted: boolean;
+  inFlight: { controller: AbortController | null } | null;
 }
 
 function useDrainCleanup(
   drainTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
   retryTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
   pendingSubmissionRef: React.MutableRefObject<QueuedSubmission | null>,
-  mountedRef: React.MutableRefObject<boolean>,
+  lifecycle: DrainLifecycle,
   requeueSubmission: (submission: QueuedSubmission) => void,
   releaseDrain: () => void,
 ) {
   useEffect(() => {
-    mountedRef.current = true;
+    lifecycle.mounted = true;
     return () => {
-      mountedRef.current = false;
+      lifecycle.mounted = false;
       if (drainTimeoutRef.current !== null) {
         clearTimeout(drainTimeoutRef.current);
         drainTimeoutRef.current = null;
@@ -409,7 +419,18 @@ function useDrainCleanup(
         retryTimeoutRef.current = null;
       }
       if (pendingSubmissionRef.current !== null) {
-        requeueSubmission(pendingSubmissionRef.current);
+        if (
+          lifecycle.inFlight !== null &&
+          pendingSubmissionRef.current.onConsumed !== undefined
+        ) {
+          lifecycle.inFlight.controller?.abort();
+          return;
+        }
+        if (pendingSubmissionRef.current.onConsumed !== undefined) {
+          pendingSubmissionRef.current.onConsumed();
+        } else {
+          requeueSubmission(pendingSubmissionRef.current);
+        }
         pendingSubmissionRef.current = null;
         releaseDrain();
       }
@@ -417,11 +438,31 @@ function useDrainCleanup(
   }, [
     drainTimeoutRef,
     retryTimeoutRef,
-    mountedRef,
+    lifecycle,
     pendingSubmissionRef,
     releaseDrain,
     requeueSubmission,
   ]);
+}
+
+async function executeQueuedSubmission(
+  next: QueuedSubmission,
+  submitQueryRef: UseSubmitQueryDeps['submitQueryRef'],
+  abortControllerRef: UseSubmitQueryDeps['abortControllerRef'],
+  lifecycle: DrainLifecycle,
+): Promise<SubmissionDisposition> {
+  const submit = submitQueryRef.current;
+  if (submit === null) {
+    debugLogger.error(
+      'Cannot drain queued submission before the submitter is ready.',
+    );
+    return 'requeue-await-event';
+  }
+  const inFlight: { controller: AbortController | null } = { controller: null };
+  lifecycle.inFlight = inFlight;
+  const settlement = submit(next.query, next.options, next.promptId, true);
+  inFlight.controller = abortControllerRef.current;
+  return settlement;
 }
 
 function useDrainSubmission(
@@ -433,28 +474,25 @@ function useDrainSubmission(
   submitQueryRef: UseSubmitQueryDeps['submitQueryRef'],
   requeueSubmission: UseSubmitQueryDeps['requeueSubmission'],
   releaseDrain: UseSubmitQueryDeps['releaseDrain'],
+  lifecycle: DrainLifecycle,
+  abortControllerRef: UseSubmitQueryDeps['abortControllerRef'],
 ) {
   return useCallback(
     async (next: QueuedSubmission): Promise<void> => {
       drainTimeoutRef.current = null;
       let disposition: SubmissionDisposition = 'requeue-await-event';
       try {
-        const submit = submitQueryRef.current;
-        if (submit === null) {
-          debugLogger.error(
-            'Cannot drain queued submission before the submitter is ready.',
-          );
-        } else {
-          disposition = await submit(
-            next.query,
-            next.options,
-            next.promptId,
-            true,
-          );
-        }
+        disposition = await executeQueuedSubmission(
+          next,
+          submitQueryRef,
+          abortControllerRef,
+          lifecycle,
+        );
       } catch (error: unknown) {
         debugLogger.error('Queued submission failed unexpectedly:', error);
       } finally {
+        lifecycle.inFlight = null;
+        if (!lifecycle.mounted) disposition = 'consumed';
         const ownsPendingSubmission = pendingSubmissionRef.current === next;
         const shouldRetry =
           ownsPendingSubmission &&
@@ -469,6 +507,8 @@ function useDrainSubmission(
           pendingSubmissionRef.current = null;
           if (disposition !== 'consumed' && !retryLimitReached) {
             requeueSubmission(next);
+          } else {
+            next.onConsumed?.();
           }
           releaseDrain();
         }
@@ -501,8 +541,35 @@ function useDrainSubmission(
       submitQueryRef,
       requeueSubmission,
       releaseDrain,
+      lifecycle,
+      abortControllerRef,
     ],
   );
+}
+
+function reserveQueuedSubmission(
+  tryReserveDrain: UseSubmitQueryDeps['tryReserveDrain'],
+  retryTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
+  dequeueSubmission: UseSubmitQueryDeps['dequeueSubmission'],
+  releaseDrain: UseSubmitQueryDeps['releaseDrain'],
+  pendingSubmissionRef: React.MutableRefObject<QueuedSubmission | null>,
+  drainTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
+  drainSubmission: (next: QueuedSubmission) => Promise<void>,
+): void {
+  if (!tryReserveDrain()) return;
+  if (retryTimeoutRef.current !== null) {
+    clearTimeout(retryTimeoutRef.current);
+    retryTimeoutRef.current = null;
+  }
+  const next = dequeueSubmission();
+  if (!next) {
+    releaseDrain();
+    return;
+  }
+  pendingSubmissionRef.current = next;
+  drainTimeoutRef.current = setTimeout(() => {
+    void drainSubmission(next);
+  }, 0);
 }
 
 function useScheduleNext(
@@ -510,19 +577,22 @@ function useScheduleNext(
   activeTurnRef: React.MutableRefObject<boolean>,
 ) {
   const {
-    queuedSubmissionsRef,
-    dequeueSubmission,
     requeueSubmission,
     submitQueryRef,
-    tryReserveDrain,
     releaseDrain,
+    queuedSubmissionsRef,
+    dequeueSubmission,
+    tryReserveDrain,
     drainSuppressedRef,
   } = deps;
   const drainTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSubmissionRef = useRef<QueuedSubmission | null>(null);
   const retryCountRef = useRef(0);
-  const mountedRef = useRef(true);
+  const lifecycle = useRef<DrainLifecycle>({
+    mounted: true,
+    inFlight: null,
+  }).current;
   // The mutable indirection breaks the schedule/drain callback cycle while
   // allowing delayed retries to invoke the latest stable scheduler.
   const scheduleRef = useRef<() => void>(() => undefined);
@@ -532,7 +602,7 @@ function useScheduleNext(
     drainTimeoutRef,
     retryTimeoutRef,
     pendingSubmissionRef,
-    mountedRef,
+    lifecycle,
     requeueSubmission,
     releaseDrain,
   );
@@ -546,39 +616,37 @@ function useScheduleNext(
     submitQueryRef,
     requeueSubmission,
     releaseDrain,
+    lifecycle,
+    deps.abortControllerRef,
   );
 
   const schedule = useCallback(() => {
-    const queueEmpty = queuedSubmissionsRef.current.length === 0;
     const busyOrNotIdle =
       activeTurnRef.current ||
       streamingStateRef.current !== StreamingState.Idle;
     const cannotDrain =
-      !mountedRef.current ||
+      !lifecycle.mounted ||
       busyOrNotIdle ||
-      queueEmpty ||
+      queuedSubmissionsRef.current.length === 0 ||
       drainSuppressedRef.current;
-    if (cannotDrain || !tryReserveDrain()) {
-      return;
-    }
-    if (retryTimeoutRef.current !== null) {
-      clearTimeout(retryTimeoutRef.current);
-      retryTimeoutRef.current = null;
-    }
-
-    const next = dequeueSubmission();
-    if (!next) {
-      releaseDrain();
-      return;
-    }
-    pendingSubmissionRef.current = next;
-    drainTimeoutRef.current = setTimeout(() => {
-      void drainSubmission(next);
-    }, 0);
+    if (cannotDrain) return;
+    reserveQueuedSubmission(
+      tryReserveDrain,
+      retryTimeoutRef,
+      dequeueSubmission,
+      releaseDrain,
+      pendingSubmissionRef,
+      drainTimeoutRef,
+      drainSubmission,
+    );
   }, [
     activeTurnRef,
+    lifecycle,
     queuedSubmissionsRef,
     retryTimeoutRef,
+    pendingSubmissionRef,
+    drainTimeoutRef,
+    streamingStateRef,
     dequeueSubmission,
     drainSubmission,
     tryReserveDrain,

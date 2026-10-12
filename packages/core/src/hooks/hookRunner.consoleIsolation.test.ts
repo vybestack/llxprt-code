@@ -4,15 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describe,
-  expect,
-  it,
-  vi,
-  beforeEach,
-  afterEach,
-  type Mock,
-} from 'bun:test';
+import { fixtureHookRuntime } from './__tests__/hook-runtime-fixture.js';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'bun:test';
 import { spawn } from 'node:child_process';
 import { HookRunner } from './hookRunner.js';
 import {
@@ -25,9 +18,10 @@ import type { Config } from '../config/config.js';
 
 const realNodeChildProcessModule = { ...(await import('node:child_process')) };
 
+const spawnMock = vi.fn<typeof spawn>();
 void vi.mock('node:child_process', () => {
   const actual = realNodeChildProcessModule;
-  return { ...actual, spawn: vi.fn() };
+  return { ...actual, spawn: spawnMock };
 });
 
 const mockInput: HookInput = {
@@ -72,8 +66,8 @@ describe('HookRunner Windows console isolation (Issue #2548)', () => {
     // The spawn mock is created once by the module factory, so its recorded
     // calls survive across tests. Clear them so each test only observes the
     // spawn invocation it triggered itself.
-    (spawn as Mock<typeof spawn>).mockClear();
-    (spawn as Mock<typeof spawn>).mockReturnValue(
+    spawnMock.mockClear();
+    spawnMock.mockReturnValue(
       mockSpawnObj as unknown as ReturnType<typeof spawn>,
     );
 
@@ -97,9 +91,15 @@ describe('HookRunner Windows console isolation (Issue #2548)', () => {
       configurable: true,
     });
 
-    const runner = new HookRunner({
-      getSanitizationConfig: () => undefined,
-    } as Config);
+    const runner = new HookRunner(
+      fixtureHookRuntime({
+        getSanitizationConfig: () => undefined,
+      } as Config).process,
+      fixtureHookRuntime({
+        getSanitizationConfig: () => undefined,
+      } as Config).isTrustedFolder,
+      () => new AbortController().signal,
+    );
 
     try {
       await runner.executeHook(
@@ -131,9 +131,15 @@ describe('HookRunner Windows console isolation (Issue #2548)', () => {
       configurable: true,
     });
 
-    const runner = new HookRunner({
-      getSanitizationConfig: () => undefined,
-    } as Config);
+    const runner = new HookRunner(
+      fixtureHookRuntime({
+        getSanitizationConfig: () => undefined,
+      } as Config).process,
+      fixtureHookRuntime({
+        getSanitizationConfig: () => undefined,
+      } as Config).isTrustedFolder,
+      () => new AbortController().signal,
+    );
 
     try {
       await runner.executeHook(
@@ -142,7 +148,7 @@ describe('HookRunner Windows console isolation (Issue #2548)', () => {
         mockInput,
       );
 
-      const spawnOptions = (spawn as Mock<typeof spawn>).mock.calls[0][2];
+      const spawnOptions = spawnMock.mock.calls[0][2];
       expect(spawnOptions).toBeDefined();
       expect(spawnOptions.shell).toBe(false);
       expect(spawnOptions.windowsHide).toBeUndefined();

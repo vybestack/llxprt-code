@@ -141,7 +141,7 @@ export async function maybePromptForSettings(
   // Merge new values with existing values
   const result: Record<string, string> = {};
   for (const setting of settings) {
-    if (Object.hasOwn(newValues, setting.envVar)) {
+    if (Object.prototype.hasOwnProperty.call(newValues, setting.envVar)) {
       result[setting.envVar] = newValues[setting.envVar];
       continue;
     }

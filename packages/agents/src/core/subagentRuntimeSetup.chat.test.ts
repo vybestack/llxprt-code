@@ -92,6 +92,7 @@ describe('createChatObject', () => {
     const malformedPromptConfig = {} as CreateChatObjectParams['promptConfig'];
 
     const params: CreateChatObjectParams = {
+      readMcpInstructions: () => undefined,
       promptConfig: malformedPromptConfig,
       modelConfig: { model: 'test-model', temp: 0, top_p: 1 },
       outputConfig: undefined,
@@ -106,9 +107,8 @@ describe('createChatObject', () => {
       },
       contentGenerator: {},
       environmentContextLoader: async () => [],
-      foregroundConfig: {
-        getMcpInstructions: () => undefined,
-      } as unknown as CreateChatObjectParams['foregroundConfig'],
+      foregroundConfig:
+        {} as unknown as CreateChatObjectParams['foregroundConfig'],
       context: { get: () => undefined, get_keys: () => [], set: () => {} },
     };
 
@@ -123,6 +123,7 @@ describe('createChatObject', () => {
     } as CreateChatObjectParams['promptConfig'];
 
     const params: CreateChatObjectParams = {
+      readMcpInstructions: () => undefined,
       promptConfig: emptyPromptConfig,
       modelConfig: { model: 'test-model', temp: 0, top_p: 1 },
       outputConfig: undefined,
@@ -137,9 +138,8 @@ describe('createChatObject', () => {
       },
       contentGenerator: {},
       environmentContextLoader: async () => [],
-      foregroundConfig: {
-        getMcpInstructions: () => undefined,
-      } as unknown as CreateChatObjectParams['foregroundConfig'],
+      foregroundConfig:
+        {} as unknown as CreateChatObjectParams['foregroundConfig'],
       context: { get: () => undefined, get_keys: () => [], set: () => {} },
     };
 
@@ -154,6 +154,7 @@ describe('createChatObject', () => {
     } as CreateChatObjectParams['promptConfig'];
 
     const params: CreateChatObjectParams = {
+      readMcpInstructions: () => undefined,
       promptConfig: whitespacePromptConfig,
       modelConfig: { model: 'test-model', temp: 0, top_p: 1 },
       outputConfig: undefined,
@@ -168,9 +169,8 @@ describe('createChatObject', () => {
       },
       contentGenerator: {},
       environmentContextLoader: async () => [],
-      foregroundConfig: {
-        getMcpInstructions: () => undefined,
-      } as unknown as CreateChatObjectParams['foregroundConfig'],
+      foregroundConfig:
+        {} as unknown as CreateChatObjectParams['foregroundConfig'],
       context: { get: () => undefined, get_keys: () => [], set: () => {} },
     };
 
@@ -185,6 +185,7 @@ describe('createChatObject', () => {
     } as unknown as CreateChatObjectParams['promptConfig'];
 
     const params: CreateChatObjectParams = {
+      readMcpInstructions: () => undefined,
       promptConfig: numericPromptConfig,
       modelConfig: { model: 'test-model', temp: 0, top_p: 1 },
       outputConfig: undefined,
@@ -199,9 +200,8 @@ describe('createChatObject', () => {
       },
       contentGenerator: {},
       environmentContextLoader: async () => [],
-      foregroundConfig: {
-        getMcpInstructions: () => undefined,
-      } as unknown as CreateChatObjectParams['foregroundConfig'],
+      foregroundConfig:
+        {} as unknown as CreateChatObjectParams['foregroundConfig'],
       context: { get: () => undefined, get_keys: () => [], set: () => {} },
     };
 

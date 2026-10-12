@@ -87,6 +87,7 @@ function wireProvider(provider: SafetyBaseProvider): SettingsService {
     setSettingsService: vi.fn(),
   };
   const settings = new SettingsService();
+  provider.setRuntimeSettingsService(settings);
   settings.set('model', `${PROVIDER_NAME}-model`);
   settings.setProviderSetting(PROVIDER_NAME, 'model', `${PROVIDER_NAME}-model`);
   const config = createRuntimeConfigStub(settings);
@@ -124,14 +125,13 @@ describe('RetryOrchestrator invocation safety', () => {
 
   it('does not crash a wrapped BaseProvider when only options + signal are provided', async () => {
     const baseProvider = new SafetyBaseProvider();
-    const settings = wireProvider(baseProvider);
+    wireProvider(baseProvider);
     const orchestrator = new RetryOrchestrator(baseProvider);
 
     const abortController = new AbortController();
 
     const options: GenerateChatOptions = {
       contents: [prompt],
-      settings,
     };
 
     await consumeStream(
@@ -151,7 +151,7 @@ describe('RetryOrchestrator invocation safety', () => {
 
   it('adds an explicit signal to an existing invocation object', async () => {
     const baseProvider = new SafetyBaseProvider();
-    const settings = wireProvider(baseProvider);
+    wireProvider(baseProvider);
     const orchestrator = new RetryOrchestrator(baseProvider);
 
     const existingInvocation = {
@@ -163,7 +163,6 @@ describe('RetryOrchestrator invocation safety', () => {
       orchestrator.generateChatCompletion(
         {
           contents: [prompt],
-          settings,
           invocation: existingInvocation,
         },
         undefined,

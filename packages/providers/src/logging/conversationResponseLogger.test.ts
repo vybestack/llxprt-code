@@ -24,6 +24,9 @@ import { writeConversationLog } from './telemetryEmitter.js';
 import { logConversationRequestEntry } from './conversationLogger.js';
 
 const mockConfig = {
+  getTargetDir: () => process.cwd(),
+  getTokenizerFactory: () => undefined,
+
   getConversationLoggingEnabled: () => true,
   getConversationLogPath: () => '/tmp/test-log',
   getRedactionConfig: () => ({}),

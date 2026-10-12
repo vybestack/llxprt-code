@@ -6,12 +6,20 @@
 
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { Config } from './config.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '../session/session-settings-owner.js';
+import { WorkspaceFilesystemOwner } from '../services/workspace-filesystem-owner.js';
+import { CoreShellToolHostAdapter } from '../tools-adapters/CoreShellToolHostAdapter.js';
 
-describe('Config - Ephemeral Settings', () => {
-  let config: Config;
+describe('Session-owned ephemeral settings', () => {
+  let settings: SettingsService;
+  let owner: SessionSettingsOwner;
+  let shell: CoreShellToolHostAdapter;
 
   beforeEach(() => {
-    config = new Config({
+    settings = new SettingsService();
+    owner = new SessionSettingsOwner(settings);
+    const config = new Config({
       model: 'test-model',
       question: 'test question',
       embeddingModel: 'test-embedding',
@@ -21,6 +29,13 @@ describe('Config - Ephemeral Settings', () => {
       debugMode: false,
       cwd: '.',
     });
+    const workspace = new WorkspaceFilesystemOwner({
+      targetDir: config.getTargetDir(),
+      isTrusted: () => true,
+    });
+    shell = new CoreShellToolHostAdapter(config, workspace.paths, () =>
+      owner.readToolExecutionPolicy(),
+    );
   });
 
   describe('task-continuation setting', () => {
@@ -33,7 +48,7 @@ describe('Config - Ephemeral Settings', () => {
      */
     it('should return undefined for unset task-continuation setting', () => {
       // When no setting is configured
-      const result = config.getEphemeralSetting('todo-continuation');
+      const result = owner.readNamedParameter('todo-continuation');
 
       // Then it returns undefined (services handle default logic)
       expect(result).toBeUndefined();
@@ -48,10 +63,10 @@ describe('Config - Ephemeral Settings', () => {
      */
     it('should return true when explicitly set to true', () => {
       // Given setting is explicitly set to true
-      config.setEphemeralSetting('todo-continuation', true);
+      owner.writeUserParameter('todo-continuation', true);
 
       // When getting the setting
-      const result = config.getEphemeralSetting('todo-continuation');
+      const result = owner.readNamedParameter('todo-continuation');
 
       // Then it returns true
       expect(result).toBe(true);
@@ -66,10 +81,10 @@ describe('Config - Ephemeral Settings', () => {
      */
     it('should return false when explicitly set to false', () => {
       // Given setting is explicitly set to false
-      config.setEphemeralSetting('todo-continuation', false);
+      owner.writeUserParameter('todo-continuation', false);
 
       // When getting the setting
-      const result = config.getEphemeralSetting('todo-continuation');
+      const result = owner.readNamedParameter('todo-continuation');
 
       // Then it returns false
       expect(result).toBe(false);
@@ -84,7 +99,7 @@ describe('Config - Ephemeral Settings', () => {
      */
     it('should demonstrate service behavior with undefined setting', () => {
       // Given no setting configured
-      const ephemeralSetting = config.getEphemeralSetting('todo-continuation');
+      const ephemeralSetting = owner.readNamedParameter('todo-continuation');
 
       // When service checks the setting (simulating service logic)
       const continuationEnabled = ephemeralSetting !== false; // This is how the service treats undefined
@@ -96,8 +111,8 @@ describe('Config - Ephemeral Settings', () => {
 
     it('should demonstrate service behavior with explicit false', () => {
       // Given setting is explicitly set to false
-      config.setEphemeralSetting('todo-continuation', false);
-      const ephemeralSetting = config.getEphemeralSetting('todo-continuation');
+      owner.writeUserParameter('todo-continuation', false);
+      const ephemeralSetting = owner.readNamedParameter('todo-continuation');
 
       // When service checks the setting (simulating service logic)
       const continuationEnabled = ephemeralSetting !== false; // This is how the service treats false
@@ -109,8 +124,8 @@ describe('Config - Ephemeral Settings', () => {
 
     it('should demonstrate service behavior with explicit true', () => {
       // Given setting is explicitly set to true
-      config.setEphemeralSetting('todo-continuation', true);
-      const ephemeralSetting = config.getEphemeralSetting('todo-continuation');
+      owner.writeUserParameter('todo-continuation', true);
+      const ephemeralSetting = owner.readNamedParameter('todo-continuation');
 
       // When service checks the setting (simulating service logic)
       const continuationEnabled = ephemeralSetting !== false; // This is how the service treats true
@@ -124,26 +139,30 @@ describe('Config - Ephemeral Settings', () => {
   describe('shell acquisition setting', () => {
     it('preserves an absent retention limit for downstream default resolution', () => {
       expect(
-        config.getShellExecutionConfig().outputRetentionMaxBytes,
+        shell.getShellExecutionConfig().executionOptions
+          .outputRetentionMaxBytes,
       ).toBeUndefined();
 
-      config.setEphemeralSetting('shell-output-retention-max-bytes', -1);
+      owner.writeUserParameter('shell-output-retention-max-bytes', -1);
 
-      expect(config.getShellExecutionConfig().outputRetentionMaxBytes).toBe(-1);
+      expect(
+        shell.getShellExecutionConfig().executionOptions
+          .outputRetentionMaxBytes,
+      ).toBe(-1);
     });
   });
 
   describe('ephemeral settings persistence', () => {
     it('should persist ephemeral setting values across get/set operations', () => {
       // Given multiple ephemeral settings
-      config.setEphemeralSetting('todo-continuation', false);
-      config.setEphemeralSetting('shell-replacement', true);
-      config.setEphemeralSetting('tool-output-max-items', 100);
+      owner.writeUserParameter('todo-continuation', false);
+      owner.writeUserParameter('shell-replacement', true);
+      owner.writeUserParameter('tool-output-max-items', 100);
 
       // When getting the settings
-      const todoContinuation = config.getEphemeralSetting('todo-continuation');
-      const shellReplacement = config.getEphemeralSetting('shell-replacement');
-      const maxItems = config.getEphemeralSetting('tool-output-max-items');
+      const todoContinuation = owner.readNamedParameter('todo-continuation');
+      const shellReplacement = owner.readNamedParameter('shell-replacement');
+      const maxItems = owner.readNamedParameter('tool-output-max-items');
 
       // Then all values are preserved
       expect(todoContinuation).toBe(false);
@@ -152,26 +171,26 @@ describe('Config - Ephemeral Settings', () => {
     });
 
     it('should normalize legacy boolean streaming values when reading settings', () => {
-      const settingsService = config.getSettingsService();
+      const settingsService = settings;
 
       settingsService.set('streaming', false);
 
-      expect(config.getEphemeralSetting('streaming')).toBe('disabled');
-      expect(config.getEphemeralSettings().streaming).toBe('disabled');
+      expect(owner.readNamedParameter('streaming')).toBe('disabled');
+      expect(owner.captureNamedParameters().streaming).toBe('disabled');
 
       settingsService.set('streaming', true);
 
-      expect(config.getEphemeralSetting('streaming')).toBe('enabled');
-      expect(config.getEphemeralSettings().streaming).toBe('enabled');
+      expect(owner.readNamedParameter('streaming')).toBe('enabled');
+      expect(owner.captureNamedParameters().streaming).toBe('enabled');
     });
 
     it('should return copy of all ephemeral settings', () => {
       // Given multiple ephemeral settings
-      config.setEphemeralSetting('todo-continuation', true);
-      config.setEphemeralSetting('custom-setting', 'test-value');
+      owner.writeUserParameter('todo-continuation', true);
+      owner.writeUserParameter('custom-setting', 'test-value');
 
       // When getting all settings
-      const allSettings = config.getEphemeralSettings();
+      const allSettings = { ...owner.captureNamedParameters() };
 
       // Then it returns a copy with all settings
       expect(allSettings).toStrictEqual({
@@ -181,30 +200,28 @@ describe('Config - Ephemeral Settings', () => {
 
       // And modifying the returned object doesn't affect the config
       allSettings['new-setting'] = 'should-not-affect-config';
-      expect(config.getEphemeralSetting('new-setting')).toBeUndefined();
+      expect(owner.readNamedParameter('new-setting')).toBeUndefined();
     });
   });
 
   describe('type safety', () => {
     it('should handle different value types for ephemeral settings', () => {
       // Boolean values
-      config.setEphemeralSetting('todo-continuation', false);
-      expect(config.getEphemeralSetting('todo-continuation')).toBe(false);
+      owner.writeUserParameter('todo-continuation', false);
+      expect(owner.readNamedParameter('todo-continuation')).toBe(false);
 
       // Number values
-      config.setEphemeralSetting('tool-output-max-items', 50);
-      expect(config.getEphemeralSetting('tool-output-max-items')).toBe(50);
+      owner.writeUserParameter('tool-output-max-items', 50);
+      expect(owner.readNamedParameter('tool-output-max-items')).toBe(50);
 
       // String values
-      config.setEphemeralSetting('auth-key', 'test-key');
-      expect(config.getEphemeralSetting('auth-key')).toBe('test-key');
+      owner.writeUserParameter('auth-key', 'test-key');
+      expect(owner.readNamedParameter('auth-key')).toBe('test-key');
 
       // Object values
       const headers = { 'Content-Type': 'application/json' };
-      config.setEphemeralSetting('custom-headers', headers);
-      expect(config.getEphemeralSetting('custom-headers')).toStrictEqual(
-        headers,
-      );
+      owner.writeUserParameter('custom-headers', headers);
+      expect(owner.readNamedParameter('custom-headers')).toStrictEqual(headers);
     });
   });
 });

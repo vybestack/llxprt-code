@@ -36,7 +36,8 @@ interface CommandDirectory {
 }
 
 export interface FileCommandRuntime {
-  readonly storage?: Storage;
+  readonly userCommandsDir: string;
+  readonly projectCommandsDir: string;
   getProjectRoot(): string;
   getExtensions(): Array<{
     name: string;
@@ -73,10 +74,15 @@ const TomlCommandDefSchema = z.object({
  * - Handling file system errors and malformed files gracefully.
  */
 export class FileCommandLoader implements ICommandLoader {
-  private readonly projectRoot: string;
+  private readonly userCommandsDir: string;
+  private readonly projectCommandsDir: string;
 
   constructor(private readonly config: FileCommandRuntime | null) {
-    this.projectRoot = config?.getProjectRoot() ?? process.cwd();
+    this.userCommandsDir =
+      config?.userCommandsDir ?? Storage.getUserCommandsDir();
+    this.projectCommandsDir =
+      config?.projectCommandsDir ??
+      path.join(process.cwd(), '.llxprt', 'commands');
   }
 
   /**
@@ -158,13 +164,11 @@ export class FileCommandLoader implements ICommandLoader {
   private getCommandDirectories(): CommandDirectory[] {
     const dirs: CommandDirectory[] = [];
 
-    const storage = this.config?.storage ?? new Storage(this.projectRoot);
-
     // 1. User commands
-    dirs.push({ path: Storage.getUserCommandsDir() });
+    dirs.push({ path: this.userCommandsDir });
 
     // 2. Project commands (override user commands)
-    dirs.push({ path: storage.getProjectCommandsDir() });
+    dirs.push({ path: this.projectCommandsDir });
 
     // 3. Extension commands (processed last to detect all conflicts)
     if (this.config) {

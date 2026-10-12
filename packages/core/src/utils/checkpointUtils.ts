@@ -5,7 +5,7 @@
  */
 
 import * as path from 'node:path';
-import type { GitService } from '../services/gitService.js';
+import type { WorkspaceCheckpointOperations } from '../services/workspace-checkpoint-owner.js';
 import type { AgentClientContract } from '../core/clientContract.js';
 import type { IContent } from '../services/history/IContent.js';
 import { getErrorMessage } from './errors.js';
@@ -84,8 +84,11 @@ export function getTruncatedCheckpointNames(filenames: string[]): string[] {
 
 async function processSingleToolCall<HistoryType>(
   toolCall: ToolCallRequestInfo,
-  gitService: GitService,
-  agentClient: AgentClientContract,
+  gitService: Pick<
+    WorkspaceCheckpointOperations,
+    'createFileSnapshot' | 'getCurrentCommitHash'
+  >,
+  agentClient: Pick<AgentClientContract, 'getHistory'>,
   history?: HistoryType,
 ): Promise<{
   errors: string[];
@@ -151,8 +154,11 @@ async function processSingleToolCall<HistoryType>(
 
 export async function processRestorableToolCalls<HistoryType>(
   toolCalls: ToolCallRequestInfo[],
-  gitService: GitService,
-  agentClient: AgentClientContract,
+  gitService: Pick<
+    WorkspaceCheckpointOperations,
+    'createFileSnapshot' | 'getCurrentCommitHash'
+  >,
+  agentClient: Pick<AgentClientContract, 'getHistory'>,
   history?: HistoryType,
 ): Promise<{
   checkpointsToWrite: Map<string, string>;

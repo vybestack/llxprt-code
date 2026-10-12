@@ -6,8 +6,10 @@
 
 // Auth barrel exports
 export { MCPOAuthProvider } from './oauth-provider.js';
+export { awaitOAuthOperation } from './oauth-request.js';
 export type {
   MCPOAuthConfig,
+  McpOAuthBinding,
   OAuthAuthorizationResponse,
   OAuthClientRegistrationRequest,
   OAuthClientRegistrationResponse,

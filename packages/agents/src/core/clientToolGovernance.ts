@@ -4,14 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
   isJsonSchema,
   type JsonSchema,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
 
 export { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/prompt-config/subagent-delegation.js';
@@ -21,7 +20,7 @@ export { shouldIncludeSubagentDelegation } from '@vybestack/llxprt-code-core/pro
  * parametersJsonSchema) into a neutral ToolDeclaration. Schema resolution
  * order: parametersJsonSchema → parameters → {} (empty object).
  */
-function toToolDeclaration(decl: {
+export function toToolDeclaration(decl: {
   name?: string;
   description?: string;
   parametersJsonSchema?: unknown;
@@ -51,17 +50,18 @@ function toToolDeclaration(decl: {
  * Reads the tool governance ephemeral settings (allowed/disabled tool lists).
  * Returns undefined if neither list is configured.
  */
-export function getToolGovernanceEphemerals(config: Config):
+export function getToolGovernanceEphemerals(policy: {
+  readonly allowed?: readonly string[];
+  readonly disabled?: readonly string[];
+}):
   | {
       allowed?: string[];
       disabled?: string[];
     }
   | undefined {
-  const rawAllowed = config.getEphemeralSetting('tools.allowed');
+  const rawAllowed = policy.allowed;
   const allowedList = readToolList(rawAllowed);
-  const disabledList = readToolList(
-    config.getEphemeralSetting('tools.disabled'),
-  );
+  const disabledList = readToolList(policy.disabled);
 
   const allowedExplicit = Array.isArray(rawAllowed);
   const hasDisabled = disabledList.length > 0;
@@ -98,11 +98,17 @@ export function readToolList(value: unknown): string[] {
  * Falls back to getAllTools then getFunctionDeclarations.
  */
 export function buildToolDeclarationsFromView(
-  toolRegistry: ToolRegistry | undefined,
-  view: ToolRegistryView,
+  toolRegistry: ToolSelection | undefined,
+  view?: Pick<ToolRegistryView, 'listToolNames'>,
 ): ToolDeclaration[] {
   if (!toolRegistry) {
     return [];
+  }
+  if (view === undefined) {
+    return toolRegistry.getFunctionDeclarations().flatMap((declaration) => {
+      const converted = toToolDeclaration(declaration);
+      return converted === null ? [] : [converted];
+    });
   }
 
   const allowedNames = view.listToolNames();
@@ -147,25 +153,19 @@ export function buildToolDeclarationsFromView(
 /**
  * Returns the deduplicated list of enabled tool names for use in system prompts.
  */
-export function getEnabledToolNamesForPrompt(config: Config): string[] {
-  const registry: unknown = config.getToolRegistry();
-  if (
-    registry == null ||
-    typeof (registry as { getEnabledTools?: unknown }).getEnabledTools !==
-      'function'
-  ) {
-    return [];
-  }
-  return Array.from(
-    new Set(
-      (registry as { getEnabledTools: () => Array<{ name?: string }> })
-        .getEnabledTools()
+export function getEnabledToolNamesForPrompt(selection: {
+  getFunctionDeclarations(): ReadonlyArray<{ readonly name?: string }>;
+}): string[] {
+  return [
+    ...new Set(
+      selection
+        .getFunctionDeclarations()
         .map((tool) => tool.name)
         .filter(
-          (name): name is string => typeof name === 'string' && name.length > 0,
+          (name): name is string => name !== undefined && name.length > 0,
         ),
     ),
-  );
+  ];
 }
 
 /**
@@ -173,10 +173,8 @@ export function getEnabledToolNamesForPrompt(config: Config): string[] {
  * Delegates to the shared shouldIncludeSubagentDelegation function.
  */
 export async function shouldIncludeSubagentDelegationForConfig(
-  config: Config,
+  definitions: { listSubagents(): Promise<string[]> } | undefined,
   enabledToolNames: string[],
 ): Promise<boolean> {
-  return shouldIncludeSubagentDelegation(enabledToolNames, () =>
-    config.getSubagentManager(),
-  );
+  return shouldIncludeSubagentDelegation(enabledToolNames, () => definitions);
 }

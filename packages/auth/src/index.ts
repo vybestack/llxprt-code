@@ -92,30 +92,12 @@ export type {
   CredentialResolutionResult,
 } from './credential-resolution-error.js';
 
-export {
-  flushRuntimeAuthScope,
-  resolveProfileId,
-  buildCacheKey,
-  ensureRuntimeState,
-  recordCacheHit,
-  recordCacheMiss,
-  getValidCachedEntry,
-  registerSettingsSubscriptions,
-  invalidateMatchingEntries,
-  storeRuntimeScopedToken,
-  invalidateEntry,
-  invalidateProviderRuntimeCache,
-  runtimeScopedStates,
-} from './precedence.js';
+export { resolveProfileId } from './precedence.js';
 
 export type {
   AuthPrecedenceConfig,
   OAuthManager,
   OAuthTokenRequestMetadata,
-  RuntimeAuthScopeFlushResult,
-  RuntimeAuthScopeCacheEntrySummary,
-  RuntimeScopedAuthEntry,
-  RuntimeScopedState,
 } from './precedence.js';
 
 // ─── Device Flows ────────────────────────────────────────────────────────────

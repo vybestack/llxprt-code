@@ -7,7 +7,7 @@
 import * as fs from 'fs/promises';
 import type { Dirent } from 'fs';
 import * as path from 'path';
-import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
+import type { WorkspaceIgnoreOperations } from '../services/workspace-filesystem-owner.js';
 import type { FileFilteringOptions } from '../config/constants.js';
 import { DebugLogger } from '../debug/index.js';
 import { debugLogger } from './debugLogger.js';
@@ -20,7 +20,7 @@ interface BfsFileSearchOptions {
   maxDirs?: number;
   maxDepth?: number;
   debug?: boolean;
-  fileService?: FileDiscoveryService;
+  fileService?: Pick<WorkspaceIgnoreOperations, 'shouldIgnoreFile'>;
   fileFilteringOptions?: FileFilteringOptions;
 }
 

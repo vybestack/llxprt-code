@@ -155,10 +155,6 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
     runtimeContext.config ??= createRuntimeConfigStub(settingsService);
-    runtimeContext.config.getEphemeralSettings = () => ({
-      ...settingsService.getAllGlobalSettings(),
-      ...settingsService.getProviderSettings('anthropic'),
-    });
   });
 
   const buildCallOptions = (
@@ -254,9 +250,6 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
         undefined,
         {
           ...TEST_PROVIDER_CONFIG,
-          getEphemeralSettings: () => ({
-            streaming: 'disabled',
-          }),
         },
       );
 
@@ -293,9 +286,6 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
     it('constructs SDK with apiKey and no authToken for regular API keys, without OAuth beta headers', async () => {
       const apiProvider = new AnthropicProvider('test-api-key', undefined, {
         ...TEST_PROVIDER_CONFIG,
-        getEphemeralSettings: () => ({
-          streaming: 'disabled',
-        }),
       });
 
       const callOptions = buildCallOptions(
@@ -334,9 +324,6 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
         undefined,
         {
           ...TEST_PROVIDER_CONFIG,
-          getEphemeralSettings: () => ({
-            streaming: 'disabled',
-          }),
         },
       );
 
@@ -377,9 +364,6 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
     it('sends tool names without prefix when using a regular API key', async () => {
       const apiProvider = new AnthropicProvider('test-api-key', undefined, {
         ...TEST_PROVIDER_CONFIG,
-        getEphemeralSettings: () => ({
-          streaming: 'disabled',
-        }),
       });
 
       const callOptions = buildCallOptions(
@@ -425,9 +409,6 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
         undefined,
         {
           ...TEST_PROVIDER_CONFIG,
-          getEphemeralSettings: () => ({
-            streaming: 'disabled',
-          }),
         },
       );
 
@@ -462,9 +443,6 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
     it('does not include oauth-2025-04-20 in anthropic-beta header for API key requests', async () => {
       const apiProvider = new AnthropicProvider('test-api-key', undefined, {
         ...TEST_PROVIDER_CONFIG,
-        getEphemeralSettings: () => ({
-          streaming: 'disabled',
-        }),
       });
 
       settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');

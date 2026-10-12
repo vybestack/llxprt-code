@@ -7,6 +7,7 @@
 import { type MCPOAuthConfig } from './oauth-provider.js';
 import { getErrorMessage } from '@vybestack/llxprt-code-tools/utils/errors.js';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
+import { awaitOAuthOperation } from './oauth-request.js';
 
 const debugLogger = new DebugLogger('llxprt:mcp:oauth');
 
@@ -54,9 +55,10 @@ export const FIVE_MIN_BUFFER_MS = 5 * 60 * 1000;
 
 async function tryAuthServerDiscovery(
   authServerUrl: string,
+  signal?: AbortSignal,
 ): Promise<MCPOAuthConfig | null> {
   const authServerMetadata =
-    await OAuthUtils.discoverAuthorizationServerMetadata(authServerUrl);
+    await OAuthUtils.discoverAuthorizationServerMetadata(authServerUrl, signal);
 
   if (authServerMetadata) {
     const config = OAuthUtils.metadataToOAuthConfig(authServerMetadata);
@@ -120,14 +122,21 @@ export class OAuthUtils {
    */
   static async fetchProtectedResourceMetadata(
     resourceMetadataUrl: string,
+    signal?: AbortSignal,
   ): Promise<OAuthProtectedResourceMetadata | null> {
     try {
-      const response = await fetch(resourceMetadataUrl);
+      const response = await awaitOAuthOperation(signal, () =>
+        fetch(resourceMetadataUrl, { signal }),
+      );
       if (!response.ok) {
         return null;
       }
-      return (await response.json()) as OAuthProtectedResourceMetadata;
+      return (await awaitOAuthOperation(signal, () =>
+        response.json(),
+      )) as OAuthProtectedResourceMetadata;
     } catch (error) {
+      signal?.throwIfAborted();
+
       debugLogger.debug(
         `Failed to fetch protected resource metadata from ${resourceMetadataUrl}: ${getErrorMessage(error)}`,
       );
@@ -143,14 +152,20 @@ export class OAuthUtils {
    */
   static async fetchAuthorizationServerMetadata(
     authServerMetadataUrl: string,
+    signal?: AbortSignal,
   ): Promise<OAuthAuthorizationServerMetadata | null> {
     try {
-      const response = await fetch(authServerMetadataUrl);
+      const response = await awaitOAuthOperation(signal, () =>
+        fetch(authServerMetadataUrl, { signal }),
+      );
       if (!response.ok) {
         return null;
       }
-      return (await response.json()) as OAuthAuthorizationServerMetadata;
+      return (await awaitOAuthOperation(signal, () =>
+        response.json(),
+      )) as OAuthAuthorizationServerMetadata;
     } catch (error) {
+      signal?.throwIfAborted();
       debugLogger.debug(
         `Failed to fetch authorization server metadata from ${authServerMetadataUrl}: ${getErrorMessage(error)}`,
       );
@@ -184,6 +199,7 @@ export class OAuthUtils {
    */
   static async discoverAuthorizationServerMetadata(
     authServerUrl: string,
+    signal?: AbortSignal,
   ): Promise<OAuthAuthorizationServerMetadata | null> {
     const authServerUrlObj = new URL(authServerUrl);
     const base = `${authServerUrlObj.protocol}//${authServerUrlObj.host}`;
@@ -232,8 +248,10 @@ export class OAuthUtils {
     );
 
     for (const endpoint of endpointsToTry) {
-      const authServerMetadata =
-        await this.fetchAuthorizationServerMetadata(endpoint);
+      const authServerMetadata = await this.fetchAuthorizationServerMetadata(
+        endpoint,
+        signal,
+      );
       if (authServerMetadata) {
         return authServerMetadata;
       }
@@ -253,6 +271,7 @@ export class OAuthUtils {
    */
   static async discoverOAuthConfig(
     serverUrl: string,
+    signal?: AbortSignal,
   ): Promise<MCPOAuthConfig | null> {
     try {
       // First try standard root-based discovery
@@ -261,6 +280,7 @@ export class OAuthUtils {
       // Try to get the protected resource metadata at root
       let resourceMetadata = await this.fetchProtectedResourceMetadata(
         wellKnownUrls.protectedResource,
+        signal,
       );
 
       // If root discovery fails and we have a path, try path-based discovery
@@ -270,6 +290,7 @@ export class OAuthUtils {
           const pathBasedUrls = this.buildWellKnownUrls(serverUrl, true);
           resourceMetadata = await this.fetchProtectedResourceMetadata(
             pathBasedUrls.protectedResource,
+            signal,
           );
         }
       }
@@ -292,7 +313,7 @@ export class OAuthUtils {
       ) {
         // Use the first authorization server
         const authServerUrl = resourceMetadata.authorization_servers[0];
-        const config = await tryAuthServerDiscovery(authServerUrl);
+        const config = await tryAuthServerDiscovery(authServerUrl, signal);
         if (config) {
           return config;
         }
@@ -300,8 +321,10 @@ export class OAuthUtils {
 
       // Fallback: try well-known endpoints at the base URL
       debugLogger.debug(`Trying OAuth discovery fallback at ${serverUrl}`);
-      const authServerMetadata =
-        await this.discoverAuthorizationServerMetadata(serverUrl);
+      const authServerMetadata = await this.discoverAuthorizationServerMetadata(
+        serverUrl,
+        signal,
+      );
 
       if (authServerMetadata) {
         const config = this.metadataToOAuthConfig(authServerMetadata);
@@ -316,6 +339,7 @@ export class OAuthUtils {
 
       return null;
     } catch (error) {
+      signal?.throwIfAborted();
       if (error instanceof ResourceMismatchError) {
         throw error;
       }
@@ -351,6 +375,7 @@ export class OAuthUtils {
   static async discoverOAuthFromWWWAuthenticate(
     wwwAuthenticate: string,
     mcpServerUrl?: string,
+    signal?: AbortSignal,
   ): Promise<MCPOAuthConfig | null> {
     const resourceMetadataUri =
       this.parseWWWAuthenticateHeader(wwwAuthenticate);
@@ -358,8 +383,10 @@ export class OAuthUtils {
       return null;
     }
 
-    const resourceMetadata =
-      await this.fetchProtectedResourceMetadata(resourceMetadataUri);
+    const resourceMetadata = await this.fetchProtectedResourceMetadata(
+      resourceMetadataUri,
+      signal,
+    );
 
     if (resourceMetadata && mcpServerUrl) {
       // Validate resource parameter per RFC 9728 Section 7.3
@@ -379,8 +406,10 @@ export class OAuthUtils {
     }
 
     const authServerUrl = resourceMetadata.authorization_servers[0];
-    const authServerMetadata =
-      await this.discoverAuthorizationServerMetadata(authServerUrl);
+    const authServerMetadata = await this.discoverAuthorizationServerMetadata(
+      authServerUrl,
+      signal,
+    );
 
     if (authServerMetadata) {
       return this.metadataToOAuthConfig(authServerMetadata);

@@ -299,7 +299,8 @@ describe('AgentClient (client.ts)', () => {
             blocks: initialRequest,
           },
         ],
-        expect.any(Object),
+        signal,
+        undefined,
       );
 
       // Second call with "Please continue."
@@ -311,7 +312,8 @@ describe('AgentClient (client.ts)', () => {
             blocks: [{ type: 'text', text: 'System: Please continue.' }],
           },
         ],
-        expect.any(Object),
+        signal,
+        undefined,
       );
     });
 

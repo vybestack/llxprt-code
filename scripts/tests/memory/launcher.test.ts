@@ -400,7 +400,7 @@ const installedLauncherSource = join(
   repositoryRoot,
   'scripts',
   'memory',
-  'installed-launcher.ts',
+  'installed-launcher-entry.ts',
 );
 
 function cleanInstalledEnv(
@@ -654,7 +654,7 @@ describe('installed memprofile launcher runtime', () => {
     const source = spawnSyncWithFileCapture(
       current.root,
       process.execPath,
-      [join(repositoryRoot, 'scripts/memory/launcher.ts'), '--help'],
+      [join(repositoryRoot, 'scripts/memory/launcher-entry.ts'), '--help'],
       { cwd: repositoryRoot },
     );
 

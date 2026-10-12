@@ -17,14 +17,9 @@ import { statsCommand } from './statsCommand.js';
 import type { CommandContext } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
+import { discoverProviderBuckets } from './oauthBucketDiscovery.js';
 
-const maybeGetCliOAuthManagerMock = vi.fn();
-
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => ({
-    maybeGetCliOAuthManager: maybeGetCliOAuthManagerMock,
-  }),
-}));
+const optionalOAuthManagerMock = vi.fn();
 
 function getBucketsSubCommand() {
   const sub = statsCommand.subCommands?.find((sc) => sc.name === 'buckets');
@@ -113,8 +108,17 @@ describe('/stats buckets subcommand', () => {
   let mockContext: CommandContext;
 
   beforeEach(() => {
-    mockContext = createMockCommandContext();
-    maybeGetCliOAuthManagerMock.mockReset();
+    mockContext = createMockCommandContext({
+      oauthControl: {
+        isAvailable: () => Boolean(optionalOAuthManagerMock()),
+        discoverBuckets: (
+          logger: Parameters<
+            CommandContext['oauthControl']['discoverBuckets']
+          >[0],
+        ) => discoverProviderBuckets(optionalOAuthManagerMock(), logger),
+      },
+    });
+    optionalOAuthManagerMock.mockReset();
   });
 
   afterEach(() => {
@@ -135,7 +139,7 @@ describe('/stats buckets subcommand', () => {
         },
       },
     });
-    maybeGetCliOAuthManagerMock.mockReturnValue({
+    optionalOAuthManagerMock.mockReturnValue({
       getSupportedProviders: () => ['codex'],
       getTokenStore: () => tokenStore,
     });
@@ -165,7 +169,7 @@ describe('/stats buckets subcommand', () => {
         },
       },
     });
-    maybeGetCliOAuthManagerMock.mockReturnValue({
+    optionalOAuthManagerMock.mockReturnValue({
       getSupportedProviders: () => ['claudecode'],
       getTokenStore: () => tokenStore,
     });
@@ -205,7 +209,7 @@ describe('/stats buckets subcommand', () => {
         },
       },
     });
-    maybeGetCliOAuthManagerMock.mockReturnValue({
+    optionalOAuthManagerMock.mockReturnValue({
       getSupportedProviders: () => ['codex', 'claudecode'],
       getTokenStore: () => tokenStore,
     });
@@ -220,7 +224,7 @@ describe('/stats buckets subcommand', () => {
   });
 
   it('shows the unavailable message when the runtime manager is genuinely absent', async () => {
-    maybeGetCliOAuthManagerMock.mockReturnValue(null);
+    optionalOAuthManagerMock.mockReturnValue(null);
 
     await getBucketsSubCommand().action!(mockContext, '');
 
@@ -232,7 +236,7 @@ describe('/stats buckets subcommand', () => {
 
   it('shows No OAuth buckets available when the manager exists but has zero buckets', async () => {
     const tokenStore = makeTokenStore({});
-    maybeGetCliOAuthManagerMock.mockReturnValue({
+    optionalOAuthManagerMock.mockReturnValue({
       getSupportedProviders: () => ['codex', 'claudecode'],
       getTokenStore: () => tokenStore,
     });
@@ -256,7 +260,7 @@ describe('/stats buckets subcommand', () => {
         lastUsed: 1700000000000,
       })),
     };
-    maybeGetCliOAuthManagerMock.mockReturnValue({
+    optionalOAuthManagerMock.mockReturnValue({
       getSupportedProviders: () => ['codex', 'claudecode'],
       getTokenStore: () => tokenStore,
     });
@@ -277,7 +281,7 @@ describe('/stats buckets subcommand', () => {
       listBuckets: vi.fn(async () => ['default']),
       getBucketStats: vi.fn(getStatsWithCodexFailure),
     };
-    maybeGetCliOAuthManagerMock.mockReturnValue({
+    optionalOAuthManagerMock.mockReturnValue({
       getSupportedProviders: () => ['codex', 'claudecode'],
       getTokenStore: () => tokenStore,
     });
@@ -315,7 +319,7 @@ describe('/stats buckets subcommand', () => {
         },
       },
     });
-    maybeGetCliOAuthManagerMock.mockReturnValue({
+    optionalOAuthManagerMock.mockReturnValue({
       getSupportedProviders: () => ['codex'],
       getTokenStore: () => tokenStore,
     });
@@ -338,7 +342,7 @@ describe('/stats buckets subcommand', () => {
         },
       },
     });
-    maybeGetCliOAuthManagerMock.mockReturnValue({
+    optionalOAuthManagerMock.mockReturnValue({
       getSupportedProviders: () => ['codex'],
       getTokenStore: () => tokenStore,
     });
@@ -354,7 +358,7 @@ describe('/stats buckets subcommand', () => {
     expect(lastItem.text).toContain('unavailable');
   });
 
-  it('does not depend on context.services.oauthManager', async () => {
+  it('reads owned bucket statistics without a manager in command services', async () => {
     const tokenStore = makeTokenStore({
       codex: {
         buckets: ['default'],
@@ -368,14 +372,10 @@ describe('/stats buckets subcommand', () => {
         },
       },
     });
-    maybeGetCliOAuthManagerMock.mockReturnValue({
+    optionalOAuthManagerMock.mockReturnValue({
       getSupportedProviders: () => ['codex'],
       getTokenStore: () => tokenStore,
     });
-    // Explicitly do NOT set context.services.oauthManager — the command must
-    // discover the manager through the runtime API, not command context.
-    mockContext.services.oauthManager = undefined;
-
     await getBucketsSubCommand().action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);

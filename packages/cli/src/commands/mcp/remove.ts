@@ -5,6 +5,7 @@
  */
 
 // File for 'llxprt mcp remove' command
+import { configureCommandOptions } from '../command-configuration.js';
 import type { CommandModule } from 'yargs';
 import { loadSettings, SettingScope } from '../../config/settings.js';
 import { exitCli } from '../utils.js';
@@ -40,20 +41,22 @@ export const removeCommand: CommandModule = {
   command: 'remove <name>',
   describe: 'Remove a server',
   builder: (yargs) =>
-    yargs
-      .usage('Usage: llxprt mcp remove [options] <name>')
-      .positional('name', {
-        describe: 'Name of the server',
-        type: 'string',
-        demandOption: true,
-      })
-      .option('scope', {
-        alias: 's',
-        describe: 'Configuration scope (user or project)',
-        type: 'string',
-        default: 'project',
-        choices: ['user', 'project'],
-      }),
+    configureCommandOptions(yargs, (configuration) =>
+      configuration
+        .usage('Usage: llxprt mcp remove [options] <name>')
+        .positional('name', {
+          describe: 'Name of the server',
+          type: 'string',
+          demandOption: true,
+        })
+        .option('scope', {
+          alias: 's',
+          describe: 'Configuration scope (user or project)',
+          type: 'string',
+          default: 'project',
+          choices: ['user', 'project'],
+        }),
+    ),
   handler: async (argv) => {
     await removeMcpServer(argv.name as string, {
       scope: argv.scope as string,

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * Behavioral test: projectPromptEnvelope must be carried through the real
  * production wrapper chain (RetryOrchestrator + LoggingProviderWrapper), not
@@ -49,6 +50,13 @@ function buildRuntimeContext(): ProviderRuntimeContext {
   return {
     settingsService: new SettingsService(),
     config: {
+      getTargetDir: () => process.cwd(),
+      getTokenizerFactory: () => undefined,
+      getConversationLogPath: () => '',
+
+      getModel: () => '',
+      getEphemeralSetting: () => undefined,
+      getUserMemory: () => '',
       getConversationLoggingEnabled: () => false,
       getRedactionConfig: () => ({
         redactApiKeys: false,
@@ -58,7 +66,6 @@ function buildRuntimeContext(): ProviderRuntimeContext {
         redactEmails: false,
         redactPersonalInfo: false,
       }),
-      getProviderManager: () => ({ accumulateSessionTokens: () => {} }),
     } as unknown as Config,
     runtimeId: 'prompt-envelope-wrapper-chain-test',
     metadata: {},
@@ -69,9 +76,8 @@ function buildChainOptions(contents: IContent[]): GenerateChatOptions {
   const runtime = buildRuntimeContext();
   return {
     contents,
-    settings: runtime.settingsService,
-    config: runtime.config,
-    runtime,
+
+    invocation: captureProviderInvocation(runtime, 'estimating-provider'),
   };
 }
 

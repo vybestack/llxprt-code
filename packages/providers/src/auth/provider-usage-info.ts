@@ -17,13 +17,11 @@
  */
 
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   CodexOAuthTokenSchema,
   type IOAuthSettingsProvider,
 } from '@vybestack/llxprt-code-auth';
 import type { TokenStore } from './types.js';
-import { isAuthOnlyEnabled } from './auth-utils.js';
 import type { CodexRateLimitResetCreditsResponse } from '../openai/codexRateLimitReset.js';
 
 const logger = new DebugLogger('llxprt:oauth:provider-usage');
@@ -162,7 +160,7 @@ export async function getAllAnthropicUsageInfo(
  */
 export async function getAllCodexUsageInfo(
   tokenStore: TokenStore,
-  config?: Config,
+  baseUrl?: string,
 ): Promise<Map<string, Record<string, unknown>>> {
   const result = new Map<string, Record<string, unknown>>();
 
@@ -185,7 +183,7 @@ export async function getAllCodexUsageInfo(
         : undefined;
 
     if (token.expiry > nowInSeconds && accountId) {
-      const runtimeBaseUrl = config?.getEphemeralSetting('base-url');
+      const runtimeBaseUrl = baseUrl;
       const codexBaseUrl =
         typeof runtimeBaseUrl === 'string' && runtimeBaseUrl.trim() !== ''
           ? runtimeBaseUrl
@@ -241,7 +239,7 @@ async function fetchAndStoreCodexResetCredits(
  */
 export async function getAllCodexRateLimitResetCredits(
   tokenStore: TokenStore,
-  config?: Config,
+  baseUrl?: string,
 ): Promise<Map<string, CodexRateLimitResetCreditsResponse>> {
   const result = new Map<string, CodexRateLimitResetCreditsResponse>();
 
@@ -254,7 +252,7 @@ export async function getAllCodexRateLimitResetCredits(
 
   // The base-url does not depend on the bucket, so resolve it once before the
   // loop instead of recomputing it per iteration.
-  const runtimeBaseUrl = config?.getEphemeralSetting('base-url');
+  const runtimeBaseUrl = baseUrl;
   const codexBaseUrl =
     typeof runtimeBaseUrl === 'string' && runtimeBaseUrl.trim() !== ''
       ? runtimeBaseUrl
@@ -306,22 +304,13 @@ export async function getAllCodexRateLimitResetCredits(
 export async function getHigherPriorityAuth(
   providerName: string,
   settings: IOAuthSettingsProvider | undefined,
-  settingsReader?: { get(key: string): unknown },
+  authOnly: boolean = false,
 ): Promise<string | null> {
   if (!settings) {
     return null;
   }
 
-  try {
-    if (settingsReader) {
-      const authOnly = isAuthOnlyEnabled(settingsReader.get('authOnly'));
-      if (authOnly) {
-        return null;
-      }
-    }
-  } catch {
-    // Settings reader failed (subagent/test context) — skip authOnly check
-  }
+  if (authOnly) return null;
 
   if (settings.getProviderApiKey(providerName)) {
     return 'API Key';

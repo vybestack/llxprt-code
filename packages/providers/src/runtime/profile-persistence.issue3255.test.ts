@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -25,31 +25,6 @@ const runtimeEphemerals = {
   'session-persistence-queue-max-bytes': 7_000_000,
 } satisfies ProfileEphemeralSettings;
 
-void vi.mock('./runtimeAccessors.js', () => ({
-  getCliRuntimeServices: () => ({
-    config: {
-      getEphemeralSettings: () => runtimeEphemerals,
-    },
-    settingsService: {},
-    providerManager: {},
-  }),
-  maybeGetCliOAuthManager: () => null,
-  getActiveModelName: () => 'reasoning-model',
-  getActiveModelParams: () => ({}),
-  _internal: {
-    resolveActiveProviderName: () => 'openai',
-    getProviderSettingsSnapshot: () => ({ model: 'reasoning-model' }),
-    getActiveProviderOrThrow: () => {
-      throw new Error('Not used while building a profile snapshot');
-    },
-    extractModelParams: () => ({}),
-  },
-}));
-
-void vi.mock('./profileApplication.js', () => ({
-  applyProfileWithGuards: vi.fn(),
-}));
-
 const { buildRuntimeProfileSnapshot } = await import('./profileSnapshot.js');
 
 describe('reasoning wire profile persistence', () => {
@@ -65,7 +40,12 @@ describe('reasoning wire profile persistence', () => {
 
   it('saves and loads the registry-driven runtime snapshot without changing maps', async () => {
     const profileManager = new ProfileManager(profilesDir);
-    const snapshot = buildRuntimeProfileSnapshot();
+    const snapshot = buildRuntimeProfileSnapshot({
+      providerName: 'openai',
+      modelName: 'reasoning-model',
+      providerSettings: {},
+      ephemeralSettings: runtimeEphemerals,
+    });
 
     await profileManager.saveProfile('reasoning-wire', snapshot);
     const loaded = await profileManager.loadProfile('reasoning-wire');

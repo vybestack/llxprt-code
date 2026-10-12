@@ -296,13 +296,31 @@ ${formattedContent}`;
         ? llmContent.split('\n').length
         : undefined;
     const mimetype = getSpecificMimeType(filePath);
-    void lines;
-    void mimetype;
-    void filePath;
+    this.host.recordFileRead(filePath, lines, mimetype);
+  }
+
+  private validateWorkspaceBoundary(): ToolResult | undefined {
+    const pathError = validatePathWithinWorkspace(
+      this.host.getWorkspaceRoots(),
+      this.getFilePath(),
+    );
+    if (pathError) {
+      return {
+        llmContent: pathError,
+        returnDisplay: pathError,
+        error: {
+          message: pathError,
+          type: ToolErrorType.PATH_NOT_IN_WORKSPACE,
+        },
+      };
+    }
+    return undefined;
   }
 
   async execute(): Promise<ToolResult> {
-    const ephemeralSettings = this.host.getEphemeralSettings();
+    const pathError = this.validateWorkspaceBoundary();
+    if (pathError) return pathError;
+    const ephemeralSettings = this.host.readExecutionPolicy();
     const effectiveLimit =
       this.params.limit ??
       (ephemeralSettings['file-read-max-lines'] as number | undefined) ??
@@ -310,8 +328,8 @@ ${formattedContent}`;
     let imageResizePolicy;
     let imageBudget;
     try {
-      imageResizePolicy = resolveImageResizePolicy(ephemeralSettings);
-      imageBudget = resolveImageDimensionBudget(ephemeralSettings);
+      imageResizePolicy = resolveImageResizePolicy({ ...ephemeralSettings });
+      imageBudget = resolveImageDimensionBudget({ ...ephemeralSettings });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       // Combined label: this catch covers both image-resize policy and
@@ -331,6 +349,7 @@ ${formattedContent}`;
       imageResizePolicy,
       imageBudget,
       this.params.column_offset ?? 0,
+      (filePath) => this.host.readTextFile(filePath),
     );
 
     if (result.error) {

@@ -26,7 +26,7 @@ import type {
   TokenStore,
 } from '@vybestack/llxprt-code-auth';
 import { AnthropicOAuthProvider } from '../anthropic-oauth-provider.js';
-import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
+import type { BrowserProfileAssociation } from '../browser-profile-association-store.js';
 import { startLocalOAuthCallback } from '../local-oauth-callback.js';
 
 const startLocalOAuthCallbackMock = startLocalOAuthCallback as Mock<
@@ -133,11 +133,21 @@ function expectBrowserLaunch(
 
 describe('AnthropicOAuthProvider browser profile association', () => {
   let provider: AnthropicOAuthProvider;
+  let association: (
+    provider: string,
+    bucket?: string,
+  ) => BrowserProfileAssociation | undefined;
   let openBrowserSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.spyOn(global.console, 'log').mockImplementation(() => {});
-    provider = new AnthropicOAuthProvider(createTokenStore());
+    association = () => undefined;
+    provider = new AnthropicOAuthProvider(
+      createTokenStore(),
+      undefined,
+      undefined,
+      (name, bucket) => association(name, bucket),
+    );
     stubDeviceFlow(provider);
 
     openBrowserSpy = vi
@@ -148,21 +158,14 @@ describe('AnthropicOAuthProvider browser profile association', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    oauthRuntimeBridge.setAccessors(undefined);
     clearOAuthGlobals();
   });
 
   it('launches the associated browser/profile when an association exists', async () => {
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: () => undefined,
-      getProviderManager: () => undefined,
-      getRuntimeContext: () => undefined,
-      getCurrentProfileName: () => null,
-      getBrowserProfileAssociation: (_provider, _bucket) => ({
-        browser: 'chrome',
-        profileDirectory: 'Profile 1',
-        displayName: 'Work',
-      }),
+    association = (_provider, _bucket) => ({
+      browser: 'chrome',
+      profileDirectory: 'Profile 1',
+      displayName: 'Work',
     });
 
     provider.setAuthContext({ bucket: 'work' });
@@ -181,7 +184,7 @@ describe('AnthropicOAuthProvider browser profile association', () => {
   });
 
   it('launches the default browser when no association is set', async () => {
-    // No accessors registered → getBrowserProfileAssociation returns undefined
+    // No association is configured for this owner.
     provider.setAuthContext({ bucket: 'work' });
 
     configureSuccessfulLocalCallback();
@@ -195,15 +198,9 @@ describe('AnthropicOAuthProvider browser profile association', () => {
   });
 
   it('falls back to the default browser when the association accessor throws', async () => {
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: () => undefined,
-      getProviderManager: () => undefined,
-      getRuntimeContext: () => undefined,
-      getCurrentProfileName: () => null,
-      getBrowserProfileAssociation: () => {
-        throw new Error('store unavailable');
-      },
-    });
+    association = () => {
+      throw new Error('store unavailable');
+    };
 
     provider.setAuthContext({ bucket: 'work' });
 
@@ -242,16 +239,10 @@ describe('AnthropicOAuthProvider browser profile association', () => {
   });
 
   it('tolerates a browser launch failure and still completes auth (graceful degradation)', async () => {
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: () => undefined,
-      getProviderManager: () => undefined,
-      getRuntimeContext: () => undefined,
-      getCurrentProfileName: () => null,
-      getBrowserProfileAssociation: (_provider, _bucket) => ({
-        browser: 'chrome',
-        profileDirectory: 'Profile 1',
-        displayName: 'Work',
-      }),
+    association = (_provider, _bucket) => ({
+      browser: 'chrome',
+      profileDirectory: 'Profile 1',
+      displayName: 'Work',
     });
     openBrowserSpy.mockRejectedValue(new Error('spawn chrome ENOENT'));
     provider.setAuthContext({ bucket: 'work' });

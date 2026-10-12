@@ -12,7 +12,8 @@ import {
   cleanupTempDirectory,
   createTempProfile,
   createTempKeyfile,
-  initializeTestConfig,
+  initializeTestSessionRoot,
+  type CliTestSessionRoot,
   readSettingsFile,
   writeSettingsFile,
 } from './test-utils.js';
@@ -23,6 +24,7 @@ import { loadSettings } from '../config/settings.js';
 describe('API Key Security Integration Tests', () => {
   let tempDir: string;
   let config: Config;
+  let sessionRoot: CliTestSessionRoot;
 
   beforeEach(async () => {
     tempDir = await createTempDirectory();
@@ -34,7 +36,7 @@ describe('API Key Security Integration Tests', () => {
       cwd: tempDir,
       model: 'gemini-1.5-flash',
     });
-    await initializeTestConfig(config);
+    sessionRoot = await initializeTestSessionRoot(config);
   });
 
   afterEach(async () => {
@@ -44,9 +46,15 @@ describe('API Key Security Integration Tests', () => {
   describe('API keys should NEVER persist to settings.json', () => {
     it('should not write API keys to settings.json when set via ephemeral settings', async () => {
       // Set API keys via ephemeral settings
-      config.setEphemeralSetting('openai-api-key', 'sk-test-12345');
-      config.setEphemeralSetting('anthropic-api-key', 'sk-ant-test-67890');
-      config.setEphemeralSetting('gemini-api-key', 'AIza-test-abcdef');
+      sessionRoot.agent.setEphemeralSetting('openai-api-key', 'sk-test-12345');
+      sessionRoot.agent.setEphemeralSetting(
+        'anthropic-api-key',
+        'sk-ant-test-67890',
+      );
+      sessionRoot.agent.setEphemeralSetting(
+        'gemini-api-key',
+        'AIza-test-abcdef',
+      );
 
       // Simulate saving settings (without API keys)
       const settings = {
@@ -101,11 +109,11 @@ describe('API Key Security Integration Tests', () => {
 
     it('should not write base URLs with embedded credentials to settings.json', async () => {
       // Set base URLs via ephemeral settings
-      config.setEphemeralSetting(
+      sessionRoot.agent.setEphemeralSetting(
         'openai-base-url',
         'https://api.openai.com/v1',
       );
-      config.setEphemeralSetting(
+      sessionRoot.agent.setEphemeralSetting(
         'anthropic-base-url',
         'https://user:pass@api.anthropic.com',
       );
@@ -133,13 +141,22 @@ describe('API Key Security Integration Tests', () => {
   describe('Provider isolation', () => {
     it('should maintain provider isolation for API keys', async () => {
       // Set different API keys for multiple providers
-      config.setEphemeralSetting('openai-api-key', 'sk-openai-12345');
-      config.setEphemeralSetting('anthropic-api-key', 'sk-anthropic-67890');
-      config.setEphemeralSetting('google-api-key', 'AIza-google-abcdef');
-      config.setEphemeralSetting('groq-api-key', 'gsk_groq_xyz123');
+      sessionRoot.agent.setEphemeralSetting(
+        'openai-api-key',
+        'sk-openai-12345',
+      );
+      sessionRoot.agent.setEphemeralSetting(
+        'anthropic-api-key',
+        'sk-anthropic-67890',
+      );
+      sessionRoot.agent.setEphemeralSetting(
+        'google-api-key',
+        'AIza-google-abcdef',
+      );
+      sessionRoot.agent.setEphemeralSetting('groq-api-key', 'gsk_groq_xyz123');
 
       // Get ephemeral settings
-      const ephemeralSettings = config.getEphemeralSettings();
+      const ephemeralSettings = sessionRoot.agent.getEphemeralSettings();
 
       // Verify each provider has its own isolated key
       expect(ephemeralSettings['openai-api-key']).toBe('sk-openai-12345');
@@ -277,10 +294,13 @@ describe('API Key Security Integration Tests', () => {
   describe('API key storage locations', () => {
     it('should only store API keys in ephemeral settings (runtime only)', async () => {
       // Set API key in ephemeral settings
-      config.setEphemeralSetting('auth-key', 'sk-test-ephemeral-only');
+      sessionRoot.agent.setEphemeralSetting(
+        'auth-key',
+        'sk-test-ephemeral-only',
+      );
 
       // Verify it's in ephemeral settings
-      expect(config.getEphemeralSetting('auth-key')).toBe(
+      expect(sessionRoot.agent.getEphemeralSetting('auth-key')).toBe(
         'sk-test-ephemeral-only',
       );
 

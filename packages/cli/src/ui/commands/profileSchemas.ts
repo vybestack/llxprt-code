@@ -8,7 +8,7 @@ import {
   type CommandArgumentSchema,
   type CompleterFn,
 } from './schema/types.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
+import type { RuntimeApi } from '../contexts/RuntimeContext.js';
 import { createTokenStore } from '@vybestack/llxprt-code-providers/auth.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import type { MessageActionReturn } from './types.js';
@@ -45,26 +45,28 @@ export function validateBucketName(bucket: string): {
   return { valid: true };
 }
 
-export async function listProfiles(): Promise<string[]> {
-  return getRuntimeApi().listSavedProfiles();
+export async function listProfiles(runtimeApi: RuntimeApi): Promise<string[]> {
+  return runtimeApi.listSavedProfiles();
 }
 
-export const profileNameCompleter: CompleterFn = withFuzzyFilter(async () => {
-  try {
-    const profiles = await listProfiles();
-    return profiles.map((profile) => ({
-      value: profile,
-      description: profileSuggestionDescription,
-    }));
-  } catch {
-    return [];
-  }
-});
+export const profileNameCompleter: CompleterFn = withFuzzyFilter(
+  async (ctx) => {
+    try {
+      const profiles = await listProfiles(ctx.runtimeApi);
+      return profiles.map((profile) => ({
+        value: profile,
+        description: profileSuggestionDescription,
+      }));
+    } catch {
+      return [];
+    }
+  },
+);
 
 const lbMemberProfileCompleter: CompleterFn = withFuzzyFilter(
-  async (_ctx, _partial, tokens) => {
+  async (ctx, _partial, tokens) => {
     try {
-      const profiles = await listProfiles();
+      const profiles = await listProfiles(ctx.runtimeApi);
       // tokens.tokens format: ["save", "loadbalancer", "lb-name", "policy", "prof1", "prof2", ...]
       // Skip first 4 tokens (save, loadbalancer, lb-name, policy) to get already selected profiles
       const alreadySelected = tokens.tokens
@@ -82,10 +84,10 @@ const lbMemberProfileCompleter: CompleterFn = withFuzzyFilter(
 );
 
 const bucketCompleter: CompleterFn = withFuzzyFilter(
-  async (_ctx, _partial, tokens) => {
+  async (ctx, _partial, tokens) => {
     try {
-      const runtime = getRuntimeApi();
-      const status = runtime.getActiveProviderStatus();
+      const runtime = ctx.runtimeApi;
+      const status = runtime.providerStatus();
       const provider = status.providerName;
 
       if (!provider) {
@@ -214,9 +216,9 @@ export const profileSetDefaultSchema: CommandArgumentSchema = [
     kind: 'value',
     name: 'profile',
     description: 'Set default profile or choose none',
-    completer: withFuzzyFilter(async () => {
+    completer: withFuzzyFilter(async (ctx) => {
       try {
-        const profiles = await listProfiles();
+        const profiles = await listProfiles(ctx.runtimeApi);
         const candidates = ['none', ...profiles];
         return candidates.map((option) => ({
           value: option,

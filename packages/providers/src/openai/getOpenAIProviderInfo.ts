@@ -122,7 +122,6 @@ export type OpenAIProviderInfoSource = {
 };
 
 type ProviderInfoConfig = {
-  getProviderManager?: () => OpenAIProviderInfoSource | undefined;
   getProvider?: () => string | undefined;
   getModel?: () => string | undefined;
 };
@@ -134,13 +133,9 @@ type ProviderInfoSettings = {
 
 function resolveManager(
   providerManager: OpenAIProviderInfoSource | null | undefined,
-  config: ProviderInfoConfig | undefined,
+  _config: ProviderInfoConfig | undefined,
 ): OpenAIProviderInfoSource | null | undefined {
-  const runtimeManager =
-    typeof config?.getProviderManager === 'function'
-      ? config.getProviderManager()
-      : undefined;
-  return providerManager ?? runtimeManager ?? null;
+  return providerManager ?? null;
 }
 
 function resolveActiveProviderName(

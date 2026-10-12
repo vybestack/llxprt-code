@@ -59,52 +59,6 @@ export const createProviderKeyStorageMock = vi.fn<
     getKey: (name: string) => Promise<string | null>;
   }
 >();
-export const getCliRuntimeServicesMock = vi.fn<
-  () => {
-    config: {
-      getModel: () => string | undefined;
-      setModel: (value: string | undefined) => void;
-      getEphemeralSetting: (key: string) => unknown;
-      setEphemeralSetting: (key: string, value: unknown) => void;
-      getEphemeralSettings: () => Record<string, unknown>;
-      getContentGeneratorConfig: () => Record<string, unknown> | undefined;
-    };
-    settingsService: {
-      setCurrentProfileName?: (name: string | null) => void;
-      getCurrentProfileName?: () => string | null;
-      set: (key: string, value: unknown) => void;
-      get: (key: string) => unknown;
-      exportForStateSnapshot: () => {
-        global: Record<string, unknown>;
-        providers: Record<string, Record<string, unknown>>;
-        tools?: StubToolsPolicy;
-      };
-      restoreFromStateSnapshot: (snapshot: {
-        global: Record<string, unknown>;
-        providers: Record<string, Record<string, unknown>>;
-        tools?: StubToolsPolicy;
-      }) => void;
-      getProviderSettings: (providerName: string) => Record<string, unknown>;
-      setProviderSetting: (
-        providerName: string,
-        key: string,
-        value: unknown,
-      ) => void;
-    };
-    providerManager: {
-      listProviders: () => string[];
-      getProviderByName: (providerName: string) => { name: string } | null;
-      getActiveProviderName: () => string | null;
-      getActiveProvider: () => {
-        name: string;
-        getDefaultModel?: () => string;
-      };
-    };
-    profileManager?: {
-      loadProfile: (profileName: string) => Promise<Profile>;
-    };
-  }
->();
 export const getActiveProviderOrThrowMock = vi.fn<() => { name: string }>();
 
 export const configStub = {
@@ -260,9 +214,6 @@ export const providerManagerStub = {
 export const isCliStatelessProviderModeEnabledMock = vi
   .fn<() => boolean>()
   .mockReturnValue(false);
-export const isCliRuntimeStatelessReadyMock = vi
-  .fn<() => boolean>()
-  .mockReturnValue(true);
 
 export const mockProfileManager = {
   loadProfile: vi.fn<(profileName: string) => Promise<Profile>>(),
@@ -283,10 +234,8 @@ const SHARED_STUBS = [
   getActiveModelParamsMock,
   setEphemeralSettingMock,
   createProviderKeyStorageMock,
-  getCliRuntimeServicesMock,
   getActiveProviderOrThrowMock,
   isCliStatelessProviderModeEnabledMock,
-  isCliRuntimeStatelessReadyMock,
   keyStorageStub.getKey,
   mockProfileManager.loadProfile,
 ];
@@ -343,15 +292,8 @@ export function resetProfileApplicationStubs(): {
     configStub.setEphemeralSetting(key, value);
   });
 
-  getCliRuntimeServicesMock.mockReturnValue({
-    config: configStub,
-    settingsService: settingsServiceStub,
-    providerManager: providerManagerStub,
-    profileManager: mockProfileManager,
-  });
   getActiveProviderOrThrowMock.mockReturnValue({ name: 'gemini' });
   isCliStatelessProviderModeEnabledMock.mockReturnValue(true);
-  isCliRuntimeStatelessReadyMock.mockReturnValue(true);
 
   return { savedGcpProject, savedGcpLocation };
 }

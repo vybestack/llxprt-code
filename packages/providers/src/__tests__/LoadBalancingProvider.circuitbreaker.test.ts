@@ -1,3 +1,5 @@
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+const fixtureOwners = installRuntimeTestOwners();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -45,6 +47,8 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
     settingsService = new SettingsService();
     runtimeConfig = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager({
+      sessionSettings: fixtureOwners.adopt(runtimeConfig, settingsService)
+        .settingsOwner,
       settingsService,
       config: runtimeConfig,
     });

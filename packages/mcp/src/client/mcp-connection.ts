@@ -4,10 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  defaultFeedbackSink,
+  type HostFeedbackSink,
+} from '../host/hostServices.js';
+
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { ListRootsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
-import type { MCPServerConfig } from '../config/mcpServerConfig.js';
+import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import {
+  abortError,
+  closeTransport,
+  closeAfterConnectionFailure,
+  connectClient,
+  joinConnectionOperation,
+} from './mcp-connection-lifetime.js';
+import type { MCPServerConfig } from '../config/index.js';
 import type { McpWorkspaceContext } from '../host/hostInterfaces.js';
 
 type Unsubscribe = () => void;
@@ -18,11 +30,6 @@ import {
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/index.js';
 import { basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import {
-  MCPServerStatus,
-  mcpServerRequiresOAuth,
-  updateMCPServerStatus,
-} from './mcp-status.js';
 import {
   createTransport,
   getStoredOAuthToken,
@@ -36,99 +43,13 @@ import {
   extractWWWAuthenticateHeader,
   fetchWwwAuthenticateHeader,
   handleAutomaticOAuth,
+  type McpOAuthOperations,
   retryWithOAuth,
   showAuthRequiredMessage,
 } from './mcp-oauth-helpers.js';
 import { hasNetworkTransport } from './mcp-discovery-helpers.js';
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:tools:mcp-client');
-
-function abortError(cause?: unknown): DOMException {
-  const error = new DOMException('MCP connection was cancelled', 'AbortError');
-  if (cause !== undefined) {
-    Object.defineProperty(error, 'cause', {
-      configurable: true,
-      enumerable: false,
-      value: cause,
-      writable: true,
-    });
-  }
-  return error;
-}
-
-function isAbortError(error: unknown): error is DOMException {
-  return error instanceof DOMException && error.name === 'AbortError';
-}
-
-function closeTransport(transport?: Transport): Promise<void> {
-  return typeof transport?.close === 'function'
-    ? transport.close()
-    : Promise.resolve();
-}
-
-/**
- * Races an operation against cancellation while ensuring its cleanup path runs
- * at most once, including when abort and promise settlement happen together.
- */
-function abortable<T>(
-  promise: Promise<T>,
-  signal: AbortSignal,
-  cleanup: (value: T) => void | Promise<void>,
-  cleanupOnAbort?: () => void | Promise<void>,
-): Promise<T> {
-  let cleanupPromise: Promise<void> | undefined;
-  let cancellationCause: unknown;
-  const runCleanup = (
-    cleanupOperation: () => void | Promise<void>,
-  ): Promise<void> => {
-    cleanupPromise ??= Promise.resolve()
-      .then(cleanupOperation)
-      .catch((error: unknown) => {
-        debugLogger.warn('MCP cancellation cleanup failed:', error);
-      });
-    return cleanupPromise;
-  };
-  const cleanupResolvedValue = (value: T): Promise<void> =>
-    runCleanup(() => cleanup(value));
-  const cleanupAfterAbort = (): Promise<void> => {
-    if (cleanupOnAbort !== undefined) {
-      return runCleanup(cleanupOnAbort);
-    }
-    void promise.then(cleanupResolvedValue, () => {});
-    return Promise.resolve();
-  };
-  if (signal.aborted) {
-    return cleanupAfterAbort().then(() => Promise.reject(abortError()));
-  }
-
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => {
-      void cleanupAfterAbort().then(() =>
-        reject(abortError(cancellationCause)),
-      );
-    };
-    signal.addEventListener('abort', onAbort, { once: true });
-    promise.then(
-      (value) => {
-        signal.removeEventListener('abort', onAbort);
-        if (signal.aborted) {
-          void cleanupResolvedValue(value).then(() => reject(abortError()));
-        } else {
-          resolve(value);
-        }
-      },
-      (error: unknown) => {
-        signal.removeEventListener('abort', onAbort);
-        if (signal.aborted) {
-          cancellationCause = error;
-          void cleanupAfterAbort().then(() => reject(abortError(error)));
-        } else {
-          reject(error);
-        }
-      },
-    );
-  });
-}
 
 function initializeMcpClient(
   clientVersion: string,
@@ -229,6 +150,7 @@ async function resolveWwwAuthenticateHeader(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   errorString: string,
+  signal?: AbortSignal,
 ): Promise<string | null> {
   let wwwAuthenticate = extractWWWAuthenticateHeader(errorString);
 
@@ -236,7 +158,7 @@ async function resolveWwwAuthenticateHeader(
     debugLogger.log(
       `No www-authenticate header in error, trying to fetch it from server...`,
     );
-    wwwAuthenticate = await fetchWwwAuthenticateHeader(mcpServerConfig);
+    wwwAuthenticate = await fetchWwwAuthenticateHeader(mcpServerConfig, signal);
   }
 
   return wwwAuthenticate;
@@ -247,6 +169,8 @@ async function retryWithWwwAuthenticate(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   wwwAuthenticate: string,
+  owner: McpOAuthOperations,
+  signal?: AbortSignal,
 ): Promise<Client> {
   debugLogger.log(
     `Received 401 with www-authenticate header: ${wwwAuthenticate}`,
@@ -256,10 +180,18 @@ async function retryWithWwwAuthenticate(
     mcpServerName,
     mcpServerConfig,
     wwwAuthenticate,
+    owner,
+    signal,
   );
 
   if (oauthSuccess) {
-    return connectWithOAuthToken(mcpClient, mcpServerName, mcpServerConfig);
+    return connectWithOAuthToken(
+      owner.tokenStorage,
+      mcpClient,
+      mcpServerName,
+      mcpServerConfig,
+      signal,
+    );
   }
 
   debugLogger.error(
@@ -274,6 +206,9 @@ async function retryWithOAuthDiscovery(
   mcpClient: Client,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
+  owner: McpOAuthOperations,
+  signal?: AbortSignal,
+  feedback: HostFeedbackSink = defaultFeedbackSink,
 ): Promise<Client> {
   const shouldTryDiscovery =
     (typeof mcpServerConfig.httpUrl === 'string' &&
@@ -281,7 +216,12 @@ async function retryWithOAuthDiscovery(
     mcpServerConfig.oauth?.enabled === true;
 
   if (!shouldTryDiscovery) {
-    await showAuthRequiredMessage(mcpServerName);
+    await showAuthRequiredMessage(
+      owner.tokenStorage,
+      mcpServerName,
+      signal,
+      feedback,
+    );
   }
 
   debugLogger.log(`Attempting OAuth discovery for '${mcpServerName}'...`);
@@ -291,9 +231,17 @@ async function retryWithOAuthDiscovery(
       mcpServerName,
       mcpServerConfig,
       '',
+      owner,
+      signal,
     );
     if (oauthSuccess) {
-      return connectWithOAuthToken(mcpClient, mcpServerName, mcpServerConfig);
+      return connectWithOAuthToken(
+        owner.tokenStorage,
+        mcpClient,
+        mcpServerName,
+        mcpServerConfig,
+        signal,
+      );
     }
     throw new Error(
       `OAuth configuration failed for '${mcpServerName}'. Please authenticate manually with /mcp auth ${mcpServerName}`,
@@ -309,25 +257,49 @@ async function retryWithOAuthDiscovery(
 }
 
 async function trySSEFallback(
+  owner: McpOAuthOperations,
   mcpClient: Client,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
+  signal?: AbortSignal,
+  feedback: HostFeedbackSink = defaultFeedbackSink,
+  onRequiresOAuth?: () => void,
 ): Promise<Client | undefined> {
   debugLogger.log(
     `Initial connection failed for '${mcpServerName}', attempting SSE fallback`,
   );
   try {
-    await connectWithSSETransport(mcpClient, mcpServerConfig);
+    await connectWithSSETransport(
+      mcpClient,
+      mcpServerConfig,
+      undefined,
+      signal,
+    );
     return mcpClient;
   } catch (fallbackError) {
+    signal?.throwIfAborted();
     if (isAuthenticationError(fallbackError)) {
-      mcpServerRequiresOAuth.set(mcpServerName, true);
-      const storedToken = await getStoredOAuthToken(mcpServerName);
+      onRequiresOAuth?.();
+      const storedToken = await getStoredOAuthToken(
+        owner.tokenStorage,
+        mcpServerName,
+        signal,
+      );
       if (storedToken) {
-        await connectWithSSETransport(mcpClient, mcpServerConfig, storedToken);
+        await connectWithSSETransport(
+          mcpClient,
+          mcpServerConfig,
+          storedToken,
+          signal,
+        );
         return mcpClient;
       }
-      await showAuthRequiredMessage(mcpServerName);
+      await showAuthRequiredMessage(
+        owner.tokenStorage,
+        mcpServerName,
+        signal,
+        feedback,
+      );
     }
   }
   return undefined;
@@ -338,16 +310,25 @@ async function handleAuthenticationError(
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   errorString: string,
+  owner: McpOAuthOperations,
+  signal?: AbortSignal,
+  feedback: HostFeedbackSink = defaultFeedbackSink,
 ): Promise<Client> {
   const shouldTriggerOAuth = mcpServerConfig.oauth?.enabled;
   if (shouldTriggerOAuth !== true) {
-    await showAuthRequiredMessage(mcpServerName);
+    await showAuthRequiredMessage(
+      owner.tokenStorage,
+      mcpServerName,
+      signal,
+      feedback,
+    );
   }
 
   const wwwAuthenticate = await resolveWwwAuthenticateHeader(
     mcpServerName,
     mcpServerConfig,
     errorString,
+    signal,
   );
 
   if (wwwAuthenticate) {
@@ -356,10 +337,19 @@ async function handleAuthenticationError(
       mcpServerName,
       mcpServerConfig,
       wwwAuthenticate,
+      owner,
+      signal,
     );
   }
 
-  return retryWithOAuthDiscovery(mcpClient, mcpServerName, mcpServerConfig);
+  return retryWithOAuthDiscovery(
+    mcpClient,
+    mcpServerName,
+    mcpServerConfig,
+    owner,
+    signal,
+    feedback,
+  );
 }
 
 async function handleConnectionError(
@@ -368,10 +358,19 @@ async function handleConnectionError(
   mcpServerConfig: MCPServerConfig,
   error: unknown,
   httpReturned404: boolean,
+  owner: McpOAuthOperations,
+  signal?: AbortSignal,
+  feedback: HostFeedbackSink = defaultFeedbackSink,
+  onRequiresOAuth?: () => void,
 ): Promise<Client> {
+  signal?.throwIfAborted();
   if (isAuthenticationError(error)) {
-    mcpServerRequiresOAuth.set(mcpServerName, true);
-    const storedToken = await getStoredOAuthToken(mcpServerName);
+    onRequiresOAuth?.();
+    const storedToken = await getStoredOAuthToken(
+      owner.tokenStorage,
+      mcpServerName,
+      signal,
+    );
     if (storedToken) {
       await retryWithOAuth(
         mcpClient,
@@ -379,10 +378,16 @@ async function handleConnectionError(
         mcpServerConfig,
         storedToken,
         httpReturned404,
+        signal,
       );
       return mcpClient;
     }
-    await showAuthRequiredMessage(mcpServerName);
+    await showAuthRequiredMessage(
+      owner.tokenStorage,
+      mcpServerName,
+      signal,
+      feedback,
+    );
   }
 
   if (
@@ -392,9 +397,13 @@ async function handleConnectionError(
     mcpServerConfig.url
   ) {
     const sseResult = await trySSEFallback(
+      owner,
       mcpClient,
       mcpServerName,
       mcpServerConfig,
+      signal,
+      feedback,
+      onRequiresOAuth,
     );
     if (sseResult) {
       return sseResult;
@@ -408,66 +417,28 @@ async function handleConnectionError(
       mcpServerName,
       mcpServerConfig,
       errorString,
+      owner,
+      signal,
+      feedback,
     );
   }
 
   return throwConnectionError(mcpServerName, mcpServerConfig, error);
 }
 
-async function closeAfterConnectionFailure(
-  close: () => Promise<void>,
-): Promise<void> {
-  try {
-    await close();
-  } catch (cleanupError) {
-    debugLogger.warn('MCP transport cleanup failed:', cleanupError);
-  }
-}
-
-async function connectClient(
-  mcpClient: Client,
-  transport: Transport,
-  timeout: number,
-  signal?: AbortSignal,
-): Promise<void> {
-  let transportClosed = false;
-  const closeConnectedTransport = async (): Promise<void> => {
-    if (transportClosed) {
-      return;
-    }
-    transportClosed = true;
-    await closeTransport(transport);
-  };
-  try {
-    const connection = Promise.resolve(
-      mcpClient.connect(transport, { timeout }),
-    );
-    if (signal === undefined) {
-      await connection;
-    } else {
-      await abortable(
-        connection,
-        signal,
-        closeConnectedTransport,
-        closeConnectedTransport,
-      );
-    }
-  } catch (error) {
-    await closeAfterConnectionFailure(closeConnectedTransport);
-    throw error;
-  }
-}
-
 /**
  * Creates and connects an MCP client to a server based on the provided configuration.
  */
-export async function connectToMcpServer(
+async function connectToMcpServerOperation(
   clientVersion: string,
   mcpServerName: string,
   mcpServerConfig: MCPServerConfig,
   debugMode: boolean,
   workspaceContext: McpWorkspaceContext,
+  owner: McpOAuthOperations,
   signal?: AbortSignal,
+  feedback: HostFeedbackSink = defaultFeedbackSink,
+  onRequiresOAuth?: () => void,
 ): Promise<Client> {
   const mcpClient = initializeMcpClient(clientVersion, workspaceContext);
 
@@ -475,13 +446,20 @@ export async function connectToMcpServer(
 
   try {
     const transportPromise = createTransport(
+      owner.tokenStorage,
       mcpServerName,
       mcpServerConfig,
       debugMode,
+      signal,
+      owner.getAuthProviderFactory,
     );
     const transport =
       signal !== undefined
-        ? await abortable(transportPromise, signal, closeTransport)
+        ? await joinConnectionOperation(
+            transportPromise,
+            signal,
+            closeTransport,
+          )
         : await transportPromise;
     try {
       await connectClient(
@@ -490,7 +468,6 @@ export async function connectToMcpServer(
         mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC,
         signal,
       );
-      updateMCPServerStatus(mcpServerName, MCPServerStatus.CONNECTED);
       return mcpClient;
     } catch (error) {
       if (signal?.aborted !== true && is404Error(error)) {
@@ -501,7 +478,7 @@ export async function connectToMcpServer(
   } catch (error) {
     if (signal?.aborted === true) {
       await closeAfterConnectionFailure(() => mcpClient.close());
-      if (isAbortError(error)) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
         throw error;
       }
       throw abortError(error);
@@ -512,14 +489,60 @@ export async function connectToMcpServer(
       mcpServerConfig,
       error,
       httpReturned404,
+      owner,
+      signal,
+      feedback,
+      onRequiresOAuth,
     );
     return signal !== undefined
-      ? abortable(
+      ? joinConnectionOperation(
           recoveryPromise,
           signal,
           () => mcpClient.close(),
           () => mcpClient.close(),
         )
       : recoveryPromise;
+  }
+}
+
+export async function connectToMcpServer(
+  clientVersion: string,
+  mcpServerName: string,
+  mcpServerConfig: MCPServerConfig,
+  debugMode: boolean,
+  workspaceContext: McpWorkspaceContext,
+  owner: McpOAuthOperations,
+  signal?: AbortSignal,
+  feedback: HostFeedbackSink = defaultFeedbackSink,
+  onRequiresOAuth?: () => void,
+): Promise<Client> {
+  const controller = new AbortController();
+  const timeoutMs = mcpServerConfig.timeout ?? MCP_DEFAULT_TIMEOUT_MSEC;
+  const timeoutError = McpError.fromError(
+    ErrorCode.RequestTimeout,
+    'Request timed out',
+    { timeout: timeoutMs },
+  );
+  const timer = setTimeout(() => controller.abort(timeoutError), timeoutMs);
+  const requestSignal = signal
+    ? AbortSignal.any([signal, controller.signal])
+    : controller.signal;
+  try {
+    return await connectToMcpServerOperation(
+      clientVersion,
+      mcpServerName,
+      mcpServerConfig,
+      debugMode,
+      workspaceContext,
+      owner,
+      requestSignal,
+      feedback,
+      onRequiresOAuth,
+    );
+  } catch (error) {
+    if (requestSignal.reason === timeoutError) throw timeoutError;
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
 }

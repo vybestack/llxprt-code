@@ -63,6 +63,7 @@ import {
   type LegacyPattern,
 } from './legacy-paths/config.ts';
 import { scanFileAst } from './legacy-paths/ast-scanner.ts';
+import { compilerEmittedSiblings } from './compiler-emitted-siblings.ts';
 
 const REPO_ROOT = process.env.LEGACY_PATHS_ROOT
   ? resolve(process.env.LEGACY_PATHS_ROOT)
@@ -408,9 +409,10 @@ function discoverFiles(): { files: string[]; errors: string[] } {
   const errors: string[] = [];
   const files: string[] = [];
   const candidates = collectCandidates(errors);
+  const emitted = new Set(compilerEmittedSiblings(REPO_ROOT));
   for (const f of candidates) {
     const rel = relRepo(f);
-    if (shouldIncludeFile(rel)) {
+    if (shouldIncludeFile(rel) && !emitted.has(rel)) {
       files.push(f);
     }
   }

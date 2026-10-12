@@ -4,260 +4,140 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import { OAuthManager } from './oauth-manager.js';
 import {
-  MemoryTokenStore,
   createTestProvider,
+  MemoryTokenStore,
 } from './__tests__/behavioral/test-utils.js';
-import type {
-  Config,
-  BucketFailoverHandler,
-  OAuthTokenRequestMetadata,
-} from '@vybestack/llxprt-code-core';
-import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 
-function isMissingConfigBucketWarning(message: string): boolean {
-  return (
-    message.includes('[issue1029]') &&
-    message.includes('buckets') &&
-    message.includes('no Config available')
-  );
+async function owner(): Promise<OAuthManager> {
+  const store = new MemoryTokenStore();
+  for (const bucket of ['primary', 'secondary', 'third']) {
+    await store.saveToken(
+      'anthropic',
+      {
+        access_token: `credential-${bucket}`,
+        token_type: 'Bearer',
+        expiry: Math.floor(Date.now() / 1000) + 3600,
+      },
+      bucket,
+    );
+  }
+  const oauth = new OAuthManager(store);
+  oauth.registerProvider(createTestProvider('anthropic'));
+  await oauth.toggleOAuthEnabled('anthropic');
+  return oauth;
 }
 
-describe('OAuthManager - Bucket Failover Handler Wiring (Issue 1151)', () => {
-  let oauthManager: OAuthManager;
-  let mockConfig: Config;
-  let mockGetBucketFailoverHandler: ReturnType<typeof vi.fn>;
-  let mockSetBucketFailoverHandler: ReturnType<typeof vi.fn>;
-  let tokenStore: MemoryTokenStore;
-
-  beforeEach(() => {
-    // Register runtime accessors matching the old mock defaults
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: (key: string) =>
-        key === 'auth-bucket-delay' ? 0 : undefined,
-      getProviderManager: () => undefined,
-      getRuntimeContext: () => undefined,
-      getCurrentProfileName: () => null,
-    });
-
-    tokenStore = new MemoryTokenStore();
-    const provider = createTestProvider('anthropic');
-
-    mockGetBucketFailoverHandler = vi.fn();
-    mockSetBucketFailoverHandler = vi.fn();
-    mockConfig = {
-      getBucketFailoverHandler: mockGetBucketFailoverHandler,
-      setBucketFailoverHandler: mockSetBucketFailoverHandler,
-    } as unknown as Config;
-
-    oauthManager = new OAuthManager(tokenStore, undefined, {
-      config: mockConfig,
-    });
-    oauthManager.registerProvider(provider);
-  });
-
-  afterEach(() => {
-    oauthRuntimeBridge.setAccessors(undefined);
-  });
-
-  it('should create BucketFailoverHandler when profile has multiple buckets', async () => {
-    vi.spyOn(
-      oauthManager as unknown as {
-        getProfileBuckets: () => Promise<string[]>;
-      },
-      'getProfileBuckets',
-    ).mockResolvedValue(['bucket1', 'bucket2', 'bucket3']);
-
-    mockGetBucketFailoverHandler.mockReturnValue(undefined);
-
-    await oauthManager.getOAuthToken('anthropic');
-
-    expect(mockSetBucketFailoverHandler).toHaveBeenCalledTimes(1);
-    const handlerArg = mockSetBucketFailoverHandler.mock.calls[0][0];
-    expect(handlerArg).toBeDefined();
-    expect(handlerArg.getBuckets()).toStrictEqual([
-      'bucket1',
-      'bucket2',
-      'bucket3',
+describe('OAuth owner bucket recovery', () => {
+  it('rotates a configured bucket using live token authority without Config', async () => {
+    const oauth = await owner();
+    oauth.configureBucketFailover('anthropic', ['primary', 'secondary']);
+    const operations = oauth.composeRetryOperations('anthropic');
+    expect(
+      await operations.tryBucketFailover?.({ triggeringStatus: 429 }),
+    ).toBe(true);
+    expect(operations.readCurrentBucket?.()).toBe('secondary');
+    expect(await oauth.getToken('anthropic')).toBe('credential-secondary');
+    expect(oauth.getSessionBucket('anthropic')).toBe('secondary');
+    expect(operations.readFailoverBuckets?.()).toStrictEqual([
+      'primary',
+      'secondary',
     ]);
   });
 
-  it('should reuse existing handler if buckets match in the same scope', async () => {
-    await tokenStore.saveToken('anthropic', {
-      access_token: 'test-token',
-      token_type: 'Bearer',
-      expiry: Math.floor(Date.now() / 1000) + 3600,
-      refresh_token: 'test-refresh-token',
-      scope: '',
-    });
-
-    vi.spyOn(
-      oauthManager as unknown as {
-        getProfileBuckets: () => Promise<string[]>;
-      },
-      'getProfileBuckets',
-    ).mockResolvedValue(['bucket1', 'bucket2']);
-
-    const existingHandler: BucketFailoverHandler = {
-      getBuckets: vi.fn().mockReturnValue(['bucket1', 'bucket2']),
-      getCurrentBucket: vi.fn(),
-      tryFailover: vi.fn(),
-      isEnabled: vi.fn(),
-    };
-
-    mockGetBucketFailoverHandler.mockReturnValue(existingHandler);
-
-    await oauthManager.getOAuthToken('anthropic');
-
-    expect(mockSetBucketFailoverHandler).not.toHaveBeenCalled();
-  });
-
-  it('should recreate handler when the request scope changes even if buckets match', async () => {
-    await tokenStore.saveToken('anthropic', {
-      access_token: 'test-token',
-      token_type: 'Bearer',
-      expiry: Math.floor(Date.now() / 1000) + 3600,
-      refresh_token: 'test-refresh-token',
-      scope: '',
-    });
-
-    const metadata: OAuthTokenRequestMetadata = {
-      profileId: 'subagent-profile',
-      providerId: 'anthropic',
-      runtimeMetadata: {
-        source: 'SubagentOrchestrator',
-        subagent: 'codeanalyzer',
-      },
-    };
-
-    vi.spyOn(
-      oauthManager as unknown as {
-        getProfileBuckets: () => Promise<string[]>;
-      },
-      'getProfileBuckets',
-    ).mockResolvedValue(['bucket1', 'bucket2']);
-
-    const existingHandler: BucketFailoverHandler = {
-      getBuckets: vi.fn().mockReturnValue(['bucket1', 'bucket2']),
-      getCurrentBucket: vi.fn(),
-      tryFailover: vi.fn(),
-      isEnabled: vi.fn(),
-    };
-
-    mockGetBucketFailoverHandler.mockReturnValue(existingHandler);
-
-    await oauthManager.getOAuthToken('anthropic', metadata);
-
-    expect(mockSetBucketFailoverHandler).toHaveBeenCalledTimes(1);
-    const handlerArg = mockSetBucketFailoverHandler.mock.calls[0][0] as {
-      getRequestMetadata: () => OAuthTokenRequestMetadata | undefined;
-      reset: () => void;
-    };
-
-    expect(handlerArg.getRequestMetadata()).toStrictEqual(metadata);
-    expect(oauthManager.getSessionBucket('anthropic')).toBeUndefined();
-  });
-
-  it('should recreate handler if bucket list changes', async () => {
-    await tokenStore.saveToken('anthropic', {
-      access_token: 'test-token',
-      token_type: 'Bearer',
-      expiry: Math.floor(Date.now() / 1000) + 3600,
-      refresh_token: 'test-refresh-token',
-      scope: '',
-    });
-
-    vi.spyOn(
-      oauthManager as unknown as {
-        getProfileBuckets: () => Promise<string[]>;
-      },
-      'getProfileBuckets',
-    ).mockResolvedValue(['bucket1', 'bucket3', 'bucket4']);
-
-    const existingHandler: BucketFailoverHandler = {
-      getBuckets: vi.fn().mockReturnValue(['bucket1', 'bucket2']),
-      getCurrentBucket: vi.fn(),
-      tryFailover: vi.fn(),
-      isEnabled: vi.fn(),
-    };
-
-    mockGetBucketFailoverHandler.mockReturnValue(existingHandler);
-
-    await oauthManager.getOAuthToken('anthropic');
-
-    expect(mockSetBucketFailoverHandler).toHaveBeenCalledTimes(1);
-    const handlerArg = mockSetBucketFailoverHandler.mock.calls[0][0];
-    expect(handlerArg.getBuckets()).toStrictEqual([
-      'bucket1',
-      'bucket3',
-      'bucket4',
+  it('retains already failed bucket exclusions when the same owner configures the same bucket list', async () => {
+    const oauth = await owner();
+    oauth.configureBucketFailover('anthropic', ['primary', 'secondary']);
+    const operations = oauth.composeRetryOperations('anthropic');
+    await operations.tryBucketFailover?.({ triggeringStatus: 429 });
+    oauth.configureBucketFailover('anthropic', ['primary', 'secondary']);
+    expect(
+      await operations.tryBucketFailover?.({ triggeringStatus: 429 }),
+    ).toBe(false);
+    expect(operations.readFailoverBuckets?.()).toStrictEqual([
+      'primary',
+      'secondary',
     ]);
   });
 
-  it('should warn if buckets configured but no config available', async () => {
-    const oauthManagerNoConfig = new OAuthManager(tokenStore);
-    oauthManagerNoConfig.registerProvider(createTestProvider('anthropic'));
-
-    vi.spyOn(
-      oauthManagerNoConfig as unknown as {
-        getProfileBuckets: () => Promise<string[]>;
-      },
-      'getProfileBuckets',
-    ).mockResolvedValue(['bucket1', 'bucket2']);
-
-    const { DebugLogger } = await import('@vybestack/llxprt-code-core');
-    const warnSpy = vi.spyOn(DebugLogger.prototype, 'warn');
-
-    await oauthManagerNoConfig.getOAuthToken('anthropic');
-
-    const warningMessages: string[] = Array.from(
-      warnSpy.mock.calls,
-      ([message]) => String(message),
-    );
-    expect(warningMessages.some(isMissingConfigBucketWarning)).toBe(true);
-
-    warnSpy.mockRestore();
+  it('replaces bucket routing when the owner installs a different bucket list', async () => {
+    const oauth = await owner();
+    oauth.configureBucketFailover('anthropic', ['primary', 'secondary']);
+    await oauth
+      .composeRetryOperations('anthropic')
+      .tryBucketFailover?.({ triggeringStatus: 429 });
+    oauth.configureBucketFailover('anthropic', ['primary', 'third']);
+    const operations = oauth.composeRetryOperations('anthropic');
+    expect(
+      await operations.tryBucketFailover?.({ triggeringStatus: 429 }),
+    ).toBe(true);
+    expect(operations.readCurrentBucket?.()).toBe('third');
   });
 
-  it('wires a metadata-scoped failover handler during eager multi-bucket auth', async () => {
-    const metadata: OAuthTokenRequestMetadata = {
-      profileId: 'opusthinkingbucketed',
-      providerId: 'anthropic',
-      runtimeMetadata: {
-        source: 'SubagentOrchestrator',
-        subagent: 'codeanalyzer',
-      },
-    };
-
-    vi.spyOn(
-      oauthManager as unknown as {
-        getProfileBuckets: () => Promise<string[]>;
-      },
-      'getProfileBuckets',
-    ).mockResolvedValue(['bucket-a', 'bucket-b']);
-
-    vi.spyOn(oauthManager, 'authenticate').mockResolvedValue(undefined);
-
-    await oauthManager.authenticateMultipleBuckets(
+  it('isolates equal profile labels on independently composed owners', async () => {
+    const left = await owner();
+    const right = await owner();
+    const metadata = { profileId: 'same-label', providerId: 'anthropic' };
+    left.configureBucketFailover(
       'anthropic',
-      ['bucket-a', 'bucket-b'],
+      ['primary', 'secondary'],
       metadata,
     );
+    right.configureBucketFailover('anthropic', ['primary', 'third'], metadata);
+    await left
+      .composeRetryOperations('anthropic', metadata)
+      .tryBucketFailover?.({ triggeringStatus: 429 });
+    expect(left.getSessionBucket('anthropic', metadata)).toBe('secondary');
+    expect(right.getSessionBucket('anthropic', metadata)).toBe('primary');
+    expect(left.getSessionBucket('anthropic')).toBeUndefined();
+  });
 
-    expect(mockSetBucketFailoverHandler).toHaveBeenCalledTimes(1);
-    const handlerArg = mockSetBucketFailoverHandler.mock.calls[0][0] as {
-      getCurrentBucket: () => string | undefined;
-      reset: () => void;
-    };
-
-    oauthManager.setSessionBucket('anthropic', 'bucket-b', metadata);
-    expect(handlerArg.getCurrentBucket()).toBe('bucket-a');
-    handlerArg.reset();
-    expect(oauthManager.getSessionBucket('anthropic', metadata)).toBe(
-      'bucket-a',
+  it('isolates distinct profile bucket routes within the same owner', async () => {
+    const oauth = await owner();
+    const foreground = { profileId: 'foreground', providerId: 'anthropic' };
+    const child = { profileId: 'child', providerId: 'anthropic' };
+    oauth.configureBucketFailover(
+      'anthropic',
+      ['primary', 'secondary'],
+      foreground,
     );
-    expect(oauthManager.getSessionBucket('anthropic')).toBeUndefined();
+    oauth.configureBucketFailover('anthropic', ['primary', 'third'], child);
+    await oauth
+      .composeRetryOperations('anthropic', child)
+      .tryBucketFailover?.({ triggeringStatus: 429 });
+    expect(oauth.getSessionBucket('anthropic', child)).toBe('third');
+    expect(oauth.getSessionBucket('anthropic', foreground)).toBe('primary');
+  });
+
+  it('removes stale failover routing when a profile reduces to one bucket', async () => {
+    const oauth = await owner();
+    oauth.configureBucketFailover('anthropic', ['primary', 'secondary']);
+    const operations = oauth.composeRetryOperations('anthropic');
+    await operations.tryBucketFailover?.({ triggeringStatus: 429 });
+    oauth.configureBucketFailover('anthropic', ['primary']);
+    expect(operations.readFailoverBuckets?.()).toStrictEqual([]);
+    expect(
+      await operations.tryBucketFailover?.({ triggeringStatus: 429 }),
+    ).toBe(false);
+    expect(oauth.getSessionBucket('anthropic')).not.toBe('secondary');
+  });
+
+  it('restores the owner bucket exclusions after a failed profile transition', async () => {
+    const oauth = await owner();
+    oauth.configureBucketFailover('anthropic', ['primary', 'secondary']);
+    const operations = oauth.composeRetryOperations('anthropic');
+    await operations.tryBucketFailover?.({ triggeringStatus: 429 });
+    const restore = oauth.checkpointRetryHandlers();
+    oauth.clearRetryHandlers();
+    oauth.configureBucketFailover('anthropic', ['primary', 'third']);
+    oauth.setSessionBucket('anthropic', 'primary');
+    restore();
+    expect(
+      await operations.tryBucketFailover?.({ triggeringStatus: 429 }),
+    ).toBe(false);
+    expect(operations.readCurrentBucket?.()).toBe('secondary');
+    expect(oauth.getSessionBucket('anthropic')).toBe('secondary');
   });
 });

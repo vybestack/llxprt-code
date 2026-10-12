@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { chmod, mkdtemp, rm, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -164,8 +165,9 @@ describe('openai-responses-media-resolution', () => {
       requestMediaBudgetBytes: budget,
     });
     const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings,
+      runtimeId: runtime.runtimeId,
+      runtimeMetadata: runtime.metadata,
+
       providerName: provider.name,
       ephemeralsSnapshot: { 'responses-stateful': stateful },
     });
@@ -179,7 +181,11 @@ describe('openai-responses-media-resolution', () => {
       ephemerals: { 'responses-stateful': stateful },
     });
 
-    for await (const _content of provider.generateChatCompletion(options)) {
+    for await (const _content of bindProviderMedia(
+      provider,
+      runtime.mediaResolver,
+      runtime.requestMediaBudgetBytes,
+    ).generateChatCompletion(options)) {
       // Drain the real transport parser.
     }
   }

@@ -36,29 +36,26 @@ const continueSchema: CommandArgumentSchema = [
         value: 'latest',
         description: 'Most recent session',
       };
-      const storage = config.storage as
-        | Partial<typeof config.storage>
-        | undefined;
-      if (
-        typeof storage?.getProjectChatsDir !== 'function' ||
-        typeof storage.getProjectTempDir !== 'function'
-      ) {
-        return [latest];
-      }
       let targets: Awaited<
         ReturnType<typeof SessionDiscovery.listContinueTargets>
       >;
       try {
-        const detailed = await SessionDiscovery.listContinueTargetsDetailed(
-          storage.getProjectChatsDir(),
-          basename(storage.getProjectTempDir()),
-          config.getLocalMediaStore(),
-        );
-        warnUnreadableRecordings(
-          '/continue completions',
-          detailed.unreadableRecordings,
-        );
-        targets = detailed.targets;
+        if (ctx.recordingOwner === 'agent') {
+          const agent = ctx.services.agent;
+          if (agent === null) throw new Error('Session agent is unavailable');
+          targets = [...(await agent.session.listBrowserTargets())];
+        } else {
+          const detailed = await SessionDiscovery.listContinueTargetsDetailed(
+            config.projectChatsDir,
+            basename(config.projectTempDir),
+            ctx.services.agent?.agentClient.mediaStore,
+          );
+          warnUnreadableRecordings(
+            '/continue completions',
+            detailed.unreadableRecordings,
+          );
+          targets = detailed.targets;
+        }
       } catch (error: unknown) {
         debugLogger.warn('Failed to discover /continue completions:', error);
         return [latest];

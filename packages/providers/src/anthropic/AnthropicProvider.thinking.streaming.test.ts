@@ -86,7 +86,7 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
     );
 
     const chunks: IContent[] = [];
@@ -164,7 +164,7 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
     );
 
     const chunks: IContent[] = [];
@@ -244,7 +244,7 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
 
     const chunks: IContent[] = [];
     for await (const chunk of provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
     )) {
       chunks.push(chunk);
     }
@@ -323,7 +323,7 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
     );
 
     const chunks: IContent[] = [];
@@ -378,7 +378,7 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
     );
 
     const chunks: IContent[] = [];
@@ -433,7 +433,7 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
     );
 
     const chunks: IContent[] = [];
@@ -478,7 +478,7 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
     );
 
     const chunks: IContent[] = [];
@@ -540,7 +540,7 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
     );
 
     const chunks: IContent[] = [];
@@ -617,7 +617,7 @@ describe('AnthropicProvider Extended Thinking Streaming (issue #1723)', () => {
       );
       const chunks: IContent[] = [];
       for await (const chunk of provider.generateChatCompletion(
-        buildCallOptions(messages),
+        buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
       )) {
         chunks.push(chunk);
       }

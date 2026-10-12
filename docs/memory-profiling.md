@@ -86,7 +86,7 @@ bun scripts/tmux-harness.ts \
   --script scripts/tmux-script.issue3386-memory-retention.fake.json \
   --out-dir tmp/memory-profile-run \
   --assert
-bun scripts/memory/report.ts tmp/memory-profile-run/memprofile
+bun scripts/memory/report-entry.ts tmp/memory-profile-run/memprofile
 ```
 
 The example uses the fake provider and writes beneath the selected harness output directory. Use a unique ignored directory for each comparison, and keep the scenario unchanged between baseline and candidate runs.

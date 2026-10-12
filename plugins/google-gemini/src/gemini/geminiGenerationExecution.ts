@@ -9,7 +9,6 @@ import type {
   GenerateContentResponse,
   Part,
 } from './geminiWireTypes.js';
-import { type Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type NormalizedGenerateChatOptions } from '@vybestack/llxprt-code-providers/BaseProvider.js';
 import {
@@ -114,7 +113,6 @@ export interface NonOAuthContentGenerator {
  */
 export async function executeNonOAuthGeneration(
   options: NormalizedGenerateChatOptions,
-  _globalConfig: Config | undefined,
   contentsWithSignatures: Array<{ role: string; parts: Part[] }>,
   requestConfig: Record<string, unknown>,
   currentModel: string,

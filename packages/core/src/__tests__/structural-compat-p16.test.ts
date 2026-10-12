@@ -126,7 +126,6 @@ describe('P16: Core implementations satisfy auth DI interfaces', () => {
       const coreIndex = await import('@vybestack/llxprt-code-core');
       // AuthPrecedenceResolver is re-exported from core index
       expect('AuthPrecedenceResolver' in coreIndex).toBe(true);
-      expect('flushRuntimeAuthScope' in coreIndex).toBe(true);
       expect('KeyringTokenStore' in coreIndex).toBe(true);
     });
   });

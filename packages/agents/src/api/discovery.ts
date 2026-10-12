@@ -16,8 +16,7 @@
  * registered ProviderManager from a fresh SettingsService and imports nothing
  * from the CLI. We deliberately do NOT call the global
  * `@vybestack/llxprt-code-providers/runtime.js` `listProviders()` accessor: it
- * delegates to `getCliRuntimeServices()`, which THROWS when no Config/runtime is
- * registered — exactly the pre-agent situation these helpers serve.
+ * requires an owner Config, which does not exist before Agent construction.
  *
  * Tool enumeration is re-projected from the canonical built-in tool classes'
  * `static readonly Name` properties — the SAME classes `registerStandardTools`
@@ -25,7 +24,8 @@
  */
 
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
+import { NodeFileSystem } from '@vybestack/llxprt-code-providers/composition.js';
+import { createProviderManager } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { LSTool } from '@vybestack/llxprt-code-tools/tools/ls.js';
 import { ReadFileTool } from '@vybestack/llxprt-code-tools/tools/read-file.js';
@@ -132,7 +132,9 @@ export function listProviders(): readonly ProviderInfo[] {
     runtimeId: 'static-discovery',
     metadata: { stage: 'static-discovery' },
   };
-  const { manager } = createProviderManager(context, {});
+  const { manager } = createProviderManager(context, {
+    fileSystem: new NodeFileSystem(),
+  });
   const names = manager.listProviders();
   return projectProviderInfos(names);
 }

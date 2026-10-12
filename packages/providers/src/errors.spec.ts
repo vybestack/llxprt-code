@@ -23,6 +23,8 @@ describe('AllBucketsExhaustedError', () => {
         'anthropic',
         ['default', 'vybestack'],
         lastError,
+        undefined,
+        undefined,
       );
 
       expect(error.status).toBe(429);
@@ -36,6 +38,8 @@ describe('AllBucketsExhaustedError', () => {
         'anthropic',
         ['default'],
         lastError,
+        undefined,
+        undefined,
       );
 
       expect(error.status).toBe(401);
@@ -48,6 +52,8 @@ describe('AllBucketsExhaustedError', () => {
         'anthropic',
         ['default'],
         lastError,
+        undefined,
+        undefined,
       );
 
       expect(error.status).toBeUndefined();
@@ -70,6 +76,7 @@ describe('AllBucketsExhaustedError', () => {
           claudius: 'skipped',
           vybestack: 'quota-exhausted',
         },
+        undefined,
       );
 
       expect(error.message).toContain(
@@ -88,6 +95,8 @@ describe('AllBucketsExhaustedError', () => {
         'anthropic',
         ['default'],
         lastError,
+        undefined,
+        undefined,
       );
 
       expect(error.message).toContain('Overloaded');
@@ -101,6 +110,8 @@ describe('AllBucketsExhaustedError', () => {
         'anthropic',
         ['default'],
         lastError,
+        undefined,
+        undefined,
       );
 
       expect(error.message).toContain('Plain error message');
@@ -113,6 +124,8 @@ describe('AllBucketsExhaustedError', () => {
         'anthropic',
         ['default'],
         lastError,
+        undefined,
+        undefined,
       );
 
       expect(error.message).toContain('429 {invalid json}');
@@ -127,6 +140,8 @@ describe('AllBucketsExhaustedError', () => {
         'anthropic',
         ['default'],
         lastError,
+        undefined,
+        undefined,
       );
 
       expect(error.message).toContain('OAuth token has been revoked.');
@@ -141,6 +156,8 @@ describe('AllBucketsExhaustedError', () => {
         'anthropic',
         ['default'],
         lastError,
+        undefined,
+        undefined,
       );
 
       expect(error.name).toBe('AllBucketsExhaustedError');
@@ -154,6 +171,8 @@ describe('AllBucketsExhaustedError', () => {
         'anthropic',
         buckets,
         lastError,
+        undefined,
+        undefined,
       );
 
       expect(error.attemptedBuckets).toStrictEqual(buckets);
@@ -168,6 +187,8 @@ describe('AllBucketsExhaustedError', () => {
         'anthropic',
         ['default'],
         lastError,
+        undefined,
+        undefined,
       );
 
       expect(error.lastError).toBe(lastError);
@@ -185,6 +206,7 @@ describe('AllBucketsExhaustedError', () => {
         ['bucket1', 'bucket2'],
         lastError,
         reasons,
+        undefined,
       );
 
       expect(error.bucketFailureReasons).toStrictEqual(reasons);
@@ -201,6 +223,7 @@ describe('AllBucketsExhaustedError', () => {
           default: 'skipped',
           vybestack: 'quota-exhausted',
         },
+        undefined,
       );
 
       expect(error.message).toContain('default: skipped');

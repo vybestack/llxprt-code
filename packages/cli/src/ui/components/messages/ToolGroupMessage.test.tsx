@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installWorkspaceRuntimeFixture } from '../../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { render } from 'ink-testing-library';
 import React from 'react';
@@ -79,7 +82,7 @@ void vi.mock('./ToolConfirmationMessage.js', () => ({
 }));
 
 describe('<ToolGroupMessage />', () => {
-  const mockConfig: Config = {} as Config;
+  const mockConfig: Config = { getMcpServers: () => undefined } as Config;
 
   const createToolCall = (
     overrides: Partial<IndividualToolCallDisplay> = {},
@@ -97,7 +100,9 @@ describe('<ToolGroupMessage />', () => {
   const baseProps = {
     groupId: 1,
     terminalWidth: 80,
-    config: mockConfig,
+    get config() {
+      return composeFixtureRuntime(mockConfig);
+    },
     isFocused: true,
     agentId: 'helper-agent',
   };

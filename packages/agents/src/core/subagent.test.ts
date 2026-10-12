@@ -61,9 +61,14 @@ describe('subagent.ts', () => {
   describe('SubAgentScope', () => {
     describe('Stateless compliance (STATELESS7)', () => {
       it('should not read provider manager directly from Config', async () => {
-        const { config } = await createMockConfig();
+        const { config, mcpRuntime } = await createMockConfig();
         const promptConfig: PromptConfig = { systemPrompt: 'Stateless' };
-        const getProviderManagerSpy = vi.spyOn(config, 'getProviderManager');
+        const getProviderManagerSpy = vi.fn(() => {
+          throw new Error('Forbidden Config manager discovery');
+        });
+        Object.defineProperty(config, 'getProviderManager', {
+          value: getProviderManagerSpy,
+        });
 
         const providerAdapter: AgentRuntimeProviderAdapter = {
           getActiveProvider: vi.fn(
@@ -79,11 +84,14 @@ describe('subagent.ts', () => {
           setActiveProvider: vi.fn(),
         };
 
-        const { overrides } = createRuntimeOverrides({
-          runtimeBundle: createStatelessRuntimeBundle({
-            providerAdapter,
-          }),
-        });
+        const { overrides } = createRuntimeOverrides(
+          mcpRuntime.workspaceFilesystem.paths,
+          {
+            runtimeBundle: createStatelessRuntimeBundle({
+              providerAdapter,
+            }),
+          },
+        );
 
         await SubAgentScope.create(
           'stateless-agent',

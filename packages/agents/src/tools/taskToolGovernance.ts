@@ -4,16 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { ToolGovernance } from '@vybestack/llxprt-code-tools';
+import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import {
   canonicalizeToolName,
   buildSubagentExcludedToolNames,
-  buildToolGovernance,
   getToolNameCandidates,
   isSubagentExcludedToolName,
   isToolBlocked,
 } from '../core/toolGovernance.js';
+import { validateTimeoutSeconds } from '@vybestack/llxprt-code-tools/utils/timeoutResolution.js';
 import type { TaskToolParams } from './task.js';
 
 /**
@@ -38,15 +38,14 @@ export interface TaskToolInvocationParams {
  */
 export function buildGovernedToolWhitelist(
   candidateTools: string[] | undefined,
-  registry: ToolRegistry,
-  config: Config,
+  registry: ToolSelection,
+  governance: ToolGovernance,
 ): string[] | undefined {
   if (!candidateTools || candidateTools.length === 0) {
     return undefined;
   }
 
   const excluded = buildSubagentExcludedToolNames();
-  const governance = buildToolGovernance(config);
   const allowedRegistryTools = registry
     .getEnabledTools()
     .map((tool) => tool.name)
@@ -283,4 +282,34 @@ function resolveOutputSpec(
     throw new Error(error);
   }
   return params.expected_outputs;
+}
+
+export function validateTaskParamValues(params: TaskToolParams): string | null {
+  const spellingError = validateCanonicalTaskParamSpellings(params);
+  if (spellingError !== null) {
+    return spellingError;
+  }
+  const subagentName = params.subagent_name;
+  if (!subagentName || subagentName.trim().length === 0) {
+    return 'Task tool requires a subagent_name.';
+  }
+
+  const goalPrompt = params.goal_prompt;
+  if (!goalPrompt || goalPrompt.trim().length === 0) {
+    return 'Task tool requires a goal_prompt describing the assignment.';
+  }
+
+  if (params.max_turns !== undefined) {
+    const maxTurns = params.max_turns;
+    if (!Number.isInteger(maxTurns) || (maxTurns !== -1 && maxTurns < 1)) {
+      return 'Task tool max_turns must be a positive integer or -1 for unlimited.';
+    }
+  }
+
+  const timeoutError = validateTimeoutSeconds(params.timeout_seconds);
+  if (timeoutError !== null) {
+    return timeoutError;
+  }
+
+  return validateOutputParams(params);
 }

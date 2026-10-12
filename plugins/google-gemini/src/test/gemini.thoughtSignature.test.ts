@@ -5,7 +5,10 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import type { Part } from '../gemini/geminiWireTypes.js';
+import type {
+  Part,
+  Content as WireContent,
+} from '../gemini/geminiWireTypes.js';
 import {
   ensureActiveLoopHasThoughtSignatures,
   stripThoughtsFromHistory,
@@ -283,6 +286,11 @@ describe('ensureActiveLoopHasThoughtSignatures', () => {
  * Gemini returns thought content with `thought: true` on parts.
  * These should be stripped from history before sending back to the API.
  */
+function contentParts(content: WireContent): Part[] {
+  if (!content.parts) throw new Error('Expected content parts');
+  return content.parts;
+}
+
 describe('stripThoughtsFromHistory', () => {
   interface Content {
     role: string;
@@ -304,8 +312,8 @@ describe('stripThoughtsFromHistory', () => {
     const result = stripThoughtsFromHistory(history, 'all');
 
     expect(result).toHaveLength(2);
-    expect(result[1].parts).toHaveLength(1);
-    expect((result[1].parts[0] as { text: string }).text).toBe(
+    expect(contentParts(result[1])).toHaveLength(1);
+    expect((contentParts(result[1])[0] as { text: string }).text).toBe(
       'Here is my answer.',
     );
   });
@@ -327,7 +335,7 @@ describe('stripThoughtsFromHistory', () => {
     const result = stripThoughtsFromHistory(history, 'all');
 
     expect(result).toHaveLength(2);
-    const firstPart = result[1].parts[0] as Part & {
+    const firstPart = contentParts(result[1])[0] as Part & {
       thoughtSignature?: string;
     };
     expect(firstPart.thoughtSignature).toBeUndefined();
@@ -349,7 +357,7 @@ describe('stripThoughtsFromHistory', () => {
     const result = stripThoughtsFromHistory(history, 'none');
 
     expect(result).toBe(history); // Same reference
-    expect(result[1].parts).toHaveLength(2);
+    expect(contentParts(result[1])).toHaveLength(2);
   });
 
   it('should keep last model turn with policy "allButLast"', () => {
@@ -375,13 +383,16 @@ describe('stripThoughtsFromHistory', () => {
     const result = stripThoughtsFromHistory(history, 'allButLast');
 
     // First model turn should have thought stripped
-    expect(result[1].parts).toHaveLength(1);
-    expect((result[1].parts[0] as { text: string }).text).toBe('First answer');
+    expect(contentParts(result[1])).toHaveLength(1);
+    expect((contentParts(result[1])[0] as { text: string }).text).toBe(
+      'First answer',
+    );
 
     // Last model turn should be preserved
-    expect(result[3].parts).toHaveLength(2);
+    expect(contentParts(result[3])).toHaveLength(2);
     expect(
-      (result[3].parts[0] as { text: string; thought?: boolean }).thought,
+      (contentParts(result[3])[0] as { text: string; thought?: boolean })
+        .thought,
     ).toBe(true);
   });
 
@@ -430,7 +441,9 @@ describe('stripThoughtsFromHistory', () => {
     expect(result[0].role).toBe('user');
     expect(result[1].role).toBe('user');
     expect(result[2].role).toBe('model');
-    expect((result[2].parts[0] as { text: string }).text).toBe('Real answer');
+    expect((contentParts(result[2])[0] as { text: string }).text).toBe(
+      'Real answer',
+    );
   });
 
   it('should return same reference if no modifications needed', () => {

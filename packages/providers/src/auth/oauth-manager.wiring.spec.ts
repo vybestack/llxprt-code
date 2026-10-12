@@ -1,3 +1,4 @@
+import { readFixtureSessionAuthPolicy } from './__tests__/session-auth-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -230,14 +231,19 @@ describe('OAuthManager wiring', () => {
       manager,
       undefined,
       expect.any(Function),
+      expect.any(Function),
+      runtimeDeps.readAuthIdentity,
+      expect.any(Function),
+      { loadProfile: expect.any(Function) },
     );
 
     expect(wiring.AuthFlowOrchestrator).toHaveBeenCalledWith(
       tokenStore,
       providerRegistry,
       manager,
-      config,
       messageBus,
+      expect.any(Function),
+      expect.any(Function),
     );
 
     expect(wiring.AuthStatusService).toHaveBeenCalledWith(
@@ -246,6 +252,7 @@ describe('OAuthManager wiring', () => {
       proactiveRenewalManager,
       bucketManager,
       tokenAccessCoordinator,
+      undefined,
     );
 
     expect(
@@ -317,7 +324,11 @@ describe('OAuthManager wiring', () => {
       merged: {},
     } as unknown as import('@vybestack/llxprt-code-auth').IOAuthSettingsProvider;
 
-    const manager = new OAuthManager(tokenStore, settings, { config });
+    settingsService.set('base-url', 'https://api.example.test');
+    const manager = new OAuthManager(tokenStore, settings, {
+      config,
+      readSessionAuthPolicy: readFixtureSessionAuthPolicy(settingsService),
+    });
 
     const tokenAccessCoordinator = wiring.state.tokenAccessCoordinator as {
       getToken: ReturnType<typeof vi.fn>;
@@ -460,7 +471,7 @@ describe('OAuthManager wiring', () => {
     expect(wiring.getHigherPriorityAuth).toHaveBeenCalledWith(
       'claudecode',
       settings,
-      settingsService,
+      false,
     );
 
     await expect(manager.getAnthropicUsageInfo()).resolves.toStrictEqual({
@@ -481,7 +492,7 @@ describe('OAuthManager wiring', () => {
     );
     expect(wiring.getAllCodexUsageInfo).toHaveBeenCalledWith(
       tokenStore,
-      config,
+      'https://api.example.test',
     );
 
     await expect(
@@ -498,7 +509,7 @@ describe('OAuthManager wiring', () => {
     );
     expect(wiring.getAllCodexRateLimitResetCredits).toHaveBeenCalledWith(
       tokenStore,
-      config,
+      'https://api.example.test',
     );
 
     const bus = {} as import('@vybestack/llxprt-code-core').MessageBus;

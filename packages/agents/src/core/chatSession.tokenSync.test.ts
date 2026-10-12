@@ -1,3 +1,5 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -19,7 +21,7 @@ import {
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createTokenSyncTestFixture } from './__tests__/helpers/tokenSyncTestFixture.js';
@@ -102,9 +104,11 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
         getActiveProvider: vi.fn(() => mockProvider),
       };
 
-      mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
-
       const view = createAgentRuntimeContext({
+        ...createSessionPolicyFixture(
+          providerRuntimeSnapshot.settingsService,
+          providerRuntimeSnapshot.runtimeId,
+        ),
         state: runtimeState,
         history: historyService,
         settings: {
@@ -113,10 +117,19 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
           preserveThreshold: 0.2,
           telemetry: { enabled: true, target: null },
         },
-        provider: createProviderAdapterFromManager(
-          mockConfig.getProviderManager(),
+        provider: createProviderAdapterFromManager({
+          ...runtimeSetup.providerManager,
+          getActiveProvider: () => providerManager.getActiveProvider(),
+        }),
+        telemetry: createTelemetryAdapter(
+          mockConfig,
+          RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-adapter-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
         ),
-        telemetry: createTelemetryAdapterFromConfig(mockConfig),
         tools: createToolRegistryViewFromRegistry(),
         providerRuntime: providerRuntimeSnapshot,
       });
@@ -181,9 +194,11 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
         getActiveProvider: vi.fn(() => mockProvider),
       };
 
-      mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
-
       const view = createAgentRuntimeContext({
+        ...createSessionPolicyFixture(
+          providerRuntimeSnapshot.settingsService,
+          providerRuntimeSnapshot.runtimeId,
+        ),
         state: runtimeState,
         history: historyService,
         settings: {
@@ -192,10 +207,19 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
           preserveThreshold: 0.2,
           telemetry: { enabled: true, target: null },
         },
-        provider: createProviderAdapterFromManager(
-          mockConfig.getProviderManager(),
+        provider: createProviderAdapterFromManager({
+          ...runtimeSetup.providerManager,
+          getActiveProvider: () => providerManager.getActiveProvider(),
+        }),
+        telemetry: createTelemetryAdapter(
+          mockConfig,
+          RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-adapter-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
         ),
-        telemetry: createTelemetryAdapterFromConfig(mockConfig),
         tools: createToolRegistryViewFromRegistry(),
         providerRuntime: providerRuntimeSnapshot,
       });
@@ -260,9 +284,11 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
         getActiveProvider: vi.fn(() => mockProvider),
       };
 
-      mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
-
       const view = createAgentRuntimeContext({
+        ...createSessionPolicyFixture(
+          providerRuntimeSnapshot.settingsService,
+          providerRuntimeSnapshot.runtimeId,
+        ),
         state: runtimeState,
         history: historyService,
         settings: {
@@ -271,10 +297,19 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
           preserveThreshold: 0.2,
           telemetry: { enabled: true, target: null },
         },
-        provider: createProviderAdapterFromManager(
-          mockConfig.getProviderManager(),
+        provider: createProviderAdapterFromManager({
+          ...runtimeSetup.providerManager,
+          getActiveProvider: () => providerManager.getActiveProvider(),
+        }),
+        telemetry: createTelemetryAdapter(
+          mockConfig,
+          RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-adapter-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
         ),
-        telemetry: createTelemetryAdapterFromConfig(mockConfig),
         tools: createToolRegistryViewFromRegistry(),
         providerRuntime: providerRuntimeSnapshot,
       });
@@ -346,9 +381,11 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
         getActiveProvider: vi.fn(() => mockProvider),
       };
 
-      mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
-
       const view = createAgentRuntimeContext({
+        ...createSessionPolicyFixture(
+          providerRuntimeSnapshot.settingsService,
+          providerRuntimeSnapshot.runtimeId,
+        ),
         state: runtimeState,
         history: historyService,
         settings: {
@@ -357,10 +394,19 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
           preserveThreshold: 0.2,
           telemetry: { enabled: true, target: null },
         },
-        provider: createProviderAdapterFromManager(
-          mockConfig.getProviderManager(),
+        provider: createProviderAdapterFromManager({
+          ...runtimeSetup.providerManager,
+          getActiveProvider: () => providerManager.getActiveProvider(),
+        }),
+        telemetry: createTelemetryAdapter(
+          mockConfig,
+          RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-adapter-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
         ),
-        telemetry: createTelemetryAdapterFromConfig(mockConfig),
         tools: createToolRegistryViewFromRegistry(),
         providerRuntime: providerRuntimeSnapshot,
       });
@@ -393,6 +439,10 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
       });
 
       const view = createAgentRuntimeContext({
+        ...createSessionPolicyFixture(
+          providerRuntimeSnapshot.settingsService,
+          providerRuntimeSnapshot.runtimeId,
+        ),
         state: runtimeState,
         history: historyService,
         settings: {
@@ -401,10 +451,19 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
           preserveThreshold: 0.2,
           telemetry: { enabled: true, target: null },
         },
-        provider: createProviderAdapterFromManager(
-          mockConfig.getProviderManager(),
+        provider: createProviderAdapterFromManager({
+          ...runtimeSetup.providerManager,
+          getActiveProvider: () => providerManager.getActiveProvider(),
+        }),
+        telemetry: createTelemetryAdapter(
+          mockConfig,
+          RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-adapter-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
         ),
-        telemetry: createTelemetryAdapterFromConfig(mockConfig),
         tools: createToolRegistryViewFromRegistry(),
         providerRuntime: providerRuntimeSnapshot,
       });
@@ -433,8 +492,6 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
       const providerManager = {
         getActiveProvider: vi.fn(() => mockProvider),
       };
-
-      mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
 
       chat = new ChatSession(view, mockContentGenerator, {}, []);
 
@@ -475,6 +532,10 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
       expect(estimatedCountBeforeAI).toBeGreaterThan(0);
 
       const view = createAgentRuntimeContext({
+        ...createSessionPolicyFixture(
+          providerRuntimeSnapshot.settingsService,
+          providerRuntimeSnapshot.runtimeId,
+        ),
         state: runtimeState,
         history: historyService,
         settings: {
@@ -483,10 +544,19 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
           preserveThreshold: 0.2,
           telemetry: { enabled: true, target: null },
         },
-        provider: createProviderAdapterFromManager(
-          mockConfig.getProviderManager(),
+        provider: createProviderAdapterFromManager({
+          ...runtimeSetup.providerManager,
+          getActiveProvider: () => providerManager.getActiveProvider(),
+        }),
+        telemetry: createTelemetryAdapter(
+          mockConfig,
+          RootTelemetry.prepare({
+            enabled: false,
+            sessionId: 'isolated-adapter-fixture',
+            maxBytes: 1024,
+            maxFiles: 1,
+          }),
         ),
-        telemetry: createTelemetryAdapterFromConfig(mockConfig),
         tools: createToolRegistryViewFromRegistry(),
         providerRuntime: providerRuntimeSnapshot,
       });
@@ -505,8 +575,6 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
       const providerManager = {
         getActiveProvider: vi.fn(() => mockProvider),
       };
-
-      mockConfig.getProviderManager = vi.fn().mockReturnValue(providerManager);
 
       chat = new ChatSession(view, mockContentGenerator, {}, []);
 

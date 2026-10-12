@@ -6,7 +6,7 @@
 
 import type { SchedulerHandle } from './sessionExecutionServices.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { ToolLookup } from '@vybestack/llxprt-code-tools';
 
 /**
  * Purpose a scheduler entry is created for. Replaces the string key
@@ -16,11 +16,9 @@ import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 export type SchedulerPurpose = 'session' | 'agentic-loop' | 'subagent';
 
 /**
- * Session-owned scheduler registry carrying the semantics the deleted
- * process-global scheduler singleton implements today: get-or-create with
- * in-flight deduplication and acquire counting. Binding constraint: keys
- * are owner objects, never strings; two sessions with the same label
- * string never share an entry.
+ * Session-owned scheduler registry with in-flight creation deduplication
+ * and acquire counting. Owner objects, never diagnostic labels, identify
+ * entries; sessions with the same label never share an entry.
  */
 export interface SessionSchedulerRegistry {
   /**
@@ -47,7 +45,7 @@ export interface SessionSchedulerRegistry {
     options?: {
       interactiveMode?: boolean;
       messageBus?: MessageBus;
-      toolRegistry?: ToolRegistry;
+      toolRegistry?: ToolLookup;
     },
   ): Promise<SchedulerHandle>;
   /**

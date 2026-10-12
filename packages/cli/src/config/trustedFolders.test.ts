@@ -678,7 +678,7 @@ describe('isWorkspaceTrusted with IDE override', () => {
     vi.spyOn(fs, 'readFileSync').mockReturnValue(
       JSON.stringify({ [process.cwd()]: TrustLevel.DO_NOT_TRUST }),
     );
-    expect(isWorkspaceTrusted(mockSettings)).toBe(true);
+    expect(isWorkspaceTrusted(mockSettings, process.cwd(), true)).toBe(true);
     expect(fs.readFileSync).not.toHaveBeenCalled();
   });
 
@@ -688,7 +688,7 @@ describe('isWorkspaceTrusted with IDE override', () => {
     vi.spyOn(fs, 'readFileSync').mockReturnValue(
       JSON.stringify({ [process.cwd()]: TrustLevel.TRUST_FOLDER }),
     );
-    expect(isWorkspaceTrusted(mockSettings)).toBe(false);
+    expect(isWorkspaceTrusted(mockSettings, process.cwd(), false)).toBe(false);
     expect(fs.readFileSync).not.toHaveBeenCalled();
   });
 
@@ -706,7 +706,7 @@ describe('isWorkspaceTrusted with IDE override', () => {
       folderTrust: false,
     } as Settings;
     (getIdeTrust as Mock<typeof getIdeTrust>).mockReturnValue(false);
-    expect(isWorkspaceTrusted(settings)).toBe(true);
+    expect(isWorkspaceTrusted(settings, process.cwd(), false)).toBe(true);
   });
 });
 

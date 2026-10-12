@@ -25,20 +25,9 @@ export const MAX_TASK_TIMEOUT_SECONDS = 1800;
 export const TASK_TIMEOUT_DEFAULT_SETTING = 'task-default-timeout-seconds';
 export const TASK_TIMEOUT_MAX_SETTING = 'task-max-timeout-seconds';
 
-/**
- * Reads ephemeral settings from the config using boundary-validation.
- *
- * The static `Config` type declares `getEphemeralSettings` as a required
- * method, but callers (and tests) routinely pass partial objects where the
- * method is absent. Validating with `typeof === 'function'` keeps the runtime
- * guard without tripping `@typescript-eslint/no-unnecessary-condition`.
- */
-export function readEphemeralSettings(config: {
-  getEphemeralSettings?: () => Record<string, unknown> | undefined;
-}): Record<string, unknown> {
-  return typeof config.getEphemeralSettings === 'function'
-    ? (config.getEphemeralSettings() ?? {})
-    : {};
+export interface TaskTimeoutPolicy {
+  readonly 'task-default-timeout-seconds'?: unknown;
+  readonly 'task-max-timeout-seconds'?: unknown;
 }
 
 /**
@@ -67,22 +56,19 @@ export function resolveTimeoutSeconds(
  * clamping in the result and message.
  */
 export function resolveTimeoutResolutionFromConfig(
-  config: {
-    getEphemeralSettings?: () => Record<string, unknown> | undefined;
-  },
+  settings: TaskTimeoutPolicy,
   requestedTimeoutSeconds: number | undefined,
 ): TimeoutResolution {
-  const settings = readEphemeralSettings(config);
   // Configured default/maximum are validated at the resolution boundary so a
   // bad profile value (0, -2, Infinity, non-numeric) is rejected here rather
   // than flowing unchecked to setTimeout (Finding 2).
   const defaultTimeoutSeconds = readConfiguredTimeoutSeconds(
-    settings,
+    { [TASK_TIMEOUT_DEFAULT_SETTING]: settings[TASK_TIMEOUT_DEFAULT_SETTING] },
     TASK_TIMEOUT_DEFAULT_SETTING,
     DEFAULT_TASK_TIMEOUT_SECONDS,
   );
   const maxTimeoutSeconds = readConfiguredTimeoutSeconds(
-    settings,
+    { [TASK_TIMEOUT_MAX_SETTING]: settings[TASK_TIMEOUT_MAX_SETTING] },
     TASK_TIMEOUT_MAX_SETTING,
     MAX_TASK_TIMEOUT_SECONDS,
   );
@@ -98,12 +84,10 @@ export function resolveTimeoutResolutionFromConfig(
  * default and maximum bounds configured there.
  */
 export function resolveTimeoutFromConfig(
-  config: {
-    getEphemeralSettings?: () => Record<string, unknown> | undefined;
-  },
+  settings: TaskTimeoutPolicy,
   requestedTimeoutSeconds: number | undefined,
 ): number | undefined {
-  return resolveTimeoutResolutionFromConfig(config, requestedTimeoutSeconds)
+  return resolveTimeoutResolutionFromConfig(settings, requestedTimeoutSeconds)
     .effectiveTimeoutSeconds;
 }
 
@@ -123,14 +107,12 @@ export interface TimeoutControllers {
  * clears any pending timeout).
  */
 export function createTimeoutControllers(
-  config: {
-    getEphemeralSettings?: () => Record<string, unknown> | undefined;
-  },
+  settings: TaskTimeoutPolicy,
   signal: AbortSignal,
   requestedTimeoutSeconds: number | undefined,
 ): TimeoutControllers {
   const resolution = resolveTimeoutResolutionFromConfig(
-    config,
+    settings,
     requestedTimeoutSeconds,
   );
   const timeoutSeconds = resolution.effectiveTimeoutSeconds;
@@ -285,9 +267,7 @@ export function handleBackgroundAbort(
  * null when timeouts are disabled).
  */
 export function setupAsyncTimeout(
-  config: {
-    getEphemeralSettings?: () => Record<string, unknown> | undefined;
-  },
+  settings: TaskTimeoutPolicy,
   requestedTimeoutSeconds: number | undefined,
   asyncAbortController: AbortController,
   timedOut: { value: boolean },
@@ -296,7 +276,7 @@ export function setupAsyncTimeout(
   resolution: TimeoutResolution;
 } {
   const resolution = resolveTimeoutResolutionFromConfig(
-    config,
+    settings,
     requestedTimeoutSeconds,
   );
   const timeoutMs =
@@ -315,9 +295,9 @@ export function setupAsyncTimeout(
 }
 
 /**
- * Wires the foreground turn's abort signal into the async abort controller so
- * that ESC (which aborts the foreground turn) also cancels the detached
- * subagent. Returns a cleanup function that removes the listener.
+ * Keeps async startup cancellable by the foreground until task registration
+ * transfers ownership to the task manager. The returned cleanup detaches only
+ * this relay, preserving the task controller and its timeout.
  */
 export function setupForegroundRelay(
   foregroundSignal: AbortSignal,

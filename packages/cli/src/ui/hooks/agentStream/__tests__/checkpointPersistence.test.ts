@@ -86,9 +86,7 @@ function makeNonRestorableTool(): TrackedToolCall {
 function makeConfig(checkpointEnabled = true): Config {
   return {
     getCheckpointingEnabled: vi.fn(() => checkpointEnabled),
-    storage: {
-      getProjectTempCheckpointsDir: vi.fn(() => '/tmp/checkpoints'),
-    },
+    projectCheckpointsDir: '/tmp/checkpoints',
   } as unknown as Config;
 }
 
@@ -270,7 +268,7 @@ describe('useCheckpointPersistence', () => {
           gitService as unknown as GitService,
           mockHistory,
           makeFakeAgent(agentClient),
-          config.storage,
+          config.projectCheckpointsDir,
           onDebugMessage,
           fsOps,
         ),
@@ -295,7 +293,7 @@ describe('useCheckpointPersistence', () => {
           gitService as unknown as GitService,
           mockHistory,
           makeFakeAgent(makeAgentClient()),
-          config.storage,
+          config.projectCheckpointsDir,
           vi.fn(),
           fsOps,
         ),
@@ -320,7 +318,7 @@ describe('useCheckpointPersistence', () => {
           gitService as unknown as GitService,
           mockHistory,
           makeFakeAgent(makeAgentClient()),
-          config.storage,
+          config.projectCheckpointsDir,
           vi.fn(),
           fsOps,
         ),
@@ -345,7 +343,7 @@ describe('useCheckpointPersistence', () => {
           undefined, // no gitService
           mockHistory,
           makeFakeAgent(makeAgentClient()),
-          config.storage,
+          config.projectCheckpointsDir,
           onDebugMessage,
           fsOps,
         ),
@@ -378,7 +376,7 @@ describe('useCheckpointPersistence', () => {
           gitService as unknown as GitService,
           mockHistory,
           makeFakeAgent(agentClient),
-          config.storage,
+          config.projectCheckpointsDir,
           onDebugMessage,
           fsOps,
         ),
@@ -408,7 +406,7 @@ describe('useCheckpointPersistence', () => {
           gitService as unknown as GitService,
           mockHistory,
           makeFakeAgent(makeAgentClient()),
-          config.storage,
+          config.projectCheckpointsDir,
           onDebugMessage,
           fsOps,
         ),
@@ -445,7 +443,7 @@ describe('useCheckpointPersistence', () => {
           gitService as unknown as GitService,
           mockHistory,
           makeFakeAgent(agentClient),
-          config.storage,
+          config.projectCheckpointsDir,
           onDebugMessage,
           fsOps,
         ),
@@ -463,9 +461,7 @@ describe('useCheckpointPersistence', () => {
   it('does not write when checkpointDir is null', async () => {
     const config = {
       getCheckpointingEnabled: vi.fn(() => true),
-      storage: {
-        getProjectTempCheckpointsDir: vi.fn(() => null),
-      },
+      projectCheckpointsDir: null,
     } as unknown as Config;
     const fsOps = makeFsOps();
 
@@ -477,7 +473,7 @@ describe('useCheckpointPersistence', () => {
           makeGitService() as unknown as GitService,
           mockHistory,
           makeFakeAgent(makeAgentClient()),
-          config.storage,
+          config.projectCheckpointsDir,
           vi.fn(),
           fsOps,
         ),
@@ -505,7 +501,7 @@ describe('useCheckpointPersistence', () => {
         gitService as unknown as GitService,
         mockHistory,
         makeFakeAgent(agentClient),
-        config.storage,
+        config.projectCheckpointsDir,
         onDebugMessage,
         fsOps,
       ),
@@ -543,7 +539,7 @@ describe('useCheckpointPersistence', () => {
         gitService as unknown as GitService,
         mockHistory,
         makeFakeAgent(agentClient),
-        config.storage,
+        config.projectCheckpointsDir,
         onDebugMessage,
         fsOps,
       ),

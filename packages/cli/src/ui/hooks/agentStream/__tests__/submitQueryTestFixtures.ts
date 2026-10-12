@@ -38,9 +38,6 @@ export function createMockOverrides() {
       getMcpClientManager: () => undefined,
       getMcpServers: () => ({}),
     },
-    asyncTasks: {
-      setupAsyncTaskAutoTrigger: () => () => {},
-    },
   };
 }
 

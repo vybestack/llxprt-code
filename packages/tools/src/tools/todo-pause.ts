@@ -164,7 +164,7 @@ ${reasonResult.systemFeedback}
     if (!this.toolHost) {
       return null;
     }
-    const raw = this.toolHost.getEphemeralSettings().emojifilter;
+    const raw = this.toolHost.readExecutionPolicy().emojifilter;
     const mode = isEmojiFilterMode(raw) ? raw : 'auto';
     return new EmojiFilter({ mode });
   }

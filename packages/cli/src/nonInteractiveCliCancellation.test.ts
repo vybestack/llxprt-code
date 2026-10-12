@@ -78,7 +78,10 @@ function setupTtyStdin(): {
   stdin.isRaw = false;
 
   vi.spyOn(stdin, 'on').mockImplementation(
-    (event: string, listener: (...args: unknown[]) => void) => {
+    (
+      event: string | symbol,
+      listener: Parameters<import('node:events').EventEmitter['on']>[1],
+    ) => {
       if (event === 'keypress') {
         keypressListeners.push(
           listener as (
@@ -91,9 +94,15 @@ function setupTtyStdin(): {
     },
   );
   vi.spyOn(stdin, 'removeListener').mockImplementation(
-    (event: string | symbol, listener: (...args: unknown[]) => void) => {
+    (
+      event: string | symbol,
+      listener: Parameters<import('node:events').EventEmitter['on']>[1],
+    ) => {
       if (typeof event === 'string') {
-        removeListenerCalls.push({ event, listener });
+        removeListenerCalls.push({
+          event,
+          listener: (...args: unknown[]) => listener(...args),
+        });
         if (event === 'keypress') {
           const idx = keypressListeners.indexOf(
             listener as (
@@ -144,12 +153,10 @@ describe('createStdinCancellation', () => {
   let abortController: AbortController;
   let stderrWriteSpy: ReturnType<typeof vi.spyOn>;
   let processExitSpy: ReturnType<typeof vi.spyOn>;
-  let originalIsTTY: boolean | undefined;
-  let originalIsRaw: boolean | undefined;
+  const originalIsTTY = Object.getOwnPropertyDescriptor(stdin, 'isTTY');
+  const originalIsRaw = Object.getOwnPropertyDescriptor(stdin, 'isRaw');
 
   beforeEach(() => {
-    originalIsTTY = stdin.isTTY;
-    originalIsRaw = stdin.isRaw;
     abortController = new AbortController();
     stderrWriteSpy = vi
       .spyOn(process.stderr, 'write')
@@ -162,8 +169,12 @@ describe('createStdinCancellation', () => {
   });
 
   afterEach(() => {
-    stdin.isTTY = originalIsTTY;
-    stdin.isRaw = originalIsRaw;
+    if (originalIsTTY !== undefined)
+      Object.defineProperty(stdin, 'isTTY', originalIsTTY);
+    else Reflect.deleteProperty(stdin, 'isTTY');
+    if (originalIsRaw !== undefined)
+      Object.defineProperty(stdin, 'isRaw', originalIsRaw);
+    else Reflect.deleteProperty(stdin, 'isRaw');
     vi.restoreAllMocks();
   });
 

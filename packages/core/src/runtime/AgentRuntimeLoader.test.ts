@@ -1,10 +1,15 @@
+import type { AdmittedModelParameters } from './admittedModelParameters.js';
+import { SessionSettingsOwner } from '../session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { assembleTaskSchemaPolicy } from '../config/task-schema-policy-assembly.js';
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,7 +25,6 @@ import type {
   ToolRegistryView,
   ReadonlySettingsSnapshot,
 } from './AgentRuntimeContext.js';
-import { getTestRuntimeMessageBus } from '../__tests__/config-test-helpers.js';
 
 import type { AgentRuntimeState } from './AgentRuntimeState.js';
 import { HistoryService } from '../services/history/HistoryService.js';
@@ -39,13 +43,13 @@ import { LocalMediaStore } from '../storage/local-media-store.js';
 import { MediaAdmissionService } from '../storage/media-admission-service.js';
 
 function createTestConfig(): Config {
-  const settingsService = new SettingsService();
-
   return new Config({
     sessionId: 'test-session',
     targetDir: '/tmp/test-agent-runtime-loader',
-    settingsService,
-  } as unknown as import('../config/config.js').ConfigParameters);
+    cwd: process.cwd(),
+    model: 'gemini-2.0-pro',
+    debugMode: false,
+  });
 }
 
 function createRuntimeState(): AgentRuntimeState {
@@ -69,10 +73,13 @@ function createStubGenerator(label: string): ContentGenerator {
     generateContent: vi.fn(async () => ({
       label,
       candidates: [],
+      content: { speaker: 'ai' as const, blocks: [] },
     })),
-    generateContentStream: vi.fn(async function* () {
-      yield { label };
-    }),
+    generateContentStream: vi.fn(async () =>
+      (async function* () {
+        yield { content: { speaker: 'ai' as const, blocks: [] }, label };
+      })(),
+    ),
     countTokens: vi.fn(async () => ({ totalTokens: 0 })),
     embedContent: vi.fn(async () => ({
       embeddings: [],
@@ -82,11 +89,15 @@ function createStubGenerator(label: string): ContentGenerator {
 
 describe('AgentRuntimeLoader', () => {
   let config: Config;
+  let policyOwner: RuntimePolicyOwner;
+  afterEach(() => policyOwner.dispose());
   let runtimeState: AgentRuntimeState;
   let settingsSnapshot: ReadonlySettingsSnapshot;
   // Issue #2616: a runtime context requires explicit settings, so the
   // declaration is unassigned until beforeEach constructs one.
   let providerRuntime: ProviderRuntimeContext;
+  let settingsOwner: SessionSettingsOwner;
+  afterEach(() => settingsOwner.dispose());
 
   const telemetryAdapter: AgentRuntimeTelemetryAdapter = {
     logApiRequest: vi.fn(),
@@ -94,7 +105,11 @@ describe('AgentRuntimeLoader', () => {
     logApiError: vi.fn(),
   };
   const providerAdapter: AgentRuntimeProviderAdapter = {
-    getActiveProvider: vi.fn(() => ({ name: 'gemini' })),
+    getActiveProvider: vi.fn(() => ({
+      name: 'gemini',
+      getModels: async () => [],
+      async *generateChatCompletion() {},
+    })),
     setActiveProvider: vi.fn(),
   };
   const toolsView: ToolRegistryView = {
@@ -108,6 +123,7 @@ describe('AgentRuntimeLoader', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     config = createTestConfig();
+    policyOwner = new RuntimePolicyOwner(config);
     runtimeState = createRuntimeState();
     settingsSnapshot = {
       compressionThreshold: 0.42,
@@ -119,10 +135,99 @@ describe('AgentRuntimeLoader', () => {
         disabled: undefined,
       },
     };
+    const settingsService = new SettingsService();
+    settingsOwner = new SessionSettingsOwner(settingsService);
+    settingsOwner.bindTelemetry(config);
     providerRuntime = createProviderRuntimeContext({
-      settingsService: new SettingsService(),
+      settingsService,
       metadata: { source: 'AgentRuntimeLoader.test' },
     });
+  });
+
+  it('uses each supplied owner store for media saves and reads, including after the other closes', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'runtime-loader-owners-'));
+    const first = new LocalMediaStore({
+      rootDirectory: join(directory, 'first'),
+      quotaBytes: 1024,
+    });
+    const second = new LocalMediaStore({
+      rootDirectory: join(directory, 'second'),
+      quotaBytes: 1024,
+    });
+    try {
+      const profile = {
+        config,
+        telemetry: settingsOwner.telemetry,
+        state: runtimeState,
+        settings: settingsSnapshot,
+        providerRuntime,
+        prepareProviderInvocation: (
+          provider: string,
+          parameters?: AdmittedModelParameters,
+          signal?: AbortSignal,
+        ) =>
+          settingsOwner.prepareProviderInvocation(
+            runtimeState.runtimeId,
+            provider,
+            parameters,
+            signal,
+          ),
+        readToolGovernance: () =>
+          settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
+      };
+      const overrides = {
+        providerAdapter,
+        telemetryAdapter,
+        toolsView,
+        contentGenerator: createStubGenerator('owner-media'),
+      };
+      const firstRuntime = await loadAgentRuntime({
+        profile,
+        mediaStore: first,
+        overrides,
+      });
+      const secondRuntime = await loadAgentRuntime({
+        profile,
+        mediaStore: second,
+        overrides,
+      });
+
+      const firstStore = firstRuntime.runtimeContext.mediaStore;
+      const secondStore = secondRuntime.runtimeContext.mediaStore;
+      if (firstStore === undefined || secondStore === undefined) {
+        throw new Error('Runtime media stores must be available');
+      }
+      const firstBytes = new Uint8Array([1, 2, 3]);
+      const secondBytes = new Uint8Array([4, 5, 6]);
+      const firstReference = await firstStore.admit({
+        bytes: firstBytes,
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      });
+      const secondReference = await secondStore.admit({
+        bytes: secondBytes,
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      });
+      expect(await first.readVerified(firstReference)).toStrictEqual(
+        firstBytes,
+      );
+      expect(await second.readVerified(secondReference)).toStrictEqual(
+        secondBytes,
+      );
+      await expect(first.readVerified(secondReference)).rejects.toThrow(
+        'Media store read verified failed',
+      );
+
+      await first.close();
+      expect(await secondStore.readVerified(secondReference)).toStrictEqual(
+        secondBytes,
+      );
+    } finally {
+      await first.close();
+      await second.close();
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it('creates isolated runtime bundle per invocation', async () => {
@@ -134,11 +239,29 @@ describe('AgentRuntimeLoader', () => {
     );
 
     const baseOptions = {
+      mediaStore: new LocalMediaStore({
+        rootDirectory: config.projectTempDir + '/media',
+        quotaBytes: config.getMediaStoreQuotaByteLimit(),
+      }),
       profile: {
         config,
+        telemetry: settingsOwner.telemetry,
         state: runtimeState,
         settings: settingsSnapshot,
         providerRuntime,
+        prepareProviderInvocation: (
+          provider: string,
+          parameters?: AdmittedModelParameters,
+          signal?: AbortSignal,
+        ) =>
+          settingsOwner.prepareProviderInvocation(
+            runtimeState.runtimeId,
+            provider,
+            parameters,
+            signal,
+          ),
+        readToolGovernance: () =>
+          settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
         contentGeneratorConfig: createContentGeneratorConfig(),
       },
       overrides: {
@@ -181,11 +304,29 @@ describe('AgentRuntimeLoader', () => {
   it('reuses provided history service when supplied', async () => {
     const sharedHistory = new HistoryService();
     const bundle = await loadAgentRuntime({
+      mediaStore: new LocalMediaStore({
+        rootDirectory: config.projectTempDir + '/media',
+        quotaBytes: config.getMediaStoreQuotaByteLimit(),
+      }),
       profile: {
         config,
+        telemetry: settingsOwner.telemetry,
         state: runtimeState,
         settings: settingsSnapshot,
         providerRuntime,
+        prepareProviderInvocation: (
+          provider: string,
+          parameters?: AdmittedModelParameters,
+          signal?: AbortSignal,
+        ) =>
+          settingsOwner.prepareProviderInvocation(
+            runtimeState.runtimeId,
+            provider,
+            parameters,
+            signal,
+          ),
+        readToolGovernance: () =>
+          settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
         contentGeneratorConfig: createContentGeneratorConfig(),
       },
       overrides: {
@@ -241,11 +382,26 @@ describe('AgentRuntimeLoader', () => {
       sharedHistory.addAll(admittedHistory);
 
       const runtimeOptions = {
+        mediaStore: store,
         profile: {
           config,
+          telemetry: settingsOwner.telemetry,
           state: runtimeState,
           settings: settingsSnapshot,
           providerRuntime,
+          prepareProviderInvocation: (
+            provider: string,
+            parameters?: AdmittedModelParameters,
+            signal?: AbortSignal,
+          ) =>
+            settingsOwner.prepareProviderInvocation(
+              runtimeState.runtimeId,
+              provider,
+              parameters,
+              signal,
+            ),
+          readToolGovernance: () =>
+            settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
           contentGeneratorConfig: createContentGeneratorConfig(),
         },
         overrides: {
@@ -253,7 +409,6 @@ describe('AgentRuntimeLoader', () => {
           telemetryAdapter,
           toolsView,
           historyService: sharedHistory,
-          mediaStore: store,
           contentGenerator: createStubGenerator('media-owner'),
         },
       };
@@ -278,11 +433,29 @@ describe('AgentRuntimeLoader', () => {
     };
 
     const bundle = await loadAgentRuntime({
+      mediaStore: new LocalMediaStore({
+        rootDirectory: config.projectTempDir + '/media',
+        quotaBytes: config.getMediaStoreQuotaByteLimit(),
+      }),
       profile: {
         config,
+        telemetry: settingsOwner.telemetry,
         state: runtimeState,
         settings: mutableSettings,
         providerRuntime,
+        prepareProviderInvocation: (
+          provider: string,
+          parameters?: AdmittedModelParameters,
+          signal?: AbortSignal,
+        ) =>
+          settingsOwner.prepareProviderInvocation(
+            runtimeState.runtimeId,
+            provider,
+            parameters,
+            signal,
+          ),
+        readToolGovernance: () =>
+          settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
         contentGeneratorConfig: createContentGeneratorConfig(),
       },
       overrides: {
@@ -303,11 +476,13 @@ describe('AgentRuntimeLoader', () => {
     });
   });
 
-  it('filters tool registry view using allowed/disabled lists from settings snapshot', async () => {
+  it('filters tool registry view using live allowed/disabled settings policy', async () => {
+    settingsOwner.setAllowedTools(['alpha']);
+    settingsOwner.writeUserParameter('tools.disabled', ['beta']);
     const registry = new ToolRegistry(
       config,
-      getTestRuntimeMessageBus(config),
-      new SettingsService(),
+      policyOwner.session.messageBus,
+      assembleTaskSchemaPolicy(new SettingsService()),
     );
     registry.registerTool(
       new MockTool('alpha', 'alpha', 'Alpha tool for testing.'),
@@ -317,8 +492,13 @@ describe('AgentRuntimeLoader', () => {
     );
 
     const bundle = await loadAgentRuntime({
+      mediaStore: new LocalMediaStore({
+        rootDirectory: config.projectTempDir + '/media',
+        quotaBytes: config.getMediaStoreQuotaByteLimit(),
+      }),
       profile: {
         config,
+        telemetry: settingsOwner.telemetry,
         state: runtimeState,
         settings: {
           ...settingsSnapshot,
@@ -328,6 +508,19 @@ describe('AgentRuntimeLoader', () => {
           },
         },
         providerRuntime,
+        prepareProviderInvocation: (
+          provider: string,
+          parameters?: AdmittedModelParameters,
+          signal?: AbortSignal,
+        ) =>
+          settingsOwner.prepareProviderInvocation(
+            runtimeState.runtimeId,
+            provider,
+            parameters,
+            signal,
+          ),
+        readToolGovernance: () =>
+          settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
         toolRegistry: registry,
         contentGeneratorConfig: createContentGeneratorConfig(),
       },
@@ -346,12 +539,20 @@ describe('AgentRuntimeLoader', () => {
     expect(bundle.toolsView.getToolMetadata('beta')).toBeUndefined();
   });
 
-  it('hydrates contentGeneratorFactory from Config when providerManager is present but factory is missing from snapshot', async () => {
+  it('uses the explicitly prepared content generator factory with the supplied profile', async () => {
     const factoryGenerator: ContentGenerator = {
-      generateContent: vi.fn(async () => ({ candidates: [] })),
-      generateContentStream: vi.fn(async function* () {
-        yield { candidates: [] };
-      }),
+      generateContent: vi.fn(async () => ({
+        candidates: [],
+        content: { speaker: 'ai' as const, blocks: [] },
+      })),
+      generateContentStream: vi.fn(async () =>
+        (async function* () {
+          yield {
+            candidates: [],
+            content: { speaker: 'ai' as const, blocks: [] },
+          };
+        })(),
+      ),
       countTokens: vi.fn(async () => ({ totalTokens: 0 })),
       embedContent: vi.fn(async () => ({ embeddings: [] })),
     };
@@ -360,50 +561,43 @@ describe('AgentRuntimeLoader', () => {
       createContentGenerator: vi.fn(() => factoryGenerator),
     };
 
-    const fakeManager: RuntimeProviderManager = {
-      getActiveProvider: vi.fn(),
-      getActiveProviderName: vi.fn(),
-      setActiveProvider: vi.fn(),
-      setRuntimeContext: vi.fn(),
-      getAvailableModels: vi.fn(async () => []),
-      getProviderNames: () => [],
-      listProviders: () => [],
-      getProviderByName: vi.fn(),
-      registerProvider: vi.fn(),
-      prepareStatelessProviderInvocation: vi.fn(),
-      getProviderMetrics: () => ({}),
-      getSessionTokenUsage: () => ({
-        input: 0,
-        output: 0,
-        cache: 0,
-        tool: 0,
-        thought: 0,
-        total: 0,
-      }),
-      setConfig: vi.fn(),
-      hasActiveProvider: () => true,
-      accumulateSessionTokens: vi.fn(),
-    };
-
     const configWithFactory = new Config({
       sessionId: 'test-session',
       targetDir: '/tmp/test-agent-runtime-loader',
-      settingsService: new SettingsService(),
-    } as unknown as import('../config/config.js').ConfigParameters);
-    configWithFactory.setContentGeneratorFactory(factory);
-    configWithFactory.setProviderManager(fakeManager);
+      cwd: process.cwd(),
+      model: 'gemini-2.0-pro',
+      debugMode: false,
+    });
 
     const contentConfigWithManager: ContentGeneratorConfig = {
+      contentGeneratorFactory: factory,
       model: 'gemini-2.0-pro',
-      providerManager: fakeManager,
     };
 
     const bundle = await loadAgentRuntime({
+      mediaStore: new LocalMediaStore({
+        rootDirectory: config.projectTempDir + '/media',
+        quotaBytes: config.getMediaStoreQuotaByteLimit(),
+      }),
       profile: {
         config: configWithFactory,
+        telemetry: settingsOwner.telemetry,
         state: runtimeState,
         settings: settingsSnapshot,
         providerRuntime,
+        prepareProviderInvocation: (
+          provider: string,
+          parameters?: AdmittedModelParameters,
+          signal?: AbortSignal,
+        ) =>
+          settingsOwner.prepareProviderInvocation(
+            runtimeState.runtimeId,
+            provider,
+            parameters,
+            signal,
+          ),
+        readToolGovernance: () =>
+          settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
         contentGeneratorConfig: contentConfigWithManager,
       },
       overrides: {
@@ -414,17 +608,37 @@ describe('AgentRuntimeLoader', () => {
     });
 
     expect(bundle.contentGenerator).toBe(factoryGenerator);
-    expect(factory.createContentGenerator).toHaveBeenCalledWith(fakeManager);
+    expect(
+      await bundle.contentGenerator.countTokens({ contents: [] }),
+    ).toStrictEqual({ totalTokens: 0 });
   });
 
   it('throws when providerManager is absent', async () => {
     await expect(
       loadAgentRuntime({
+        mediaStore: new LocalMediaStore({
+          rootDirectory: config.projectTempDir + '/media',
+          quotaBytes: config.getMediaStoreQuotaByteLimit(),
+        }),
         profile: {
           config,
+          telemetry: settingsOwner.telemetry,
           state: runtimeState,
           settings: settingsSnapshot,
           providerRuntime,
+          prepareProviderInvocation: (
+            provider: string,
+            parameters?: AdmittedModelParameters,
+            signal?: AbortSignal,
+          ) =>
+            settingsOwner.prepareProviderInvocation(
+              runtimeState.runtimeId,
+              provider,
+              parameters,
+              signal,
+            ),
+          readToolGovernance: () =>
+            settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
           contentGeneratorConfig: createContentGeneratorConfig(),
         },
         overrides: {
@@ -449,6 +663,7 @@ describe('AgentRuntimeLoader', () => {
       listProviders: () => [],
       getProviderByName: vi.fn(),
       registerProvider: vi.fn(),
+      checkpointProviderRegistry: () => () => {},
       prepareStatelessProviderInvocation: vi.fn(),
       getProviderMetrics: () => ({}),
       getSessionTokenUsage: () => ({
@@ -467,21 +682,41 @@ describe('AgentRuntimeLoader', () => {
     const configNoFactory = new Config({
       sessionId: 'test-session',
       targetDir: '/tmp/test-agent-runtime-loader',
-      settingsService: new SettingsService(),
-    } as unknown as import('../config/config.js').ConfigParameters);
+      cwd: process.cwd(),
+      model: 'gemini-2.0-pro',
+      debugMode: false,
+    });
 
     const contentConfigWithManagerOnly: ContentGeneratorConfig = {
       model: 'gemini-2.0-pro',
-      providerManager: fakeManager,
     };
 
     await expect(
       loadAgentRuntime({
+        mediaStore: new LocalMediaStore({
+          rootDirectory: config.projectTempDir + '/media',
+          quotaBytes: config.getMediaStoreQuotaByteLimit(),
+        }),
         profile: {
           config: configNoFactory,
+          telemetry: settingsOwner.telemetry,
           state: runtimeState,
           settings: settingsSnapshot,
           providerRuntime,
+          prepareProviderInvocation: (
+            provider: string,
+            parameters?: AdmittedModelParameters,
+            signal?: AbortSignal,
+          ) =>
+            settingsOwner.prepareProviderInvocation(
+              runtimeState.runtimeId,
+              provider,
+              parameters,
+              signal,
+            ),
+          readToolGovernance: () =>
+            settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
+          providerManager: fakeManager,
           contentGeneratorConfig: contentConfigWithManagerOnly,
         },
         overrides: {
@@ -491,7 +726,7 @@ describe('AgentRuntimeLoader', () => {
         },
       }),
     ).rejects.toThrow(
-      'Provider content generator factory is required when a provider manager is configured',
+      'No provider runtime is composed for this Config. Compose the providers package (see packages/providers/src/composition) before creating a content generator.',
     );
   });
 });

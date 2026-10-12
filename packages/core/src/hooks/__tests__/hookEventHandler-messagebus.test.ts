@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { fixtureHookRuntime } from './hook-runtime-fixture.js';
 /**
  * @plan PLAN-20250218-HOOKSYSTEM.P07
  * @requirement DELTA-HEVT-001, DELTA-HEVT-002, DELTA-HEVT-003, DELTA-HBUS-002, DELTA-HBUS-003, DELTA-HPAY-003
@@ -182,8 +183,8 @@ describe('MessageBus subscription (DELTA-HEVT-001)', () => {
     config = makeConfig();
   });
 
-  afterEach(() => {
-    handler.dispose();
+  afterEach(async () => {
+    await handler.dispose();
     bus.clear();
   });
 
@@ -196,7 +197,7 @@ describe('MessageBus subscription (DELTA-HEVT-001)', () => {
    */
   it('subscribes and processes HOOK_EXECUTION_REQUEST @plan:PLAN-20250218-HOOKSYSTEM.P07', async () => {
     handler = new HookEventHandler(
-      config,
+      fixtureHookRuntime(config),
       makeRegistry(),
       makePlanner(),
       makeRunner(),
@@ -228,7 +229,7 @@ describe('MessageBus subscription (DELTA-HEVT-001)', () => {
   it('does NOT subscribe when MessageBus is absent @plan:PLAN-20250218-HOOKSYSTEM.P07', () => {
     expect(() => {
       handler = new HookEventHandler(
-        config,
+        fixtureHookRuntime(config),
         makeRegistry(),
         makePlanner(),
         makeRunner(),
@@ -248,7 +249,7 @@ describe('MessageBus subscription (DELTA-HEVT-001)', () => {
    */
   it('ignores messages after dispose @plan:PLAN-20250218-HOOKSYSTEM.P07', async () => {
     handler = new HookEventHandler(
-      config,
+      fixtureHookRuntime(config),
       makeRegistry(),
       makePlanner(),
       makeRunner(),
@@ -257,7 +258,7 @@ describe('MessageBus subscription (DELTA-HEVT-001)', () => {
       DebugLogger.getLogger('test'),
     );
 
-    handler.dispose();
+    await handler.dispose();
     bus.clear();
 
     const request: HookExecutionRequest = {
@@ -285,7 +286,7 @@ describe('Correlated responses (DELTA-HEVT-002)', () => {
   beforeEach(() => {
     bus = new FakeMessageBus();
     handler = new HookEventHandler(
-      makeConfig(),
+      fixtureHookRuntime(makeConfig()),
       makeRegistry(),
       makePlanner(),
       makeRunner(),
@@ -295,8 +296,8 @@ describe('Correlated responses (DELTA-HEVT-002)', () => {
     );
   });
 
-  afterEach(() => {
-    handler.dispose();
+  afterEach(async () => {
+    await handler.dispose();
     bus.clear();
   });
 
@@ -361,7 +362,7 @@ describe('Correlated responses (DELTA-HEVT-002)', () => {
           async (correlationId) => {
             const localBus = new FakeMessageBus();
             const localHandler = new HookEventHandler(
-              makeConfig(),
+              fixtureHookRuntime(makeConfig()),
               makeRegistry(),
               makePlanner(),
               makeRunner(),
@@ -388,7 +389,7 @@ describe('Correlated responses (DELTA-HEVT-002)', () => {
             expect(responses.length).toBeGreaterThan(0);
             expect(responses[0].correlationId).toBe(correlationId);
 
-            localHandler.dispose();
+            await localHandler.dispose();
           },
         ),
       ),
@@ -407,7 +408,7 @@ describe('Unsupported event name (DELTA-HEVT-003)', () => {
   beforeEach(() => {
     bus = new FakeMessageBus();
     handler = new HookEventHandler(
-      makeConfig(),
+      fixtureHookRuntime(makeConfig()),
       makeRegistry(),
       makePlanner(),
       makeRunner(),
@@ -417,8 +418,8 @@ describe('Unsupported event name (DELTA-HEVT-003)', () => {
     );
   });
 
-  afterEach(() => {
-    handler.dispose();
+  afterEach(async () => {
+    await handler.dispose();
     bus.clear();
   });
 
@@ -487,7 +488,7 @@ describe('Unsupported event name (DELTA-HEVT-003)', () => {
           async (invalidEventName, correlationId) => {
             const localBus = new FakeMessageBus();
             const localHandler = new HookEventHandler(
-              makeConfig(),
+              fixtureHookRuntime(makeConfig()),
               makeRegistry(),
               makePlanner(),
               makeRunner(),
@@ -515,7 +516,7 @@ describe('Unsupported event name (DELTA-HEVT-003)', () => {
             expect(responses[0].success).toBe(false);
             expect(responses[0].correlationId).toBe(correlationId);
 
-            localHandler.dispose();
+            await localHandler.dispose();
           },
         ),
       ),
@@ -532,7 +533,7 @@ describe('Bus-absent fallback (DELTA-HBUS-002)', () => {
 
   beforeEach(() => {
     handler = new HookEventHandler(
-      makeConfig(),
+      fixtureHookRuntime(makeConfig()),
       makeRegistry(),
       makePlanner(),
       makeRunner(),
@@ -542,8 +543,8 @@ describe('Bus-absent fallback (DELTA-HBUS-002)', () => {
     );
   });
 
-  afterEach(() => {
-    handler.dispose();
+  afterEach(async () => {
+    await handler.dispose();
   });
 
   /**
@@ -588,7 +589,7 @@ describe('correlationId generation (DELTA-HBUS-003)', () => {
   beforeEach(() => {
     bus = new FakeMessageBus();
     handler = new HookEventHandler(
-      makeConfig(),
+      fixtureHookRuntime(makeConfig()),
       makeRegistry(),
       makePlanner(),
       makeRunner(),
@@ -598,8 +599,8 @@ describe('correlationId generation (DELTA-HBUS-003)', () => {
     );
   });
 
-  afterEach(() => {
-    handler.dispose();
+  afterEach(async () => {
+    await handler.dispose();
     bus.clear();
   });
 
@@ -662,7 +663,7 @@ describe('correlationId generation (DELTA-HBUS-003)', () => {
           async (eventName) => {
             const localBus = new FakeMessageBus();
             const localHandler = new HookEventHandler(
-              makeConfig(),
+              fixtureHookRuntime(makeConfig()),
               makeRegistry(),
               makePlanner(),
               makeRunner(),
@@ -690,7 +691,7 @@ describe('correlationId generation (DELTA-HBUS-003)', () => {
             expect(responses[0].correlationId).toBeDefined();
             expect(responses[0].correlationId.length).toBeGreaterThan(0);
 
-            localHandler.dispose();
+            await localHandler.dispose();
           },
         ),
       ),
@@ -707,7 +708,7 @@ describe('Model translation (DELTA-HPAY-003)', () => {
 
   beforeEach(() => {
     handler = new HookEventHandler(
-      makeConfig(),
+      fixtureHookRuntime(makeConfig()),
       makeRegistry(),
       makePlanner(),
       makeRunner(),
@@ -717,8 +718,8 @@ describe('Model translation (DELTA-HPAY-003)', () => {
     );
   });
 
-  afterEach(() => {
-    handler.dispose();
+  afterEach(async () => {
+    await handler.dispose();
   });
 
   /**
@@ -729,10 +730,12 @@ describe('Model translation (DELTA-HPAY-003)', () => {
    * @then the result is returned (translation happens internally)
    */
   it('fireBeforeModelEvent accepts model payload @plan:PLAN-20250218-HOOKSYSTEM.P07', async () => {
-    const result = await handler.fireBeforeModelEvent(
-      { messages: [{ role: 'user', content: 'test' }] },
-      { model: 'gpt-4' },
-    );
+    const result = await handler.fireBeforeModelEvent({
+      model: 'gpt-4',
+      contents: [
+        { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+      ],
+    });
     expect(result).toBeDefined();
     expect(result.success).toBe(true);
   });
@@ -746,8 +749,8 @@ describe('Model translation (DELTA-HPAY-003)', () => {
    */
   it('fireAfterModelEvent accepts model response @plan:PLAN-20250218-HOOKSYSTEM.P07', async () => {
     const result = await handler.fireAfterModelEvent(
-      { messages: [] },
-      { candidates: [] },
+      { model: 'test-model', contents: [] },
+      { content: { speaker: 'ai', blocks: [] } },
     );
     expect(result).toBeDefined();
     expect(result.success).toBe(true);
@@ -769,7 +772,7 @@ describe('Model translation (DELTA-HPAY-003)', () => {
           async (eventName, correlationId) => {
             const localBus = new FakeMessageBus();
             const localHandler = new HookEventHandler(
-              makeConfig(),
+              fixtureHookRuntime(makeConfig()),
               makeRegistry(),
               makePlanner(),
               makeRunner(),
@@ -795,7 +798,7 @@ describe('Model translation (DELTA-HPAY-003)', () => {
             const responses = localBus.getPublishedResponses();
             expect(responses).toHaveLength(1);
 
-            localHandler.dispose();
+            await localHandler.dispose();
           },
         ),
       ),

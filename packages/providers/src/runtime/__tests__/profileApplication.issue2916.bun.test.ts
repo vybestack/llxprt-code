@@ -51,141 +51,49 @@ function createProviderKeyStorageDouble() {
   };
 }
 
-const configStub = {
-  ephemerals: new Map<string, unknown>(),
-  model: 'gpt-4o' as string | undefined,
-  getModel() {
-    return this.model;
-  },
-  getEphemeralSetting(key: string) {
-    return this.ephemerals.get(key);
-  },
-  setEphemeralSetting(key: string, value: unknown) {
-    if (value === undefined) {
-      this.ephemerals.delete(key);
-      return;
-    }
-    this.ephemerals.set(key, value);
-  },
-  getEphemeralSettings() {
-    return Object.fromEntries(this.ephemerals.entries());
-  },
-  getContentGeneratorConfig() {
-    return undefined;
-  },
-};
+import { useProfileOwner as installProfileOwner } from './profile-workflow-owner-fixture.js';
+import { assembleModelSelection } from '../providerMutations.js';
+const root = installProfileOwner();
 
-const settingsServiceStub = {
-  providerSettings: new Map<string, Record<string, unknown>>(),
-  // Mirrors the real SettingsService rollback primitives (#2534 C5); this
-  // stub has no mutable global surface, so only provider scopes round-trip.
-  exportForStateSnapshot() {
-    return {
-      global: {},
-      providers: structuredClone(Object.fromEntries(this.providerSettings)),
-    };
-  },
-  restoreFromStateSnapshot(snapshot: {
-    global: Record<string, unknown>;
-    providers: Record<string, Record<string, unknown>>;
-  }) {
-    void snapshot.global;
-    this.providerSettings = new Map(
-      Object.entries(snapshot.providers).map(([provider, settings]) => [
-        provider,
-        structuredClone(settings),
-      ]),
-    );
-  },
-  getProviderSettings(providerName: string) {
-    return (
-      this.providerSettings.get(providerName) ??
-      this.providerSettings.set(providerName, {}).get(providerName)!
-    );
-  },
-  setProviderSetting(providerName: string, key: string, value: unknown) {
-    this.getProviderSettings(providerName)[key] = value;
-  },
-  setCurrentProfileName(_name: string | null) {
-    void _name;
-  },
-  getCurrentProfileName() {
-    return null;
-  },
-};
-
-const providerManagerStub = {
-  available: ['openai'],
-  activeProviderName: 'openai',
-  providerLookup: new Map<
-    string,
-    { name: string; getDefaultModel?: () => string }
-  >([['openai', { name: 'openai', getDefaultModel: () => 'gpt-4o' }]]),
-  listProviders() {
-    return this.available.slice();
-  },
-  getProviderByName(name: string) {
-    return this.providerLookup.get(name) ?? null;
-  },
-  getActiveProviderName() {
-    return this.activeProviderName;
-  },
-  getActiveProvider() {
-    return (
-      this.providerLookup.get(this.activeProviderName) ?? {
-        name: this.activeProviderName,
-        getDefaultModel: () => 'gpt-4o',
-      }
-    );
-  },
-};
-
-await mock.module('../runtimeSettings.js', () => ({
-  getCliRuntimeServices: () => ({
-    config: configStub,
-    settingsService: settingsServiceStub,
-    providerManager: providerManagerStub,
-    profileManager: {
-      loadProfile: async (_name: string) => {
-        void _name;
-        throw new Error('not used for standard profiles');
-      },
-    },
-  }),
+await mock.module('../../auth/index.js', () => ({
   createProviderKeyStorage: () => createProviderKeyStorageDouble(),
-  setEphemeralSetting: (key: string, value: unknown) =>
-    configStub.setEphemeralSetting(key, value),
-  getEphemeralSetting: (key: string) => configStub.getEphemeralSetting(key),
-  getEphemeralSettings: () => configStub.getEphemeralSettings(),
-  clearActiveModelParam: (_key: string) => {
-    void _key;
-  },
-  getActiveModelParams: () => ({}),
-  setActiveModelParam: (_key: string, _value: unknown) => {
-    void _key;
-    void _value;
-  },
-  isCliRuntimeStatelessReady: () => true,
-  isCliStatelessProviderModeEnabled: () => true,
-  switchActiveProvider: async (providerName: string) => {
-    providerManagerStub.activeProviderName = providerName;
-    return { infoMessages: [] as string[], changed: true };
-  },
-  setActiveModel: async (model: string) => {
-    void model;
-    return { nextModel: 'gpt-4o' };
-  },
-  updateActiveProviderApiKey: async (_apiKey: string | null) => {
-    void _apiKey;
-    return {};
-  },
-  updateActiveProviderBaseUrl: async (_baseUrl: string | null) => {
-    void _baseUrl;
-    return {};
-  },
 }));
+import type { ProviderSwitcher } from '../providerSwitch.js';
 
-const { applyProfileWithGuards } = await import('../profileApplication.js');
+const stubSwitchProvider: ProviderSwitcher = async (name) => {
+  root().manager.setActiveProvider(name);
+  root().settings.set('activeProvider', name);
+  return {
+    infoMessages: [],
+    changed: true,
+    previousProvider: null,
+    nextProvider: name,
+  };
+};
+
+const { applyProfileCascade } = await import('../profileApplication.js');
+
+function applyProfileForTest(
+  profile: Profile,
+  options: Parameters<typeof applyProfileCascade>[1],
+  switchProvider: ProviderSwitcher,
+): ReturnType<typeof applyProfileCascade> {
+  return applyProfileCascade(
+    profile,
+    options,
+    root().config,
+    root().settings,
+    root().manager,
+    root().store,
+    switchProvider,
+    assembleModelSelection(root().settingsOwner),
+    {
+      readEndpoint: () => root().settingsOwner.readSelectedEndpoint(),
+      applyParameter: (key, value) =>
+        root().settingsOwner.writeUserParameter(key, value),
+    },
+  );
+}
 
 function standardProfile(authKeyName: unknown): Profile {
   return {
@@ -198,7 +106,7 @@ function standardProfile(authKeyName: unknown): Profile {
 }
 
 function providerAuthKey(): unknown {
-  return settingsServiceStub.getProviderSettings('openai')['auth-key'];
+  return root().settings.getProviderSettings('openai')['auth-key'];
 }
 
 async function captureRejection(
@@ -219,14 +127,8 @@ function asError(value: unknown): Error | undefined {
 
 describe('issue #2916: unresolved auth-key-name rejects profile application', () => {
   beforeEach(() => {
-    configStub.ephemerals.clear();
-    configStub.model = 'gpt-4o';
-    settingsServiceStub.providerSettings.clear();
-    providerManagerStub.available = ['openai'];
-    providerManagerStub.activeProviderName = 'openai';
-    providerManagerStub.providerLookup = new Map([
-      ['openai', { name: 'openai', getDefaultModel: () => 'gpt-4o' }],
-    ]);
+    root().manager.setActiveProvider('openai');
+    root().settingsOwner.initializeProviderSelection('openai', 'gpt-4o');
     keyStorage = {
       mode: 'not-found',
       resolvedValue: null,
@@ -246,7 +148,7 @@ describe('issue #2916: unresolved auth-key-name rejects profile application', ()
     keyStorage.mode = 'not-found';
 
     const { thrown, message } = await captureRejection(
-      applyProfileWithGuards(standardProfile('work-key')),
+      applyProfileForTest(standardProfile('work-key'), {}, stubSwitchProvider),
     );
 
     expect(thrown).toBeDefined();
@@ -260,7 +162,7 @@ describe('issue #2916: unresolved auth-key-name rejects profile application', ()
     keyStorage.error = storageError;
 
     const { thrown, message } = await captureRejection(
-      applyProfileWithGuards(standardProfile('prod-key')),
+      applyProfileForTest(standardProfile('prod-key'), {}, stubSwitchProvider),
     );
 
     const thrownError = asError(thrown);
@@ -289,7 +191,7 @@ describe('issue #2916: unresolved auth-key-name rejects profile application', ()
     };
 
     const { thrown, message } = await captureRejection(
-      applyProfileWithGuards(profileWithFallback),
+      applyProfileForTest(profileWithFallback, {}, stubSwitchProvider),
     );
 
     expect(thrown).toBeDefined();
@@ -315,19 +217,19 @@ describe('issue #2916: unresolved auth-key-name rejects profile application', ()
     };
 
     const { thrown, message } = await captureRejection(
-      applyProfileWithGuards(profileWithKeyfile),
+      applyProfileForTest(profileWithKeyfile, {}, stubSwitchProvider),
     );
 
     expect(thrown).toBeDefined();
     expect(message).toContain("Named key 'ghost-key' not found");
     expect(providerAuthKey()).not.toBe('keyfile-fallback-secret');
     expect(
-      settingsServiceStub.getProviderSettings('openai')['auth-keyfile'],
+      root().settings.getProviderSettings('openai')['auth-keyfile'],
     ).toBeUndefined();
   });
 
   it('does not replace a previously configured provider credential when the named key is unresolved', async () => {
-    settingsServiceStub.setProviderSetting(
+    root().settings.setProviderSetting(
       'openai',
       'auth-key',
       'prior-configured-secret',
@@ -335,7 +237,7 @@ describe('issue #2916: unresolved auth-key-name rejects profile application', ()
     keyStorage.mode = 'not-found';
 
     const { thrown, message } = await captureRejection(
-      applyProfileWithGuards(standardProfile('ghost-key')),
+      applyProfileForTest(standardProfile('ghost-key'), {}, stubSwitchProvider),
     );
 
     expect(thrown).toBeDefined();
@@ -347,17 +249,19 @@ describe('issue #2916: unresolved auth-key-name rejects profile application', ()
     keyStorage.mode = 'not-found';
 
     const { thrown } = await captureRejection(
-      applyProfileWithGuards(standardProfile('ghost-key')),
+      applyProfileForTest(standardProfile('ghost-key'), {}, stubSwitchProvider),
     );
 
     expect(thrown).toBeDefined();
-    expect(configStub.getEphemeralSetting('auth-key-name')).toBeUndefined();
+    expect(
+      root().settingsOwner.readNamedParameter('auth-key-name'),
+    ).toBeUndefined();
   });
 
   it('preserves prior application state when named-key resolution fails', async () => {
-    configStub.setEphemeralSetting('context-limit', 50000);
-    configStub.setEphemeralSetting('auth-key', 'prior-applied-secret');
-    settingsServiceStub.setProviderSetting(
+    root().settingsOwner.writeUserParameter('context-limit', 50000);
+    root().settingsOwner.writeUserParameter('auth-key', 'prior-applied-secret');
+    root().settings.setProviderSetting(
       'openai',
       'auth-key',
       'prior-provider-secret',
@@ -365,21 +269,25 @@ describe('issue #2916: unresolved auth-key-name rejects profile application', ()
     keyStorage.mode = 'not-found';
 
     const { thrown, message } = await captureRejection(
-      applyProfileWithGuards(standardProfile('ghost-key')),
+      applyProfileForTest(standardProfile('ghost-key'), {}, stubSwitchProvider),
     );
 
     expect(thrown).toBeDefined();
     expect(message).toContain("Named key 'ghost-key' not found");
     // Prior non-auth ephemeral must survive a failed apply.
-    expect(configStub.getEphemeralSetting('context-limit')).toBe(50000);
+    expect(root().settingsOwner.readNamedParameter('context-limit')).toBe(
+      50000,
+    );
     // Prior auth ephemeral must survive a failed apply.
-    expect(configStub.getEphemeralSetting('auth-key')).toBe(
+    expect(root().settingsOwner.readNamedParameter('auth-key')).toBe(
       'prior-applied-secret',
     );
     // Prior provider auth must survive a failed apply.
     expect(providerAuthKey()).toBe('prior-provider-secret');
     // The unresolved new name must never be installed.
-    expect(configStub.getEphemeralSetting('auth-key-name')).toBeUndefined();
+    expect(
+      root().settingsOwner.readNamedParameter('auth-key-name'),
+    ).toBeUndefined();
   });
 
   const unresolvedStoredResults: ReadonlyArray<{
@@ -398,13 +306,19 @@ describe('issue #2916: unresolved auth-key-name rejects profile application', ()
       keyStorage.resolvedValue = storedValue;
 
       const { thrown, message } = await captureRejection(
-        applyProfileWithGuards(standardProfile('work-key')),
+        applyProfileForTest(
+          standardProfile('work-key'),
+          {},
+          stubSwitchProvider,
+        ),
       );
 
       expect(thrown).toBeDefined();
       expect(message).toContain("Named key 'work-key' not found");
       expect(providerAuthKey()).toBeUndefined();
-      expect(configStub.getEphemeralSetting('auth-key-name')).toBeUndefined();
+      expect(
+        root().settingsOwner.readNamedParameter('auth-key-name'),
+      ).toBeUndefined();
     });
   }
 
@@ -412,10 +326,16 @@ describe('issue #2916: unresolved auth-key-name rejects profile application', ()
     keyStorage.mode = 'resolved';
     keyStorage.resolvedValue = 'resolved-secret-value';
 
-    const result = await applyProfileWithGuards(standardProfile('work-key'));
+    const result = await applyProfileForTest(
+      standardProfile('work-key'),
+      {},
+      stubSwitchProvider,
+    );
 
     expect(result.providerName).toBe('openai');
-    expect(configStub.getEphemeralSetting('auth-key-name')).toBe('work-key');
+    expect(root().settingsOwner.readNamedParameter('auth-key-name')).toBe(
+      'work-key',
+    );
     expect(providerAuthKey()).toBe('resolved-secret-value');
   });
 
@@ -449,9 +369,11 @@ describe('issue #2916: unresolved auth-key-name rejects profile application', ()
         },
       };
 
-      await applyProfileWithGuards(profileWithInline);
+      await applyProfileForTest(profileWithInline, {}, stubSwitchProvider);
 
-      expect(configStub.getEphemeralSetting('auth-key-name')).toBeUndefined();
+      expect(
+        root().settingsOwner.readNamedParameter('auth-key-name'),
+      ).toBeUndefined();
       expect(providerAuthKey()).toBe('inline-direct-key');
     });
   }

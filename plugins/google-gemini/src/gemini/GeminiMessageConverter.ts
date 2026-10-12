@@ -10,7 +10,7 @@ import {
   type IContent,
   type MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { isGemini3Model } from './modelClassification.js';
 import { buildToolResponsePayload } from '@vybestack/llxprt-code-providers/utils/toolResponsePayload.js';
 
@@ -77,7 +77,7 @@ export function convertAiBlocksToGeminiParts(
 export function convertToolContentToGeminiContents(
   content: IContent,
   currentModel: string,
-  configForMessages: unknown,
+  configForMessages: OutputLimitConfig | undefined,
   contents: Array<{ role: string; parts: Part[] }>,
 ): void {
   const toolResponseBlock = content.blocks.find(
@@ -91,7 +91,7 @@ export function convertToolContentToGeminiContents(
   );
   const payload = buildToolResponsePayload(
     toolResponseBlock,
-    configForMessages as Config | undefined,
+    configForMessages,
   );
   const frPart: Part = {
     functionResponse: {
@@ -126,7 +126,7 @@ export function convertToolContentToGeminiContents(
 export function convertHistoryToGeminiFormat(
   content: IContent[],
   currentModel = 'gemini-2.5-pro',
-  configForMessages?: unknown,
+  configForMessages?: OutputLimitConfig,
 ): Array<{ role: string; parts: Part[] }> {
   const contents: Array<{ role: string; parts: Part[] }> = [];
   for (const c of content) {

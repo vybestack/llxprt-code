@@ -1,3 +1,4 @@
+import { CoreToolScheduler } from '../../coreToolScheduler.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -5,6 +6,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import { bindSchedulerOwner } from '../../../session/assembleSchedulerOwner.js';
 import { AgenticLoop } from '../AgenticLoop.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -54,13 +56,14 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
 
       const toolRegistry = createToolRegistryForTest([tool]);
       const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-      const config = createTestConfig({
-        messageBus,
-        toolRegistry,
-        policyEngine: createAllowPolicyEngine(),
-        interactive: true,
-        approvalMode: ApprovalMode.YOLO,
-      });
+      const { config: config, settingsOwner: configSettingsOwner } =
+        createTestConfig({
+          messageBus,
+          toolRegistry,
+          policyEngine: createAllowPolicyEngine(),
+          interactive: true,
+          approvalMode: ApprovalMode.YOLO,
+        });
 
       const { client, turnMessages } = createScriptedAgentClient([
         [
@@ -71,6 +74,20 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
       ]);
 
       const loop = new AgenticLoop({
+        createSchedulerOwner: bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
         agentClient: client,
         config,
         messageBus,
@@ -145,19 +162,38 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
 
       const toolRegistry = createToolRegistryForTest([tool]);
       const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-      const config = createTestConfig({
-        messageBus,
-        toolRegistry,
-        policyEngine: createAllowPolicyEngine(),
-        interactive: true,
-        approvalMode: ApprovalMode.YOLO,
-        imagePayloadBudgetBytes: 1,
-      });
+      const { config: config, settingsOwner: configSettingsOwner } =
+        createTestConfig({
+          messageBus,
+          toolRegistry,
+          policyEngine: createAllowPolicyEngine(),
+          interactive: true,
+          approvalMode: ApprovalMode.YOLO,
+          imagePayloadBudgetBytes: 1,
+        });
       const { client, turnMessages } = createScriptedAgentClient([
         [toolCallRequestEvent('image_tool', 'call-1'), finishedEvent()],
         [contentEvent('final-response'), finishedEvent()],
       ]);
-      const loop = new AgenticLoop({ agentClient: client, config, messageBus });
+      const loop = new AgenticLoop({
+        createSchedulerOwner: bindSchedulerOwner(
+          config,
+          messageBus,
+          config.isInteractive(),
+          toolRegistry,
+          (options) => new CoreToolScheduler(options),
+          () => configSettingsOwner.readToolExecutionPolicy(),
+          () =>
+            configSettingsOwner.readToolGovernance(
+              config.getExcludeTools() ?? [],
+            ),
+          undefined,
+          configSettingsOwner.telemetry,
+        ),
+        agentClient: client,
+        config,
+        messageBus,
+      });
 
       const eventsPromise = collectEvents(
         loop,
@@ -184,13 +220,14 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
   it('forces one more turn when steer arrives during a final-answer stream (no tool calls)', async () => {
     const toolRegistry = createToolRegistryForTest([]);
     const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.YOLO,
+      });
 
     const { client, turnMessages } = createScriptedAgentClient([
       // Turn 1: model responds with text only (no tool calls) and finishes
@@ -200,6 +237,20 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
     ]);
 
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
       agentClient: client,
       config,
       messageBus,
@@ -232,13 +283,14 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
 
     const toolRegistry = createToolRegistryForTest([tool]);
     const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.YOLO,
+      });
 
     const { client, turnMessages } = createScriptedAgentClient([
       [toolCallRequestEvent('record_tool', 'call-1', {}), finishedEvent()],
@@ -246,6 +298,20 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
     ]);
 
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
       agentClient: client,
       config,
       messageBus,
@@ -269,19 +335,34 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
   it('is a no-op when the loop is not running', () => {
     const toolRegistry = createToolRegistryForTest([]);
     const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.YOLO,
+      });
 
     const { client } = createScriptedAgentClient([
       [contentEvent('done'), finishedEvent()],
     ]);
 
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
       agentClient: client,
       config,
       messageBus,
@@ -302,13 +383,14 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
 
     const toolRegistry = createToolRegistryForTest([tool]);
     const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: true,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: true,
+        approvalMode: ApprovalMode.YOLO,
+      });
 
     const { client, turnMessages } = createScriptedAgentClient([
       [toolCallRequestEvent('record_tool', 'call-1', {}), finishedEvent()],
@@ -316,6 +398,20 @@ describe('AgenticLoop steering (injectSteer / drainSteer)', () => {
     ]);
 
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        configSettingsOwner.telemetry,
+      ),
       agentClient: client,
       config,
       messageBus,

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { captureResponsesRequest } from './responses-request.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
@@ -84,18 +85,14 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     return {
       providerName: this.name,
       logger: this.logger,
-      getProviderBaseURL: (options) => this.resolveEffectiveBaseURL(options),
-      getCustomHeaders: (options) => this.getCustomHeaders(options),
       isCodexMode: () => this.isCodexMode(),
       getCodexAccountId: () => this.getCodexAccountId(),
       resolveAuthTokenForPrompt: () => this.getAuthTokenForPrompt(),
       shouldRetryOnError: (error) => this.shouldRetryOnError(error),
-      getDefaultModel: () => this.getDefaultModel(),
       getMediaTransportCapabilities: (isCodex) =>
         isCodex
           ? declaredMediaTransportCapabilities('codex')
           : this.getMediaTransportCapabilities(),
-      getGlobalConfig: () => this.globalConfig,
       getUnallowedModelParameters: this.getUnallowedModelParameters,
       getWebSocketTransport: () => this.resolveWebSocketTransport(),
       // Codex statefulness is only valid over the WebSocket transport, so the
@@ -174,7 +171,15 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       );
     }
     yield* executeOpenAIResponsesRequest(
-      options,
+      captureResponsesRequest(
+        options,
+        this.name,
+        this.resolveEffectiveBaseURL(options) ?? 'https://api.openai.com/v1',
+        this.getCustomHeaders(options),
+        this.getDefaultModel(),
+        this.requestMediaResolver,
+        this.requestMediaBudgetBytes,
+      ),
       this.buildExecutorDeps(),
       preparedRequestContext,
     );
@@ -189,13 +194,22 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection> {
     const normalized = await this.normalizeOptionsForProjection(options);
-    const requestContext = await buildResponsesRequestContextForProjection(
+    const request = captureResponsesRequest(
       normalized,
+      this.name,
+      this.resolveEffectiveBaseURL(normalized) ?? 'https://api.openai.com/v1',
+      this.getCustomHeaders(normalized),
+      this.getDefaultModel(),
+      this.requestMediaResolver,
+      this.requestMediaBudgetBytes,
+    );
+    const requestContext = await buildResponsesRequestContextForProjection(
+      request,
       this.buildExecutorDeps(),
     );
     const transportToken = Object.freeze({});
     this.preparedPromptEnvelopes.set(transportToken, requestContext);
-    const pdfEnabled = isResponsesPdfEnabled(normalized);
+    const pdfEnabled = isResponsesPdfEnabled(request);
     const projection = projectOpenAIResponsesPromptEnvelope(
       requestContext.request,
       {

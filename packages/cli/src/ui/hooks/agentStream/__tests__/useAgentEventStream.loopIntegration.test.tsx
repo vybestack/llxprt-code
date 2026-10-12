@@ -1,8 +1,13 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { TaskLaunchOwner } from '@vybestack/llxprt-code-agents';
+import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
 
 import type {
   IContent,
@@ -31,12 +36,12 @@ import type {
  *        (approve via ProceedOnce AND reject via Cancel), NOT via an
  *        approvalHandler — production never wires one.
  */
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect, vi, afterEach } from 'bun:test';
+import { rmSync } from 'node:fs';
 import { renderHook } from '../../../../__tests__/render.js';
 import { act } from 'react';
 import {
   createAgenticLoop,
-  createToolScheduler,
   mapLoopStream,
   type AgentEvent,
   type Agent,
@@ -44,7 +49,6 @@ import {
   type DisplayCallbacks,
   type AgentClientContract,
 } from '@vybestack/llxprt-code-agents';
-import { createSchedulerRegistryDelegate } from './schedulerRegistryTestHelper.js';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
   AgentEventType,
@@ -58,13 +62,10 @@ import type {
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import {
-  ApprovalMode,
-  DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
-} from '@vybestack/llxprt-code-core/config/configTypes.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type {
   ToolRegistry,
   ToolCallConfirmationDetails,
@@ -72,6 +73,7 @@ import type {
 import type { AgentEventRouter } from '../useAgentEventStream.js';
 import { useAgentEventStream } from '../useAgentEventStream.js';
 import {
+  createLoopConfig,
   toolCallRequestEvent,
   contentEvent,
   finishedEvent,
@@ -117,8 +119,12 @@ function createScriptedAgentClient(scripts: ServerAgentStreamEvent[][]): {
     },
   } as unknown as ReturnType<AgentClientContract['getChat']>;
 
+  const baseClient = createClientBase();
   const client: AgentClientContract = {
-    ...createClientBase(),
+    ...baseClient,
+    get tools() {
+      return baseClient.tools;
+    },
     getChat() {
       return chat;
     },
@@ -157,51 +163,14 @@ function createScriptedAgentClient(scripts: ServerAgentStreamEvent[][]): {
 // (agenticLoop-test-helpers.ts), which are not publicly exported. We build
 // real, correctly-typed lambdas for every Config method the loop calls.
 
-function createTestConfig(options: {
-  messageBus: MessageBus;
-  toolRegistry: ToolRegistry;
-  policyEngine: PolicyEngine;
-  interactive: boolean;
-  approvalMode?: ApprovalMode;
-}): Config {
-  const { messageBus, toolRegistry, policyEngine, interactive } = options;
-  const approvalMode = options.approvalMode ?? ApprovalMode.YOLO;
-  const fixture: Record<string, unknown> = {
-    getSessionId: () => 'loop-integration-test',
-    getUsageStatisticsEnabled: () => false,
-    getDebugMode: () => false,
-    getImagePayloadBudgetBytes: () => DEFAULT_IMAGE_PAYLOAD_BUDGET_BYTES,
-    getApprovalMode: () => approvalMode,
-    getEphemeralSettings: () => ({}),
-    getEphemeralSetting: () => undefined,
-    getAllowedTools: () => [],
-    getExcludeTools: () => [],
-    getContentGeneratorConfig: () => ({ model: 'test-model' }),
-    getModel: () => 'test-model',
-    getToolRegistry: () => toolRegistry,
-    getMessageBus: () => messageBus,
-    getPolicyEngine: () => policyEngine,
-    getTelemetryLogPromptsEnabled: () => false,
-    isInteractive: () => interactive,
-    getNonInteractive: () => !interactive,
-    getToolSchedulerFactory: () => createToolScheduler,
-  };
-  const delegate = createSchedulerRegistryDelegate({
-    config: fixture as unknown as Config,
-    messageBus,
-    toolRegistry,
-    createScheduler: async (schedulerOptions) =>
-      createToolScheduler({
-        config: fixture as unknown as Config,
-        messageBus,
-        toolRegistry,
-        toolContextInteractiveMode: schedulerOptions.interactiveMode ?? true,
-        getPreferredEditor: () => undefined,
-        onEditorClose: () => {},
-      }),
-  });
-  return { ...fixture, ...delegate } as unknown as Config;
-}
+const ownedConfigs: Array<{
+  config: Config;
+  directory: string;
+  settingsOwner: SessionSettingsOwner;
+}> = [];
+
+const createTestConfig = (options: Parameters<typeof createLoopConfig>[0]) =>
+  createLoopConfig(options, (root) => ownedConfigs.push(root));
 
 function createToolRegistryForTest(tools: MockTool[]): ToolRegistry {
   const toolMap = new Map<string, MockTool>();
@@ -242,6 +211,8 @@ function createAskPolicyEngine(): PolicyEngine {
 
 interface RealEngineAgentOptions {
   agentClient: AgentClientContract;
+  settingsOwner: SessionSettingsOwner;
+  settingsService: SettingsService;
   config: Config;
   messageBus: MessageBus;
   interactiveMode?: boolean;
@@ -258,6 +229,7 @@ function createRealEngineAgent(opts: RealEngineAgentOptions): Agent {
   const editorCallbacksHolder =
     opts.editorCallbacksHolder ??
     ({ current: {} } as { current: Record<string, unknown> });
+  const taskLaunchOwner = new TaskLaunchOwner(new AsyncTaskManager());
   const agent = {
     async chat() {
       return { text: '', toolCalls: [], finishReason: 'stop' };
@@ -270,6 +242,15 @@ function createRealEngineAgent(opts: RealEngineAgentOptions): Agent {
       },
     ): AsyncIterable<AgentEvent> {
       const loop = createAgenticLoop({
+        telemetry: opts.settingsOwner.telemetry,
+        taskLaunchOwner,
+        readShellJobSettings: () =>
+          resolveShellJobSettings(opts.settingsService),
+        readExecutionPolicy: () => opts.settingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          opts.settingsOwner.readToolGovernance(
+            opts.config.getExcludeTools() ?? [],
+          ),
         agentClient: opts.agentClient,
         config: opts.config,
         messageBus: opts.messageBus,
@@ -358,7 +339,10 @@ function createRealEngineAgent(opts: RealEngineAgentOptions): Agent {
     },
     listProviders: () => [],
     listTools: () => [],
-    async dispose() {},
+    async dispose() {
+      taskLaunchOwner.closeAdmissionAndAbort();
+      await taskLaunchOwner.join();
+    },
   } as unknown as Agent;
   return agent;
 }
@@ -368,7 +352,17 @@ function unused(): never {
 }
 
 function createClientBase(): AgentClientContract {
+  let selection: import('@vybestack/llxprt-code-tools').ToolSelection =
+    createToolRegistryForTest([]);
   return {
+    get tools() {
+      return selection;
+    },
+    bindToolSelection: (
+      tools: import('@vybestack/llxprt-code-tools').ToolSelection,
+    ) => {
+      selection = tools;
+    },
     async initialize() {},
     isInitialized: () => true,
     hasChatInitialized: () => true,
@@ -478,10 +472,13 @@ type CancellationLoopObservation = CancellationLoopDetails &
   ({ readonly signalAborted: true } | { readonly signalAborted: false });
 
 describe('useAgentEventStream loop integration', () => {
-  // Each test builds its own fixture and registry delegate inside its
-  // observe helper, so scheduler state is isolated per test with nothing
-  // global left to clear between them.
-
+  afterEach(async () => {
+    for (const { config, directory, settingsOwner } of ownedConfigs.splice(0)) {
+      await settingsOwner.dispose();
+      await config.dispose();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
   const observeMultiTurnToolCallContinuation =
     async (): Promise<MultiTurnLoopObservation> => {
       const tool = new MockTool({
@@ -494,7 +491,7 @@ describe('useAgentEventStream loop integration', () => {
       const toolRegistry = createToolRegistryForTest([tool]);
       const policyEngine = createAllowPolicyEngine();
       const messageBus = new MessageBus(policyEngine, false);
-      const config = createTestConfig({
+      const { config, settingsOwner, settingsService } = createTestConfig({
         messageBus,
         toolRegistry,
         policyEngine,
@@ -510,9 +507,12 @@ describe('useAgentEventStream loop integration', () => {
         [contentEvent('final answer'), finishedEvent()],
       ]);
 
+      client.bindToolSelection(toolRegistry);
       const agent = createRealEngineAgent({
         agentClient: client,
         config,
+        settingsOwner,
+        settingsService,
         messageBus,
         interactiveMode: true,
       });
@@ -587,7 +587,7 @@ describe('useAgentEventStream loop integration', () => {
       const policyEngine = createAllowPolicyEngine();
       const messageBus = new MessageBus(policyEngine, false);
       const toolRegistry = createToolRegistryForTest([]);
-      const config = createTestConfig({
+      const { config, settingsOwner, settingsService } = createTestConfig({
         messageBus,
         toolRegistry,
         policyEngine,
@@ -633,9 +633,12 @@ describe('useAgentEventStream loop integration', () => {
         },
       };
 
+      hangingClient.bindToolSelection(toolRegistry);
       const agent = createRealEngineAgent({
         agentClient: hangingClient,
         config,
+        settingsOwner,
+        settingsService,
         messageBus,
         interactiveMode: true,
       });
@@ -761,7 +764,7 @@ describe('useAgentEventStream loop integration', () => {
     const toolRegistry = createToolRegistryForTest([tool]);
     const policyEngine = createAskPolicyEngine();
     const messageBus = new MessageBus(policyEngine, false);
-    const config = createTestConfig({
+    const { config, settingsOwner, settingsService } = createTestConfig({
       messageBus,
       toolRegistry,
       policyEngine,
@@ -769,9 +772,12 @@ describe('useAgentEventStream loop integration', () => {
       approvalMode: ApprovalMode.DEFAULT,
     });
     const { client } = createScriptedAgentClient(scripts);
+    client.bindToolSelection(toolRegistry);
     const agent = createRealEngineAgent({
       agentClient: client,
       config,
+      settingsOwner,
+      settingsService,
       messageBus,
       interactiveMode: true,
     });
@@ -856,7 +862,7 @@ describe('useAgentEventStream loop integration', () => {
     const policyEngine = createAllowPolicyEngine();
     const messageBus = new MessageBus(policyEngine, false);
     const toolRegistry = createToolRegistryForTest([]);
-    const config = createTestConfig({
+    const { config, settingsOwner, settingsService } = createTestConfig({
       messageBus,
       toolRegistry,
       policyEngine,
@@ -866,9 +872,12 @@ describe('useAgentEventStream loop integration', () => {
     const { client } = createScriptedAgentClient([]);
     const displayCallbacksHolder = { current: {} as DisplayCallbacks };
     const editorCallbacksHolder = { current: {} as Record<string, unknown> };
+    client.bindToolSelection(toolRegistry);
     const agent = createRealEngineAgent({
       agentClient: client,
       config,
+      settingsOwner,
+      settingsService,
       messageBus,
       interactiveMode: true,
       displayCallbacksHolder,

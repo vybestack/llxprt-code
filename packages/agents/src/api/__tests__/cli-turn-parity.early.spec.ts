@@ -1,8 +1,12 @@
+import { resolveShellJobSettings } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { withFixtureAgent } from './helpers/agentHarness.js';
+import { TaskLaunchOwner } from '../../session/task-launch-owner.js';
+import { AsyncTaskManager } from '@vybestack/llxprt-code-core';
 
 /**
  * @plan:PLAN-20260621-COREAPIREMED.P07
@@ -67,13 +71,11 @@ import {
   mapLoopStream,
   type AgentEvent,
   type Agent,
-  type ApprovalHandler,
 } from '@vybestack/llxprt-code-agents';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
 import {
   buildCliStyleConfig,
   projectEvents,
-  type Config,
   type MessageBus,
 } from './helpers/buildCliStyleConfig.js';
 import { drain, internalConfig } from './helpers/agentHarness.js';
@@ -86,15 +88,24 @@ import { drain, internalConfig } from './helpers/agentHarness.js';
  * so Path A and Path B project to the SAME comparable event space.
  */
 async function driveReferenceLoop(
-  config: Config,
+  built: Awaited<ReturnType<typeof buildCliStyleConfig>>,
+  agentClient: Agent['agentClient'],
   messageBus: MessageBus,
   input: string,
 ): Promise<readonly AgentEvent[]> {
-  const approvalHandler: ApprovalHandler = async () => ({
+  const { config, settingsOwner, settingsService } = built;
+  const approvalHandler = async () => ({
     outcome: ToolConfirmationOutcome.ProceedOnce,
   });
+  const taskLaunchOwner = new TaskLaunchOwner(new AsyncTaskManager());
   const loop = createAgenticLoop({
-    agentClient: config.getAgentClient(),
+    taskLaunchOwner,
+    telemetry: settingsOwner.telemetry,
+    readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+    getToolGovernance: () =>
+      settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
+    readShellJobSettings: () => resolveShellJobSettings(settingsService),
+    agentClient,
     config,
     messageBus,
     interactiveMode: false,
@@ -104,7 +115,12 @@ async function driveReferenceLoop(
   const controller = new AbortController();
   const loopEvents = loop.run(input, controller.signal);
   const agentEvents = mapLoopStream(loopEvents);
-  return drain(agentEvents);
+  try {
+    return await drain(agentEvents);
+  } finally {
+    taskLaunchOwner.closeAdmissionAndAbort();
+    await taskLaunchOwner.join();
+  }
 }
 
 /**
@@ -160,17 +176,23 @@ describe('CLI turn-parity (early RED) @plan:PLAN-20260621-COREAPIREMED.P07 @requ
     try {
       const config = built.config;
       const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
         config,
+        mcpRuntime: built.mcpRuntime,
         onApproval: () => ToolConfirmationOutcome.ProceedOnce,
       });
+      return await withFixtureAgent(agent, async () => {
+        // REQ-INT-001: the adopted Config is the SAME instance.
+        expect(internalConfig(agent)).toBe(config);
 
-      // REQ-INT-001: the adopted Config is the SAME instance.
-      expect(internalConfig(agent)).toBe(config);
-
-      // REQ-INT-001: the stream yields exactly one terminal done.
-      const events = await drain(agent.stream('hello'));
-      const doneEvents = events.filter((e) => e.type === 'done');
-      expect(doneEvents).toHaveLength(1);
+        // REQ-INT-001: the stream yields exactly one terminal done.
+        const events = await drain(agent.stream('hello'));
+        const doneEvents = events.filter((e) => e.type === 'done');
+        expect(doneEvents).toHaveLength(1);
+      });
     } finally {
       await built.cleanup();
     }
@@ -183,40 +205,48 @@ describe('CLI turn-parity (early RED) @plan:PLAN-20260621-COREAPIREMED.P07 @requ
       // Config + MessageBus + FakeProvider script so it does not drain the
       // Path B reference drive.
       const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
         config: built.config,
+        mcpRuntime: built.mcpRuntime,
         onApproval: () => ToolConfirmationOutcome.ProceedOnce,
       });
-      const pathAEvents = await drain(agent.stream('hello'));
-      const pathA = projectEvents(pathAEvents);
+      return await withFixtureAgent(agent, async () => {
+        const pathAEvents = await drain(agent.stream('hello'));
+        const pathA = projectEvents(pathAEvents);
 
-      // Path B: the reference AgenticLoop drive over an INDEPENDENT config so
-      // the finite FakeProvider script is not starved by Path A.
-      const builtRef = await buildCliStyleConfig('parity-toolcall.jsonl');
-      try {
-        const pathBEvents = await driveReferenceLoop(
-          builtRef.config,
-          builtRef.messageBus,
-          'hello',
-        );
-        const pathB = projectEvents(pathBEvents);
+        // Path B: the reference AgenticLoop drive over an INDEPENDENT config so
+        // the finite FakeProvider script is not starved by Path A.
+        const builtRef = await buildCliStyleConfig('parity-toolcall.jsonl');
+        try {
+          const pathBEvents = await driveReferenceLoop(
+            builtRef,
+            builtRef.agentClient,
+            builtRef.messageBus,
+            'hello',
+          );
+          const pathB = projectEvents(pathBEvents);
 
-        // REQ-INT-002: same projected tool names, isError flags, and single
-        // terminal done reason. Internal fields (prompt_id, traceId) are
-        // projected away — never compared.
-        expect(pathA).toStrictEqual(pathB);
-      } finally {
-        await builtRef.cleanup();
-      }
+          // REQ-INT-002: same projected tool names, isError flags, and single
+          // terminal done reason. Internal fields (prompt_id, traceId) are
+          // projected away — never compared.
+          expect(pathA).toStrictEqual(pathB);
+        } finally {
+          await builtRef.cleanup();
+        }
 
-      // Behavioral anchor: at least one tool-call event is projected with a
-      // specific tool name (parity must be behavioral, not vacuously empty).
-      const toolCalls = pathA.filter((e) => e.type === 'tool-call');
-      expect(toolCalls).toHaveLength(1);
-      expect(toolCalls[0].toolName).toBe('read_file');
+        // Behavioral anchor: at least one tool-call event is projected with a
+        // specific tool name (parity must be behavioral, not vacuously empty).
+        const toolCalls = pathA.filter((e) => e.type === 'tool-call');
+        expect(toolCalls).toHaveLength(1);
+        expect(toolCalls[0].toolName).toBe('read_file');
 
-      // Behavioral anchor: exactly one terminal done.
-      const dones = pathA.filter((e) => e.type === 'done');
-      expect(dones).toHaveLength(1);
+        // Behavioral anchor: exactly one terminal done.
+        const dones = pathA.filter((e) => e.type === 'done');
+        expect(dones).toHaveLength(1);
+      });
     } finally {
       await built.cleanup();
     }
@@ -234,30 +264,38 @@ describe('CLI turn-parity (early RED) @plan:PLAN-20260621-COREAPIREMED.P07 @requ
             const built = await buildCliStyleConfig(fixture.path);
             try {
               const agent: Agent = await fromConfig({
+                settingsOwner: built.settingsOwner,
+                settingsService: built.settingsService,
+                agentClient: built.agentClient,
+                providerManager: built.providerManager,
                 config: built.config,
+                mcpRuntime: built.mcpRuntime,
                 onApproval: () => ToolConfirmationOutcome.ProceedOnce,
               });
-              const pathAEvents = await drain(agent.stream('hello'));
-              const pathA = projectEvents(pathAEvents);
+              return await withFixtureAgent(agent, async () => {
+                const pathAEvents = await drain(agent.stream('hello'));
+                const pathA = projectEvents(pathAEvents);
 
-              // Path B: reference AgenticLoop drive over an INDEPENDENT
-              // config so the finite FakeProvider script is not drained by
-              // Path A.
-              const builtRef = await buildCliStyleConfig(fixture.path);
-              try {
-                const pathBEvents = await driveReferenceLoop(
-                  builtRef.config,
-                  builtRef.messageBus,
-                  'hello',
-                );
-                const pathB = projectEvents(pathBEvents);
+                // Path B: reference AgenticLoop drive over an INDEPENDENT
+                // config so the finite FakeProvider script is not drained by
+                // Path A.
+                const builtRef = await buildCliStyleConfig(fixture.path);
+                try {
+                  const pathBEvents = await driveReferenceLoop(
+                    builtRef,
+                    builtRef.agentClient,
+                    builtRef.messageBus,
+                    'hello',
+                  );
+                  const pathB = projectEvents(pathBEvents);
 
-                // REQ-INT-002: projected event sequences are equivalent for
-                // every generated turn.
-                expect(pathA).toStrictEqual(pathB);
-              } finally {
-                await builtRef.cleanup();
-              }
+                  // REQ-INT-002: projected event sequences are equivalent for
+                  // every generated turn.
+                  expect(pathA).toStrictEqual(pathB);
+                } finally {
+                  await builtRef.cleanup();
+                }
+              });
             } finally {
               await built.cleanup();
             }

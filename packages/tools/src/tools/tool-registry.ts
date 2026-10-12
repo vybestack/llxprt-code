@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { applyTaskSchemaPolicy } from '../formatters/task-schema-policy.js';
 
 import { type FunctionDeclaration } from '../types/wire-types.js';
 import {
@@ -20,7 +21,6 @@ import {
 } from '../types/tool-context.js';
 import type { IToolRegistryHost } from '../interfaces/IToolRegistryHost.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
-import type { SettingsServiceBoundary } from '../interfaces/index.js';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { parse } from 'shell-quote';
@@ -29,7 +29,6 @@ import { safeJsonStringify } from '../utils/safeJsonStringify.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import { normalizeToolName } from '../formatters/toolNameUtils.js';
 import {
-  buildToolGovernance,
   isToolBlocked,
   type ToolGovernance,
 } from '../formatters/toolGovernanceUtils.js';
@@ -414,6 +413,13 @@ class DiscoveredToolInvocation extends BaseToolInvocation<
   }
 }
 
+export interface RegistryPolicy {
+  readonly hideTaskAsync: boolean;
+  readonly governance: ToolGovernance;
+  readonly lazyMcp: boolean;
+  readonly eagerServers: readonly string[];
+}
+
 export class ToolRegistry {
   private tools: Map<string, AnyDeclarativeTool> = new Map();
   private config: IToolRegistryHost;
@@ -423,10 +429,7 @@ export class ToolRegistry {
 
   private readonly messageBus: IToolMessageBus;
 
-  private readonly settingsService: Pick<
-    SettingsServiceBoundary,
-    'get' | 'getAllGlobalSettings'
-  >;
+  private readonly readSchemaTransforms: () => RegistryPolicy;
 
   /**
    * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
@@ -434,77 +437,33 @@ export class ToolRegistry {
    * @requirement REQ-D01-003
    * @pseudocode lines 122-133
    *
-   * The settings service is a REQUIRED injected dependency (#2534 review
-   * Finding 3): every production construction site injects the real
-   * Config-owned service (config.getSettingsService()); the former optional
-   * parameter silently defaulted to a no-op, hiding missing wiring.
+   * Schema policy is a required live read supplied by the composition root.
+   * The registry cannot read unrelated settings or mutate its owner's store.
    */
   constructor(
     config: IToolRegistryHost,
     messageBus: IToolMessageBus,
-    settingsService: Pick<
-      SettingsServiceBoundary,
-      'get' | 'getAllGlobalSettings'
-    >,
+    readSchemaTransforms: () => RegistryPolicy,
   ) {
     this.config = config;
     this.messageBus = messageBus;
-    this.settingsService = settingsService;
+    this.readSchemaTransforms = readSchemaTransforms;
   }
 
   private getToolGovernance(): ToolGovernance {
-    return buildToolGovernance({
-      getEphemeralSettings: () =>
-        this.config.getEphemeralSettings?.() ?? undefined,
-      getExcludeTools: () => this.config.getExcludeTools?.(),
-    });
+    return this.readSchemaTransforms().governance;
   }
 
   private isToolActive(toolName: string, governance: ToolGovernance): boolean {
     return !isToolBlocked(toolName, governance);
   }
 
-  private getEphemeralPath(key: string): unknown {
-    const ephemerals: unknown = this.config.getEphemeralSettings?.();
-    if (
-      ephemerals === null ||
-      typeof ephemerals !== 'object' ||
-      Array.isArray(ephemerals)
-    ) {
-      return undefined;
-    }
-
-    if (Reflect.has(ephemerals, key)) {
-      return Reflect.get(ephemerals, key);
-    }
-
-    const parts = key.split('.');
-    let current: unknown = ephemerals;
-    for (const part of parts) {
-      if (current === null || typeof current !== 'object') {
-        return undefined;
-      }
-      if (Array.isArray(current) || !Reflect.has(current, part)) {
-        return undefined;
-      }
-      current = Reflect.get(current, part);
-    }
-    return current;
-  }
-
   private isLazyMcpEnabled(): boolean {
-    return this.getEphemeralPath('mcp.lazy') === true;
+    return this.readSchemaTransforms().lazyMcp;
   }
 
   private getEagerServers(): Set<string> {
-    const raw = this.getEphemeralPath('mcp.eagerServers');
-    if (
-      Array.isArray(raw) &&
-      raw.every((v): v is string => typeof v === 'string')
-    ) {
-      return new Set(raw);
-    }
-    return new Set();
+    return new Set(this.readSchemaTransforms().eagerServers);
   }
 
   private getMcpServerNames(): Set<string> {
@@ -643,8 +602,6 @@ export class ToolRegistry {
   async discoverAllTools(): Promise<void> {
     await this.withDiscoveryLock(async () => {
       const newTools = this.buildCoreToolsMap();
-
-      this.config.getPromptRegistry?.()?.clear();
 
       await this.discoverAndRegisterToolsFromCommand(newTools);
 
@@ -801,21 +758,7 @@ export class ToolRegistry {
    * Used to conditionally hide tool parameters that are disabled by settings.
    */
   private getSchemaTransforms(): { hideTaskAsync: boolean } {
-    // Global setting from /settings (subagents.asyncEnabled)
-    const globalSettings = this.settingsService.getAllGlobalSettings();
-    const subagentsSettings = globalSettings['subagents'] as
-      | { asyncEnabled?: boolean }
-      | undefined;
-    const globalAsyncEnabled = subagentsSettings?.asyncEnabled !== false;
-
-    // Profile setting from /set (subagents.async.enabled)
-    const profileAsyncEnabled =
-      this.settingsService.get('subagents.async.enabled') !== false;
-
-    return {
-      hideTaskAsync:
-        globalAsyncEnabled !== true || profileAsyncEnabled !== true,
-    };
+    return this.readSchemaTransforms();
   }
 
   /**
@@ -826,18 +769,7 @@ export class ToolRegistry {
     schema: FunctionDeclaration,
     transforms: { hideTaskAsync: boolean },
   ): FunctionDeclaration {
-    // Hide 'async' parameter from task tool when async subagents are disabled
-    if (schema.name === 'task' && transforms.hideTaskAsync) {
-      const newSchema = structuredClone(schema);
-      const jsonSchema = newSchema.parametersJsonSchema as
-        | { properties?: Record<string, unknown> }
-        | undefined;
-      if (jsonSchema?.properties) {
-        delete jsonSchema.properties.async;
-      }
-      return newSchema;
-    }
-    return schema;
+    return applyTaskSchemaPolicy(schema, transforms);
   }
 
   /**

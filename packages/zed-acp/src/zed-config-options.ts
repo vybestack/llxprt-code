@@ -10,11 +10,37 @@ import {
   coreEvents,
   CoreEvent,
   DebugLogger,
-  type Config,
   type RuntimeModel,
 } from '@vybestack/llxprt-code-core';
-import { parseEphemeralSettingValue } from '@vybestack/llxprt-code-providers/runtime.js';
+import { parseEphemeralSettingValue } from '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js';
 import type { ClientCapabilitiesWithSession } from './acp-types.js';
+
+export function projectZedModelReads(
+  agent: Pick<Agent, 'getModel' | 'listAvailableModels'>,
+): Pick<Agent, 'getModel' | 'listAvailableModels'> {
+  return {
+    getModel: () => agent.getModel(),
+    listAvailableModels: () => agent.listAvailableModels(),
+  };
+}
+
+export function projectZedModelSelection(
+  agent: Pick<Agent, 'getModel' | 'listAvailableModels' | 'setModel'>,
+): Pick<Agent, 'getModel' | 'listAvailableModels' | 'setModel'> {
+  return {
+    ...projectZedModelReads(agent),
+    setModel: (model) => agent.setModel(model),
+  };
+}
+
+export function projectZedOptionSettings(
+  config: Pick<Agent, 'getEphemeralSetting' | 'setEphemeralSetting'>,
+): Pick<Agent, 'getEphemeralSetting' | 'setEphemeralSetting'> {
+  return {
+    getEphemeralSetting: (key) => config.getEphemeralSetting(key),
+    setEphemeralSetting: (key, value) => config.setEphemeralSetting(key, value),
+  };
+}
 
 const REASONING_VALUES = ['minimal', 'low', 'medium', 'high', 'xhigh'];
 const EMOJI_VALUES = ['allowed', 'auto', 'warn', 'error'];
@@ -25,7 +51,7 @@ function selectOption(value: string): acp.SessionConfigSelectOption {
 }
 
 function settingOption(
-  config: Config,
+  config: Pick<Agent, 'getEphemeralSetting' | 'setEphemeralSetting'>,
   id: string,
   name: string,
   category: acp.SessionConfigOptionCategory,
@@ -61,12 +87,10 @@ function modelOption(
 }
 
 async function availableModels(
-  agent: Pick<Agent, 'getProviderStatus'>,
-  config: Config,
+  agent: Pick<Agent, 'listAvailableModels'>,
 ): Promise<RuntimeModel[] | undefined> {
   try {
-    const provider = agent.getProviderStatus().provider;
-    return await config.getProviderManager()?.getAvailableModels(provider);
+    return await agent.listAvailableModels();
   } catch (error) {
     logger.debug(() => `Failed to load available models: ${String(error)}`);
     return undefined;
@@ -74,11 +98,11 @@ async function availableModels(
 }
 
 export async function buildZedConfigOptions(
-  agent: Pick<Agent, 'getModel' | 'getProviderStatus'>,
-  config: Config,
+  agent: Pick<Agent, 'getModel' | 'listAvailableModels'>,
+  config: Pick<Agent, 'getEphemeralSetting' | 'setEphemeralSetting'>,
 ): Promise<acp.SessionConfigOption[]> {
   const currentModel = agent.getModel();
-  const models = await availableModels(agent, config);
+  const models = await availableModels(agent);
   return [
     ...(models === undefined || currentModel.length === 0
       ? []
@@ -103,13 +127,13 @@ export async function buildZedConfigOptions(
 }
 
 export async function applyZedConfigOption(
-  agent: Agent,
-  config: Config,
+  agent: Pick<Agent, 'getModel' | 'listAvailableModels' | 'setModel'>,
+  config: Pick<Agent, 'getEphemeralSetting' | 'setEphemeralSetting'>,
   configId: string,
   value: string,
 ): Promise<acp.SessionConfigOption[]> {
   if (configId === 'model') {
-    const models = await availableModels(agent, config);
+    const models = await availableModels(agent);
     if (models === undefined) {
       throw acp.RequestError.internalError(
         { configId },
@@ -155,8 +179,8 @@ export async function applyZedConfigOption(
 
 export async function zedConfigOptionsForClient(
   capabilities: ClientCapabilitiesWithSession | undefined,
-  agent: Pick<Agent, 'getModel' | 'getProviderStatus'>,
-  config: Config,
+  agent: Pick<Agent, 'getModel' | 'listAvailableModels'>,
+  config: Pick<Agent, 'getEphemeralSetting' | 'setEphemeralSetting'>,
 ): Promise<Pick<acp.NewSessionResponse, 'configOptions'>> {
   return capabilities?.session?.configOptions === true
     ? { configOptions: await buildZedConfigOptions(agent, config) }
@@ -164,8 +188,8 @@ export async function zedConfigOptionsForClient(
 }
 
 export async function setZedConfigOption(
-  agent: Agent,
-  config: Config,
+  agent: Pick<Agent, 'getModel' | 'listAvailableModels' | 'setModel'>,
+  config: Pick<Agent, 'getEphemeralSetting' | 'setEphemeralSetting'>,
   configId: string,
   value: string,
 ): Promise<acp.SetSessionConfigOptionResponse> {
@@ -206,8 +230,8 @@ export function dispatchZedConfigOption(
 }
 
 export function observeZedConfigOptions(
-  agent: Pick<Agent, 'getModel' | 'getProviderStatus'>,
-  config: Config,
+  agent: Pick<Agent, 'getModel' | 'listAvailableModels'>,
+  config: Pick<Agent, 'getEphemeralSetting' | 'setEphemeralSetting'>,
   sendUpdate: (update: acp.SessionUpdate) => Promise<void>,
   onError: (error: unknown) => void,
 ): () => void {
@@ -261,8 +285,8 @@ export function zedSessionConfigOptions(
 }
 
 async function sendConfigOptionUpdate(
-  agent: Pick<Agent, 'getModel' | 'getProviderStatus'>,
-  config: Config,
+  agent: Pick<Agent, 'getModel' | 'listAvailableModels'>,
+  config: Pick<Agent, 'getEphemeralSetting' | 'setEphemeralSetting'>,
   sendUpdate: (update: acp.SessionUpdate) => Promise<void>,
   isStopped: () => boolean,
   onError: (error: unknown) => void,

@@ -5,9 +5,22 @@
  */
 
 import { expect, it } from 'bun:test';
-import { readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
+
+it('resolves every declared Bun entry to an existing source file', () => {
+  const root = resolve(import.meta.dir, '../../packages/core');
+  const manifest = z
+    .object({ exports: z.record(z.object({ bun: z.string().optional() })) })
+    .parse(JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')));
+  const missing = Object.entries(manifest.exports).flatMap(([entry, target]) =>
+    target.bun !== undefined && !existsSync(resolve(root, target.bun))
+      ? [entry]
+      : [],
+  );
+  expect(missing).toEqual([]);
+});
 
 it('builds runtime hooks without emitting nested test helpers', () => {
   const files = readdirSync(

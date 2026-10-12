@@ -15,7 +15,7 @@ export const copyCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   autoExecute: true,
   action: async (context, _args): Promise<SlashCommandActionReturn | void> => {
-    const client = context.services.config?.getAgentClient();
+    const client = context.services.agent?.agentClient;
 
     // Check if chat is initialized before accessing it
     if (client == null || client.hasChatInitialized() !== true) {

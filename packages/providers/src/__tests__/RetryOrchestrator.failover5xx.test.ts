@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { retryOperationFixture } from './retry-operation-fixture.js';
 import { describe, it, expect } from 'bun:test';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
@@ -120,14 +121,13 @@ function createFailoverHandler(buckets: string[]) {
 }
 
 function createOptions(handler: unknown): GenerateChatOptions {
-  return {
-    contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
-    runtime: {
-      config: {
-        getBucketFailoverHandler: () => handler,
-      } as unknown as GenerateChatOptions['runtime'],
-    } as unknown as GenerateChatOptions['runtime'],
-  };
+  return retryOperationFixture(
+    {
+      contents: [{ role: 'user', blocks: [{ type: 'text', text: 'test' }] }],
+    },
+    undefined,
+    handler,
+  );
 }
 
 describe('RetryOrchestrator - 5xx server error failover (issue #1726)', () => {

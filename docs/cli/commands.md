@@ -54,9 +54,16 @@ Slash commands control the CLI itself — configuration, navigation, session man
 | `/chat list`            | List saved conversation tags                                       |
 | `/chat delete <tag>`    | Delete a conversation tag                                          |
 | `/compress`             | Manually compress conversation history                             |
-| `/clear`                | Clear the conversation and start fresh                             |
+| `/clear`                | Start a new session with an empty conversation                     |
 | `/copy`                 | Copy the last response to clipboard                                |
 | `/restore [checkpoint]` | Restore from a checkpointing snapshot (requires `--checkpointing`) |
+
+`/clear` closes the current session and starts a new one with empty conversation
+history. Your provider, model, profile, and settings stay selected. The previous
+conversation remains available through `/continue`, the session picker, and
+`--list-sessions`. Use `--continue <session-id>` to resume it from a new CLI
+invocation. If you quit after `/clear` without sending another message, plain
+`--continue` resumes the previous recorded conversation rather than an empty session.
 
 ### Tools and MCP
 

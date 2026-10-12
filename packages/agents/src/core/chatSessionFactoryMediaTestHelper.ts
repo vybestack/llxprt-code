@@ -58,3 +58,13 @@ export async function withChatSessionFactoryMediaFixture(
     await rm(directory, { recursive: true, force: true });
   }
 }
+
+export function createFactoryFixtureMediaStore(config: {
+  readonly projectTempDir: string;
+  getMediaStoreQuotaByteLimit(): number;
+}): LocalMediaStore {
+  return new LocalMediaStore({
+    rootDirectory: join(config.projectTempDir, 'media'),
+    quotaBytes: config.getMediaStoreQuotaByteLimit(),
+  });
+}

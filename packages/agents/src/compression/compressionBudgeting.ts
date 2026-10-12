@@ -104,7 +104,7 @@ export function getCompletionBudget(
   generationConfig: ModelGenerationSettings,
   _model: string,
   provider: IProvider | undefined,
-  settingsService: { get: (key: string) => unknown } | undefined,
+  liveMaxOutputTokens: unknown,
   contextLimit: number,
 ): number {
   if (!Number.isFinite(contextLimit) || contextLimit <= 0) {
@@ -114,7 +114,6 @@ export function getCompletionBudget(
   }
 
   // Check global ephemeral setting for maxOutputTokens (set via /set maxOutputTokens)
-  const liveMaxOutputTokens = settingsService?.get('maxOutputTokens');
   const liveBudget = asNumber(liveMaxOutputTokens);
   if (liveBudget !== undefined && liveBudget > 0) {
     if (liveBudget >= contextLimit) {

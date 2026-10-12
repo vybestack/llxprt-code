@@ -485,6 +485,34 @@ jobs:
         run: |-
           npm run lint:agents-api-surface
 
+      # The audit type-checks the non-workspace runtime plugins (see
+      # productionPlugins in scripts/runtime-entry-manifest.ts). The
+      # google-gemini plugin imports @ai-sdk/google from its own
+      # node_modules, which the root `bun install` does not populate, so the
+      # compiler reports TS2307/TS7006 and blocks the service-shape scanner.
+      # Plugin installs need bun >= 1.4.2 for the same reason as the
+      # runtime_plugins job (the repo pin re-resolves the plugin lockfile and
+      # stalls on hosted runners).
+      - name: 'Install runtime plugin dependencies for the audit'
+        run: |-
+          curl -fsSL https://bun.sh/install | BUN_INSTALL="$RUNNER_TEMP/bun-plugin" bash -s "bun-v1.4.2"
+          for plugin in plugins/*/; do
+            if [ -f "${plugin}package.json" ]; then
+              (cd "$plugin" && "$RUNNER_TEMP/bun-plugin/bin/bun" install --omit=peer)
+            fi
+          done
+          git checkout -- bun.lock
+
+      - name: 'Run runtime-boundary production audit (#2616)'
+        # TypeScript-aware audit of production sources: fails on any
+        # mutable-state, ALS, ambient-delegation, Config-locator or compiler
+        # finding. runtime-service-bundle and runtime-service-bag-parameter
+        # are a tracked residual held by the committed ratchet baseline
+        # (scripts/runtime-service-shape-baseline.json): per-owner counts may
+        # fall but never rise. Needs the declarations from build:types above.
+        run: |-
+          npm run check:runtime-boundary
+
       # ESLint cache is CI opt-in only (issue #2710). The exact key hashes
       # every linted source/config/type input so a changed cross-file type
       # producer invalidates the cache of its consumers. There are no
@@ -1390,6 +1418,24 @@ jobs:
       - name: 'Build project'
         run: |-
           npm run build
+
+      # Reuse this full JS build on Node 24/Linux, independently of shard
+      # selection. All non-doc changes run here, including MCP's transitive
+      # workspace dependencies and the distribution runner. No extra install.
+      # POSIX fixture coverage only; this does not claim Windows coverage.
+      - name: 'Verify standalone MCP distribution'
+        run: |-
+          npm run test:mcp:distribution -- tmp/mcp-distribution-ci
+
+      - name: 'Upload standalone MCP distribution diagnostics'
+        if: ${{ always() }}
+        uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a' # ratchet:actions/upload-artifact@v7
+        with:
+          name: 'mcp-distribution-diagnostics'
+          path: |-
+            tmp/mcp-distribution-ci/
+            !tmp/mcp-distribution-ci/packed/
+          if-no-files-found: 'warn'
 
       - name: 'Run acplint'
         run: |-

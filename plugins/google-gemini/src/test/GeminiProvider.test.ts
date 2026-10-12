@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { Part } from '../gemini/geminiWireTypes.js';
-import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import { createProviderCallOptions } from './testSupport.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const generateContentStreamMock = vi.fn();
@@ -35,7 +35,15 @@ const mockSettingsService = {
   get: vi.fn(),
   getProviderSettings: vi.fn().mockReturnValue({}),
   updateSettings: vi.fn(),
-  getAllGlobalSettings: vi.fn().mockReturnValue({}),
+  getAllGlobalSettings: () =>
+    Object.fromEntries(
+      [
+        'GOOGLE_API_KEY',
+        'GOOGLE_APPLICATION_CREDENTIALS',
+        'GOOGLE_CLOUD_PROJECT',
+        'GOOGLE_CLOUD_LOCATION',
+      ].map((key) => [key, mockSettingsService.get(key)]),
+    ),
 };
 
 /**
@@ -293,8 +301,8 @@ describe('GeminiProvider', () => {
 
   // Clean up global state after each test
   afterEach(() => {
-    delete global.__oauth_needs_code;
-    delete global.__oauth_provider;
+    Reflect.deleteProperty(globalThis, '__oauth_needs_code');
+    Reflect.deleteProperty(globalThis, '__oauth_provider');
     delete process.env.GEMINI_API_KEY;
     delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
     delete process.env.GOOGLE_CLOUD_PROJECT;
@@ -546,7 +554,7 @@ describe('GeminiProvider', () => {
 
       const request = generateContentStreamMock.mock.calls[0][0];
       const toolMessage = request.contents.find(
-        (msg: { role: string }) =>
+        (msg: { role: string; parts: Part[] }) =>
           msg.role === 'user' &&
           msg.parts.some((p: Part) => 'functionResponse' in p),
       );
@@ -602,7 +610,7 @@ describe('GeminiProvider', () => {
 
       const request = generateContentStreamMock.mock.calls[0][0];
       const toolMessage = request.contents.find(
-        (msg: { role: string }) =>
+        (msg: { role: string; parts: Part[] }) =>
           msg.role === 'user' &&
           msg.parts.some((p: Part) => 'functionResponse' in p),
       );
@@ -651,7 +659,7 @@ describe('GeminiProvider', () => {
 
       const request = generateContentStreamMock.mock.calls[0][0];
       const toolMessage = request.contents.find(
-        (msg: { role: string }) =>
+        (msg: { role: string; parts: Part[] }) =>
           msg.role === 'user' &&
           msg.parts.some((p: Part) => 'functionResponse' in p),
       );
@@ -693,7 +701,7 @@ describe('GeminiProvider', () => {
 
       const request = generateContentStreamMock.mock.calls[0][0];
       const toolMessage = request.contents.find(
-        (msg: { role: string }) =>
+        (msg: { role: string; parts: Part[] }) =>
           msg.role === 'user' &&
           msg.parts.some((p: Part) => 'functionResponse' in p),
       );
@@ -753,7 +761,7 @@ describe('GeminiProvider', () => {
 
       const request = generateContentStreamMock.mock.calls[0][0];
       const toolMessage = request.contents.find(
-        (msg: { role: string }) =>
+        (msg: { role: string; parts: Part[] }) =>
           msg.role === 'user' &&
           msg.parts.some((p: Part) => 'functionResponse' in p),
       );

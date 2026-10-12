@@ -4,6 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
+
 /**
  * CodeRabbit round (PR #3050 / issue #3031) — the post-run timeout result must
  * carry the real subagent id (Finding 3).
@@ -19,7 +26,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { TaskTool } from '../src/tools/task.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { installTaskSettingsFixtures } from './task-settings-fixture.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SubagentOrchestrator } from '../src/core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
@@ -28,13 +35,7 @@ import { withBoundedGuard } from '@vybestack/llxprt-code-test-utils';
 
 const REAL_AGENT_ID = 'agent-postrun-cr3031';
 
-function makeConfig(settings: Record<string, number>): Config {
-  return {
-    getSessionId: () => 'session-postrun-cr3031',
-    getEphemeralSettings: () => ({ ...settings }),
-    isInteractive: () => false,
-  } as unknown as Config;
-}
+const makeConfig = installTaskSettingsFixtures('session-postrun-cr3031');
 
 /**
  * A stub orchestrator whose scope run RESOLVES (completes) precisely when the
@@ -92,13 +93,18 @@ function makeResolvingOnAbortOrchestrator(): {
 describe('CodeRabbit #3031 — post-run timeout result carries the real agentId', () => {
   it('attributes a cut-short run to the real subagent id, not DEFAULT_AGENT_ID', async () => {
     const { orchestrator, resolved } = makeResolvingOnAbortOrchestrator();
-    const tool = new TaskTool(
-      makeConfig({
-        'task-default-timeout-seconds': 60,
-        'task-max-timeout-seconds': 0.05, // 50ms
-      }),
-      { messageBus: new MessageBus(), orchestratorFactory: () => orchestrator },
-    );
+    const fixture = makeConfig({
+      'task-default-timeout-seconds': 60,
+      'task-max-timeout-seconds': 0.05, // 50ms
+    });
+    const tool = new TaskTool(fixture.config, {
+      ...fixture.policies,
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
+      messageBus: new MessageBus(),
+      orchestratorFactory: () => orchestrator,
+    });
 
     const invocation = tool.build({
       subagent_name: 'helper',

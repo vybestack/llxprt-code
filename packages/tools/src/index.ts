@@ -1,3 +1,9 @@
+export type {
+  ToolLookup,
+  ToolSelection,
+  ToolPublication,
+  McpToolPublication,
+} from './interfaces/tool-catalog-operations.js';
 /**
  * @plan:PLAN-20260608-ISSUE1585.P03
  * @requirement:REQ-PKG-001, REQ-API-001
@@ -26,7 +32,6 @@ export type * from './interfaces/index.js';
 export {
   hasPublish,
   hasPublishSubscribe,
-  hasWorkspaceContextCap,
   hasIdeCap,
   hasLspCap,
 } from './interfaces/index.js';
@@ -317,6 +322,10 @@ export {
   DEFAULT_SHELL_TIMEOUT_SECONDS,
   MAX_SHELL_TIMEOUT_SECONDS,
 } from './tools/shell-helpers.js';
+export type {
+  GitHubReportOperation,
+  GitHubReportOperations,
+} from './interfaces/github-report-operations.js';
 export {
   GithubTool,
   GithubToolInvocation,
@@ -352,10 +361,7 @@ export {
   type SaveMemoryParams,
 } from './tools/memoryTool.js';
 
-export {
-  ListSubagentsTool,
-  type ListSubagentsToolDependencies,
-} from './tools/list-subagents.js';
+export { ListSubagentsTool } from './tools/list-subagents.js';
 export {
   ActivateSkillTool,
   type ActivateSkillToolParams,
@@ -482,3 +488,9 @@ export {
   detectLanguage,
   extractImports,
 } from './tools/ast-edit/language-analysis.js';
+
+export { applyTaskSchemaPolicy } from './formatters/task-schema-policy.js';
+
+export type { RegistryPolicy } from './tools/tool-registry.js';
+
+export type { ToolExecutionPolicy } from './interfaces/tool-execution-policy.js';

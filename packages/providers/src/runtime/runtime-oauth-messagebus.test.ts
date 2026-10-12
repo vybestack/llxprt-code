@@ -1,86 +1,53 @@
+import { createProviderConfigFixture } from './__tests__/provider-config-fixture.js';
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import { MessageBus, Config } from '@vybestack/llxprt-code-core';
-import { OAuthManager } from '../auth/index.js';
-import {
-  createIsolatedRuntimeContext,
-  activateIsolatedRuntimeContext,
-  registerCliProviderInfrastructure,
-  resetCliProviderInfrastructure,
-} from './runtimeSettings.js';
+import { describe, expect, it } from 'bun:test';
+import { MessageBus } from '@vybestack/llxprt-code-core';
+import { createIsolatedRuntimeContext } from './index.js';
 
 describe('runtime/provider OAuth MessageBus seam integration', () => {
-  beforeEach(() => {
-    resetCliProviderInfrastructure();
-  });
-
-  afterEach(async () => {
-    resetCliProviderInfrastructure();
-    vi.restoreAllMocks();
-  });
-
-  /**
-   * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P07
-   * @requirement REQ-D01-003.3
-   * @requirement REQ-D01-004.3
-   * @pseudocode lines 83-91
-   */
-  it('propagates the session MessageBus when runtime registration passes the explicit MessageBus dependency', async () => {
-    const runtimeHandle = createIsolatedRuntimeContext({
-      runtimeId: 'runtime-auth-messagebus',
-      config: new Config({
+  it('uses the exact owner-supplied session MessageBus for OAuth', async () => {
+    const sessionMessageBus = new MessageBus();
+    const runtimeHandle = (() => {
+      const {
+        config: capturedConfig28,
+        settingsService: capturedConfig28SettingsService,
+        settingsOwner: capturedConfig28SettingsOwner,
+      } = createProviderConfigFixture({
         sessionId: 'runtime-auth-messagebus',
         targetDir: process.cwd(),
         cwd: process.cwd(),
         model: 'runtime-auth-model',
         debugMode: false,
-      }),
-      metadata: { source: 'phase-07-runtime-test' },
-      prepare: async () => {},
-    });
+      });
+      return createIsolatedRuntimeContext(
+        {
+          settingsOwner: capturedConfig28SettingsOwner,
+          runtimeId: 'runtime-auth-messagebus',
+          config: capturedConfig28,
+          messageBus: sessionMessageBus,
+        },
+        capturedConfig28SettingsService,
+      );
+    })();
 
-    await activateIsolatedRuntimeContext(runtimeHandle, {
-      runtimeId: runtimeHandle.runtimeId,
-      metadata: { source: 'phase-07-runtime-test' },
-    });
-
-    const providerManager = {
-      setConfig: vi.fn(),
-    };
-    const sessionMessageBus = new MessageBus(
-      runtimeHandle.config.getPolicyEngine(),
-      runtimeHandle.config.getDebugMode(),
-    );
-
-    const oauthManager = new OAuthManager(
-      {
-        getToken: vi.fn().mockResolvedValue(null),
-        saveToken: vi.fn(),
-        removeToken: vi.fn(),
-        listProviders: vi.fn(),
-        listBuckets: vi.fn(),
-        acquireRefreshLock: vi.fn(),
-        releaseRefreshLock: vi.fn(),
-      } as never,
-      undefined,
-      { messageBus: sessionMessageBus },
-    );
-
-    registerCliProviderInfrastructure(providerManager as never, oauthManager, {
-      messageBus: sessionMessageBus,
-      runtimeId: runtimeHandle.runtimeId,
-    });
-
-    expect(
-      (oauthManager as unknown as { runtimeMessageBus?: MessageBus })
-        .runtimeMessageBus,
-    ).toBe(sessionMessageBus);
-
-    await runtimeHandle.cleanup();
+    try {
+      await runtimeHandle.activate();
+      expect(
+        (
+          runtimeHandle.oauthManager as unknown as {
+            runtimeMessageBus?: MessageBus;
+          }
+        ).runtimeMessageBus,
+      ).toBe(sessionMessageBus);
+      expect('providerManager' in runtimeHandle.config).toBe(false);
+    } finally {
+      await runtimeHandle.cleanup();
+      await runtimeHandle.config.dispose();
+    }
   });
 });

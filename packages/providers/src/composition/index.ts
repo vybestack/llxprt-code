@@ -16,15 +16,9 @@
 // ─── ProviderManager construction & lifecycle ────────────────────────────────
 export {
   configureProviderRuntimeFactories,
-  setFileSystem,
   createProviderManager,
-  registerProviderManagerSingleton,
-  getProviderManager,
-  resetProviderManager,
-  getOAuthManager,
   refreshAliasProviders,
   bindOpenAIAliasIdentity,
-  providerManager,
 } from './providerManagerInstance.js';
 
 // ─── Headless construction ───────────────────────────────────────────────────
@@ -102,7 +96,6 @@ export {
   ensureOAuthProviderRegistered,
   registerStandardOAuthProviders,
   isOAuthProviderRegistered,
-  resetRegisteredProviders,
 } from './oauth-provider-registration.js';
 
 // ─── Credential precedence ───────────────────────────────────────────────────

@@ -66,23 +66,13 @@ export {
 // ─── Clipboard Service ───────────────────────────────────────────────────────
 export { ClipboardService } from './ClipboardService.js';
 
-// ─── Runtime Accessor Bridge ─────────────────────────────────────────────────
-/**
- * @plan PLAN-20260827-ISSUE2562.P03
- * @requirement REQ-2562-4
- */
-export {
-  oauthRuntimeBridge,
-  DEFAULT_INTERACTIVE_AUTH_TIMEOUT_MS,
-} from './runtime-accessor-bridge.js';
-export type { OAuthRuntimeAccessors } from './runtime-accessor-bridge.js';
-
 // ─── Interactive Authentication Coordinator ──────────────────────────────────
 /**
  * @plan PLAN-20260827-ISSUE2562.P05
  * @requirement REQ-2562-4
  */
 export {
+  DEFAULT_INTERACTIVE_AUTH_TIMEOUT_MS,
   InteractiveAuthCoordinator,
   InteractiveAuthError,
   InteractiveAuthUnavailableError,
@@ -149,6 +139,3 @@ export type {
   BrowserProfileAssociation,
   AssociationStoreFs,
 } from './browser-profile-association-store.js';
-
-// ─── Browser Profile Association Store Singleton (runtime layer) ─────────────
-export { getBrowserProfileAssociationStore } from '../runtime/browser-profile-association-store-instance.js';

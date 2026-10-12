@@ -105,7 +105,7 @@ describe('AnthropicProvider issue #2329 – streaming refusal propagation', () =
       },
     ];
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
     );
 
     const chunks = [];

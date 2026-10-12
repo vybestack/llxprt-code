@@ -1,3 +1,5 @@
+import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -63,7 +65,7 @@ function stopped(): IContent {
 async function runDirectNonInteractive(
   responses: readonly IContent[],
 ): Promise<{ readonly output: OutputObject; readonly requestCount: number }> {
-  const { config } = await createMockConfig();
+  const { config, toolRegistry } = await createMockConfig();
   const baseBundle = createStatelessRuntimeBundle();
   const output: OutputObject = {
     terminate_reason: SubagentTerminateMode.ERROR,
@@ -81,6 +83,7 @@ async function runDirectNonInteractive(
   };
   let requestCount = 0;
   const chat = {
+    ...createChatPolicyFixture(),
     sendMessageStream: async () => {
       const response = responses[requestCount] ?? stopped();
       requestCount += 1;
@@ -93,6 +96,7 @@ async function runDirectNonInteractive(
     },
   } as unknown as ChatSession;
 
+  const settingsRoot = createSessionSettingsFixture(config);
   await executeNonInteractiveRun(
     chat,
     [...getScopeLocalFuncDefs(OUTPUT_CONFIG)],
@@ -109,7 +113,20 @@ async function runDirectNonInteractive(
       config,
       runConfig: defaultRunConfig,
       outputConfig: OUTPUT_CONFIG,
-      toolExecutorContext: config,
+      toolExecutorContext: {
+        telemetry: settingsRoot.settingsOwner.telemetry,
+        getToolRegistry: () => toolRegistry,
+        getTelemetryLogPromptsEnabled: () =>
+          config.getTelemetryLogPromptsEnabled(),
+        readExecutionPolicy: () =>
+          settingsRoot.settingsOwner.readToolExecutionPolicy(),
+        readGovernance: () =>
+          settingsRoot.settingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        getExcludeTools: () => config.getExcludeTools(),
+        getSessionId: () => config.getSessionId(),
+      },
     },
     () => undefined,
   );

@@ -33,6 +33,7 @@ import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { execa } from 'execa';
 import { messageOf, propertyValue } from './utils/error-guards.ts';
+import { compilerEmittedSiblings } from './compiler-emitted-siblings.js';
 
 /**
  * Heap ceiling for each ESLint process. Sized to the largest single group
@@ -96,6 +97,7 @@ export interface BuildCommandsParams {
   readonly packageDirs?: readonly string[];
   readonly heapMb?: number;
   readonly nodeOptions?: string;
+  readonly emittedSiblings?: readonly string[];
 }
 
 function nodeOptionsWithoutMemoryLimit(nodeOptions: string): string[] {
@@ -145,6 +147,7 @@ export function buildLintCommands({
   packageDirs = [],
   heapMb = DEFAULT_HEAP_MB,
   nodeOptions,
+  emittedSiblings = [],
 }: BuildCommandsParams): readonly LintCommand[] {
   const eslintBin = fileURLToPath(
     new URL('../node_modules/.bin/eslint', import.meta.url),
@@ -183,14 +186,24 @@ export function buildLintCommands({
     label,
   });
 
+  const withEmittedIgnores = (command: LintCommand): LintCommand => ({
+    ...command,
+    args: [
+      ...command.args,
+      ...emittedSiblings.flatMap((path) => ['--ignore-pattern', path]),
+    ],
+  });
+
   if (targets === null) {
-    return fullRunCommands(packageDirs, makeCommand);
+    return fullRunCommands(packageDirs, makeCommand).map(withEmittedIgnores);
   }
   // Scoped run: one process per target, always including integration-tests
   // (deduplicated), so a scoped run never holds several package type programs
   // at once either. Scoped targets come from CI's affected-target selector, so
   // an unmatched one is a stale or mistyped target and must still fail loudly.
-  return scopedTargets(targets).map((target) => makeCommand(target, [target]));
+  return scopedTargets(targets).map((target) =>
+    withEmittedIgnores(makeCommand(target, [target])),
+  );
 }
 
 /** Factory that turns a group label plus its ESLint targets into a command. */
@@ -379,6 +392,7 @@ async function runLint(): Promise<void> {
       forwardedArgs,
       cache,
       packageDirs: targets === null ? readPackageDirs(repoRoot) : [],
+      emittedSiblings: compilerEmittedSiblings(repoRoot),
     }),
   );
 }

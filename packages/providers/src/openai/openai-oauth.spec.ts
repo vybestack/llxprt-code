@@ -18,8 +18,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
 import { createProviderWithRuntime as createProviderWithRuntimeHelper } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-// @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
-import { flushRuntimeAuthScope } from '@vybestack/llxprt-code-auth';
 
 // Skip OAuth tests in CI as they require browser interaction
 const skipInCI = process.env.CI === 'true';
@@ -88,7 +86,6 @@ describe('OpenAI Provider OAuth test registration', () => {
     afterEach(() => {
       // Restore original environment
       process.env = originalEnv;
-      flushRuntimeAuthScope('openai.oauth.spec.runtime');
     });
 
     describe('Authentication Precedence', () => {

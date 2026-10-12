@@ -11,16 +11,8 @@
  * @requirement:REQ-SP4-004
  * @requirement:REQ-SP4-005
  *
- * Stateless hardening preference configuration and querying.
- * This module manages the global CLI stateless guard preference.
+ * Stateless hardening preference resolution from owner metadata.
  */
-
-import { getCurrentRuntimeScope } from './runtimeContextFactory.js';
-import {
-  runtimeRegistry,
-  resolveActiveRuntimeIdentity,
-} from './runtimeRegistry.js';
-import { isMissingRuntimeError } from './runtimeLifecycle.js';
 
 const STATELESS_METADATA_KEYS = [
   'statelessHardening',
@@ -30,9 +22,6 @@ const STATELESS_METADATA_KEYS = [
 ] as const;
 
 export type StatelessHardeningPreference = 'legacy' | 'strict';
-
-let statelessHardeningPreferenceOverride: StatelessHardeningPreference | null =
-  null;
 
 function normalizeStatelessPreference(
   value: unknown,
@@ -84,56 +73,14 @@ function readStatelessPreferenceFromMetadata(
  * @plan:PLAN-20251023-STATELESS-HARDENING.P07
  * @requirement:REQ-SP4-005
  */
-export function resolveStatelessHardeningPreference(): StatelessHardeningPreference {
-  const scope = getCurrentRuntimeScope();
-  const scopePreference = readStatelessPreferenceFromMetadata(scope?.metadata);
-  if (scopePreference) {
-    return scopePreference;
+export function resolveStatelessHardeningPreference(
+  metadata: Record<string, unknown>,
+): StatelessHardeningPreference {
+  const preference = readStatelessPreferenceFromMetadata(metadata);
+  if (preference === null) {
+    throw new Error('statelessHardening preference requires owner metadata');
   }
-
-  // Preference resolution is best-effort: if no runtime is active yet (e.g.
-  // during early bootstrap or in tests), fall through to the override/default
-  // rather than failing identity resolution.
-  let entryPreference: StatelessHardeningPreference | null = null;
-  try {
-    const { runtimeId } = resolveActiveRuntimeIdentity();
-    const entry = runtimeRegistry.get(runtimeId);
-    entryPreference = readStatelessPreferenceFromMetadata(entry?.metadata);
-  } catch (error) {
-    if (!isMissingRuntimeError(error)) {
-      throw error;
-    }
-    // No active runtime; continue to override/default below.
-  }
-  if (entryPreference) {
-    return entryPreference;
-  }
-
-  if (statelessHardeningPreferenceOverride) {
-    return statelessHardeningPreferenceOverride;
-  }
-
-  return 'strict';
-}
-
-/**
- * @plan:PLAN-20251023-STATELESS-HARDENING.P07
- * @requirement:REQ-SP4-005
- * Configure the global CLI stateless guard preference. Tests and CLI bootstrap
- * can call this to opt into strict guards without environment toggles.
- */
-export function configureCliStatelessHardening(
-  preference: StatelessHardeningPreference | null,
-): void {
-  statelessHardeningPreferenceOverride = preference;
-}
-
-/**
- * @plan:PLAN-20251023-STATELESS-HARDENING.P07
- * @requirement:REQ-SP4-005
- */
-export function getCliStatelessHardeningOverride(): StatelessHardeningPreference | null {
-  return statelessHardeningPreferenceOverride;
+  return preference;
 }
 
 /**
@@ -141,8 +88,10 @@ export function getCliStatelessHardeningOverride(): StatelessHardeningPreference
  * @requirement:REQ-SP4-005
  * Reports the currently resolved stateless hardening preference.
  */
-export function getCliStatelessHardeningPreference(): StatelessHardeningPreference {
-  return resolveStatelessHardeningPreference();
+export function getCliStatelessHardeningPreference(
+  metadata: Record<string, unknown>,
+): StatelessHardeningPreference {
+  return resolveStatelessHardeningPreference(metadata);
 }
 
 /**
@@ -151,10 +100,14 @@ export function getCliStatelessHardeningPreference(): StatelessHardeningPreferen
  * Check if stateless provider integration is enabled.
  * Exported for use by other modules that need to check the stateless mode.
  */
-export function isStatelessProviderIntegrationEnabled(): boolean {
-  return resolveStatelessHardeningPreference() === 'strict';
+export function isStatelessProviderIntegrationEnabled(
+  metadata: Record<string, unknown>,
+): boolean {
+  return resolveStatelessHardeningPreference(metadata) === 'strict';
 }
 
-export function isCliStatelessProviderModeEnabled(): boolean {
-  return isStatelessProviderIntegrationEnabled();
+export function isCliStatelessProviderModeEnabled(
+  metadata: Record<string, unknown>,
+): boolean {
+  return isStatelessProviderIntegrationEnabled(metadata);
 }

@@ -125,7 +125,10 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         delayLog.push({ ms, bucket });
         authLog.push(`Delay ${ms}ms before ${bucket}`);
       },
-      getEphemeralSetting,
+      () => ({
+        prompt: getEphemeralSetting('auth-bucket-prompt'),
+        delay: getEphemeralSetting('auth-bucket-delay'),
+      }),
     );
   });
 
@@ -529,7 +532,10 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         },
         async () => true,
         async () => {},
-        getEphemeralSetting,
+        () => ({
+          prompt: getEphemeralSetting('auth-bucket-prompt'),
+          delay: getEphemeralSetting('auth-bucket-delay'),
+        }),
       );
 
       // Start auth
@@ -744,7 +750,10 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         authenticateExceptBucketTwo.bind(undefined, authLog),
         async () => true,
         async () => {},
-        getEphemeralSetting,
+        () => ({
+          prompt: getEphemeralSetting('auth-bucket-prompt'),
+          delay: getEphemeralSetting('auth-bucket-delay'),
+        }),
       );
 
       const result = await errorAuthenticator.authenticateMultipleBuckets({
@@ -771,7 +780,10 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         },
         async () => true,
         async () => {},
-        getEphemeralSetting,
+        () => ({
+          prompt: getEphemeralSetting('auth-bucket-prompt'),
+          delay: getEphemeralSetting('auth-bucket-delay'),
+        }),
       );
 
       const result = await failAuthenticator.authenticateMultipleBuckets({
@@ -819,7 +831,10 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
           return messageBusResponsePromise;
         },
         async () => {},
-        getEphemeralSetting,
+        () => ({
+          prompt: getEphemeralSetting('auth-bucket-prompt'),
+          delay: getEphemeralSetting('auth-bucket-delay'),
+        }),
       );
 
       const authPromise = promptAuthenticator.authenticateMultipleBuckets({
@@ -867,7 +882,10 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
           // we should NEVER hit the stdin fallback path
           true, // MessageBus approved
         async () => {},
-        getEphemeralSetting,
+        () => ({
+          prompt: getEphemeralSetting('auth-bucket-prompt'),
+          delay: getEphemeralSetting('auth-bucket-delay'),
+        }),
       );
 
       const result = await noStdinAuthenticator.authenticateMultipleBuckets({
@@ -906,7 +924,10 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         async () => {
           // Delay callback - fallback triggered
         },
-        getEphemeralSetting,
+        () => ({
+          prompt: getEphemeralSetting('auth-bucket-prompt'),
+          delay: getEphemeralSetting('auth-bucket-delay'),
+        }),
       );
 
       const authPromise = timeoutAuthenticator.authenticateMultipleBuckets({
@@ -954,7 +975,10 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
           return true;
         },
         async () => {},
-        getEphemeralSetting,
+        () => ({
+          prompt: getEphemeralSetting('auth-bucket-prompt'),
+          delay: getEphemeralSetting('auth-bucket-delay'),
+        }),
       );
 
       await singleBucketAuthenticator.authenticateMultipleBuckets({
@@ -990,7 +1014,10 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
           return true;
         },
         async () => {},
-        getEphemeralSetting,
+        () => ({
+          prompt: getEphemeralSetting('auth-bucket-prompt'),
+          delay: getEphemeralSetting('auth-bucket-delay'),
+        }),
       );
 
       // Using 'default' as the implicit bucket name
@@ -1029,7 +1056,10 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
         },
         async () => nextPromptResponse(promptResponses),
         async () => {},
-        getEphemeralSetting,
+        () => ({
+          prompt: getEphemeralSetting('auth-bucket-prompt'),
+          delay: getEphemeralSetting('auth-bucket-delay'),
+        }),
       );
 
       const result = await eagerAuthenticator.authenticateMultipleBuckets({
@@ -1081,7 +1111,10 @@ describe('Phase 9: Multi-Bucket Authentication Flow', () => {
           return true;
         },
         async () => {},
-        getEphemeralSetting,
+        () => ({
+          prompt: getEphemeralSetting('auth-bucket-prompt'),
+          delay: getEphemeralSetting('auth-bucket-delay'),
+        }),
       );
 
       await partialAuthenticator.authenticateMultipleBuckets({

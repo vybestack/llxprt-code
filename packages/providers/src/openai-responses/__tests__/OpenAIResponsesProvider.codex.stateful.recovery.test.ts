@@ -1,3 +1,4 @@
+import { captureResponsesTestRequest } from '../responses-request.test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -93,7 +94,10 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
           },
         });
         const messages = await drain(
-          executeOpenAIResponsesRequest(buildOptions(contents), deps),
+          executeOpenAIResponsesRequest(
+            captureResponsesTestRequest(buildOptions(contents), deps),
+            deps,
+          ),
         );
 
         expect(fetchCalls).toBe(2);
@@ -166,7 +170,10 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
         ];
         await drain(
           executeOpenAIResponsesRequest(
-            buildOptions(historyWithDeadParent),
+            captureResponsesTestRequest(
+              buildOptions(historyWithDeadParent),
+              deps,
+            ),
             deps,
           ),
         );
@@ -199,7 +206,10 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
         ];
         await drain(
           executeOpenAIResponsesRequest(
-            buildOptions(historyAfterRecovery),
+            captureResponsesTestRequest(
+              buildOptions(historyAfterRecovery),
+              deps,
+            ),
             deps,
           ),
         );
@@ -241,7 +251,10 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
         ];
         await drainHarness(
           executeOpenAIResponsesRequest(
-            buildOptions(contents),
+            captureResponsesTestRequest(
+              buildOptions(contents),
+              buildDeps({ getWebSocketTransport: () => transport }),
+            ),
             buildDeps({ getWebSocketTransport: () => transport }),
           ),
         );
@@ -280,7 +293,10 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
         ];
         await drainHarness(
           executeOpenAIResponsesRequest(
-            buildOptions(contents),
+            captureResponsesTestRequest(
+              buildOptions(contents),
+              buildDeps({ getWebSocketTransport: () => transport }),
+            ),
             buildDeps({ getWebSocketTransport: () => transport }),
           ),
         );
@@ -322,7 +338,10 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
         ];
         await drainHarness(
           executeOpenAIResponsesRequest(
-            buildOptions(contents),
+            captureResponsesTestRequest(
+              buildOptions(contents),
+              buildDeps({ getWebSocketTransport: () => transport }),
+            ),
             buildDeps({ getWebSocketTransport: () => transport }),
           ),
         );
@@ -361,7 +380,10 @@ describe('OpenAIResponsesProvider Codex stateful — parent rejection recovery a
         ];
         await drainHarness(
           executeOpenAIResponsesRequest(
-            buildOptions(contents),
+            captureResponsesTestRequest(
+              buildOptions(contents),
+              buildDeps({ getWebSocketTransport: () => transport }),
+            ),
             buildDeps({ getWebSocketTransport: () => transport }),
           ),
         );
@@ -413,7 +435,10 @@ describe('Codex statefulness is WebSocket-bound @issue:3134', () => {
     try {
       await drain(
         executeOpenAIResponsesRequest(
-          buildOptions(contentsWithParent),
+          captureResponsesTestRequest(
+            buildOptions(contentsWithParent),
+            buildDeps({ getWebSocketTransport: () => transport }),
+          ),
           buildDeps({ getWebSocketTransport: () => transport }),
         ),
       );
@@ -441,7 +466,13 @@ describe('Codex statefulness is WebSocket-bound @issue:3134', () => {
     try {
       await drain(
         executeOpenAIResponsesRequest(
-          buildOptions(contentsWithParent),
+          captureResponsesTestRequest(
+            buildOptions(contentsWithParent),
+            buildDeps({
+              getWebSocketTransport: () => undefined,
+              isWebSocketTransportActive: () => false,
+            }),
+          ),
           buildDeps({
             getWebSocketTransport: () => undefined,
             isWebSocketTransportActive: () => false,

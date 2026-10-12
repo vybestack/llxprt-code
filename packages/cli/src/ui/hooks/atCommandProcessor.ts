@@ -5,6 +5,7 @@
  */
 
 import { unescapePath, type ContentBlock } from '@vybestack/llxprt-code-core';
+import type { ReadMcpResource } from './atCommandResourceHelpers.js';
 import type { AgentToolHandle } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import {
@@ -16,17 +17,13 @@ import {
 } from './atCommandProcessorHelpers.js';
 import type {
   AtCommandHelperRuntime,
+  FindMcpResource,
   AtCommandPart,
   AtCommandProcessResult,
 } from './atCommandProcessorHelpers.js';
-import type {
-  McpState,
-  StreamRuntime,
-  UiSubagentManager,
-} from '../cliUiRuntime.js';
+import type { StreamRuntime, UiSubagentManager } from '../cliUiRuntime.js';
 
-export type AtCommandRuntime = AtCommandHelperRuntime &
-  Pick<McpState, 'getMcpClientManager' | 'getResourceRegistry'>;
+export type AtCommandRuntime = AtCommandHelperRuntime;
 
 export function buildAtCommandRuntimeFromStream(
   runtime: StreamRuntime,
@@ -35,11 +32,10 @@ export function buildAtCommandRuntimeFromStream(
     // @plan:ISSUE-2376 — tool lookup is routed through the Agent surface
     // (getToolHandle), so the @-command runtime no longer exposes
     // getToolRegistry; it only carries MCP + file/workspace access.
-    getMcpClientManager: () => runtime.mcp.getMcpClientManager(),
-    getResourceRegistry: () => runtime.mcp.getResourceRegistry(),
     getFileFilteringOptions: () => runtime.files.getFileFilteringOptions(),
-    getWorkspaceContext: () => runtime.files.getWorkspaceContext(),
-    getFileService: () => runtime.files.getFileService(),
+    directories: () => runtime.files.directories(),
+    contains: (filePath) => runtime.files.contains(filePath),
+    ignore: runtime.files.ignore,
     getEnableRecursiveFileSearch: () =>
       runtime.files.getEnableRecursiveFileSearch(),
   };
@@ -72,6 +68,8 @@ export function applyPowerShellAtAlias(query: string): string {
 }
 
 interface HandleAtCommandParams {
+  findResource: FindMcpResource;
+  readResource: ReadMcpResource;
   query: string;
   config: AtCommandRuntime;
   // @plan:ISSUE-2376 — named-tool lookup via the public Agent surface,
@@ -190,6 +188,8 @@ export async function handleAtCommand({
   query,
   config,
   getToolHandle,
+  readResource,
+  findResource,
   addItem,
   onDebugMessage,
   messageId: userMessageTimestamp,
@@ -210,10 +210,7 @@ export async function handleAtCommand({
     return handleMissingReadManyFilesTool(addItem, userMessageTimestamp);
   }
 
-  const subagentNames = await resolveSubagentNames(
-    subagentManager,
-    onDebugMessage,
-  );
+  const names = await resolveSubagentNames(subagentManager, onDebugMessage);
 
   const resolution = await resolveAtPaths(
     atPathCommandParts,
@@ -221,7 +218,8 @@ export async function handleAtCommand({
     getToolHandle,
     signal,
     onDebugMessage,
-    subagentNames,
+    names,
+    findResource,
   );
   if (resolution.error) {
     addItem({ type: 'error', text: resolution.error }, userMessageTimestamp);
@@ -254,7 +252,7 @@ export async function handleAtCommand({
     processedQueryParts,
     addItem,
     userMessageTimestamp,
-    mcpClientManager: config.getMcpClientManager(),
+    readResource,
   });
   if (!Array.isArray(resourceResult)) return resourceResult;
 
@@ -281,11 +279,12 @@ async function resolveAtPaths(
   signal: AbortSignal,
   onDebugMessage: (message: string) => void,
   subagentNames: readonly string[],
+  findResource: FindMcpResource,
 ) {
   return resolveAtPathCommands({
     atPathCommandParts,
     config,
-    resourceRegistry: config.getResourceRegistry(),
+    findResource,
     globTool: getToolHandle('glob'),
     signal,
     onDebugMessage,

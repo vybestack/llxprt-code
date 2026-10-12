@@ -3,6 +3,13 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { CliArgs } from './config/cliArgParser.js';
+
+import { createProviderSessionOwner } from './integration-tests/__tests__/session-client-owner-fixture.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+
+import { handoffCliConfig } from './test-utils/bootstrap-config.js';
 
 import {
   describe,
@@ -14,14 +21,22 @@ import {
   type Mock,
 } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as cli from './cli.js';
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
-import type { Config, ResumeResult } from '@vybestack/llxprt-code-core';
-import { OutputFormat } from '@vybestack/llxprt-code-core';
+import { Config, OutputFormat } from '@vybestack/llxprt-code-core';
+import { createAgent, fromConfig } from '@vybestack/llxprt-code-agents';
 import { createTestSessionMediaConfig } from './__tests__/sessionMediaConfig.js';
+
+const fakeResponses = fileURLToPath(
+  new URL(
+    '../../agents/src/api/__tests__/fixtures/plain-text.jsonl',
+    import.meta.url,
+  ),
+);
 
 const actual = { ...(await import('./config/settings.js')) };
 void vi.mock('./config/settings.js', () => ({
@@ -52,7 +67,6 @@ const actualActual = {
 };
 void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
   ...actualActual,
-  setCliRuntimeContext: vi.fn(),
   switchActiveProvider: vi.fn(async () => ({
     changed: true,
     previousProvider: null,
@@ -81,11 +95,8 @@ void vi.mock('./utils/cleanup.js', () => ({
   runExitCleanup: vi.fn(),
 }));
 
-// Agent creation has its own dedicated behavioral coverage in
-// cliAgentBootstrap.test.ts (and the single-call wiring is asserted in
-// cli.test.tsx). These provider-init tests exercise the --continue /
-// restoreHistory flow, so the agent composition root is mocked at its module
-// boundary to keep the narrow mock Config focused on session restore.
+// Agent construction is covered in cliAgentBootstrap.test.ts; the continuation
+// cases supply a real Agent and Config at this composition boundary.
 void vi.mock('./cliAgentBootstrap.js', () => ({
   createForegroundAgent: vi.fn(async () => ({
     dispose: vi.fn().mockResolvedValue(undefined),
@@ -96,7 +107,6 @@ void vi.mock('./cliAgentBootstrap.js', () => ({
 const actualActual2 = { ...(await import('@vybestack/llxprt-code-core')) };
 void vi.mock('@vybestack/llxprt-code-core', () => ({
   ...actualActual2,
-  resumeSession: vi.fn(),
   writeToStdout: vi.fn().mockReturnValue(true),
   writeToStderr: vi.fn().mockReturnValue(true),
   patchStdio: vi.fn(() => vi.fn()),
@@ -147,63 +157,25 @@ void vi.mock('ink', () => ({
   render: vi.fn().mockReturnValue({ unmount: vi.fn() }),
 }));
 
-const preflightAgentActivationMock = vi.fn(async () => ({
+const preflightMock = vi.fn(async () => ({
   authFailed: false,
   token: { established: true },
+  infoMessages: [],
 }));
-
-const actualActual3 = { ...(await import('@vybestack/llxprt-code-agents')) };
-void vi.mock('@vybestack/llxprt-code-agents', () => ({
-  ...actualActual3,
-  preflightAgentActivation: preflightAgentActivationMock,
-}));
-
-function makeResumeResult(historyText = 'resumed'): ResumeResult {
-  return {
-    ok: true,
-    history: [
-      { speaker: 'human', blocks: [{ type: 'text', text: historyText }] },
-    ],
-    metadata: {
-      sessionId: 'resumed-session',
-      projectHash: 'project-hash',
-      provider: 'gemini',
-      model: 'gemini-2.5-pro',
-      workspaceDirs: ['/tmp/project'],
-      startTime: new Date().toISOString(),
-    },
-    recording: {
-      dispose: vi.fn().mockResolvedValue(undefined),
-      flush: vi.fn().mockResolvedValue(undefined),
-      isActive: vi.fn().mockReturnValue(true),
-      getFilePath: vi.fn().mockReturnValue('/tmp/session.jsonl'),
-      getSessionId: vi.fn().mockReturnValue('resumed-session'),
-      recordContent: vi.fn(),
-      recordCompressed: vi.fn(),
-      recordRewind: vi.fn(),
-      recordProviderSwitch: vi.fn(),
-      recordSessionEvent: vi.fn(),
-      recordDirectoriesChanged: vi.fn(),
-      initializeForResume: vi.fn(),
-      enqueue: vi.fn(),
-    } as unknown as ResumeResult['recording'],
-    lockHandle: {
-      lockPath: '/tmp/resumed-session.lock',
-      release: vi.fn().mockResolvedValue(undefined),
-    } as unknown as ResumeResult['lockHandle'],
-    warnings: [],
-    skippedRecordings: [],
-  };
-}
 
 describe('cli main provider initialization', () => {
   const originalIsTTY = process.stdin.isTTY;
+  const originalHome = process.env.LLXPRT_CONFIG_HOME;
+  const originalLogHome = process.env.LLXPRT_LOG_HOME;
+  const originalFake = process.env.LLXPRT_FAKE_RESPONSES;
   let projectTempDir = '';
   let sessionMediaConfig: ReturnType<typeof createTestSessionMediaConfig>;
 
   beforeEach(async () => {
     projectTempDir = '';
-    projectTempDir = await mkdtemp(join(tmpdir(), 'cli-provider-init-'));
+    projectTempDir = await mkdtemp(
+      join(tmpdir(), 'llxprt-provider-init-sessions-'),
+    );
     sessionMediaConfig = createTestSessionMediaConfig(projectTempDir);
     dynamicSettingsRegistry.reset();
     process.stdin.isTTY = true;
@@ -212,28 +184,38 @@ describe('cli main provider initialization', () => {
 
   afterEach(async () => {
     try {
+      for (const manager of bootstrapManagers) manager.dispose();
+      bootstrapManagers = [];
       if (projectTempDir !== '') {
         await rm(projectTempDir, { recursive: true, force: true });
       }
     } finally {
       process.stdin.isTTY = originalIsTTY;
       dynamicSettingsRegistry.reset();
+      if (originalHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
+      else process.env.LLXPRT_CONFIG_HOME = originalHome;
+      if (originalLogHome === undefined) delete process.env.LLXPRT_LOG_HOME;
+      else process.env.LLXPRT_LOG_HOME = originalLogHome;
+      if (originalFake === undefined) delete process.env.LLXPRT_FAKE_RESPONSES;
+      else process.env.LLXPRT_FAKE_RESPONSES = originalFake;
     }
   });
 
   async function verifyInitializesContentGeneratorConfigBeforeInteractiveProviderUsage() {
     const freshSessionId = randomUUID();
-    const providerManager = {
-      getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
-      getActiveProviderName: vi.fn().mockReturnValue('gemini'),
-      hasActiveProvider: vi.fn().mockReturnValue(true),
-      setActiveProvider: vi.fn().mockReturnValue(undefined),
-    };
 
-    const mockConfig = {
+    const mockConfig = new Config({
+      sessionId: freshSessionId,
+      targetDir: projectTempDir,
+      cwd: projectTempDir,
+      debugMode: false,
+      model: 'gemini-2.5-pro',
+      provider: 'gemini',
+      interactive: true,
+      initialSettings: {},
+    });
+    Object.assign(mockConfig, {
       initialize: vi.fn().mockResolvedValue(undefined),
-      refreshAuth: vi.fn().mockResolvedValue(undefined),
-      getProviderManager: vi.fn(() => providerManager),
       getProvider: vi.fn(() => 'gemini'),
       getConversationLoggingEnabled: vi.fn(() => false),
       getMcpServers: vi.fn(() => ({})),
@@ -261,9 +243,7 @@ describe('cli main provider initialization', () => {
       getProjectTempDir: vi.fn(() => projectTempDir),
       ...sessionMediaConfig,
       getContinueSessionRef: vi.fn(() => null),
-      getWorkspaceContext: vi.fn(() => ({
-        getDirectories: () => ['/tmp/project'],
-      })),
+
       getScreenReader: vi.fn(() => false),
       getTerminalBackground: vi.fn(() => undefined),
 
@@ -272,12 +252,21 @@ describe('cli main provider initialization', () => {
       getTelemetrySettings: vi.fn(() => ({
         perf: { enabled: false, memory: false },
       })),
-    } as unknown as Config;
+    });
 
+    const { manager } = createBootstrapManager(mockConfig);
     const { loadCliConfig } = await import('./config/config.js');
     const { parseArguments } = await import('./config/cliArgParser.js');
-    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce(
-      mockConfig,
+    (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
+      handoffCliConfig(
+        mockConfig,
+        (store, owner) => ({
+          ...bootstrapOperationCapabilities(mockConfig, manager, store, owner),
+          preflight: preflightMock,
+          dispose: () => {},
+        }),
+        manager,
+      ),
     );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       promptInteractive: undefined,
@@ -290,7 +279,7 @@ describe('cli main provider initialization', () => {
       outputFormat: OutputFormat.TEXT,
       extensions: [],
       sessionSummary: undefined,
-    } as unknown as import('./config/cliArgParser.js').CliArgs);
+    } as unknown as CliArgs);
 
     const exitSpy = vi
       .spyOn(process, 'exit')
@@ -310,7 +299,7 @@ describe('cli main provider initialization', () => {
     }
 
     return {
-      preflightAgentActivation: preflightAgentActivationMock,
+      preflight: preflightMock,
       exitSpy,
       consoleErrorSpy,
     };
@@ -320,90 +309,65 @@ describe('cli main provider initialization', () => {
     const behaviorResult =
       await verifyInitializesContentGeneratorConfigBeforeInteractiveProviderUsage();
 
-    expect(behaviorResult.preflightAgentActivation).toHaveBeenCalledTimes(1);
+    expect(behaviorResult.preflight).toHaveBeenCalledTimes(1);
     behaviorResult.exitSpy.mockRestore();
     behaviorResult.consoleErrorSpy.mockRestore();
   });
 
-  async function observeFailedContinueRestoreFallbackIssue1873() {
-    const freshSessionId = randomUUID();
-    const providerManager = {
-      getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
-      getActiveProviderName: vi.fn().mockReturnValue('gemini'),
-      hasActiveProvider: vi.fn().mockReturnValue(true),
-      setActiveProvider: vi.fn().mockReturnValue(undefined),
-    };
+  async function seedSession(id: string, text: string): Promise<string> {
+    const agent = await createAgent({
+      provider: 'fake',
+      model: 'fake-model',
+      workingDir: projectTempDir,
+      sessionId: id,
+    });
+    try {
+      await agent.setHistory([
+        { speaker: 'human', blocks: [{ type: 'text', text }] },
+      ]);
+      await agent.session.setRecording({ enabled: true });
+      const path = agent.session.getRecording().path;
+      if (!path) throw new Error('Seed recording path missing');
+      await agent.session.setRecording({ enabled: false });
+      return path;
+    } finally {
+      await agent.dispose();
+    }
+  }
 
-    const restoreHistory = vi
-      .fn()
-      .mockRejectedValue(new Error('restore failed on purpose'));
-    const resetChat = vi.fn().mockResolvedValue(undefined);
-    const getAgentClient = vi.fn(() => ({ restoreHistory, resetChat }));
-
-    const adoptSessionId = vi.fn();
-    const mockConfig = {
-      initialize: vi.fn().mockResolvedValue(undefined),
-      refreshAuth: vi.fn().mockResolvedValue(undefined),
-      getProviderManager: vi.fn(() => providerManager),
-      getProvider: vi.fn(() => 'gemini'),
-      getConversationLoggingEnabled: vi.fn(() => false),
-      getMcpServers: vi.fn(() => ({})),
-      getDebugMode: vi.fn(() => false),
-      getIdeMode: vi.fn(() => false),
-      getIdeClient: vi.fn(() => null),
-      getListExtensions: vi.fn(() => false),
-      getOutputFormat: vi.fn(() => OutputFormat.TEXT),
-      getToolRegistryInfo: vi.fn(() => ({
-        registered: [],
-        unregistered: [],
-      })),
-      getSandbox: vi.fn(() => false),
-      getModel: vi.fn(() => 'gemini-2.5-pro'),
-      getEphemeralSetting: vi.fn(() => undefined),
-      setEphemeralSetting: vi.fn(),
-      getProjectRoot: vi.fn(() => '/tmp/project'),
-      isInteractive: vi.fn(() => true),
-      getSessionId: vi.fn(() => freshSessionId),
-      adoptSessionId,
-      getQuestion: vi.fn(() => ''),
-      getExperimentalZedIntegration: vi.fn(() => false),
-      getZedIntegrationEnabled: vi.fn(() => false),
-      getTrustedFolder: vi.fn(() => true),
-      getProjectTempDir: vi.fn(() => projectTempDir),
-      ...sessionMediaConfig,
-      getContinueSessionRef: vi.fn(() => '__CONTINUE_LATEST__'),
-      getWorkspaceContext: vi.fn(() => ({
-        getDirectories: () => ['/tmp/project'],
-      })),
-      getScreenReader: vi.fn(() => false),
-      getTerminalBackground: vi.fn(() => undefined),
-
-      getAgentClient,
-      setTerminalBackground: vi.fn(),
-      getPolicyEngine: vi.fn(() => null),
-      getTelemetrySettings: vi.fn(() => ({
-        perf: { enabled: false, memory: false },
-      })),
-    } as unknown as Config;
-
-    const resumeResult = makeResumeResult('restored user content');
-    const recordingDisposeSpy = resumeResult.recording.dispose as ReturnType<
-      typeof vi.fn
-    >;
-    const lockReleaseSpy = resumeResult.lockHandle.release as ReturnType<
-      typeof vi.fn
-    >;
-
-    const coreModule = await import('@vybestack/llxprt-code-core');
-    const resumeSessionMock = coreModule.resumeSession as Mock<
-      typeof coreModule.resumeSession
-    >;
-    resumeSessionMock.mockResolvedValueOnce(resumeResult);
-
+  async function continueLatest(failRestore: boolean) {
+    process.env.LLXPRT_CONFIG_HOME = projectTempDir;
+    process.env.LLXPRT_LOG_HOME = join(projectTempDir, 'log');
+    process.env.LLXPRT_FAKE_RESPONSES = fakeResponses;
+    const olderId = randomUUID();
+    const latestId = randomUUID();
+    const olderPath = await seedSession(olderId, 'older provider-init turn');
+    const latestPath = await seedSession(latestId, 'latest provider-init turn');
+    const freshId = randomUUID();
+    const config = new Config({
+      cwd: projectTempDir,
+      targetDir: projectTempDir,
+      debugMode: false,
+      sessionId: freshId,
+      model: 'fake-model',
+      provider: 'fake',
+      continueSession: true,
+      initialSettings: {},
+      interactive: true,
+    });
     const { loadCliConfig } = await import('./config/config.js');
     const { parseArguments } = await import('./config/cliArgParser.js');
-    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce(
-      mockConfig,
+    const { manager, settingsService } = createBootstrapManager(config);
+    (loadCliConfig as Mock<typeof loadCliConfig>).mockImplementationOnce(
+      handoffCliConfig(
+        config,
+        (store, owner) => ({
+          ...bootstrapOperationCapabilities(config, manager, store, owner),
+          preflight: preflightMock,
+          dispose: () => {},
+        }),
+        manager,
+      ),
     );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
       promptInteractive: undefined,
@@ -411,218 +375,177 @@ describe('cli main provider initialization', () => {
       promptWords: [],
       experimentalAcp: false,
       experimentalUi: true,
-      provider: 'gemini',
+      provider: 'fake',
       profileLoad: undefined,
       outputFormat: OutputFormat.TEXT,
       extensions: [],
       sessionSummary: undefined,
-    } as unknown as import('./config/cliArgParser.js').CliArgs);
-
-    const exitSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation((code?: string | number | null | undefined) => {
-        throw new Error(`EXIT_${code ?? 'unknown'}`);
-      });
-    const consoleWarnSpy = vi
-      .spyOn(console, 'warn')
-      .mockImplementation(() => {});
-    const consoleErrorSpy = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
-
-    // Issue #1873: main() must NOT throw — it should fall back to a fresh
-    // session. If the try/catch didn't handle the restore error, main()
-    // would throw 'restore failed on purpose'.
-    const mainResult = await cli.main();
-
-    return {
-      mainResult,
-      resumeSessionMock,
-      restoreHistory,
-      adoptSessionId,
-      recordingDisposeSpy,
-      lockReleaseSpy,
-      resetChat,
-      exitSpy,
-      consoleWarnSpy,
-      consoleErrorSpy,
-    };
+    } as unknown as CliArgs);
+    const owner = await fromConfig({
+      settingsService,
+      config,
+      sessionId: freshId,
+      sessionIdentityOwnership: 'config',
+    });
+    const client = owner.agentClient;
+    if (failRestore) {
+      vi.spyOn(client, 'setHistory').mockRejectedValueOnce(
+        new Error('restore failed on purpose'),
+      );
+    }
+    const { createForegroundAgent } = await import('./cliAgentBootstrap.js');
+    (
+      createForegroundAgent as Mock<typeof createForegroundAgent>
+    ).mockResolvedValueOnce(owner);
+    const exit = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new Error(`EXIT_${code ?? 'unknown'}`);
+    });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await cli.main();
+      const history = await owner.getHistory();
+      for await (const _event of owner.stream('provider-init-continued')) {
+        /* consume the fake provider turn */
+      }
+      const recording = owner.session.getRecording();
+      const chatsDir = config.projectChatsDir;
+      const filesDuringStartup = await readdir(chatsDir);
+      const locksDuringStartup = filesDuringStartup.filter((name) =>
+        name.endsWith('.lock'),
+      );
+      const sessionFiles = filesDuringStartup.filter((name) =>
+        name.endsWith('.jsonl'),
+      );
+      if (!recording.path) throw new Error('Owner recording was not started');
+      const continuedTranscript = await readFile(recording.path, 'utf8');
+      const adoptedId = config.getSessionId();
+      const exited = exit.mock.calls.length;
+      await owner.dispose();
+      const locksAfterExit = (await readdir(config.projectChatsDir)).filter(
+        (name) => name.endsWith('.lock'),
+      );
+      return {
+        result,
+        recording,
+        history,
+        locksDuringStartup,
+        locksAfterExit,
+        sessionFiles,
+        continuedTranscript,
+        exited,
+        adoptedId,
+        olderId,
+        latestId,
+        olderPath,
+        latestPath,
+        freshId,
+      };
+    } finally {
+      exit.mockRestore();
+      error.mockRestore();
+      await owner.dispose();
+      await config.dispose();
+    }
   }
 
-  it('falls back to a fresh session and does not adopt corrupted session ID when restoreHistory fails during --continue flow (issue #1873)', async () => {
-    const behaviorResult =
-      await observeFailedContinueRestoreFallbackIssue1873();
-
-    expect(behaviorResult.mainResult).toBeUndefined();
-    // resumeSession was called to load the session
-    expect(behaviorResult.resumeSessionMock).toHaveBeenCalledTimes(1);
-    // restoreHistory was attempted with the resumed content
-    expect(behaviorResult.restoreHistory).toHaveBeenCalledTimes(1);
-
-    // Issue #1873 ACC-1: The corrupted session's ID must NOT be adopted.
-    // Previously adoptSessionId was called BEFORE restoreHistory, leaving
-    // the agent in a half-restored state (adopted session ID but history
-    // never restored) that hangs when the user sends a prompt.
-    expect(behaviorResult.adoptSessionId).not.toHaveBeenCalled();
-
-    // Issue #1873 ACC-3: Resources from the failed resume must be released
-    // so the corrupted session file is unlocked and the recording closed.
-    expect(behaviorResult.recordingDisposeSpy).toHaveBeenCalled();
-    expect(behaviorResult.lockReleaseSpy).toHaveBeenCalled();
-
-    // Issue #1873: restoreHistory is not atomic — it may partially populate
-    // the AgentClient before throwing. resetChat ensures no half-restored
-    // items persist into the fresh session.
-    expect(behaviorResult.resetChat).toHaveBeenCalledTimes(1);
-
-    behaviorResult.resumeSessionMock.mockReset();
-    behaviorResult.exitSpy.mockRestore();
-    behaviorResult.consoleWarnSpy.mockRestore();
-    behaviorResult.consoleErrorSpy.mockRestore();
-  });
-
-  async function observeSuccessfulContinueRestoreIssue1873() {
-    const freshSessionId = randomUUID();
-    const providerManager = {
-      getActiveProvider: vi.fn().mockReturnValue({ name: 'gemini' }),
-      getActiveProviderName: vi.fn().mockReturnValue('gemini'),
-      hasActiveProvider: vi.fn().mockReturnValue(true),
-      setActiveProvider: vi.fn().mockReturnValue(undefined),
-    };
-
-    const restoreHistory = vi.fn().mockResolvedValue(undefined);
-    const resetChat = vi.fn().mockResolvedValue(undefined);
-    const getAgentClient = vi.fn(() => ({ restoreHistory, resetChat }));
-
-    const adoptSessionId = vi.fn();
-    const mockConfig = {
-      initialize: vi.fn().mockResolvedValue(undefined),
-      refreshAuth: vi.fn().mockResolvedValue(undefined),
-      getProviderManager: vi.fn(() => providerManager),
-      getProvider: vi.fn(() => 'gemini'),
-      getConversationLoggingEnabled: vi.fn(() => false),
-      getMcpServers: vi.fn(() => ({})),
-      getDebugMode: vi.fn(() => false),
-      getIdeMode: vi.fn(() => false),
-      getIdeClient: vi.fn(() => null),
-      getListExtensions: vi.fn(() => false),
-      getOutputFormat: vi.fn(() => OutputFormat.TEXT),
-      getToolRegistryInfo: vi.fn(() => ({
-        registered: [],
-        unregistered: [],
-      })),
-      getSandbox: vi.fn(() => false),
-      getModel: vi.fn(() => 'gemini-2.5-pro'),
-      getEphemeralSetting: vi.fn(() => undefined),
-      setEphemeralSetting: vi.fn(),
-      getProjectRoot: vi.fn(() => '/tmp/project'),
-      isInteractive: vi.fn(() => true),
-      getSessionId: vi.fn(() => freshSessionId),
-      adoptSessionId,
-      getQuestion: vi.fn(() => ''),
-      getExperimentalZedIntegration: vi.fn(() => false),
-      getZedIntegrationEnabled: vi.fn(() => false),
-      getTrustedFolder: vi.fn(() => true),
-      getProjectTempDir: vi.fn(() => projectTempDir),
-      ...sessionMediaConfig,
-      getContinueSessionRef: vi.fn(() => '__CONTINUE_LATEST__'),
-      getWorkspaceContext: vi.fn(() => ({
-        getDirectories: () => ['/tmp/project'],
-      })),
-      getScreenReader: vi.fn(() => false),
-      getTerminalBackground: vi.fn(() => undefined),
-
-      getAgentClient,
-      setTerminalBackground: vi.fn(),
-      getPolicyEngine: vi.fn(() => null),
-      getTelemetrySettings: vi.fn(() => ({
-        perf: { enabled: false, memory: false },
-      })),
-    } as unknown as Config;
-
-    const resumeResult = makeResumeResult('restored user content');
-    const recordingDisposeSpy = resumeResult.recording.dispose as ReturnType<
-      typeof vi.fn
-    >;
-    const lockReleaseSpy = resumeResult.lockHandle.release as ReturnType<
-      typeof vi.fn
-    >;
-
-    const coreModule = await import('@vybestack/llxprt-code-core');
-    const resumeSessionMock = coreModule.resumeSession as Mock<
-      typeof coreModule.resumeSession
-    >;
-    resumeSessionMock.mockResolvedValueOnce(resumeResult);
-
-    const { loadCliConfig } = await import('./config/config.js');
-    const { parseArguments } = await import('./config/cliArgParser.js');
-    (loadCliConfig as Mock<typeof loadCliConfig>).mockResolvedValueOnce(
-      mockConfig,
+  it('falls back to a fresh owner session and releases the latest session lock when restore fails during --continue (issue #1873)', async () => {
+    const {
+      result,
+      adoptedId,
+      recording,
+      history,
+      latestPath,
+      freshId,
+      locksDuringStartup,
+      locksAfterExit,
+      sessionFiles,
+      continuedTranscript,
+      exited,
+    } = await continueLatest(true);
+    expect(result).toBeUndefined();
+    expect(exited).toBe(0);
+    expect(sessionFiles).toHaveLength(3);
+    expect(continuedTranscript).toContain('provider-init-continued');
+    expect(adoptedId).toBe(freshId);
+    expect(recording.path).not.toBe(latestPath);
+    expect(JSON.stringify(history)).not.toContain('latest provider-init turn');
+    expect(await readFile(latestPath, 'utf8')).toContain(
+      'latest provider-init turn',
     );
-    (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce({
-      promptInteractive: undefined,
-      prompt: undefined,
-      promptWords: [],
-      experimentalAcp: false,
-      experimentalUi: true,
-      provider: 'gemini',
-      profileLoad: undefined,
-      outputFormat: OutputFormat.TEXT,
-      extensions: [],
-      sessionSummary: undefined,
-    } as unknown as import('./config/cliArgParser.js').CliArgs);
+    expect(locksDuringStartup).toHaveLength(1);
+    expect(locksAfterExit).toHaveLength(0);
+  }, 30000);
 
-    const exitSpy = vi
-      .spyOn(process, 'exit')
-      .mockImplementation((code?: string | number | null | undefined) => {
-        throw new Error(`EXIT_${code ?? 'unknown'}`);
-      });
-    const consoleWarnSpy = vi
-      .spyOn(console, 'warn')
-      .mockImplementation(() => {});
-    const consoleErrorSpy = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
-
-    const mainResult = await cli.main();
-
-    return {
-      mainResult,
-      resumeSessionMock,
-      restoreHistory,
-      adoptSessionId,
-      resetChat,
-      recordingDisposeSpy,
-      lockReleaseSpy,
-      exitSpy,
-      consoleWarnSpy,
-      consoleErrorSpy,
-    };
-  }
-
-  it('adopts the resumed session ID and does not release resources when restoreHistory succeeds during --continue flow (issue #1873)', async () => {
-    const behaviorResult = await observeSuccessfulContinueRestoreIssue1873();
-
-    expect(behaviorResult.mainResult).toBeUndefined();
-    expect(behaviorResult.resumeSessionMock).toHaveBeenCalledTimes(1);
-    expect(behaviorResult.restoreHistory).toHaveBeenCalledTimes(1);
-
-    // On success, the resumed session ID IS adopted (correct behavior).
-    expect(behaviorResult.adoptSessionId).toHaveBeenCalledWith(
-      'resumed-session',
-    );
-
-    // On success, resetChat is NOT called — the restored history is kept.
-    expect(behaviorResult.resetChat).not.toHaveBeenCalled();
-
-    // On success, the resumed recording and lock are NOT disposed during
-    // startup — they are held for the session lifecycle.
-    expect(behaviorResult.recordingDisposeSpy).not.toHaveBeenCalled();
-    expect(behaviorResult.lockReleaseSpy).not.toHaveBeenCalled();
-
-    behaviorResult.resumeSessionMock.mockReset();
-    behaviorResult.exitSpy.mockRestore();
-    behaviorResult.consoleWarnSpy.mockRestore();
-    behaviorResult.consoleErrorSpy.mockRestore();
-  });
+  it('resumes the latest owner transcript without starting another recording during --continue (issue #1873)', async () => {
+    const {
+      result,
+      adoptedId,
+      recording,
+      history,
+      olderId,
+      latestId,
+      olderPath,
+      latestPath,
+      locksDuringStartup,
+      locksAfterExit,
+      sessionFiles,
+      continuedTranscript,
+      exited,
+    } = await continueLatest(false);
+    expect(result).toBeUndefined();
+    expect(exited).toBe(0);
+    expect(sessionFiles).toHaveLength(2);
+    expect(continuedTranscript).toContain('provider-init-continued');
+    expect(adoptedId).toBe(latestId);
+    expect(adoptedId).not.toBe(olderId);
+    expect(recording.path).toBe(latestPath);
+    expect(recording.path).not.toBe(olderPath);
+    expect(JSON.stringify(history)).toContain('latest provider-init turn');
+    expect(JSON.stringify(history)).not.toContain('older provider-init turn');
+    expect(locksDuringStartup).toHaveLength(1);
+    expect(locksAfterExit).toHaveLength(0);
+  }, 30000);
 });
+
+function bootstrapOperationCapabilities(
+  config: Config,
+  manager: ProviderManager,
+  settingsService: SettingsService,
+  owner: Parameters<typeof createProviderSessionOwner>[3],
+) {
+  const operation = createProviderSessionOwner(
+    config,
+    manager,
+    settingsService,
+    owner,
+  );
+  return {
+    providerFileLifecycle: operation.providerFileLifecycle,
+    messageBus: operation.messageBus,
+    workspaceDefinitions: operation.workspaceDefinitions,
+    workspaceTrust: operation.workspaceTrust,
+    trustCleanup: operation.trustCleanup,
+    workspaceMemory: operation.workspaceMemory,
+    workspaceMemoryOwnership: operation.workspaceMemoryOwnership,
+    workspaceFilesystem: operation.workspaceFilesystem,
+    sessionClient: operation.sessionClient,
+    takeMediaOwner: operation.takeMediaOwner.bind(operation),
+    settingsOwnerOwnership: operation.settingsOwnerOwnership,
+    takeSettingsOwner: operation.takeSettingsOwner.bind(operation),
+    takeSessionClient: operation.takeSessionClient.bind(operation),
+  };
+}
+
+let bootstrapManagers: ProviderManager[] = [];
+function createBootstrapManager(config: Config): {
+  manager: ProviderManager;
+  settingsService: SettingsService;
+} {
+  const settingsService = new SettingsService();
+  const manager = new ProviderManager({
+    config,
+    settingsService,
+  });
+  bootstrapManagers.push(manager);
+  return { manager, settingsService };
+}

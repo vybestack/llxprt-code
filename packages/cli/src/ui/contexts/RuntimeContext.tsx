@@ -5,235 +5,193 @@
  */
 
 import type React from 'react';
+import type { RuntimeProfileAgent } from './runtimeProfileAgent.js';
 import {
   createContext,
   type PropsWithChildren,
   useContext,
-  useEffect,
   useMemo,
-  useRef,
 } from 'react';
 import type {
   Agent,
   AgentProviderSwitchOptions,
   AgentProviderSwitchResult,
 } from '@vybestack/llxprt-code-agents';
-import {
-  clearActiveModelParam,
-  deleteProfileByName,
+import type {
   getActiveModelName,
-  getActiveModelParams,
-  getActiveProfileName,
   getActiveProviderMetrics,
   getActiveProviderName,
-  getActiveProviderStatus,
-  getActiveToolFormatState,
   getUnallowedParametersForActiveModel,
-  getCliOAuthManager,
-  maybeGetCliOAuthManager,
-  getCliProviderManager,
-  getCliRuntimeContext,
-  getCliRuntimeServices,
-  getEphemeralSetting,
-  getEphemeralSettings,
-  getProfileByName,
-  getRuntimeDiagnosticsSnapshot,
   listAvailableModels,
   listProviders,
-  listSavedProfiles,
-  loadProfileByName,
-  registerCliProviderInfrastructure,
-  saveProfileSnapshot,
-  saveLoadBalancerProfile,
-  setActiveModel,
-  setActiveModelParam,
-  setActiveToolFormatOverride,
-  setDefaultProfileName,
-  setEphemeralSetting,
-  updateActiveProviderApiKey,
-  updateActiveProviderBaseUrl,
   getSessionTokenUsage,
+} from '@vybestack/llxprt-code-providers/runtime/providerReadOperations.js';
+import type {
+  getEphemeralSetting,
+  getEphemeralSettings,
   getSessionSetting,
+  setEphemeralSetting,
   setSessionSetting,
   clearSessionSetting,
-  enterRuntimeScope,
-  runWithRuntimeScope,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+} from '@vybestack/llxprt-code-providers/runtime/ownerSettingsOperations.js';
+import type { getActiveModelParams } from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
+import type {
+  getActiveToolFormatState,
+  setActiveModel,
+  setActiveToolFormatOverride,
+  updateActiveProviderApiKey,
+  BaseUrlUpdateResult,
+} from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import type {
+  getProfileByName,
+  saveLoadBalancerProfile,
+} from '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js';
+import type { ProviderRuntimeStatus } from '@vybestack/llxprt-code-providers/runtime/providerStatus.js';
+import type { createProviderInspection } from '../../runtime/providerInspection.js';
+import type { getOpenAIProviderInfo } from '@vybestack/llxprt-code-providers';
 
 /**
  * @plan PLAN-20251018-STATELESSPROVIDER2.P15
  * @requirement REQ-SP2-003
  * @pseudocode cli-runtime-isolation.md lines 4-10
- * React bridge that binds CLI runtime helpers to the active runtime scope so UI commands remain isolated.
+ * React bridge that binds UI runtime operations to its Agent and owner features.
  */
+type RuntimeFunctions = ReturnType<typeof createProviderInspection> & {
+  listProviders: () => ReturnType<typeof listProviders>;
+  getActiveProviderName: () => ReturnType<typeof getActiveProviderName>;
+  listAvailableModels: (
+    provider?: string,
+  ) => ReturnType<typeof listAvailableModels>;
+  getActiveModelName: () => ReturnType<typeof getActiveModelName>;
+  providerStatus: () => ProviderRuntimeStatus;
+  getEphemeralSettings: () => ReturnType<typeof getEphemeralSettings>;
+  setEphemeralSetting: (
+    key: string,
+    value: unknown,
+  ) => ReturnType<typeof setEphemeralSetting>;
+  getUnallowedParametersForActiveModel: () => ReturnType<
+    typeof getUnallowedParametersForActiveModel
+  >;
+  saveProfileDefinition: (name: string, profile: unknown) => Promise<void>;
+  saveLoadBalancerProfile: (
+    name: string,
+    profile: Parameters<typeof saveLoadBalancerProfile>[1],
+  ) => Promise<void>;
+  listSavedProfiles: () => Promise<string[]>;
+  getProfileByName: (name: string) => ReturnType<typeof getProfileByName>;
+  getActiveToolFormatState: () => ReturnType<typeof getActiveToolFormatState>;
+  setActiveToolFormatOverride: (
+    format: Parameters<typeof setActiveToolFormatOverride>[0],
+  ) => ReturnType<typeof setActiveToolFormatOverride>;
+  getActiveProviderMetrics: () => ReturnType<typeof getActiveProviderMetrics>;
+  getSessionTokenUsage: () => ReturnType<typeof getSessionTokenUsage>;
+  getEphemeralSetting: (key: string) => ReturnType<typeof getEphemeralSetting>;
+  getSessionSetting: (key: string) => ReturnType<typeof getSessionSetting>;
+  setSessionSetting: (
+    key: string,
+    value: unknown,
+  ) => ReturnType<typeof setSessionSetting>;
+  clearSessionSetting: (key: string) => ReturnType<typeof clearSessionSetting>;
+};
 
-const runtimeFunctions = {
-  listProviders,
-  getActiveProviderName,
-  setActiveModel,
-  listAvailableModels,
-  getActiveModelName,
-  getActiveProfileName,
-  getActiveProviderStatus,
-  getActiveModelParams,
-  getEphemeralSettings,
-  setEphemeralSetting,
-  setActiveModelParam,
-  clearActiveModelParam,
-  getUnallowedParametersForActiveModel,
-  saveProfileSnapshot,
-  saveLoadBalancerProfile,
-  loadProfileByName,
-  deleteProfileByName,
-  listSavedProfiles,
-  getProfileByName,
-  setDefaultProfileName,
-  updateActiveProviderBaseUrl,
-  updateActiveProviderApiKey,
-  getCliProviderManager,
-  getCliOAuthManager,
-  maybeGetCliOAuthManager,
-  registerCliProviderInfrastructure,
-  getRuntimeDiagnosticsSnapshot,
-  getActiveToolFormatState,
-  setActiveToolFormatOverride,
-  getActiveProviderMetrics,
-  getSessionTokenUsage,
-  getCliRuntimeServices,
-  getEphemeralSetting,
-  getSessionSetting,
-  setSessionSetting,
-  clearSessionSetting,
-} as const;
-
-type RuntimeFunctions = typeof runtimeFunctions;
-
-/**
- * Provider-switch wrapper that delegates to the Agent facade's setProvider
- * method. The agent reference is stored when the RuntimeContextProvider
- * mounts and updated on re-renders, so UI hooks can call setProvider
- * without importing the raw provider-switch primitive (#2374).
- */
 type AgentSetProvider = (
   provider: string,
   model?: string,
   options?: AgentProviderSwitchOptions,
 ) => Promise<AgentProviderSwitchResult>;
 
-export type RuntimeApi = {
-  [K in keyof RuntimeFunctions]: RuntimeFunctions[K];
-} & {
-  setProvider: AgentSetProvider;
+type ProfileRuntimeApi = Pick<
+  Agent,
+  | 'getActiveProfileName'
+  | 'setDefaultProfileName'
+  | 'getRuntimeDiagnosticsSnapshot'
+  | 'saveProfileSnapshot'
+  | 'deleteProfileByName'
+>;
+
+export type RuntimeOwnerFeatures = RuntimeFunctions & {
+  setActiveModel: (model: string) => ReturnType<typeof setActiveModel>;
+  getActiveModelParams: () => ReturnType<typeof getActiveModelParams>;
+  setActiveModelParam: (key: string, value: unknown) => void;
+  clearActiveModelParam: (key: string) => void;
+  updateActiveProviderApiKey: (
+    key: string | null,
+  ) => ReturnType<typeof updateActiveProviderApiKey>;
+  getWorkspaceDirectories: () => readonly string[];
+  getDefaultProfileName: () => string | null;
+  getOpenAIProviderInfo: () => ReturnType<typeof getOpenAIProviderInfo>;
 };
+
+export type RuntimeApi = RuntimeOwnerFeatures &
+  ProfileRuntimeApi & {
+    setProvider: AgentSetProvider;
+    loadProfileByName: (name: string) => ReturnType<Agent['profiles']['load']>;
+    updateActiveProviderBaseUrl: (
+      url: string | null,
+    ) => Promise<BaseUrlUpdateResult>;
+  };
 
 interface RuntimeContextBridge {
   runtimeId: string;
-  metadata: Record<string, unknown>;
   api: RuntimeApi;
-  runWithScope<T>(callback: () => T): T;
-  enterScope(): void;
 }
 
 const RuntimeContext = createContext<RuntimeContextBridge | null>(null);
 
+function makeBaseUrlUpdater(
+  agent: RuntimeProfileAgent,
+): RuntimeApi['updateActiveProviderBaseUrl'] {
+  return async (url) => {
+    await agent.auth.setBaseUrl(url);
+    const providerName = agent.getProvider();
+    const trimmed = url?.trim();
+    const baseUrl = trimmed?.toLowerCase() === 'none' ? undefined : trimmed;
+    return {
+      changed: true,
+      providerName,
+      baseUrl: baseUrl === '' ? undefined : baseUrl,
+      message: baseUrl
+        ? `Base URL updated to '${baseUrl}' for provider '${providerName}'.`
+        : `Base URL cleared; provider '${providerName}' now uses the default endpoint.`,
+    };
+  };
+}
+
 function makeRuntimeApi(
-  runtimeId: string,
-  metadata: Record<string, unknown>,
-  agentRef: { current: Agent | null },
+  agent: RuntimeProfileAgent,
+  owner: RuntimeOwnerFeatures,
 ): RuntimeApi {
-  const scope = { runtimeId, metadata };
-  const boundEntries = Object.entries(runtimeFunctions).map(([key, fn]) => {
-    if (typeof fn !== 'function') {
-      return [key, fn];
-    }
-    const wrapped = (...args: unknown[]) =>
-      runWithRuntimeScope(scope, () =>
-        (fn as (...inner: unknown[]) => unknown)(...args),
-      );
-    return [key, wrapped];
-  });
-  const base = Object.fromEntries(boundEntries) as {
-    [K in keyof RuntimeFunctions]: RuntimeFunctions[K];
+  return {
+    ...owner,
+    setProvider: (provider, model, options) =>
+      agent.setProvider(provider, model, options),
+    getActiveProfileName: () => agent.getActiveProfileName(),
+    setDefaultProfileName: (name) => agent.setDefaultProfileName(name),
+    getRuntimeDiagnosticsSnapshot: () => agent.getRuntimeDiagnosticsSnapshot(),
+    saveProfileSnapshot: (name, additional) =>
+      agent.saveProfileSnapshot(name, additional),
+    deleteProfileByName: (name) => agent.deleteProfileByName(name),
+    loadProfileByName: (name) => agent.profiles.load(name),
+    updateActiveProviderBaseUrl: makeBaseUrlUpdater(agent),
   };
-  const setProvider: AgentSetProvider = (provider, model, options) => {
-    const agent = agentRef.current;
-    if (!agent) {
-      return Promise.reject(
-        new Error('Agent facade is not available for provider switch.'),
-      );
-    }
-    return agent.setProvider(provider, model, options);
-  };
-  return { ...base, setProvider };
 }
 
 function createBridge(
-  runtimeId: string,
-  metadata: Record<string, unknown>,
-  agentRef: { current: Agent | null },
+  agent: RuntimeProfileAgent,
+  owner: RuntimeOwnerFeatures,
 ): RuntimeContextBridge {
-  const scope = { runtimeId, metadata };
-  const api = makeRuntimeApi(runtimeId, metadata, agentRef);
-  return {
-    runtimeId,
-    metadata,
-    api,
-    runWithScope: <T,>(callback: () => T): T =>
-      runWithRuntimeScope(scope, callback),
-    enterScope: () => enterRuntimeScope(scope),
-  };
-}
-
-let latestBridge: RuntimeContextBridge | null = null;
-
-type CliRuntimeContext = ReturnType<typeof getCliRuntimeContext>;
-
-function resolveRuntimeId(runtime: CliRuntimeContext): string {
-  if (
-    typeof runtime.runtimeId === 'string' &&
-    runtime.runtimeId.trim() !== ''
-  ) {
-    return runtime.runtimeId;
-  }
-  // getCliRuntimeContext() guarantees a valid non-empty runtimeId on success;
-  // this guard exists only to fail fast if that invariant is broken.
-  throw new Error(
-    'Runtime context has no valid runtimeId. Ensure setCliRuntimeContext() was called with an explicit runtimeId before the UI bridge is constructed.',
-  );
+  return { runtimeId: agent.getRuntimeId(), api: makeRuntimeApi(agent, owner) };
 }
 
 export interface RuntimeContextProviderProps {
-  agent: Agent;
+  agent: RuntimeProfileAgent;
+  owner: RuntimeOwnerFeatures;
 }
 
 export const RuntimeContextProvider: React.FC<
   PropsWithChildren<RuntimeContextProviderProps>
-> = ({ children, agent }) => {
-  const agentRef = useRef<Agent | null>(agent);
-  useEffect(() => {
-    agentRef.current = agent;
-  }, [agent]);
-
-  const runtime = getCliRuntimeContext();
-  // Invariant: CLI bootstrap calls setCliRuntimeContext() with an explicit
-  // runtimeId before the UI bridge mounts; violating that contract is fatal.
-  const runtimeId = resolveRuntimeId(runtime);
-
-  const bridge = useMemo(() => {
-    const normalizedMetadata = runtime.metadata ?? {};
-    return createBridge(runtimeId, normalizedMetadata, agentRef);
-  }, [runtimeId, runtime, agentRef]);
-
-  useEffect(() => {
-    bridge.enterScope();
-    latestBridge = bridge;
-    return () => {
-      if (latestBridge?.runtimeId === bridge.runtimeId) {
-        latestBridge = null;
-      }
-    };
-  }, [bridge]);
-
+> = ({ children, agent, owner }) => {
+  const bridge = useMemo(() => createBridge(agent, owner), [agent, owner]);
   return (
     <RuntimeContext.Provider value={bridge}>{children}</RuntimeContext.Provider>
   );
@@ -253,20 +211,9 @@ export function useRuntimeApi(): RuntimeApi {
   return useRuntimeBridge().api;
 }
 
-export function getRuntimeBridge(): RuntimeContextBridge {
-  if (latestBridge) {
-    return latestBridge;
-  }
-
-  const runtime = getCliRuntimeContext();
-  const runtimeId = resolveRuntimeId(runtime);
-  const metadata = runtime.metadata ?? {};
-  const bridge = createBridge(runtimeId, metadata, { current: null });
-  bridge.enterScope();
-  latestBridge = bridge;
-  return bridge;
-}
-
-export function getRuntimeApi(): RuntimeApi {
-  return getRuntimeBridge().api;
+export function createRuntimeApi(
+  agent: RuntimeProfileAgent,
+  owner: RuntimeOwnerFeatures,
+): RuntimeApi {
+  return makeRuntimeApi(agent, owner);
 }

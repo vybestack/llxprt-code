@@ -60,6 +60,7 @@ async function fireAfterHook(deps: MessageStreamDeps, ctx: StreamContext) {
     ctx.promptText,
     responseText,
     false,
+    ctx.recordingExecution?.hookOwner,
   );
 }
 
@@ -77,6 +78,28 @@ async function* fireAfterHookAndEmitClearContext(
     };
   }
 }
+async function tryContextSizeCompression(
+  deps: MessageStreamDeps,
+  ctx: StreamContext,
+): Promise<boolean> {
+  try {
+    const result = await deps.getChat().performCompression(ctx.prompt_id, {
+      trigger: 'auto',
+      transcriptPathProvider: ctx.recordingExecution?.transcriptPath,
+      historyOrigin: ctx.recordingExecution?.historyOrigin,
+      hookOwner: ctx.recordingExecution?.hookOwner,
+      ...(ctx.modelParameters ? { modelParameters: ctx.modelParameters } : {}),
+    });
+    return result === PerformCompressionResult.COMPRESSED;
+  } catch (error) {
+    deps.logger.warn(
+      () =>
+        `[stream:orchestrator] 413 compression attempt failed; escalating to context-window enforcement`,
+      { error: error instanceof Error ? error.message : String(error) },
+    );
+    return false;
+  }
+}
 
 /**
  * Context-size 413 recovery: the pending request carries no oversized
@@ -88,6 +111,7 @@ async function* fireAfterHookAndEmitClearContext(
  */
 async function* handleContextSize413Error(
   deps: MessageStreamDeps,
+  event: ServerAgentStreamEvent,
   ctx: StreamContext,
   deferredEvents: ServerAgentStreamEvent[],
   state: TerminalState,
@@ -96,27 +120,33 @@ async function* handleContextSize413Error(
   boundedTurns: number,
 ): AsyncGenerator<ServerAgentStreamEvent, IterationResult | undefined> {
   const chat = deps.getChat();
-  let compressionSucceeded = false;
-  try {
-    const result = await chat.performCompression(ctx.prompt_id, {
-      trigger: 'auto',
-    });
-    compressionSucceeded = result === PerformCompressionResult.COMPRESSED;
-  } catch (error) {
-    // Compression is best-effort recovery: a subsystem failure escalates to
-    // enforcement rather than aborting the stream.
-    deps.logger.warn(
-      () =>
-        `[stream:orchestrator] 413 compression attempt failed; escalating to context-window enforcement`,
-      { error: error instanceof Error ? error.message : String(error) },
-    );
-  }
+  const compressionSucceeded = await tryContextSizeCompression(deps, ctx);
   if (!compressionSucceeded) {
     try {
       const pendingTokens = await chat.estimatePendingTokens(
         iContentFromAgentMessageInput(initialRequest),
       );
-      await chat.enforceContextWindow(pendingTokens, ctx.prompt_id);
+      if (ctx.recordingExecution) {
+        await chat.enforceContextWindow(
+          pendingTokens,
+          ctx.prompt_id,
+          ctx.recordingExecution.transcriptPath,
+          ctx.recordingExecution.historyOrigin,
+          ctx.recordingExecution.hookOwner,
+          ctx.modelParameters,
+        );
+      } else if (ctx.modelParameters) {
+        await chat.enforceContextWindow(
+          pendingTokens,
+          ctx.prompt_id,
+          undefined,
+          undefined,
+          undefined,
+          ctx.modelParameters,
+        );
+      } else {
+        await chat.enforceContextWindow(pendingTokens, ctx.prompt_id);
+      }
     } catch (error) {
       // Enforcement throwing means the context cannot be reduced locally;
       // end the iteration gracefully instead of crashing the stream.
@@ -125,6 +155,7 @@ async function* handleContextSize413Error(
           `[stream:orchestrator] 413 context-window enforcement failed; ending iteration without retry`,
         { error: error instanceof Error ? error.message : String(error) },
       );
+      yield event;
       for (const d of deferredEvents) yield d;
       await fireAfterHook(deps, ctx);
       return earlyIterResult(state.hadToolCallsThisTurn, {
@@ -150,6 +181,8 @@ async function* handleContextSize413Error(
     boundedTurns - 1,
     false,
     true,
+    ctx.recordingExecution,
+    ctx.modelParameters,
   );
   await fireAfterHook(deps, ctx);
   return earlyIterResult(state.hadToolCallsThisTurn, {
@@ -160,6 +193,7 @@ async function* handleContextSize413Error(
 
 async function* handle413Error(
   deps: MessageStreamDeps,
+  event: ServerAgentStreamEvent,
   ctx: StreamContext,
   deferredEvents: ServerAgentStreamEvent[],
   state: TerminalState,
@@ -176,6 +210,7 @@ async function* handle413Error(
         hadToolCallsThisTurn: state.hadToolCallsThisTurn,
       },
     );
+    yield event;
     for (const d of deferredEvents) yield d;
     await fireAfterHook(deps, ctx);
     return earlyIterResult(state.hadToolCallsThisTurn, {
@@ -193,6 +228,7 @@ async function* handle413Error(
   ) {
     return yield* handleContextSize413Error(
       deps,
+      event,
       ctx,
       deferredEvents,
       state,
@@ -223,6 +259,8 @@ async function* handle413Error(
     boundedTurns - 1,
     false,
     true,
+    ctx.recordingExecution,
+    ctx.modelParameters,
   );
   await fireAfterHook(deps, ctx);
   return earlyIterResult(state.hadToolCallsThisTurn, {
@@ -276,6 +314,8 @@ async function* handleToolContentRejection400(
     boundedTurns - 1,
     false,
     true,
+    ctx.recordingExecution,
+    ctx.modelParameters,
   );
   await fireAfterHook(deps, ctx);
   return earlyIterResult(state.hadToolCallsThisTurn, {
@@ -345,6 +385,8 @@ async function* handleErrorEvent(
     hadThinking: state.hadThinking,
   });
 
+  if (errorStatus !== 413) yield event;
+
   if (
     errorStatus === 413 &&
     config.getContinueOnFailedApiCall() &&
@@ -352,6 +394,7 @@ async function* handleErrorEvent(
   ) {
     const result = yield* handle413Error(
       deps,
+      event,
       ctx,
       deferredEvents,
       state,
@@ -400,6 +443,7 @@ async function* handleErrorEvent(
       hadThinking: state.hadThinking,
     },
   );
+  if (errorStatus === 413) yield event;
   for (const d of deferredEvents) yield d;
   yield* fireAfterHookAndEmitClearContext(deps, ctx);
   return earlyIterResult(state.hadToolCallsThisTurn, {
@@ -472,6 +516,9 @@ async function* handleInvalidStreamEvent(
       ctx.prompt_id,
       boundedTurns - 1,
       true,
+      false,
+      ctx.recordingExecution,
+      ctx.modelParameters,
     );
     yield* fireAfterHookAndEmitClearContext(deps, ctx);
     return earlyIterResult(state.hadToolCallsThisTurn, {

@@ -14,7 +14,6 @@ import {
   type LlxprtExtension,
 } from '@vybestack/llxprt-code-core';
 import { DebugLogger, debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 import { resolvePath } from '../utils/resolvePath.js';
 import { isDebugMode } from './environmentLoader.js';
 import { isWorkspaceTrusted } from './trustedFolders.js';
@@ -42,7 +41,6 @@ export interface ContextResolutionResult {
   readonly ideMode: boolean;
   readonly folderTrust: boolean;
   readonly trustedFolder: boolean;
-  readonly fileService: FileDiscoveryService;
   readonly fileFiltering: FileFilteringOptions;
   readonly memoryFileFiltering: FileFilteringOptions;
   readonly includeDirectories: readonly string[];
@@ -100,10 +98,7 @@ function resolveTrustAndIdeContext(
 
 function resolveFiltering(
   profileMergedSettings: Settings,
-  cwd: string,
-): Pick<ContextResolutionResult, 'fileFiltering' | 'memoryFileFiltering'> & {
-  fileService: FileDiscoveryService;
-} {
+): Pick<ContextResolutionResult, 'fileFiltering' | 'memoryFileFiltering'> {
   const { enableFuzzySearch, ...fileFilteringFromSettings } =
     profileMergedSettings.fileFiltering ?? {};
 
@@ -130,9 +125,7 @@ function resolveFiltering(
     setLlxprtMdFilename(getCurrentLlxprtMdFilename());
   }
 
-  const fileService = new FileDiscoveryService(cwd);
-
-  return { fileFiltering, memoryFileFiltering, fileService };
+  return { fileFiltering, memoryFileFiltering };
 }
 
 function resolveIncludeDirectories(
@@ -215,7 +208,7 @@ export function resolveContextAndEnvironment(
   } = input;
 
   const trustAndIde = resolveTrustAndIdeContext(input);
-  const filtering = resolveFiltering(profileMergedSettings, cwd);
+  const filtering = resolveFiltering(profileMergedSettings);
   const includeDirs = resolveIncludeDirectories(argv, profileMergedSettings);
   const extensionData = resolveExtensions(
     extensions,

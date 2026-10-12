@@ -370,10 +370,12 @@ export function resolveRelativeModule(
 ): string | undefined {
   const target = resolve(dirname(fromAbsFile), specifier);
   const targetNoJs = target.replace(/\.(js|jsx|mjs|cjs)$/, '');
+  const sourceSiblingCandidates = /\.(js|jsx|mjs|cjs)$/.test(target)
+    ? [`${targetNoJs}.ts`, `${targetNoJs}.tsx`]
+    : [];
   const fileCandidates = [
+    ...sourceSiblingCandidates,
     target,
-    `${targetNoJs}.ts`,
-    `${targetNoJs}.tsx`,
     `${target}.ts`,
     `${target}.tsx`,
     `${target}.js`,

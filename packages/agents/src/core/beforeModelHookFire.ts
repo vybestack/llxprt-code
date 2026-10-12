@@ -11,7 +11,7 @@
  * precedent as resolvePendingBoundaryFromHook in boundaryRecovery.ts).
  */
 
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProviderToolset as ProviderToolset } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import {
@@ -29,7 +29,7 @@ export interface BeforeModelHookFireResult {
 
 /** Inputs to fireBeforeModelHook. */
 export interface BeforeModelHookFireOptions {
-  configForHooks: AgentRuntimeContext['providerRuntime']['config'];
+  owner?: HookExecutionOwner;
   requestContents: IContent[];
   pendingUserIContents: IContent[];
   tools: ProviderToolset | undefined;
@@ -49,7 +49,7 @@ export async function fireBeforeModelHook(
   options: BeforeModelHookFireOptions,
 ): Promise<BeforeModelHookFireResult> {
   const {
-    configForHooks,
+    owner,
     requestContents,
     pendingUserIContents,
     tools,
@@ -71,29 +71,19 @@ export async function fireBeforeModelHook(
       log,
     ),
   });
-  if (
-    configForHooks === undefined ||
-    typeof configForHooks.getEnableHooks !== 'function' ||
-    configForHooks.getEnableHooks() !== true
-  ) {
-    return passthrough();
-  }
-  const hookSystem =
-    typeof configForHooks.getHookSystem === 'function'
-      ? configForHooks.getHookSystem()
-      : undefined;
-  if (hookSystem === undefined) return passthrough();
-
-  await hookSystem.initialize();
+  if (owner?.beforeModel === undefined) return passthrough();
   // Capture a projection snapshot BEFORE firing the hook so in-place
   // mutations (hooks that mutate the live array/elements and return no
   // llm_request) are detected by differential recovery (G1, issue #2306).
   const snapshot = snapshotContents(requestContents);
-  const beforeModelResult = await hookSystem.fireBeforeModelEvent({
-    model,
-    contents: requestContents,
-    ...(tools !== undefined ? { tools } : {}),
-  });
+  const beforeModelResult = await owner.beforeModel(
+    {
+      model,
+      contents: requestContents,
+      ...(tools !== undefined ? { tools } : {}),
+    },
+    owner.signal,
+  );
 
   enforceBeforeModelHookDecision(beforeModelResult, hookRestrictedAllowedTools);
 

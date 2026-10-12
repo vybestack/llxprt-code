@@ -1,8 +1,11 @@
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 /**
  * Integration tests for Phase 4: Tool Executor Unification
@@ -17,17 +20,15 @@
  * 3. agentId preservation - agentId flows correctly through execution paths
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { afterEach, describe, it, expect, beforeEach } from 'bun:test';
 import {
   CoreToolScheduler,
   type CompletedToolCall,
 } from './coreToolScheduler.js';
-import {
-  executeToolCall,
-  type ToolExecutionConfig,
-} from './nonInteractiveToolExecutor.js';
+import { executeToolCall } from './nonInteractiveToolExecutor.js';
+import { bindSchedulerOwner } from '../session/assembleSchedulerOwner.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
-import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 
 import type {
   ContextAwareTool,
@@ -35,18 +36,11 @@ import type {
 } from '@vybestack/llxprt-code-tools';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
-import { createSchedulerRegistryDelegate } from './__tests__/scheduler-registry-test-helpers.js';
 
-function createMockMessageBus() {
-  return {
-    subscribe: vi.fn().mockReturnValue(() => {}),
-    publish: vi.fn(),
-    respondToConfirmation: vi.fn(),
-    requestConfirmation: vi.fn().mockResolvedValue(true),
-    removeAllListeners: vi.fn(),
-    listenerCount: vi.fn().mockReturnValue(0),
-  };
-}
+const ownedFixtures: Array<{
+  config: Config;
+  policyOwner: RuntimePolicyOwner;
+}> = [];
 
 function createAllowPolicyEngine(): PolicyEngine {
   return new PolicyEngine({
@@ -88,27 +82,46 @@ function createMockConfig(
     ephemeralSettings?: Record<string, unknown>;
     policyEngine?: PolicyEngine;
   },
-): Config {
+): {
+  config: Config;
+  settingsOwner: SessionSettingsOwner;
+  policyOwner: RuntimePolicyOwner;
+} {
   const policyEngine = options?.policyEngine ?? createAllowPolicyEngine();
-  const mockMessageBus = createMockMessageBus();
 
-  return {
-    getSessionId: () => 'test-session-id',
-    getUsageStatisticsEnabled: () => false,
-    getDebugMode: () => false,
-    getApprovalMode: () => options?.approvalMode ?? ApprovalMode.YOLO,
-    getEphemeralSettings: () => options?.ephemeralSettings ?? {},
-    getEphemeralSetting: (key: string) => options?.ephemeralSettings?.[key],
-    getAllowedTools: () => [],
-    getExcludeTools: () => [],
-    getContentGeneratorConfig: () => ({
+  const config = Object.assign(
+    new Config({
+      sessionId: 'test-session-id',
+      cwd: process.cwd(),
+      targetDir: process.cwd(),
       model: 'test-model',
+      debugMode: false,
+      trustedFolder: true,
+      initialSettings: options?.ephemeralSettings ?? {},
+      policyEngineConfig: {
+        rules: [...policyEngine.getRules()],
+        defaultDecision: policyEngine.getDefaultDecision(),
+      },
     }),
-    getToolRegistry: () => toolRegistry,
-    getMessageBus: () => mockMessageBus,
-    getPolicyEngine: () => policyEngine,
-    getTelemetryLogPromptsEnabled: () => false,
-  } as unknown as Config;
+    {
+      getSessionId: () => 'test-session-id',
+      getUsageStatisticsEnabled: () => false,
+      getDebugMode: () => false,
+      getApprovalMode: () => options?.approvalMode ?? ApprovalMode.YOLO,
+
+      getAllowedTools: () => [],
+      getExcludeTools: () => [],
+      getContentGeneratorConfig: () => ({
+        model: 'test-model',
+      }),
+      getToolRegistry: () => toolRegistry,
+      getTelemetryLogPromptsEnabled: () => false,
+    },
+  );
+  const policyOwner = new RuntimePolicyOwner(config);
+  const settingsRoot = createSessionSettingsFixture(config);
+  ownedFixtures.push({ config, policyOwner });
+  return { ...settingsRoot, config, policyOwner };
 }
 
 function createMockExecutionConfig(
@@ -118,61 +131,35 @@ function createMockExecutionConfig(
     ephemeralSettings?: Record<string, unknown>;
     policyEngine?: PolicyEngine;
   },
-): ToolExecutionConfig {
+): ReturnType<typeof bindSchedulerOwner> {
   const policyEngine = options?.policyEngine ?? createAllowPolicyEngine();
-  const ephemeralSettings = options?.ephemeralSettings ?? {};
-  const messageBus = createMockMessageBus();
-
-  // Build the base config fixture, then attach a per-config scheduler
-  // registry delegate keyed by owner object identity plus purpose, matching
-  // production Config semantics.
-  const fixture = {
-    getSessionId: () => 'test-session-id',
-    getTelemetryLogPromptsEnabled: () => false,
-    getExcludeTools: () => [],
-    getEphemeralSettings: () => ephemeralSettings,
-    getEphemeralSetting: (key: string) => ephemeralSettings[key],
-    getToolRegistry: () => toolRegistry,
-    getPolicyEngine: () => policyEngine,
-    getApprovalMode: () => options?.approvalMode ?? ApprovalMode.DEFAULT,
-    getAllowedTools: () => undefined,
-    getMessageBus: () => messageBus,
-    getUsageStatisticsEnabled: () => false,
-    getDebugMode: () => false,
-    getContentGeneratorConfig: () => ({ model: 'test-model' }),
-    getToolSchedulerFactory:
-      () => (options: ConstructorParameters<typeof CoreToolScheduler>[0]) =>
-        new CoreToolScheduler(options),
-  };
-
-  const delegate = createSchedulerRegistryDelegate({
-    config: fixture as unknown as Config,
-    messageBus: getTestRuntimeMessageBus(fixture as unknown as Config),
-    toolRegistry,
-    createScheduler: async (schedulerOptions) =>
-      fixture.getToolSchedulerFactory()({
-        config: fixture as unknown as Config,
-        messageBus: getTestRuntimeMessageBus(fixture as unknown as Config),
-        toolRegistry,
-        toolContextInteractiveMode: schedulerOptions.interactiveMode ?? true,
-        getPreferredEditor: () => undefined,
-        onEditorClose: () => {},
-      }),
+  const { config, settingsOwner } = createMockConfig(toolRegistry, {
+    ...options,
+    approvalMode: options?.approvalMode ?? ApprovalMode.DEFAULT,
   });
-
-  const config: ToolExecutionConfig = {
-    ...fixture,
-    ...delegate,
-  } as unknown as ToolExecutionConfig;
-
-  return config;
+  const messageBus = new MessageBus(policyEngine, false);
+  return bindSchedulerOwner(
+    config,
+    messageBus,
+    false,
+    toolRegistry,
+    (schedulerOptions) => new CoreToolScheduler(schedulerOptions),
+    () => settingsOwner.readToolExecutionPolicy(),
+    () => settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
+    undefined,
+    settingsOwner.telemetry,
+  );
 }
 
 describe('Tool Executor Unification - Integration Tests', () => {
+  afterEach(async () => {
+    for (const fixture of ownedFixtures.splice(0)) {
+      await fixture.policyOwner.dispose();
+      await fixture.config.dispose();
+    }
+  });
+
   let abortController: AbortController;
-  // Stable per-suite registry owner: executeToolCall acquires and releases
-  // on this same object, so the per-config registry refcount balances.
-  const executionOwner = { label: 'tool-executor-unification' };
 
   beforeEach(() => {
     abortController = new AbortController();
@@ -192,7 +179,11 @@ describe('Tool Executor Unification - Integration Tests', () => {
         'tools.disabled': ['blocked_tool'],
       };
 
-      const schedulerConfig = createMockConfig(toolRegistry, {
+      const {
+        config: schedulerConfig,
+        policyOwner,
+        settingsOwner: schedulerConfigSettingsOwner,
+      } = createMockConfig(toolRegistry, {
         ephemeralSettings,
       });
       const executorConfig = createMockExecutionConfig(toolRegistry, {
@@ -217,9 +208,16 @@ describe('Tool Executor Unification - Integration Tests', () => {
       );
 
       const scheduler = new CoreToolScheduler({
+        telemetry: schedulerConfigSettingsOwner.telemetry,
+        readExecutionPolicy: () =>
+          schedulerConfigSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          schedulerConfigSettingsOwner.readToolGovernance(
+            schedulerConfig.getExcludeTools() ?? [],
+          ),
         config: schedulerConfig,
-        messageBus: getTestRuntimeMessageBus(schedulerConfig),
-        toolRegistry: schedulerConfig.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           schedulerCompletionResolver?.(calls);
@@ -236,7 +234,6 @@ describe('Tool Executor Unification - Integration Tests', () => {
         executorConfig,
         request,
         abortController.signal,
-        { owner: executionOwner },
       );
       const executorResponse = executorCompleted.response;
 
@@ -264,7 +261,11 @@ describe('Tool Executor Unification - Integration Tests', () => {
         'tools.allowed': ['allowed_tool'],
       };
 
-      const schedulerConfig = createMockConfig(toolRegistry, {
+      const {
+        config: schedulerConfig,
+        policyOwner,
+        settingsOwner: schedulerConfigSettingsOwner,
+      } = createMockConfig(toolRegistry, {
         ephemeralSettings,
       });
       const executorConfig = createMockExecutionConfig(toolRegistry, {
@@ -289,9 +290,16 @@ describe('Tool Executor Unification - Integration Tests', () => {
       );
 
       const scheduler = new CoreToolScheduler({
+        telemetry: schedulerConfigSettingsOwner.telemetry,
+        readExecutionPolicy: () =>
+          schedulerConfigSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          schedulerConfigSettingsOwner.readToolGovernance(
+            schedulerConfig.getExcludeTools() ?? [],
+          ),
         config: schedulerConfig,
-        messageBus: getTestRuntimeMessageBus(schedulerConfig),
-        toolRegistry: schedulerConfig.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           schedulerCompletionResolver?.(calls);
@@ -308,7 +316,6 @@ describe('Tool Executor Unification - Integration Tests', () => {
         executorConfig,
         request,
         abortController.signal,
-        { owner: executionOwner },
       );
       const executorResponse = executorCompleted.response;
 
@@ -333,7 +340,11 @@ describe('Tool Executor Unification - Integration Tests', () => {
         'tools.allowed': ['some_other_tool'],
       };
 
-      const schedulerConfig = createMockConfig(toolRegistry, {
+      const {
+        config: schedulerConfig,
+        policyOwner,
+        settingsOwner: schedulerConfigSettingsOwner,
+      } = createMockConfig(toolRegistry, {
         ephemeralSettings,
       });
       const executorConfig = createMockExecutionConfig(toolRegistry, {
@@ -358,9 +369,16 @@ describe('Tool Executor Unification - Integration Tests', () => {
       );
 
       const scheduler = new CoreToolScheduler({
+        telemetry: schedulerConfigSettingsOwner.telemetry,
+        readExecutionPolicy: () =>
+          schedulerConfigSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          schedulerConfigSettingsOwner.readToolGovernance(
+            schedulerConfig.getExcludeTools() ?? [],
+          ),
         config: schedulerConfig,
-        messageBus: getTestRuntimeMessageBus(schedulerConfig),
-        toolRegistry: schedulerConfig.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           schedulerCompletionResolver?.(calls);
@@ -377,7 +395,6 @@ describe('Tool Executor Unification - Integration Tests', () => {
         executorConfig,
         request,
         abortController.signal,
-        { owner: executionOwner },
       );
       const executorResponse = executorCompleted.response;
 
@@ -402,7 +419,11 @@ describe('Tool Executor Unification - Integration Tests', () => {
       });
 
       const toolRegistry = createMockToolRegistry(contextAwareTool);
-      const config = createMockConfig(toolRegistry);
+      const {
+        config: config,
+        policyOwner,
+        settingsOwner: configSettingsOwner,
+      } = createMockConfig(toolRegistry);
 
       let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
         null;
@@ -411,9 +432,16 @@ describe('Tool Executor Unification - Integration Tests', () => {
       });
 
       const scheduler = new CoreToolScheduler({
+        telemetry: configSettingsOwner.telemetry,
+        readExecutionPolicy: () =>
+          configSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
         config,
-        messageBus: getTestRuntimeMessageBus(config),
-        toolRegistry: config.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
@@ -447,7 +475,11 @@ describe('Tool Executor Unification - Integration Tests', () => {
       });
 
       const toolRegistry = createMockToolRegistry(contextAwareTool);
-      const config = createMockConfig(toolRegistry);
+      const {
+        config: config,
+        policyOwner,
+        settingsOwner: configSettingsOwner,
+      } = createMockConfig(toolRegistry);
 
       let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
         null;
@@ -456,9 +488,16 @@ describe('Tool Executor Unification - Integration Tests', () => {
       });
 
       const scheduler = new CoreToolScheduler({
+        telemetry: configSettingsOwner.telemetry,
+        readExecutionPolicy: () =>
+          configSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
         config,
-        messageBus: getTestRuntimeMessageBus(config),
-        toolRegistry: config.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
         },
@@ -496,7 +535,11 @@ describe('Tool Executor Unification - Integration Tests', () => {
       });
 
       const toolRegistry = createMockToolRegistry(contextAwareTool);
-      const config = createMockConfig(toolRegistry);
+      const {
+        config: config,
+        policyOwner,
+        settingsOwner: configSettingsOwner,
+      } = createMockConfig(toolRegistry);
 
       let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
         null;
@@ -505,9 +548,16 @@ describe('Tool Executor Unification - Integration Tests', () => {
       });
 
       const scheduler = new CoreToolScheduler({
+        telemetry: configSettingsOwner.telemetry,
+        readExecutionPolicy: () =>
+          configSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
         config,
-        messageBus: getTestRuntimeMessageBus(config),
-        toolRegistry: config.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
@@ -542,7 +592,11 @@ describe('Tool Executor Unification - Integration Tests', () => {
       });
 
       const toolRegistry = createMockToolRegistry(tool);
-      const config = createMockConfig(toolRegistry);
+      const {
+        config: config,
+        policyOwner,
+        settingsOwner: configSettingsOwner,
+      } = createMockConfig(toolRegistry);
 
       let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
         null;
@@ -551,9 +605,16 @@ describe('Tool Executor Unification - Integration Tests', () => {
       });
 
       const scheduler = new CoreToolScheduler({
+        telemetry: configSettingsOwner.telemetry,
+        readExecutionPolicy: () =>
+          configSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
         config,
-        messageBus: getTestRuntimeMessageBus(config),
-        toolRegistry: config.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
@@ -588,7 +649,11 @@ describe('Tool Executor Unification - Integration Tests', () => {
       });
 
       const toolRegistry = createMockToolRegistry(tool);
-      const config = createMockConfig(toolRegistry);
+      const {
+        config: config,
+        policyOwner,
+        settingsOwner: configSettingsOwner,
+      } = createMockConfig(toolRegistry);
 
       let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
         null;
@@ -597,9 +662,16 @@ describe('Tool Executor Unification - Integration Tests', () => {
       });
 
       const scheduler = new CoreToolScheduler({
+        telemetry: configSettingsOwner.telemetry,
+        readExecutionPolicy: () =>
+          configSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
         config,
-        messageBus: getTestRuntimeMessageBus(config),
-        toolRegistry: config.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
@@ -648,7 +720,6 @@ describe('Tool Executor Unification - Integration Tests', () => {
         executorConfig,
         request,
         abortController.signal,
-        { owner: executionOwner },
       );
       const response = completed.response;
 
@@ -677,7 +748,6 @@ describe('Tool Executor Unification - Integration Tests', () => {
         executorConfig,
         request,
         abortController.signal,
-        { owner: executionOwner },
       );
       const response = completed.response;
 
@@ -692,7 +762,11 @@ describe('Tool Executor Unification - Integration Tests', () => {
       });
 
       const toolRegistry = createMockToolRegistry(contextAwareTool);
-      const config = createMockConfig(toolRegistry);
+      const {
+        config: config,
+        policyOwner,
+        settingsOwner: configSettingsOwner,
+      } = createMockConfig(toolRegistry);
 
       let completionResolver: ((calls: CompletedToolCall[]) => void) | null =
         null;
@@ -701,9 +775,16 @@ describe('Tool Executor Unification - Integration Tests', () => {
       });
 
       const scheduler = new CoreToolScheduler({
+        telemetry: configSettingsOwner.telemetry,
+        readExecutionPolicy: () =>
+          configSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
         config,
-        messageBus: getTestRuntimeMessageBus(config),
-        toolRegistry: config.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           completionResolver?.(calls);
@@ -741,7 +822,11 @@ describe('Tool Executor Unification - Integration Tests', () => {
       });
 
       const toolRegistry = createMockToolRegistry(tool);
-      const schedulerConfig = createMockConfig(toolRegistry);
+      const {
+        config: schedulerConfig,
+        policyOwner,
+        settingsOwner: schedulerConfigSettingsOwner,
+      } = createMockConfig(toolRegistry);
       const executorConfig = createMockExecutionConfig(toolRegistry);
 
       const request = {
@@ -763,9 +848,16 @@ describe('Tool Executor Unification - Integration Tests', () => {
       );
 
       const scheduler = new CoreToolScheduler({
+        telemetry: schedulerConfigSettingsOwner.telemetry,
+        readExecutionPolicy: () =>
+          schedulerConfigSettingsOwner.readToolExecutionPolicy(),
+        getToolGovernance: () =>
+          schedulerConfigSettingsOwner.readToolGovernance(
+            schedulerConfig.getExcludeTools() ?? [],
+          ),
         config: schedulerConfig,
-        messageBus: getTestRuntimeMessageBus(schedulerConfig),
-        toolRegistry: schedulerConfig.getToolRegistry(),
+        messageBus: policyOwner.session.messageBus,
+        toolRegistry,
         toolContextInteractiveMode: false,
         onAllToolCallsComplete: async (calls) => {
           schedulerCompletionResolver?.(calls);
@@ -782,7 +874,6 @@ describe('Tool Executor Unification - Integration Tests', () => {
         executorConfig,
         request,
         abortController.signal,
-        { owner: executionOwner },
       );
       const executorResponse = executorCompleted.response;
 

@@ -489,7 +489,10 @@ describe('media-session-lifecycle', () => {
           { turnId: 'turn-media', source: 'acp-image' },
         );
         const service = new SessionPersistenceService(
-          storage,
+          {
+            projectRoot: storage.getProjectRoot(),
+            chatsDir: storage.getProjectChatsDir(),
+          },
           'session-media',
           {
             mediaStore: store,

@@ -10,11 +10,19 @@ import { loadSettings } from '../../config/settings.js';
 import { exitCli } from '../utils.js';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
-import { createTransport, MCPServerStatus } from '@vybestack/llxprt-code-mcp';
+import {
+  MCPOAuthTokenStorage,
+  KeychainTokenStorage,
+  createTransport,
+  MCPServerStatus,
+} from '@vybestack/llxprt-code-mcp';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { ExtensionStorage, loadExtensions } from '../../config/extension.js';
 import { ExtensionEnablementManager } from '../../config/extensions/extensionEnablement.js';
-import { wireMcpAuthFactories } from '../../mcpHostWiring.js';
+import {
+  buildMcpAuthFactoryRegistry,
+  type McpAuthProviderFactory,
+} from '@vybestack/llxprt-code-mcp/auth/mcp-auth-factory.js';
 
 const COLOR_GREEN = '\u001b[32m';
 const COLOR_YELLOW = '\u001b[33m';
@@ -56,8 +64,10 @@ function toFailureReason(error: unknown): string {
 }
 
 async function testMCPConnection(
+  tokenStorage: MCPOAuthTokenStorage,
   serverName: string,
   config: MCPServerConfig,
+  getAuthProviderFactory: (type: string) => McpAuthProviderFactory | undefined,
 ): Promise<ServerStatusResult> {
   const client = new Client({
     name: 'mcp-test-client',
@@ -67,10 +77,16 @@ async function testMCPConnection(
   let transport;
   try {
     // Use the same transport creation logic as core
-    transport = await createTransport(serverName, config, false);
+    transport = await createTransport(
+      tokenStorage,
+      serverName,
+      config,
+      false,
+      AbortSignal.timeout(5000),
+      getAuthProviderFactory,
+    );
   } catch (error) {
-    // Transport creation failed (e.g. a required auth plugin is missing);
-    // keep the Disconnected status but carry the reason so the user sees it.
+    // Transport creation failed
     await client.close();
     return {
       status: MCPServerStatus.DISCONNECTED,
@@ -98,23 +114,31 @@ async function testMCPConnection(
 }
 
 async function getServerStatus(
+  tokenStorage: MCPOAuthTokenStorage,
   serverName: string,
   server: MCPServerConfig,
+  getAuthProviderFactory: (type: string) => McpAuthProviderFactory | undefined,
 ): Promise<ServerStatusResult> {
   // Test all server types by attempting actual connection
-  return testMCPConnection(serverName, server);
+  return testMCPConnection(
+    tokenStorage,
+    serverName,
+    server,
+    getAuthProviderFactory,
+  );
 }
 
 export async function listMcpServers(): Promise<void> {
-  // This command runs in its own process without the session bootstrap, so
-  // it wires the plugin-contributed MCP auth factories itself before testing
-  // connections (#2764). Registration is startup-only: the single
-  // listMcpServers run per process registers exactly once.
   const { loadInstalledRuntimePlugins } = await import(
     '@vybestack/llxprt-code-providers/composition.js'
   );
-  wireMcpAuthFactories(await loadInstalledRuntimePlugins());
-
+  const contributions = await loadInstalledRuntimePlugins();
+  const authFactories = buildMcpAuthFactoryRegistry(
+    contributions.getMcpAuthFactories().map((entry) => entry.contribution),
+  );
+  const tokenStorage = new MCPOAuthTokenStorage(
+    new KeychainTokenStorage('llxprt-cli-mcp-oauth'),
+  );
   const mcpServers = await getMcpServersFromConfig();
   const serverNames = Object.keys(mcpServers);
 
@@ -128,7 +152,12 @@ export async function listMcpServers(): Promise<void> {
   for (const serverName of serverNames) {
     const server = mcpServers[serverName];
 
-    const { status, failureReason } = await getServerStatus(serverName, server);
+    const { status, failureReason } = await getServerStatus(
+      tokenStorage,
+      serverName,
+      server,
+      (type) => authFactories.getAuthProviderFactory(type),
+    );
 
     let statusIndicator = '';
     let statusText = '';

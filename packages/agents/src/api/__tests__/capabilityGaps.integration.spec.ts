@@ -154,6 +154,28 @@ describe('P20 capability-gap integration adequacy (REQ-INT-001..004) @plan:PLAN-
     expect(authStatus.authenticated).toBe(false);
   });
 
+  for (const server of ['toString', 'constructor', '__proto__']) {
+    it(`mcp: inherited ${server} is an absent declaration without authentication side effects`, async () => {
+      built = await buildAgent(FIXTURE);
+      const authenticated = await built.agent.mcp.authenticate(server);
+      expect(authenticated).toStrictEqual({
+        server,
+        authenticated: false,
+        requiresAuth: false,
+        oauthStatus: 'not-required',
+        sessionAuthenticated: false,
+      });
+      expect(await built.agent.mcp.auth(server)).toStrictEqual({
+        server,
+        authenticated: false,
+        requiresAuth: false,
+        oauthStatus: 'not-required',
+        sessionAuthenticated: false,
+      });
+      expect(built.agent.mcp.listServers()).toHaveLength(0);
+    });
+  }
+
   // ─── REQ-INT-004: Tool-keys ───────────────────────────────────────────────
 
   it('tool-keys: supported() is a NON-EMPTY array with string toolName each; save/status/delete/setKeyFile/getKeyFile are functions; status(exa).hasKey is boolean and maskedKey (if present) is not a raw secret', async () => {

@@ -130,59 +130,69 @@ class GlobToolInvocation extends BaseToolInvocation<
 
   async execute(signal: AbortSignal): Promise<ToolResult> {
     try {
-      const ephemeralSettings = this.host.getEphemeralSettings();
-      const maxItems =
-        (ephemeralSettings['tool-output-max-items'] as number | undefined) ??
-        50;
-
-      const searchDirectoriesResult = this.resolveSearchDirectories(
+      return await this.host.runSearch(
         this.host.getWorkspaceRoots(),
-      );
+        async () => {
+          const ephemeralSettings = this.host.readExecutionPolicy();
+          const maxItems =
+            (ephemeralSettings['tool-output-max-items'] as
+              | number
+              | undefined) ?? 50;
 
-      if (searchDirectoriesResult.error) return searchDirectoriesResult.error;
-      const searchDirectories = searchDirectoriesResult.directories;
+          const searchDirectoriesResult = this.resolveSearchDirectories(
+            this.host.getWorkspaceRoots(),
+          );
 
-      const defaultFileIgnores = this.host.getFileFilteringOptions();
-      const usingLegacyRespectGitIgnore =
-        this.params.file_filtering_options === undefined &&
-        this.params.respect_git_ignore !== undefined;
-      if (this.params.respect_git_ignore !== undefined) {
-        debugLogger.warn(
-          usingLegacyRespectGitIgnore
-            ? 'GlobTool: respect_git_ignore is deprecated; use file_filtering_options.respect_git_ignore instead.'
-            : 'GlobTool: both respect_git_ignore and file_filtering_options were provided; using file_filtering_options.',
-        );
-      }
-      const respectGitIgnore = this.resolveRespectGitIgnore(
-        defaultFileIgnores.respectGitIgnore,
-        usingLegacyRespectGitIgnore,
-      );
-      const respectLlxprtIgnore = this.resolveRespectLlxprtIgnore(
-        defaultFileIgnores.respectLlxprtIgnore,
-        usingLegacyRespectGitIgnore,
-      );
-      const fileFilteringOptions = { respectGitIgnore, respectLlxprtIgnore };
-      const fileDiscovery = this.host.getFileService();
+          if (searchDirectoriesResult.error)
+            return searchDirectoriesResult.error;
+          const searchDirectories = searchDirectoriesResult.directories;
 
-      const allEntries = await this.collectGlobEntries(
-        searchDirectories,
-        signal,
-      );
-      const { filteredEntries, ignoredCount } = this.applyFileFilters(
-        allEntries,
-        fileFilteringOptions,
-        fileDiscovery,
-      );
+          const defaultFileIgnores = this.host.getFileFilteringOptions();
+          const usingLegacyRespectGitIgnore =
+            this.params.file_filtering_options === undefined &&
+            this.params.respect_git_ignore !== undefined;
+          if (this.params.respect_git_ignore !== undefined) {
+            debugLogger.warn(
+              usingLegacyRespectGitIgnore
+                ? 'GlobTool: respect_git_ignore is deprecated; use file_filtering_options.respect_git_ignore instead.'
+                : 'GlobTool: both respect_git_ignore and file_filtering_options were provided; using file_filtering_options.',
+            );
+          }
+          const respectGitIgnore = this.resolveRespectGitIgnore(
+            defaultFileIgnores.respectGitIgnore,
+            usingLegacyRespectGitIgnore,
+          );
+          const respectLlxprtIgnore = this.resolveRespectLlxprtIgnore(
+            defaultFileIgnores.respectLlxprtIgnore,
+            usingLegacyRespectGitIgnore,
+          );
+          const fileFilteringOptions = {
+            respectGitIgnore,
+            respectLlxprtIgnore,
+          };
+          const fileDiscovery = this.host.getFileService();
 
-      if (filteredEntries.length === 0) {
-        return this.buildNoFilesResult(searchDirectories, ignoredCount);
-      }
+          const allEntries = await this.collectGlobEntries(
+            searchDirectories,
+            signal,
+          );
+          const { filteredEntries, ignoredCount } = this.applyFileFilters(
+            allEntries,
+            fileFilteringOptions,
+            fileDiscovery,
+          );
 
-      return this.buildFileListResult(
-        filteredEntries,
-        searchDirectories,
-        ignoredCount,
-        maxItems,
+          if (filteredEntries.length === 0) {
+            return this.buildNoFilesResult(searchDirectories, ignoredCount);
+          }
+
+          return this.buildFileListResult(
+            filteredEntries,
+            searchDirectories,
+            ignoredCount,
+            maxItems,
+          );
+        },
       );
     } catch (error) {
       const errorMessage =

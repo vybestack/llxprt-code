@@ -1,79 +1,222 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * Behavioral tests for the AgentClientSource bridge in cliUiRuntime.ts
- * (#2378 review remediation — Finding 4).
- *
- * Verifies that buildAgentClientSource correctly bridges the detached-client
- * factory from the bare source to the AgentClientSource capability, ensuring
- * that createDetachedAutoPromptClient can delegate through the UI runtime
- * boundary to the underlying Config.createDetachedAgentClient.
- */
-
 import { describe, expect, it } from 'bun:test';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core';
+import { fileURLToPath } from 'node:url';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import { json } from 'node:stream/consumers';
+import { z } from 'zod';
+import { fetchGitHubSuggestions } from './hooks/githubAtCompletion.js';
+import { FakeProvider } from '../../../providers/src/fake/FakeProvider.js';
+import { fromConfig } from '@vybestack/llxprt-code-agents';
+import { createSessionClientEngineFixture } from '../../../agents/src/api/__tests__/helpers/session-client-engine-fixture.js';
 import {
   buildSlashCommandRuntime,
-  type UiRuntimeBareSource,
+  buildUiRuntimeFromSource,
 } from './cliUiRuntime.js';
 
-/**
- * Minimal source for the detached-client bridge behavior.
- *
- * `buildUiRuntimeFromSource` wraps EVERY source method in a lazy arrow
- * delegate that is only invoked when the corresponding runtime method is
- * called. These tests only build the runtime and read its
- * `createDetachedAgentClient` bridge, so the arrow-wrapped delegates are never
- * invoked and do not need real implementations. The ONLY fields read eagerly
- * at build time are the two VALUE fields `storage` and
- * `extensionEnablementManager`, so those are the only members this fake must
- * supply (beyond the agent-client members under test). The full ~130-method
- * Config surface would be structural theater here, so it is intentionally
- * omitted and the object is narrowed through the documented test-double idiom
- * (`as unknown as UiRuntimeBareSource`).
- */
-function makeBareSource(
-  overrides: {
-    createDetachedAgentClient?: (
-      runtimeId?: string,
-    ) => Promise<AgentClientContract>;
-  } = {},
-): UiRuntimeBareSource {
-  return {
-    getAgentClient: () => ({ id: 'primary' }) as unknown as AgentClientContract,
-    getAgentClientFactory: () => undefined,
-    ...(overrides.createDetachedAgentClient
-      ? { createDetachedAgentClient: overrides.createDetachedAgentClient }
-      : {}),
-    // The two fields read eagerly by buildUiRuntimeFromSource.
-    storage: { getGlobalConfigDir: () => '' } as never,
-    extensionEnablementManager: undefined,
-  } as unknown as UiRuntimeBareSource;
-}
-
-describe('AgentClientSource detached-client bridge (buildSlashCommandRuntime)', () => {
-  it('bridges createDetachedAgentClient to the flattened runtime when present on the source', async () => {
-    const expectedClient = { id: 'detached' } as unknown as AgentClientContract;
-    const source = makeBareSource({
-      createDetachedAgentClient: async () => expectedClient,
+describe('UI session client ownership', () => {
+  it('routes completion through the explicit session report tool and closes retained completion admission', async () => {
+    const fixture = await createSessionClientEngineFixture();
+    const requestSchema = z
+      .object({
+        op: z.enum(['issue.list', 'pr.list']),
+        params: z
+          .object({
+            limit: z.literal(10),
+            state: z.literal('open'),
+            search: z.string(),
+          })
+          .strict(),
+      })
+      .strict();
+    const server = createServer((request, response) => {
+      void json(request)
+        .then((input: unknown) => {
+          const { op, params } = requestSchema.parse(input);
+          const items = [
+            { number: 27, title: params.search.toUpperCase(), state: 'OPEN' },
+          ];
+          response.writeHead(200, { 'content-type': 'application/json' });
+          response.end(
+            JSON.stringify({ [op === 'issue.list' ? 'issues' : 'prs']: items }),
+          );
+        })
+        .catch((cause: unknown) =>
+          response.destroy(new Error('Invalid completion request', { cause })),
+        );
     });
-
-    const runtime = buildSlashCommandRuntime(source);
-
-    expect(typeof runtime.createDetachedAgentClient).toBe('function');
-    const result = await runtime.createDetachedAgentClient!();
-    expect(result).toBe(expectedClient);
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    const address = server.address();
+    if (address === null || typeof address === 'string')
+      throw new Error('Missing completion server');
+    const endpoint = `http://127.0.0.1:${address.port}`;
+    const agent = await fromConfig({
+      config: fixture.config,
+      settingsService: fixture.settingsService,
+      settingsOwner: fixture.handle.settingsOwner,
+      providerManager: fixture.handle.providerManager,
+      messageBus: fixture.messageBus,
+      mcpRuntime: fixture.mcp,
+      agentClient: fixture.owner.getAgentClient(),
+      githubBrokerClient: {
+        runOperation: async (op, params, signal) => {
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            body: JSON.stringify({ op, params }),
+            signal,
+          });
+          const input: unknown = await response.json();
+          return z.record(z.unknown()).parse(input);
+        },
+      },
+    });
+    try {
+      const runtime = buildUiRuntimeFromSource(fixture.config, agent);
+      const reads = runtime.app.githubCompletion;
+      if (reads === undefined)
+        throw new Error('Missing GitHub completion reads');
+      expect('submitReport' in reads).toBe(false);
+      expect('getGitHubBrokerClient' in runtime.app).toBe(false);
+      const suggestions = await fetchGitHubSuggestions(
+        reads,
+        { kind: 'issue', query: 'completion report' },
+        new AbortController().signal,
+      );
+      expect(suggestions).toStrictEqual([
+        {
+          label: 'issue-27  COMPLETION REPORT',
+          value: 'issue-27',
+          description: 'issue · open',
+        },
+      ]);
+      const invalid: unknown = Reflect.apply(reads.readReport, undefined, [
+        'issue.create',
+        { title: 'forbidden' },
+        new AbortController().signal,
+      ]);
+      await expect(invalid).rejects.toThrow('Invalid enum value');
+      await agent.dispose();
+      await expect(
+        reads.readReport(
+          'issue.list',
+          { limit: 10, state: 'open', search: 'after close' },
+          new AbortController().signal,
+        ),
+      ).rejects.toThrow('closed');
+      expect(
+        await fetchGitHubSuggestions(
+          reads,
+          { kind: 'pr', query: 'closed' },
+          new AbortController().signal,
+        ),
+      ).toStrictEqual([]);
+    } finally {
+      await agent.dispose();
+      await fixture.cleanup();
+      const closed = new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+      server.closeAllConnections();
+      await closed;
+    }
   });
 
-  it('omits createDetachedAgentClient from the flattened runtime when absent on the source', () => {
-    const source = makeBareSource();
+  it('resolves the published current client without embedding it in the workspace command projection', async () => {
+    const fixture = await createSessionClientEngineFixture();
+    const agent = await fromConfig({
+      settingsService: fixture.settingsService,
+      settingsOwner: fixture.handle.settingsOwner,
+      config: fixture.config,
+      providerManager: fixture.handle.providerManager,
+      messageBus: fixture.messageBus,
+      mcpRuntime: fixture.mcp,
+      agentClient: fixture.owner.getAgentClient(),
+    });
+    try {
+      const ui = buildUiRuntimeFromSource(fixture.config, agent);
+      const workspace = buildSlashCommandRuntime(fixture.config, agent);
+      const previous = ui.agentClientSource.getAgentClient();
+      await agent.setHistory([
+        {
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'carried history' }],
+        },
+      ]);
+      const provider = new FakeProvider(
+        fileURLToPath(
+          new URL(
+            '../../../agents/src/api/__tests__/fixtures/multi-turn-text.jsonl',
+            import.meta.url,
+          ),
+        ),
+        fixture.config.getTargetDir(),
+      );
+      provider.name = 'ui-profile-owner';
+      fixture.handle.providerManager.registerProvider(provider);
+      await agent.profiles.applySnapshot({
+        version: 1,
+        provider: provider.name,
+        model: 'replacement-model',
+        modelParams: {},
+        ephemeralSettings: {},
+      });
+      const current = ui.agentClientSource.getAgentClient();
+      expect(current).not.toBe(previous);
+      expect(
+        (await agent.getHistory()).filter(
+          (content) => content.speaker === 'human',
+        ),
+      ).toHaveLength(1);
+      expect('getAgentClient' in workspace).toBe(false);
+      expect('createDetachedAgentClient' in workspace).toBe(false);
+      expect('getAgentClientFactory' in workspace).toBe(false);
+      await agent.dispose();
+      await fixture.mcp.refreshContext();
+      await previous.addHistory({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'borrowed caller survives' }],
+      });
+      expect(
+        (await previous.getHistory()).filter(
+          (content) => content.speaker === 'human',
+        ),
+      ).toHaveLength(2);
+    } finally {
+      await agent.dispose();
+      await fixture.cleanup();
+    }
+  });
 
-    const runtime = buildSlashCommandRuntime(source);
-
-    expect(runtime.createDetachedAgentClient).toBeUndefined();
+  it('creates detached clients from the session owner while retaining the primary client', async () => {
+    const fixture = await createSessionClientEngineFixture();
+    try {
+      const agent = await fromConfig({
+        config: fixture.config,
+        settingsService: fixture.settingsService,
+        settingsOwner: fixture.handle.settingsOwner,
+        providerManager: fixture.handle.providerManager,
+        messageBus: fixture.messageBus,
+        mcpRuntime: fixture.mcp,
+        agentClient: fixture.owner.getAgentClient(),
+      });
+      const ui = buildUiRuntimeFromSource(fixture.config, agent);
+      const detached = await ui.agentClientSource.createDetachedAgentClient?.();
+      expect(detached).toBeDefined();
+      expect(detached).not.toBe(agent.agentClient);
+      expect(detached?.mediaStore).toBe(agent.agentClient.mediaStore);
+      expect(detached?.hasChatInitialized()).toBe(false);
+      await detached?.dispose();
+      expect(
+        agent.agentClient.getHistoryService()?.getRawHistory(),
+      ).toHaveLength(0);
+    } finally {
+      await fixture.cleanup();
+    }
   });
 });

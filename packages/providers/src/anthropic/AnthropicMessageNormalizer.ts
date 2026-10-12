@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 /**
  * Anthropic Message Normalization Module
  * Converts IContent[] to AnthropicMessage[] format for the Anthropic API
@@ -350,13 +351,10 @@ function buildToolResult(
   toolResponseBlock: ToolResponseBlock,
   toolTextContent: string,
   mediaBlocks: MediaBlock[],
-  config: unknown,
+  config: OutputLimitConfig | undefined,
   supportsUrlImages: boolean,
 ): AnthropicToolResultBlock {
-  const payload = buildToolResponsePayload(
-    toolResponseBlock,
-    config as Parameters<typeof buildToolResponsePayload>[1],
-  );
+  const payload = buildToolResponsePayload(toolResponseBlock, config);
   let contentPayload = toolTextContent
     ? `${toolTextContent}\n${payload.result}`
     : payload.result;
@@ -804,7 +802,7 @@ export function convertToAnthropicMessages(
     stripFromContext?: 'all' | 'allButLast' | 'none';
     includeInContext?: boolean;
     reasoningEnabled: boolean;
-    config: unknown;
+    config: OutputLimitConfig | undefined;
     currentModel?: string;
     currentBaseURL?: string;
     supportsUrlImages?: boolean;

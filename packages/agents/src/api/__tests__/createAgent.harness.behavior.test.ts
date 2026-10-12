@@ -39,6 +39,14 @@ import {
   tempRoot,
 } from './helpers/agentHarness.js';
 
+describe('agent Config ownership', () => {
+  it('has no production Config side-channel module', () => {
+    expect(
+      existsSync(new URL('../internalConfigAccess.ts', import.meta.url)),
+    ).toBe(false);
+  });
+});
+
 describe('createAgent harness hardening @plan:PLAN-20260626-RUNTIMEBOUNDARY.P01', () => {
   it('respects caller interactive:false when harness.forceInteractive is false @scenario:no-force-interactive @given:an agent config with interactive:false and harness:{forceInteractive:false} @when:createAgent builds the agent @then:Config.isInteractive() === false (caller value preserved, not overwritten to true)', async () => {
     const { agent, cleanup } = await buildAgent('plain-text.jsonl', {

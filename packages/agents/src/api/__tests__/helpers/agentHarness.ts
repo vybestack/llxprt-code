@@ -1,8 +1,10 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
 
 /**
  * @plan:PLAN-20260617-COREAPI.P11
@@ -32,8 +34,14 @@ import { resolve, join } from 'node:path';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { getInternalConfig } from '../../internalConfigAccess.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import {
+  FakeProvider,
+  OpenAIProvider,
+  AnthropicProvider,
+} from '@vybestack/llxprt-code-providers';
+import { createProviderKeyStorage } from '../../../../../providers/src/auth/proxy/credential-store-factory.js';
+import { vi } from 'bun:test';
 import {
   createAgent,
   type Agent,
@@ -72,7 +80,26 @@ export type {
 } from '@vybestack/llxprt-code-agents';
 export { createAgent } from '@vybestack/llxprt-code-agents';
 export function internalConfig(agent: Agent): Config {
-  return getInternalConfig(agent);
+  if (
+    !('deps' in agent) ||
+    !isRecord(agent.deps) ||
+    !(agent.deps.config instanceof Config)
+  ) {
+    throw new Error('Expected an AgentImpl with its owned Config dependency');
+  }
+  return agent.deps.config;
+}
+
+export function internalSettingsOwner(agent: Agent): SessionSettingsOwner {
+  if (
+    !('deps' in agent) ||
+    !isRecord(agent.deps) ||
+    !(agent.deps.settingsOwner instanceof SessionSettingsOwner)
+  )
+    throw new Error(
+      'Expected an Agent with its selected session settings owner',
+    );
+  return agent.deps.settingsOwner;
 }
 
 // ─── Agent construction via the production env seam ─────────────────────────
@@ -130,7 +157,67 @@ export {
   /** Absolute path to the fixtures directory (exposed for assertions). */
   FIXTURES_DIR as fixturesDir,
 };
+
+export async function buildProfileAgent(
+  fixtureRelPath: string,
+): Promise<BuiltAgent> {
+  const built = await buildAgent(fixtureRelPath);
+  const config = internalConfig(built.agent);
+  const manager = built.agent.providerManager;
+
+  for (const name of ['openai', 'anthropic']) {
+    const provider = new FakeProvider(
+      resolve(FIXTURES_DIR, fixtureRelPath),
+      config.getTargetDir(),
+    );
+    provider.name = name;
+    manager.registerProvider(provider);
+  }
+  const keys = vi
+    .spyOn(createProviderKeyStorage(), 'getKey')
+    .mockImplementation(async (name) => {
+      if (name !== 'openai-prod' && name !== 'anthropic-prod')
+        throw new Error(`Unexpected fixture key: ${name}`);
+      return `fixture-credential-${name}`;
+    });
+  return {
+    agent: built.agent,
+    cleanup: async () => {
+      keys.mockRestore();
+      await built.cleanup();
+    },
+  };
+}
+
 export { TEMP_ROOT as tempRoot };
+
+export async function buildProfilesAgent(
+  fixtureRelPath: string,
+): Promise<BuiltAgent> {
+  const built = await buildAgent(fixtureRelPath);
+  const manager = built.agent.providerManager;
+
+  manager.registerProvider(new OpenAIProvider('local-test-key'));
+  manager.registerProvider(new AnthropicProvider('local-test-key'));
+  const keys = vi
+    .spyOn(createProviderKeyStorage(), 'getKey')
+    .mockImplementation(async (name) => {
+      if (
+        name !== 'openai-prod' &&
+        name !== 'anthropic-prod' &&
+        name !== 'saved-key-ref'
+      )
+        throw new Error(`Unexpected fixture key: ${name}`);
+      return `fixture-credential-${name}`;
+    });
+  return {
+    agent: built.agent,
+    cleanup: async () => {
+      keys.mockRestore();
+      await built.cleanup();
+    },
+  };
+}
 
 /**
  * Builds an agent backed by an inline (programmatic) JSONL content string,
@@ -457,4 +544,29 @@ export async function loadLoadBalancerProfileFixture(
   fixtureRelPath: string,
 ): Promise<Readonly<Record<string, unknown>>> {
   return loadProfileFixture(fixtureRelPath);
+}
+
+export async function withFixtureAgent<T>(
+  agent: Agent,
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await run();
+  } finally {
+    await agent.dispose();
+  }
+}
+
+export { WorkspaceIdeOwner } from '@vybestack/llxprt-code-core/services/workspace-ide-owner.js';
+export { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core';
+
+export function internalWorkspace(agent: Agent): McpRuntimeOwner {
+  if (
+    !('deps' in agent) ||
+    !isRecord(agent.deps) ||
+    !(agent.deps.mcpOperations instanceof McpRuntimeOwner)
+  ) {
+    throw new Error('Expected retained Agent workspace root');
+  }
+  return agent.deps.mcpOperations;
 }

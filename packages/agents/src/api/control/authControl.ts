@@ -310,3 +310,14 @@ export class AuthControl implements AgentAuthControl {
     }));
   }
 }
+
+/**
+ * Type guard narrowing the unknown onOAuthPrompt dep to OAuthPromptHandler.
+ * The AgentConfigSchema guarantees the shape when present; this guard avoids
+ * an unsafe cast.
+ * @plan:PLAN-20260617-COREAPI.P18
+ * @requirement:REQ-008
+ */
+export function isOAuthPromptHandler(v: unknown): v is OAuthPromptHandler {
+  return typeof v === 'function';
+}

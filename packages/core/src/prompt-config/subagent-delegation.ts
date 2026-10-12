@@ -4,9 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { SubagentManager } from '../config/subagentManager.js';
+import type { SubagentDefinitionReads } from '../services/workspace-definition-owner.js';
 
-export type SubagentManagerResolver = () => SubagentManager | undefined;
+export type SubagentManagerResolver = () =>
+  | Pick<SubagentDefinitionReads, 'listSubagents'>
+  | undefined;
 
 export async function shouldIncludeSubagentDelegation(
   enabledToolNames: string[],

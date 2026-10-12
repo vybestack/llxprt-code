@@ -16,8 +16,25 @@ import { describe, it, expect } from 'bun:test';
 import { createAgentRuntimeStateFromConfig } from './runtimeStateFactory.js';
 import type { RuntimeStateConfigSource } from './runtimeStateFactory.js';
 import { PLACEHOLDER_MODEL, UNCONFIGURED_PROVIDER } from '../config/models.js';
+import { Config } from '../config/config.js';
 
 describe('createAgentRuntimeStateFromConfig: neutral bootstrap identity (#2481)', () => {
+  it('uses frozen initial endpoint data only while constructing declared state', () => {
+    const endpoint = 'http://127.0.0.1:39281/v1';
+    const config = new Config({
+      sessionId: 'declared-state',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      model: 'declared-model',
+      provider: 'openai',
+      debugMode: false,
+      initialSettings: { 'base-url': endpoint },
+    });
+    const state = createAgentRuntimeStateFromConfig(config);
+    expect(new URL(state.baseUrl ?? '').origin).toBe('http://127.0.0.1:39281');
+    expect(state.model).toBe('declared-model');
+  });
+
   it('returns full neutral pair (UNCONFIGURED_PROVIDER + PLACEHOLDER_MODEL) when nothing is set', () => {
     const config: RuntimeStateConfigSource = {
       getProvider: () => undefined,

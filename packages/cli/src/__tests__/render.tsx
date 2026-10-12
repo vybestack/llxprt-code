@@ -118,7 +118,7 @@ const mockRuntimeApi: MockRuntimeApi = {
   listAvailableModels: () => [],
   getActiveModelName: () => 'mock-model',
   getActiveProfileName: () => null,
-  getActiveProviderStatus: () => ({ status: 'ready' }),
+  providerStatus: () => ({ status: 'ready' }),
   getActiveModelParams: () => ({}),
   getEphemeralSettings: () => ({}),
   setEphemeralSetting: () => {},
@@ -136,12 +136,15 @@ const mockRuntimeApi: MockRuntimeApi = {
   getActiveToolFormatState: () => ({ format: 'default', isOverridden: false }),
   getActiveProviderMetrics: () => ({}),
   getRuntimeDiagnosticsSnapshot: () => ({}),
-  registerCliProviderInfrastructure: () => {},
-  getCliProviderManager: () => null,
-  getCliOAuthManager: () => {
-    throw new Error('OAuthManager missing from runtime registration');
-  },
-  getCliRuntimeServices: () => null,
+  getLoadBalancerStats: () => undefined,
+  getLoadBalancerTokenAccounting: () => undefined,
+  detectProviderQuota: () => undefined,
+  getActiveProviderDetails: () => undefined,
+  getProviderDumpMetadata: () => ({ providerName: 'backend' }),
+  getActiveProviderAliasConfig: () => ({
+    ok: false,
+    content: 'No active provider set. Use /setup to configure a provider.',
+  }),
   getSessionTokenUsage: () => ({ inputTokens: 0, outputTokens: 0 }),
   getUnallowedParametersForActiveModel: () => [],
 };

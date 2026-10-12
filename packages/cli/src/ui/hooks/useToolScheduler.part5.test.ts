@@ -30,7 +30,6 @@ import {
   DebugLogger,
   PolicyDecision,
   type SchedulerCallbacks as SchedulerCallbacksCore,
-  type SchedulerPurpose,
   type ToolCall,
   ToolConfirmationOutcome,
   type ToolCallConfirmationDetails,
@@ -415,32 +414,6 @@ const mockConfig = {
   getPolicyEngine: vi.fn(() => ({
     evaluate: vi.fn(() => PolicyDecision.ASK_USER),
   })),
-  getOrCreateScheduler: vi.fn(
-    (
-      owner: object,
-      _purpose: SchedulerPurpose,
-      callbacks: SchedulerCallbacks,
-    ) => {
-      const existing = createdSchedulers.get(owner);
-      if (existing) {
-        existing.setCallbacks({
-          ...callbacks,
-          config: mockConfig,
-        });
-        return Promise.resolve(existing);
-      }
-
-      const scheduler = buildMockScheduler(mockConfig, callbacks);
-      createdSchedulers.set(owner, scheduler);
-      return Promise.resolve(scheduler);
-    },
-  ),
-  disposeScheduler: vi.fn((owner: object, _purpose: SchedulerPurpose) => {
-    const scheduler = createdSchedulers.get(owner);
-    scheduler?.dispose();
-    createdSchedulers.delete(owner);
-  }),
-  setInteractiveSubagentSchedulerFactory: vi.fn(),
 } as unknown as Config;
 
 const mockTool = new MockTool({
@@ -478,7 +451,11 @@ const renderScheduler = (
   renderHook(() =>
     useReactToolScheduler(
       onComplete,
-      createReactToolSchedulerRuntimeForTest(mockConfig),
+      createReactToolSchedulerRuntimeForTest(mockConfig, async (callbacks) => {
+        const scheduler = buildMockScheduler(mockConfig as Config, callbacks);
+        createdSchedulers.set({}, scheduler);
+        return scheduler;
+      }),
       setPendingHistoryItem,
       () => undefined,
       () => {},

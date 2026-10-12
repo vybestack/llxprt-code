@@ -1,8 +1,17 @@
+import { cliSkillOperations } from '../../config/configBuilder.js';
 /**
  * @license
  * Copyright 2026 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { configureCommandOptions } from '../command-configuration.js';
+import {
+  MCPOAuthTokenStorage,
+  KeychainTokenStorage,
+} from '@vybestack/llxprt-code-mcp';
+import { defaultBrowserLauncher } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
+
+import { McpRuntimeOwner } from '@vybestack/llxprt-code-agents';
 
 import type { CommandModule } from 'yargs';
 import { discoverSkillsForConfig } from '@vybestack/llxprt-code-core';
@@ -37,10 +46,42 @@ export async function handleList(showAll = false) {
     workspaceDir,
   );
 
-  // Skill discovery owns its own session MessageBus and Config.initialize
-  // lifecycle inside core (#2378): the CLI command is a thin client and never
-  // constructs a MessageBus or calls Config.initialize itself.
-  let skills = await discoverSkillsForConfig(config);
+  const mcpRuntime = await McpRuntimeOwner.create(
+    {
+      tokenStorage: new MCPOAuthTokenStorage(
+        new KeychainTokenStorage('llxprt-cli-mcp-oauth'),
+      ),
+      openBrowser: defaultBrowserLauncher,
+    },
+    config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    cliSkillOperations(config),
+  );
+  let skills;
+  try {
+    skills = await discoverSkillsForConfig(
+      { list: (all) => mcpRuntime.workspaceSkills.operations.list(all) },
+      () => mcpRuntime.initialize(),
+    );
+  } finally {
+    await mcpRuntime.dispose();
+    await config.dispose();
+  }
 
   // By default, filter out built-in skills unless --all is specified
   if (!showAll) {
@@ -80,11 +121,13 @@ export const listCommand: CommandModule = {
   command: 'list [--all]',
   describe: 'Lists discovered skills.',
   builder: (yargs) =>
-    yargs.option('all', {
-      type: 'boolean',
-      default: false,
-      describe: 'Include built-in skills in the listing',
-    }),
+    configureCommandOptions(yargs, (configuration) =>
+      configuration.option('all', {
+        type: 'boolean',
+        default: false,
+        describe: 'Include built-in skills in the listing',
+      }),
+    ),
   handler: async (argv) => {
     await handleList(argv.all as boolean);
     await exitCli();

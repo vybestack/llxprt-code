@@ -162,7 +162,7 @@ describe('AnthropicProvider multi-block human message assembly', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { resolved: { streaming: true } }),
     );
     for await (const _chunk of generator) {
       // consume
@@ -190,7 +190,7 @@ describe('AnthropicProvider multi-block human message assembly', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { resolved: { streaming: true } }),
     );
     for await (const _chunk of generator) {
       // consume
@@ -218,7 +218,7 @@ describe('AnthropicProvider multi-block human message assembly', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { resolved: { streaming: true } }),
     );
     for await (const _chunk of generator) {
       // consume
@@ -247,7 +247,7 @@ describe('AnthropicProvider multi-block human message assembly', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { resolved: { streaming: true } }),
     );
     for await (const _chunk of generator) {
       // consume
@@ -275,7 +275,7 @@ describe('AnthropicProvider multi-block human message assembly', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { resolved: { streaming: true } }),
     );
     for await (const _chunk of generator) {
       // consume
@@ -303,7 +303,7 @@ describe('AnthropicProvider multi-block human message assembly', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { resolved: { streaming: true } }),
     );
     for await (const _chunk of generator) {
       // consume
@@ -329,7 +329,7 @@ describe('AnthropicProvider multi-block human message assembly', () => {
     ];
 
     const generator = provider.generateChatCompletion(
-      buildCallOptions(messages),
+      buildCallOptions(messages, { resolved: { streaming: true } }),
     );
     for await (const _chunk of generator) {
       // consume

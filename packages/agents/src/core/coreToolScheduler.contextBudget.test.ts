@@ -1,16 +1,19 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { afterEach, describe, it, expect, vi, beforeEach } from 'bun:test';
 import {
   CoreToolScheduler,
   type CompletedToolCall,
 } from './coreToolScheduler.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
@@ -23,7 +26,12 @@ import {
   type ToolResult,
 } from '@vybestack/llxprt-code-tools';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import { getTestRuntimeMessageBus } from '@vybestack/llxprt-code-test-utils/core/config.js';
+
+const ownedFixtures: Array<{
+  config: Config;
+  policyOwner: RuntimePolicyOwner;
+  settingsOwner: SessionSettingsOwner;
+}> = [];
 
 // Helper function to create a mock MessageBus
 function createMockMessageBus() {
@@ -51,12 +59,6 @@ function getToolResponseOutput(part: unknown): string | undefined {
 }
 
 // Helper function to create a mock PolicyEngine
-function createMockPolicyEngine() {
-  return {
-    evaluate: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
-    checkDecision: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
-  };
-}
 
 // Track execution order for verifying parallel execution
 const executionLog: Array<{
@@ -82,7 +84,10 @@ class OrderTrackingInvocation extends BaseToolInvocation<
   }
 
   async execute(): Promise<ToolResult> {
-    const entry = { name: this.toolName, startTime: Date.now() };
+    const entry: { name: string; startTime: number; endTime?: number } = {
+      name: this.toolName,
+      startTime: Date.now(),
+    };
     executionLog.push(entry);
 
     if (this.delayMs > 0) {
@@ -156,16 +161,26 @@ class OrderTrackingTool extends BaseDeclarativeTool<
 }
 
 describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
+  afterEach(async () => {
+    for (const fixture of ownedFixtures.splice(0)) {
+      await fixture.settingsOwner.dispose();
+      await fixture.policyOwner.dispose();
+      await fixture.config.dispose();
+    }
+  });
+
   let onAllToolCallsComplete: ReturnType<typeof vi.fn>;
   let onToolCallsUpdate: ReturnType<typeof vi.fn>;
 
   function createConfig(
     tools: Map<string, OrderTrackingTool>,
     ephemeralOverrides: Record<string, unknown> = {},
-  ): Config {
-    const mockMessageBus = createMockMessageBus();
-    const mockPolicyEngine = createMockPolicyEngine();
-
+  ): {
+    config: Config;
+    policyOwner: RuntimePolicyOwner;
+    settingsOwner: SessionSettingsOwner;
+    toolRegistry: ToolRegistry;
+  } {
     const mockToolRegistry = {
       getTool: (name: string) => tools.get(name) ?? null,
       getFunctionDeclarations: () => [],
@@ -181,21 +196,43 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       getAllToolNames: () => Array.from(tools.keys()),
     } as unknown as ToolRegistry;
 
-    return {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      getApprovalMode: () => ApprovalMode.YOLO,
-      getEphemeralSettings: () => ({ ...ephemeralOverrides }),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
+    const config = Object.assign(
+      new Config({
+        sessionId: 'test-session-id',
+        cwd: process.cwd(),
+        targetDir: process.cwd(),
         model: 'test-model',
+        debugMode: false,
+        initialSettings: ephemeralOverrides,
+        trustedFolder: true,
+        policyEngineConfig: { defaultDecision: PolicyDecision.ALLOW },
       }),
-      getModel: () => 'test-model',
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: () => mockMessageBus,
-      getPolicyEngine: () => mockPolicyEngine,
-    } as unknown as Config;
+      {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        getApprovalMode: () => ApprovalMode.YOLO,
+
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+        getModel: () => 'test-model',
+      },
+    );
+    const settings = new SettingsService();
+    for (const [key, value] of Object.entries(config.getInitialSettings()))
+      settings.set(key, value);
+    const settingsOwner = new SessionSettingsOwner(settings);
+    settingsOwner.bindTelemetry(config);
+    const policyOwner = new RuntimePolicyOwner(config);
+    ownedFixtures.push({ config, settingsOwner, policyOwner });
+    return {
+      config,
+      settingsOwner,
+      policyOwner,
+      toolRegistry: mockToolRegistry,
+    };
   }
 
   beforeEach(() => {
@@ -209,14 +246,23 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
     const tools = new Map([
       ['solo_tool', new OrderTrackingTool('solo_tool', 10)],
     ]);
-    const config = createConfig(tools, {
+    const {
+      config: config,
+      policyOwner,
+      settingsOwner,
+      toolRegistry,
+    } = createConfig(tools, {
       'tool-output-max-tokens': 50000,
     });
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
       config,
-      messageBus: getTestRuntimeMessageBus(config),
-      toolRegistry: config.getToolRegistry(),
+      messageBus: policyOwner.session.messageBus,
+      toolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -254,12 +300,21 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       ['tool_a', new OrderTrackingTool('tool_a', 30)],
       ['tool_b', new OrderTrackingTool('tool_b', 30)],
     ]);
-    const config = createConfig(tools);
+    const {
+      config: config,
+      policyOwner,
+      settingsOwner,
+      toolRegistry,
+    } = createConfig(tools);
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
       config,
-      messageBus: getTestRuntimeMessageBus(config),
-      toolRegistry: config.getToolRegistry(),
+      messageBus: policyOwner.session.messageBus,
+      toolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -332,14 +387,23 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       ['big_tool_4', new OrderTrackingTool('big_tool_4', 10, largeOutputSize)],
     ]);
 
-    const config = createConfig(tools, {
+    const {
+      config: config,
+      policyOwner,
+      settingsOwner,
+      toolRegistry,
+    } = createConfig(tools, {
       'tool-output-max-tokens': 10000,
     });
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
       config,
-      messageBus: getTestRuntimeMessageBus(config),
-      toolRegistry: config.getToolRegistry(),
+      messageBus: policyOwner.session.messageBus,
+      toolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -443,14 +507,23 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       });
     }
 
-    const config = createConfig(tools, {
+    const {
+      config: config,
+      policyOwner,
+      settingsOwner,
+      toolRegistry,
+    } = createConfig(tools, {
       'tool-output-max-tokens': 100000,
     });
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
       config,
-      messageBus: getTestRuntimeMessageBus(config),
-      toolRegistry: config.getToolRegistry(),
+      messageBus: policyOwner.session.messageBus,
+      toolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -493,14 +566,23 @@ describe('CoreToolScheduler - Issue #1301 Batch Output Budget', () => {
       });
     }
 
-    const config = createConfig(tools, {
+    const {
+      config: config,
+      policyOwner,
+      settingsOwner,
+      toolRegistry,
+    } = createConfig(tools, {
       'tool-output-max-tokens': 5000,
     });
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
       config,
-      messageBus: getTestRuntimeMessageBus(config),
-      toolRegistry: config.getToolRegistry(),
+      messageBus: policyOwner.session.messageBus,
+      toolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',

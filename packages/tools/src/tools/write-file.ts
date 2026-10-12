@@ -84,14 +84,14 @@ interface GetCorrectedFileContentResult {
 async function getCorrectedFileContent(
   filePath: string,
   proposedContent: string,
-  _host: IToolHost,
+  host: IToolHost,
 ): Promise<GetCorrectedFileContentResult> {
   let originalContent = '';
   let fileExists = false;
   let correctedContent = proposedContent;
 
   try {
-    originalContent = await fs.promises.readFile(filePath, 'utf-8');
+    originalContent = await host.readTextFile(filePath);
     fileExists = true;
   } catch (err) {
     if (isNodeError(err) && err.code === 'ENOENT') {
@@ -235,6 +235,20 @@ class WriteFileToolInvocation extends BaseToolInvocation<
 
   async execute(_abortSignal: AbortSignal): Promise<ToolResult> {
     const filePath = this.getFilePath();
+    const pathError = validatePathWithinWorkspace(
+      this.host.getWorkspaceRoots(),
+      filePath,
+    );
+    if (pathError) {
+      return {
+        llmContent: pathError,
+        returnDisplay: pathError,
+        error: {
+          message: pathError,
+          type: ToolErrorType.PATH_NOT_IN_WORKSPACE,
+        },
+      };
+    }
 
     // Pre-read file-size gate: reject an oversized existing target before
     // reading/copying it. New-file creation is unaffected (the gate returns
@@ -294,12 +308,17 @@ class WriteFileToolInvocation extends BaseToolInvocation<
     originalContent: string,
     isNewFile: boolean,
   ): Promise<ToolResult> {
+    const pathError = validatePathWithinWorkspace(
+      this.host.getWorkspaceRoots(),
+      filePath,
+    );
+    if (pathError) throw new Error(pathError);
     const dirName = path.dirname(filePath);
     if (!fs.existsSync(dirName)) {
       fs.mkdirSync(dirName, { recursive: true });
     }
 
-    fs.writeFileSync(filePath, fileContent, 'utf-8');
+    await this.host.writeTextFile(filePath, fileContent);
 
     const fileName = path.basename(filePath);
     const fileDiff = Diff.createPatch(

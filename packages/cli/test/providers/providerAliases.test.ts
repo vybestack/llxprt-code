@@ -15,13 +15,7 @@ import * as path from 'path';
 // Loaded with top-level await rather than a static import so the modules that
 // consume providerAliases are evaluated AFTER the unmock above. Static imports
 // are hoisted, so they would otherwise capture the globally mocked entries.
-const {
-  getProviderManager,
-  resetProviderManager,
-  setFileSystem,
-  createProviderManager,
-  registerProviderManagerSingleton,
-} = await import(
+const { createProviderManager } = await import(
   '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js'
 );
 const { NodeFileSystem } = await import(
@@ -36,6 +30,7 @@ const { SettingsService } = await import('@vybestack/llxprt-code-settings');
 
 describe('Provider alias integration', () => {
   let tempDir: string;
+  let providerManager: ReturnType<typeof createProviderManager>['manager'];
   let originalOpenAIApiKey: string | undefined;
   let originalHome: string | undefined;
   let originalUserProfile: string | undefined;
@@ -83,17 +78,15 @@ describe('Provider alias integration', () => {
     // test's own root too.
     process.env['LLXPRT_DATA_HOME'] = llxprtDir;
 
-    resetProviderManager();
-    setFileSystem(new NodeFileSystem());
-
-    // After DI migration, set up runtime context and create/register ProviderManager
+    // After DI migration, set up runtime context and create ProviderManager
     // Issue #2616: the runtime context carries its settings service
     // explicitly (no ambient install or teardown).
     const runtimeContext = createProviderRuntimeContext({
       settingsService: new SettingsService(),
     });
-    const { manager, oauthManager } = createProviderManager(runtimeContext);
-    registerProviderManagerSingleton(manager, oauthManager);
+    providerManager = createProviderManager(runtimeContext, {
+      fileSystem: new NodeFileSystem(),
+    }).manager;
   });
 
   afterEach(() => {
@@ -123,14 +116,10 @@ describe('Provider alias integration', () => {
       process.env['LLXPRT_DATA_HOME'] = originalDataHome;
     }
 
-    resetProviderManager();
-
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
   it('registers user-defined alias providers from the canonical data providers directory (<dataDir>/providers)', () => {
-    const providerManager = getProviderManager();
-
     expect(providerManager.listProviders()).toContain('myotherprovider');
 
     const aliasProvider = providerManager.getProviderByName('myotherprovider');
@@ -175,7 +164,6 @@ describe('Provider alias integration', () => {
   });
 
   it('includes packaged provider aliases by default', () => {
-    const providerManager = getProviderManager();
     expect(providerManager.listProviders()).toContain('Fireworks');
     expect(providerManager.listProviders()).toContain('OpenRouter');
   });

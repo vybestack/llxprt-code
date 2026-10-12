@@ -12,14 +12,15 @@ import {
   useReducer,
   useRef,
 } from 'react';
-import { AsyncFzf } from 'fzf';
+import { searchCompletionCandidates } from './completion-fuzzy-search.js';
 import type {
   FileFilteringOptions,
   FileSearch,
+  SearchOptions,
   MCPResource,
 } from '@vybestack/llxprt-code-core';
 import {
-  FileSearchFactory,
+  WorkspaceFilesystemOwner,
   escapePath,
   DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
   DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
@@ -139,14 +140,6 @@ function fileFilteringOptions(
   return config?.getFileFilteringOptions();
 }
 
-function getResourceRegistry(config: CliUiRuntime | undefined) {
-  if (config === undefined) {
-    return undefined;
-  }
-
-  return config.getResourceRegistry();
-}
-
 function getSubagentManager(config: CliUiRuntime | undefined) {
   if (config === undefined) {
     return undefined;
@@ -162,14 +155,12 @@ function hasResourceIdentity(resource: MCPResource): boolean {
 function buildResourceCandidates(
   config: CliUiRuntime | undefined,
 ): ResourceSuggestionCandidate[] {
-  const registry = getResourceRegistry(config);
-
-  if (registry === undefined) {
+  if (config === undefined) {
     return [];
   }
 
-  return registry
-    .getAllResources()
+  return config
+    .listResources()
     .filter(hasResourceIdentity)
     .map((resource) => {
       const prefixedUri = `${resource.serverName}:${resource.uri}`;
@@ -225,11 +216,7 @@ async function buildGitHubSuggestions(
 ): Promise<Suggestion[]> {
   const parsed = parseGitHubAtPattern(pattern);
   if (parsed === null) return [];
-  return fetchGitHubSuggestions(
-    config?.getGitHubBrokerClient(),
-    parsed,
-    signal,
-  );
+  return fetchGitHubSuggestions(config?.githubCompletion, parsed, signal);
 }
 
 /**
@@ -259,13 +246,13 @@ async function buildNonFileSuggestions(
   // during construction cannot escape before the others start.
   const settled = await Promise.allSettled([
     (async () =>
-      searchResourceCandidates(
+      searchNonFileCandidates(
         pattern,
         buildResourceCandidates(config),
         signal,
       ))(),
     (async () =>
-      searchSubagentCandidates(
+      searchNonFileCandidates(
         pattern,
         await buildSubagentCandidates(config),
         signal,
@@ -278,7 +265,7 @@ async function buildNonFileSuggestions(
   return { github, rest: [...resources, ...subagents] };
 }
 
-async function searchResourceCandidates(
+async function searchNonFileCandidates(
   pattern: string,
   candidates: ResourceSuggestionCandidate[],
   signal: AbortSignal,
@@ -294,73 +281,80 @@ async function searchResourceCandidates(
       .map((candidate) => candidate.suggestion);
   }
 
-  const fzf = new AsyncFzf(candidates, {
-    selector: (candidate: ResourceSuggestionCandidate) => candidate.searchKey,
-  });
-  const results = await fzf.find(normalizedPattern, {
-    limit: MAX_SUGGESTIONS_TO_SHOW * 3,
-  });
+  const results = await searchCompletionCandidates(
+    candidates,
+    normalizedPattern,
+    MAX_SUGGESTIONS_TO_SHOW * 3,
+    signal,
+  );
 
   if (signal.aborted) {
     return [];
   }
 
-  return results.map(
-    (result: { item: ResourceSuggestionCandidate }) => result.item.suggestion,
-  );
-}
-
-async function searchSubagentCandidates(
-  pattern: string,
-  candidates: SubagentSuggestionCandidate[],
-  signal: AbortSignal,
-): Promise<Suggestion[]> {
-  if (candidates.length === 0) {
-    return [];
-  }
-
-  const normalizedPattern = pattern.toLowerCase();
-  if (!normalizedPattern) {
-    return candidates
-      .slice(0, MAX_SUGGESTIONS_TO_SHOW)
-      .map((candidate) => candidate.suggestion);
-  }
-
-  const fzf = new AsyncFzf(candidates, {
-    selector: (candidate: SubagentSuggestionCandidate) => candidate.searchKey,
-  });
-  const results = await fzf.find(normalizedPattern, {
-    limit: MAX_SUGGESTIONS_TO_SHOW * 3,
-  });
-
-  if (signal.aborted) {
-    return [];
-  }
-
-  return results.map(
-    (result: { item: SubagentSuggestionCandidate }) => result.item.suggestion,
-  );
+  return results;
 }
 
 async function createFileSearcher(
   config: CliUiRuntime | undefined,
   cwd: string,
 ): Promise<FileSearch> {
-  const filteringOptions = fileFilteringOptions(config);
-  const searcher = FileSearchFactory.create({
-    projectRoot: cwd,
-    ignoreDirs: DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
-    ignorePatterns: DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
-    useGitignore: filteringOptions?.respectGitIgnore ?? true,
-    useExtensionIgnore: filteringOptions?.respectLlxprtIgnore ?? true,
-    cache: true,
-    cacheTtl: 30, // 30 seconds
-    enableRecursiveFileSearch: config?.getEnableRecursiveFileSearch() ?? true,
-    enableFuzzySearch: !(config?.getFileFilteringDisableFuzzySearch() ?? false),
-    maxFiles: filteringOptions?.maxFileCount,
-    maxDepth: DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
-  });
-
+  const search = async (
+    pattern: string,
+    options: SearchOptions = {},
+  ): Promise<string[]> => {
+    const filteringOptions = fileFilteringOptions(config);
+    const settings = {
+      ...options,
+      ...filteringOptions,
+      ignoreDirs: DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
+      ignorePatterns: DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
+      enableRecursiveFileSearch: config?.getEnableRecursiveFileSearch() ?? true,
+      enableFuzzySearch: !(
+        config?.getFileFilteringDisableFuzzySearch() ?? false
+      ),
+      maxFiles: filteringOptions?.maxFileCount,
+      maxDepth: DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
+    };
+    if (config) return config.search(cwd, pattern, settings);
+    const root = new WorkspaceFilesystemOwner({
+      targetDir: cwd,
+      isTrusted: () => true,
+    });
+    try {
+      return await root.search.search(cwd, pattern, settings);
+    } finally {
+      await root.dispose();
+    }
+  };
+  const initialize = async (): Promise<void> => {
+    const filteringOptions = fileFilteringOptions(config);
+    const options = {
+      ...filteringOptions,
+      ignoreDirs: DEFAULT_AUTOCOMPLETE_IGNORE_DIRS,
+      ignorePatterns: DEFAULT_AUTOCOMPLETE_IGNORE_PATTERNS,
+      enableRecursiveFileSearch: config?.getEnableRecursiveFileSearch() ?? true,
+      enableFuzzySearch: !(
+        config?.getFileFilteringDisableFuzzySearch() ?? false
+      ),
+      maxFiles: filteringOptions?.maxFileCount,
+      maxDepth: DEFAULT_AUTOCOMPLETE_MAX_DEPTH,
+    };
+    if (config) {
+      await config.initializeSearch(cwd, options);
+      return;
+    }
+    const root = new WorkspaceFilesystemOwner({
+      targetDir: cwd,
+      isTrusted: () => true,
+    });
+    try {
+      await root.search.initializeSearch(cwd, options);
+    } finally {
+      await root.dispose();
+    }
+  };
+  const searcher: FileSearch = { initialize, search };
   await searcher.initialize();
   return searcher;
 }

@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installWorkspaceRuntimeHook } from '../../__tests__/workspace-runtime-fixture.js';
+import { installDefinitionRuntimeFixture } from '../../__tests__/definition-runtime-fixture.js';
+
 import {
   advanceTimersByTimeAsync,
   runOnlyPendingTimersAsync,
@@ -26,18 +29,27 @@ import { CommandKind } from '../commands/types.js';
 
 describe('useAtCompletion (subagent/filtering/debounce)', () => {
   let testRootDir: string;
+  const createDefinitions = installDefinitionRuntimeFixture();
+  let definitions: ReturnType<typeof createDefinitions>;
+  const useFixtureRuntime = installWorkspaceRuntimeHook(
+    () => testRootDir || process.cwd(),
+    undefined,
+    undefined,
+    () => definitions,
+  );
   let mockConfig: Config;
 
   beforeEach(() => {
+    definitions = createDefinitions();
     mockConfig = {
+      getMcpServers: () => undefined,
       getFileFilteringOptions: vi.fn(() => ({
         respectGitIgnore: true,
         respectLlxprtIgnore: true,
       })),
       getEnableRecursiveFileSearch: () => true,
       getFileFilteringDisableFuzzySearch: () => false,
-      getResourceRegistry: () => ({ getAllResources: () => [] }),
-      getSubagentManager: () => undefined,
+      listResources: () => [],
     } as unknown as Config;
     vi.clearAllMocks();
   });
@@ -51,24 +63,35 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
     vi.restoreAllMocks();
   });
 
+  async function addSubagents(names: readonly string[]): Promise<void> {
+    await definitions.profileWrites.saveProfile('worker', {
+      version: 1,
+      provider: 'fake',
+      model: 'fixture',
+      modelParams: {},
+      ephemeralSettings: {},
+    });
+    for (const name of names)
+      await definitions.subagentWrites.saveSubagent(
+        name,
+        'worker',
+        'Follow the request.',
+      );
+  }
+
   describe('Subagent Suggestions', () => {
     it('should include subagent names in suggestions when SubagentManager is available', async () => {
       testRootDir = await createTmpDir({});
 
-      const subagentConfig = {
-        ...mockConfig,
-        getSubagentManager: () => ({
-          listSubagents: () =>
-            Promise.resolve([
-              'codeanalyzer',
-              'deepthinker',
-              'typescriptexpert',
-            ]),
-        }),
-      } as unknown as Config;
+      await addSubagents(['codeanalyzer', 'deepthinker', 'typescriptexpert']);
 
       const { result } = renderHook(() =>
-        useTestHarnessForAtCompletion(true, '', subagentConfig, testRootDir),
+        useTestHarnessForAtCompletion(
+          true,
+          '',
+          useFixtureRuntime(mockConfig),
+          testRootDir,
+        ),
       );
 
       await waitFor(() => {
@@ -91,15 +114,15 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
     it('tags subagent suggestions with kind: CommandKind.SUBAGENT', async () => {
       testRootDir = await createTmpDir({});
 
-      const subagentConfig = {
-        ...mockConfig,
-        getSubagentManager: () => ({
-          listSubagents: () => Promise.resolve(['typescriptexpert']),
-        }),
-      } as unknown as Config;
+      await addSubagents(['typescriptexpert']);
 
       const { result } = renderHook(() =>
-        useTestHarnessForAtCompletion(true, '', subagentConfig, testRootDir),
+        useTestHarnessForAtCompletion(
+          true,
+          '',
+          useFixtureRuntime(mockConfig),
+          testRootDir,
+        ),
       );
 
       await waitFor(() => {
@@ -116,23 +139,13 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
     it('should filter subagent suggestions by pattern', async () => {
       testRootDir = await createTmpDir({});
 
-      const subagentConfig = {
-        ...mockConfig,
-        getSubagentManager: () => ({
-          listSubagents: () =>
-            Promise.resolve([
-              'codeanalyzer',
-              'deepthinker',
-              'typescriptexpert',
-            ]),
-        }),
-      } as unknown as Config;
+      await addSubagents(['codeanalyzer', 'deepthinker', 'typescriptexpert']);
 
       const { result } = renderHook(() =>
         useTestHarnessForAtCompletion(
           true,
           'deep',
-          subagentConfig,
+          useFixtureRuntime(mockConfig),
           testRootDir,
         ),
       );
@@ -154,18 +167,13 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       };
       testRootDir = await createTmpDir(structure);
 
-      const subagentConfig = {
-        ...mockConfig,
-        getSubagentManager: () => ({
-          listSubagents: () => Promise.resolve(['deepthinker']),
-        }),
-      } as unknown as Config;
+      await addSubagents(['deepthinker']);
 
       const { result } = renderHook(() =>
         useTestHarnessForAtCompletion(
           true,
           'deep',
-          subagentConfig,
+          useFixtureRuntime(mockConfig),
           testRootDir,
         ),
       );
@@ -190,7 +198,12 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       testRootDir = await createTmpDir({});
 
       const { result } = renderHook(() =>
-        useTestHarnessForAtCompletion(true, '', mockConfig, testRootDir),
+        useTestHarnessForAtCompletion(
+          true,
+          '',
+          useFixtureRuntime(mockConfig),
+          testRootDir,
+        ),
       );
 
       await waitFor(() => {
@@ -206,18 +219,13 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
     it('should handle gracefully when listSubagents() rejects', async () => {
       testRootDir = await createTmpDir({ 'file.txt': '' });
 
-      const failingSubagentConfig = {
-        ...mockConfig,
-        getSubagentManager: () => ({
-          listSubagents: () => Promise.reject(new Error('Failed to list')),
-        }),
-      } as unknown as Config;
+      await definitions.definitionOwner.dispose();
 
       const { result } = renderHook(() =>
         useTestHarnessForAtCompletion(
           true,
           '',
-          failingSubagentConfig,
+          useFixtureRuntime(mockConfig),
           testRootDir,
         ),
       );
@@ -246,7 +254,12 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       const createSpy = vi.spyOn(FileSearchFactory, 'create');
 
       renderHook(() =>
-        useTestHarnessForAtCompletion(true, '', mockConfig, testRootDir),
+        useTestHarnessForAtCompletion(
+          true,
+          '',
+          useFixtureRuntime(mockConfig),
+          testRootDir,
+        ),
       );
 
       expect(createSpy).toHaveBeenCalledWith(
@@ -262,7 +275,12 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       const createSpy = vi.spyOn(FileSearchFactory, 'create');
 
       renderHook(() =>
-        useTestHarnessForAtCompletion(true, '', mockConfig, testRootDir),
+        useTestHarnessForAtCompletion(
+          true,
+          '',
+          useFixtureRuntime(mockConfig),
+          testRootDir,
+        ),
       );
 
       expect(createSpy).toHaveBeenCalledWith(
@@ -278,7 +296,12 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       const createSpy = vi.spyOn(FileSearchFactory, 'create');
 
       renderHook(() =>
-        useTestHarnessForAtCompletion(true, '', mockConfig, testRootDir),
+        useTestHarnessForAtCompletion(
+          true,
+          '',
+          useFixtureRuntime(mockConfig),
+          testRootDir,
+        ),
       );
 
       expect(createSpy).toHaveBeenCalledWith(
@@ -298,7 +321,12 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       testRootDir = await createTmpDir(structure);
 
       const { result } = renderHook(() =>
-        useTestHarnessForAtCompletion(true, '', mockConfig, testRootDir),
+        useTestHarnessForAtCompletion(
+          true,
+          '',
+          useFixtureRuntime(mockConfig),
+          testRootDir,
+        ),
       );
 
       await waitFor(() => {
@@ -324,7 +352,12 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       testRootDir = await createTmpDir(structure);
 
       const { result } = renderHook(() =>
-        useTestHarnessForAtCompletion(true, '', mockConfig, testRootDir),
+        useTestHarnessForAtCompletion(
+          true,
+          '',
+          useFixtureRuntime(mockConfig),
+          testRootDir,
+        ),
       );
 
       await waitFor(() => {
@@ -351,7 +384,12 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
 
       const { rerender } = renderHook(
         ({ pattern }: { pattern: string }) =>
-          useTestHarnessForAtCompletion(true, pattern, mockConfig, testRootDir),
+          useTestHarnessForAtCompletion(
+            true,
+            pattern,
+            useFixtureRuntime(mockConfig),
+            testRootDir,
+          ),
         { initialProps: { pattern: '' } },
       );
 
@@ -424,7 +462,12 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
 
       const { result, rerender } = renderHook(
         ({ pattern }: { pattern: string }) =>
-          useTestHarnessForAtCompletion(true, pattern, mockConfig, testRootDir),
+          useTestHarnessForAtCompletion(
+            true,
+            pattern,
+            useFixtureRuntime(mockConfig),
+            testRootDir,
+          ),
         { initialProps: { pattern: 'a' } },
       );
 
@@ -515,7 +558,12 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       } as unknown as Config;
 
       const { result } = renderHook(() =>
-        useTestHarnessForAtCompletion(true, '', timeoutConfig, testRootDir),
+        useTestHarnessForAtCompletion(
+          true,
+          '',
+          useFixtureRuntime(timeoutConfig),
+          testRootDir,
+        ),
       );
 
       await act(async () => {
@@ -547,7 +595,12 @@ describe('useAtCompletion (subagent/filtering/debounce)', () => {
       testRootDir = await createTmpDir(structure);
 
       const { result } = renderHook(() =>
-        useTestHarnessForAtCompletion(true, '', mockConfig, testRootDir),
+        useTestHarnessForAtCompletion(
+          true,
+          '',
+          useFixtureRuntime(mockConfig),
+          testRootDir,
+        ),
       );
 
       await waitFor(() => {

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { BaseProvider } from './BaseProvider.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -77,6 +78,8 @@ async function captureProviderFailure(
   provider: IProvider,
   settings: SettingsService,
 ): Promise<CredentialResolutionError> {
+  if (provider instanceof BaseProvider)
+    provider.setRuntimeSettingsService(settings);
   const options = createOptions(provider.name, settings);
   try {
     await provider.generateChatCompletion(options).next();
@@ -183,6 +186,7 @@ describe('Provider credential-resolution error surface', () => {
     const settings = createSettings('anthropic');
     settings.setProviderSetting('anthropic', 'base-url', baseURL);
     const provider = new AnthropicProvider(undefined, baseURL);
+    provider.setRuntimeSettingsService(settings);
     const options = createOptions('anthropic', settings);
 
     const error = await captureError(provider.generateChatCompletion(options));

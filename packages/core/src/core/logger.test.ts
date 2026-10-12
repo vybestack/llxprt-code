@@ -108,7 +108,10 @@ describe('Logger', () => {
     await cleanupLogAndCheckpointFiles();
     // Ensure the directory exists for the test
     await fs.mkdir(TEST_LLXPRT_DIR, { recursive: true });
-    logger = new Logger(testSessionId, new Storage(process.cwd()));
+    logger = new Logger(
+      testSessionId,
+      new Storage(process.cwd()).getProjectTempDir(),
+    );
     await logger.initialize();
   });
 
@@ -186,7 +189,7 @@ describe('Logger', () => {
       await fs.writeFile(TEST_LOG_FILE_PATH, toJsonl(existingLogs));
       const newLogger = new Logger(
         currentSessionId,
-        new Storage(process.cwd()),
+        new Storage(process.cwd()).getProjectTempDir(),
       );
       await newLogger.initialize();
       expect(newLogger['messageId']).toBe(2);
@@ -205,7 +208,10 @@ describe('Logger', () => {
         },
       ];
       await fs.writeFile(TEST_LOG_FILE_PATH, toJsonl(existingLogs));
-      const newLogger = new Logger('a-new-session', new Storage(process.cwd()));
+      const newLogger = new Logger(
+        'a-new-session',
+        new Storage(process.cwd()).getProjectTempDir(),
+      );
       await newLogger.initialize();
       expect(newLogger['messageId']).toBe(0);
       await newLogger.close();
@@ -257,7 +263,7 @@ describe('Logger', () => {
     it('should handle logger not initialized', async () => {
       const uninitializedLogger = new Logger(
         testSessionId,
-        new Storage(process.cwd()),
+        new Storage(process.cwd()).getProjectTempDir(),
       );
       await uninitializedLogger.close(); // Ensure it's treated as uninitialized
       const consoleDebugSpy = vi
@@ -284,7 +290,7 @@ describe('Logger', () => {
 
       const steadyLogger = new Logger(
         testSessionId,
-        new Storage(process.cwd()),
+        new Storage(process.cwd()).getProjectTempDir(),
       );
       await steadyLogger.initialize();
       expect(steadyLogger['messageId']).toBe(1);
@@ -350,7 +356,7 @@ describe('Logger', () => {
       const readFileSpy = vi.spyOn(fs, 'readFile');
       const legacyLogger = new Logger(
         testSessionId,
-        new Storage(process.cwd()),
+        new Storage(process.cwd()).getProjectTempDir(),
       );
       await legacyLogger.initialize();
       await legacyLogger.logMessage(MessageSenderType.USER, 'after-migration');
@@ -386,14 +392,20 @@ describe('Logger', () => {
 
   describe('getPreviousUserMessages', () => {
     it('should retrieve all user messages from logs, sorted newest first', async () => {
-      const loggerSort = new Logger('session-1', new Storage(process.cwd()));
+      const loggerSort = new Logger(
+        'session-1',
+        new Storage(process.cwd()).getProjectTempDir(),
+      );
       await loggerSort.initialize();
       await loggerSort.logMessage(MessageSenderType.USER, 'S1M0_ts100000');
       vi.advanceTimersByTime(1000);
       await loggerSort.logMessage(MessageSenderType.USER, 'S1M1_ts101000');
       vi.advanceTimersByTime(1000);
       // Switch to a different session to log
-      const loggerSort2 = new Logger('session-2', new Storage(process.cwd()));
+      const loggerSort2 = new Logger(
+        'session-2',
+        new Storage(process.cwd()).getProjectTempDir(),
+      );
       await loggerSort2.initialize();
       await loggerSort2.logMessage(MessageSenderType.USER, 'S2M0_ts102000');
       vi.advanceTimersByTime(1000);
@@ -408,7 +420,7 @@ describe('Logger', () => {
 
       const finalLogger = new Logger(
         'final-session',
-        new Storage(process.cwd()),
+        new Storage(process.cwd()).getProjectTempDir(),
       );
       await finalLogger.initialize();
 
@@ -431,7 +443,7 @@ describe('Logger', () => {
     it('should return empty array if logger not initialized', async () => {
       const uninitializedLogger = new Logger(
         testSessionId,
-        new Storage(process.cwd()),
+        new Storage(process.cwd()).getProjectTempDir(),
       );
       await uninitializedLogger.close();
       const messages = await uninitializedLogger.getPreviousUserMessages();
@@ -468,7 +480,7 @@ describe('Logger', () => {
       // close() must reset ALL mutable instance state, otherwise a reused
       // instance would silently skip the trailing-newline safety check.
       expect(logger['_needsNewlineCheck']).toBe(true);
-      expect(logger['llxprtDir']).toBeUndefined();
+      expect(logger['logFilePath']).toBeUndefined();
     });
   });
 });

@@ -4,45 +4,52 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { setCommand } from '../ui/commands/setCommand.js';
 import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
 import type { CommandContext } from '../ui/commands/types.js';
-import type { Config } from '@vybestack/llxprt-code-core';
-
-// Ephemeral settings are written through the runtime API rather than Config.
-// The real accessor resolves the CLI runtime scope, which this test does not
-// establish, so the bridge is supplied here and asserted on directly.
-const setEphemeralSetting = vi.fn();
-void vi.mock('../ui/contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => ({
-    setEphemeralSetting,
-    getEphemeralSettings: () => ({}),
-    setActiveModelParam: vi.fn(),
-    clearActiveModelParam: vi.fn(),
-  }),
-}));
+import { Config } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 
 describe('retry settings integration tests', () => {
   let context: CommandContext;
+  let config: Config;
+  let settingsOwner: SessionSettingsOwner;
+  let directory: string;
 
-  beforeEach(() => {
-    setEphemeralSetting.mockClear();
-    const mockConfig = {
-      setEphemeralSetting: vi.fn(),
-    } as unknown as Config;
-
-    context = createMockCommandContext({
-      services: {
-        config: mockConfig,
-      },
+  beforeEach(async () => {
+    directory = await mkdtemp(join(tmpdir(), 'llxprt-retry-settings-'));
+    config = new Config({
+      sessionId: 'retry-settings',
+      targetDir: directory,
+      cwd: directory,
+      model: 'test-model',
+      debugMode: false,
     });
+    settingsOwner = new SessionSettingsOwner(new SettingsService());
+    context = createMockCommandContext({
+      runtimeApi: {
+        setEphemeralSetting: (key: string, value: unknown) =>
+          settingsOwner.writeUserParameter(key, value),
+      },
+      services: { config },
+    });
+  });
+
+  afterEach(async () => {
+    await settingsOwner.dispose();
+    await config.dispose();
+    await rm(directory, { recursive: true, force: true });
   });
 
   it('should set retries as ephemeral setting', async () => {
     const result = await setCommand.action!(context, 'retries 3');
 
-    expect(setEphemeralSetting).toHaveBeenCalledWith('retries', 3);
+    expect(settingsOwner.readNamedParameter('retries')).toBe(3);
 
     expect(result).toStrictEqual({
       type: 'message',
@@ -55,7 +62,7 @@ describe('retry settings integration tests', () => {
   it('should set retrywait as ephemeral setting', async () => {
     const result = await setCommand.action!(context, 'retrywait 10000');
 
-    expect(setEphemeralSetting).toHaveBeenCalledWith('retrywait', 10000);
+    expect(settingsOwner.readNamedParameter('retrywait')).toBe(10000);
 
     expect(result).toStrictEqual({
       type: 'message',

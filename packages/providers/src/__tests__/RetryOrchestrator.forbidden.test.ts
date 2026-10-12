@@ -13,6 +13,7 @@
  * the surfaced error shape.
  */
 
+import { retryOperationFixture } from './retry-operation-fixture.js';
 import { describe, it, expect, vi } from 'bun:test';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
 import type { IProvider, GenerateChatOptions } from '../IProvider.js';
@@ -156,15 +157,16 @@ describe('RetryOrchestrator forbidden (403) handling — issue #2917', () => {
     });
 
     const result = await consumeStream(
-      orchestrator.generateChatCompletion({
-        contents: [],
-        resolved: { authToken: 'revoked-403-token' },
-        runtime: {
-          config: {
-            getOnAuthErrorHandler: () => onAuthErrorHandler,
+      orchestrator.generateChatCompletion(
+        retryOperationFixture(
+          {
+            contents: [],
+            resolved: { authToken: 'revoked-403-token' },
           },
-        },
-      } as GenerateChatOptions),
+          onAuthErrorHandler,
+          undefined,
+        ),
+      ),
     );
 
     // With a real recovery mechanism, the orchestrator retries exactly once
@@ -174,7 +176,7 @@ describe('RetryOrchestrator forbidden (403) handling — issue #2917', () => {
     expect(result).toHaveLength(1);
   });
 
-  it('still refreshes then fails over when a bucketFailoverHandler is configured (AC4)', async () => {
+  it('rotates the bucket before replaying an unrecovered credential (AC4)', async () => {
     const attemptBuckets: string[] = [];
     let failoverCalls = 0;
     const buckets = ['bucket1', 'bucket2'];
@@ -182,11 +184,7 @@ describe('RetryOrchestrator forbidden (403) handling — issue #2917', () => {
     let currentBucket = buckets[bucketIndex];
 
     const provider = createTestProvider({
-      responses: [
-        { error: createForbiddenError() },
-        { error: createForbiddenError() },
-        'success',
-      ],
+      responses: [{ error: createForbiddenError() }, 'success'],
       onTransportCall: () => {
         attemptBuckets.push(currentBucket);
       },
@@ -197,36 +195,33 @@ describe('RetryOrchestrator forbidden (403) handling — issue #2917', () => {
     });
 
     const result = await consumeStream(
-      orchestrator.generateChatCompletion({
-        contents: [],
-        runtime: {
-          config: {
-            getBucketFailoverHandler: () => ({
-              getBuckets: () => buckets,
-              getCurrentBucket: () => currentBucket,
-              tryFailover: () => {
-                failoverCalls++;
-                return advanceForbiddenBucket(
-                  buckets,
-                  bucketIndex,
-                  (nextIndex, nextBucket) => {
-                    bucketIndex = nextIndex;
-                    currentBucket = nextBucket;
-                  },
-                );
-              },
-              isEnabled: () => true,
-            }),
+      orchestrator.generateChatCompletion(
+        retryOperationFixture(
+          {
+            contents: [],
           },
-        },
-      } as GenerateChatOptions),
+          undefined,
+          {
+            getBuckets: () => buckets,
+            getCurrentBucket: () => currentBucket,
+            tryFailover: () => {
+              failoverCalls++;
+              return advanceForbiddenBucket(
+                buckets,
+                bucketIndex,
+                (nextIndex, nextBucket) => {
+                  bucketIndex = nextIndex;
+                  currentBucket = nextBucket;
+                },
+              );
+            },
+            isEnabled: () => true,
+          },
+        ),
+      ),
     );
 
-    // First 403 triggers the refresh-retry allowance on the ORIGINAL bucket,
-    // and only the second 403 triggers bucket failover. Asserting the bucket
-    // per attempt pins that ordering: a failover after the first 403 would
-    // still produce three calls and still end on bucket2.
-    expect(attemptBuckets).toStrictEqual(['bucket1', 'bucket1', 'bucket2']);
+    expect(attemptBuckets).toStrictEqual(['bucket1', 'bucket2']);
     expect(failoverCalls).toBe(1);
     expect(result).toHaveLength(1);
   });

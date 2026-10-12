@@ -10,7 +10,10 @@
  * @pseudocode consumer-migration.md lines 10-15
  */
 
-import type { Config } from '@vybestack/llxprt-code-core';
+import type {
+  Config,
+  RuntimeProviderManager,
+} from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from './config/settings.js';
 import { guardUnconfiguredProvider } from './unconfiguredProviderGuard.js';
 
@@ -33,11 +36,18 @@ import { guardUnconfiguredProvider } from './unconfiguredProviderGuard.js';
  *   unconfigured-provider exit (defaults to a no-op). When omitted, the guard
  *   is still called with a no-op cleanup so the defensive path still fires.
  */
-export async function validateNonInteractiveAuth(
+export async function validateNonInteractiveAuth<
+  C extends Pick<Config, 'getProvider' | 'getOutputFormat' | 'isInteractive'>,
+>(
   useExternalAuth: boolean | undefined,
-  nonInteractiveConfig: Config,
-  settings?: LoadedSettings,
+  nonInteractiveConfig: C,
+  settings: LoadedSettings | undefined,
   runCleanup: () => Promise<void> = () => Promise.resolve(),
+  providerState: Pick<RuntimeProviderManager, 'hasActiveProvider'> | undefined,
+  applyCompressionSetting: (
+    key: 'compression-threshold' | 'context-limit',
+    value: number,
+  ) => void,
 ) {
   void useExternalAuth;
 
@@ -45,7 +55,11 @@ export async function validateNonInteractiveAuth(
   // centralized guard which reports the error and exits 52. The main CLI
   // boundary already calls guardUnconfiguredProvider BEFORE this function,
   // so this is a second line of defense for any caller that bypasses main.
-  await guardUnconfiguredProvider(nonInteractiveConfig, runCleanup);
+  await guardUnconfiguredProvider(
+    nonInteractiveConfig,
+    runCleanup,
+    providerState,
+  );
 
   // Apply compression settings after the provider gate
   if (settings) {
@@ -56,13 +70,10 @@ export async function validateNonInteractiveAuth(
       | undefined;
 
     if (compressionThreshold !== undefined) {
-      nonInteractiveConfig.setEphemeralSetting(
-        'compression-threshold',
-        compressionThreshold,
-      );
+      applyCompressionSetting('compression-threshold', compressionThreshold);
     }
     if (contextLimit !== undefined) {
-      nonInteractiveConfig.setEphemeralSetting('context-limit', contextLimit);
+      applyCompressionSetting('context-limit', contextLimit);
     }
   }
 

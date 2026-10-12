@@ -4,6 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  installWorkspaceRuntimeHook,
+  installWorkspaceRuntimeFixture,
+} from '../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+const useFixtureRuntime = installWorkspaceRuntimeHook();
+
 /**
  * Phase 3 TDD Tests - Tab Completion Extension Filtering
  *
@@ -44,7 +51,9 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
     vi.clearAllMocks();
     mockCommandContext = createMockCommandContext();
     mockConfig = {
+      getMcpServers: () => undefined,
       getEnablePromptCompletion: () => false,
+      isExtensionEnabled: () => true,
       getUtilityModel: () => undefined,
     } as unknown as Config;
   });
@@ -78,10 +87,10 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
       const allCommands = [...builtinCommands, ...extensionCommands];
 
       // Mock the extension as enabled
-      mockCommandContext.services.config = {
+      mockCommandContext.services.config = composeFixtureRuntime({
         ...mockCommandContext.services.config,
         isExtensionEnabled: (name: string) => name === 'my-ext',
-      } as unknown as Config;
+      } as unknown as Config);
 
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('/my');
@@ -94,7 +103,7 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
             allCommands,
             mockCommandContext,
             false,
-            mockConfig,
+            useFixtureRuntime(mockConfig),
           ),
         };
       });
@@ -134,10 +143,10 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
       const allCommands = [...builtinCommands, ...extensionCommands];
 
       // Mock the extension as disabled
-      mockCommandContext.services.config = {
+      mockCommandContext.services.config = composeFixtureRuntime({
         ...mockCommandContext.services.config,
         isExtensionEnabled: (_name: string) => false,
-      } as unknown as Config;
+      } as unknown as Config);
 
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('/my');
@@ -150,7 +159,7 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
             allCommands,
             mockCommandContext,
             false,
-            mockConfig,
+            useFixtureRuntime(mockConfig),
           ),
         };
       });
@@ -208,7 +217,7 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
               commands,
               mockCommandContext,
               false,
-              mockConfig,
+              useFixtureRuntime(mockConfig),
             ),
           };
         },
@@ -264,10 +273,10 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
       const allCommands = [...builtinCommands, ...extensionCommands];
 
       // All extensions disabled
-      mockCommandContext.services.config = {
+      mockCommandContext.services.config = composeFixtureRuntime({
         ...mockCommandContext.services.config,
         isExtensionEnabled: () => false,
-      } as unknown as Config;
+      } as unknown as Config);
 
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('/');
@@ -280,7 +289,7 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
             allCommands,
             mockCommandContext,
             false,
-            mockConfig,
+            useFixtureRuntime(mockConfig),
           ),
         };
       });
@@ -339,7 +348,7 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
               commands,
               mockCommandContext,
               false,
-              mockConfig,
+              useFixtureRuntime(mockConfig),
             ),
           };
         },
@@ -407,10 +416,10 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
       const allCommands = [...builtinCommands, ...extensionCommands];
 
       // Extension disabled
-      mockCommandContext.services.config = {
+      mockCommandContext.services.config = composeFixtureRuntime({
         ...mockCommandContext.services.config,
         isExtensionEnabled: () => false,
-      } as unknown as Config;
+      } as unknown as Config);
 
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('/myext ');
@@ -423,7 +432,7 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
             allCommands,
             mockCommandContext,
             false,
-            mockConfig,
+            useFixtureRuntime(mockConfig),
           ),
         };
       });
@@ -474,10 +483,10 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
       const allCommands = [...builtinCommands, ...extensionCommands];
 
       // Enable only ext-1
-      mockCommandContext.services.config = {
+      mockCommandContext.services.config = composeFixtureRuntime({
         ...mockCommandContext.services.config,
         isExtensionEnabled: (name: string) => name === 'ext-1',
-      } as unknown as Config;
+      } as unknown as Config);
 
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('/e');
@@ -490,7 +499,7 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
             allCommands,
             mockCommandContext,
             false,
-            mockConfig,
+            useFixtureRuntime(mockConfig),
           ),
         };
       });
@@ -520,10 +529,10 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
       const allCommands = [...extensionCommands];
 
       // Extension disabled
-      mockCommandContext.services.config = {
+      mockCommandContext.services.config = composeFixtureRuntime({
         ...mockCommandContext.services.config,
         isExtensionEnabled: () => false,
-      } as unknown as Config;
+      } as unknown as Config);
 
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('/exactmatch');
@@ -536,7 +545,7 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
             allCommands,
             mockCommandContext,
             false,
-            mockConfig,
+            useFixtureRuntime(mockConfig),
           ),
         };
       });
@@ -571,10 +580,10 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
 
       const allCommands = [...builtinCommands, ...extensionCommands];
 
-      mockCommandContext.services.config = {
+      mockCommandContext.services.config = composeFixtureRuntime({
         ...mockCommandContext.services.config,
         isExtensionEnabled: () => true,
-      } as unknown as Config;
+      } as unknown as Config);
 
       const { result } = renderHook(() => {
         const textBuffer = useTextBufferForTest('/');
@@ -587,7 +596,7 @@ describe('Tab Completion Extension Filtering (Phase 3 TDD)', () => {
             allCommands,
             mockCommandContext,
             false,
-            mockConfig,
+            useFixtureRuntime(mockConfig),
           ),
         };
       });

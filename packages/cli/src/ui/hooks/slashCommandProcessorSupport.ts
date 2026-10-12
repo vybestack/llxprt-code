@@ -8,28 +8,26 @@ import { useShallowMemo } from './useShallowMemo.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import process from 'node:process';
-import * as path from 'node:path';
-import type { RecordingIntegration, Todo } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
-  addMCPStatusChangeListener,
-  removeMCPStatusChangeListener,
-} from '@vybestack/llxprt-code-mcp';
-import {
+  type RecordingIntegration,
+  type Todo,
   CoreEvent,
   coreEvents,
-  GitService,
-  IdeClient,
+  type WorkspaceCheckpointOperations,
   Logger,
-  SubagentManager,
+  type SubagentDefinitionReads,
+  type SubagentDefinitionWrites,
+  type ProfileDefinitionReads,
 } from '@vybestack/llxprt-code-core';
-import { ProfileManager, Storage } from '@vybestack/llxprt-code-settings';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { Message, HistoryItemWithoutId } from '../types.js';
 import { MessageType } from '../types.js';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
+import type { RuntimeApi } from '../contexts/RuntimeContext.js';
 import { CommandService } from '../../services/CommandService.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { FileCommandLoader } from '../../services/FileCommandLoader.js';
@@ -48,13 +46,18 @@ interface TodoContextValue {
 }
 
 interface CommandContextInputs {
+  runtimeApi: RuntimeApi;
+  refreshProviderAliases: CommandContext['refreshProviderAliases'];
+  oauthControl: CommandContext['oauthControl'];
   config: CliUiRuntime | null;
   agent: Agent | null;
   settings: LoadedSettings;
-  gitService: GitService | undefined;
+  gitService: WorkspaceCheckpointOperations | undefined;
   logger: Logger;
-  profileManager: ProfileManager | undefined;
-  subagentManager: SubagentManager | undefined;
+  profileManager: Pick<ProfileDefinitionReads, 'listProfiles'> | undefined;
+  subagentManager:
+    | (SubagentDefinitionReads & SubagentDefinitionWrites)
+    | undefined;
   addItem: UseHistoryManagerReturn['addItem'];
   clearItems: UseHistoryManagerReturn['clearItems'];
   loadHistory: UseHistoryManagerReturn['loadHistory'];
@@ -71,6 +74,7 @@ interface CommandContextInputs {
   extensionsUpdateState: Map<string, ExtensionUpdateState>;
   todoContext: TodoContextValue | undefined;
   recordingIntegration: RecordingIntegration | undefined;
+  recordingOwner?: 'agent' | 'raw';
   recordingSwapCallbacks: RecordingSwapCallbacks | undefined;
   stats: {
     stats: CommandContext['session']['stats'];
@@ -119,37 +123,35 @@ export function convertMessageToHistoryItem(
   }
 }
 
-export function useManagers(config: CliUiRuntime | null): {
-  gitService: GitService | undefined;
+export function useManagers(
+  config: CliUiRuntime | null,
+  agent?: Agent,
+): {
+  gitService: WorkspaceCheckpointOperations | undefined;
   logger: Logger;
-  profileManager: ProfileManager | undefined;
-  subagentManager: SubagentManager | undefined;
+  profileManager: Pick<ProfileDefinitionReads, 'listProfiles'> | undefined;
+  subagentManager:
+    | (SubagentDefinitionReads & SubagentDefinitionWrites)
+    | undefined;
 } {
-  const gitService = useMemo(() => {
-    if (!config?.getProjectRoot()) return undefined;
-    return new GitService(config.getProjectRoot(), config.storage);
-  }, [config]);
+  const gitService =
+    config?.getCheckpointingEnabled() === true ? config.checkpoints : undefined;
   const logger = useMemo(
     () =>
       new Logger(
         config?.getSessionId() ?? '',
-        config?.storage ?? new Storage(process.cwd()),
+        config?.projectTempDir ??
+          new Storage(process.cwd()).getProjectTempDir(),
       ),
     [config],
   );
-  const profileManager = useMemo(() => {
-    if (!config) return undefined;
-    return new ProfileManager(
-      path.join(Storage.getGlobalConfigDir(), 'profiles'),
-    );
-  }, [config]);
-  const subagentManager = useMemo(() => {
-    if (!config || !profileManager) return undefined;
-    return new SubagentManager(
-      path.join(Storage.getGlobalConfigDir(), 'subagents'),
-      profileManager,
-    );
-  }, [config, profileManager]);
+  const profileManager = agent?.workspace.profileDefinitions;
+  const subagentManager = agent
+    ? {
+        ...agent.workspace.subagentDefinitions,
+        ...agent.workspace.subagentWrites,
+      }
+    : undefined;
   return { gitService, logger, profileManager, subagentManager };
 }
 
@@ -194,6 +196,9 @@ export function useCommandContext(
 ): CommandContext {
   return useShallowMemo(
     (): CommandContext => ({
+      runtimeApi: inputs.runtimeApi,
+      refreshProviderAliases: inputs.refreshProviderAliases,
+      oauthControl: inputs.oauthControl,
       signal: NEVER_ABORTED_SIGNAL,
       services: {
         config: inputs.config,
@@ -212,6 +217,7 @@ export function useCommandContext(
       },
       todoContext: inputs.todoContext,
       recordingIntegration: inputs.recordingIntegration,
+      recordingOwner: inputs.recordingOwner === 'agent' ? 'agent' : undefined,
       recordingSwapCallbacks: inputs.recordingSwapCallbacks,
     }),
     {
@@ -257,38 +263,43 @@ export function useCommandReload(
   isConfigInitialized: boolean,
   reloadCommands: () => void,
   setCommands: (commands: readonly SlashCommand[]) => void,
+  agent: Agent | null,
+  recordingOwner?: 'agent' | 'raw',
 ): void {
   useEffect(
-    () => subscribeToExternalCommandChanges(config, reloadCommands),
-    [config, reloadCommands],
+    () => subscribeToExternalCommandChanges(config, reloadCommands, agent),
+    [config, reloadCommands, agent],
   );
   useEffect(() => {
     const controller = new AbortController();
-    void loadSlashCommands(config, controller.signal, setCommands);
+    void loadSlashCommands(
+      config,
+      controller.signal,
+      setCommands,
+      recordingOwner,
+    );
     return () => {
       controller.abort();
     };
-  }, [config, reloadTrigger, isConfigInitialized, setCommands]);
+  }, [config, reloadTrigger, isConfigInitialized, setCommands, recordingOwner]);
 }
 
 function subscribeToExternalCommandChanges(
   config: CliUiRuntime | null,
   reloadCommands: () => void,
+  agent: Agent | null,
 ): (() => void) | undefined {
   if (!config) return undefined;
   const listener = () => {
     reloadCommands();
   };
-  void IdeClient.getInstance().then((client) => {
-    client.addStatusChangeListener(listener);
-  });
-  addMCPStatusChangeListener(listener);
+  const ideClient = config.getIdeClient();
+  ideClient?.addStatusChangeListener(listener);
+  const unsubscribeMcp = agent?.mcp.subscribeStatus(listener);
   coreEvents.on(CoreEvent.FolderTrustChanged, listener);
   return () => {
-    void IdeClient.getInstance().then((client) => {
-      client.removeStatusChangeListener(listener);
-    });
-    removeMCPStatusChangeListener(listener);
+    ideClient?.removeStatusChangeListener(listener);
+    unsubscribeMcp?.();
     coreEvents.off(CoreEvent.FolderTrustChanged, listener);
   };
 }
@@ -299,17 +310,21 @@ function shouldUseBuiltinCommandsOnly(): boolean {
 
 export function loadBuiltinSlashCommandsForTesting(
   config: CliUiRuntime | null,
+  recordingOwner?: 'agent' | 'raw',
 ): readonly SlashCommand[] {
-  return new BuiltinCommandLoader(config).loadCommandsSync();
+  return new BuiltinCommandLoader(config, recordingOwner).loadCommandsSync();
 }
 
 async function loadSlashCommands(
   config: CliUiRuntime | null,
   signal: AbortSignal,
   setCommands: (commands: readonly SlashCommand[]) => void,
+  recordingOwner?: 'agent' | 'raw',
 ): Promise<void> {
   try {
-    const loaders: ICommandLoader[] = [new BuiltinCommandLoader(config)];
+    const loaders: ICommandLoader[] = [
+      new BuiltinCommandLoader(config, recordingOwner),
+    ];
     if (!shouldUseBuiltinCommandsOnly()) {
       loaders.unshift(new McpPromptLoader(config));
       loaders.push(new FileCommandLoader(config));

@@ -236,19 +236,16 @@ describe('Deprecation Guards (P36)', () => {
       expect(matches[0]).toContain('credential-store-factory.ts');
     });
 
-    it('consumer modules should import createTokenStore from the providers auth barrel, not core directly for stores', () => {
-      // Key consumer modules that create OAuthManager should use createTokenStore.
-      // After the engine relocation, the factory lives in
-      // packages/providers/src/auth/proxy/credential-store-factory.ts and is
-      // re-exported through the providers auth barrel
-      // (@vybestack/llxprt-code-providers/auth.js). CLI consumers import it from
-      // that barrel rather than from core directly.
+    it('consumer modules should use the credential factory, not construct stores directly', () => {
+      // Runtime context creation uses a per-owner credential store from the
+      // factory; the provider-manager composition root uses the shared store.
+      // Neither consumer constructs a token store directly.
       // These are: runtimeContextFactory.ts and providerManagerInstance.ts.
       // authCommand.ts must consume the registered runtime OAuthManager instead
       // of creating a partial fallback manager.
 
       const runtimeMatches = grepFiles(
-        'createTokenStore',
+        'createOwnedTokenStore',
         '*.ts',
         path.resolve(providersSrcRoot, 'runtime'),
         ['node_modules', 'dist', '__tests__'],

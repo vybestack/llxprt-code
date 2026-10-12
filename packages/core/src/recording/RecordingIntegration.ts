@@ -69,12 +69,37 @@ function fingerprint(value: string): string {
  *
  * @issue #3132
  */
+function acceptsOrigin(
+  owner: object | undefined,
+  origin: object | undefined,
+): boolean {
+  return owner === undefined || origin === undefined || origin === owner;
+}
+
 function contentIdentity(content: IContent): string | null {
   const seq = content.metadata?.chronology?.seq;
   if (typeof seq !== 'number') {
     return null;
   }
-  return `${seq}:${fingerprint(JSON.stringify(content))}`;
+  return `${seq}:${fingerprint(
+    JSON.stringify({
+      ...content,
+      metadata: { ...content.metadata, turnId: undefined },
+    }),
+  )}`;
+}
+
+function unstampedContentIdentity(content: IContent): string {
+  return fingerprint(
+    JSON.stringify({
+      ...content,
+      metadata: {
+        ...content.metadata,
+        chronology: undefined,
+        turnId: undefined,
+      },
+    }),
+  );
 }
 
 /**
@@ -87,6 +112,7 @@ function contentIdentity(content: IContent): string | null {
 export class RecordingIntegration {
   private readonly recording: SessionRecordingService;
   private historySubscription: (() => void) | null = null;
+  private owner: object | undefined;
   private compressionInProgress = false;
   /**
    * Identities of the content records this recording already contains.
@@ -104,9 +130,11 @@ export class RecordingIntegration {
    * @issue #3132
    */
   private readonly recordedIdentities = new Set<string>();
+  private readonly unstampedSnapshot = new Map<number, string>();
   private disposed = false;
   private readonly persistence: SessionPersistenceService | undefined;
   private readonly pendingPersistence = new Map<number, Promise<void>>();
+  private readonly pendingBatches = new Set<Promise<void>>();
   private readonly persistenceFailures = new Map<number, unknown>();
   private nextPersistenceGeneration = 0;
   private disposePromise: Promise<void> | undefined;
@@ -174,6 +202,40 @@ export class RecordingIntegration {
   private async prepareBatch(
     publication: HistoryBatchPublication,
   ): Promise<PreparedHistoryBatchEffect> {
+    let releaseBatch: () => void = () => undefined;
+    const pending = new Promise<void>((resolve) => {
+      releaseBatch = resolve;
+    });
+    this.pendingBatches.add(pending);
+    const release = (): void => {
+      this.pendingBatches.delete(pending);
+      releaseBatch();
+    };
+    try {
+      const effect = await this.prepareBatchEffect(publication);
+      return {
+        publish: () => effect.publish(),
+        rollback: async () => {
+          try {
+            await effect.rollback();
+          } finally {
+            release();
+          }
+        },
+        finalize: async () => {
+          await effect.finalize?.();
+          release();
+        },
+      };
+    } catch (error: unknown) {
+      release();
+      throw error;
+    }
+  }
+
+  private async prepareBatchEffect(
+    publication: HistoryBatchPublication,
+  ): Promise<PreparedHistoryBatchEffect> {
     await this.recording.flush();
     if (!this.recording.isActive()) {
       throw new Error('Cannot publish history batch: recording is not active');
@@ -181,12 +243,18 @@ export class RecordingIntegration {
 
     let persistence: PreparedPersistenceSave | undefined;
     let recording: PreparedContentBatch | undefined;
+    let batchContents: readonly IContent[] = [];
     try {
       persistence = await this.persistence?.prepareSave(
         publication.nextHistory,
       );
       if (!this.compressionInProgress) {
-        recording = this.recording.prepareContentBatch(publication.contents);
+        batchContents = publication.contents.filter(
+          (content) => !this.hasRecordedContent(content),
+        );
+        if (batchContents.length > 0) {
+          recording = this.recording.prepareContentBatch(batchContents);
+        }
       }
     } catch (error: unknown) {
       if (persistence === undefined) throw error;
@@ -205,6 +273,7 @@ export class RecordingIntegration {
       publish: async () => {
         recording?.publish();
         await persistence?.publish();
+        for (const content of batchContents) this.markRecordedContent(content);
       },
       rollback: async () => {
         const failures: unknown[] = [];
@@ -235,11 +304,12 @@ export class RecordingIntegration {
    * @requirement REQ-INT-001, REQ-INT-002
    * @pseudocode recording-integration.md lines 39-71
    */
-  subscribeToHistory(historyService: HistoryService): void {
+  subscribeToHistory(historyService: HistoryService, owner?: object): void {
     this.unsubscribeFromHistory();
     if (this.disposed) {
       return;
     }
+    this.owner = owner;
 
     // Whatever is already in history at subscribe time is content this
     // recording either already contains (resume and fork both attach to a
@@ -248,59 +318,87 @@ export class RecordingIntegration {
     // append it (issue #3132).
     this.rememberExistingHistory(historyService);
 
-    const onContentAdded = (content: IContent) => {
-      if (this.disposed || this.compressionInProgress) {
+    const onContentAdded = (content: IContent, origin?: object) => {
+      if (
+        this.disposed ||
+        this.compressionInProgress ||
+        !acceptsOrigin(owner, origin)
+      ) {
         return;
       }
-      const identity = contentIdentity(content);
-      if (identity !== null && this.recordedIdentities.has(identity)) {
-        return;
-      }
+      if (this.hasRecordedContent(content)) return;
       this.recording.recordContent(content);
-      if (identity !== null) {
-        this.recordedIdentities.add(identity);
-      }
+      this.markRecordedContent(content);
       this.persist(historyService);
     };
 
-    const onCompressionStarted = () => {
-      if (this.disposed) {
-        return;
-      }
+    const onCompressionStarted = (origin?: object) => {
+      if (this.disposed || !acceptsOrigin(owner, origin)) return;
       this.compressionInProgress = true;
     };
 
-    const onCompressionLockReleased = () => {
-      if (this.disposed) {
-        return;
-      }
+    const onCompressionLockReleased = (origin?: object) => {
+      if (this.disposed || !acceptsOrigin(owner, origin)) return;
       this.compressionInProgress = false;
     };
 
-    const onCompressionEnded = (summary: IContent, itemsCompressed: number) => {
-      if (this.disposed) {
-        return;
-      }
+    const onCompressionEnded = (
+      summary: IContent,
+      itemsCompressed: number,
+      origin?: object,
+    ) => {
+      if (this.disposed || !acceptsOrigin(owner, origin)) return;
       this.compressionInProgress = false;
       this.recording.recordCompressed(summary, itemsCompressed);
       this.persist(historyService);
     };
 
     const unregisterBatchParticipant = historyService.registerBatchParticipant(
-      (publication) => this.prepareBatch(publication),
+      (publication) =>
+        acceptsOrigin(owner, publication.origin)
+          ? this.prepareBatch(publication)
+          : { publish: () => undefined, rollback: () => undefined },
     );
-    historyService.on('contentAdded', onContentAdded);
-    historyService.on('compressionStarted', onCompressionStarted);
-    historyService.on('compressionLockReleased', onCompressionLockReleased);
-    historyService.on('compressionEnded', onCompressionEnded);
+    this.historySubscription = () =>
+      this.removeSubscriptions([
+        unregisterBatchParticipant,
+        () => historyService.off('contentAdded', onContentAdded),
+        () => historyService.off('compressionStarted', onCompressionStarted),
+        () =>
+          historyService.off(
+            'compressionLockReleased',
+            onCompressionLockReleased,
+          ),
+        () => historyService.off('compressionEnded', onCompressionEnded),
+      ]);
+    try {
+      historyService.on('contentAdded', onContentAdded);
+      historyService.on('compressionStarted', onCompressionStarted);
+      historyService.on('compressionLockReleased', onCompressionLockReleased);
+      historyService.on('compressionEnded', onCompressionEnded);
+    } catch (error: unknown) {
+      try {
+        this.unsubscribeFromHistory();
+      } catch (cleanupError: unknown) {
+        throw new AggregateError(
+          [error, cleanupError],
+          'History subscription and cleanup failed',
+        );
+      }
+      throw error;
+    }
+  }
 
-    this.historySubscription = () => {
-      unregisterBatchParticipant();
-      historyService.off('contentAdded', onContentAdded);
-      historyService.off('compressionStarted', onCompressionStarted);
-      historyService.off('compressionLockReleased', onCompressionLockReleased);
-      historyService.off('compressionEnded', onCompressionEnded);
-    };
+  private removeSubscriptions(removals: ReadonlyArray<() => void>): void {
+    const failures: unknown[] = [];
+    for (const remove of removals) {
+      try {
+        remove();
+      } catch (error: unknown) {
+        failures.push(error);
+      }
+    }
+    this.throwFailures(failures, 'History subscription cleanup failed');
   }
 
   /**
@@ -309,11 +407,35 @@ export class RecordingIntegration {
    *
    * @issue #3132
    */
+  private hasRecordedContent(content: IContent): boolean {
+    const identity = contentIdentity(content);
+    if (identity !== null && this.recordedIdentities.has(identity)) return true;
+    const seq = content.metadata?.chronology?.seq;
+    return (
+      typeof seq === 'number' &&
+      this.unstampedSnapshot.get(seq) === unstampedContentIdentity(content)
+    );
+  }
+
+  private markRecordedContent(content: IContent): void {
+    const identity = contentIdentity(content);
+    if (identity !== null) this.recordedIdentities.add(identity);
+  }
+
   private rememberExistingHistory(historyService: HistoryService): void {
-    for (const content of historyService.getAll()) {
+    this.rememberRecordedHistory(historyService.getAll());
+  }
+
+  rememberRecordedHistory(history: readonly IContent[]): void {
+    for (const [index, content] of history.entries()) {
       const identity = contentIdentity(content);
       if (identity !== null) {
         this.recordedIdentities.add(identity);
+      } else {
+        this.unstampedSnapshot.set(
+          index + 1,
+          unstampedContentIdentity(content),
+        );
       }
     }
   }
@@ -328,9 +450,10 @@ export class RecordingIntegration {
       return;
     }
 
-    this.historySubscription();
+    const unsubscribe = this.historySubscription;
     this.historySubscription = null;
     this.compressionInProgress = false;
+    unsubscribe();
   }
 
   /**
@@ -403,16 +526,20 @@ export class RecordingIntegration {
   dispose(): Promise<void> {
     if (this.disposePromise !== undefined) return this.disposePromise;
     this.disposed = true;
-    this.unsubscribeFromHistory();
     const generation = this.nextPersistenceGeneration;
     const operation = (async (): Promise<void> => {
+      const failures: unknown[] = [];
       try {
-        await this.awaitPersistenceThrough(generation);
-        const failures = this.takePersistenceFailuresThrough(generation);
-        this.throwFailures(failures, 'Session persistence shutdown failed');
-      } finally {
-        this.disposePromise = Promise.resolve();
+        this.unsubscribeFromHistory();
+      } catch (error: unknown) {
+        failures.push(error);
       }
+      await Promise.all([
+        this.awaitPersistenceThrough(generation),
+        ...this.pendingBatches,
+      ]);
+      failures.push(...this.takePersistenceFailuresThrough(generation));
+      this.throwFailures(failures, 'Recording integration shutdown failed');
     })();
     this.disposePromise = operation;
     return operation;
@@ -424,6 +551,6 @@ export class RecordingIntegration {
    * @pseudocode recording-integration.md lines 102-104
    */
   onHistoryServiceReplaced(newHistoryService: HistoryService): void {
-    this.subscribeToHistory(newHistoryService);
+    this.subscribeToHistory(newHistoryService, this.owner);
   }
 }

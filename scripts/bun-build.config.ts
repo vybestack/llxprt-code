@@ -37,6 +37,7 @@ import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { portableTiktokenPlugin } from './portable-tiktoken-plugin.js';
 import { stageCliBundleAssets } from './copy_bundle_assets.js';
+import { releaseSourceEmittedSiblingPlugin } from './source-emitted-sibling-resolution.js';
 
 /**
  * Re-exported so the issue #3062 guard keeps its import path. The alias
@@ -51,6 +52,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const require = createRequire(import.meta.url);
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf-8'));
+const sourceFirstPlugin = releaseSourceEmittedSiblingPlugin(root);
 
 /**
  * Modules that must remain external in the bundle. These are either native
@@ -146,7 +148,7 @@ const a2aServerConfig: Parameters<typeof Bun.build>[0] = {
   format: 'esm',
   conditions: ['production'],
   external: EXTERNALS,
-  plugins: [portableTiktokenPlugin],
+  plugins: [portableTiktokenPlugin, sourceFirstPlugin],
   loader: { '.node': 'file' },
   minify: true,
   splitting: false,
@@ -173,6 +175,7 @@ export const CLI_BUNDLE_DIR = join(root, 'packages/cli/bundle');
 
 const cliBundleSharedConfig = {
   target: 'bun',
+  plugins: [sourceFirstPlugin],
   loader: { '.node': 'file' },
   minify: false,
   splitting: false,
@@ -185,6 +188,7 @@ const cliBundleSharedConfig = {
 } satisfies Pick<
   Parameters<typeof Bun.build>[0],
   | 'target'
+  | 'plugins'
   | 'loader'
   | 'minify'
   | 'splitting'
@@ -203,9 +207,17 @@ const cliBundleSharedConfig = {
  * EXTERNALS list is reused so native addons and Bun-specific UI packages stay
  * external (resolved from node_modules at launch, exactly as raw TS does).
  */
+const CLI_BUNDLE_EXTERNALS = [
+  ...EXTERNALS,
+  ...CLI_DIRNAME_DEPENDENT_EXTERNALS,
+  // Bundling Zod's v4 module graph with current Core sources leaves util unbound
+  // in Bun 1.3.14; CLI owns Zod directly, so resolve it at runtime instead.
+  'zod',
+];
+
 export const cliBundleConfig: Parameters<typeof Bun.build>[0] = {
   ...cliBundleSharedConfig,
-  external: [...EXTERNALS, ...CLI_DIRNAME_DEPENDENT_EXTERNALS],
+  external: CLI_BUNDLE_EXTERNALS,
   // Absolute paths: `prepack` runs this from `packages/cli`, not the repo
   // root, so cwd-relative entrypoints would not resolve.
   entrypoints: [join(root, 'packages/cli/index.ts')],
@@ -223,7 +235,7 @@ function profilerBundleConfig(
 ): Parameters<typeof Bun.build>[0] {
   return {
     ...cliBundleSharedConfig,
-    external: [...EXTERNALS, ...CLI_DIRNAME_DEPENDENT_EXTERNALS],
+    external: CLI_BUNDLE_EXTERNALS,
     entrypoints: [join(root, 'scripts/memory', sourceName)],
     naming: outputName,
   };
@@ -249,7 +261,7 @@ export const cliBundleTargets: readonly CliBundleTarget[] = [
   {
     label: 'memprofile-launcher',
     config: profilerBundleConfig(
-      'installed-launcher.ts',
+      'installed-launcher-entry.ts',
       'memprofile-launcher.js',
     ),
   },
@@ -263,18 +275,21 @@ export const cliBundleTargets: readonly CliBundleTarget[] = [
   {
     label: 'memprofile-request',
     config: profilerBundleConfig(
-      'installed-request.ts',
+      'installed-request-entry.ts',
       'memprofile-request.js',
     ),
   },
   {
     label: 'memprofile-report',
-    config: profilerBundleConfig('installed-report.ts', 'memprofile-report.js'),
+    config: profilerBundleConfig(
+      'installed-report-entry.ts',
+      'memprofile-report.js',
+    ),
   },
   {
     label: 'memprofile-analyze',
     config: profilerBundleConfig(
-      'installed-analyze.ts',
+      'installed-analyze-entry.ts',
       'memprofile-analyze.js',
     ),
   },

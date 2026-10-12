@@ -1,9 +1,49 @@
+import type { SessionImageSelection } from './session-image-assembly.js';
+import type {
+  RuntimeTokenizerFactory,
+  RuntimeContentGeneratorFactory,
+  ContentGenerator,
+} from '@vybestack/llxprt-code-core';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import type {
+  WorkspaceTrustControlPort,
+  WorkspaceIdePort,
+} from '@vybestack/llxprt-code-core';
+import type { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type {
+  ToolSelection,
+  ToolPublication,
+} from '@vybestack/llxprt-code-tools';
+import type { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import type { WorkspaceLspOwner } from '@vybestack/llxprt-code-core/lsp/workspace-lsp-owner.js';
+import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type {
+  ContinueTarget,
+  RuntimeProviderManager,
+  UnreadableRecording,
+} from '@vybestack/llxprt-code-core';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @plan:PLAN-20260617-COREAPI.P03
  * @requirement:REQ-002, REQ-006, REQ-017
  * @plan:PLAN-20260621-COREAPIREMED.P06
  * @requirement:REQ-001
  */
+import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import type { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import type {
+  AgentRuntimeFactoryBindings,
+  TokenStore,
+} from '@vybestack/llxprt-code-core';
+import type { RuntimeActivationBindings } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
+import type { WorkspaceDefinitionOwner } from '@vybestack/llxprt-code-core';
+import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
+
+import type { TokenStorage } from '@vybestack/llxprt-code-mcp';
+import type { McpHostServices } from '@vybestack/llxprt-code-mcp/host/hostServices.js';
 
 import { z } from 'zod';
 import type { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
@@ -21,7 +61,7 @@ import type {
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { OutputFormat } from '@vybestack/llxprt-code-core/utils/output-format.js';
 import { ProviderActivationIntentSchema } from './config-schema.js';
-import type { ActivationPreflightToken } from './activationPreflightState.js';
+import type { ActivationPreflight } from './activationPreflightState.js';
 
 export interface ProviderAuth {
   readonly apiKey?: string;
@@ -250,9 +290,23 @@ export interface AgentSchedulerFactoryOptions {
 
 export type AgentSchedulerFactory = (
   options: AgentSchedulerFactoryOptions,
-) => AgentSchedulerHandle;
+) => AgentSchedulerHandle | Promise<AgentSchedulerHandle>;
 
-export interface AgentConfig {
+type MemoryOwnershipOptions = {
+  readonly memoryOwner?:
+    | { readonly owner: WorkspaceMemoryOwner; readonly ownership?: 'caller' }
+    | { readonly owner: WorkspaceMemoryOwner; readonly ownership: 'agent' };
+};
+
+import type { HostGitHubBrokerSelection } from './host-github-broker-owner.js';
+
+export interface AgentConfig
+  extends MemoryOwnershipOptions,
+    HostGitHubBrokerSelection,
+    SessionImageSelection {
+  readonly trustPort?: WorkspaceTrustControlPort;
+  readonly idePort?: WorkspaceIdePort;
+  readonly mediaOwner?: SessionMediaOwner;
   readonly provider: string;
   readonly model: string;
   readonly modelParams?: AgentModelParams;
@@ -336,6 +390,14 @@ export interface AgentConfig {
   readonly harness?: AgentHarnessOptions;
   readonly onApproval?: ApprovalHandler;
   readonly onOAuthPrompt?: OAuthPromptHandler;
+  readonly definitionOwner?: WorkspaceDefinitionOwner;
+  readonly definitionOwnership?: 'agent' | 'caller';
+  readonly filesystemOwner?: WorkspaceFilesystemOwner;
+  readonly filesystemOwnership?: 'agent' | 'caller';
+  readonly lspOwner?: WorkspaceLspOwner;
+  readonly lspOwnership?: 'agent' | 'caller';
+  readonly mcpHost?: Partial<McpHostServices>;
+  readonly mcpTokenStorage?: TokenStorage;
   readonly editorCallbacks?: EditorCallbacks;
   /**
    * Caller-owned factory. Scheduler instances the Agent creates through this
@@ -343,6 +405,11 @@ export interface AgentConfig {
    * The factory function itself is never disposed.
    */
   readonly toolSchedulerFactory?: AgentSchedulerFactory;
+  readonly runtimeFactoryBindings?: AgentRuntimeFactoryBindings;
+  readonly tokenizerFactory?: RuntimeTokenizerFactory;
+  readonly contentGeneratorFactory?: RuntimeContentGeneratorFactory<ContentGenerator>;
+  readonly runtimeActivationBindings?: RuntimeActivationBindings;
+  readonly tokenStore?: TokenStore;
   /**
    * UNSTABLE escape hatch. Long-tail settings merged into ConfigParameters by
    * the adapter. Throws if it shadows a typed AgentConfig field. Subject to
@@ -351,14 +418,50 @@ export interface AgentConfig {
   readonly settings?: Readonly<Record<string, unknown>>;
 }
 
-export interface FromConfigOptions {
+import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+
+interface FromConfigBaseOptions
+  extends HostGitHubBrokerSelection,
+    SessionImageSelection {
+  readonly oauthManager?: OAuthManager;
+  readonly providerFileLifecycle?: ProviderFileLifecycle;
+  readonly tokenizerFactory?: RuntimeTokenizerFactory;
+  readonly contentGeneratorFactory?: RuntimeContentGeneratorFactory<ContentGenerator>;
+  readonly trustPort?: WorkspaceTrustControlPort;
+  readonly idePort?: WorkspaceIdePort;
+  readonly hookOwner?: SessionHookOwner;
+  readonly definitionOwner?: WorkspaceDefinitionOwner;
+  readonly definitionOwnership?: 'agent' | 'caller';
+  readonly filesystemOwner?: WorkspaceFilesystemOwner;
+  readonly filesystemOwnership?: 'agent' | 'caller';
+  readonly lspOwner?: WorkspaceLspOwner;
+  readonly lspOwnership?: 'agent' | 'caller';
+  readonly policyOwner?: RuntimePolicyOwner;
+  readonly agentClient?: AgentClientContract;
+  readonly providerManager?: RuntimeProviderManager;
+  readonly runtimeFactoryBindings?: AgentRuntimeFactoryBindings;
+  readonly runtimeActivationBindings?: RuntimeActivationBindings;
+  readonly tokenStore?: TokenStore;
+  readonly asyncTaskManager?: AsyncTaskManager;
   readonly config: Config;
+  readonly settingsService: SettingsService;
+  readonly settingsOwner?: SessionSettingsOwner;
   readonly messageBus?: MessageBus;
   readonly onApproval?: ApprovalHandler;
   readonly onOAuthPrompt?: OAuthPromptHandler;
   readonly editorCallbacks?: EditorCallbacks;
+  readonly prepareSessionTools?: (
+    config: Config,
+    messageBus: MessageBus,
+    tools: Pick<ToolSelection, 'getAllTools'> & ToolPublication,
+  ) => void;
   readonly toolSchedulerFactory?: AgentSchedulerFactory;
   readonly sessionId?: string;
+  /**
+   * Which owner may change the supplied Config's session identity on resume.
+   * Borrowed facades keep their recording identity private by default.
+   */
+  readonly sessionIdentityOwnership?: 'config' | 'facade';
   /**
    * Declarative provider-activation / auth intent (#2374). When supplied,
    * fromConfig executes the intent via executeProviderActivation INSTEAD of the
@@ -368,11 +471,39 @@ export interface FromConfigOptions {
    * refreshAuth path.
    */
   readonly activation?: ProviderActivationIntent;
-  /** Single-use token returned by a successful activation preflight. */
-  readonly activationPreflightToken?: ActivationPreflightToken;
 }
+
+export type FromConfigOptions = FromConfigBaseOptions &
+  MemoryOwnershipOptions &
+  (
+    | {
+        readonly mcpRuntime: McpRuntimeOwner;
+        readonly mcpOwnership?: 'agent' | 'caller';
+        readonly mcpHost?: never;
+        readonly mcpTokenStorage?: never;
+      }
+    | {
+        readonly mcpRuntime?: undefined;
+        readonly mcpOwnership?: 'agent';
+        readonly mcpHost?: Partial<McpHostServices>;
+        readonly mcpTokenStorage?: TokenStorage;
+      }
+  ) &
+  (
+    | {
+        readonly activationPreflight: ActivationPreflight;
+        readonly activation: ProviderActivationIntent;
+      }
+    | { readonly activationPreflight?: undefined }
+  );
 
 export const FromConfigValidatableSchema = z.object({
   sessionId: z.string().optional(),
   activation: ProviderActivationIntentSchema.optional(),
 });
+
+/** Browser targets plus the recordings session discovery skipped as unreadable. */
+export interface BrowserListing {
+  readonly targets: readonly ContinueTarget[];
+  readonly unreadableRecordings: readonly UnreadableRecording[];
+}

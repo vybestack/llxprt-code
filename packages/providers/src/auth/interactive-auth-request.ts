@@ -23,14 +23,13 @@ import {
   type InteractiveAuthOutcome,
   type InteractiveAuthReason,
 } from './interactive-auth-coordinator.js';
-import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
 import { rethrowIfStoreOutage } from './token-store-outage.js';
 import type { TokenStore } from './types.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import {
-  getActiveRuntimeIdentity,
-  type RuntimeKind,
-} from '../runtime/active-runtime-identity.js';
+import type {
+  ProviderRuntimeContext,
+  RuntimeKind,
+} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 const logger = new DebugLogger('llxprt:oauth:interactive-auth-request');
 
@@ -65,10 +64,22 @@ export async function classifyInteractiveAuthReason(
   }
 }
 
+export function requiresInteractiveAuthentication(
+  runtimeKind: RuntimeKind | undefined,
+): boolean {
+  return (
+    runtimeKind === 'agent' ||
+    runtimeKind === 'subagent' ||
+    interactiveAuthCoordinator.hasHost()
+  );
+}
+
 function buildInteractiveAuthRequester(
   runtimeKind: RuntimeKind | undefined,
+  identity:
+    | Pick<ProviderRuntimeContext, 'runtimeId' | 'runtimeKind'>
+    | undefined,
 ): InteractiveAuthChallenge['requester'] {
-  const identity = getActiveRuntimeIdentity();
   const runtimeId =
     identity !== undefined && identity.runtimeKind === runtimeKind
       ? identity.runtimeId
@@ -126,16 +137,20 @@ export async function requestInteractiveAuthentication(
   bucket: string,
   runtimeKind: RuntimeKind | undefined,
   reason: InteractiveAuthReason,
+  timeoutMs: unknown,
+  identity:
+    | Pick<ProviderRuntimeContext, 'runtimeId' | 'runtimeKind'>
+    | undefined,
 ): Promise<void> {
   const challenge: InteractiveAuthChallenge = {
     provider: providerName,
     bucket,
-    requester: buildInteractiveAuthRequester(runtimeKind),
+    requester: buildInteractiveAuthRequester(runtimeKind, identity),
     reason,
     correlationId: crypto.randomUUID(),
   };
   const outcome = await interactiveAuthCoordinator.requestAuth(challenge, {
-    timeoutMs: oauthRuntimeBridge.getInteractiveAuthTimeoutMs(),
+    timeoutMs: typeof timeoutMs === 'number' ? timeoutMs : undefined,
   });
   assertInteractiveAuthSucceeded(outcome, providerName, bucket);
 }

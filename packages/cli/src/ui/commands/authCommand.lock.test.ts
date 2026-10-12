@@ -99,7 +99,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
       tokenVisibility: { status: 'invalid' },
     } satisfies AuthLockStatus);
 
-    const executor = new AuthCommandExecutor(manager);
+    const executor = new AuthCommandExecutor(manager, () => {});
     const result = asMessage(
       await executor.execute(mockContext, 'codex lock status'),
     );
@@ -125,7 +125,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
       tokenVisibility: { status: 'invalid' },
     } satisfies AuthLockStatus);
 
-    const executor = new AuthCommandExecutor(manager);
+    const executor = new AuthCommandExecutor(manager, () => {});
     const result = asMessage(
       await executor.execute(mockContext, 'codex lock status'),
     );
@@ -155,7 +155,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
       },
     } satisfies AuthLockStatus);
 
-    const executor = new AuthCommandExecutor(manager);
+    const executor = new AuthCommandExecutor(manager, () => {});
     const result = asMessage(
       await executor.execute(mockContext, 'codex lock status'),
     );
@@ -179,7 +179,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
       tokenVisibility: { status: 'valid' },
     } satisfies AuthLockStatus);
 
-    const executor = new AuthCommandExecutor(manager);
+    const executor = new AuthCommandExecutor(manager, () => {});
     const result = asMessage(
       await executor.execute(mockContext, 'codex lock status'),
     );
@@ -200,7 +200,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
       canonicalPath: '/tmp/codex-auth.lock',
     } satisfies AuthLockRecoveryResult);
 
-    const executor = new AuthCommandExecutor(manager);
+    const executor = new AuthCommandExecutor(manager, () => {});
     const result = asMessage(
       await executor.execute(mockContext, 'codex unlock'),
     );
@@ -219,7 +219,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
       canonicalPath: '/tmp/codex-auth.lock',
     } satisfies AuthLockRecoveryResult);
 
-    const executor = new AuthCommandExecutor(manager);
+    const executor = new AuthCommandExecutor(manager, () => {});
     const result = asMessage(
       await executor.execute(mockContext, 'codex unlock'),
     );
@@ -238,7 +238,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
       canonicalPath: '/tmp/codex-work-auth.lock',
     } satisfies AuthLockRecoveryResult);
 
-    const executor = new AuthCommandExecutor(manager);
+    const executor = new AuthCommandExecutor(manager, () => {});
     const result = asMessage(
       await executor.execute(mockContext, 'codex unlock work'),
     );
@@ -257,7 +257,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
       canonicalPath: '/tmp/codex-auth.lock',
     } satisfies AuthLockRecoveryResult);
 
-    const executor = new AuthCommandExecutor(manager);
+    const executor = new AuthCommandExecutor(manager, () => {});
     const result = asMessage(
       await executor.execute(mockContext, 'codex unlock default --force'),
     );
@@ -280,7 +280,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
       canonicalPath: '/tmp/codex-auth.lock',
     } satisfies AuthLockRecoveryResult);
 
-    const executor = new AuthCommandExecutor(manager);
+    const executor = new AuthCommandExecutor(manager, () => {});
     const result = asMessage(
       await executor.execute(
         mockContext,
@@ -298,7 +298,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
   });
 
   it('rejects the acknowledgment flag without --force', async () => {
-    const executor = new AuthCommandExecutor(manager);
+    const executor = new AuthCommandExecutor(manager, () => {});
     const result = asMessage(
       await executor.execute(
         mockContext,
@@ -330,7 +330,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
       tokenVisibility: { status: 'invalid' },
     } satisfies AuthLockStatus);
 
-    const executor = new AuthCommandExecutor(manager);
+    const executor = new AuthCommandExecutor(manager, () => {});
     await executor.execute(mockContext, 'codex lock status --verbose');
 
     expect(manager.inspectAuthLock).toHaveBeenCalledWith('codex', 'default');
@@ -339,7 +339,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
   it('lock status surfaces inspection errors as command output', async () => {
     manager.inspectAuthLock.mockRejectedValue(new Error('disk I/O error'));
 
-    const executor = new AuthCommandExecutor(manager);
+    const executor = new AuthCommandExecutor(manager, () => {});
     const result = asMessage(
       await executor.execute(mockContext, 'codex lock status'),
     );
@@ -355,7 +355,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
       new Error('lock directory denied'),
     );
 
-    const executor = new AuthCommandExecutor(manager);
+    const executor = new AuthCommandExecutor(manager, () => {});
     const result = asMessage(
       await executor.execute(mockContext, 'codex unlock'),
     );
@@ -376,7 +376,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
       cleanupDiagnostic: 'Recovery fence cleanup failed: permission denied',
     } satisfies AuthLockRecoveryResult);
 
-    const executor = new AuthCommandExecutor(manager);
+    const executor = new AuthCommandExecutor(manager, () => {});
     const result = asMessage(
       await executor.execute(mockContext, 'codex unlock'),
     );
@@ -395,7 +395,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
       canonicalPath: '/tmp/codex-auth.lock',
     } satisfies AuthLockRecoveryResult);
 
-    const executor = new AuthCommandExecutor(manager);
+    const executor = new AuthCommandExecutor(manager, () => {});
     const result = asMessage(
       await executor.execute(
         mockContext,

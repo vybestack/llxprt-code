@@ -19,6 +19,11 @@
       "bun": "./src/core/index.ts",
       "import": "./dist/src/core/index.js"
     },
+    "./core/instructions.js": {
+      "types": "./dist/src/core/instructions.d.ts",
+      "bun": "./src/core/instructions.ts",
+      "import": "./dist/src/core/instructions.js"
+    },
     "./core/mock-tool.js": {
       "types": "./dist/src/core/mock-tool.d.ts",
       "bun": "./src/core/mock-tool.ts",

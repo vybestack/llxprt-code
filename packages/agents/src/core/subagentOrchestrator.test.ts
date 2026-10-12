@@ -1,8 +1,17 @@
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import { fixtureToolSelection } from './__tests__/subagentOrchestrator-test-helpers.js';
+
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
 
 import { describe, expect, it, vi } from 'bun:test';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
@@ -46,11 +55,7 @@ const foregroundConfig = makeForegroundConfig();
  * `undefined` (missing value) — distinct from omitting the accessor entirely.
  */
 function makeConfigWithMaxTurns(value: unknown): Config {
-  return {
-    ...foregroundConfig,
-    getEphemeralSetting: (key: string) =>
-      key === 'maxTurnsPerPrompt' ? value : undefined,
-  } as unknown as Config;
+  return makeForegroundConfig({ maxTurnsPerPrompt: value });
 }
 
 /**
@@ -108,7 +113,16 @@ describe('SubagentOrchestrator - token-usage identity (issue #3130)', () => {
     const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
     const foregroundConfig = makeForegroundConfig();
 
+    const ownedSettings1 = createSessionSettingsFixture(foregroundConfig);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: ownedSettings1.workspaceTrust,
+      createChildSettings: () =>
+        ownedSettings1.settingsOwner.createChildStore(),
+      readRunPolicy: () => ownedSettings1.settingsOwner.readSubagentRunPolicy(),
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager,
       profileManager,
       foregroundConfig,
@@ -146,7 +160,16 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     const { factory } = createScopeFactory();
     const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
 
+    const ownedSettings2 = createSessionSettingsFixture(foregroundConfig);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: ownedSettings2.workspaceTrust,
+      createChildSettings: () =>
+        ownedSettings2.settingsOwner.createChildStore(),
+      readRunPolicy: () => ownedSettings2.settingsOwner.readSubagentRunPolicy(),
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager,
       profileManager,
       foregroundConfig,
@@ -181,7 +204,16 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     const { factory } = createScopeFactory();
     const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
 
+    const ownedSettings3 = createSessionSettingsFixture(foregroundConfig);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: ownedSettings3.workspaceTrust,
+      createChildSettings: () =>
+        ownedSettings3.settingsOwner.createChildStore(),
+      readRunPolicy: () => ownedSettings3.settingsOwner.readSubagentRunPolicy(),
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager,
       profileManager,
       foregroundConfig,
@@ -223,7 +255,16 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     const runtimeBundle = createRuntimeBundle('config');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
+    const ownedSettings4 = createSessionSettingsFixture(foregroundConfig);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: ownedSettings4.workspaceTrust,
+      createChildSettings: () =>
+        ownedSettings4.settingsOwner.createChildStore(),
+      readRunPolicy: () => ownedSettings4.settingsOwner.readSubagentRunPolicy(),
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager,
       profileManager,
       foregroundConfig,
@@ -290,7 +331,16 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     const runtimeBundle = createRuntimeBundle('profile-turns');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
+    const ownedSettings5 = createSessionSettingsFixture(foregroundConfig);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: ownedSettings5.workspaceTrust,
+      createChildSettings: () =>
+        ownedSettings5.settingsOwner.createChildStore(),
+      readRunPolicy: () => ownedSettings5.settingsOwner.readSubagentRunPolicy(),
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager,
       profileManager,
       foregroundConfig,
@@ -336,7 +386,16 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     const runtimeBundle = createRuntimeBundle('profile-unbounded');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
+    const ownedSettings6 = createSessionSettingsFixture(foregroundConfig);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: ownedSettings6.workspaceTrust,
+      createChildSettings: () =>
+        ownedSettings6.settingsOwner.createChildStore(),
+      readRunPolicy: () => ownedSettings6.settingsOwner.readSubagentRunPolicy(),
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager,
       profileManager,
       foregroundConfig,
@@ -385,24 +444,27 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       loadProfile,
     } as unknown as ProfileManager;
 
-    const configWithParentTurns = {
-      ...foregroundConfig,
-      getEphemeralSetting: (key: string) => {
-        if (key === 'maxTurnsPerPrompt') {
-          return 75;
-        }
-        return undefined;
-      },
-    } as unknown as Config;
+    const configWithParentTurns = makeConfigWithMaxTurns(75);
 
     const { factory } = createScopeFactory();
     const runtimeBundle = createRuntimeBundle('parent-turns');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
+    const foregroundRoot1 = configWithParentTurns;
+    const foregroundSettings1 = createSessionSettingsFixture(foregroundRoot1);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: foregroundSettings1.workspaceTrust,
+      createChildSettings: () =>
+        foregroundSettings1.settingsOwner.createChildStore(),
+      readRunPolicy: () =>
+        foregroundSettings1.settingsOwner.readSubagentRunPolicy(),
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager,
       profileManager,
-      foregroundConfig: configWithParentTurns,
+      foregroundConfig: foregroundRoot1,
       scopeFactory: factory,
       runtimeLoader,
       messageBus: new MessageBus(),
@@ -424,7 +486,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       updatedAt: new Date().toISOString(),
     };
 
-    let parentMaxTurns = 50;
+    const parentMaxTurns = 50;
     const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
     const subagentManager = {
       loadSubagent,
@@ -435,23 +497,28 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       loadProfile,
     } as unknown as ProfileManager;
 
-    const configWithDynamicTurns = {
-      ...foregroundConfig,
-      getEphemeralSetting: (key: string) => {
-        if (key === 'maxTurnsPerPrompt') {
-          return parentMaxTurns;
-        }
-        return undefined;
-      },
-    } as unknown as Config;
+    const configWithDynamicTurns = makeForegroundConfig({
+      maxTurnsPerPrompt: parentMaxTurns,
+    });
 
     const { factory } = createScopeFactory();
     const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
 
+    const foregroundRoot2 = configWithDynamicTurns;
+    const foregroundSettings2 = createSessionSettingsFixture(foregroundRoot2);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: foregroundSettings2.workspaceTrust,
+      createChildSettings: () =>
+        foregroundSettings2.settingsOwner.createChildStore(),
+      readRunPolicy: () =>
+        foregroundSettings2.settingsOwner.readSubagentRunPolicy(),
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager,
       profileManager,
-      foregroundConfig: configWithDynamicTurns,
+      foregroundConfig: foregroundRoot2,
       scopeFactory: factory,
       runtimeLoader,
       messageBus: new MessageBus(),
@@ -459,7 +526,10 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     await orchestrator.launch({ name: subagentConfig.name });
 
-    parentMaxTurns = 250;
+    foregroundSettings2.settingsOwner.writeUserParameter(
+      'maxTurnsPerPrompt',
+      250,
+    );
 
     await orchestrator.launch({ name: subagentConfig.name });
 
@@ -489,24 +559,27 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       loadProfile,
     } as unknown as ProfileManager;
 
-    const configWithParentTurns = {
-      ...foregroundConfig,
-      getEphemeralSetting: (key: string) => {
-        if (key === 'maxTurnsPerPrompt') {
-          return 75;
-        }
-        return undefined;
-      },
-    } as unknown as Config;
+    const configWithParentTurns = makeConfigWithMaxTurns(75);
 
     const { factory } = createScopeFactory();
     const runtimeBundle = createRuntimeBundle('explicit-over-parent');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
+    const foregroundRoot3 = configWithParentTurns;
+    const foregroundSettings3 = createSessionSettingsFixture(foregroundRoot3);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: foregroundSettings3.workspaceTrust,
+      createChildSettings: () =>
+        foregroundSettings3.settingsOwner.createChildStore(),
+      readRunPolicy: () =>
+        foregroundSettings3.settingsOwner.readSubagentRunPolicy(),
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager,
       profileManager,
-      foregroundConfig: configWithParentTurns,
+      foregroundConfig: foregroundRoot3,
       scopeFactory: factory,
       runtimeLoader,
       messageBus: new MessageBus(),
@@ -548,24 +621,27 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       loadProfile,
     } as unknown as ProfileManager;
 
-    const configWithParentTurns = {
-      ...foregroundConfig,
-      getEphemeralSetting: (key: string) => {
-        if (key === 'maxTurnsPerPrompt') {
-          return 75;
-        }
-        return undefined;
-      },
-    } as unknown as Config;
+    const configWithParentTurns = makeConfigWithMaxTurns(75);
 
     const { factory } = createScopeFactory();
     const runtimeBundle = createRuntimeBundle('profile-over-parent');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
+    const foregroundRoot4 = configWithParentTurns;
+    const foregroundSettings4 = createSessionSettingsFixture(foregroundRoot4);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: foregroundSettings4.workspaceTrust,
+      createChildSettings: () =>
+        foregroundSettings4.settingsOwner.createChildStore(),
+      readRunPolicy: () =>
+        foregroundSettings4.settingsOwner.readSubagentRunPolicy(),
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager,
       profileManager,
-      foregroundConfig: configWithParentTurns,
+      foregroundConfig: foregroundRoot4,
       scopeFactory: factory,
       runtimeLoader,
       messageBus: new MessageBus(),
@@ -596,24 +672,27 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       loadProfile,
     } as unknown as ProfileManager;
 
-    const configWithUnlimitedParentTurns = {
-      ...foregroundConfig,
-      getEphemeralSetting: (key: string) => {
-        if (key === 'maxTurnsPerPrompt') {
-          return -1;
-        }
-        return undefined;
-      },
-    } as unknown as Config;
+    const configWithUnlimitedParentTurns = makeConfigWithMaxTurns(-1);
 
     const { factory } = createScopeFactory();
     const runtimeBundle = createRuntimeBundle('unlimited-parent-turns');
     const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
 
+    const foregroundRoot5 = configWithUnlimitedParentTurns;
+    const foregroundSettings5 = createSessionSettingsFixture(foregroundRoot5);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: foregroundSettings5.workspaceTrust,
+      createChildSettings: () =>
+        foregroundSettings5.settingsOwner.createChildStore(),
+      readRunPolicy: () =>
+        foregroundSettings5.settingsOwner.readSubagentRunPolicy(),
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager,
       profileManager,
-      foregroundConfig: configWithUnlimitedParentTurns,
+      foregroundConfig: foregroundRoot5,
       scopeFactory: factory,
       runtimeLoader,
       messageBus: new MessageBus(),
@@ -684,11 +763,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
       },
     };
 
-    const configWithForegroundCap = {
-      ...foregroundConfig,
-      getEphemeralSetting: (key: string) =>
-        key === 'maxTurnsPerPrompt' ? 75 : undefined,
-    } as unknown as Config;
+    const configWithForegroundCap = makeConfigWithMaxTurns(75);
 
     const { orchestrator, factory } = createOrchestratorForTurns({
       subagentName: 'task-unlimited-helper',
@@ -728,7 +803,16 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     const { factory } = createScopeFactory();
     const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
 
+    const ownedSettings7 = createSessionSettingsFixture(foregroundConfig);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: ownedSettings7.workspaceTrust,
+      createChildSettings: () =>
+        ownedSettings7.settingsOwner.createChildStore(),
+      readRunPolicy: () => ownedSettings7.settingsOwner.readSubagentRunPolicy(),
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager,
       profileManager,
       foregroundConfig,
@@ -760,7 +844,16 @@ describe('SubagentOrchestrator - MessageBus threading (Issue #2312)', () => {
     const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle());
     const sessionMessageBus = new MessageBus();
 
+    const ownedSettings8 = createSessionSettingsFixture(foregroundConfig);
     const orchestrator = new SubagentOrchestrator({
+      workspaceTrust: ownedSettings8.workspaceTrust,
+      createChildSettings: () =>
+        ownedSettings8.settingsOwner.createChildStore(),
+      readRunPolicy: () => ownedSettings8.settingsOwner.readSubagentRunPolicy(),
+      toolRegistry: fixtureToolSelection(),
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
       subagentManager,
       profileManager,
       foregroundConfig,
@@ -776,6 +869,6 @@ describe('SubagentOrchestrator - MessageBus threading (Issue #2312)', () => {
     // SubAgentScope.create(name, config, prompt, model, run, toolConfig, outputConfig, overrides, signal)
     const overridesArg = factoryCall[7];
     expect(overridesArg).toBeDefined();
-    expect(overridesArg?.messageBus).toBe(sessionMessageBus);
+    expect(overridesArg.messageBus).toBe(sessionMessageBus);
   });
 });

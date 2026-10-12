@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installZedFilesystemFixture } from './__tests__/zed-filesystem-fixture.js';
+import { projectZedSessionSettings } from './zed-session-ports.js';
+const fixtureFilesystem = installZedFilesystemFixture();
+
 import { afterEach, describe, expect, it } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
 import {
@@ -390,7 +394,12 @@ describe('Zed terminal execution', () => {
     const session = new Session(
       'test-session-id',
       agent,
-      buildMinimalConfig(),
+      projectZedSessionSettings(
+        buildMinimalConfig(),
+        agent,
+        fixtureFilesystem().files,
+        fixtureFilesystem().ignore,
+      ),
       connection as unknown as acp.AgentSideConnection,
       false,
       terminals,
@@ -467,7 +476,12 @@ describe('Zed terminal execution', () => {
     const session = new Session(
       'test-session-id',
       agent,
-      buildMinimalConfig(),
+      projectZedSessionSettings(
+        buildMinimalConfig(),
+        agent,
+        fixtureFilesystem().files,
+        fixtureFilesystem().ignore,
+      ),
       connection as unknown as acp.AgentSideConnection,
     );
     createdSessions.push(session);

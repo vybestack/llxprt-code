@@ -6,7 +6,33 @@
 
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
+
+export function requiresObservedSemanticPurgeCacheWrite(
+  runtimeContext: AgentRuntimeContext,
+  provider: IProvider,
+): boolean {
+  const promptCaching = runtimeContext.readPromptCachingPolicy();
+  const validPromptCachingValues = new Set<unknown>([
+    undefined,
+    'off',
+    '5m',
+    '1h',
+    '24h',
+  ]);
+  if (!validPromptCachingValues.has(promptCaching)) {
+    throw new Error(
+      `Invalid prompt-caching setting for semantic media purge: ${String(promptCaching)}`,
+    );
+  }
+  return (
+    provider.getMediaTransportCapabilities?.().explicitCacheBreakpoints ===
+      true &&
+    promptCaching !== undefined &&
+    promptCaching !== 'off'
+  );
+}
 
 export function createSemanticMediaPurgeSession(
   runtimeContext: AgentRuntimeContext,
@@ -15,19 +41,10 @@ export function createSemanticMediaPurgeSession(
   return new SemanticMediaPurgeSession({
     history,
     mode: () => runtimeContext.ephemerals.semanticMediaPurge(),
-    persist: async (candidateHistory, frontier) => {
-      const config = runtimeContext.providerRuntime.config;
-      const recording = config?.getSessionRecordingService();
-      if (recording?.isActive() !== true) {
-        throw new Error(
-          'Semantic media purge requires an active session recording',
-        );
-      }
-      recording.recordSemanticMediaPurge(candidateHistory, frontier);
-      await recording.flush();
-      if (!recording.isActive()) {
-        throw new Error('Semantic media purge recording did not remain active');
-      }
+    persist: () => {
+      throw new Error(
+        'Semantic media purge requires an active session recording',
+      );
     },
   });
 }

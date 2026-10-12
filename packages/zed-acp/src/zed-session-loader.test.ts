@@ -15,9 +15,8 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'bun:test';
-import * as path from 'node:path';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import type { Config } from '@vybestack/llxprt-code-core';
+import { Config } from '@vybestack/llxprt-code-core';
 import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
 import {
   hasRecordedSessionFile,
@@ -26,16 +25,17 @@ import {
 } from './zed-session-loader.js';
 
 const PROJECT_TEMP_DIR = '/tmp/llxprt-project-abc';
-const EXPECTED_CHATS_DIR = path.join(PROJECT_TEMP_DIR, 'chats');
+const EXPECTED_CHATS_DIR = buildConfig().projectChatsDir;
 
 /** Config whose storage.getProjectChatsDir drives the chats-dir derivation. */
 function buildConfig(): Config {
-  return {
-    storage: {
-      getProjectTempDir: () => PROJECT_TEMP_DIR,
-      getProjectChatsDir: () => EXPECTED_CHATS_DIR,
-    },
-  } as unknown as Config;
+  return new Config({
+    sessionId: 'loader',
+    cwd: PROJECT_TEMP_DIR,
+    targetDir: PROJECT_TEMP_DIR,
+    debugMode: false,
+    model: 'test',
+  });
 }
 
 const FIXED_SESSION_TIMESTAMP = '2026-07-11T10-00-00';

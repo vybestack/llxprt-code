@@ -26,6 +26,7 @@
  * @pseudocode replay-engine.md lines 10-198
  */
 
+import { hydrateRecordedMedia } from '../storage/recorded-media-transfer.js';
 import * as fs from 'node:fs';
 import * as readline from 'node:readline';
 import {
@@ -882,6 +883,7 @@ async function verifyReplayMedia(
     return replay;
   }
   try {
+    await hydrateRecordedMedia(options.mediaStore, replay.history);
     const admissionContext = {
       turnId: 'session-replay',
       source: 'session-replay',

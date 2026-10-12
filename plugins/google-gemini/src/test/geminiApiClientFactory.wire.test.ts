@@ -4,6 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { CoreToolHostAdapter, Config } from '@vybestack/llxprt-code-core';
+import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import { GeminiProvider } from '../gemini/GeminiProvider.js';
+import { createProviderCallOptions } from './testSupport.js';
+
 /**
  * Wire-level tests for the Gemini client seam.
  *
@@ -28,10 +35,6 @@ import {
 import { ApplyPatchTool } from '../../../../packages/tools/src/index.js';
 import { SchemaValidator } from '../../../../packages/tools/src/utils/schemaValidator.js';
 import { buildGeminiTools } from '../gemini/geminiRequestBuilding.js';
-import { GeminiProvider } from '../gemini/GeminiProvider.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderCallOptions } from './testSupport.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -171,27 +174,16 @@ describe('geminiApiClientFactory', () => {
     'keeps empty-tools logging metadata out of actual provider HTTP requests (streaming=%s)',
     async (streaming) => {
       const settings = new SettingsService();
-      const config = new Config({
-        cwd: process.cwd(),
-        targetDir: process.cwd(),
-        debugMode: false,
-        sessionId: 'logging-wire',
-        model: 'gemini-3-flash-preview',
-        settingsService: settings,
+      const provider = new GeminiProvider('test-key', origin(), {
+        defaultModel: 'gemini-3-flash-preview',
       });
-      config.setEphemeralSetting(
-        'streaming',
-        streaming ? 'enabled' : 'disabled',
-      );
-      const provider = new GeminiProvider('test-key', origin(), config);
-      provider.setConfig(config);
       captured = [];
       nextResponse = textResponse('ok');
       for (const conversationLogEmptyTools of [undefined, true, false]) {
         const options = createProviderCallOptions({
           providerName: 'gemini',
           settings,
-          config,
+          ephemerals: { streaming: streaming ? 'enabled' : 'disabled' },
           contents: [
             { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
           ],
@@ -394,7 +386,36 @@ describe('geminiApiClientFactory', () => {
   });
 
   describe('Gemini client seam: required-only object unions', () => {
-    const declaration = new ApplyPatchTool().schema;
+    const declarationRoot = new WorkspaceFilesystemOwner({
+      targetDir: process.cwd(),
+      isTrusted: () => true,
+    });
+    const declarationSettings = new SessionSettingsOwner(new SettingsService());
+    const declarationConfig = new Config({
+      sessionId: 'gemini-schema',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
+      model: 'test',
+    });
+    declarationSettings.bindTelemetry(declarationConfig);
+    afterAll(async () => {
+      await declarationSettings.dispose();
+      await declarationRoot.dispose();
+      await declarationConfig.dispose();
+    });
+    const declaration = new ApplyPatchTool(
+      new CoreToolHostAdapter(
+        declarationConfig,
+        declarationRoot.paths,
+        declarationRoot.files,
+        declarationRoot.ignore,
+        declarationRoot.scans,
+        () => declarationSettings.readToolExecutionPolicy(),
+        { isTrustedFolder: () => true, getIdeTrust: () => undefined },
+        declarationSettings.telemetry,
+      ),
+    ).schema;
     const name = declaration.name;
     if (typeof name !== 'string') {
       throw new Error('Expected the apply_patch declaration name');

@@ -80,7 +80,6 @@ const baseContext: ContextResolutionResult = {
   ideMode: false,
   folderTrust: false,
   trustedFolder: true,
-  fileService: {} as ContextResolutionResult['fileService'],
   fileFiltering: DEFAULT_FILE_FILTERING_OPTIONS,
   memoryFileFiltering: DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
   includeDirectories: [],
