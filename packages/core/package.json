@@ -237,6 +237,11 @@
       "bun": "./src/services/history/historyDensityRows.ts",
       "import": "./dist/src/services/history/historyDensityRows.js"
     },
+    "./services/history/attachHistoryJournal.js": {
+      "types": "./dist/src/services/history/attachHistoryJournal.d.ts",
+      "bun": "./src/services/history/attachHistoryJournal.ts",
+      "import": "./dist/src/services/history/attachHistoryJournal.js"
+    },
     "./llm-types/index.js": {
       "bun": "./src/llm-types/index.ts",
       "import": "./dist/src/llm-types/index.js"

@@ -59,6 +59,7 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core';
 import type { AgentSessionPersistence } from './recordedHistoryPersistence.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { HistoryAttachmentError } from '@vybestack/llxprt-code-core/services/history/attachHistoryJournal.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
   captureRollbackFailure,
@@ -880,12 +881,18 @@ export class SessionControl implements AgentSessionControl {
       this.recording = service;
       this.integration = integration;
       this.integrationNeedsSubscribe = !subscribed;
-    } catch (error: unknown) {
-      const cleanupFailures = await cleanupSessionResources(
-        integration,
-        service,
-        null,
-      );
+    } catch (attachError: unknown) {
+      // The new recorder is discarded, so the attachment's partial-commit
+      // accounting is moot; the caller needs the underlying startup failure.
+      // The integration re-reports the same attachment failure on dispose,
+      // which is the startup failure itself and not a cleanup failure.
+      const error =
+        attachError instanceof HistoryAttachmentError
+          ? attachError.cause
+          : attachError;
+      const cleanupFailures = (
+        await cleanupSessionResources(integration, service, null)
+      ).filter((failure) => failure !== attachError);
       if (cleanupFailures.length > 0) {
         throw new AggregateError(
           [error, ...cleanupFailures],
