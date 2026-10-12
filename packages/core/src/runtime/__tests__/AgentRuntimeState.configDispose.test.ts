@@ -14,6 +14,7 @@ import {
   FakeProvider,
 } from '@vybestack/llxprt-code-providers';
 import { fromConfig, McpRuntimeOwner } from '@vybestack/llxprt-code-agents';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { fileURLToPath } from 'node:url';
 
 async function owner() {
@@ -51,11 +52,13 @@ async function owner() {
     policy,
     'runtime',
   );
+  const credentialAuthority = new CredentialAuthority();
   const manager = new ProviderManager(
     createProviderRuntimeContext({
       config,
       settingsService,
     }),
+    credentialAuthority,
   );
   manager.registerProvider(
     new FakeProvider(
@@ -68,6 +71,7 @@ async function owner() {
     ),
   );
   const agent = await fromConfig({
+    credentialAuthority,
     settingsService,
     config,
     mcpRuntime: mcp,
