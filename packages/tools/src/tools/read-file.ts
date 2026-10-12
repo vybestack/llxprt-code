@@ -348,8 +348,8 @@ ${formattedContent}`;
       effectiveLimit,
       imageResizePolicy,
       imageBudget,
-      this.params.column_offset ?? 0,
       (filePath) => this.host.readTextFile(filePath),
+      this.params.column_offset ?? 0,
     );
 
     if (result.error) {

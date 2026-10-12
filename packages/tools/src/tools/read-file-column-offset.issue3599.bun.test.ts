@@ -730,6 +730,7 @@ describe('read_file column_offset (issue #3599)', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
         0,
       );
 
@@ -742,6 +743,64 @@ describe('read_file column_offset (issue #3599)', () => {
           lineLength: line.length,
           nextColumnOffset: LINE_CAP - 1,
         },
+      ]);
+    });
+
+    it('reads through the seventh-argument reader when the column offset is omitted', async () => {
+      const onDisk = writeFixture('helper-reader-disk.txt', 'disk content\n');
+      const alternate = writeFixture('helper-reader-alt.txt', 'alt content\n');
+
+      const result = await processSingleFileContent(
+        onDisk,
+        tempDir(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        () => physicalFiles.readTextFile(alternate),
+      );
+
+      expect(result.llmContent).toBe('alt content');
+    });
+
+    it('keeps the injected reader when a column offset follows it', async () => {
+      const line = patterned(3000);
+      const onDisk = writeFixture('helper-both-disk.txt', 'disk content\n');
+      const alternate = writeFixture('helper-both-alt.txt', `${line}\n`);
+
+      const result = await processSingleFileContent(
+        onDisk,
+        tempDir(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        () => physicalFiles.readTextFile(alternate),
+        0,
+      );
+
+      expect(result.llmContent).toBe(
+        `${line.slice(0, LINE_CAP)}${CLIP_MARKER}`,
+      );
+      expect(result.clippedLines).toStrictEqual([
+        { lineNumber: 1, lineLength: 3000, nextColumnOffset: LINE_CAP },
+      ]);
+    });
+
+    it('serves the registered read_file tool from the host reader with continuation enabled', async () => {
+      const line = patterned(3000);
+      const onDisk = writeFixture('host-reader-disk.txt', 'disk content\n');
+      const host: IToolHost = {
+        ...createHost(tempDir()),
+        readTextFile: async () => `${line}\n`,
+      };
+      const tool = new ReadFileTool(host);
+
+      const output = await run(tool, { absolute_path: onDisk });
+
+      expect(shownText(output)).toBe(line.slice(0, LINE_CAP));
+      expect(recommendedCalls(output)).toStrictEqual([
+        { absolute_path: onDisk, offset: 0, limit: 1, column_offset: LINE_CAP },
       ]);
     });
 

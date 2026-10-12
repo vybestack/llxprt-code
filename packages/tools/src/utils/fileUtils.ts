@@ -880,8 +880,8 @@ export async function processSingleFileContent(
   limit?: number,
   imageResizePolicy?: ImageResizePolicy,
   imageBudget?: ImageDimensionBudget,
-  columnOffset?: number,
   readText: (filePath: string) => Promise<string> = readFileWithEncoding,
+  columnOffset?: number,
 ): Promise<ProcessedFileReadResult> {
   try {
     const accessError = validateFileAccess(filePath);

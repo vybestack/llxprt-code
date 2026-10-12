@@ -184,3 +184,44 @@ are byte-identical (2113 lines each); no findings for the new test file or the n
 guidance module.
 
 Smoke output: three-line haiku, exit 0.
+
+## CodeRabbit threads on merged PR 3855 (integration triage)
+
+Candidate base: merge commit `1af0ca5a3` (main `e8ad032fa` merged into issue3599). No
+design review was run; these are two CodeRabbit threads on the conflict integration.
+
+| Thread | Location | Classification | Outcome |
+| --- | --- | --- | --- |
+| `PRRT_kwDOPB5qbc6rTNZs` | `read-file.ts:354`, pass `column_offset` without defaulting it to 0 | Reject | `read_file` is deliberately opt-in to continuation at the default 0, so the tail guidance this issue asks for reaches callers who omit the parameter. Passing `undefined` would restore the legacy clip with no way to read the rest of a long line. The tests that omit `column_offset` (for example "discloses the cap and recommends a call that retrieves the tail") fail without it. No code change. |
+| `PRRT_kwDOPB5qbc6rTNZv` | `fileUtils.ts:886`, `columnOffset` displaced the public seventh `readText` argument | In-scope fix | Valid merge-integration defect. Upstream `processSingleFileContent(…, imageBudget, readText)` had `readText` seventh; the merge inserted `columnOffset` in front of it. A function passed as the seventh argument was read as a numeric offset and silently ignored as a reader. |
+
+Fix: the exported signature is now `(filePath, rootDirectory, offset, limit, imageResizePolicy,
+imageBudget, readText = readFileWithEncoding, columnOffset?)`, so the upstream positional
+contract is unchanged and `columnOffset` is appended after it. The `read_file` and
+`read_line_range` calls were reordered to match. The internal `processTextFile` argument order is
+unchanged. No union type, `typeof` switch or compatibility wrapper was added.
+
+RED then GREEN (`src/tools/read-file-column-offset.issue3599.bun.test.ts`):
+
+- New tests: "reads through the seventh-argument reader when the column offset is omitted"
+  (the callback reads a different temp file, so alternate content proves the injected reader
+  was used), "keeps the injected reader when a column offset follows it", and "serves the
+  registered read_file tool from the host reader with continuation enabled" (host
+  `readTextFile` returns different content from the file on disk, and the recommended
+  continuation call carries the explicit offset). The existing "explicit column offset"
+  test was changed to pass `undefined` for the reader and `0` as the eighth argument.
+- Before the fix (`tmp/verify3599/conflict-signature/red.log`): 29 pass, 3 fail. The failures
+  were the reader-omitted-offset test, the reader-plus-offset test, and the re-ordered explicit
+  offset test.
+- After the fix (`green.log`): 32 pass, 0 fail.
+
+Full gates after the fix, logs in `tmp/verify3599/conflict-signature/`, run by `run.sh`
+with the existing `LLXPRT_*_TEST_CONCURRENCY=1` controls and no suite changes:
+lint exit 0, typecheck exit 0, format exit 0 (no files changed by format), build exit 0, smoke
+(`lunahigh`, three-line haiku) exit 0, test-audit scan exit 0, `npm test` exit 0 on the
+first attempt (CLI: 10133 passed, 0 failed, 5 skipped, 13 todo). The four `(fail)` lines in the
+core section (`hangs`, `fails` x3) are the runner self-test fixtures, as in earlier runs.
+
+Test audit: a baseline scan of a clean `1af0ca5a3` worktree and the candidate scan both report
+2225 findings and their `findings.tsv` files are byte-identical. The three added tests produce no
+findings.

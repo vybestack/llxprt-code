@@ -342,6 +342,7 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
       limit,
       undefined,
       undefined,
+      undefined,
       0,
     );
 
