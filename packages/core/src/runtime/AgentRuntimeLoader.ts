@@ -8,7 +8,6 @@ import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 
 import type { RuntimeTokenizerFactory } from './contracts/RuntimeTokenizerFactory.js';
 import { HistoryService } from '../services/history/HistoryService.js';
-import { createHistoryProviderFileBindingStore } from '../services/history/provider-file-binding.js';
 import type { Config } from '../config/config.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 import { MediaAdmissionService } from '../storage/media-admission-service.js';
@@ -189,7 +188,6 @@ export async function loadAgentRuntime(
     overrides.mediaAdmission ?? new MediaAdmissionService(mediaStore);
   const mediaResolver =
     overrides.mediaResolver ?? new RequestMediaResolver(mediaStore);
-  const requestMediaBudgetBytes = profile.config.getImagePayloadBudgetBytes();
 
   const runtimeContext = createAgentRuntimeContext({
     state: profile.state,
@@ -202,12 +200,7 @@ export async function loadAgentRuntime(
     history,
     readRuntimeSettings: profile.readRuntimeSettings,
     prepareProviderInvocation: profile.prepareProviderInvocation,
-    providerRuntime: {
-      ...profile.providerRuntime,
-      mediaResolver,
-      requestMediaBudgetBytes,
-      providerFileBindings: createHistoryProviderFileBindingStore(history),
-    },
+    providerRuntime: profile.providerRuntime,
     mediaStore,
     mediaAdmission,
     mediaResolver,

@@ -107,7 +107,15 @@ export async function createSessionClientEngineFixture(
       config,
       messageBus,
       prepare: (ctx) =>
-        registerProvidersOntoManager(ctx.providerManager, ctx, config),
+        registerProvidersOntoManager(
+          ctx.providerManager,
+          ctx.settingsService,
+          ctx.runtimeId,
+          ctx.metadata,
+          config,
+          ctx.credentialAuthority,
+          ctx.oauthManager,
+        ),
     },
     workspace.settingsService,
   );

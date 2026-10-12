@@ -95,7 +95,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
-          invocationData(providerRuntime, name),
+          invocationData(providerRuntime, name, settingsService),
           name,
           parameters,
           signal,
@@ -202,7 +202,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
-          invocationData(providerRuntime, name),
+          invocationData(providerRuntime, name, settingsService),
           name,
           parameters,
           signal,
@@ -334,7 +334,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
-          invocationData(providerRuntime, name),
+          invocationData(providerRuntime, name, settingsService),
           name,
           parameters,
           signal,
@@ -514,7 +514,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
-          invocationData(providerRuntime, name),
+          invocationData(providerRuntime, name, settingsService),
           name,
           parameters,
           signal,
@@ -618,7 +618,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
-          invocationData(providerRuntime, name),
+          invocationData(providerRuntime, name, settingsService),
           name,
           parameters,
           signal,
@@ -728,7 +728,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
-          invocationData(providerRuntime, name),
+          invocationData(providerRuntime, name, settingsService),
           name,
           parameters,
           signal,
@@ -814,7 +814,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       const view = createAgentRuntimeContext({
         prepareProviderInvocation: (name, parameters, signal) =>
           captureProviderInvocation(
-            invocationData(providerRuntime, name),
+            invocationData(providerRuntime, name, settingsService),
             name,
             parameters,
             signal,

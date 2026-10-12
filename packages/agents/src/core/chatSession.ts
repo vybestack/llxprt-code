@@ -370,10 +370,6 @@ export class ChatSession {
     const runtimeContext: AgentRuntimeContext = Object.freeze({
       ...this.runtimeContext,
       history,
-      providerRuntime: Object.freeze({
-        ...this.runtimeContext.providerRuntime,
-        providerFileBindings,
-      }),
     });
     const semanticMediaPurge = createSemanticMediaPurgeSession(
       runtimeContext,

@@ -155,10 +155,6 @@ describe('ProviderManager media/file composition', () => {
     const runtime = {
       settingsService: selected.settingsService,
       runtimeId: 'same-label',
-      mediaResolver: foreignResolver,
-      requestMediaBudgetBytes: 1,
-      providerFileBindings: foreignBindings,
-      providerFileLifecycle: foreignLifecycle,
     };
     const manager = new ProviderManager(
       resolver,
@@ -171,8 +167,22 @@ describe('ProviderManager media/file composition', () => {
       new CredentialAuthority(),
       selected.settingsOwner,
     );
+    const foreignManager = new ProviderManager(
+      foreignResolver,
+      1,
+      foreignBindings,
+      foreignLifecycle,
+      selected.settingsService,
+      selected.config,
+      { ...runtime },
+      new CredentialAuthority(),
+      selected.settingsOwner,
+    );
     try {
-      manager.registerProvider(new MediaFileProvider());
+      const sharedProvider = new MediaFileProvider();
+      foreignManager.registerProvider(sharedProvider);
+      foreignManager.setActiveProvider('openai');
+      manager.registerProvider(sharedProvider);
       manager.setActiveProvider('openai');
       manager.setRuntimeContext(
         runtime,
@@ -204,6 +214,7 @@ describe('ProviderManager media/file composition', () => {
       expect(resolver.accounting().activeRequestCount).toBe(0);
     } finally {
       manager.dispose();
+      foreignManager.dispose();
       await rm(root, { recursive: true, force: true });
     }
   });

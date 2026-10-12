@@ -177,9 +177,13 @@ describe('CLI provider manager creation uses concrete providers', () => {
       expect(assembled.providerManager.listProviders()).toContain(
         'test-cli-provider',
       );
-      expect(assembled.runtime.providerFileLifecycle).toBe(
-        assembled.registration.providerFileLifecycle,
-      );
+      expect('providerFileLifecycle' in assembled.runtime).toBe(false);
+      expect(
+        assembled.registration.providerFileLifecycle.retainsScope(
+          'session',
+          'p13-consumer-test',
+        ),
+      ).toBe(false);
     } finally {
       assembled.registration.dispose();
     }

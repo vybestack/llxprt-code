@@ -188,8 +188,6 @@ describe('provider-media-recovery', () => {
       settingsService: settings,
       config,
       runtimeId: `${providerCase.kind}-media-entry`,
-      mediaResolver: resolver,
-      requestMediaBudgetBytes: budget,
     });
     const invocation = createRuntimeInvocationContext({
       runtimeId: runtime.runtimeId,

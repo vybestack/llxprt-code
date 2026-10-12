@@ -395,7 +395,15 @@ async function createAdoptedRuntime(
           options.activationPreflight?.operation.providerFileLifecycle,
         prepare: (ctx) => {
           if (adoptedManager === undefined)
-            registerProvidersOntoManager(ctx.providerManager, ctx, ctx.config);
+            registerProvidersOntoManager(
+              ctx.providerManager,
+              ctx.settingsService,
+              ctx.runtimeId,
+              ctx.metadata,
+              ctx.config,
+              ctx.credentialAuthority,
+              ctx.oauthManager,
+            );
         },
       },
       options.settingsService,

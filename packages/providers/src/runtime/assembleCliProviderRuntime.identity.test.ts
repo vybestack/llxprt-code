@@ -77,8 +77,9 @@ describe('CLI foreground provider ownership', () => {
       'Provider reads require an explicit session owner',
     );
     expect('providerManager' in config).toBe(false);
-    expect(bundle.runtime.providerFileLifecycle).toBe(
-      bundle.registration.providerFileLifecycle,
+    expect('providerFileLifecycle' in bundle.runtime).toBe(false);
+    expect(bundle.registration.providerFileLifecycle).toBeInstanceOf(
+      ProviderFileLifecycle,
     );
     bundle.registration.dispose();
   });
@@ -294,13 +295,12 @@ describe('CLI foreground provider ownership', () => {
       registration: early.registration,
     });
     expect(recovered.registration.config).toBe(config);
-    expect(recovered.runtime.providerFileLifecycle).toBe(
+    expect('providerFileLifecycle' in recovered.runtime).toBe(false);
+    expect(recovered.registration.providerFileLifecycle).toBe(
       early.registration.providerFileLifecycle,
     );
     expect(recovered.providerManager.getActiveProvider()?.name).toBe('openai');
-    const lifecycle = recovered.runtime.providerFileLifecycle;
-    if (!(lifecycle instanceof ProviderFileLifecycle))
-      throw new Error('Missing recovered file owner');
+    const lifecycle = recovered.registration.providerFileLifecycle;
     const acquired = lifecycle.acquire({
       cacheKey: 'prior-file',
       identity,

@@ -36,12 +36,13 @@ export function createConfigParams(
 export function invocationData(
   runtime: ProviderRuntimeContext,
   name: string,
+  settingsService: SettingsService,
 ): ProviderInvocationData {
   return {
     runtimeId: runtime.runtimeId,
     metadata: runtime.metadata,
-    globalSettings: runtime.settingsService.getAllGlobalSettings(),
-    providerSettings: runtime.settingsService.getProviderSettings(name),
+    globalSettings: settingsService.getAllGlobalSettings(),
+    providerSettings: settingsService.getProviderSettings(name),
   };
 }
 

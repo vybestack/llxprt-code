@@ -221,15 +221,12 @@ export async function prepareOwnedMediaRuntime(
     for (const [key, value] of Object.entries(config.getInitialSettings()))
       settings.set(key, value);
     settingsOwner = new SessionSettingsOwner(settings);
-    const selectedSettings = settingsOwner;
-    selectedSettings.initializeProviderSelection(
-      config.getProvider(),
-      config.getModel(),
-    );
+    const owner = settingsOwner;
+    owner.initializeProviderSelection(config.getProvider(), config.getModel());
     applyRuntimeEphemerals(
       {
         setEphemeralSetting: (key, value) =>
-          selectedSettings.writeUserParameter(key, value),
+          owner.writeUserParameter(key, value),
       },
       parsed,
     );
@@ -253,9 +250,16 @@ export async function prepareOwnedMediaRuntime(
         settingsOwner,
         settingsOwnerOwnership: 'transferred',
         messageBus,
-        prepare: (ctx) => {
-          registerProvidersOntoManager(ctx.providerManager, ctx, ctx.config);
-        },
+        prepare: (ctx) =>
+          registerProvidersOntoManager(
+            ctx.providerManager,
+            ctx.settingsService,
+            ctx.runtimeId,
+            ctx.metadata,
+            ctx.config,
+            ctx.credentialAuthority,
+            ctx.oauthManager,
+          ),
       },
       settings,
     );
@@ -287,19 +291,17 @@ export async function prepareOwnedMediaRuntime(
  */
 export function registerProvidersOntoManager(
   isolatedManager: IsolatedRuntimeContextHandle['providerManager'],
-  source: {
-    settingsService: IsolatedRuntimeContextHandle['settingsService'];
-    runtimeId: IsolatedRuntimeContextHandle['runtimeId'];
-    metadata: IsolatedRuntimeContextHandle['metadata'];
-    credentialAuthority?: CredentialAuthority;
-    oauthManager?: OAuthManager;
-  },
+  settingsService: IsolatedRuntimeContextHandle['settingsService'],
+  runtimeId: string,
+  metadata: Record<string, unknown>,
   config: Config,
+  credentialAuthority: CredentialAuthority | undefined,
+  oauthManager: OAuthManager | undefined,
 ): void {
   const context = {
-    settingsService: source.settingsService,
-    runtimeId: source.runtimeId,
-    metadata: source.metadata,
+    settingsService,
+    runtimeId,
+    metadata,
   };
   // Wire the file-backed OAuth settings provider so the provider instances
   // built here are bound to an OAuthManager that can read oauthEnabledProviders
@@ -314,13 +316,13 @@ export function registerProvidersOntoManager(
     throw new AgentBootstrapError(
       'Owned provider registration requires its concrete manager',
     );
-  if (source.credentialAuthority === undefined)
+  if (credentialAuthority === undefined)
     throw new Error('Provider registration requires its credential authority');
   createProviderManager(
-    context.settingsService,
+    settingsService,
     context,
     config,
-    source.credentialAuthority,
+    credentialAuthority,
     new NodeFileSystem(),
     undefined,
     undefined,
@@ -328,7 +330,7 @@ export function registerProvidersOntoManager(
     undefined,
     createFileOAuthSettingsProvider(),
     undefined,
-    source.oauthManager,
+    oauthManager,
     undefined,
     isolatedManager,
     undefined,
