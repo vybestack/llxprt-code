@@ -74,6 +74,10 @@ export function createHeadlessProviderManager(
     options.credentialAuthority ??
       new HostCredentialOwner(process.env).authority,
     options.fileSystem ?? new NodeFileSystem(),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
   );
 
   if (options.apiKey !== undefined) {

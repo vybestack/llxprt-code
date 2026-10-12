@@ -108,6 +108,10 @@ describe('providerManagerInstance schema-default behavior (issue #2033)', () => 
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       false,
     );
 
@@ -155,6 +159,10 @@ describe('providerManagerInstance schema-default behavior (issue #2033)', () => 
       undefined,
       new CredentialAuthority(),
       fs,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,

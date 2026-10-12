@@ -28,6 +28,10 @@ describe('public provider-manager filesystem injection', () => {
       undefined,
       new CredentialAuthority(),
       fileSystem,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
     );
 
     expect(manager.getActiveProvider()?.name).toBe('anthropic');

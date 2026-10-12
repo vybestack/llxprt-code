@@ -29,6 +29,10 @@ describe('Profile Application timeout preservation (Issue #1049)', () => {
       debugMode: false,
     });
     const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settings,
       config,
       createProviderRuntimeContext({ settingsService: settings, config }),

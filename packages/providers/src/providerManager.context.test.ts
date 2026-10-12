@@ -32,7 +32,15 @@ describe('ProviderManager runtime context', () => {
       settingsService: foreign,
       runtimeId: 'foreign-constructor-settings',
     });
-    const manager = new ProviderManager(selected, undefined, runtime);
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      selected,
+      undefined,
+      runtime,
+    );
     manager.registerProvider(createStubProvider('selected-provider'));
     manager.setActiveProvider('selected-provider');
 
@@ -51,6 +59,10 @@ describe('ProviderManager runtime context', () => {
     });
 
     const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       runtime.settingsService,
       runtime.config,
       runtime,
@@ -68,9 +80,9 @@ describe('ProviderManager runtime context', () => {
   it('requires an explicit runtime and never reads ambient global state (issue #2300)', () => {
     // Even with an ambient context set, the no-arg constructor must refuse to
     // adopt it — identity is supplied explicitly, never inferred.
-    expect(() => new ProviderManager()).toThrow(
-      /does not read ambient global runtime state/,
-    );
+    expect(
+      () => new ProviderManager(undefined, undefined, undefined, undefined),
+    ).toThrow(/does not read ambient global runtime state/);
   });
 
   it('binds to the explicitly provided runtime context, not the ambient one', () => {
@@ -84,6 +96,10 @@ describe('ProviderManager runtime context', () => {
     });
 
     const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       runtime.settingsService,
       runtime.config,
       runtime,

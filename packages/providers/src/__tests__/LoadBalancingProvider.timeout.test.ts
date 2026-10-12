@@ -87,6 +87,10 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
     settingsService = new SettingsService();
     runtimeConfig = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       runtimeConfig,
       undefined,

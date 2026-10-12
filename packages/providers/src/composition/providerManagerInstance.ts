@@ -1,3 +1,5 @@
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
@@ -543,6 +545,10 @@ export function createProviderManager(
   config: Config | undefined,
   authority: CredentialAuthority,
   fileSystem: IFileSystem,
+  mediaResolver: RequestMediaResolutionService | undefined,
+  requestMediaBudgetBytes: number | undefined,
+  providerFileBindings: ProviderFileBindingStore | undefined,
+  providerFileLifecycle: object | undefined,
   oauthSettings?: IOAuthSettingsProvider,
   runtimeMessageBus?: MessageBus,
   borrowedOAuthManager?: OAuthManager,
@@ -556,7 +562,17 @@ export function createProviderManager(
   const user = resolveUserSettings(fileSystem);
   const manager =
     selectedManager ??
-    new ProviderManager(settings, config, runtime, undefined, owner);
+    new ProviderManager(
+      mediaResolver,
+      requestMediaBudgetBytes,
+      providerFileBindings,
+      providerFileLifecycle,
+      settings,
+      config,
+      runtime,
+      undefined,
+      owner,
+    );
 
   bindCredentialKeys(manager, authority);
 
@@ -599,6 +615,38 @@ export function createProviderManager(
   const { openaiApiKey, openaiBaseUrl, openaiProviderConfig } =
     resolveOpenaiSettings(settings, user, authOnlyEnabled, allowBrowser);
 
+  return finishProviderRegistration(
+    manager,
+    oauthManager,
+    tokenStore,
+    config,
+    settings,
+    user,
+    openaiApiKey,
+    openaiBaseUrl,
+    openaiProviderConfig,
+    authOnlyEnabled,
+    addItem,
+    providerContributions,
+    activateConfiguredProvider,
+  );
+}
+
+function finishProviderRegistration(
+  manager: ProviderManager,
+  oauthManager: OAuthManager,
+  tokenStore: TokenStore,
+  config: Config | undefined,
+  settings: RuntimeSettingsState,
+  user: UserSettingsView | undefined,
+  openaiApiKey: string | undefined,
+  openaiBaseUrl: string | undefined,
+  openaiProviderConfig: IProviderConfig,
+  authOnlyEnabled: boolean,
+  addItem: OAuthUICallback | undefined,
+  providerContributions: ProviderContributionRegistry | undefined,
+  activateConfiguredProvider: boolean,
+): { manager: ProviderManager; oauthManager: OAuthManager } {
   registerAllProviders(
     manager,
     loadProviderAliasEntries(),

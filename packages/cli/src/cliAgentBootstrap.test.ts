@@ -114,7 +114,13 @@ describe('createForegroundAgent @plan:PLAN-20270110-ISSUE2378.P01 @requirement:R
     const root = makeConfig(overrides);
     roots = [...roots, root];
     ({ config, settingsService, settingsOwner } = root);
-    providerManager = new ProviderManager(settingsService);
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+    );
     fakeAgent = makeFakeAgent(config, () => bus);
     fromConfigMock.mockImplementation(async (options: FromConfigOptions) => {
       if (!options.mcpRuntime) {

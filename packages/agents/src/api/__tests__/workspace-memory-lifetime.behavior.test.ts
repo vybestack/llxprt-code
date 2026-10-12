@@ -93,6 +93,10 @@ async function preflightWithSuppliedMemory(
   memoryOwnership?: 'borrowed' | 'transferred',
 ) {
   const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     built.settingsService,
     undefined,
     undefined,
@@ -259,6 +263,10 @@ describe('supplied workspace memory lifetime through public adoption', () => {
     const { directory, file } = await physicalMemory();
     const built = await factoryless(directory);
     const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       built.settingsService,
       undefined,
       undefined,
@@ -313,6 +321,10 @@ describe('supplied workspace memory lifetime through public adoption', () => {
     const { directory, file, memory } = await physicalMemory();
     const built = await factoryless(directory);
     const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       built.settingsService,
       undefined,
       undefined,

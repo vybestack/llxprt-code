@@ -28,6 +28,10 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
       undefined,

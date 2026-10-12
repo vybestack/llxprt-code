@@ -43,7 +43,13 @@ describe('ProviderManager sandbox-base-url resolution', () => {
   beforeEach(() => {
     originalSandboxEnv = process.env.SANDBOX;
     settingsService = new SettingsService();
-    manager = new ProviderManager(settingsService);
+    manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+    );
     manager.registerProvider(createMockProvider('test-provider'));
     manager.setActiveProvider('test-provider');
   });

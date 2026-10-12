@@ -1,3 +1,5 @@
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import type { CredentialAuthority } from './auth/proxy/credential-store-factory.js';
 import type { ModelRegistry } from '@vybestack/llxprt-code-core/models/registry.js';
@@ -143,6 +145,10 @@ export class ProviderManager implements IProviderManager {
   }
 
   constructor(
+    private readonly mediaResolver: RequestMediaResolutionService | undefined,
+    private readonly requestMediaBudgetBytes: number | undefined,
+    private readonly providerFileBindings: ProviderFileBindingStore | undefined,
+    private readonly providerFileLifecycle: object | undefined,
     settingsService?: RuntimeSettingsState,
     config?: Config,
     runtime?: ProviderRuntimeContext,
@@ -697,13 +703,12 @@ export class ProviderManager implements IProviderManager {
   }
 
   private bindRequestProvider(provider: IProvider): IProvider {
-    const owner = this.runtime;
     return bindProviderMediaAndFiles(
       provider,
-      owner?.mediaResolver,
-      owner?.requestMediaBudgetBytes,
-      owner?.providerFileBindings,
-      owner?.providerFileLifecycle,
+      this.mediaResolver,
+      this.requestMediaBudgetBytes,
+      this.providerFileBindings,
+      this.providerFileLifecycle,
       this.config?.getTargetDir(),
     );
   }

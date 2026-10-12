@@ -67,6 +67,10 @@ describe('ProviderManager provider ordering', () => {
 
   it('prioritizes core providers and sorts remaining alphabetically', () => {
     const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       runtime.settingsService,
       runtime.config,
       runtime,
@@ -105,14 +109,27 @@ describe('ProviderManager provider ordering', () => {
     // only { settingsService } — it must NOT backfill config from ambient
     // state, so no LoggingProviderWrapper is applied.
 
-    const withoutConfig = new ProviderManager(settingsService);
+    const withoutConfig = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+    );
     withoutConfig.registerProvider(createProvider('no-config-provider'));
     expect(
       withoutConfig.getProviderByName('no-config-provider'),
     ).not.toBeInstanceOf(LoggingProviderWrapper);
 
     // The same construction WITH an explicit config gets the wrapper.
-    const withConfig = new ProviderManager(settingsService, runtimeConfig);
+    const withConfig = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      runtimeConfig,
+    );
     withConfig.registerProvider(createProvider('with-config-provider'));
     expect(withConfig.getProviderByName('with-config-provider')).toBeInstanceOf(
       LoggingProviderWrapper,
@@ -127,6 +144,10 @@ describe('ProviderPerformanceTracker', () => {
   it('returns null metrics when no active provider is set', () => {
     const runtime = setTestRuntimeContext();
     const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       runtime.settingsService,
       runtime.config,
       runtime,
@@ -147,6 +168,10 @@ describe('ProviderPerformanceTracker', () => {
 
   it('should accumulate session tokens correctly', () => {
     const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       runtime.settingsService,
       runtime.config,
       runtime,
@@ -205,6 +230,10 @@ describe('ProviderPerformanceTracker', () => {
 
   it('should reset session token usage', () => {
     const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       runtime.settingsService,
       runtime.config,
       runtime,

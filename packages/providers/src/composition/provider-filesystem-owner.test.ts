@@ -43,6 +43,10 @@ describe('provider manager filesystem ownership', () => {
         first.config,
         new CredentialAuthority(),
         first.fileSystem,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
       );
       const b = createProviderManager(
         second.settingsService,
@@ -53,6 +57,10 @@ describe('provider manager filesystem ownership', () => {
         second.config,
         new CredentialAuthority(),
         second.fileSystem,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
       );
       expect(a.manager.getActiveProviderName()).toBe('openai');
       expect(b.manager.getActiveProviderName()).toBe('anthropic');

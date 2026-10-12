@@ -421,7 +421,13 @@ describe('issue #3473 F2: raw timing transport at retry and LB boundaries', () =
       },
     ]);
     const settingsService = new SettingsService();
-    const providerManager = new ProviderManager(settingsService);
+    const providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+    );
     providerManager.registerProvider(failing);
     providerManager.registerProvider(ok);
     const lb = new LoadBalancingProvider(makeFailoverConfig(), providerManager);
@@ -483,6 +489,10 @@ describe('issue #3473 F2: raw timing transport at retry and LB boundaries', () =
     const settingsService = new SettingsService();
     const config: Config = createRuntimeConfigStub(settingsService);
     const providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
       undefined,

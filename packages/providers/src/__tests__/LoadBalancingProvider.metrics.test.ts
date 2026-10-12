@@ -45,6 +45,10 @@ describe('LoadBalancingProvider Metrics Collection - Phase 5', () => {
       const settingsService = new SettingsService();
       const config = createRuntimeConfigStub(settingsService);
       providerManager = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         settingsService,
         config,
         undefined,

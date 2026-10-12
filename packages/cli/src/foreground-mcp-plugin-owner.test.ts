@@ -106,6 +106,10 @@ describe('foreground MCP plugin ownership', () => {
     });
     const credentialAuthority = new CredentialAuthority();
     const providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
       undefined,

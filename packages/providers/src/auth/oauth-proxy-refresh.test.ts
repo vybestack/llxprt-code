@@ -76,8 +76,20 @@ describe('OAuth owner fetch', () => {
       const b = new OwnedFetch(bProxy.url);
       const aManager = new OAuthManager(store());
       const bManager = new OAuthManager(store());
-      const aProviders = new ProviderManager(new SettingsService());
-      const bProviders = new ProviderManager(new SettingsService());
+      const aProviders = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        new SettingsService(),
+      );
+      const bProviders = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        new SettingsService(),
+      );
       const transport =
         (network: OwnedFetch) =>
         (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {

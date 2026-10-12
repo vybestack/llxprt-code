@@ -312,6 +312,10 @@ describe('public Agent workspace definition lifetime', () => {
       },
     );
     const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       caller.settingsService,
       caller.config,
       undefined,

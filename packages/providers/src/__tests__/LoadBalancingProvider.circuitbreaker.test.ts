@@ -47,6 +47,10 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
     settingsService = new SettingsService();
     runtimeConfig = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       runtimeConfig,
       undefined,

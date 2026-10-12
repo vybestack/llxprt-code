@@ -214,6 +214,10 @@ function createLoadBalancer(options: {
   const settingsOwner = new SessionSettingsOwner(settingsService);
   settingsOwner.bindTelemetry(config);
   const providerManager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     settingsService,
     config,
     undefined,

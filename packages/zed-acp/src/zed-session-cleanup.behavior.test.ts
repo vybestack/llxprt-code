@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../providers/src/auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -31,7 +32,14 @@ function buildHost(): Config {
 }
 function buildSession(config: Config, trust: WorkspaceTrustLifecycle) {
   const settingsService = new SettingsService();
-  const manager = new ProviderManager(settingsService, config);
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    settingsService,
+    config,
+  );
   managers.push(manager);
   const connection = new acp.AgentSideConnection(
     (connection) =>
@@ -61,6 +69,7 @@ function buildSession(config: Config, trust: WorkspaceTrustLifecycle) {
     new DebugLogger('acp-cleanup-test'),
     settingsService,
     trust,
+    { credentialAuthority: new CredentialAuthority() },
   );
 }
 

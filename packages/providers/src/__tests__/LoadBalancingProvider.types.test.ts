@@ -22,7 +22,14 @@ describe('LoadBalancingProvider', () => {
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    _providerManager = new ProviderManager(settingsService, config);
+    _providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      config,
+    );
   });
 
   afterEach(() => {

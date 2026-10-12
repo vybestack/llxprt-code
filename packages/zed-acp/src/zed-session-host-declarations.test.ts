@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../providers/src/auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -86,7 +87,14 @@ describe('Zed session host declarations', () => {
         sessionUpdate: vi.fn(async () => undefined),
       } as never,
       unusedProfileApplication,
-      new ProviderManager(hostSettings, host),
+      new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        hostSettings,
+        host,
+      ),
       () => {
         const session = new SettingsService({ sessionSource: hostSettings });
         session.restoreFromStateSnapshot(hostSettings.exportForStateSnapshot());
@@ -95,7 +103,7 @@ describe('Zed session host declarations', () => {
       undefined,
       definitionFixture(),
       undefined,
-      providerInputs,
+      { ...providerInputs, credentialAuthority: new CredentialAuthority() },
     );
   }
 

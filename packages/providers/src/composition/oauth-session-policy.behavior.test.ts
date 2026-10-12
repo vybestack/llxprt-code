@@ -41,6 +41,10 @@ describe('Composed OAuth session policy', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       options.activateConfiguredProvider,
     );
     const second = createProviderManager(
@@ -49,6 +53,10 @@ describe('Composed OAuth session policy', () => {
       undefined,
       options.credentialAuthority,
       options.fileSystem,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,

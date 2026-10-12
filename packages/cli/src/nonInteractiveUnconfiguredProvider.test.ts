@@ -142,6 +142,10 @@ function configureProvider(
   runtimeSettings: { store: SettingsService; owner: SessionSettingsOwner },
 ): ProviderManager {
   const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     runtimeSettings.store,
     config,
     undefined,

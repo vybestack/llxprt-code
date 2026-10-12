@@ -60,6 +60,10 @@ describe('issue #2891: provider OAuth identity is owner-bound', () => {
         second,
         new CredentialAuthority(),
         new NodeFileSystem(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
       );
       const boundB = new BoundManagerExposingProvider(
         undefined,

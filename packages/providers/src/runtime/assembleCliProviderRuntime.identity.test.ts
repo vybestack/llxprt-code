@@ -32,6 +32,31 @@ function createOwner(
 }
 
 describe('CLI foreground provider ownership', () => {
+  it('keeps Config on the foreground owner instead of the admitted runtime', async () => {
+    const settings = new SettingsService();
+    const { config, settingsOwner } = createOwner(settings, 'config-owner');
+    const bundle = assembleCliProviderRuntime({
+      credentialAuthority: new CredentialAuthority(),
+      settingsOwner,
+      settingsService: settings,
+      config,
+      runtimeId: 'config-owner',
+    });
+    try {
+      expect(bundle.runtime.config).toBeUndefined();
+      expect(bundle.registration.config).toBe(config);
+      const prepare = bundle.providerManager.prepareStatelessProviderInvocation;
+      if (prepare === undefined)
+        throw new Error('Missing preparation operation');
+      expect(() => prepare.call(bundle.providerManager)).not.toThrow();
+    } finally {
+      await bundle.policyOwner?.dispose();
+      bundle.registration.dispose();
+      await settingsOwner.dispose();
+      await config.dispose();
+    }
+  });
+
   it('binds the same runtime bus, provider manager, OAuth manager, and file lifecycle to the Config', () => {
     const settings = new SettingsService();
     const { config: config } = createOwner(settings, 'bundle-owner');

@@ -60,6 +60,10 @@ describe('createProviderManager: unconfigured state (#2481)', () => {
       undefined,
       new CredentialAuthority(),
       new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
     );
     try {
       expect(manager.getActiveProviderName()).toBe('anthropic');
@@ -87,6 +91,10 @@ describe('createProviderManager: unconfigured state (#2481)', () => {
       undefined,
       new CredentialAuthority(),
       new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -153,6 +161,10 @@ describe('createProviderManager: explicit provider activation unchanged (#2481)'
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       true,
     );
 
@@ -175,6 +187,10 @@ describe('createProviderManager: explicit provider activation unchanged (#2481)'
       undefined,
       new CredentialAuthority(),
       new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -217,6 +233,10 @@ describe('createProviderManager: invalid configured provider (#2481)', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       true,
     );
 
@@ -234,6 +254,10 @@ describe('createProviderManager: invalid configured provider (#2481)', () => {
       undefined,
       new CredentialAuthority(),
       new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -273,6 +297,10 @@ describe('createProviderManager: invalid configured provider (#2481)', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         true,
       ),
     );
@@ -304,6 +332,10 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       true,
     );
 
@@ -321,6 +353,10 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
       undefined,
       new CredentialAuthority(),
       new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -351,6 +387,10 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       true,
     );
 
@@ -367,6 +407,10 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
       undefined,
       new CredentialAuthority(),
       new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -403,6 +447,10 @@ describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#248
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       true,
     );
 
@@ -431,6 +479,10 @@ describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#248
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       true,
     );
 
@@ -449,6 +501,10 @@ describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#248
       config,
       new CredentialAuthority(),
       new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,

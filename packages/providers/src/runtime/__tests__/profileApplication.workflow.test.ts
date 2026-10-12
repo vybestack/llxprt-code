@@ -280,7 +280,13 @@ describe('Profile cascade workflow at the owner', () => {
     if (!provider) throw new Error('Missing fixture provider');
     provider.name = 'no-default';
     provider.getDefaultModel = () => '';
-    const manager = new ProviderManager(owner().settings);
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      owner().settings,
+    );
     manager.registerProvider(provider);
     manager.setActiveProvider('no-default');
     configureProviderRuntimeFactories(config, manager);
@@ -311,7 +317,13 @@ describe('Profile cascade workflow at the owner', () => {
   });
 
   it('rejects an unregistered active provider at the explicit manager boundary', async () => {
-    const manager = new ProviderManager(owner().settings);
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      owner().settings,
+    );
     expect(() => manager.setActiveProvider('unregistered')).toThrow(
       "Provider 'unregistered' not found",
     );

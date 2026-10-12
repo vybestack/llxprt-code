@@ -54,6 +54,10 @@ async function owner() {
   );
   const credentialAuthority = new CredentialAuthority();
   const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     settingsService,
     config,
     createProviderRuntimeContext({

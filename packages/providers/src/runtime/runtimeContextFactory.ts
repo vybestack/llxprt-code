@@ -285,7 +285,6 @@ function buildActivateClosure(
 
     const scopedRuntime = createProviderRuntimeContext({
       settingsService: resolvedSettingsService,
-      config,
       providerFileLifecycle,
       runtimeId: state.currentRuntimeId,
       runtimeKind: state.currentRuntimeKind,
@@ -532,21 +531,33 @@ function initialRuntimeMetadata(
   return { source: 'cli-isolated-runtime-factory', ...metadata };
 }
 
-function initialProviderContext(
-  options: IsolatedRuntimeContextOptions,
+function initialProviderManager(
   settingsService: SettingsService,
+  config: Config,
+  credentialAuthority: CredentialAuthority | undefined,
+  owner: SessionSettingsOwner,
   providerFileLifecycle: ProviderFileLifecycle,
   runtimeId: string,
+  runtimeKind: RuntimeKind | undefined,
   metadata: Record<string, unknown>,
-) {
-  return createProviderRuntimeContext({
-    settingsService,
-    config: options.config,
+): ProviderManager {
+  return new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
     providerFileLifecycle,
-    runtimeId,
-    runtimeKind: options.runtimeKind ?? 'agent',
-    metadata,
-  });
+    settingsService,
+    config,
+    createProviderRuntimeContext({
+      settingsService,
+      providerFileLifecycle,
+      runtimeId,
+      runtimeKind: runtimeKind ?? 'agent',
+      metadata,
+    }),
+    credentialAuthority,
+    owner,
+  );
 }
 
 export function createIsolatedRuntimeContext(
@@ -579,18 +590,15 @@ export function createIsolatedRuntimeContext(
   // at `options.messageBus ?? new MessageBus(...)`); otherwise construct a fresh one.
   const manager =
     options.providerManager ??
-    new ProviderManager(
+    initialProviderManager(
       settingsService,
       options.config,
-      initialProviderContext(
-        { ...options, settingsOwner },
-        settingsService,
-        providerFileLifecycle,
-        runtimeId,
-        metadata,
-      ),
       options.credentialAuthority,
       settingsOwner,
+      providerFileLifecycle,
+      runtimeId,
+      options.runtimeKind,
+      metadata,
     );
   const selectedFactories = configureProviderRuntimeFactories(
     options.config,

@@ -145,6 +145,10 @@ describe('LoadBalancingProvider - provider-specific prompt rendering (issue #317
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
       undefined,

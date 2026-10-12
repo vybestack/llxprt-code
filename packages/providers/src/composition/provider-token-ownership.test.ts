@@ -31,6 +31,10 @@ function root(
     undefined,
     authority,
     new NodeFileSystem(),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
   );
 }
 

@@ -162,6 +162,10 @@ describe('claudecode OAuth registration with environment key', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       false,
     );
 
@@ -246,6 +250,10 @@ describe('claudecode OAuth registration with environment key', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       false,
     );
 
@@ -318,6 +326,10 @@ describe('claudecode OAuth registration with environment key', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       false,
     );
 
@@ -372,6 +384,10 @@ describe('claudecode OAuth registration with environment key', () => {
       undefined,
       new CredentialAuthority(),
       new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,

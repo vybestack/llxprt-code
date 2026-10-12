@@ -215,6 +215,10 @@ describe('Multi-Provider Integration Tests', () => {
     runtimeConfig = runtime.config;
     settingsService.set('activeProvider', '');
     manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       runtime.settingsService,
       runtime.config,
       runtime,

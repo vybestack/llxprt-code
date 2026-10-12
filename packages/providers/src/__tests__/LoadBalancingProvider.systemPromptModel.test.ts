@@ -212,6 +212,10 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
       undefined,
