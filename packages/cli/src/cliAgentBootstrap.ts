@@ -40,7 +40,6 @@ import {
   type ActivationPreflight,
 } from '@vybestack/llxprt-code-agents';
 
-import { createRuntimeActivationBindings } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
 import { registerCleanup } from './utils/cleanup.js';
 import {
   hasProfileAuthEphemerals,
@@ -183,7 +182,6 @@ export async function createForegroundAgent({
     settingsOwner,
     config,
     providerManager,
-    runtimeActivationBindings: createRuntimeActivationBindings(),
     sessionId: config.getSessionId(),
     sessionIdentityOwnership: 'config',
     mcpRuntime,

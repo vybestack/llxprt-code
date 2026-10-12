@@ -84,7 +84,7 @@ import {
   assembleProviderSwitch,
   assembleSessionProviderSwitch,
 } from './providerSwitchAssembly.js';
-import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 import { executeProviderActivation } from './providerActivationExecutor.js';
 import { PLACEHOLDER_MODEL } from './constants.js';
 import {

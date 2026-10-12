@@ -8,6 +8,7 @@ import {
   SessionSettingsOwner,
   type RuntimePolicyOwner,
   type RuntimeProviderManager,
+  type ProviderSwitcher,
   type Config,
   type AgentClientContract,
   SessionRecordingService,
@@ -37,7 +38,6 @@ import type {
   AgentActivationOperation,
   AgentProfileApplication,
 } from '@vybestack/llxprt-code-agents';
-import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
 
 import {
   buildMcpAuthFactoryRegistry,

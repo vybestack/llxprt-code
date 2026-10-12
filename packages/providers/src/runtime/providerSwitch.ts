@@ -13,6 +13,10 @@ import {
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
+import type {
+  ProviderSwitchOptions,
+  ProviderSwitchResult,
+} from '@vybestack/llxprt-code-core';
 import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { extractProviderBaseUrl } from './providerMutations.js';
 import {
@@ -40,28 +44,6 @@ export const DEFAULT_PRESERVE_EPHEMERALS = Object.freeze([
   'max_tokens',
   'streaming',
 ] as const);
-
-export interface ProviderSwitchResult {
-  changed: boolean;
-  previousProvider: string | null;
-  nextProvider: string;
-  defaultModel?: string;
-  infoMessages: string[];
-}
-
-export interface ProviderSwitchOptions {
-  publication?: 'immediate' | 'deferred';
-  clientReplacement?: 'immediate' | 'deferred';
-  autoOAuth?: boolean;
-  preserveEphemerals?: readonly string[];
-  skipModelDefaults?: boolean;
-  addItem?: OAuthUICallback;
-}
-
-export type ProviderSwitcher = (
-  name: string,
-  options?: ProviderSwitchOptions,
-) => Promise<ProviderSwitchResult>;
 
 function getAliasConfig(providerName: string): ProviderAliasConfig | undefined {
   try {

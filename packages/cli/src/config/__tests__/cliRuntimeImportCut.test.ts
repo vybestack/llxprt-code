@@ -81,6 +81,24 @@ describe('CLI provider bootstrap across owners', () => {
     }
   });
 
+  it('consumes provider selection contracts without provider runtime imports', async () => {
+    const files = [
+      '../../cliSessionBootstrap.ts',
+      '../../cliAgentBootstrap.ts',
+      '../profileBootstrap.ts',
+      '../../ui/contexts/RuntimeContext.tsx',
+      '../../ui/hooks/agentStream/__tests__/useSubmitQuery.providerIgnoreCancel.bun.tsx',
+      '../../../../agents/src/api/profile-application/switchProfileProvider.ts',
+      '../../../../agents/src/api/profileApplicationAssembly.ts',
+      '../../../../agents/src/api/agent-deps.ts',
+      '../../../../agents/src/api/__tests__/helpers/profile-owner-fixture.ts',
+    ];
+    for (const file of files) {
+      const source = await readFile(new URL(file, import.meta.url), 'utf8');
+      expect(source).not.toContain('@vybestack/llxprt-code-providers/runtime');
+    }
+  });
+
   it('keeps same-label pre/post Config handles separate and reapplies CLI overrides after switching', async () => {
     const bootstraps = [];
     for (const [provider, model, key, contextLimit] of [

@@ -4,7 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { NetworkFetch } from '@vybestack/llxprt-code-core';
+import type {
+  NetworkFetch,
+  ModelChangeResult,
+  ApiKeyUpdateResult,
+  BaseUrlUpdateResult,
+} from '@vybestack/llxprt-code-core';
 import type React from 'react';
 import type { RuntimeProfileAgent } from './runtimeProfileAgent.js';
 import {
@@ -20,11 +25,6 @@ import type {
   AgentProviderSwitchResult,
   SessionProviderReads,
 } from '@vybestack/llxprt-code-agents';
-import type {
-  setActiveModel,
-  updateActiveProviderApiKey,
-  BaseUrlUpdateResult,
-} from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
 import type { createProviderInspection } from '../../runtime/providerInspection.js';
 import type { getOpenAIProviderInfo } from '@vybestack/llxprt-code-providers';
 
@@ -75,7 +75,7 @@ type ProfileRuntimeApi = Pick<
 >;
 
 export type RuntimeOwnerFeatures = RuntimeFunctions & {
-  setActiveModel: (model: string) => ReturnType<typeof setActiveModel>;
+  setActiveModel: (model: string) => Promise<ModelChangeResult>;
   getActiveModelParams: () => ReturnType<
     SessionProviderReads['getActiveModelParams']
   >;
@@ -83,7 +83,7 @@ export type RuntimeOwnerFeatures = RuntimeFunctions & {
   clearActiveModelParam: (key: string) => void;
   updateActiveProviderApiKey: (
     key: string | null,
-  ) => ReturnType<typeof updateActiveProviderApiKey>;
+  ) => Promise<ApiKeyUpdateResult>;
   getWorkspaceDirectories: () => readonly string[];
   getDefaultProfileName: () => string | null;
   getOpenAIProviderInfo: () => ReturnType<typeof getOpenAIProviderInfo>;

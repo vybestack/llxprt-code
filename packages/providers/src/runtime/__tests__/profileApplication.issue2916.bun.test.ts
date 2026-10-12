@@ -58,7 +58,7 @@ const root = installProfileOwner();
 await mock.module('../../auth/index.js', () => ({
   createProviderKeyStorage: () => createProviderKeyStorageDouble(),
 }));
-import type { ProviderSwitcher } from '../providerSwitch.js';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 
 const stubSwitchProvider: ProviderSwitcher = async (name) => {
   root().manager.setActiveProvider(name);

@@ -26,10 +26,8 @@ import {
   applyProfileCascade,
   type ProfileApplicationResult,
 } from '../../../../agents/src/api/profileApplication.js';
-import {
-  switchActiveProvider,
-  type ProviderSwitcher,
-} from '../providerSwitch.js';
+import { switchActiveProvider } from '../providerSwitch.js';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 
 export function standardProfile(
   ephemeralSettings: Record<string, unknown> = {},

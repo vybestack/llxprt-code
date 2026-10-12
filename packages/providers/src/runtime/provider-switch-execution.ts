@@ -5,7 +5,7 @@
  */
 import type { ModelProfileInfoPayload } from '@vybestack/llxprt-code-core/utils/events.js';
 import type { ProviderAliasConfig } from '../composition/providerAliases.js';
-import type { ProviderSwitchResult } from './providerSwitch.js';
+import type { ProviderSwitchResult } from '@vybestack/llxprt-code-core';
 import {
   applySwitchDefaults,
   clearSwitchEphemerals,

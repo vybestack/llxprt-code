@@ -3,6 +3,11 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type {
+  ApiKeyUpdateResult,
+  BaseUrlUpdateResult,
+  ModelChangeResult,
+} from '@vybestack/llxprt-code-core';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 
 /**
@@ -140,27 +145,6 @@ export function extractProviderBaseUrl(
   }
 
   return undefined;
-}
-
-export interface ApiKeyUpdateResult {
-  changed: boolean;
-  providerName: string;
-  message: string;
-  isPaidMode?: boolean;
-}
-
-export interface BaseUrlUpdateResult {
-  changed: boolean;
-  providerName: string;
-  message: string;
-  baseUrl?: string;
-}
-
-export interface ModelChangeResult {
-  providerName: string;
-  previousModel?: string;
-  nextModel: string;
-  authRefreshed: boolean;
 }
 
 export interface ModelSelectionOperations {

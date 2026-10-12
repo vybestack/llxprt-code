@@ -33,10 +33,8 @@ import type {
 import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import {
-  switchActiveProvider,
-  type ProviderSwitcher,
-} from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
+import { switchActiveProvider } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 
 import {
   AgentActivationBootstrap,

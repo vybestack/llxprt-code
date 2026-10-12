@@ -21,7 +21,7 @@ import {
   type ProfileLoadOptions,
   type ProfileLoadResult,
 } from './profileSnapshot.js';
-import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 
 import { checkpointProviderTransition } from './providerTransitionCheckpoint.js';
 import type { Agent } from './agent.js';

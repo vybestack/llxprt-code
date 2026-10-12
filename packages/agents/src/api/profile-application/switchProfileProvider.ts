@@ -3,7 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 
 const PRESERVED_PROFILE_EPHEMERALS = Object.freeze([
   'auth-key',
