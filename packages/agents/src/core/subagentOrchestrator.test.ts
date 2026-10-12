@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
@@ -115,6 +116,7 @@ describe('SubagentOrchestrator - token-usage identity (issue #3130)', () => {
 
     const ownedSettings1 = createSessionSettingsFixture(foregroundConfig);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: ownedSettings1.workspaceTrust,
       createChildSettings: () =>
         ownedSettings1.settingsOwner.createChildStore(),
@@ -162,6 +164,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     const ownedSettings2 = createSessionSettingsFixture(foregroundConfig);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: ownedSettings2.workspaceTrust,
       createChildSettings: () =>
         ownedSettings2.settingsOwner.createChildStore(),
@@ -206,6 +209,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     const ownedSettings3 = createSessionSettingsFixture(foregroundConfig);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: ownedSettings3.workspaceTrust,
       createChildSettings: () =>
         ownedSettings3.settingsOwner.createChildStore(),
@@ -257,6 +261,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     const ownedSettings4 = createSessionSettingsFixture(foregroundConfig);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: ownedSettings4.workspaceTrust,
       createChildSettings: () =>
         ownedSettings4.settingsOwner.createChildStore(),
@@ -333,6 +338,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     const ownedSettings5 = createSessionSettingsFixture(foregroundConfig);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: ownedSettings5.workspaceTrust,
       createChildSettings: () =>
         ownedSettings5.settingsOwner.createChildStore(),
@@ -388,6 +394,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     const ownedSettings6 = createSessionSettingsFixture(foregroundConfig);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: ownedSettings6.workspaceTrust,
       createChildSettings: () =>
         ownedSettings6.settingsOwner.createChildStore(),
@@ -453,6 +460,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     const foregroundRoot1 = configWithParentTurns;
     const foregroundSettings1 = createSessionSettingsFixture(foregroundRoot1);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings1.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings1.settingsOwner.createChildStore(),
@@ -507,6 +515,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     const foregroundRoot2 = configWithDynamicTurns;
     const foregroundSettings2 = createSessionSettingsFixture(foregroundRoot2);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings2.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings2.settingsOwner.createChildStore(),
@@ -568,6 +577,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     const foregroundRoot3 = configWithParentTurns;
     const foregroundSettings3 = createSessionSettingsFixture(foregroundRoot3);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings3.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings3.settingsOwner.createChildStore(),
@@ -630,6 +640,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     const foregroundRoot4 = configWithParentTurns;
     const foregroundSettings4 = createSessionSettingsFixture(foregroundRoot4);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings4.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings4.settingsOwner.createChildStore(),
@@ -681,6 +692,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
     const foregroundRoot5 = configWithUnlimitedParentTurns;
     const foregroundSettings5 = createSessionSettingsFixture(foregroundRoot5);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings5.workspaceTrust,
       createChildSettings: () =>
         foregroundSettings5.settingsOwner.createChildStore(),
@@ -805,6 +817,7 @@ describe('SubagentOrchestrator - Config Resolution', () => {
 
     const ownedSettings7 = createSessionSettingsFixture(foregroundConfig);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: ownedSettings7.workspaceTrust,
       createChildSettings: () =>
         ownedSettings7.settingsOwner.createChildStore(),
@@ -846,6 +859,7 @@ describe('SubagentOrchestrator - MessageBus threading (Issue #2312)', () => {
 
     const ownedSettings8 = createSessionSettingsFixture(foregroundConfig);
     const orchestrator = new SubagentOrchestrator({
+      credentialAuthority: new CredentialAuthority(),
       workspaceTrust: ownedSettings8.workspaceTrust,
       createChildSettings: () =>
         ownedSettings8.settingsOwner.createChildStore(),

@@ -195,6 +195,7 @@ describe('providerSwitch', () => {
       expect(ensureOAuthProviderRegistered).toHaveBeenCalledWith(
         'claudecode',
         oauthManager,
+        expect.any(Function),
         undefined,
         undefined,
       );

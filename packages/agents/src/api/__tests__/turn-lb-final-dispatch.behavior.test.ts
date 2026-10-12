@@ -6,6 +6,7 @@ import { internalConfig } from './helpers/agentHarness.js';
  */
 
 import { describe, expect, it, vi } from 'bun:test';
+import { AgentBusyError } from '@vybestack/llxprt-code-agents';
 import {
   ProfileManager,
   type LoadBalancerProfile,
@@ -55,7 +56,7 @@ const lb = (policy: 'roundrobin' | 'failover'): LoadBalancerProfile => ({
 
 describe('Final LB delegate authorization after asynchronous member authentication', () => {
   for (const policy of ['roundrobin', 'failover'] as const) {
-    it(`blocks the ${policy} stale member HTTP request and admits its replacement independently of a same-label sibling`, async () => {
+    it(`rejects active ${policy} replacement and preserves admitted members independently of a same-label sibling`, async () => {
       await withOwners(async (a, b, oldEndpoint, newEndpoint, start) => {
         const profiles = new ProfileManager();
         await profiles.saveProfile('same-label-held-member', {
@@ -115,15 +116,18 @@ describe('Final LB delegate authorization after asynchronous member authenticati
               },
             });
           }
-          await a.profiles.applySnapshot(lb(policy));
+          await expect(
+            a.profiles.applySnapshot(lb(policy)),
+          ).rejects.toBeInstanceOf(AgentBusyError);
           const sibling = start(b, 'Same-label independent sibling');
           held.release();
           oldEndpoint.release();
           successful(await sibling);
+          successful(await admission);
           expect(
-            (await admission).events.some((event) => event.type === 'error'),
-          ).toBe(true);
-          expect(oldEndpoint.requests()).toHaveLength(0);
+            oldEndpoint.requests().map(({ model }) => model),
+          ).toStrictEqual(['held-original']);
+          await a.profiles.applySnapshot(lb(policy));
           successful(await start(a, 'New LB member admission'));
           expect(
             newEndpoint.requests().map(({ model }) => model),

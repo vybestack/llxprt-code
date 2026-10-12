@@ -138,7 +138,20 @@ function bindAdoptedSessionHooks(
   mcp: McpRuntimeOwner,
   options: FromConfigOptions,
 ): void {
-  bindAdoptedDefinitions(client, mcp, options);
+  const definitions = assembleAdoptedDefinitionOperations(
+    mcp,
+    options.definitionOwner,
+    options.config,
+    options.definitionOwnership,
+    ownsMcpRuntime(options),
+  );
+  client.bindMcpRuntime(
+    mcp,
+    options.runtimeFactoryBindings?.taskToolRegistration() ??
+      createTaskRegistration(options.credentialAuthority),
+    definitions.profileDefinitions,
+    definitions.subagentDefinitions,
+  );
   if (client.hasHookComposition()) {
     if (options.hookOwner !== undefined)
       throw new AgentBootstrapError(
@@ -394,27 +407,6 @@ async function createAdoptedRuntime(
       await transferredOwner?.dispose();
     throw error;
   }
-}
-
-function bindAdoptedDefinitions(
-  sessionClient: SessionClientOwner,
-  mcpRuntime: McpRuntimeOwner,
-  options: FromConfigOptions,
-): void {
-  const definitions = assembleAdoptedDefinitionOperations(
-    mcpRuntime,
-    options.definitionOwner,
-    options.config,
-    options.definitionOwnership,
-    ownsMcpRuntime(options),
-  );
-  sessionClient.bindMcpRuntime(
-    mcpRuntime,
-    options.runtimeFactoryBindings?.taskToolRegistration() ??
-      createTaskRegistration(options.credentialAuthority),
-    definitions.profileDefinitions,
-    definitions.subagentDefinitions,
-  );
 }
 
 async function cleanupFailedAdoption(

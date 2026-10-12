@@ -3,6 +3,7 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 const retainedActivationOperations: Array<{ dispose(): void | Promise<void> }> =
   [];
@@ -25,6 +26,7 @@ async function loadConfigFixture(...args: Parameters<typeof loadCliConfig>) {
       args[5],
       {
         ...args[6],
+        credentialAuthority: new CredentialAuthority(),
         settingsService: store,
         sessionSettingsOwner: settingsOwner,
         onActivationBootstrapReady: (operation) => {
@@ -604,7 +606,7 @@ describe('loadCliConfig disableYoloMode', () => {
       security: { disableYoloMode: true },
     };
     await expect(
-      loadCliConfig(
+      loadConfigFixture(
         settings,
         [],
         new ExtensionEnablementManager(
@@ -670,7 +672,7 @@ describe('loadCliConfig secureModeEnabled', () => {
       admin: { secureModeEnabled: true },
     };
     await expect(
-      loadCliConfig(
+      loadConfigFixture(
         settings,
         [],
         new ExtensionEnablementManager(

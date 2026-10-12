@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 /**
  * @license
@@ -160,6 +161,7 @@ describe('Mounted CLI child execution ownership', () => {
       isInteractiveEnvironment: () => true,
       orchestratorFactory: (messageBus) =>
         new SubagentOrchestrator({
+          credentialAuthority: new CredentialAuthority(),
           workspaceTrust: built.mcpRuntime.trust,
           createChildSettings: () => built.settingsOwner.createChildStore(),
           readRunPolicy: () => built.settingsOwner.readSubagentRunPolicy(),

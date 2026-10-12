@@ -147,7 +147,6 @@ async function profile() {
         agent,
         boot.activationOperation.workspaceFilesystem,
       );
-      const mediaAdopted = agent.agentClient.mediaStore === store;
       const borrowedSurface = [
         'config',
         'manager',
@@ -176,7 +175,7 @@ async function profile() {
         headless,
         authFailed: activation.authFailed,
         ownerAdopted,
-        mediaAdopted,
+        mediaAdopted: agent.agentClient.mediaStore === store,
         providerAdopted: agent.providerManager === boot.providerManager,
         borrowedSurface,
         runtimeHasManager: 'providerManager' in runtime,

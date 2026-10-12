@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
@@ -118,6 +119,7 @@ export function createOrchestratorForTurns(options: {
   const foregroundConfig1 = options.foregroundConfig ?? makeForegroundConfig();
   const foregroundSettings1 = createSessionSettingsFixture(foregroundConfig1);
   const orchestrator = new SubagentOrchestrator({
+    credentialAuthority: new CredentialAuthority(),
     workspaceTrust: foregroundSettings1.workspaceTrust,
     createChildSettings: () =>
       foregroundSettings1.settingsOwner.createChildStore(),

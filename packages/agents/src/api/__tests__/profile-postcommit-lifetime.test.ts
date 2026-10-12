@@ -406,8 +406,11 @@ async function exercise(
       expect(built.settingsOwner.readSelectedModel()).toBe(
         'committed-oauth-model',
       );
+      await expect(
+        oauth.getOAuthToken('claudecode', 'primary'),
+      ).rejects.toThrow('OAuth manager is disposed');
       expect(
-        (await oauth.getOAuthToken('claudecode', 'primary'))?.refresh_token,
+        (await store.getToken('claudecode', 'primary'))?.refresh_token,
       ).toBe('rotated-refresh');
       await built.agentClient.startChat(await built.agentClient.getHistory());
       const successor = await fromConfig({

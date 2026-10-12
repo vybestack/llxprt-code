@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { assembleSettingsControl } from '../../../../agents/src/api/control/settings-control.js';
 import { assembleToolFormatControl } from '../../../../agents/src/api/control/tool-format-control.js';
 import { SessionProviderReads } from '@vybestack/llxprt-code-agents';
@@ -103,6 +104,7 @@ describe('CLI provider bootstrap across owners', () => {
       const runtimeState = await prepareRuntimeForProfile(
         parseBootstrapArgs(args, {
           runtimeId: 'shared-cli-label',
+          credentialAuthority: new CredentialAuthority(),
           settingsService,
         }),
       );
@@ -172,6 +174,7 @@ describe('CLI provider bootstrap across owners', () => {
           providerModelResult: { provider: item.provider, model: item.model },
           defaultDisabledTools: [],
           runtimeOverrides: {
+            credentialAuthority: new CredentialAuthority(),
             settingsService: item.settingsService,
             sessionSettingsOwner: item.settingsOwner,
             onActivationBootstrapReady: (operation) => {
