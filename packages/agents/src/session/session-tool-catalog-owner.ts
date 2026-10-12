@@ -1,3 +1,4 @@
+import { summarizeToolOutput } from '@vybestack/llxprt-code-core/utils/summarizer.js';
 import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
@@ -43,7 +44,15 @@ import {
 } from '@vybestack/llxprt-code-mcp';
 import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
 import { CoreToolRegistryHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreToolRegistryHostAdapter.js';
-import type { McpRuntimeOwner } from '../api/mcpRuntimeAssembly.js';
+import type {
+  WorkspacePathOperations,
+  WorkspaceTextOperations,
+  WorkspaceIgnoreOperations,
+  WorkspaceScanOperations,
+} from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import type { WorkspaceIdePort } from '@vybestack/llxprt-code-core/services/workspace-ide-owner.js';
+import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core/services/workspace-trust-ports.js';
+import type { ILspService } from '@vybestack/llxprt-code-tools';
 
 type ConfigurationEntry = {
   readonly displayName: string;
@@ -124,7 +133,16 @@ export class SessionToolCatalogOwner {
   }
 
   initialize(
-    workspace: McpRuntimeOwner,
+    isWorkspaceStopped: () => boolean,
+    paths: WorkspacePathOperations,
+    files: WorkspaceTextOperations,
+    ignore: WorkspaceIgnoreOperations,
+    scans: WorkspaceScanOperations,
+    diagnostics: ILspService | undefined,
+    ide: WorkspaceIdePort,
+    trust: WorkspaceTrustControlPort,
+    workspaceSelection: ToolSelection,
+    readMcpInstructions: () => string | undefined,
     bus: MessageBus,
     registration: TaskToolRegistration,
     summarize: Parameters<typeof createToolRegistry>[9],
@@ -133,14 +151,14 @@ export class SessionToolCatalogOwner {
     createChildSettings: () => SettingsService,
     readTaskPolicy: () => TaskExecutionPolicy,
     readRunPolicy: () => SubagentRunPolicy,
-    profiles: ProfileDefinitionReads = workspace.profileDefinitions,
-    subagents: SubagentDefinitionReads = workspace.subagentDefinitions,
+    profiles: ProfileDefinitionReads,
+    subagents: SubagentDefinitionReads,
     hookOwner?: SessionHookOwner,
     telemetry?: RootTelemetry,
     requestInteractiveAuth?: InteractiveAuthPromptOperation,
   ): Promise<void> {
     this.admission.assertOpen();
-    this.workspaceStopped = () => workspace.isStopped();
+    this.workspaceStopped = isWorkspaceStopped;
     this.sessionApproval = approval;
     this.sessionBus = new CoreMessageBusAdapter(bus);
     this.initialization ??= createToolRegistry(
@@ -149,59 +167,79 @@ export class SessionToolCatalogOwner {
       bus,
       this.readTaskSchemaPolicy,
       this.readExecutionPolicy,
-      workspace.workspacePaths,
-      workspace.workspaceFiles,
-      workspace.workspaceIgnore,
-      workspace.workspaceScans,
+      paths,
+      files,
+      ignore,
+      scans,
       summarize,
-      workspace.workspaceLsp.diagnostics,
-      {
-        ...registration,
-        create: (
+      diagnostics,
+      this.bindTaskRegistration(
+        registration,
+        instructions,
+        createChildSettings,
+        readTaskPolicy,
+        readRunPolicy,
+        hookOwner,
+        trust,
+        telemetry,
+        requestInteractiveAuth,
+      ),
+      readMcpInstructions,
+      false,
+      profiles,
+      subagents,
+      ide,
+      trust,
+      this.githubReports,
+      this.imageOperation,
+      telemetry,
+      this.requestFetch,
+    ).then(({ registry, allPotentialTools }) =>
+      this.publishRegistry(registry, allPotentialTools, workspaceSelection),
+    );
+    return this.initialization;
+  }
+
+  private bindTaskRegistration(
+    registration: TaskToolRegistration,
+    instructions: InstructionReadOperations,
+    createChildSettings: () => SettingsService,
+    readTaskPolicy: () => TaskExecutionPolicy,
+    readRunPolicy: () => SubagentRunPolicy,
+    hookOwner: SessionHookOwner | undefined,
+    trust: WorkspaceTrustControlPort,
+    telemetry: RootTelemetry | undefined,
+    requestInteractiveAuth: InteractiveAuthPromptOperation | undefined,
+  ): TaskToolRegistration {
+    return {
+      ...registration,
+      create: (
+        config,
+        profiles,
+        subagents,
+        messageBus,
+        paths,
+        readMcpInstructions,
+      ) =>
+        registration.create(
           config,
           profiles,
           subagents,
           messageBus,
           paths,
           readMcpInstructions,
-        ) =>
-          registration.create(
-            config,
-            profiles,
-            subagents,
-            messageBus,
-            paths,
-            readMcpInstructions,
-            instructions,
-            createChildSettings,
-            readTaskPolicy,
-            readRunPolicy,
-            () => this.readGovernance(),
-            this.selection,
-            hookOwner,
-            workspace.trust,
-            telemetry,
-            requestInteractiveAuth,
-          ),
-      },
-      workspace.readInstructions,
-      false,
-      profiles,
-      subagents,
-      workspace.ide,
-      workspace.trust,
-      this.githubReports,
-      this.imageOperation,
-      telemetry,
-      this.requestFetch,
-    ).then(({ registry, allPotentialTools }) =>
-      this.publishRegistry(
-        registry,
-        allPotentialTools,
-        workspace.toolSelection,
-      ),
-    );
-    return this.initialization;
+          instructions,
+          createChildSettings,
+          readTaskPolicy,
+          readRunPolicy,
+          () => this.readGovernance(),
+          this.selection,
+          hookOwner,
+          trust,
+          telemetry,
+          requestInteractiveAuth,
+        ),
+    };
   }
 
   private publishRegistry(
@@ -224,7 +262,7 @@ export class SessionToolCatalogOwner {
   initializeInherited(
     selection: ToolSelection,
     bus: MessageBus,
-    trust?: McpRuntimeOwner['trust'],
+    trust?: WorkspaceTrustControlPort,
   ): Promise<void> {
     this.admission.assertOpen();
     this.initialization ??= Promise.resolve().then(() => {
@@ -384,4 +422,18 @@ export class SessionToolCatalogOwner {
       this.closed = true;
     }
   }
+}
+
+export function bindToolOutputSummary(
+  readClient: () => Parameters<typeof summarizeToolOutput>[1],
+  readUtilityModel: () => string | undefined,
+): NonNullable<Parameters<typeof createToolRegistry>[9]> {
+  return (content, signal, budget) =>
+    summarizeToolOutput(
+      content,
+      readClient(),
+      signal,
+      budget,
+      readUtilityModel(),
+    );
 }

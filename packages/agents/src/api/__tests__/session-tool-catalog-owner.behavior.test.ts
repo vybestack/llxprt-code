@@ -1,3 +1,7 @@
+import { SessionToolCatalogOwner } from '../../session/session-tool-catalog-owner.js';
+import { createTaskRegistration } from '../runtimeFactories.js';
+import { createMcpApprovalPolicy } from '@vybestack/llxprt-code-core/policy/mcp-approval.js';
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -46,6 +50,58 @@ function adopt(workspace: Awaited<ReturnType<typeof openWorkspace>>) {
 }
 
 describe('session executable tool ownership', () => {
+  it('publishes executable tooling from independent workspace ports', async () => {
+    const fixture = await openWorkspace();
+    const { config, settingsOwner, mcpRuntime } = fixture.built;
+    const catalog = new SessionToolCatalogOwner(
+      config,
+      () => settingsOwner.readRegistryPolicy([]),
+      () => settingsOwner.readToolExecutionPolicy(),
+    );
+    const policy = mcpRuntime.policyOwner.session;
+    const approval = createMcpApprovalPolicy(
+      { ...policy.decisions, ...policy.confirmation },
+      async () => undefined,
+      () => undefined,
+    );
+    try {
+      await catalog.initialize(
+        () => mcpRuntime.isStopped(),
+        mcpRuntime.workspacePaths,
+        mcpRuntime.workspaceFiles,
+        mcpRuntime.workspaceIgnore,
+        mcpRuntime.workspaceScans,
+        mcpRuntime.workspaceLsp.diagnostics,
+        mcpRuntime.ide,
+        mcpRuntime.trust,
+        mcpRuntime.toolSelection,
+        mcpRuntime.readInstructions,
+        policy.messageBus,
+        createTaskRegistration(),
+        undefined,
+        approval,
+        emptyInstructionReads,
+        () => settingsOwner.createChildStore(),
+        () => settingsOwner.readTaskPolicy(),
+        () => settingsOwner.readSubagentRunPolicy(),
+        mcpRuntime.profileDefinitions,
+        mcpRuntime.subagentDefinitions,
+        undefined,
+        settingsOwner.telemetry,
+      );
+      const read = catalog.selection.getTool('read_file');
+      if (read === undefined) throw new Error('Missing published reader');
+      const result = await read.buildAndExecute(
+        { absolute_path: join(fixture.directory, 'input.txt') },
+        new AbortController().signal,
+      );
+      expect(String(result.llmContent)).toContain('seven physical apples');
+    } finally {
+      await catalog.dispose();
+      await fixture.close();
+    }
+  });
+
   it('registers an argument-specific ShellTool allowlist without registering ReadFileTool', async () => {
     const workspace = await openWorkspace(['ShellTool(git status)']);
     const agent = await adopt(workspace);
