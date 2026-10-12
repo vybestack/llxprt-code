@@ -42,6 +42,15 @@ export class CarryProbeClient extends AgentClient {
     super(...args);
   }
 
+  // The session owner binds its real tokenizer to every client it creates;
+  // the probe substitutes the character-count tokenizer the fixture asserts on.
+  override bindTokenization(
+    ..._operations: Parameters<AgentClient['bindTokenization']>
+  ): void {
+    const tokenizer = accountingFactory((text) => text.length);
+    super.bindTokenization(tokenizer.getTokenizer, tokenizer);
+  }
+
   override getHistory(): AsyncGenerator<IContent, void, unknown> {
     throw new Error('Carried history array forbidden');
   }
@@ -161,7 +170,6 @@ export async function withAgentCarry<T>(
         },
       });
       const previous = agent.agentClient;
-      history.setTokenizerFactory(accountingFactory((text) => text.length));
       previous.storeHistoryServiceForReuse(history);
       const access = Object.assign(
         () => {
