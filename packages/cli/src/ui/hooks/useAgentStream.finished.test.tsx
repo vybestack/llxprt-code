@@ -200,7 +200,7 @@ describe('useAgentStream', () => {
   // Helper to create mock tool calls - reduces boilerplate
 
   // Helper to render hook with default parameters - reduces boilerplate
-  const renderHookWithDefaults = (
+  const renderHookWithDefaults = async (
     options: {
       shellModeActive?: boolean;
       onCancelSubmit?: (shouldRestorePrompt?: boolean) => void;
@@ -328,7 +328,7 @@ describe('useAgentStream', () => {
         })(),
       );
 
-      const { result } = renderHookWithDefaults();
+      const { result } = await renderHookWithDefaults();
 
       await act(async () => {
         await result.current.submitQuery('risky request');
@@ -362,7 +362,7 @@ describe('useAgentStream', () => {
         })(),
       );
 
-      const { result } = renderHookWithDefaults();
+      const { result } = await renderHookWithDefaults();
 
       await act(async () => {
         await result.current.submitQuery('normal request');
@@ -430,7 +430,7 @@ describe('useAgentStream', () => {
             })(),
           );
 
-          const { result } = renderHookWithDefaults();
+          const { result } = await renderHookWithDefaults();
 
           await act(async () => {
             await result.current.submitQuery('Test overflow');
@@ -547,7 +547,7 @@ describe('useAgentStream', () => {
         })(),
       );
 
-      const { result } = renderHookWithDefaults();
+      const { result } = await renderHookWithDefaults();
 
       await act(async () => {
         await result.current.submitQuery(`Test ${stopReason}`);

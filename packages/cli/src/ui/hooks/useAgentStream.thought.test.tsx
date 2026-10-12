@@ -298,7 +298,7 @@ describe('useAgentStream', () => {
       });
     });
 
-    it('should memoize pendingHistoryItems', () => {
+    it('should memoize pendingHistoryItems', async () => {
       mockUseReactToolScheduler.mockReturnValue([
         [],
         mockScheduleToolCalls,

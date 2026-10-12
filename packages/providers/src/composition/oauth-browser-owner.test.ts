@@ -266,11 +266,16 @@ describe('OAuth owner reads before registration', () => {
         if (!manager.isOAuthEnabled('codex'))
           await manager.toggleOAuthEnabled('codex');
       }
-      for (const manager of managers)
-        manager.bindInteractiveAuthHost(async (challenge) => {
-          challenges.push(challenge);
-          await new Promise<void>(() => {});
-        });
+      const started = managers.map(
+        (manager) =>
+          new Promise<void>((resolve) => {
+            manager.bindInteractiveAuthHost(async (challenge) => {
+              challenges.push(challenge);
+              resolve();
+              await new Promise<void>(() => {});
+            });
+          }),
+      );
       try {
         const first = managers[0]
           .getToken('codex', 'short')
@@ -278,6 +283,7 @@ describe('OAuth owner reads before registration', () => {
         const second = managers[1]
           .getToken('codex', 'long')
           .catch((error: unknown) => error);
+        await Promise.all(started);
         expect(
           await Promise.race([
             first,

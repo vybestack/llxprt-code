@@ -304,14 +304,9 @@ export class TokenAccessCoordinator {
     providerName: string,
     requestMetadata: OAuthTokenRequestMetadata | undefined,
   ): Promise<string | undefined> {
-    let bucketToUse: string | undefined;
-    await this.withBucketResolutionLock(providerName, async () => {
-      bucketToUse = await this.resolveBucketWithFailover(
-        providerName,
-        requestMetadata,
-      );
-    });
-    return bucketToUse;
+    return this.withBucketResolutionLock(providerName, () =>
+      this.resolveBucketWithFailover(providerName, requestMetadata),
+    );
   }
 
   /**
@@ -1025,7 +1020,7 @@ export class TokenAccessCoordinator {
       if (storedToken.access_token !== effectiveFailedToken) {
         return storedToken;
       }
-      const refreshedToken = await refreshStoredToken(
+      return await refreshStoredToken(
         providerName,
         storedToken,
         effectiveBucket,
@@ -1034,7 +1029,6 @@ export class TokenAccessCoordinator {
         this.proactiveRenewalManager,
         signal,
       );
-      return refreshedToken;
     } catch (refreshError) {
       if (signal) throw refreshError;
       rethrowIfStoreOutage(refreshError);
