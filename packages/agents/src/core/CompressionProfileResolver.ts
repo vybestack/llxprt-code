@@ -1,3 +1,5 @@
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { ProfileDefinitionReads } from '@vybestack/llxprt-code-core';
 import { applyProfileSettings } from '@vybestack/llxprt-code-settings';
 import type { PrepareProviderInvocation } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
@@ -460,6 +462,10 @@ export async function resolveLoadBalancedCompressionProvider(
   profile: LoadBalancerProfile,
   config: Config | undefined,
   profileManager: Pick<ProfileDefinitionReads, 'loadProfile'>,
+  mediaResolver: RequestMediaResolutionService | undefined,
+  requestMediaBudgetBytes: number | undefined,
+  providerFileBindings: ProviderFileBindingStore | undefined,
+  providerFileLifecycle: object | undefined,
 ): Promise<CompressionProviderResult> {
   const candidates = await buildCompressionLoadBalancerCandidates(
     ctx,
@@ -488,17 +494,17 @@ export async function resolveLoadBalancedCompressionProvider(
     candidates,
     initialIndex,
     interactionMode,
+    mediaResolver,
+    requestMediaBudgetBytes,
+    providerFileBindings,
+    providerFileLifecycle,
   );
   const runtimeId = `${ctx.providerRuntime.runtimeId}::compression-profile:${profileName}`;
-  const settings = new SettingsService();
-  settings.setCurrentProfileName(profileName);
-  settings.set('activeProvider', 'load-balancer');
-  settings.set('model', profile.model || provider.getDefaultModel());
-  for (const [key, value] of Object.entries(profile.ephemeralSettings)) {
-    if (value !== undefined) {
-      settings.set(key, value);
-    }
-  }
+  const settings = compressionLoadBalancerSettings(
+    profileName,
+    profile,
+    profile.model || provider.getDefaultModel(),
+  );
   const metadata = {
     ...(ctx.providerRuntime.metadata ?? {}),
     source: 'ChatSession.resolveCompressionProvider',
@@ -544,6 +550,10 @@ export async function resolveCompressionProvider(
   ctx: CompressionProfileResolverContext,
   profileName: string | undefined,
   resolveDefaultProvider: () => IProvider,
+  mediaResolver: RequestMediaResolutionService | undefined,
+  requestMediaBudgetBytes: number | undefined,
+  providerFileBindings: ProviderFileBindingStore | undefined,
+  providerFileLifecycle: object | undefined,
 ): Promise<CompressionProviderResult> {
   if (!profileName) {
     const runtime = ctx.providerRuntime;
@@ -582,6 +592,10 @@ export async function resolveCompressionProvider(
       profile,
       config,
       profileManager,
+      mediaResolver,
+      requestMediaBudgetBytes,
+      providerFileBindings,
+      providerFileLifecycle,
     );
   }
 
@@ -592,4 +606,21 @@ export async function resolveCompressionProvider(
     profileManager,
     config,
   );
+}
+
+function compressionLoadBalancerSettings(
+  profileName: string,
+  profile: LoadBalancerProfile,
+  model: string,
+): SettingsService {
+  const settings = new SettingsService();
+  settings.setCurrentProfileName(profileName);
+  settings.set('activeProvider', 'load-balancer');
+  settings.set('model', model);
+  for (const [key, value] of Object.entries(profile.ephemeralSettings)) {
+    if (value !== undefined) {
+      settings.set(key, value);
+    }
+  }
+  return settings;
 }

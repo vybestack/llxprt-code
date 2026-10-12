@@ -1,3 +1,5 @@
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -62,6 +64,10 @@ export class CompressionLoadBalancingProvider implements IProvider {
     private readonly candidates: readonly CompressionLoadBalancerCandidate[],
     initialIndex: number,
     private readonly interactionMode: CompressionInteractionMode,
+    private readonly mediaResolver: RequestMediaResolutionService | undefined,
+    private readonly requestMediaBudgetBytes: number | undefined,
+    private providerFileBindings: ProviderFileBindingStore | undefined,
+    private readonly providerFileLifecycle: object | undefined,
   ) {
     if (candidates.length === 0) {
       throw new Error('Load-balanced compression profile requires subprofiles');
@@ -158,11 +164,11 @@ export class CompressionLoadBalancingProvider implements IProvider {
     };
     yield* bindProviderMediaAndFiles(
       candidate.provider,
-      candidate.runtime.mediaResolver,
-      candidate.runtime.requestMediaBudgetBytes,
-      candidate.runtime.providerFileBindings,
-      candidate.runtime.providerFileLifecycle,
-      candidate.runtime.config?.getTargetDir(),
+      this.mediaResolver,
+      this.requestMediaBudgetBytes,
+      this.providerFileBindings,
+      this.providerFileLifecycle,
+      candidate.config?.getTargetDir(),
     ).generateChatCompletion(candidateOptions);
   }
 }

@@ -428,6 +428,7 @@ async function runInteractiveDirect(responses: readonly IContent[]): Promise<{
     fixturePaths(),
     () => undefined,
     emptyInstructionReads,
+    undefined,
     messageBus,
     undefined,
     OUTPUT_CONFIG,

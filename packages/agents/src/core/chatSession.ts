@@ -1,5 +1,11 @@
-import { completedToolResponseIds } from './chatSessionProviderRuntime.js';
 import {
+  chatResolvedBaseUrl,
+  tryReadActiveProvider,
+  supportsChatCompletion,
+  completedToolResponseIds,
+  cleanupChatSessionProviderFiles,
+  initialProviderBaseUrl,
+  resolveProviderBaseUrl,
   completedToolResponses,
   logChatInitialization,
 } from './chatSessionProviderRuntime.js';
@@ -99,13 +105,7 @@ import {
   createSemanticMediaPurgeSession,
   requiresObservedSemanticPurgeCacheWrite,
 } from './chatSessionMediaLifecycle.js';
-import {
-  cleanupChatSessionProviderFiles,
-  initialProviderBaseUrl,
-  resolveProviderBaseUrl,
-} from './chatSessionProviderRuntime.js';
 import { createCompressionHookTrigger } from './compressionHookWiring.js';
-import type { CompressionProfileResolverContext } from './CompressionProfileResolver.js';
 import { resolveCompressionProvider } from './CompressionProfileResolver.js';
 import { ConversationManager } from './ConversationManager.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
@@ -259,7 +259,10 @@ export class ChatSession {
     this.runtimeState = this.runtimeContext.state;
     this.historyService = this.runtimeContext.history;
     this.generationConfig = generationConfig;
-    this.semanticMediaPurge = this._createSemanticMediaPurgeSession();
+    this.semanticMediaPurge = createSemanticMediaPurgeSession(
+      this.runtimeContext,
+      this.historyService,
+    );
     this.systemPromptAssembler = systemPromptAssembler;
     // Carry the assembler onto the generation config so the three send seams
     // (TurnProcessor/StreamProcessor/DirectMessageProcessor) thread it onto
@@ -285,13 +288,7 @@ export class ChatSession {
     const resolveBaseUrl = (p: IProvider) =>
       resolveProviderBaseUrl(p, this.runtimeState.baseUrl);
 
-    this.compressionHandler = new CompressionHandler(
-      this.runtimeContext,
-      this.historyService,
-      this.generationConfig,
-      this.resolveCompressionProvider.bind(this),
-      createCompressionHookTrigger(triggerCompressionHook),
-    );
+    this.compressionHandler = this.createCompression(triggerCompressionHook);
 
     this.tokenUsageLogger = createTokenUsageLogger(this.runtimeContext);
     this.compressionHandler.tokenUsageLogger = this.tokenUsageLogger;
@@ -392,7 +389,10 @@ export class ChatSession {
       this.runtimeContext = runtimeContext;
       this.historyService = history;
       this.providerFileBindings = providerFileBindings;
-      this.compressionHandler.rebindHistory(runtimeContext);
+      this.compressionHandler.rebindHistory(
+        runtimeContext,
+        providerFileBindings,
+      );
       this.conversationManager.rebindHistory(runtimeContext);
       this.streamProcessor.rebindHistory(runtimeContext, providerFileBindings);
       this.turnProcessor.rebindHistory(runtimeContext, providerFileBindings);
@@ -402,10 +402,19 @@ export class ChatSession {
     };
   }
 
-  private _createSemanticMediaPurgeSession(): SemanticMediaPurgeSession {
-    return createSemanticMediaPurgeSession(
+  private createCompression(
+    triggerCompressionHook: typeof triggerPreCompressHook,
+  ): CompressionHandler {
+    return new CompressionHandler(
       this.runtimeContext,
       this.historyService,
+      this.mediaResolver,
+      this.requestMediaBudgetBytes,
+      this.providerFileBindings,
+      this.providerFileLifecycle,
+      this.generationConfig,
+      this.resolveCompressionProvider.bind(this),
+      createCompressionHookTrigger(triggerCompressionHook),
     );
   }
 
@@ -424,11 +433,9 @@ export class ChatSession {
   // ── Provider resolution (stays on coordinator) ───────────────────
 
   private getActiveProvider(): IProvider | undefined {
-    try {
-      return this.runtimeContext.provider.getActiveProvider();
-    } catch {
-      return undefined;
-    }
+    return tryReadActiveProvider(() =>
+      this.runtimeContext.provider.getActiveProvider(),
+    );
   }
 
   private lookupProviderByName(
@@ -530,37 +537,34 @@ export class ChatSession {
   }
 
   providerSupportsIContent(provider: IProvider | undefined): boolean {
-    if (!provider) return false;
-    return (
-      typeof (provider as { generateChatCompletion?: unknown })
-        .generateChatCompletion === 'function'
-    );
+    return supportsChatCompletion(provider);
   }
 
   // ── Compression profile resolution (delegated to CompressionProfileResolver) ──
-
-  private getCompressionProfileResolverContext(): CompressionProfileResolverContext {
-    return {
-      profileDefinitions: this.runtimeContext.profileDefinitions,
-      providerRuntime: this.runtimeContext.providerRuntime,
-      prepareProviderInvocation: this.runtimeContext.prepareProviderInvocation,
-      runtimeState: this.runtimeState,
-      resolveExplicitCompressionProvider:
-        this.resolveExplicitCompressionProvider.bind(this),
-      roundRobinIndexes: this.compressionLoadBalancerRoundRobinIndexes,
-    };
-  }
 
   private async resolveCompressionProvider(
     profileName: string | undefined,
   ): Promise<CompressionProviderResult> {
     return resolveCompressionProvider(
-      this.getCompressionProfileResolverContext(),
+      {
+        profileDefinitions: this.runtimeContext.profileDefinitions,
+        providerRuntime: this.runtimeContext.providerRuntime,
+        prepareProviderInvocation:
+          this.runtimeContext.prepareProviderInvocation,
+        runtimeState: this.runtimeState,
+        resolveExplicitCompressionProvider:
+          this.resolveExplicitCompressionProvider.bind(this),
+        roundRobinIndexes: this.compressionLoadBalancerRoundRobinIndexes,
+      },
       profileName,
       () =>
         this.resolveProviderForRuntime(
           'ChatSession.resolveCompressionProvider.default',
         ),
+      this.mediaResolver,
+      this.requestMediaBudgetBytes,
+      this.providerFileBindings,
+      this.providerFileLifecycle,
     );
   }
 
@@ -1021,14 +1025,10 @@ export class ChatSession {
    * mask the error being reported.
    */
   getResolvedBaseUrl(): string | undefined {
-    try {
-      const provider = this.resolveProviderForRuntime(
-        'ChatSession.getResolvedBaseUrl',
-      );
-      return resolveProviderBaseUrl(provider, this.runtimeState.baseUrl);
-    } catch {
-      return undefined;
-    }
+    return chatResolvedBaseUrl(
+      () => this.resolveProviderForRuntime('ChatSession.getResolvedBaseUrl'),
+      this.runtimeState.baseUrl,
+    );
   }
 
   /**

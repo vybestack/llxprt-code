@@ -118,6 +118,10 @@ describe('compression profile conversation identity', () => {
           },
           'compression-profile',
           () => provider,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
         );
         if (!resolved.invocation) throw new Error('Expected invocation');
         const outer = await sessionHeaders(resolved.invocation);

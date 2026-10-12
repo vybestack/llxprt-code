@@ -195,6 +195,10 @@ describe('Finding 1: provider fallback failure propagation through real Compress
     handler = new CompressionHandler(
       runtimeContext,
       historyService,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       {},
       vi.fn().mockResolvedValue(providerResult),
       vi.fn().mockResolvedValue(undefined),

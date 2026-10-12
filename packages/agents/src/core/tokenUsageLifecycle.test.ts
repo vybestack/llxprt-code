@@ -185,6 +185,10 @@ function buildCompressionHandler(logFile: string): {
   const handler = new CompressionHandler(
     view,
     historyService,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     {},
     providerResolver,
     hookTrigger,

@@ -34,7 +34,12 @@ import {
 async function captureCompressError(
   ctx: Parameters<MiddleOutStrategy['compress']>[0],
 ): Promise<unknown> {
-  const strategy = new MiddleOutStrategy();
+  const strategy = new MiddleOutStrategy(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+  );
   try {
     await strategy.compress(ctx);
     throw new Error('Expected compress() to throw but it did not');

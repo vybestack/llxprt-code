@@ -1,3 +1,5 @@
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -32,6 +34,7 @@ import {
 } from './compressionStrategyFactory.js';
 import { PendingContextWindowEnforcer } from './pendingContextWindowEnforcement.js';
 import { applyCompressionWithAnchor } from './cacheAnchor.js';
+import { selectCompressionSummary } from './utils.js';
 import { buildCompressionContext as buildContext } from './compressionContextBuilder.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { TokenUsageLogger } from '../core/TokenUsageLogger.js';
@@ -103,7 +106,21 @@ export class CompressionHandler {
 
   private logger = new DebugLogger('llxprt:gemini:compression');
 
-  rebindHistory(runtimeContext: AgentRuntimeContext): void {
+  private strategy(name: CompressionStrategyName) {
+    return getCompressionStrategy(
+      name,
+      this.mediaResolver,
+      this.requestMediaBudgetBytes,
+      this.providerFileBindings,
+      this.providerFileLifecycle,
+    );
+  }
+
+  rebindHistory(
+    runtimeContext: AgentRuntimeContext,
+    providerFileBindings: ProviderFileBindingStore | undefined,
+  ): void {
+    this.providerFileBindings = providerFileBindings;
     this.runtimeContext = runtimeContext;
     this.historyService = runtimeContext.history;
   }
@@ -111,6 +128,10 @@ export class CompressionHandler {
   constructor(
     private runtimeContext: AgentRuntimeContext,
     private historyService: HistoryService,
+    private readonly mediaResolver: RequestMediaResolutionService | undefined,
+    private readonly requestMediaBudgetBytes: number | undefined,
+    private providerFileBindings: ProviderFileBindingStore | undefined,
+    private readonly providerFileLifecycle: object | undefined,
     private readonly generationConfig: ModelGenerationSettings,
     private readonly providerResolver: (
       compressionProfileName: string | undefined,
@@ -149,7 +170,7 @@ export class CompressionHandler {
       const strategyName = parseCompressionStrategyName(
         this.runtimeContext.ephemerals.compressionStrategy(),
       );
-      const strategy = getCompressionStrategy(strategyName);
+      const strategy = this.strategy(strategyName);
 
       // REQ-HD-002.2: If strategy has no optimize method or trigger isn't continuous
       if (!strategy.optimize || strategy.trigger.mode !== 'continuous') {
@@ -706,23 +727,7 @@ export class CompressionHandler {
   static selectCompressionSummary(
     newHistory: readonly IContent[],
   ): IContent | undefined {
-    for (const entry of newHistory) {
-      if (entry.metadata?.reason === 'compression-state-snapshot') {
-        return entry;
-      }
-    }
-    for (const entry of newHistory) {
-      if (
-        entry.metadata?.isSummary === true ||
-        (entry.metadata?.synthetic === true &&
-          entry.blocks.some(
-            (b) => b.type === 'text' && b.text.includes('<state_snapshot>'),
-          ))
-      ) {
-        return entry;
-      }
-    }
-    return undefined;
+    return selectCompressionSummary(newHistory);
   }
 
   /**
@@ -791,7 +796,7 @@ export class CompressionHandler {
     );
 
     const attemptPrimary = async (): Promise<StrategyCompressionResult> => {
-      const strategy = getCompressionStrategy(configuredStrategyName);
+      const strategy = this.strategy(configuredStrategyName);
       return strategy.compress(context);
     };
 
@@ -889,7 +894,7 @@ export class CompressionHandler {
   private async runOneShotFallback(
     context: CompressionContext,
   ): Promise<StrategyCompressionResult> {
-    const oneShot = getCompressionStrategy('one-shot');
+    const oneShot = this.strategy('one-shot');
     return oneShot.compress(context);
   }
 
@@ -932,7 +937,7 @@ export class CompressionHandler {
   private async compressWithFallbackStrategy(
     context: CompressionContext,
   ): Promise<StrategyCompressionResult> {
-    const fallback = getCompressionStrategy('top-down-truncation');
+    const fallback = this.strategy('top-down-truncation');
     return fallback.compress(context);
   }
 

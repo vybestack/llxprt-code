@@ -217,6 +217,7 @@ describe('Mounted CLI child execution ownership', () => {
             _environment,
             readApproval,
             admitParameters,
+            lifecycle,
             hooks,
             signal,
           ) => {
@@ -242,6 +243,7 @@ describe('Mounted CLI child execution ownership', () => {
               async () => [],
               readApproval,
               admitParameters,
+              lifecycle,
               hooks,
               signal,
               {

@@ -259,6 +259,7 @@ export class SubagentOrchestrator {
             )
           : admitModelParameters(isolatedHandle.settingsService, providerName);
       },
+      isolatedHandle.providerFileLifecycle,
       isolatedHandle.sessionClient.hookOperations.execution({
         sessionId: () => runtimeResult.runtimeContext.state.sessionId,
         transcriptPath: () => undefined,

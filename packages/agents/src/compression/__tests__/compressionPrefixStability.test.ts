@@ -288,7 +288,12 @@ describe('A4: HistoryService cache-anchor contract (#3070 Defect B)', () => {
 
 describe('A1: preserved head never shrinks across successive compressions (#3070 Defect B)', () => {
   it('40 messages → head preserved after second compression with anchor', async () => {
-    const strategy = new MiddleOutStrategy();
+    const strategy = new MiddleOutStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
 
     // 40 plain human/ai messages (no tool calls → boundary adjustment is no-op)
     const baseHistory: IContent[] = [];
@@ -345,7 +350,12 @@ describe('A2: serialized head content never decreases across 5 append-compress c
   });
 
   const observeFiveCompressionCycles = async () => {
-    const strategy = new MiddleOutStrategy();
+    const strategy = new MiddleOutStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
 
     // Start with enough messages to compress
     const baseHistory: IContent[] = [];
@@ -408,7 +418,12 @@ describe('A5: anchor invariants (#3070 Defect B)', () => {
 
   const observeAnchorFloorHOLDSWhenAnUNMATCHEDToolCallSitsAtTheBoundary =
     async () => {
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       // Build history where an UNMATCHED tool_call sits at/near the anchor floor.
       // The anchor floor is set to the entry just before the unmatched tool_call,
@@ -472,7 +487,12 @@ describe('A5: anchor invariants (#3070 Defect B)', () => {
   });
 
   const observeKeepsAMatchedToolCallAndResponseOnTheSameSideOf = async () => {
-    const strategy = new MiddleOutStrategy();
+    const strategy = new MiddleOutStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
     const history: IContent[] = [
       humanMsg('h0'),
       aiTextMsg('a1'),
@@ -537,7 +557,12 @@ describe('A5: anchor invariants (#3070 Defect B)', () => {
 
   const observeAnchorThatWouldPushPastTheBottomSplitYieldsACleanStructural =
     async () => {
-      const strategy = new MiddleOutStrategy();
+      const strategy = new MiddleOutStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       const history: IContent[] = [];
       for (let i = 0; i < 10; i++) {

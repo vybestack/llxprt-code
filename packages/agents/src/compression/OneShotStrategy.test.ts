@@ -303,12 +303,22 @@ describe('OneShotStrategy', () => {
 
   describe('interface contract', () => {
     it('has name "one-shot"', () => {
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy.name).toBe('one-shot');
     });
 
     it('requiresLLM is true', () => {
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       expect(strategy.requiresLLM).toBe(true);
     });
   });
@@ -320,7 +330,12 @@ describe('OneShotStrategy', () => {
   describe('no compression needed', () => {
     it('returns empty history unchanged', async () => {
       const ctx = buildContext({ history: [] });
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const result = await strategy.compress(ctx);
 
       expect(result.kind).toBe('noop');
@@ -332,7 +347,12 @@ describe('OneShotStrategy', () => {
     it('returns history unchanged when too few messages to compress', async () => {
       const history = generateHistory(3);
       const ctx = buildContext({ history });
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const result = await strategy.compress(ctx);
 
       expect(result.kind).toBe('noop');
@@ -347,7 +367,12 @@ describe('OneShotStrategy', () => {
       // But 5 messages with 0.5 preserve = keep last 2-3, compress 2-3 → too few
       const history = generateHistory(5);
       const ctx = buildContext({ history, preserveThreshold: 0.5 });
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const result = await strategy.compress(ctx);
 
       // floor(5 * 0.5) = 2 messages to compress, which is < 4
@@ -365,7 +390,12 @@ describe('OneShotStrategy', () => {
       // 20 messages, preserveThreshold 0.2 → keep last 4, compress first 16
       const history = generateHistory(20);
       const ctx = buildContext({ history, preserveThreshold: 0.2 });
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const result = await strategy.compress(ctx);
 
       expect(result.metadata.llmCallMade).toBe(true);
@@ -397,7 +427,12 @@ describe('OneShotStrategy', () => {
     it('does not preserve any top messages (unlike middle-out)', async () => {
       const history = generateHistory(20);
       const ctx = buildContext({ history, preserveThreshold: 0.2 });
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const result = await strategy.compress(ctx);
 
       expect(result.metadata.topPreserved).toBe(0);
@@ -406,7 +441,12 @@ describe('OneShotStrategy', () => {
     it('compressed count is less than original', async () => {
       const history = generateHistory(20);
       const ctx = buildContext({ history });
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const result = await strategy.compress(ctx);
 
       expect(result.metadata.compressedMessageCount).toBeLessThan(
@@ -434,7 +474,12 @@ describe('OneShotStrategy', () => {
         },
       });
 
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       await strategy.compress(ctx);
 
       expect(capturedProfile).toBe('my-flash-profile');
@@ -453,7 +498,12 @@ describe('OneShotStrategy', () => {
         },
       });
 
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       await strategy.compress(ctx);
 
       expect(capturedProfile).toBeUndefined();
@@ -487,7 +537,12 @@ describe('OneShotStrategy', () => {
       // preserveThreshold = 0.2 → splitIndex = floor(12 * 0.8) = 9
       // That lands on the tool response — boundary adjustment should move it
       const ctx = buildContext({ history, preserveThreshold: 0.2 });
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const result = await strategy.compress(ctx);
 
       // Should still compress and produce valid result
@@ -514,7 +569,12 @@ describe('OneShotStrategy', () => {
         }),
       });
 
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       await expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
     });
 
@@ -530,7 +590,12 @@ describe('OneShotStrategy', () => {
         }),
       });
 
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       await expect(strategy.compress(ctx)).rejects.toThrow(
         CompressionExecutionError,
       );
@@ -545,7 +610,12 @@ describe('OneShotStrategy', () => {
     it('reports correct metadata fields', async () => {
       const history = generateHistory(20);
       const ctx = buildContext({ history });
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const result = await strategy.compress(ctx);
 
       expect(result.metadata.strategyUsed).toBe('one-shot');
@@ -575,7 +645,12 @@ describe('OneShotStrategy', () => {
           runtime: testProviderRuntime,
         }),
       });
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       await expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
       const capturedError = await strategy
@@ -599,7 +674,12 @@ describe('OneShotStrategy', () => {
           runtime: testProviderRuntime,
         }),
       });
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
 
       await expect(strategy.compress(ctx)).rejects.toThrow(EmptySummaryError);
       const capturedError = await strategy
@@ -674,7 +754,12 @@ describe('OneShotStrategy', () => {
           runtime: testProviderRuntime,
         }),
       });
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const result = await strategy.compress(ctx);
 
       expect(result.metadata.llmCallMade).toBe(true);
@@ -756,7 +841,12 @@ describe('OneShotStrategy', () => {
           runtime: testProviderRuntime,
         }),
       });
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const result = await strategy.compress(ctx);
 
       // The kept tail should retain the original media block since

@@ -59,7 +59,12 @@ describe('One-shot finish diagnostics', () => {
       }),
     });
 
-    const result = new OneShotStrategy().compress(context);
+    const result = new OneShotStrategy(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ).compress(context);
 
     await expect(result).rejects.toBeInstanceOf(EmptySummaryError);
     await expect(result).rejects.toMatchObject({

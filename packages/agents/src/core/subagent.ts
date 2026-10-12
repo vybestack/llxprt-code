@@ -152,6 +152,7 @@ export class SubAgentScope {
     private readonly workspacePaths: WorkspacePathOperations,
     private readonly readMcpInstructions: () => string | undefined,
     private readonly instructions: InstructionReadOperations,
+    private readonly providerFileLifecycle: object | undefined,
     private readonly messageBus?: MessageBus,
     private readonly toolConfig?: ToolConfig,
     private readonly outputConfig?: OutputConfig,
@@ -205,6 +206,7 @@ export class SubAgentScope {
     environmentContextLoader: EnvironmentContextLoader | undefined,
     readApprovalMode: (() => ApprovalMode) | undefined,
     admitModelParameters: (() => AdmittedModelParameters) | undefined,
+    providerFileLifecycle: object | undefined,
     hookOwner: HookExecutionOwner | undefined,
     parentSignal?: AbortSignal,
     dependencies: SubAgentDependencies = {},
@@ -254,6 +256,7 @@ export class SubAgentScope {
       workspacePaths,
       readMcpInstructions,
       instructions,
+      providerFileLifecycle,
       messageBus,
       toolConfig,
       outputConfig,
@@ -330,7 +333,7 @@ export class SubAgentScope {
         instructions: this.instructions,
         context,
       },
-      this.runtimeContext.providerRuntime.providerFileLifecycle,
+      this.providerFileLifecycle,
     );
     if (!chat) {
       this.output.terminate_reason = SubagentTerminateMode.ERROR;

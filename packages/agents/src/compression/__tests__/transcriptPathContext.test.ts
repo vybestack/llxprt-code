@@ -49,6 +49,10 @@ function makeHandler(historyService: HistoryService): CompressionHandler {
   return new CompressionHandler(
     runtimeContext,
     historyService,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     {},
     vi.fn().mockResolvedValue(providerResult),
     vi.fn().mockResolvedValue(undefined),

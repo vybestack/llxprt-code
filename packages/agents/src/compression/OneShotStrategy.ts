@@ -1,3 +1,5 @@
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -79,6 +81,13 @@ const MINIMUM_COMPRESS_MESSAGES = 4;
 // ---------------------------------------------------------------------------
 
 export class OneShotStrategy implements CompressionStrategy {
+  constructor(
+    private readonly mediaResolver: RequestMediaResolutionService | undefined,
+    private readonly requestMediaBudgetBytes: number | undefined,
+    private readonly providerFileBindings: ProviderFileBindingStore | undefined,
+    private readonly providerFileLifecycle: object | undefined,
+  ) {}
+
   readonly name = 'one-shot' as const;
   readonly requiresLLM = true;
   /** @plan PLAN-20260211-HIGHDENSITY.P03 @requirement REQ-HD-001.3 */
@@ -191,6 +200,10 @@ export class OneShotStrategy implements CompressionStrategy {
       provider,
       summary,
       context,
+      this.mediaResolver,
+      this.requestMediaBudgetBytes,
+      this.providerFileBindings,
+      this.providerFileLifecycle,
       resolvedRuntime,
       resolvedConfig,
       resolvedOptions,
@@ -307,10 +320,10 @@ export class OneShotStrategy implements CompressionStrategy {
   ): IProvider {
     return bindCompressionProvider(
       provider,
-      owner.mediaResolver,
-      owner.requestMediaBudgetBytes,
-      owner.providerFileBindings,
-      owner.providerFileLifecycle,
+      this.mediaResolver,
+      this.requestMediaBudgetBytes,
+      this.providerFileBindings,
+      this.providerFileLifecycle,
       owner.config?.getTargetDir(),
     );
   }

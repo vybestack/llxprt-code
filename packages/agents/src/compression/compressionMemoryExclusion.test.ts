@@ -324,7 +324,12 @@ describe('Compression memory exclusion (issue #3174)', () => {
         provider,
       });
 
-      const strategy = new OneShotStrategy();
+      const strategy = new OneShotStrategy(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
       const result = await strategy.compress(context);
 
       const request = captured[0];

@@ -468,6 +468,7 @@ export function scopeInputs(
   Parameters<typeof SubAgentScope.create>[18],
   Parameters<typeof SubAgentScope.create>[19],
   Parameters<typeof SubAgentScope.create>[20],
+  Parameters<typeof SubAgentScope.create>[21],
 ] {
   const runtime = inputs.runtimeBundle;
   return [
@@ -484,6 +485,7 @@ export function scopeInputs(
     inputs.environmentContextLoader,
     inputs.readApprovalMode,
     inputs.admitModelParameters,
+    undefined,
     inputs.hookOwner,
   ];
 }

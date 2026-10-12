@@ -116,3 +116,31 @@ export function completedToolResponseIds(
     .filter((id): id is string => typeof id === 'string' && id.length > 0);
   return responseCallIds;
 }
+
+export function chatResolvedBaseUrl(
+  resolveProvider: () => IProvider,
+  baseUrl: string | undefined,
+): string | undefined {
+  try {
+    return resolveProviderBaseUrl(resolveProvider(), baseUrl);
+  } catch {
+    return undefined;
+  }
+}
+
+export function tryReadActiveProvider(
+  readActive: () => IProvider,
+): IProvider | undefined {
+  try {
+    return readActive();
+  } catch {
+    return undefined;
+  }
+}
+
+export function supportsChatCompletion(
+  provider: IProvider | undefined,
+): boolean {
+  if (!provider) return false;
+  return typeof provider.generateChatCompletion === 'function';
+}

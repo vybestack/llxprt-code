@@ -117,6 +117,10 @@ function buildHandler(opts: {
   const handler = new CompressionHandler(
     runtimeContext,
     historyService,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     {},
     () => Promise.resolve(providerResult),
     () => Promise.resolve(undefined),

@@ -128,7 +128,12 @@ describe('MiddleOutStrategy media sanitization', () => {
             runtime: testProviderRuntime,
           }),
         });
-        const strategy = new MiddleOutStrategy();
+        const strategy = new MiddleOutStrategy(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
         const result = await strategy.compress(ctx);
 
         const allBlocks = capturedRequests.flatMap((m) => m.blocks);
@@ -233,7 +238,12 @@ describe('MiddleOutStrategy media sanitization', () => {
             runtime: testProviderRuntime,
           }),
         });
-        const strategy = new MiddleOutStrategy();
+        const strategy = new MiddleOutStrategy(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
         const result = await strategy.compress(ctx);
 
         const topCount = result.metadata.topPreserved!;
@@ -331,7 +341,12 @@ describe('MiddleOutStrategy media sanitization', () => {
             runtime: testProviderRuntime,
           }),
         });
-        const strategy = new MiddleOutStrategy();
+        const strategy = new MiddleOutStrategy(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
         const result = await strategy.compress(ctx);
 
         const allBlocks = capturedRequests.flatMap((m) => m.blocks);
@@ -424,7 +439,12 @@ describe('MiddleOutStrategy media sanitization', () => {
             runtime: testProviderRuntime,
           }),
         });
-        const strategy = new MiddleOutStrategy();
+        const strategy = new MiddleOutStrategy(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
         const result = await strategy.compress(ctx);
 
         const allBlocks = capturedRequests.flatMap((m) => m.blocks);
@@ -499,7 +519,12 @@ describe('MiddleOutStrategy media sanitization', () => {
             runtime: testProviderRuntime,
           }),
         });
-        const strategy = new MiddleOutStrategy();
+        const strategy = new MiddleOutStrategy(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
         const result = await strategy.compress(ctx);
 
         const allBlocks = capturedRequests.flatMap((m) => m.blocks);
@@ -566,7 +591,12 @@ describe('MiddleOutStrategy media sanitization', () => {
             runtime: testProviderRuntime,
           }),
         });
-        const strategy = new MiddleOutStrategy();
+        const strategy = new MiddleOutStrategy(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+        );
         const result = await strategy.compress(ctx);
 
         const topCount = result.metadata.topPreserved!;
