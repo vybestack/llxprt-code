@@ -90,6 +90,7 @@ import type {
   CommitWatermark,
   CompressionDetailPayload,
   DensityMutationPayload,
+  SessionRecordLine,
   SyntheticInsertPayload,
 } from '../../recording/types.js';
 import {
@@ -195,10 +196,21 @@ export interface HistoryPublicationScope {
   close(published: boolean): void;
 }
 
+/** Publications up to this many rows reach the mirrors directly, not through the pump. */
+const DIRECT_DELIVERY_LINE_LIMIT = 4;
+
 export class HistoryJournalStore {
   private binding: JournalBinding;
   private readonly fanout = new HistoryRecorderFanout();
   private readonly fanoutFeed = new HistoryFanoutFeed(this.fanout);
+  /**
+   * Rows admitted by the open publication, kept only while the publication is
+   * small enough to hand to the mirrors directly. Larger publications are
+   * re-read from the hidden primary by the pump, so nothing context-sized is
+   * retained.
+   */
+  private scopeLines: SessionRecordLine[] = [];
+  private scopeOverflow = false;
   private primaryOrigin: string | undefined;
   private publicationDepth = 0;
   private adoptionPending = false;
@@ -303,8 +315,15 @@ export class HistoryJournalStore {
     binding.rowCount = nextLength;
     binding.durableTail = current.durableTail;
     this.publicationOrdinals.admitted(line.seq);
-    if (this.fanout.active && this.publicationDepth === 0)
-      this.fanoutFeed.schedule(recorder, line.seq, 'feed');
+    if (!this.fanout.active) return;
+    if (this.publicationDepth === 0) {
+      if (this.fanoutFeed.idle) this.fanoutFeed.deliverNow(recorder, [line]);
+      else this.fanoutFeed.schedule(recorder, line.seq, 'feed');
+    } else if (this.scopeLines.length < DIRECT_DELIVERY_LINE_LIMIT) {
+      this.scopeLines.push(line);
+    } else {
+      this.scopeOverflow = true;
+    }
   }
 
   /**
@@ -320,15 +339,19 @@ export class HistoryJournalStore {
         if (closed) return;
         closed = true;
         this.publicationDepth--;
+        if (this.publicationDepth > 0) return;
+        const lines = this.scopeLines;
+        const overflow = this.scopeOverflow;
+        this.scopeLines = [];
+        this.scopeOverflow = false;
         const recorder = this.binding.recorder;
         const seq = this.binding.lastSeq;
-        if (
-          this.publicationDepth === 0 &&
-          this.fanout.active &&
-          recorder !== undefined &&
-          seq !== null
-        )
-          this.fanoutFeed.schedule(recorder, seq, published ? 'feed' : 'skip');
+        if (!this.fanout.active || recorder === undefined || seq === null)
+          return;
+        if (!published) this.fanoutFeed.schedule(recorder, seq, 'skip');
+        else if (!overflow && this.fanoutFeed.idle)
+          this.fanoutFeed.deliverNow(recorder, lines);
+        else this.fanoutFeed.schedule(recorder, seq, 'feed');
       },
     };
   }

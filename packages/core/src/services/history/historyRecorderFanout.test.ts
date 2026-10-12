@@ -164,6 +164,35 @@ describe('per-origin journal fan-out in the history store', () => {
     expect(fileB).not.toContain('a-turn');
   });
 
+  it('hands a published row to the mirror before any await', async () => {
+    const { service, ownerA, ownerB, b } = await shared();
+    await service.attachJournal(b, true, undefined, ownerB);
+    const before = b.getLastEnqueuedSequence();
+    service.add(row('b-turn'), undefined, ownerB);
+    expect(b.getLastEnqueuedSequence()).toBe(before + 1);
+    service.add(row('a-turn'), undefined, ownerA);
+    expect(b.getLastEnqueuedSequence()).toBe(before + 1);
+  });
+
+  it('keeps row order when a large batch is still being pumped to the mirror', async () => {
+    const { service, ownerB, b } = await shared();
+    await service.attachJournal(b, true, undefined, ownerB);
+    const batch = Array.from({ length: 12 }, (_, index) =>
+      row(`batch-${index}`),
+    );
+    const publishing = service.addBatch(batch, undefined, { origin: ownerB });
+    service.add(row('after-batch'), undefined, ownerB);
+    await publishing;
+    await service.waitForCommit();
+    const fileB = await recorded(b);
+    const positions = [
+      ...batch.map((_, index) => `batch-${index}`),
+      'after-batch',
+    ].map((text) => fileB.indexOf(text));
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect(positions).toStrictEqual([...positions].sort((x, y) => x - y));
+  });
+
   it('re-attaching an origin replaces only that binding', async () => {
     const { service, ownerA, ownerB, a, b } = await shared();
     await service.attachJournal(b, true, undefined, ownerB);

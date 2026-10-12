@@ -2,7 +2,10 @@
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
-import type { SessionEventType } from '../../recording/types.js';
+import type {
+  SessionEventType,
+  SessionRecordLine,
+} from '../../recording/types.js';
 import { acceptsHistoryOrigin } from './historyOriginId.js';
 
 interface FanoutBinding {
@@ -92,6 +95,7 @@ export class HistoryFanoutFeed {
   private primary: SessionRecordingService | undefined;
   private chain: Promise<void> = Promise.resolve();
   private failures: unknown[] = [];
+  private scheduled = 0;
 
   constructor(private readonly fanout: HistoryRecorderFanout) {}
 
@@ -101,11 +105,41 @@ export class HistoryFanoutFeed {
     this.cursor = cursor;
   }
 
+  /** True when no scheduled delivery is pending, so direct delivery keeps row order. */
+  get idle(): boolean {
+    return this.scheduled === 0;
+  }
+
+  /**
+   * Hand just-admitted rows straight to the mirrors, then move the cursor
+   * past them once the primary commits the last one. The caller checks
+   * {@link idle} first so row order is kept; direct delivery is what lets a
+   * small publication reach the mirrors as soon as it publishes, the way it
+   * reaches a sole recorder. A refusing mirror is reported through
+   * {@link settle}, like a pump failure.
+   */
+  deliverNow(
+    primary: SessionRecordingService,
+    lines: readonly Pick<SessionRecordLine, 'seq' | 'type' | 'payload'>[],
+  ): void {
+    const last = lines[lines.length - 1];
+    if (last === undefined) return;
+    for (const line of lines) {
+      try {
+        this.fanout.deliver(line.type, line.payload);
+      } catch (error) {
+        this.failures.push(error);
+      }
+    }
+    this.schedule(primary, last.seq, 'skip');
+  }
+
   schedule(
     primary: SessionRecordingService,
     seq: number,
     mode: 'feed' | 'skip',
   ): void {
+    this.scheduled++;
     this.chain = this.chain.then(async () => {
       try {
         if (primary !== this.primary)
@@ -118,6 +152,8 @@ export class HistoryFanoutFeed {
           await this.deliverRange(primary, start, byteOffset);
       } catch (error) {
         this.failures.push(error);
+      } finally {
+        this.scheduled--;
       }
     });
   }

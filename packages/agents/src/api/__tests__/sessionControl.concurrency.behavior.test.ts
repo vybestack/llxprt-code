@@ -577,12 +577,12 @@ describe('SessionControl concurrency: resume and stop', () => {
           [{ type: 'text', text: 'recorded turn alpha' }],
         ]);
 
-      // LAST-submitted op wins: stop ran AFTER resume fully committed, so the
-      // final state is cleanly DISABLED and the resumed lock is released.
-      // A non-serialized interleaving would leave recording enabled or a lock.
-      expect(control.getRecording().enabled).toBe(false);
-      expect(control.getRecording().path).toBeUndefined();
-      expect(remainingLockFiles(projectRoot)).toStrictEqual([]);
+        // LAST-submitted op wins: stop ran AFTER resume fully committed, so the
+        // final state is cleanly DISABLED and the resumed lock is released.
+        // A non-serialized interleaving would leave recording enabled or a lock.
+        expect(control.getRecording().enabled).toBe(false);
+        expect(control.getRecording().path).toBeUndefined();
+        expect(remainingLockFiles(projectRoot)).toStrictEqual([]);
 
         // Dispose after an already-clean teardown is a safe no-op.
         await expect(control.dispose()).resolves.toBeUndefined();
@@ -730,10 +730,20 @@ describe('SessionControl atomic resume', () => {
 describe('SessionControl checkpoints', () => {
   it('resumes a checkpoint through journal adoption and appends without eager client history', async () => {
     await withProjectRoot(async (projectRoot) => {
-      const config = buildFakeConfig(projectRoot);
+      const config = buildFakeConfig(
+        projectRoot,
+        projectRoot,
+        1024 * 1024,
+        'checkpoint-boot',
+      );
       const client = buildFakeClient([humanText('checkpoint prefix')]);
       const control = new SessionControl(
-        buildDeps(config, client.contract, 'checkpoint-boot'),
+        buildDeps(
+          config,
+          client.contract,
+          'checkpoint-boot',
+          config.getLocalMediaStore(),
+        ),
       );
       try {
         await control.setRecording({ enabled: true });
@@ -910,9 +920,7 @@ describe('SessionControl recording reattachment', () => {
       );
 
       await control.setRecording({ enabled: true });
-      const path = control.getRecording().path;
-      if (typeof path !== 'string') throw new Error('Missing recording file');
-      assertNotNull(path, 'Recording did not materialize');
+      expect(control.getRecording().enabled).toBe(true);
 
       // Now a HistoryService becomes available (as it would once the client's
       // chat materializes). No listener is attached yet (enable could not
@@ -933,6 +941,9 @@ describe('SessionControl recording reattachment', () => {
       // The previously-dead integration is now subscribed to the live history.
       liveHistory.add(humanText('journal after reattach'));
       await liveHistory.waitForCommit();
+      // The recording file only materializes once the first row is written.
+      const path = control.getRecording().path;
+      if (typeof path !== 'string') throw new Error('Missing recording file');
       expect(liveHistory.journalPath()).toBe(path);
       expect(readFileSync(path, 'utf8')).toContain('journal after reattach');
 

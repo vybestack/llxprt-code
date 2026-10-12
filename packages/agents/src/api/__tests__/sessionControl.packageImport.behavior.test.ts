@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FakeProvider } from '@vybestack/llxprt-code-providers';
@@ -66,6 +66,8 @@ async function withIsolatedAgent<T>(
   workingDir: string,
   fn: (agent: Agent) => Promise<T>,
 ): Promise<T> {
+  // The workspace filesystem owner requires the workspace root to exist.
+  mkdirSync(workingDir, { recursive: true });
   const { agent, cleanup } = await buildAgent('multi-turn-text.jsonl', {
     workingDir,
   });
