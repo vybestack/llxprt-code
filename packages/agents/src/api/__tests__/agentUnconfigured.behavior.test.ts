@@ -340,7 +340,9 @@ describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
     manager = makeUnconfiguredProviderManager();
     client = makeRecordingClient();
     deps = await makeDeps(manager, client);
-    agent = new AgentImpl(deps);
+    agent = new AgentImpl(deps, async () => {
+      throw new Error('Unexpected model selection');
+    });
   });
 
   afterEach(() => {

@@ -34,7 +34,7 @@ export interface AgentModelParametersControl {
 }
 
 export function assembleModelParameterControl(
-  readSettings: () => Pick<SettingsService, 'setProviderSetting'>,
+  writeProviderSetting: SettingsService['setProviderSetting'],
   readProvider: () => string | undefined,
   readParameters: () => Record<string, unknown>,
   assertAdmission: () => void,
@@ -42,12 +42,21 @@ export function assembleModelParameterControl(
   return {
     set: (key, value) => {
       assertAdmission();
-      setActiveModelParam(key, value, readSettings(), readProvider());
+      setActiveModelParam(
+        key,
+        value,
+        { setProviderSetting: writeProviderSetting },
+        readProvider(),
+      );
       readParameters()[key] = value;
     },
     clear: (key) => {
       assertAdmission();
-      clearActiveModelParam(key, readSettings(), readProvider());
+      clearActiveModelParam(
+        key,
+        { setProviderSetting: writeProviderSetting },
+        readProvider(),
+      );
       delete readParameters()[key];
     },
   };

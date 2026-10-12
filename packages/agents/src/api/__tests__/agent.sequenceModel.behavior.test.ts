@@ -46,7 +46,7 @@ import { describe, it, expect } from 'bun:test';
 import * as fc from 'fast-check';
 import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
-import { buildAgent, type AgentDeps } from '../agentImpl.js';
+import { AgentImpl, type AgentDeps } from '../agentImpl.js';
 import { createLoopHolder } from '../loop/rebuildLoop.js';
 import { recordOwnership } from '../agentBootstrap.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -144,7 +144,9 @@ describe('getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P1
     try {
       const fakeClient = makeSeqClient('gpt-4o');
       const deps = assembleDeps(built, () => fakeClient);
-      const agent: Agent = buildAgent(deps);
+      const agent: Agent = new AgentImpl(deps, async () => {
+        throw new Error('Unexpected model selection');
+      });
       expect(agent.getCurrentSequenceModel()).toBe('gpt-4o');
     } finally {
       await built.cleanup();
@@ -156,7 +158,9 @@ describe('getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P1
     try {
       const fakeClient = makeSeqClient(null);
       const deps = assembleDeps(built, () => fakeClient);
-      const agent: Agent = buildAgent(deps);
+      const agent: Agent = new AgentImpl(deps, async () => {
+        throw new Error('Unexpected model selection');
+      });
       // Property: null-stability — repeated calls always return null (never
       // drift to undefined or a string). fc.integer drives the repetition count.
       await fc.assert(
@@ -175,7 +179,9 @@ describe('getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P1
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
       const deps = assembleDeps(built, () => undefined);
-      const agent: Agent = buildAgent(deps);
+      const agent: Agent = new AgentImpl(deps, async () => {
+        throw new Error('Unexpected model selection');
+      });
       expect(agent.getCurrentSequenceModel()).toBeNull();
     } finally {
       await built.cleanup();
@@ -187,7 +193,9 @@ describe('getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P1
     try {
       let current: AgentClientContract | undefined = makeSeqClient('gpt-4o');
       const deps = assembleDeps(built, () => current);
-      const agent: Agent = buildAgent(deps);
+      const agent: Agent = new AgentImpl(deps, async () => {
+        throw new Error('Unexpected model selection');
+      });
       // First call resolves the initial client.
       expect(agent.getCurrentSequenceModel()).toBe('gpt-4o');
       // Rebind: the closure now returns a DIFFERENT client on the SAME agent.
@@ -205,7 +213,9 @@ describe('getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P1
         fc.asyncProperty(fc.string({ minLength: 1 }), async (s) => {
           const fakeClient = makeSeqClient(s);
           const deps = assembleDeps(built, () => fakeClient);
-          const agent: Agent = buildAgent(deps);
+          const agent: Agent = new AgentImpl(deps, async () => {
+            throw new Error('Unexpected model selection');
+          });
           expect(agent.getCurrentSequenceModel()).toBe(s);
         }),
       );
@@ -246,11 +256,17 @@ describe('getCurrentSequenceModel delegation @plan:PLAN-20260621-COREAPIREMED.P1
     const fallbackProperty = fc.asyncProperty(
       fc.string({ minLength: 1 }),
       (reportedModel) => {
-        const presentAgent: Agent = buildAgent(
+        const presentAgent: Agent = new AgentImpl(
           assembleDeps(built, () => makeSeqClient(reportedModel)),
+          async () => {
+            throw new Error('Unexpected model selection');
+          },
         );
-        const absentAgent: Agent = buildAgent(
+        const absentAgent: Agent = new AgentImpl(
           assembleDeps(built, () => makeSeqClient(null)),
+          async () => {
+            throw new Error('Unexpected model selection');
+          },
         );
         const presentResult =
           presentAgent.getCurrentSequenceModel() ?? presentAgent.getModel();

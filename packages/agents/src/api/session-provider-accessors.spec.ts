@@ -23,7 +23,12 @@ import { SessionProviderReads } from './session-provider-reads.js';
 import { assembleSettingsControl } from './control/settings-control.js';
 function settingsControl(owner: SessionSettingsOwner) {
   return assembleSettingsControl(
-    () => owner,
+    owner.readNamedParameter.bind(owner),
+    owner.captureNamedParameters.bind(owner),
+    owner.writeUserParameter.bind(owner),
+    owner.readSessionOverride.bind(owner),
+    owner.writeSessionOverride.bind(owner),
+    owner.clearSessionOverride.bind(owner),
     () => {},
     () => {},
   );

@@ -15,42 +15,39 @@ export interface AgentSettingsControl {
 }
 
 export function assembleSettingsControl(
-  readOwner: () => Pick<
-    SessionSettingsOwner,
-    | 'readNamedParameter'
-    | 'captureNamedParameters'
-    | 'writeUserParameter'
-    | 'readSessionOverride'
-    | 'writeSessionOverride'
-    | 'clearSessionOverride'
-  >,
+  readNamedParameter: SessionSettingsOwner['readNamedParameter'],
+  captureNamedParameters: SessionSettingsOwner['captureNamedParameters'],
+  writeUserParameter: SessionSettingsOwner['writeUserParameter'],
+  readSessionOverride: SessionSettingsOwner['readSessionOverride'],
+  writeSessionOverride: SessionSettingsOwner['writeSessionOverride'],
+  clearSessionOverride: SessionSettingsOwner['clearSessionOverride'],
   assertReadAdmission: () => void,
   assertWriteAdmission: () => void,
 ): AgentSettingsControl {
   return {
     getEphemeralSetting: (key) => {
       assertReadAdmission();
-      return readOwner().readNamedParameter(key);
+      return readNamedParameter(key);
     },
     getEphemeralSettings: () => {
       assertReadAdmission();
-      return readOwner().captureNamedParameters();
+      return captureNamedParameters();
     },
     setEphemeralSetting: (key, value) => {
       assertWriteAdmission();
-      readOwner().writeUserParameter(key, value);
+      writeUserParameter(key, value);
     },
     getSessionSetting: (key) => {
       assertReadAdmission();
-      return readOwner().readSessionOverride(key);
+      return readSessionOverride(key);
     },
     setSessionSetting: (key, value) => {
       assertWriteAdmission();
-      readOwner().writeSessionOverride(key, value);
+      writeSessionOverride(key, value);
     },
     clearSessionSetting: (key) => {
       assertWriteAdmission();
-      readOwner().clearSessionOverride(key);
+      clearSessionOverride(key);
     },
   };
 }
