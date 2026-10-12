@@ -155,7 +155,7 @@ describe('ProviderManager behavioral tests', () => {
       const provider = new FakeProvider(filePath);
       const settingsService = new SettingsService();
       const config = createTestConfig(settingsService);
-      const manager = new ProviderManager({ settingsService, config });
+      const manager = new ProviderManager(settingsService, config);
       settingsService.set('activeProvider', 'fake');
       settingsService.setProviderSetting('fake', 'auth-key', 'test-key');
       manager.registerProvider(provider);
@@ -181,7 +181,7 @@ describe('ProviderManager behavioral tests', () => {
       const provider = new FakeProvider(filePath);
       const settingsService = new SettingsService();
       const config = createTestConfig(settingsService);
-      const manager = new ProviderManager({ settingsService, config });
+      const manager = new ProviderManager(settingsService, config);
       settingsService.setProviderSetting('fake', 'auth-key', 'test-key');
       manager.registerProvider(provider);
       manager.setActiveProvider('fake');
@@ -200,7 +200,7 @@ describe('ProviderManager behavioral tests', () => {
   it('hasActiveProvider returns false for fresh instance', () => {
     const settingsService = new SettingsService();
     const config = createTestConfig(settingsService);
-    const manager = new ProviderManager({ settingsService, config });
+    const manager = new ProviderManager(settingsService, config);
     expect(manager.hasActiveProvider()).toBe(false);
   });
 
@@ -219,7 +219,7 @@ describe('ProviderManager behavioral tests', () => {
       const provider = new FakeProvider(filePath);
       const settingsService = new SettingsService();
       const config = createTestConfig(settingsService);
-      const manager = new ProviderManager({ settingsService, config });
+      const manager = new ProviderManager(settingsService, config);
       settingsService.setProviderSetting('fake', 'auth-key', 'test-key');
       manager.registerProvider(provider);
       manager.setActiveProvider('fake');

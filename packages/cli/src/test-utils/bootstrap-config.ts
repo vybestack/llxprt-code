@@ -30,7 +30,12 @@ export function handoffCliConfig(
     const owner = overrides.sessionSettingsOwner;
     if (!owner) return config;
     owner.assertSettingsIdentity(store);
-    providerManager.setRuntimeContext({ config, settingsService: store });
+    providerManager.setRuntimeContext(
+      { config, settingsService: store },
+      owner,
+      store,
+      config,
+    );
     owner.initializeProviderSelection(config.getProvider(), config.getModel());
     const operation = await createOperation(store, owner);
     overrides.onProviderManagerReady?.(providerManager);

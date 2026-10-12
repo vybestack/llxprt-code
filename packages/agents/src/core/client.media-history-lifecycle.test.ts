@@ -283,11 +283,13 @@ describe('AgentClient (client.ts)', () => {
     });
     const selectedOwner = new SessionSettingsOwner(settingsService);
     selectedOwner.bindTelemetry(config);
-    const manager = new ProviderManager({
+    const manager = new ProviderManager(
       settingsService,
       config,
-      sessionSettings: selectedOwner,
-    });
+      undefined,
+      undefined,
+      selectedOwner,
+    );
     ownerManager = manager;
     configureProviderRuntimeFactories(config, manager);
     settingsService.set('activeProvider', 'gemini');

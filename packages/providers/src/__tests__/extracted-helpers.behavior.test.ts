@@ -332,39 +332,15 @@ describe('extracted provider helper behavior', () => {
 
   it('preserves logging option normalization and missing-config fail-fast behavior', () => {
     const settingsService = new SettingsService();
-    const config = Object.assign(
-      new Config({
-        sessionId: 'logging-policy',
-        targetDir: process.cwd(),
-        cwd: process.cwd(),
-        model: 'logging-model',
-        debugMode: false,
-      }),
-      {
-        getModel: () => '',
-        getUserMemory: () => '',
-        getTargetDir: () => process.cwd(),
-        getConversationLogPath: () => '',
-        getRedactionConfig: () => ({
-          redactApiKeys: false,
-          redactCredentials: false,
-          redactFilePaths: false,
-          redactUrls: false,
-          redactEmails: false,
-          redactPersonalInfo: false,
-        }),
-        getConversationLoggingEnabled: () => false,
-      },
-    );
     const normalized = normalizeChatCompletionOptions(
       [{ speaker: 'user', blocks: [{ type: 'text', text: 'hello' }] }],
       undefined,
       {
         providerName: 'provider-a',
         statelessRuntimeMetadata: { inherited: true },
-        runtimeContextResolver: () => ({
-          settingsService,
-          config,
+        readInvocationData: () => ({
+          globalSettings: settingsService.getAllGlobalSettings(),
+          providerSettings: settingsService.getProviderSettings('provider-a'),
           runtimeId: 'runtime-a',
           metadata: { runtime: true },
         }),

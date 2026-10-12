@@ -213,11 +213,13 @@ function createLoadBalancer(options: {
   const config = createRuntimeConfigStub(settingsService);
   const settingsOwner = new SessionSettingsOwner(settingsService);
   settingsOwner.bindTelemetry(config);
-  const providerManager = new ProviderManager({
+  const providerManager = new ProviderManager(
     settingsService,
     config,
-    sessionSettings: settingsOwner,
-  });
+    undefined,
+    undefined,
+    settingsOwner,
+  );
   ownedReleases.push(
     () => providerManager.dispose(),
     () => settingsOwner.dispose(),

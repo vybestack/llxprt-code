@@ -63,10 +63,10 @@ describe('#10 exact counts for all scenarios', () => {
       ),
       { metrics: wrapperSettings1.telemetry.localMetrics },
     );
-    wrapper.setRuntimeContextResolver(() => ({
+    wrapper.setInvocationDataReader(() => ({
       runtimeId: 'test',
-      settingsService: { getConfig: () => config } as never,
-      config,
+      globalSettings: {},
+      providerSettings: {},
       metadata: {},
     }));
     await consumeStream(
@@ -92,10 +92,10 @@ describe('#10 exact counts for all scenarios', () => {
       ),
       { metrics: wrapperSettings2.telemetry.localMetrics },
     );
-    wrapper.setRuntimeContextResolver(() => ({
+    wrapper.setInvocationDataReader(() => ({
       runtimeId: 'test',
-      settingsService: { getConfig: () => config } as never,
-      config,
+      globalSettings: {},
+      providerSettings: {},
       metadata: {},
     }));
     await expect(
@@ -126,10 +126,10 @@ describe('#10 exact counts for all scenarios', () => {
       ),
       { metrics: wrapperSettings3.telemetry.localMetrics },
     );
-    wrapper.setRuntimeContextResolver(() => ({
+    wrapper.setInvocationDataReader(() => ({
       runtimeId: 'test',
-      settingsService: { getConfig: () => config } as never,
-      config,
+      globalSettings: {},
+      providerSettings: {},
       metadata: {},
     }));
     const stream = wrapper.generateChatCompletion(
@@ -258,10 +258,10 @@ describe('LoggingProviderWrapper sync invocation timing (finding #5)', () => {
       ),
       { metrics: wrapperSettings4.telemetry.localMetrics },
     );
-    wrapper.setRuntimeContextResolver(() => ({
+    wrapper.setInvocationDataReader(() => ({
       runtimeId: 'test',
-      settingsService: { getConfig: () => config } as never,
-      config,
+      globalSettings: {},
+      providerSettings: {},
       metadata: {},
     }));
     await expect(
@@ -299,10 +299,10 @@ describe('LoggingProviderWrapper sync invocation timing (finding #5)', () => {
       ),
       { metrics: wrapperSettings5.telemetry.localMetrics },
     );
-    wrapper.setRuntimeContextResolver(() => ({
+    wrapper.setInvocationDataReader(() => ({
       runtimeId: 'test',
-      settingsService: { getConfig: () => config } as never,
-      config,
+      globalSettings: {},
+      providerSettings: {},
       metadata: {},
     }));
 

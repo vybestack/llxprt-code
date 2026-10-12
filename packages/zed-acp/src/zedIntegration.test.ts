@@ -209,10 +209,10 @@ describe('ZedAgent.newSession', () => {
       }) => {
         capturedOptions.push(options);
         capturedConfigs.push(options.config);
-        const providerManager = new ProviderManager({
-          config: options.config,
-          settingsService: options.settingsService,
-        });
+        const providerManager = new ProviderManager(
+          options.settingsService,
+          options.config,
+        );
         capturedManagers.push(providerManager);
         return {
           providerManager,
@@ -248,10 +248,7 @@ describe('ZedAgent.newSession', () => {
       baseConfig,
       connection as never,
       unusedProfileApplication,
-      new ProviderManager({
-        config: baseConfig,
-        settingsService,
-      }),
+      new ProviderManager(settingsService, baseConfig),
       () => new SettingsService({ sessionSource: settingsService }),
       undefined,
       definitionFixture(),

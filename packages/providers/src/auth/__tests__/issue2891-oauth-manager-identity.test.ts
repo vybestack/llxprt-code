@@ -55,12 +55,11 @@ describe('issue #2891: provider OAuth identity is owner-bound', () => {
     );
     try {
       const b = createProviderManager(
+        secondRoot.settingsService,
         { config: second, settingsService: secondRoot.settingsService },
-        {
-          credentialAuthority: new CredentialAuthority(),
-          config: second,
-          fileSystem: new NodeFileSystem(),
-        },
+        second,
+        new CredentialAuthority(),
+        new NodeFileSystem(),
       );
       const boundB = new BoundManagerExposingProvider(
         undefined,

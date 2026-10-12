@@ -26,7 +26,7 @@ describe('LoadBalancingProvider', () => {
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({ settingsService, config });
+    providerManager = new ProviderManager(settingsService, config);
   });
 
   afterEach(() => {
@@ -176,10 +176,10 @@ describe('LoadBalancingProvider', () => {
           getModel: () => undefined,
         },
       );
-      const localProviderManager = new ProviderManager({
+      const localProviderManager = new ProviderManager(
         settingsService,
-        config: configWithoutGlobalModel,
-      });
+        configWithoutGlobalModel,
+      );
       const provider = new LoadBalancingProvider(
         lbConfig,
         localProviderManager,

@@ -101,7 +101,7 @@ export interface ZedSessionProviderInputs {
   readonly credentialAuthority?: CredentialAuthority;
   readonly providerContributions?: ProviderContributionRegistry;
   readonly oauthSettings?: NonNullable<
-    Parameters<typeof createProviderManager>[1]['oauthSettings']
+    Parameters<typeof createProviderManager>[5]
   >;
 }
 
@@ -331,23 +331,17 @@ async function composeSessionProviderManager(
       'ACP provider construction requires a credential authority',
     );
   const { manager, oauthManager } = createProviderManager(
-    {
-      config,
-      settingsService,
-      runtimeId: sessionId,
-    },
-    {
-      config,
-      fileSystem: new NodeFileSystem(),
-      credentialAuthority: providerInputs.credentialAuthority,
-      runtimeMessageBus: policy.session.messageBus,
-      ...(providerInputs.oauthSettings === undefined
-        ? {}
-        : { oauthSettings: providerInputs.oauthSettings }),
-      ...(providerInputs.providerContributions === undefined
-        ? {}
-        : { providerContributions: providerInputs.providerContributions }),
-    },
+    settingsService,
+    { config, settingsService, runtimeId: sessionId },
+    config,
+    providerInputs.credentialAuthority,
+    new NodeFileSystem(),
+    providerInputs.oauthSettings,
+    policy.session.messageBus,
+    undefined,
+    undefined,
+    undefined,
+    providerInputs.providerContributions,
   );
   return { manager, oauthManager };
 }

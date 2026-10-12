@@ -149,13 +149,21 @@ describe('claudecode OAuth registration with environment key', () => {
       './providerManagerInstance.js'
     );
 
-    const { oauthManager } = createProviderManager(activeContext, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new NodeFileSystem(),
-      config: undefined,
-      allowBrowserEnvironment: false,
-    });
+    const { oauthManager } = createProviderManager(
+      activeContext.settingsService,
+      activeContext,
+      undefined,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      false,
+    );
 
     const registeredClaudecode =
       ensureOAuthProviderRegisteredMock.mock.calls.some(
@@ -225,13 +233,21 @@ describe('claudecode OAuth registration with environment key', () => {
       },
     } as unknown as Config;
 
-    createProviderManager(activeContext, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new NodeFileSystem(),
-      config: mockConfig,
-      allowBrowserEnvironment: false,
-    });
+    createProviderManager(
+      activeContext.settingsService,
+      activeContext,
+      mockConfig,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      false,
+    );
 
     // No alias may receive an API key while authOnly is on — not the alias
     // that happens to be registered first, and not the ones that declare
@@ -289,13 +305,21 @@ describe('claudecode OAuth registration with environment key', () => {
       },
     } as unknown as Config;
 
-    createProviderManager(activeContext, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new NodeFileSystem(),
-      config: mockConfig,
-      allowBrowserEnvironment: false,
-    });
+    createProviderManager(
+      activeContext.settingsService,
+      activeContext,
+      mockConfig,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      false,
+    );
 
     // Without authOnly, an alias still receives the key its own `apiKeyEnv`
     // names. The family below resolves its key ONLY from that alias-level
@@ -342,13 +366,21 @@ describe('claudecode OAuth registration with environment key', () => {
       './providerManagerInstance.js'
     );
 
-    const { oauthManager } = createProviderManager(activeContext, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new NodeFileSystem(),
-      config: undefined,
-      allowBrowserEnvironment: false,
-    });
+    const { oauthManager } = createProviderManager(
+      activeContext.settingsService,
+      activeContext,
+      undefined,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      false,
+    );
 
     expect(openaiCtor).toHaveBeenCalled();
     expect(openaivercelCtor).toHaveBeenCalled();

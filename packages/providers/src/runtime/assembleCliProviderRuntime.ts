@@ -155,7 +155,6 @@ export function assembleCliProviderRuntime(
     if (input.registration && config) undoAdoption = registration.adopt(config);
     if (config !== undefined) input.settingsOwner?.bindTelemetry(config);
     const runtime = {
-      sessionSettings: input.settingsOwner,
       settingsService,
       config,
       runtimeId,
@@ -165,12 +164,10 @@ export function assembleCliProviderRuntime(
     } as ProviderRuntimeContext;
 
     const runtimeMessageBus = registration.messageBus;
-    if (
-      input.oauthManager !== undefined &&
-      input.oauthManager.runtimeMessageBus !== runtimeMessageBus
-    )
-      throw new Error(
-        'Supplied OAuth manager belongs to a different runtime message bus',
+    if (input.oauthManager !== undefined)
+      assertOAuthMessageBus(
+        input.oauthManager.runtimeMessageBus,
+        runtimeMessageBus,
       );
     policyOwner = bindCliPolicy(config, input.trustPort, registration);
 
@@ -185,31 +182,32 @@ export function assembleCliProviderRuntime(
 
     // 3. Construct the ProviderManager + OAuthManager on that bus.
     const borrowedManager = input.registration?.providerManager;
-    const { manager: providerManager, oauthManager } =
+    const { manager, oauthManager } =
       borrowedManager === undefined
-        ? createProviderManager(runtime, {
-            fileSystem: new NodeFileSystem(),
-            credentialAuthority: input.credentialAuthority,
-            config: runtime.config,
+        ? createProviderManager(
+            runtime.settingsService,
+            runtime,
+            config,
+            input.credentialAuthority,
+            new NodeFileSystem(),
+            resolvedOAuthSettings,
             runtimeMessageBus,
-            ...(resolvedOAuthSettings !== undefined
-              ? { oauthSettings: resolvedOAuthSettings }
-              : {}),
-            ...(providerContributions !== undefined
-              ? { providerContributions }
-              : {}),
-          })
+            undefined,
+            input.settingsOwner,
+            undefined,
+            providerContributions,
+          )
         : { manager: borrowedManager, oauthManager: input.oauthManager };
     if (borrowedManager !== undefined && config !== undefined)
-      bindFinalProviderOwner(providerManager, config, runtime);
+      bindOwner(manager, config, runtime, input.settingsOwner, settingsService);
 
-    registration.expectManager(providerManager);
+    registration.expectManager(manager);
 
     return {
       runtime,
       runtimeMessageBus,
       policyOwner,
-      providerManager,
+      providerManager: manager,
       oauthManager,
       registration,
     };
@@ -219,6 +217,16 @@ export function assembleCliProviderRuntime(
     if (!input.registration) registration.rollback();
     throw error;
   }
+}
+
+function assertOAuthMessageBus(
+  actual: MessageBus | undefined,
+  expected: MessageBus,
+): void {
+  if (actual !== expected)
+    throw new Error(
+      'Supplied OAuth manager belongs to a different runtime message bus',
+    );
 }
 
 function bindCliPolicy(
@@ -240,15 +248,17 @@ function bindCliPolicy(
   return owner;
 }
 
-function bindFinalProviderOwner(
+function bindOwner(
   manager: RuntimeProviderManager,
   config: Config,
   runtime: ProviderRuntimeContext,
+  settingsOwner: SessionSettingsOwner | undefined,
+  settingsService: SettingsService,
 ): void {
   if (!(manager instanceof ProviderManager))
     throw new Error('CLI provider runtime requires a ProviderManager owner');
   const selected =
-    runtime.settingsService.get('activeProvider') ?? config.getProvider();
+    settingsService.get('activeProvider') ?? config.getProvider();
   if (selected !== undefined) {
     if (typeof selected !== 'string')
       throw new TypeError('Active provider must be a string');
@@ -261,7 +271,7 @@ function bindFinalProviderOwner(
       );
     }
   }
-  manager.setRuntimeContext(runtime);
+  manager.setRuntimeContext(runtime, settingsOwner, settingsService, config);
   manager.setConfig(config);
   configureProviderRuntimeFactories(config, manager);
 }

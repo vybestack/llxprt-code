@@ -31,10 +31,7 @@ async function createFailingSession(config: Config, failure: Error) {
   const settingsService = new SettingsService();
   for (const [key, value] of Object.entries(config.getInitialSettings()))
     settingsService.set(key, value);
-  const manager = new ProviderManager({
-    config,
-    settingsService,
-  });
+  const manager = new ProviderManager(settingsService, config);
   const operation = await assembleAgentActivationBootstrap(
     config,
     settingsService,

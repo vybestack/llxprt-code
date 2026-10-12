@@ -67,12 +67,14 @@ export function createHeadlessProviderManager(
     metadata: { stage: 'headless' },
   };
 
-  const { manager, oauthManager } = createProviderManager(context, {
-    fileSystem: options.fileSystem ?? new NodeFileSystem(),
-    credentialAuthority:
-      options.credentialAuthority ??
+  const { manager, oauthManager } = createProviderManager(
+    context.settingsService,
+    context,
+    undefined,
+    options.credentialAuthority ??
       new HostCredentialOwner(process.env).authority,
-  });
+    options.fileSystem ?? new NodeFileSystem(),
+  );
 
   if (options.apiKey !== undefined) {
     settingsService.setProviderSetting(

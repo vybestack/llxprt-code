@@ -214,11 +214,16 @@ describe('explicit OAuth owner identity', () => {
     });
 
     await cli.oauthManager.getToken('owner-identity', 'bootstrap');
-    cli.providerManager.setRuntimeContext({
-      ...cli.runtime,
-      runtimeId: 'foreground-active',
-      runtimeKind: 'cli-interactive',
-    });
+    cli.providerManager.setRuntimeContext(
+      {
+        ...cli.runtime,
+        runtimeId: 'foreground-active',
+        runtimeKind: 'cli-interactive',
+      },
+      undefined,
+      isolated.settingsService,
+      isolated.config,
+    );
     await isolated.activate({
       runtimeId: 'unrelated',
       runtimeKind: 'subagent',

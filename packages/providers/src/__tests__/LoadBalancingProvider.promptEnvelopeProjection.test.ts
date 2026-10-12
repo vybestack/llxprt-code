@@ -186,12 +186,13 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(config, settingsService)
-        .settingsOwner,
+    providerManager = new ProviderManager(
       settingsService,
       config,
-    });
+      undefined,
+      undefined,
+      fixtureOwners.adopt(config, settingsService).settingsOwner,
+    );
   });
 
   it('forwards the peeked sub-profile delegate projection as an estimate-only envelope', async () => {

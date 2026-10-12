@@ -25,7 +25,7 @@ describe('ProviderManager Settings Separation', () => {
       targetDir: process.cwd(),
       settingsService,
     });
-    providerManager = new ProviderManager({ settingsService, config });
+    providerManager = new ProviderManager(settingsService, config);
   });
 
   const getSnapshot = (provider: string) =>

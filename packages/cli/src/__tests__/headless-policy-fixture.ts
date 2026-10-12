@@ -37,8 +37,11 @@ export function makeHeadlessConfig(sessionId: string): {
   settingsOwner.initializeProviderSelection('openai', PLACEHOLDER_MODEL);
   const credentialAuthority = new CredentialAuthority();
   const manager = new ProviderManager(
-    { config, settingsService },
+    settingsService,
+    config,
+    undefined,
     credentialAuthority,
+    settingsOwner,
   );
   manager.registerProvider(new OpenAIProvider(undefined));
   manager.setActiveProvider('openai');

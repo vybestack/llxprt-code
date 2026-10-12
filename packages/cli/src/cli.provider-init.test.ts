@@ -552,10 +552,7 @@ function createBootstrapManager(config: Config): {
   settingsService: SettingsService;
 } {
   const settingsService = new SettingsService();
-  const manager = new ProviderManager({
-    config,
-    settingsService,
-  });
+  const manager = new ProviderManager(settingsService, config);
   bootstrapManagers.push(manager);
   return { manager, settingsService };
 }

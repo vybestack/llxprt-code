@@ -19,15 +19,15 @@ describe('public provider-manager filesystem injection', () => {
     );
 
     const { manager } = createProviderManager(
+      new SettingsService(),
       {
         settingsService: new SettingsService(),
         runtimeId: 'filesystem-injection-test',
         metadata: { stage: 'test' },
       },
-      {
-        credentialAuthority: new CredentialAuthority(),
-        fileSystem,
-      },
+      undefined,
+      new CredentialAuthority(),
+      fileSystem,
     );
 
     expect(manager.getActiveProvider()?.name).toBe('anthropic');

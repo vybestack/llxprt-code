@@ -17,6 +17,7 @@ import {
   StubRedactor,
   createConfigStub,
   createRuntimeContext,
+  createSettingsOwner,
 } from './LoggingProviderWrapper.test-helpers.js';
 
 describe('LoggingProviderWrapper Enhanced Metrics', () => {
@@ -175,13 +176,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
         provider,
         new StubRedactor(),
         undefined,
-        () =>
-          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+        () => captureProviderRequestDiagnostics(config, settingsOwner),
       );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
       const runtime = createRuntimeContext(settings, config);
+      const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
         createProviderCallOptions({
@@ -213,13 +214,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
         provider,
         new StubRedactor(),
         undefined,
-        () =>
-          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+        () => captureProviderRequestDiagnostics(config, settingsOwner),
       );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
       const runtime = createRuntimeContext(settings, config);
+      const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
         createProviderCallOptions({
@@ -252,13 +253,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
         provider,
         new StubRedactor(),
         undefined,
-        () =>
-          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+        () => captureProviderRequestDiagnostics(config, settingsOwner),
       );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
       const runtime = createRuntimeContext(settings, config);
+      const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
         createProviderCallOptions({
@@ -292,13 +293,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
         provider,
         new StubRedactor(),
         undefined,
-        () =>
-          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+        () => captureProviderRequestDiagnostics(config, settingsOwner),
       );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
       const runtime = createRuntimeContext(settings, config);
+      const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
         createProviderCallOptions({
@@ -330,13 +331,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
         provider,
         new StubRedactor(),
         undefined,
-        () =>
-          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+        () => captureProviderRequestDiagnostics(config, settingsOwner),
       );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
       const runtime = createRuntimeContext(settings, config);
+      const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
         createProviderCallOptions({
@@ -368,13 +369,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
         provider,
         new StubRedactor(),
         undefined,
-        () =>
-          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+        () => captureProviderRequestDiagnostics(config, settingsOwner),
       );
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
       const runtime = createRuntimeContext(settings, config);
+      const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
         createProviderCallOptions({
@@ -412,13 +413,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
         provider,
         new StubRedactor(),
         undefined,
-        () =>
-          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+        () => captureProviderRequestDiagnostics(config, settingsOwner),
       );
 
       const settings = new SettingsService();
       const config = createConfigStub(false);
       const runtime = createRuntimeContext(settings, config);
+      const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
         createProviderCallOptions({
@@ -484,13 +485,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
         provider,
         new StubRedactor(),
         undefined,
-        () =>
-          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+        () => captureProviderRequestDiagnostics(config, settingsOwner),
       );
 
       const settings = new SettingsService();
       const config = createConfigStub(true); // Logging ENABLED → logResponseStream path
       const runtime = createRuntimeContext(settings, config);
+      const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
         createProviderCallOptions({
@@ -522,13 +523,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
         provider,
         new StubRedactor(),
         undefined,
-        () =>
-          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+        () => captureProviderRequestDiagnostics(config, settingsOwner),
       );
 
       const settings = new SettingsService();
       const config = createConfigStub(true); // Logging ENABLED → logResponseStream path
       const runtime = createRuntimeContext(settings, config);
+      const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
         createProviderCallOptions({
@@ -603,13 +604,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
         provider,
         new StubRedactor(),
         undefined,
-        () =>
-          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+        () => captureProviderRequestDiagnostics(config, settingsOwner),
       );
 
       const settings = new SettingsService();
       const config = createConfigStub(true); // Logging ENABLED → logResponseStream path
       const runtime = createRuntimeContext(settings, config);
+      const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
         createProviderCallOptions({
@@ -649,13 +650,13 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
         provider,
         new StubRedactor(),
         undefined,
-        () =>
-          captureProviderRequestDiagnostics(config, runtime.sessionSettings),
+        () => captureProviderRequestDiagnostics(config, settingsOwner),
       );
 
       const settings = new SettingsService();
       const config = createConfigStub(true);
       const runtime = createRuntimeContext(settings, config);
+      const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
         createProviderCallOptions({

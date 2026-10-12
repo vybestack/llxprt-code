@@ -317,15 +317,19 @@ export function registerProvidersOntoManager(
   if (source.credentialAuthority === undefined)
     throw new Error('Provider registration requires its credential authority');
   createProviderManager(
-    context as Parameters<typeof createProviderManager>[0],
-    {
-      fileSystem: new NodeFileSystem(),
-      credentialAuthority: source.credentialAuthority,
-      manager: isolatedManager,
-      config,
-      oauthSettings: createFileOAuthSettingsProvider(),
-      activateConfiguredProvider: false,
-    },
+    context.settingsService,
+    context,
+    config,
+    source.credentialAuthority,
+    new NodeFileSystem(),
+    createFileOAuthSettingsProvider(),
+    undefined,
     source.oauthManager,
+    undefined,
+    isolatedManager,
+    undefined,
+    undefined,
+    undefined,
+    false,
   );
 }

@@ -133,10 +133,13 @@ export function listProviders(): readonly ProviderInfo[] {
     runtimeId: 'static-discovery',
     metadata: { stage: 'static-discovery' },
   };
-  const { manager } = createProviderManager(context, {
-    fileSystem: new NodeFileSystem(),
-    credentialAuthority: new CredentialAuthority(),
-  });
+  const { manager } = createProviderManager(
+    context.settingsService,
+    context,
+    undefined,
+    new CredentialAuthority(),
+    new NodeFileSystem(),
+  );
   const names = manager.listProviders();
   return projectProviderInfos(names);
 }

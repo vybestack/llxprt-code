@@ -20,22 +20,7 @@ import type {
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { RuntimeSettingsState } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-
-/** Minimal RuntimeSettingsState for the runtime-context resolver in buildStack. */
-function stubRuntimeSettingsState(): RuntimeSettingsState {
-  return {
-    get: () => undefined,
-    set: () => {},
-    getProviderSettings: () => ({}),
-    setProviderSetting: () => {},
-    getAllGlobalSettings: () => ({}),
-    clear: () => {},
-    getSettings: () => Promise.resolve({}),
-    updateSettings: () => Promise.resolve(),
-  };
-}
 
 export function createConfig(loggingEnabled = false): Config {
   return new Config({
@@ -119,10 +104,10 @@ export function buildStack(
   const wrapper = new LoggingProviderWrapper(retry, config, undefined, () =>
     captureProviderRequestDiagnostics(config, wrapperSettings1),
   );
-  wrapper.setRuntimeContextResolver(() => ({
+  wrapper.setInvocationDataReader(() => ({
     runtimeId: 'test-exact',
-    settingsService: stubRuntimeSettingsState(),
-    config,
+    globalSettings: {},
+    providerSettings: {},
     metadata: {},
   }));
   return Object.assign(wrapper, {

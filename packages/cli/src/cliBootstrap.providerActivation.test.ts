@@ -72,9 +72,7 @@ function makeProviderManager(activeProviderName: string): {
   settingsService: SettingsService;
 } {
   const settingsService = new SettingsService();
-  const manager = new ProviderManager({
-    settingsService,
-  });
+  const manager = new ProviderManager(settingsService);
   managers.push(manager);
   return {
     providerManager: Object.assign(manager, {
@@ -88,9 +86,7 @@ function makeProviderManagerWithNoActive(): {
   settingsService: SettingsService;
 } {
   const settingsService = new SettingsService();
-  const manager = new ProviderManager({
-    settingsService,
-  });
+  const manager = new ProviderManager(settingsService);
   managers.push(manager);
   return { providerManager: manager, settingsService };
 }

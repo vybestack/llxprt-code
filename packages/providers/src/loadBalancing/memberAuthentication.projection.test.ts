@@ -43,12 +43,13 @@ function createProjectionFixture(
     config,
     runtimeId: 'projection-test',
   };
-  const manager = new ProviderManager({
-    sessionSettings: fixtureOwners.adopt(config, settings).settingsOwner,
-    settingsService: settings,
+  const manager = new ProviderManager(
+    settings,
     config,
     runtime,
-  });
+    undefined,
+    fixtureOwners.adopt(config, settings).settingsOwner,
+  );
   manager.bindProviderKeyStorage(keyStorage);
   const projections: GenerateChatOptions[] = [];
   let delegateRequests = 0;

@@ -144,12 +144,13 @@ describe('LoadBalancingProvider - provider-specific prompt rendering (issue #317
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(config, settingsService)
-        .settingsOwner,
+    providerManager = new ProviderManager(
       settingsService,
       config,
-    });
+      undefined,
+      undefined,
+      fixtureOwners.adopt(config, settingsService).settingsOwner,
+    );
   });
 
   it('round-robin: each candidate renders its own provider+model sentinel', async () => {

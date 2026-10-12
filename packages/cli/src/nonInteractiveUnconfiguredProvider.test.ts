@@ -126,6 +126,7 @@ function makeUnconfiguredConfig(outputFormat?: OutputFormat): {
   });
   const store = new SettingsService();
   const owner = new SessionSettingsOwner(store);
+  owner.bindTelemetry(config);
   ownedConfigs.push({ config, directory, owner });
   return {
     credentialAuthority: new CredentialAuthority(),
@@ -141,11 +142,11 @@ function configureProvider(
   runtimeSettings: { store: SettingsService; owner: SessionSettingsOwner },
 ): ProviderManager {
   const manager = new ProviderManager(
-    {
-      config,
-      settingsService: runtimeSettings.store,
-    },
+    runtimeSettings.store,
+    config,
+    undefined,
     credentialAuthority,
+    runtimeSettings.owner,
   );
   const provider: IProvider = {
     name,

@@ -29,6 +29,8 @@ describe('Profile Application timeout preservation (Issue #1049)', () => {
       debugMode: false,
     });
     const manager = new ProviderManager(
+      settings,
+      config,
       createProviderRuntimeContext({ settingsService: settings, config }),
     );
     manager.registerProvider(new OpenAIProvider('test-key'));

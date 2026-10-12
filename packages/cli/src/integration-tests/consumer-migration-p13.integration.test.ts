@@ -112,12 +112,21 @@ describe('CLI provider manager creation uses concrete providers', () => {
   it('returns a concrete ProviderManager from the providers package', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new NodeFileSystem(),
-      allowBrowserEnvironment: true,
-    });
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     // The manager must be an instance of the concrete ProviderManager class
     expect(manager).toBeInstanceOf(ProviderManager);
@@ -164,13 +173,21 @@ describe('CLI provider manager creation uses concrete providers', () => {
           settingsService,
           config: cfg,
         });
-        const { manager } = createProviderManager(rt, {
-          credentialAuthority: new CredentialAuthority(),
-
-          fileSystem: new NodeFileSystem(),
-          allowBrowserEnvironment: true,
-          config: cfg,
-        });
+        const { manager } = createProviderManager(
+          rt.settingsService,
+          rt,
+          cfg,
+          new CredentialAuthority(),
+          new NodeFileSystem(),
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          true,
+        );
 
         return {
           registeredProviderNames: manager.listProviders(),
@@ -238,12 +255,21 @@ describe('CLI provider manager creation uses concrete providers', () => {
   it('registers and switches active providers through CLI-created manager', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new NodeFileSystem(),
-      allowBrowserEnvironment: true,
-    });
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     const providerA = createTestProvider('provider-a', 'model-a');
     const providerB = createTestProvider('provider-b', 'model-b');
@@ -269,12 +295,21 @@ describe('CLI provider manager creation uses concrete providers', () => {
   it('ProviderContentGenerator constructs with CLI-created ProviderManager', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new NodeFileSystem(),
-      allowBrowserEnvironment: true,
-    });
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     // ProviderContentGenerator must be constructable using the
     // concrete ProviderManager from the providers package
@@ -296,12 +331,21 @@ describe('CLI provider manager creation uses concrete providers', () => {
   it('CLI-created ProviderManager satisfies core RuntimeProviderManager contract', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new NodeFileSystem(),
-      allowBrowserEnvironment: true,
-    });
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     // The concrete ProviderManager from providers must structurally satisfy
     // the core RuntimeProviderManager contract without a shim or adapter
@@ -340,12 +384,21 @@ describe('CLI provider manager creation uses concrete providers', () => {
   it('RuntimeContentGeneratorFactory wiring produces working ProviderContentGenerator', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new NodeFileSystem(),
-      allowBrowserEnvironment: true,
-    });
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     const testProvider = createTestProvider(
       'factory-provider',
@@ -553,12 +606,21 @@ describe('Provider-backed content generator path reachable through runtime', () 
   it('ContentGeneratorConfig constructs through the wired factory without manager data', async () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new NodeFileSystem(),
-      allowBrowserEnvironment: true,
-    });
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     // Register a provider so config wiring can proceed
     const testProvider = createTestProvider('test-provider', 'test-model');
@@ -615,12 +677,21 @@ describe('Provider-backed content generator path reachable through runtime', () 
   it('contentGeneratorFactory injection path produces a provider-backed generator', async () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new NodeFileSystem(),
-      allowBrowserEnvironment: true,
-    });
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     const testProvider = createTestProvider('test-provider', 'test-model');
     manager.registerProvider(testProvider);
@@ -692,12 +763,21 @@ describe('Provider-backed content generator path reachable through runtime', () 
 
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new NodeFileSystem(),
-      allowBrowserEnvironment: true,
-    });
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     const testProvider = createTestProvider('test-provider', 'test-model');
     manager.registerProvider(testProvider);

@@ -182,10 +182,10 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
     ).settingsOwner;
 
     // Set up runtime context resolver
-    wrapper.setRuntimeContextResolver(() => ({
+    wrapper.setInvocationDataReader(() => ({
       runtimeId: 'injected-runtime',
-      settingsService: settings,
-      config,
+      globalSettings: settings.getAllGlobalSettings(),
+      providerSettings: settings.getProviderSettings(provider.name),
       metadata: { injected: true, source: 'resolver' },
     }));
 

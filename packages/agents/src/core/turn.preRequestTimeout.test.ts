@@ -362,10 +362,7 @@ describe('Turn - first-response timeout (issue #2379)', () => {
     const { turn } = buildTurn(20);
     const settings = new SettingsService();
     const providerConfig = createRuntimeConfigStub(settings);
-    const providerManager = new ProviderManager({
-      settingsService: settings,
-      config: providerConfig,
-    });
+    const providerManager = new ProviderManager(settings, providerConfig);
     providerManager.getProviderByName = (name: string) =>
       name === 'delegate' ? delegate : undefined;
     let transports = 0;

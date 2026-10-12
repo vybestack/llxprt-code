@@ -15,12 +15,21 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 function createManager() {
   const settingsService = new SettingsService();
   const runtime = createProviderRuntimeContext({ settingsService });
-  const { manager } = createProviderManager(runtime, {
-    credentialAuthority: new CredentialAuthority(),
-
-    fileSystem: new NodeFileSystem(),
-    allowBrowserEnvironment: true,
-  });
+  const { manager } = createProviderManager(
+    runtime.settingsService,
+    runtime,
+    undefined,
+    new CredentialAuthority(),
+    new NodeFileSystem(),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    true,
+  );
   return manager;
 }
 

@@ -53,13 +53,22 @@ describe('logout ownership', () => {
       const handles: IsolatedRuntimeContextHandle[] = [];
       const build = (context: ReturnType<typeof ownerContext>) => {
         if (construction === 'composition') {
-          return createProviderManager(context, {
-            credentialAuthority: new CredentialAuthority(),
-
-            fileSystem: new NodeFileSystem(),
-            config: context.config,
-            activateConfiguredProvider: false,
-          });
+          return createProviderManager(
+            context.settingsService,
+            context,
+            context.config,
+            new CredentialAuthority(),
+            new NodeFileSystem(),
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            false,
+          );
         }
         const handle = createIsolatedRuntimeContext(
           {

@@ -95,12 +95,13 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(config, settingsService)
-        .settingsOwner,
+    providerManager = new ProviderManager(
       settingsService,
       config,
-    });
+      undefined,
+      undefined,
+      fixtureOwners.adopt(config, settingsService).settingsOwner,
+    );
   });
 
   describe('Aggregated Error When All Backends Fail', () => {

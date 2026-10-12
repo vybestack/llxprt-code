@@ -32,7 +32,7 @@ describe('LoadBalancingProvider — onStreamLiveness propagation (issue #2607 fi
   beforeEach(() => {
     settingsService = new SettingsService();
     const config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({ settingsService, config });
+    providerManager = new ProviderManager(settingsService, config);
   });
 
   it('onStreamLiveness invoked at the delegate reaches the original caller callback', async () => {

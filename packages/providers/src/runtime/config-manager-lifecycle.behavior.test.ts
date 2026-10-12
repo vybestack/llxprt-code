@@ -80,11 +80,13 @@ describe('Config-independent provider owner lifecycle', () => {
     await owner.startTelemetry(host);
     settings.set('model', 'test-model');
     settings.set('base-url', 'http://127.0.0.1:10');
-    const manager = new ProviderManager({
-      config: host,
-      settingsService: settings,
-      sessionSettings: owner,
-    });
+    const manager = new ProviderManager(
+      settings,
+      host,
+      undefined,
+      undefined,
+      owner,
+    );
     const provider = new CacheProvider();
     manager.registerProvider(provider);
     manager.setActiveProvider('cache-provider');
@@ -147,10 +149,7 @@ describe('Config-independent provider owner lifecycle', () => {
   it('keeps borrowed manager subscriptions usable after facade runtime cleanup', async () => {
     const settings = new SettingsService();
     const owner = config(settings);
-    const manager = new ProviderManager({
-      config: owner.config,
-      settingsService: settings,
-    });
+    const manager = new ProviderManager(settings, owner.config);
     const provider = new CacheProvider();
     manager.registerProvider(provider);
     manager.setActiveProvider(provider.name);
@@ -249,16 +248,20 @@ describe('Config-independent provider owner lifecycle', () => {
   it('invalidates only the active same-label owner caches and detaches the former settings store', async () => {
     const left = config(new SettingsService());
     const right = config(new SettingsService());
-    const a = new ProviderManager({
-      sessionSettings: left.settingsOwner,
-      settingsService: left.settingsService,
-      config: left.config,
-    });
-    const b = new ProviderManager({
-      sessionSettings: right.settingsOwner,
-      settingsService: right.settingsService,
-      config: right.config,
-    });
+    const a = new ProviderManager(
+      left.settingsService,
+      left.config,
+      undefined,
+      undefined,
+      left.settingsOwner,
+    );
+    const b = new ProviderManager(
+      right.settingsService,
+      right.config,
+      undefined,
+      undefined,
+      right.settingsOwner,
+    );
     const first = new CacheProvider();
     const second = new CacheProvider();
     a.registerProvider(first);
@@ -275,10 +278,12 @@ describe('Config-independent provider owner lifecycle', () => {
       a.setRuntimeContext(
         createProviderRuntimeContext({
           config: right.config,
-          sessionSettings: right.settingsOwner,
           settingsService: right.settingsService,
           runtimeId: 'rebound-owner',
         }),
+        right.settingsOwner,
+        right.settingsService,
+        right.config,
       );
       left.settingsService.set('auth-key', 'former-owner-key');
       expect(detached).toBe(first.clientRevision);
@@ -293,16 +298,20 @@ describe('Config-independent provider owner lifecycle', () => {
   it('rewraps only the telemetry owner and leaves sibling accounting untouched', async () => {
     const left = config(new SettingsService());
     const right = config(new SettingsService());
-    const a = new ProviderManager({
-      sessionSettings: left.settingsOwner,
-      settingsService: left.settingsService,
-      config: left.config,
-    });
-    const b = new ProviderManager({
-      sessionSettings: right.settingsOwner,
-      settingsService: right.settingsService,
-      config: right.config,
-    });
+    const a = new ProviderManager(
+      left.settingsService,
+      left.config,
+      undefined,
+      undefined,
+      left.settingsOwner,
+    );
+    const b = new ProviderManager(
+      right.settingsService,
+      right.config,
+      undefined,
+      undefined,
+      right.settingsOwner,
+    );
     a.registerProvider(new CacheProvider());
     b.registerProvider(new CacheProvider());
     a.setActiveProvider('cache-provider');

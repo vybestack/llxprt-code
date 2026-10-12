@@ -19,7 +19,7 @@ function setup(): {
 } {
   const settings = new SettingsService();
   const config = createRuntimeConfigStub(settings);
-  const manager = new ProviderManager({ settingsService: settings, config });
+  const manager = new ProviderManager(settings, config);
   const provider = new LoadBalancingProvider(
     {
       profileName: 'routing',

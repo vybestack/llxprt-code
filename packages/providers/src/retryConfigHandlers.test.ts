@@ -266,10 +266,7 @@ describe('owner-selected retry authentication over HTTP', () => {
 
   it('selects the member profile recovery instead of the parent callbacks over HTTP', async () => {
     const fixture = await owner();
-    const manager = new ProviderManager({
-      settingsService: fixture.settings,
-      config: fixture.config,
-    });
+    const manager = new ProviderManager(fixture.settings, fixture.config);
     manager.registerProvider(new OpenAIProvider(undefined));
     manager.setRetryOperationsFactory((_providerName, profileId) => ({
       handleAuthError: async () => {

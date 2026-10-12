@@ -46,12 +46,13 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
   beforeEach(() => {
     settingsService = new SettingsService();
     runtimeConfig = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({
-      sessionSettings: fixtureOwners.adopt(runtimeConfig, settingsService)
-        .settingsOwner,
+    providerManager = new ProviderManager(
       settingsService,
-      config: runtimeConfig,
-    });
+      runtimeConfig,
+      undefined,
+      undefined,
+      fixtureOwners.adopt(runtimeConfig, settingsService).settingsOwner,
+    );
     config = {
       profileName: 'test-lb',
       strategy: 'failover',

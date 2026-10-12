@@ -78,12 +78,13 @@ function createHarnessWithDumpContext(): Harness {
   settingsService.set('dumpcontext', 'on');
   const { config, runtimeContext } =
     createHarnessRuntimeContext(settingsService);
-  const manager = new ProviderManager({
-    sessionSettings: fixtureOwners.adopt(config, settingsService).settingsOwner,
+  const manager = new ProviderManager(
     settingsService,
     config,
-    runtime: runtimeContext,
-  });
+    runtimeContext,
+    undefined,
+    fixtureOwners.adopt(config, settingsService).settingsOwner,
+  );
   const provider = new HarnessProvider(config, settingsService);
   manager.registerProvider(provider);
   settingsService.set('activeProvider', provider.name);

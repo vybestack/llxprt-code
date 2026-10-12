@@ -63,19 +63,18 @@ describe('provider manager runtime OAuth MessageBus composition', () => {
 
     const { manager: explicitManager, oauthManager: explicitOAuthManager } =
       createProviderManager(
+        runtimeHandle.settingsService,
         {
           settingsService: runtimeHandle.settingsService,
           config: runtimeHandle.config,
           runtimeId: runtimeHandle.runtimeId,
           metadata: { source: 'phase-07-provider-test' },
         },
-        {
-          credentialAuthority: new CredentialAuthority(),
-
-          fileSystem: new NodeFileSystem(),
-          config: runtimeHandle.config,
-          runtimeMessageBus: sessionMessageBus,
-        },
+        runtimeHandle.config,
+        new CredentialAuthority(),
+        new NodeFileSystem(),
+        undefined,
+        sessionMessageBus,
       );
     const manager = explicitManager;
     const oauthManager = explicitOAuthManager;

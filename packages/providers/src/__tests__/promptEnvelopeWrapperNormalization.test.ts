@@ -135,7 +135,12 @@ function buildManagedWrapper(base: RecordingProvider): {
   const wrapper = new LoggingProviderWrapper(base, config, undefined, () =>
     captureProviderRequestDiagnostics(config, wrapperSettings1),
   );
-  wrapper.setRuntimeContextResolver(() => runtime);
+  wrapper.setInvocationDataReader((providerName) => ({
+    runtimeId: runtime.runtimeId,
+    metadata: runtime.metadata,
+    globalSettings: settings.getAllGlobalSettings(),
+    providerSettings: settings.getProviderSettings(providerName),
+  }));
   wrapper.setOptionsNormalizer((options) => ({
     ...options,
     metadata: { ...options.metadata, normalizerApplied: true },
@@ -244,9 +249,9 @@ describe('LoggingProviderWrapper projection normalization parity (issue #2817)',
     const normalize = vi.fn((options: GenerateChatOptions) => options);
     const options = { contents: [makeContent('Hello')] };
     const snapshot = structuredClone(options);
-    wrapper.setRuntimeContextResolver(() => ({
-      settingsService: settings,
-      config: buildConfigStub(),
+    wrapper.setInvocationDataReader(() => ({
+      globalSettings: settings.getAllGlobalSettings(),
+      providerSettings: settings.getProviderSettings(plain.name),
       runtimeId: 'plain-runtime',
       metadata: {},
     }));

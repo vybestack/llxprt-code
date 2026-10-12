@@ -312,10 +312,9 @@ describe('public Agent workspace definition lifetime', () => {
       },
     );
     const manager = new ProviderManager(
-      {
-        config: caller.config,
-        settingsService: caller.settingsService,
-      },
+      caller.settingsService,
+      caller.config,
+      undefined,
       new CredentialAuthority(),
     );
     manager.registerProvider(

@@ -138,12 +138,15 @@ export const createConfigStub = (loggingEnabled = false): Config =>
 export const createRuntimeContext = (
   settings: SettingsService,
   config: Config,
-): ProviderRuntimeContext & {
-  sessionSettings: ReturnType<typeof fixtureOwners.adopt>['settingsOwner'];
-} => ({
+): ProviderRuntimeContext => ({
   runtimeId: 'test-runtime',
   settingsService: settings,
   config,
-  sessionSettings: fixtureOwners.adopt(config, settings).settingsOwner,
   metadata: { source: 'LoggingProviderWrapper.test-helpers' },
 });
+
+export const createSettingsOwner = (
+  settings: SettingsService,
+  config: Config,
+): ReturnType<typeof fixtureOwners.adopt>['settingsOwner'] =>
+  fixtureOwners.adopt(config, settings).settingsOwner;

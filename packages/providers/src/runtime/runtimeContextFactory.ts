@@ -284,7 +284,6 @@ function buildActivateClosure(
       activationOptions?.runtimeKind ?? options.runtimeKind ?? 'agent';
 
     const scopedRuntime = createProviderRuntimeContext({
-      sessionSettings: options.settingsOwner,
       settingsService: resolvedSettingsService,
       config,
       providerFileLifecycle,
@@ -298,11 +297,14 @@ function buildActivateClosure(
         profileId ? { profileId } : undefined,
       ),
     );
-    providerManager.setRuntimeContext(scopedRuntime);
-
-    await Promise.resolve(
-      bindings.resetInfrastructure(state.currentRuntimeId, config),
+    providerManager.setRuntimeContext(
+      scopedRuntime,
+      options.settingsOwner,
+      resolvedSettingsService,
+      config,
     );
+
+    await bindings.resetInfrastructure(state.currentRuntimeId, config);
     await Promise.resolve(
       bindings.setRuntimeContext(resolvedSettingsService, config, {
         runtimeId: state.currentRuntimeId,
@@ -335,9 +337,7 @@ function buildActivateClosure(
         config,
       }),
     );
-    await Promise.resolve(
-      bindings.linkProviderManager(config, providerManager),
-    );
+    await bindings.linkProviderManager(config, providerManager);
   };
 }
 
@@ -542,7 +542,6 @@ function initialProviderContext(
   return createProviderRuntimeContext({
     settingsService,
     config: options.config,
-    sessionSettings: options.settingsOwner,
     providerFileLifecycle,
     runtimeId,
     runtimeKind: options.runtimeKind ?? 'agent',
@@ -558,11 +557,8 @@ export function createIsolatedRuntimeContext(
   const runtimeId = isolatedRuntimeId(options.runtimeId);
 
   const metadata = initialRuntimeMetadata(options.metadata);
-  const settingsOwner = adoptSessionSettings(
-    options.settingsOwner,
-    settingsService,
-  );
-  settingsOwner.bindTelemetry(options.config, options.borrowedTelemetry);
+  const owner = adoptSessionSettings(options.settingsOwner, settingsService);
+  owner.bindTelemetry(options.config, options.borrowedTelemetry);
   const providerFileLifecycle = createOwnerFileLifecycle(
     options.providerFileLifecycle,
   );
@@ -580,28 +576,31 @@ export function createIsolatedRuntimeContext(
   // @plan:PLAN-20260621-COREAPIREMED.P05 @requirement:REQ-005.2 @pseudocode lines 10-40
   // Adopt the caller-provided manager when supplied (mirrors the messageBus? adoption
   // at `options.messageBus ?? new MessageBus(...)`); otherwise construct a fresh one.
-  const providerManager =
+  const manager =
     options.providerManager ??
     new ProviderManager(
+      settingsService,
+      options.config,
       initialProviderContext(
-        { ...options, settingsOwner },
+        { ...options, settingsOwner: owner },
         settingsService,
         providerFileLifecycle,
         runtimeId,
         metadata,
       ),
       options.credentialAuthority,
+      owner,
     );
   const selectedFactories = configureProviderRuntimeFactories(
     options.config,
-    providerManager,
+    manager,
     options,
   );
   const { oauthManager, ownedAuth } = resolveOwnerOAuthManager(
     options,
     sessionMessageBus,
     options.config,
-    providerManager,
+    manager,
     state,
     settingsService,
   );
@@ -611,9 +610,9 @@ export function createIsolatedRuntimeContext(
     metadata,
     state,
     settingsService,
-    providerManager,
+    manager,
     oauthManager,
-    { ...options, settingsOwner },
+    { ...options, settingsOwner: owner },
     sessionMessageBus,
     providerFileLifecycle,
     ownedAuth,
@@ -626,13 +625,13 @@ export function createIsolatedRuntimeContext(
     metadata,
     settingsService,
     config: options.config,
-    providerManager,
+    providerManager: manager,
     oauthManager,
     providerFileLifecycle,
     activate,
-    settingsOwner,
+    settingsOwner: owner,
     cleanup: closeRuntimeOwners(
-      settingsOwner,
+      owner,
       cleanup,
       policyOwner,
       options.settingsOwner === undefined,

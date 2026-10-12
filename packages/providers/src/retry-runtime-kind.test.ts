@@ -43,7 +43,6 @@ describe('retry runtime kind', () => {
     const owner = createProviderRuntimeContext({
       settingsService: settings,
       config,
-      sessionSettings: root.settingsOwner,
       runtimeId: 'same-label',
       runtimeKind,
     });
@@ -134,7 +133,12 @@ describe('retry runtime kind', () => {
       readFailoverBuckets: options.readFailoverBuckets,
       readFailoverReasons: options.readFailoverReasons,
     }));
-    owner.providerManager.setRuntimeContext(runtime);
+    owner.providerManager.setRuntimeContext(
+      runtime,
+      root.settingsOwner,
+      root.settingsService,
+      config,
+    );
     owner.providerManager.registerProvider(provider);
     await owner.providerManager.setActiveProvider(provider.name);
     const fail = async (): Promise<string> => {
@@ -154,19 +158,29 @@ describe('retry runtime kind', () => {
     };
     try {
       expect(await fail()).toContain('interactive host session');
-      owner.providerManager.setRuntimeContext({
-        ...runtime,
-        runtimeId: 'activated-owner',
-        runtimeKind: 'cli-interactive',
-      });
+      owner.providerManager.setRuntimeContext(
+        {
+          ...runtime,
+          runtimeId: 'activated-owner',
+          runtimeKind: 'cli-interactive',
+        },
+        root.settingsOwner,
+        root.settingsService,
+        config,
+      );
       expect(await fail()).toContain(
         'auth dialog will open on your next message',
       );
-      owner.providerManager.setRuntimeContext({
-        ...runtime,
-        runtimeId: 'activated-owner',
-        runtimeKind: 'subagent',
-      });
+      owner.providerManager.setRuntimeContext(
+        {
+          ...runtime,
+          runtimeId: 'activated-owner',
+          runtimeKind: 'subagent',
+        },
+        root.settingsOwner,
+        root.settingsService,
+        config,
+      );
       expect(await fail()).toContain('interactive host session');
     } finally {
       owner.registration.dispose();

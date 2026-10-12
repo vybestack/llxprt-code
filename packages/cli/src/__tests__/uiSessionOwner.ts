@@ -211,11 +211,13 @@ async function assembleUiInfrastructure(
     undefined,
     config.getIdeMode(),
   );
-  const manager = new ProviderManager({
-    config,
-    sessionSettings: settings,
+  const manager = new ProviderManager(
     settingsService,
-  });
+    config,
+    undefined,
+    undefined,
+    settings,
+  );
   const media = createUiMedia();
   const filesystem = new WorkspaceFilesystemOwner({
     targetDir: process.cwd(),

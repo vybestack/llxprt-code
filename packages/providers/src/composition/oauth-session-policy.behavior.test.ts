@@ -28,12 +28,36 @@ describe('Composed OAuth session policy', () => {
       activateConfiguredProvider: false,
     };
     const first = createProviderManager(
+      firstStore,
       { config, settingsService: firstStore, runtimeId: 'same-label' },
-      options,
+      undefined,
+      options.credentialAuthority,
+      options.fileSystem,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      options.activateConfiguredProvider,
     );
     const second = createProviderManager(
+      secondStore,
       { config, settingsService: secondStore, runtimeId: 'same-label' },
-      options,
+      undefined,
+      options.credentialAuthority,
+      options.fileSystem,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      options.activateConfiguredProvider,
     );
     try {
       expect([
