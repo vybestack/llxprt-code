@@ -654,7 +654,9 @@ export class SubagentOrchestrator {
       // The child journal is opened before this runs; dispose it for any
       // assembly failure, including the pre-activation steps above the
       // isolated-runtime cleanup (#854 P05c).
-      return cleanupAfterFailure(error, () => params.childJournal.dispose());
+      await cleanupAfterFailure(error, () => params.childJournal.dispose());
+      // cleanupAfterFailure always rethrows; this satisfies control flow.
+      throw error;
     }
   }
 
