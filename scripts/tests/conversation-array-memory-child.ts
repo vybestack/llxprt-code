@@ -17,11 +17,27 @@ import {
 import { RowOwnership } from '../../packages/core/src/recording/rowOwnership.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 import {
-  conversationFor,
+  conversationWithOwners,
   forbidArrayRollback,
   gate,
-} from '../../packages/agents/src/core/conversation-array-test-helpers.js';
+} from '../../packages/agents/src/core/conversation-array-core-helpers.js';
+import { createModelToolFixture } from '../../packages/agents/src/core/__tests__/model-tool-fixture.js';
+import { SessionSettingsOwner } from '../../packages/core/src/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import type { ConversationManager } from '../../packages/agents/src/core/ConversationManager.js';
+
+// The probe runs outside the test runner, so it owns its telemetry and tool
+// roots and process exit releases them.
+const toolFixture = createModelToolFixture();
+
+function conversationFor(history: HistoryService): ConversationManager {
+  return conversationWithOwners(history, {
+    telemetryFor: (config) =>
+      new SessionSettingsOwner(new SettingsService()).bindTelemetry(config),
+    selectTools: toolFixture.select,
+  });
+}
 
 async function settled(): Promise<{ heap: number; external: number }> {
   await setImmediate();

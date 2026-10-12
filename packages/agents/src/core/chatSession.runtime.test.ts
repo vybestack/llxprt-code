@@ -126,13 +126,25 @@ function registerStubProvider(
 }
 
 function buildView(history: HistoryService) {
+  const { settingsOwner } = createSessionSettingsFixture(
+    config,
+    settingsService,
+  );
+  const state = createAgentRuntimeState({
+    runtimeId: 'runtime-test',
+    provider: 'stub',
+    model: config.getModel(),
+    sessionId: config.getSessionId(),
+  });
   return createAgentRuntimeContext({
-    state: createAgentRuntimeState({
-      runtimeId: 'runtime-test',
-      provider: 'stub',
-      model: config.getModel(),
-      sessionId: config.getSessionId(),
-    }),
+    prepareProviderInvocation: (name, parameters, signal) =>
+      settingsOwner.prepareProviderInvocation(
+        state.runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
+    state,
     history,
     settings: {
       compressionThreshold: 0.8,
@@ -142,10 +154,7 @@ function buildView(history: HistoryService) {
       'reasoning.includeInContext': true,
     },
     provider: createProviderAdapterFromManager(manager),
-    telemetry: createTelemetryAdapter(
-      config,
-      createSessionSettingsFixture(config).settingsOwner.telemetry,
-    ),
+    telemetry: createTelemetryAdapter(config, settingsOwner.telemetry),
     tools: createToolRegistryViewFromRegistry(modelTools()),
     providerRuntime: { ...providerRuntime },
   });
