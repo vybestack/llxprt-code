@@ -294,8 +294,6 @@ export async function createWorkload(
     mode === 'normal'
       ? new HistoryService({ recording })
       : new RetainingHistory({ recording });
-  history.setTokenizerFactory(tokenizerFactory);
-  history.setActiveTokenizationTarget(MODEL, 'openai-responses');
   const provider = new OpenAIResponsesProvider('test-key', baseURL);
   const runtime = workloadRuntime({
     config,
