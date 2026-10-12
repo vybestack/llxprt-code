@@ -13,6 +13,8 @@ export async function setClientTools(
   initialize: () => Promise<ChatSession>,
   todos: TodoContinuationService,
 ): Promise<void> {
+  if (toolRegistry === undefined && publicationDeclarations === undefined)
+    return;
   const toolsView =
     typeof chat?.getToolsView === 'function' ? chat.getToolsView() : undefined;
   const toolDeclarations: ToolDeclaration[] =
