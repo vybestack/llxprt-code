@@ -19,9 +19,9 @@ import {
   collectContents,
   isAsyncIterableContents,
 } from '../utils/collectContents.js';
-import { useRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
 
-const fixtureOwners = useRuntimeTestOwners();
+const fixtureOwners = installRuntimeTestOwners();
 
 function backend(name: string, providerName: string): LoadBalancerSubProfile {
   return {
