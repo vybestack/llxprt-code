@@ -239,7 +239,6 @@ describe('Runtime model parameter isolation', () => {
     };
 
     await assembleProfileApplication(
-      config,
       settingsService,
       providerManager,
       null,

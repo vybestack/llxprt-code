@@ -696,7 +696,6 @@ export async function finalizeConfig(
     sessionSettings,
   );
   const profileApplication = assembleProfileApplication(
-    input.config,
     getSettingsService(input),
     input.runtimeState.providerManager,
     input.runtimeState.oauthManager ?? null,

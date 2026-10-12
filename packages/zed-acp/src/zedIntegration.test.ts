@@ -333,7 +333,6 @@ describe('ZedAgent.authenticate credential cache', () => {
     const manager = built.providerManager;
 
     const application = actual.assembleProfileApplication(
-      config,
       built.settingsService,
       manager,
       null,

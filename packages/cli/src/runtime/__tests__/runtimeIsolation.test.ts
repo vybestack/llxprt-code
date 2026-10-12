@@ -201,7 +201,6 @@ describe('CLI runtime isolation', () => {
           },
         };
         await assembleProfileApplication(
-          runtimeA.handle.config,
           runtimeA.handle.settingsService,
           runtimeA.handle.providerManager,
           runtimeA.handle.oauthManager,
@@ -277,7 +276,6 @@ describe('CLI runtime isolation', () => {
             },
           };
           await assembleProfileApplication(
-            runtimeB.handle.config,
             runtimeB.handle.settingsService,
             runtimeB.handle.providerManager,
             runtimeB.handle.oauthManager,

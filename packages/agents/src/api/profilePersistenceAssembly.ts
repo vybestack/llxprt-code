@@ -1,5 +1,4 @@
 import { LoadBalancingProvider } from '@vybestack/llxprt-code-providers';
-import { getActiveModelParams } from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
 import {
   setActiveModel,
   assembleModelSelection,
@@ -16,6 +15,7 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProfileDefinitionWrites } from '@vybestack/llxprt-code-core';
 import {
   buildRuntimeProfileSnapshot,
+  captureProfileModelParams,
   saveProfileSnapshot,
   type ProfileSnapshotData,
 } from './profileSnapshot.js';
@@ -217,7 +217,11 @@ function assembleProfilePersistenceReads(
             ? storedModel
             : readModel() || null,
         profileName: settings.getCurrentProfileName(),
-        modelParams: getActiveModelParams(settings, providerName ?? undefined),
+        modelParams: providerName
+          ? captureProfileModelParams(
+              settings.getProviderSettings(providerName),
+            )
+          : {},
         ephemeralSettings: captureParameters(),
       };
     },

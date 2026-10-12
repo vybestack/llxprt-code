@@ -1,3 +1,7 @@
+import {
+  getProfileEphemeralSettings,
+  getProfileModelParams,
+} from './profile-application/profileAccessors.js';
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
  * @requirement:REQ-API-001
@@ -10,6 +14,7 @@ import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings/profiles/types.js';
 import {
   getProfilePersistableKeys,
+  getProviderConfigKeys,
   isInternalSettingKey,
 } from '@vybestack/llxprt-code-settings/settings/settingsRegistry.js';
 import type {
@@ -18,10 +23,9 @@ import type {
   LoadBalancerProfile,
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
-import { extractModelParams } from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 type ProfileOAuthWork = ReturnType<OAuthManager['createProfileOAuthWork']>;
-import type { ProfileApplicationResult } from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
+import type { ProfileApplicationResult } from './profileApplication.js';
 import type { LoadBalancingProviderConfig } from '@vybestack/llxprt-code-providers';
 
 type LoadBalancerProfileDetail = {
@@ -42,6 +46,18 @@ type LoadBalancerProfileWithDetails = LoadBalancerProfile & {
 
 function logger(): DebugLogger {
   return new DebugLogger('llxprt:runtime:settings');
+}
+
+export function captureProfileModelParams(
+  providerSettings: Record<string, unknown>,
+): Record<string, unknown> {
+  const reserved = getProviderConfigKeys();
+  return Object.fromEntries(
+    Object.entries(providerSettings).filter(
+      ([key, value]) =>
+        value !== undefined && value !== null && !reserved.includes(key),
+    ),
+  );
 }
 
 export interface ProfileSnapshotData {
@@ -214,7 +230,7 @@ export function buildRuntimeProfileSnapshot(
   }
 
   const modelParams = stripSensitiveModelParams(
-    extractModelParams(providerSettings) as ModelParams,
+    captureProfileModelParams(providerSettings) as ModelParams,
   );
 
   return {
@@ -618,8 +634,8 @@ async function resolveLoadBalancerProfileDetail(
       return { name: memberName, loadError: true };
     }
 
-    const ephemerals = memberProfile.ephemeralSettings;
-    const modelParams = memberProfile.modelParams;
+    const ephemerals = getProfileEphemeralSettings(memberProfile);
+    const modelParams = getProfileModelParams(memberProfile);
     return {
       name: memberName,
       provider: memberProfile.provider,

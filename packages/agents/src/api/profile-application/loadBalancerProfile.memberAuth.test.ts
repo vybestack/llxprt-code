@@ -14,12 +14,15 @@ import {
   type AuthConfig,
 } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { LoadBalancingProvider } from '../../LoadBalancingProvider.js';
-import { ProviderManager } from '../../ProviderManager.js';
-import type { GenerateChatOptions, IProvider } from '../../IProvider.js';
-import { createProviderKeyStorage } from '../../auth/proxy/credential-store-factory.js';
+import { LoadBalancingProvider } from '@vybestack/llxprt-code-providers';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import type {
+  GenerateChatOptions,
+  IProvider,
+} from '@vybestack/llxprt-code-providers';
+import { createProviderKeyStorage } from '../../../../providers/src/auth/proxy/credential-store-factory.js';
 import { resolveLoadBalancerSubProfile } from './loadBalancerProfile.js';
-import { resolveMemberAuthentication } from '../../loadBalancing/memberAuthentication.js';
+import { resolveMemberAuthentication } from '../../../../providers/src/loadBalancing/memberAuthentication.js';
 
 describe('resolveLoadBalancerSubProfile — member auth handling', () => {
   const tempDirs: string[] = [];

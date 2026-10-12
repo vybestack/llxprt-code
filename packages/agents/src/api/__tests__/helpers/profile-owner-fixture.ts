@@ -132,7 +132,6 @@ async function createProfileOwner(
     built.settingsOwner,
   );
   const application = assembleProfileApplication(
-    config,
     settings,
     manager,
     oauth,

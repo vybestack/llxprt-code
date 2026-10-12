@@ -41,7 +41,6 @@ async function openZed(label: string) {
   const manager = built.providerManager;
 
   const application = assembleProfileApplication(
-    config,
     built.settingsService,
     manager,
     null,

@@ -31,7 +31,6 @@ import {
   isCliStatelessProviderModeEnabledMock,
   createProviderKeyStorageMock,
   providerManagerStub,
-  configStub,
   mockProfileManager,
   resetProfileApplicationStubs,
   restoreGcpEnvVars,
@@ -53,7 +52,7 @@ void vi.mock('../index.js', () => ({
 }));
 
 const { applyProfileCascade, selectAvailableProvider } = await import(
-  '../profileApplication.js'
+  '../../../../agents/src/api/profileApplication.js'
 );
 
 async function applyProfileForTest(
@@ -67,7 +66,6 @@ async function applyProfileForTest(
     return await applyProfileCascade(
       profile,
       options,
-      configStub as never,
       settings,
       providerManagerStub as never,
       mockProfileManager as never,
@@ -77,6 +75,7 @@ async function applyProfileForTest(
         readEndpoint: () => owner.readSelectedEndpoint(),
         applyParameter: (key, value) => owner.writeUserParameter(key, value),
       },
+      (name) => createProviderKeyStorageMock().getKey(name),
     );
   } finally {
     await owner.dispose();

@@ -370,21 +370,17 @@ export class AgentImpl implements Agent {
     signal: AbortSignal,
   ) =>
     assembleProfileReplacement(
-      {
-        telemetry: this.deps.settingsOwner.telemetry,
-        loopHolder: this.deps.loopHolder,
-        toolSelection: this.deps.sessionClient.toolCatalog.selection,
-        readApprovalMode: () => this.getApprovalMode(),
-        readExecutionPolicy: () =>
-          this.deps.settingsOwner.readToolExecutionPolicy(),
-        getToolGovernance: () =>
-          this.deps.sessionClient.toolCatalog.readGovernance(),
-        config: this.deps.config,
-        messageBus: this.deps.messageBus,
-        resolveClient: this.deps.resolveClient,
-        approvalHandler: this.deps.approvalHandler,
-        displayCallbacks: this.deps.displayCallbacks,
-      },
+      this.deps.resolveClient,
+      this.deps.settingsOwner.telemetry,
+      this.deps.loopHolder,
+      this.deps.sessionClient.toolCatalog.selection,
+      () => this.getApprovalMode(),
+      () => this.deps.settingsOwner.readToolExecutionPolicy(),
+      () => this.deps.sessionClient.toolCatalog.readGovernance(),
+      this.deps.config,
+      this.deps.messageBus,
+      this.deps.approvalHandler,
+      this.deps.displayCallbacks,
       () => this.deps.sessionClient.prepareProfileClientReplacement(),
       () => this.activeRun,
     )(changed, signal);

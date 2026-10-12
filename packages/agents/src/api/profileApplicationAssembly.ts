@@ -1,3 +1,4 @@
+import { createProviderKeyStorage } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -13,7 +14,7 @@ import type {
 import type { Profile, SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProfileDefinitionReads } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { applyProfileCascade } from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
+import { applyProfileCascade } from './profileApplication.js';
 import {
   finishProfileApplication,
   type ProfileLoadOptions,
@@ -57,7 +58,6 @@ function assembleProfileParameterCommands(owner: SessionSettingsOwner): {
 type PreparedProfile = Awaited<ReturnType<typeof finishProfileApplication>>;
 
 export function assembleProfileApplication(
-  config: Config,
   settings: SettingsService,
   manager: RuntimeProviderManager,
   oauth: OAuthManager | null,
@@ -70,6 +70,7 @@ export function assembleProfileApplication(
   ) => Promise<PreparedProfileFacade | void> = async () => {},
   assertAdmission: () => void = () => {},
 ): AgentProfileApplication {
+  const keys = createProviderKeyStorage();
   let installed: PreparedProfile | undefined;
   return queueProfileApplications(
     profiles,
@@ -88,13 +89,13 @@ export function assembleProfileApplication(
         const application = await applyProfileCascade(
           profile,
           options,
-          config,
           settings,
           manager,
           profiles,
           switchProvider,
           assembleModelSelection(settingsOwner),
           assembleProfileParameterCommands(settingsOwner),
+          (name) => keys.getKey(name),
         );
         signal.throwIfAborted();
         prepared = await finishProfileApplication(
@@ -284,7 +285,6 @@ export function assembleAgentProfiles(
   return new ProfilesControl({
     getState: () => providerState,
     application: assembleProfileApplication(
-      config,
       settings,
       manager,
       oauth,
