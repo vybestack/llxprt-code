@@ -83,7 +83,12 @@ import { PolicyControl } from './control/policyControl.js';
 import { createTasksControl } from './control/tasksControl.js';
 import type { TasksControl } from './control/tasksControl.js';
 import type { SessionControl } from './control/sessionControl.js';
-import { assembleSessionControl } from './session-control-assembly.js';
+import {
+  assembleSessionControl,
+  idleClient,
+  initialProviderState,
+  resetIdleChat,
+} from './session-control-assembly.js';
 import {
   createRecordingExecution,
   currentRecordingPath,
@@ -279,7 +284,11 @@ export class AgentImpl implements Agent {
 
   constructor(private readonly deps: AgentDeps) {
     this.metrics = deps.settingsOwner.telemetry.localMetrics;
-    this.sessionClient = deps.sessionClient.operations;
+    this.sessionClient = idleClient(
+      deps.sessionClient.operations,
+      this.coordinator,
+      () => this.rebuild(),
+    );
     const reads = assembleProviderReads(
       deps.providerManager,
       () => this.getProviderStatus().provider,
@@ -310,18 +319,9 @@ export class AgentImpl implements Agent {
     // genuine live objects dispose() tears down (no second bus, no clones).
     this.messageBus = deps.messageBus;
 
-    const rs = deps.runtimeState;
-    this.providerState = {
-      provider: rs.provider,
-      model: rs.model,
-      modelParams: Object.assign(
-        Object.create(null) as Record<string, unknown>,
-        rs.modelParams ?? {},
-      ),
-      baseUrl: rs.baseUrl,
-    };
+    this.providerState = initialProviderState(deps.runtimeState);
     // @plan:PLAN-20260617-COREAPI.P18 @requirement:REQ-008
-    this.seedAuthState(rs.provider);
+    this.seedAuthState(deps.runtimeState.provider);
     // Shared mutable holders threaded from finalizeAgent.
     this.editorCallbacksHolder = deps.editorCallbacksHolder;
     this.tools = assembleAgentTools(deps, this.coordinator);
@@ -337,7 +337,7 @@ export class AgentImpl implements Agent {
       this.captureProfile,
       (changed, signal) => this.prepareReplacement(changed, signal),
       deps.mcpOperations.profileDefinitions,
-      () => this.coordinator.assertNoCommit(),
+      () => this.coordinator.assertIdle(),
     );
     this.auth = this.buildAuthControl();
     this.mcp = this.buildMcpControl();
@@ -898,11 +898,10 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-010
    */
   async resetChat(): Promise<void> {
-    if (this.session.getRecording().enabled) {
-      await this.session.clearHistory();
-      return;
-    }
-    await this.deps.resolveClient().resetChat();
+    this.assertProfileIdle();
+    await resetIdleChat(this.coordinator, this.session, () =>
+      this.deps.resolveClient().resetChat(),
+    );
   }
 
   /**
