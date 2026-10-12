@@ -13,15 +13,28 @@ import { OpenAIResponsesProvider } from '@vybestack/llxprt-code-providers';
 import { createRuntimeTokenizerFactory } from '@vybestack/llxprt-code-providers/composition/runtimeTokenizerFactory.js';
 import { withGpt56DiskSources } from '@vybestack/llxprt-code-providers/tokenizers/gpt56-disk-tokenizer-factory.js';
 import type { ChatSession, ChatSessionConfig } from '../../chatSession.js';
+import { ROW_BYTES } from './journal-retained-growth-plan.js';
+import { mixedText } from './journal-retained-growth-text.js';
 import {
   loggingChatSession,
   readLoggingChatStream,
 } from './chat-session-logging-fixture.js';
 
 const MODEL = 'gpt-5.6';
-const CONTEXT_LIMIT = 5_000;
+/**
+ * A turn adds about 2.3k tokens (user, reply, tool exchange). With the default
+ * 0.85 compression threshold this limit triggers compression about every 9
+ * turns, so the run compresses often without compressing on every send. Every
+ * send estimates the whole retained history, so a small limit also keeps the
+ * per-turn cost low.
+ */
+const CONTEXT_LIMIT = 30_000;
 const INSTRUCTIONS = 'Answer from the conversation history.';
-const RESPONSE_TEXT = `${'assistant reply '.repeat(40)}done`;
+
+/** The model reply for a given request number; distinct text per turn. */
+function responseText(request: number): string {
+  return mixedText(request * 2 + 1, ROW_BYTES);
+}
 
 export type WorkloadMode = 'normal' | 'trap' | 'release-trap';
 
@@ -72,13 +85,14 @@ function startProviderServer(): {
     async fetch(request): Promise<Response> {
       const body = await request.text();
       requests += 1;
+      const text = responseText(requests);
       const usage = {
         input_tokens: Math.ceil(Buffer.byteLength(body) / 4),
         output_tokens: 200,
         total_tokens: Math.ceil(Buffer.byteLength(body) / 4) + 200,
       };
       return new Response(
-        `data: ${JSON.stringify({ type: 'response.output_text.delta', delta: RESPONSE_TEXT })}\n\ndata: ${JSON.stringify({ type: 'response.completed', response: { id: `resp_${requests}`, status: 'completed', output: [], usage } })}\n\ndata: [DONE]\n\n`,
+        `data: ${JSON.stringify({ type: 'response.output_text.delta', delta: text })}\n\ndata: ${JSON.stringify({ type: 'response.completed', response: { id: `resp_${requests}`, status: 'completed', output: [], usage } })}\n\ndata: [DONE]\n\n`,
         { headers: { 'content-type': 'text/event-stream' } },
       );
     },
@@ -137,7 +151,7 @@ function turnMessage(turn: number): IContent {
     blocks: [
       {
         type: 'text',
-        text: `turn ${turn} question: ${`detail-${turn % 7} `.repeat(100)}`,
+        text: `turn ${turn} question: ${mixedText(turn * 2, ROW_BYTES)}`,
       },
     ],
   };
@@ -250,7 +264,7 @@ export async function createWorkload(
         { message: turnMessage(turn) },
         `retained-growth-${turn}`,
       );
-      if (output !== RESPONSE_TEXT)
+      if (output !== responseText(turn))
         throw new Error(`Turn ${turn} returned unexpected text`);
     },
     async dispose() {

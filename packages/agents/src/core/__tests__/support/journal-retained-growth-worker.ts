@@ -1,69 +1,75 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { gcAndSweep, heapSize } from 'bun:jsc';
 import { z } from 'zod';
+import { settledHeap } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import {
   createWorkload,
   type Workload,
   type WorkloadMode,
 } from './journal-retained-growth-workload.js';
 import {
+  CHECKPOINT_COUNT,
+  CHECKPOINT_SPACING_TURNS,
+  RELEASE_AFTER_CHECKPOINTS,
+} from './journal-retained-growth-plan.js';
+import {
+  CHECKPOINT_SAMPLE_EVERY_TURNS,
+  CONVERGENCE_WINDOWS,
+  CONVERGENCE_WINDOW_SAMPLES,
+  WARMUP_SAMPLE_EVERY_TURNS,
   WINDOW_SAMPLES,
   hasConverged,
   median,
 } from './journal-retained-growth-predicate.js';
 
 /**
- * The settled heap is sampled on the same schedule for the whole run: after
- * every SAMPLE_EVERY_TURNS turns. A full sweep drops jettisoned code blocks
- * and the heap then refills as they are recompiled, so a window that follows a
- * long unsampled stretch would read lower than one that does not. Sampling
- * identically in warm-up, baseline and checkpoints keeps the regimes equal.
- * A checkpoint is the median of its last WINDOW_SAMPLES samples. The window
- * spans 45 turns because a periodic transient drops the settled heap by 1 to 3
- * MB for about 10 turns and then refills it; a median over a window several
- * times longer than the transient ignores it.
+ * The settled heap is sampled only where a reading is used. A checkpoint (and
+ * the baseline) is the median of the WINDOW_SAMPLES samples taken
+ * CHECKPOINT_SAMPLE_EVERY_TURNS apart over the BLOCK_TURNS turns before it;
+ * nothing is sampled between blocks. The window spans 45 turns because a
+ * periodic transient drops the settled heap by 1 to 3 MB for about 10 turns
+ * and then refills it; a median over a window several times longer than the
+ * transient ignores it. Each reading is a full collection of a heap of about
+ * 170 MB, so reading only where a reading is used keeps the run inside the
+ * per-file budget.
  */
-const SAMPLE_EVERY_TURNS = 5;
+const BLOCK_TURNS = WINDOW_SAMPLES * CHECKPOINT_SAMPLE_EVERY_TURNS;
 /**
- * Two bounded structures keep filling long after startup, and a baseline taken
- * before they finish reads low against every checkpoint.
+ * The normal run warms up until the settled heap has converged. Two bounded
+ * structures keep filling after startup, and a baseline taken before they
+ * finish reads low against every checkpoint.
  * (1) Per-content measurements are a FIFO capped at DEFAULT_MAX_SENT_CALL_IDS
- * (2000) entries at about five contents per turn, so the cache fills for the
- * first ~400 to 500 turns (a creep of about 270 KB between turns 550 and 650).
- * (2) JavaScriptCore compiles and tiers up function code blocks lazily. A
- * 1,750-turn run of this workload (settled heap, median of 9 samples, every 50
- * turns) rose in discrete steps, the last of about 170 KB at turns 1050 to
- * 1100, and then stayed at 180.58 MB +/- 0.06 MB through turn 1750. Object
- * counts from heapStats were flat from turn 700 to 1700 (Object +100 per 500
- * turns, which is the bench's own sample list) and the heap snapshot growth
- * between turns 1200 and 1700 was code blocks (+119 KB) plus strings (+13 KB).
- * That is bounded compiler state and not per-turn retention. Warm-up therefore
- * runs to at least turn 1150, so the measured window starts after the last
- * step and sees the structures at their constant size.
+ * (2000) entries, filled a few entries per turn.
+ * (2) JavaScriptCore compiles and tiers up function code blocks lazily, in
+ * discrete bounded steps. Object counts from heapStats were flat afterwards
+ * and the heap snapshot growth between turns was code blocks and strings, so
+ * this is bounded compiler state and not per-turn retention.
+ * MIN_WARMUP_TURNS and MAX_WARMUP_TURNS bracket where the 4 KB-row workload
+ * converges (see heap-inventory.md).
  */
-const MIN_WARMUP_TURNS = 1150;
-const MAX_WARMUP_TURNS = 1250;
-/** Checkpoints sit at these distances after the converged baseline. */
-const CHECKPOINT_OFFSETS = [100, 200, 300, 400, 500, 600, 700, 800] as const;
-/** The release-trap lets go of its rows once this many checkpoints are taken. */
-const RELEASE_AFTER_CHECKPOINTS = 3;
-const SETTLE_ROUNDS = 6;
+const MIN_WARMUP_TURNS = 500;
+const MAX_WARMUP_TURNS = 650;
+/**
+ * The traps measure gross retention (many MB over the window), which dwarfs
+ * compiler warm-up steps of a few hundred KB, so they need no converged
+ * baseline. A short fixed warm-up gets past process startup. It must also get
+ * past the per-content measurement FIFO fill (about 500 turns): the release
+ * trap's final reading is compared with this baseline, and a baseline taken
+ * before the fill left about 950 KB of that fill in the final delta.
+ */
+const TRAP_WARMUP_TURNS = 550;
+/** Checkpoints sit at these distances after the baseline. */
+const CHECKPOINT_OFFSETS = Array.from(
+  { length: CHECKPOINT_COUNT },
+  (_, index) => (index + 1) * CHECKPOINT_SPACING_TURNS,
+);
 
 const modeSchema = z.enum(['normal', 'trap', 'release-trap']);
 
 interface Sample {
   readonly turn: number;
   readonly heapBytes: number;
-}
-
-async function settledHeap(): Promise<number> {
-  for (let round = 0; round < SETTLE_ROUNDS; round++) {
-    await Bun.sleep(0);
-    gcAndSweep();
-  }
-  return heapSize();
 }
 
 async function runTurn(
@@ -76,61 +82,29 @@ async function runTurn(
   tokenTotals.push(workload.history.getTotalTokens());
 }
 
-/** Runs one turn and, on the sampling schedule, samples the settled heap. */
-async function runSampledTurn(
+async function sampleSettled(
   workload: Workload,
   turn: number,
-  tokenTotals: number[],
-  samples: Sample[],
-): Promise<void> {
-  await runTurn(workload, turn, tokenTotals);
-  if (turn % SAMPLE_EVERY_TURNS !== 0) return;
+): Promise<Sample> {
   await workload.chat.waitForIdle();
   await workload.history.waitForCommit();
-  samples.push({ turn, heapBytes: await settledHeap() });
+  return { turn, heapBytes: await settledHeap() };
 }
 
-/** The window of WINDOW_SAMPLES samples ending at `endIndex`. */
-function windowEndingAt(samples: readonly Sample[], endIndex: number) {
-  const window = samples.slice(endIndex - WINDOW_SAMPLES + 1, endIndex + 1);
+/** Median of the settled samples taken in the block of turns ending at `turn`. */
+function windowOf(turn: number, samples: readonly Sample[]) {
   return {
-    turn: samples[endIndex].turn,
-    heapBytes: median(window.map((sample) => sample.heapBytes)),
-    readings: window.map((sample) => sample.heapBytes),
+    turn,
+    heapBytes: median(samples.map((sample) => sample.heapBytes)),
+    readings: samples.map((sample) => sample.heapBytes),
   };
 }
 
 /**
- * Warm-up runs until the settled heap has stopped moving. A fresh process
- * grows through startup, then drops sharply when startup garbage and code
- * blocks are collected, and measuring inside that settling hides or fakes
- * growth. Warm-up ends when hasConverged holds over the checkpoint-sized
- * median windows; the baseline is then the ordinary checkpoint window ending
- * there. A process that never settles fails the run. The trap workloads start
- * retaining only after this point, so every mode shares the same warm-up.
+ * Runs turns `from` to `through` and returns the checkpoint window ending at
+ * `through`. Only the last BLOCK_TURNS turns are sampled, every
+ * CHECKPOINT_SAMPLE_EVERY_TURNS, so the window holds exactly WINDOW_SAMPLES.
  */
-async function warmUp(
-  workload: Workload,
-  tokenTotals: number[],
-  samples: Sample[],
-) {
-  for (let turn = 1; turn <= MAX_WARMUP_TURNS; turn++) {
-    await runSampledTurn(workload, turn, tokenTotals, samples);
-    const sampledNow = turn % SAMPLE_EVERY_TURNS === 0;
-    const warmedPastCache = turn >= MIN_WARMUP_TURNS;
-    if (
-      sampledNow &&
-      warmedPastCache &&
-      hasConverged(samples.map((sample) => sample.heapBytes))
-    )
-      return windowEndingAt(samples, samples.length - 1);
-  }
-  throw new Error(
-    `Settled heap kept falling through ${MAX_WARMUP_TURNS} warm-up turns: ${samples.map((sample) => `${sample.turn}:${sample.heapBytes}`).join(' ')}`,
-  );
-}
-
-/** Runs turns up to `through` and returns the checkpoint window ending there. */
 async function runToCheckpoint(
   workload: Workload,
   from: number,
@@ -138,9 +112,58 @@ async function runToCheckpoint(
   tokenTotals: number[],
 ) {
   const samples: Sample[] = [];
-  for (let turn = from; turn <= through; turn++)
-    await runSampledTurn(workload, turn, tokenTotals, samples);
-  return windowEndingAt(samples, samples.length - 1);
+  for (let turn = from; turn <= through; turn++) {
+    await runTurn(workload, turn, tokenTotals);
+    const turnsBefore = through - turn;
+    if (
+      turnsBefore < BLOCK_TURNS &&
+      turnsBefore % CHECKPOINT_SAMPLE_EVERY_TURNS === 0
+    )
+      samples.push(await sampleSettled(workload, turn));
+  }
+  return windowOf(through, samples);
+}
+
+/**
+ * Warm-up runs until the settled heap has stopped moving. A fresh process
+ * grows through startup, then drops sharply when startup garbage and code
+ * blocks are collected, and measuring inside that settling hides or fakes
+ * growth. Samples start CONVERGENCE_WINDOWS full windows before
+ * MIN_WARMUP_TURNS, since the rule cannot hold with fewer readings. Warm-up
+ * ends when hasConverged holds; the baseline is then an ordinary checkpoint
+ * window over the turns that follow. A process that never settles fails the
+ * run.
+ */
+async function warmUp(
+  workload: Workload,
+  tokenTotals: number[],
+  samples: Sample[],
+) {
+  const firstSampleTurn =
+    MIN_WARMUP_TURNS -
+    (CONVERGENCE_WINDOWS * CONVERGENCE_WINDOW_SAMPLES - 1) *
+      WARMUP_SAMPLE_EVERY_TURNS;
+  for (let turn = 1; turn <= MAX_WARMUP_TURNS; turn++) {
+    await runTurn(workload, turn, tokenTotals);
+    if (turn < firstSampleTurn || turn % WARMUP_SAMPLE_EVERY_TURNS !== 0)
+      continue;
+    samples.push(await sampleSettled(workload, turn));
+    if (hasConverged(samples.map((sample) => sample.heapBytes)))
+      return runToCheckpoint(
+        workload,
+        turn + 1,
+        turn + BLOCK_TURNS,
+        tokenTotals,
+      );
+  }
+  throw new Error(
+    `Settled heap kept falling through ${MAX_WARMUP_TURNS} warm-up turns: ${samples.map((sample) => `${sample.turn}:${sample.heapBytes}`).join(' ')}`,
+  );
+}
+
+/** Fixed short warm-up for the traps; the baseline ends at TRAP_WARMUP_TURNS. */
+function warmUpFixed(workload: Workload, tokenTotals: number[]) {
+  return runToCheckpoint(workload, 1, TRAP_WARMUP_TURNS, tokenTotals);
 }
 
 /** Compression shows up as a history token total that falls between turns. */
@@ -155,7 +178,10 @@ async function run(root: string, mode: WorkloadMode): Promise<void> {
   const tokenTotals: number[] = [];
   try {
     const warmup: Sample[] = [];
-    const baseline = await warmUp(workload, tokenTotals, warmup);
+    const baseline =
+      mode === 'normal'
+        ? await warmUp(workload, tokenTotals, warmup)
+        : await warmUpFixed(workload, tokenTotals);
     workload.startRetaining();
     const checkpoints = [];
     let completed = baseline.turn;
