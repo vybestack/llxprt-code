@@ -546,14 +546,12 @@ export class AgentImpl implements Agent {
         );
       },
     };
-    return new AuthControl({
-      authState: this.authState,
-      getCurrentProvider: () => this.providerState.provider,
-      getKeyName: () => this.providerState.keyName,
-      getStatus: (provider) =>
-        authStatusForWinner(this.computeWinner(provider)),
-      onOAuthPrompt: onOAuthPromptHandler,
-      setBaseUrl: async (baseUrl) => {
+    return new AuthControl(
+      this.authState,
+      () => this.providerState.provider,
+      (provider) => authStatusForWinner(this.computeWinner(provider)),
+      onOAuthPromptHandler,
+      async (baseUrl) => {
         this.providerState.baseUrl = baseUrl ?? undefined;
         try {
           await updateActiveProviderBaseUrl(
@@ -570,9 +568,8 @@ export class AgentImpl implements Agent {
         }
       },
       keysDeps,
-      // @plan:PLAN-20260622-COREAPIGAP.P12 @requirement:REQ-005
-      getOAuthManager: () => this.deps.oauthManager,
-    });
+      () => this.deps.oauthManager,
+    );
   }
 
   /**
