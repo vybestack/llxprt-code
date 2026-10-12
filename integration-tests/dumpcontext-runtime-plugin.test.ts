@@ -3,7 +3,7 @@ import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { Storage } from '@vybestack/llxprt-code-settings';
+import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   HistoryService,
@@ -13,12 +13,12 @@ import {
 import {
   createIsolatedRuntimeContext,
   activateIsolatedRuntimeContext,
-  resetCliProviderInfrastructure,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IModel } from '@vybestack/llxprt-code-providers/IModel.js';
 import type { IProvider } from '@vybestack/llxprt-code-providers/IProvider.js';
 import { createMockCommandContext } from '../packages/cli/src/__tests__/mockCommandContext.js';
+import { bindDumpManager } from '../packages/cli/src/ui/commands/__tests__/dumpcontext-owner-fixture.js';
 import { dumpcontextCommand } from '../packages/cli/src/ui/commands/dumpcontextCommand.js';
 import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 
@@ -111,16 +111,19 @@ async function run(
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'dump-runtime-plugin-'));
   const cache = spyOn(Storage, 'getGlobalCacheDir').mockReturnValue(root);
   const history = new WatchedHistory();
-  const runtime = createIsolatedRuntimeContext({
-    runtimeId: `dump-plugin-${count}`,
-    config: new Config({
-      sessionId: `dump-plugin-${count}`,
-      targetDir: root,
-      cwd: root,
-      model: PLUGIN_MODEL,
-      debugMode: false,
-    }),
-  });
+  const runtime = createIsolatedRuntimeContext(
+    {
+      runtimeId: `dump-plugin-${count}`,
+      config: new Config({
+        sessionId: `dump-plugin-${count}`,
+        targetDir: root,
+        cwd: root,
+        model: PLUGIN_MODEL,
+        debugMode: false,
+      }),
+    },
+    new SettingsService(),
+  );
   try {
     runtime.providerManager.registerProvider(provider);
     await runtime.providerManager.setActiveProvider(PLUGIN_NAME);
@@ -133,10 +136,18 @@ async function run(
     await history.waitForCommit();
     const controller = new AbortController();
     if (cancel) controller.abort(new Error('dump cancelled'));
-    const context = createMockCommandContext({ signal: controller.signal });
-    context.services.config = Object.assign(runtime.config, {
-      getAgentClient: () => ({ getHistoryService: () => history }),
+    const context = createMockCommandContext({
+      signal: controller.signal,
+      services: {
+        agent: { agentClient: { getHistoryService: () => history } },
+      },
     });
+    const baseRuntimeApi = { ...context.runtimeApi };
+    bindDumpManager(
+      context,
+      () => baseRuntimeApi,
+      () => runtime.providerManager,
+    );
     if (dumpcontextCommand.action === undefined)
       throw new Error('Missing command');
     const result = await dumpcontextCommand.action(context, 'now');
@@ -171,7 +182,6 @@ async function run(
     history.dispose();
     cache.mockRestore();
     await runtime.cleanup();
-    resetCliProviderInfrastructure();
     await fs.rm(root, { recursive: true, force: true });
   }
 }
