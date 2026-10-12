@@ -12,10 +12,7 @@ import {
   AnthropicOAuthProvider,
   CodexOAuthProvider,
 } from '@vybestack/llxprt-code-providers/auth.js';
-import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
+import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
 import type { OAuthToken } from '@vybestack/llxprt-code-auth';
 import {
   MemoryTokenStore,
@@ -58,7 +55,10 @@ describe('profile postcommit sibling lifetime', () => {
     const published = (): void => {
       postcommit = true;
     };
-    coreEvents.on(CoreEvent.ModelProfileChanged, published);
+    owner().settingsOwner['modelNotifications'].on(
+      CoreEvent.ModelProfileChanged,
+      published,
+    );
     class Store extends MemoryTokenStore {
       override async getToken(
         provider: string,
@@ -191,7 +191,10 @@ describe('profile postcommit sibling lifetime', () => {
           profileId: 'claudecode',
         }),
       ).toBe('claudecode-primary');
-      coreEvents.off(CoreEvent.ModelProfileChanged, published);
+      owner().settingsOwner['modelNotifications'].off(
+        CoreEvent.ModelProfileChanged,
+        published,
+      );
       await agent.profiles.applySnapshot({
         version: 1,
         provider: 'fake',
@@ -214,7 +217,10 @@ describe('profile postcommit sibling lifetime', () => {
     } finally {
       release.release();
       await operation;
-      coreEvents.off(CoreEvent.ModelProfileChanged, published);
+      owner().settingsOwner['modelNotifications'].off(
+        CoreEvent.ModelProfileChanged,
+        published,
+      );
       process.off('unhandledRejection', onUnhandled);
       await agent.dispose();
       transport.mockRestore();

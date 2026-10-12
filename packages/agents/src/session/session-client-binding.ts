@@ -61,6 +61,9 @@ export function bindClientSettings(
     init?: RequestInit,
   ) => Promise<Response>,
 ): void {
+  client.bindModelNotifications?.((listener) =>
+    settingsOwner.subscribeModelChanges(listener),
+  );
   client.bindRuntimeSettings(
     () => settingsOwner.readRuntimePolicy(),
     () => settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),

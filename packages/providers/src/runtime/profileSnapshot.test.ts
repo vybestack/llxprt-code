@@ -5,7 +5,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { coreEvents, CoreEvent } from '@vybestack/llxprt-code-core';
+import { CoreEvent } from '@vybestack/llxprt-code-core';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+const modelOwner = new SessionSettingsOwner(new SettingsService());
+const modelNotifications = modelOwner['modelNotifications'];
 import type { Profile } from '@vybestack/llxprt-code-settings';
 
 // Mock external dependencies of profile snapshots so we can verify
@@ -53,6 +57,7 @@ async function publishAppliedProfile(
     { setCurrentProfileName: () => {} } as never,
     null,
     {} as never,
+    (payload) => modelOwner.publishModelProfile(payload),
   );
   applied.publish();
 }
@@ -202,18 +207,18 @@ describe('buildModelProfileInfoPayload', () => {
 
 describe('ModelProfileChanged emission from finished profile application', () => {
   beforeEach(() => {
-    coreEvents.removeAllListeners();
+    modelNotifications.removeAllListeners();
     vi.clearAllMocks();
   });
 
   afterEach(() => {
-    coreEvents.removeAllListeners();
+    modelNotifications.removeAllListeners();
     vi.restoreAllMocks();
   });
 
   it('emits ModelProfileChanged event with model, provider, and profile from application result', async () => {
     const listener = vi.fn();
-    coreEvents.on(CoreEvent.ModelProfileChanged, listener);
+    modelNotifications.on(CoreEvent.ModelProfileChanged, listener);
 
     const profile: Profile = {
       version: 1,
@@ -238,7 +243,7 @@ describe('ModelProfileChanged emission from finished profile application', () =>
 
   it('uses model as displayLabel when profileName is null', async () => {
     const listener = vi.fn();
-    coreEvents.on(CoreEvent.ModelProfileChanged, listener);
+    modelNotifications.on(CoreEvent.ModelProfileChanged, listener);
 
     const profile: Profile = {
       version: 1,
@@ -261,7 +266,7 @@ describe('ModelProfileChanged emission from finished profile application', () =>
 
   it('does not emit before the finished profile is published', async () => {
     const listener = vi.fn();
-    coreEvents.on(CoreEvent.ModelProfileChanged, listener);
+    modelNotifications.on(CoreEvent.ModelProfileChanged, listener);
 
     // Just attaching the listener should not produce any emission
     expect(listener).not.toHaveBeenCalled();

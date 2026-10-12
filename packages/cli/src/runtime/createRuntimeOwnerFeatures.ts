@@ -209,7 +209,8 @@ export function buildSettingsRuntime(
     readCitations: () => agent.getEphemeralSetting('ui.showCitations'),
     readProfileName: () => agent.getActiveProfileName(),
     readSelectedProvider: () => agent.getProvider(),
-    subscribeModelSelection: (listener) => agent.onStats(listener),
+    subscribeModelSelection: (listener) =>
+      selectedTelemetry().subscribeModelChanges(listener),
     getProxy: () => source.getProxy(),
     getBugCommand: () => source.getBugCommand(),
     getTelemetrySettings: () => selectedTelemetry().readTelemetrySettings(),

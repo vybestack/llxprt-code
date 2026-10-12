@@ -32,7 +32,6 @@ import React, { act, useEffect } from 'react';
 import { render } from 'ink-testing-library';
 import { Text } from 'ink';
 import { fromConfig } from '@vybestack/llxprt-code-agents';
-import { coreEvents } from '@vybestack/llxprt-code-core';
 import { listProviders } from '@vybestack/llxprt-code-providers/runtime.js';
 import { SessionController } from '../containers/SessionController.js';
 import { Colors } from '../colors.js';
@@ -232,7 +231,16 @@ describe('interactive runtime owner bridge', () => {
       );
       first.settingsOwner.chooseModel('first-event-model');
       second.settingsOwner.chooseModel('second-event-model');
-      act(() => coreEvents.emitModelChanged('second-event-model'));
+      act(() => {
+        first.settingsOwner.publishModelProfile({
+          model: 'first-event-model',
+          displayLabel: 'first-event-model',
+        });
+        second.settingsOwner.publishModelProfile({
+          model: 'second-event-model',
+          displayLabel: 'second-event-model',
+        });
+      });
       expect(left.lastFrame()).toContain('event-model:fake:first-event-model');
       expect(right.lastFrame()).toContain(
         'event-model:fake:second-event-model',
@@ -242,7 +250,12 @@ describe('interactive runtime owner bridge', () => {
         (await captured.right.getActiveToolFormatState()).currentFormat,
       ).toBe('kimi');
       second.settingsOwner.chooseModel('updated-model');
-      act(() => coreEvents.emitModelChanged('updated-model'));
+      act(() =>
+        second.settingsOwner.publishModelProfile({
+          model: 'updated-model',
+          displayLabel: 'updated-model',
+        }),
+      );
       right.rerender(
         <RuntimeContextProvider
           agent={b}

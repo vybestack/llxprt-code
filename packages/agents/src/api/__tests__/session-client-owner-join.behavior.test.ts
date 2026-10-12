@@ -16,10 +16,7 @@ import { join } from 'node:path';
 import { AgentClient } from '../../core/client.js';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { SessionClientOwner } from '../../session/session-client-owner.js';
-import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
+import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
 import {
   createSessionClientEngineFixture,
   engineGate,
@@ -272,7 +269,9 @@ describe('Session owner cleanup joining', () => {
         await super.initialize(content);
       }
     }
-    const before = coreEvents.listenerCount(CoreEvent.ModelChanged);
+    const before = built.handle.settingsOwner[
+      'modelNotifications'
+    ].listenerCount(CoreEvent.ModelChanged);
     const owner = await SessionClientOwner.create(
       built.config,
       assembleTaskSchemaPolicy(built.settingsService),
@@ -310,7 +309,11 @@ describe('Session owner cleanup joining', () => {
       await closing;
       await built.cleanup();
     }
-    expect(coreEvents.listenerCount(CoreEvent.ModelChanged)).toBe(before - 1);
+    expect(
+      built.handle.settingsOwner['modelNotifications'].listenerCount(
+        CoreEvent.ModelChanged,
+      ),
+    ).toBe(before - 1);
   }, 30000);
   it('still closes separately owned media when client cleanup rejects', async () => {
     const built = await createSessionClientEngineFixture();

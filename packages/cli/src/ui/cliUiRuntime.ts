@@ -11,6 +11,7 @@ type SessionSettingsOwner = NonNullable<FromConfigOptions['settingsOwner']>;
  */
 import type {
   SessionEndReason,
+  ModelProfileInfoPayload,
   WorkspaceSkillOperations,
   WorkspaceCheckpointOperations,
   WorkspacePromptSelection,
@@ -213,7 +214,9 @@ export interface SettingsTelemetryState {
   readCitations(): unknown;
   readProfileName(): string | null;
   readSelectedProvider(): string | undefined;
-  subscribeModelSelection(listener: () => void): () => void;
+  subscribeModelSelection(
+    listener: (profile?: ModelProfileInfoPayload) => void,
+  ): () => void;
   getProxy(): string | undefined;
   getBugCommand(): UiBugCommandSettings | undefined;
   getTelemetrySettings(): TelemetrySettings;

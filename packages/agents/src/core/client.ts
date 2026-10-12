@@ -1,5 +1,6 @@
 import { finishClientDisposal } from './client-disposal.js';
 import { AuxiliaryWork } from './auxiliary-work.js';
+import { ClientModelSubscriptions } from './client-model-subscriptions.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -23,7 +24,7 @@ import {
   assertSessionClientProvider,
   assertClientRuntimeState,
 } from './client-tool-selection.js';
-import { releaseClientModelSubscriptions as unlisten } from './client-model-subscriptions.js';
+
 import { publishClientPromptTokens } from './client-telemetry.js';
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderManager.js';
@@ -64,10 +65,7 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import { BaseLLMClient } from './baseLlmClient.js';
 import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
 
-import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
+import type { SubscribeModelChanges } from '@vybestack/llxprt-code-core/utils/events.js';
 export {
   isThinkingSupported,
   findCompressSplitPoint,
@@ -247,12 +245,6 @@ export class AgentClient
     this.messageStreamOrchestrator = new MessageStreamOrchestrator(
       this._buildOrchestratorDeps(createTurn),
     );
-
-    coreEvents.on(CoreEvent.ModelChanged, this.handleModelChanged);
-    coreEvents.on(
-      CoreEvent.ModelProfileChanged,
-      this.handleModelProfileChanged,
-    );
   }
 
   private _buildOrchestratorDeps(
@@ -300,6 +292,16 @@ export class AgentClient
     };
   }
 
+  private readonly modelNotifications = new ClientModelSubscriptions();
+
+  bindModelNotifications(subscribe: SubscribeModelChanges): void {
+    this.modelNotifications.bind(
+      subscribe,
+      this.handleModelChanged,
+      this.handleModelProfileChanged,
+    );
+  }
+
   private handleModelChanged = () => {
     this.currentSequenceModel = null;
   };
@@ -329,7 +331,7 @@ export class AgentClient
   dispose(): Promise<void> {
     return finishClientDisposal(
       this.auxiliary.close(),
-      () => unlisten(this.handleModelChanged, this.handleModelProfileChanged),
+      () => this.modelNotifications.release(),
       this._previousHistory,
       () => this.chat?.clearHistory(),
       () => {

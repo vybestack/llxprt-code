@@ -29,7 +29,8 @@ import { captureProviderInvocation } from '../runtime/providerRequestContext.js'
 import type { RuntimeInvocationContext } from '../runtime/RuntimeInvocationContext.js';
 import type { AdmittedModelParameters } from '../runtime/admittedModelParameters.js';
 
-import { coreEvents } from '../utils/events.js';
+import { EventEmitter } from 'node:events';
+import { CoreEvent, type ModelProfileInfoPayload } from '../utils/events.js';
 import { assertSessionScopedKey } from '@vybestack/llxprt-code-settings';
 import { EphemeralDefaultOwnership } from '../config/ephemeralDefaultOwnership.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -648,6 +649,40 @@ export class SessionSettingsOwner {
     );
   }
 
+  private readonly modelNotifications = new EventEmitter();
+
+  subscribeModelChanges(
+    listener: (profile?: ModelProfileInfoPayload) => void,
+  ): () => void {
+    this.assertOpen();
+    const model = (): void => listener();
+    const profile = (payload: ModelProfileInfoPayload): void =>
+      listener(payload);
+    this.modelNotifications.on(CoreEvent.ModelChanged, model);
+    this.modelNotifications.on(CoreEvent.ModelProfileChanged, profile);
+    return () => {
+      const failures: unknown[] = [];
+      for (const [event, callback] of [
+        [CoreEvent.ModelChanged, model],
+        [CoreEvent.ModelProfileChanged, profile],
+      ] as const) {
+        try {
+          this.modelNotifications.off(event, callback);
+        } catch (error) {
+          failures.push(error);
+        }
+      }
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1)
+        throw new AggregateError(failures, 'Model notification cleanup failed');
+    };
+  }
+
+  publishModelProfile(profile: ModelProfileInfoPayload): void {
+    this.assertOpen();
+    this.modelNotifications.emit(CoreEvent.ModelProfileChanged, profile);
+  }
+
   private publicationPending = false;
 
   beginModelPublication(): { commit: () => void; rollback: () => void } {
@@ -661,7 +696,7 @@ export class SessionSettingsOwner {
         this.publicationPending = false;
         const current = this.readSelectedModel();
         if (current !== undefined && current !== previous)
-          coreEvents.emitModelChanged(current);
+          this.modelNotifications.emit(CoreEvent.ModelChanged, current);
       },
       rollback: () => {
         this.publicationPending = false;
@@ -767,6 +802,7 @@ export class SessionSettingsOwner {
     this.closed = true;
     this.settings.off('provider-change', this.selectionChanged);
     this.selectedModels.clear();
+    this.modelNotifications.removeAllListeners();
     this.telemetryListeners.clear();
   }
 

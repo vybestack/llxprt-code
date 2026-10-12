@@ -252,13 +252,11 @@ function useModelChangeWatcher(
     // Event-driven updates replace the former 1-second setInterval polling.
     // These coreEvents fire on model/profile/provider/settings changes.
     const handleChange = () => checkModelChange();
-    coreEvents.on(CoreEvent.ModelChanged, handleChange);
-    coreEvents.on(CoreEvent.ModelProfileChanged, handleChange);
+    const releaseModel = config.subscribeModelSelection(handleChange);
     coreEvents.on(CoreEvent.SettingsChanged, handleChange);
 
     return () => {
-      coreEvents.off(CoreEvent.ModelChanged, handleChange);
-      coreEvents.off(CoreEvent.ModelProfileChanged, handleChange);
+      releaseModel();
       coreEvents.off(CoreEvent.SettingsChanged, handleChange);
       if (currentTimerRef.current) clearTimeout(currentTimerRef.current);
     };

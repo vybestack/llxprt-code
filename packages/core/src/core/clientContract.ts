@@ -1,3 +1,4 @@
+import type { SubscribeModelChanges } from '../utils/events.js';
 import type { ProviderRequestDiagnostics } from '../runtime/providerRequestDiagnostics.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
@@ -159,6 +160,7 @@ export interface AgentChatContract {
  * Core-owned; the concrete AgentClient class implements this.
  */
 export interface AgentClientContract {
+  bindModelNotifications?(subscribe: SubscribeModelChanges): void;
   readonly tools: ToolSelection;
   bindToolSelection(selection: ToolSelection): void;
   assertConfig(config: Config): void;

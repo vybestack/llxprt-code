@@ -1,3 +1,5 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -7,7 +9,7 @@ import type { Agent } from '@vybestack/llxprt-code-agents';
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, expect, it, vi } from 'bun:test';
-import { CoreEvent, coreEvents } from '@vybestack/llxprt-code-core';
+import { coreEvents } from '@vybestack/llxprt-code-core';
 import {
   applyZedConfigOption,
   buildZedConfigOptions,
@@ -203,6 +205,7 @@ describe('Zed config options', () => {
   });
 
   it('publishes agent-side setting changes and removes listeners on teardown', async () => {
+    const owner = new SessionSettingsOwner(new SettingsService());
     const sendUpdate = vi.fn(async () => undefined);
     const stop = observeZedConfigOptions(
       {
@@ -212,12 +215,13 @@ describe('Zed config options', () => {
       configFixture(),
       sendUpdate,
       vi.fn(),
+      (listener) => owner.subscribeModelChanges(listener),
     );
 
     try {
       coreEvents.emitSettingsChanged();
       await waitFor(() => expect(sendUpdate).toHaveBeenCalledOnce());
-      coreEvents.emit(CoreEvent.ModelProfileChanged, {
+      owner.publishModelProfile({
         model: 'alpha',
         providerName: 'test',
         displayLabel: 'test:alpha',
@@ -228,6 +232,7 @@ describe('Zed config options', () => {
       expect(sendUpdate).toHaveBeenCalledTimes(2);
     } finally {
       stop();
+      await owner.dispose();
     }
   });
 });

@@ -11,10 +11,7 @@ import {
   MemoryTokenStore,
   makeToken,
 } from './helpers/provider-auth-fixtures.js';
-import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
+import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
 
 function gate(): { promise: Promise<void>; resolve: () => void } {
   let resolve = (): void => {
@@ -83,7 +80,10 @@ describe('profile-preparation-cancellation', () => {
       const notice = (value: unknown): void => {
         notifications.push(value);
       };
-      coreEvents.on(CoreEvent.ModelProfileChanged, notice);
+      built.settingsOwner['modelNotifications'].on(
+        CoreEvent.ModelProfileChanged,
+        notice,
+      );
       let disposed = false;
       const application = agent.profiles.applySnapshot({
         version: 1,
@@ -143,7 +143,10 @@ describe('profile-preparation-cancellation', () => {
       } finally {
         release.resolve();
         await outcome;
-        coreEvents.off(CoreEvent.ModelProfileChanged, notice);
+        built.settingsOwner['modelNotifications'].off(
+          CoreEvent.ModelProfileChanged,
+          notice,
+        );
         await agent.dispose();
         await ownerB.dispose();
         await other.cleanup();

@@ -1,3 +1,5 @@
+import { buildZedSession } from './zed-agent-setup.js';
+import type { SubscribeModelChanges } from '@vybestack/llxprt-code-core/utils/events.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -47,6 +49,7 @@ export type ZedSessionSettings = Pick<
   Pick<Agent, 'getModel' | 'getEphemeralSetting' | 'setEphemeralSetting'> &
   WorkspaceTextOperations & {
     readonly ignore: WorkspaceIgnoreOperations;
+    readonly subscribeModelChanges: SubscribeModelChanges;
   };
 
 export function projectZedSessionAgent(agent: Agent): ZedSessionAgentPort {
@@ -91,8 +94,10 @@ export function projectZedSessionSettings(
   >,
   files: WorkspaceTextOperations,
   ignore: WorkspaceIgnoreOperations,
+  subscribeModelChanges: SubscribeModelChanges,
 ): ZedSessionSettings {
   return {
+    subscribeModelChanges,
     getModel: () => agent.getModel(),
     getEphemeralSetting: (key) => agent.getEphemeralSetting(key),
     setEphemeralSetting: (key, value) => agent.setEphemeralSetting(key, value),
@@ -107,4 +112,29 @@ export function projectZedSessionSettings(
     writeTextFile: (filePath, content) =>
       files.writeTextFile(filePath, content),
   };
+}
+
+export function buildProjectedZedSession<T>(
+  agent: Agent,
+  config: Config,
+  files: WorkspaceTextOperations,
+  subscribeModelChanges: SubscribeModelChanges,
+  create: (agent: ZedSessionAgentPort, settings: ZedSessionSettings) => T,
+  onError: (error: unknown) => void,
+): Promise<T> {
+  return buildZedSession(
+    agent,
+    () =>
+      create(
+        projectZedSessionAgent(agent),
+        projectZedSessionSettings(
+          config,
+          agent,
+          files,
+          agent.workspace,
+          subscribeModelChanges,
+        ),
+      ),
+    onError,
+  );
 }

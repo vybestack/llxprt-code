@@ -6,7 +6,6 @@
 
 import { type ModelProfileInfoPayload } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
 import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings/profiles/types.js';
 import {
@@ -512,6 +511,7 @@ export async function finishProfileApplication(
   settingsService: SettingsService,
   oauthManager: OAuthManager | null,
   profileManager: Pick<ProfileManager, 'loadProfile'>,
+  publishModelProfile: (profile: ModelProfileInfoPayload) => void,
   signal: AbortSignal = new AbortController().signal,
 ): Promise<{
   result: ProfileLoadResult;
@@ -561,7 +561,7 @@ export async function finishProfileApplication(
       }
     },
     publish: () =>
-      coreEvents.emitModelProfileChanged(
+      publishModelProfile(
         buildModelProfileInfoPayload({
           model: result.modelName,
           providerName: result.providerName,

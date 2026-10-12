@@ -30,7 +30,6 @@ import type {
   Config,
   RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
-import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
 import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
@@ -96,7 +95,7 @@ export function assembleProviderSwitch(
     if (publish && result.changed) {
       const model = settingsOwner.readSelectedModel() ?? result.nextProvider;
       const profileName = settings.getCurrentProfileName();
-      coreEvents.emitModelProfileChanged({
+      settingsOwner.publishModelProfile({
         model,
         providerName: result.nextProvider,
         profileName,

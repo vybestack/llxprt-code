@@ -250,6 +250,7 @@ async function createBaseAgent(
       return { text: '', toolCalls: [], finishReason: 'stop' };
     },
     stream: streamFn,
+    metrics: owner.settingsOwner.telemetry.localMetrics,
     injectSteer: () => {},
     getProvider: () => 'test',
     ...createProviderReads(owner),
