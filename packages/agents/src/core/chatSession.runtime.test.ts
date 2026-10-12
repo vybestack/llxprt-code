@@ -141,10 +141,8 @@ describe('ChatSession runtime context', () => {
           {
             runtimeId: providerRuntime.runtimeId,
             metadata: providerRuntime.metadata,
-            globalSettings:
-              providerRuntime.settingsService.getAllGlobalSettings(),
-            providerSettings:
-              providerRuntime.settingsService.getProviderSettings(name),
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(name),
           },
           name,
           parameters,
@@ -309,9 +307,8 @@ describe('ChatSession runtime context', () => {
           {
             runtimeId: hookRuntime.runtimeId,
             metadata: hookRuntime.metadata,
-            globalSettings: hookRuntime.settingsService.getAllGlobalSettings(),
-            providerSettings:
-              hookRuntime.settingsService.getProviderSettings(name),
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(name),
           },
           name,
           parameters,
@@ -441,9 +438,8 @@ describe('ChatSession runtime context', () => {
           {
             runtimeId: hookRuntime.runtimeId,
             metadata: hookRuntime.metadata,
-            globalSettings: hookRuntime.settingsService.getAllGlobalSettings(),
-            providerSettings:
-              hookRuntime.settingsService.getProviderSettings(name),
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(name),
           },
           name,
           parameters,

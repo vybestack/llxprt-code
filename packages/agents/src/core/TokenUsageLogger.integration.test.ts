@@ -134,7 +134,7 @@ function buildTokenSyncView(
   };
   return createAgentRuntimeContext({
     ...createSessionPolicyFixture(
-      providerRuntimeSnapshot.settingsService,
+      fixture.runtimeSetup.settingsService,
       providerRuntimeSnapshot.runtimeId,
     ),
     state: runtimeState,

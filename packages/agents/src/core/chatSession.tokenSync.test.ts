@@ -106,7 +106,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
 
       const view = createAgentRuntimeContext({
         ...createSessionPolicyFixture(
-          providerRuntimeSnapshot.settingsService,
+          runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
         ),
         state: runtimeState,
@@ -205,7 +205,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
 
       const view = createAgentRuntimeContext({
         ...createSessionPolicyFixture(
-          providerRuntimeSnapshot.settingsService,
+          runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
         ),
         state: runtimeState,
@@ -304,7 +304,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
 
       const view = createAgentRuntimeContext({
         ...createSessionPolicyFixture(
-          providerRuntimeSnapshot.settingsService,
+          runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
         ),
         state: runtimeState,
@@ -410,7 +410,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
 
       const view = createAgentRuntimeContext({
         ...createSessionPolicyFixture(
-          providerRuntimeSnapshot.settingsService,
+          runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
         ),
         state: runtimeState,
@@ -476,7 +476,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
 
       const view = createAgentRuntimeContext({
         ...createSessionPolicyFixture(
-          providerRuntimeSnapshot.settingsService,
+          runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
         ),
         state: runtimeState,
@@ -578,7 +578,7 @@ describe('ChatSession Token Count Sync - Streaming API Usage Metadata', () => {
 
       const view = createAgentRuntimeContext({
         ...createSessionPolicyFixture(
-          providerRuntimeSnapshot.settingsService,
+          runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
         ),
         state: runtimeState,

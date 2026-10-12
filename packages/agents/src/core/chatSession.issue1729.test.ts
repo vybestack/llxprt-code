@@ -81,10 +81,8 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
           {
             runtimeId: providerRuntime.runtimeId,
             metadata: providerRuntime.metadata,
-            globalSettings:
-              providerRuntime.settingsService.getAllGlobalSettings(),
-            providerSettings:
-              providerRuntime.settingsService.getProviderSettings(name),
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(name),
           },
           name,
           parameters,

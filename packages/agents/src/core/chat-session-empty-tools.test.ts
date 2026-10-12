@@ -171,8 +171,8 @@ async function send(
         {
           runtimeId: runtime.runtimeId,
           metadata: runtime.metadata,
-          globalSettings: runtime.settingsService.getAllGlobalSettings(),
-          providerSettings: runtime.settingsService.getProviderSettings(name),
+          globalSettings: settingsService.getAllGlobalSettings(),
+          providerSettings: settingsService.getProviderSettings(name),
         },
         name,
         parameters,

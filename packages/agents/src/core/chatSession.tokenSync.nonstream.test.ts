@@ -103,7 +103,7 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
 
       const view = createAgentRuntimeContext({
         ...createSessionPolicyFixture(
-          providerRuntimeSnapshot.settingsService,
+          runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
         ),
         state: runtimeState,
@@ -215,7 +215,7 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
 
       const view = createAgentRuntimeContext({
         ...createSessionPolicyFixture(
-          providerRuntimeSnapshot.settingsService,
+          runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
         ),
         state: runtimeState,
@@ -315,7 +315,7 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
 
       const view = createAgentRuntimeContext({
         ...createSessionPolicyFixture(
-          providerRuntimeSnapshot.settingsService,
+          runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
         ),
         state: runtimeState,
@@ -389,7 +389,7 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
 
       const view = createAgentRuntimeContext({
         ...createSessionPolicyFixture(
-          providerRuntimeSnapshot.settingsService,
+          runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
         ),
         state: runtimeState,
@@ -462,7 +462,7 @@ describe('ChatSession Token Count Sync - Non-streaming responses', () => {
 
       const view = createAgentRuntimeContext({
         ...createSessionPolicyFixture(
-          providerRuntimeSnapshot.settingsService,
+          runtimeSetup.settingsService,
           providerRuntimeSnapshot.runtimeId,
         ),
         state: runtimeState,

@@ -156,10 +156,8 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
           {
             runtimeId: providerRuntime.runtimeId,
             metadata: providerRuntime.metadata,
-            globalSettings:
-              providerRuntime.settingsService.getAllGlobalSettings(),
-            providerSettings:
-              providerRuntime.settingsService.getProviderSettings(name),
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(name),
           },
           name,
           parameters,
@@ -293,10 +291,8 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
           {
             runtimeId: providerRuntime.runtimeId,
             metadata: providerRuntime.metadata,
-            globalSettings:
-              providerRuntime.settingsService.getAllGlobalSettings(),
-            providerSettings:
-              providerRuntime.settingsService.getProviderSettings(name),
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(name),
           },
           name,
           parameters,
@@ -423,10 +419,8 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
           {
             runtimeId: providerRuntime.runtimeId,
             metadata: providerRuntime.metadata,
-            globalSettings:
-              providerRuntime.settingsService.getAllGlobalSettings(),
-            providerSettings:
-              providerRuntime.settingsService.getProviderSettings(name),
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(name),
           },
           name,
           parameters,
@@ -564,10 +558,8 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
           {
             runtimeId: providerRuntime.runtimeId,
             metadata: providerRuntime.metadata,
-            globalSettings:
-              providerRuntime.settingsService.getAllGlobalSettings(),
-            providerSettings:
-              providerRuntime.settingsService.getProviderSettings(name),
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(name),
           },
           name,
           parameters,

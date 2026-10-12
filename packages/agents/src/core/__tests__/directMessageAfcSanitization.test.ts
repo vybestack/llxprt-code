@@ -139,9 +139,8 @@ function createDirectHarness(
         {
           runtimeId: requestRuntime.runtimeId,
           metadata: requestRuntime.metadata,
-          globalSettings: requestRuntime.settingsService.getAllGlobalSettings(),
-          providerSettings:
-            requestRuntime.settingsService.getProviderSettings(name),
+          globalSettings: settingsService.getAllGlobalSettings(),
+          providerSettings: settingsService.getProviderSettings(name),
         },
         name,
         parameters,

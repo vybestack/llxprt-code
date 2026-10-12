@@ -146,12 +146,9 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
               {
                 runtimeId: localProviderRuntime.runtimeId,
                 metadata: localProviderRuntime.metadata,
-                globalSettings:
-                  localProviderRuntime.settingsService.getAllGlobalSettings(),
+                globalSettings: localSettingsService.getAllGlobalSettings(),
                 providerSettings:
-                  localProviderRuntime.settingsService.getProviderSettings(
-                    name,
-                  ),
+                  localSettingsService.getProviderSettings(name),
               },
               name,
               parameters,
@@ -221,12 +218,9 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
               {
                 runtimeId: localProviderRuntime.runtimeId,
                 metadata: localProviderRuntime.metadata,
-                globalSettings:
-                  localProviderRuntime.settingsService.getAllGlobalSettings(),
+                globalSettings: localSettingsService.getAllGlobalSettings(),
                 providerSettings:
-                  localProviderRuntime.settingsService.getProviderSettings(
-                    name,
-                  ),
+                  localSettingsService.getProviderSettings(name),
               },
               name,
               parameters,
@@ -358,12 +352,9 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
               {
                 runtimeId: localProviderRuntime.runtimeId,
                 metadata: localProviderRuntime.metadata,
-                globalSettings:
-                  localProviderRuntime.settingsService.getAllGlobalSettings(),
+                globalSettings: localSettingsService.getAllGlobalSettings(),
                 providerSettings:
-                  localProviderRuntime.settingsService.getProviderSettings(
-                    name,
-                  ),
+                  localSettingsService.getProviderSettings(name),
               },
               name,
               parameters,
@@ -515,12 +506,9 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
               {
                 runtimeId: localProviderRuntime.runtimeId,
                 metadata: localProviderRuntime.metadata,
-                globalSettings:
-                  localProviderRuntime.settingsService.getAllGlobalSettings(),
+                globalSettings: localSettingsService.getAllGlobalSettings(),
                 providerSettings:
-                  localProviderRuntime.settingsService.getProviderSettings(
-                    name,
-                  ),
+                  localSettingsService.getProviderSettings(name),
               },
               name,
               parameters,

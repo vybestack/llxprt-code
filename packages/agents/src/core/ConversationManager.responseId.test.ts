@@ -87,10 +87,8 @@ function buildConversationManager(model: string): {
         {
           runtimeId: providerRuntime.runtimeId,
           metadata: providerRuntime.metadata,
-          globalSettings:
-            providerRuntime.settingsService.getAllGlobalSettings(),
-          providerSettings:
-            providerRuntime.settingsService.getProviderSettings(name),
+          globalSettings: settingsService.getAllGlobalSettings(),
+          providerSettings: settingsService.getProviderSettings(name),
         },
         name,
         parameters,

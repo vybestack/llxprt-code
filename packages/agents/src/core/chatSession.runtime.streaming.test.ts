@@ -130,10 +130,8 @@ describe('ChatSession runtime streaming and abort behavior', () => {
           {
             runtimeId: hookProviderRuntime.runtimeId,
             metadata: hookProviderRuntime.metadata,
-            globalSettings:
-              hookProviderRuntime.settingsService.getAllGlobalSettings(),
-            providerSettings:
-              hookProviderRuntime.settingsService.getProviderSettings(name),
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(name),
           },
           name,
           parameters,
@@ -242,10 +240,8 @@ describe('ChatSession runtime streaming and abort behavior', () => {
             {
               runtimeId: providerRuntime.runtimeId,
               metadata: providerRuntime.metadata,
-              globalSettings:
-                providerRuntime.settingsService.getAllGlobalSettings(),
-              providerSettings:
-                providerRuntime.settingsService.getProviderSettings(name),
+              globalSettings: settingsService.getAllGlobalSettings(),
+              providerSettings: settingsService.getProviderSettings(name),
             },
             name,
             parameters,
@@ -365,10 +361,8 @@ describe('ChatSession runtime streaming and abort behavior', () => {
             {
               runtimeId: providerRuntime.runtimeId,
               metadata: providerRuntime.metadata,
-              globalSettings:
-                providerRuntime.settingsService.getAllGlobalSettings(),
-              providerSettings:
-                providerRuntime.settingsService.getProviderSettings(name),
+              globalSettings: settingsService.getAllGlobalSettings(),
+              providerSettings: settingsService.getProviderSettings(name),
             },
             name,
             parameters,

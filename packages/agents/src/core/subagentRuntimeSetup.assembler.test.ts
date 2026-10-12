@@ -206,10 +206,8 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
           {
             runtimeId: providerRuntime.runtimeId,
             metadata: providerRuntime.metadata,
-            globalSettings:
-              providerRuntime.settingsService.getAllGlobalSettings(),
-            providerSettings:
-              providerRuntime.settingsService.getProviderSettings(name),
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(name),
           },
           name,
           parameters,
