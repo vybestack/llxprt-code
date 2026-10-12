@@ -41,12 +41,7 @@ import type {
   AgentHistoryItem,
   CheckpointInfo,
 } from '@vybestack/llxprt-code-agents';
-import {
-  buildAgent,
-  drain,
-  internalConfig,
-  isDoneEvent,
-} from './helpers/agentHarness.js';
+import { buildAgent, drain, isDoneEvent } from './helpers/agentHarness.js';
 
 /** Builds a public AgentMessage (Content) with role + a single text part. */
 function textMessage(role: 'user' | 'model', text: string): AgentMessage {
@@ -595,9 +590,7 @@ describe('Session control @plan:PLAN-20260617-COREAPI.P20 @requirement:REQ-010: 
       const live = [textMessage('user', 'live deferred origin')];
       await agent.setHistory(live);
 
-      const history = internalConfig(agent)
-        .getAgentClient()
-        .getHistoryService();
+      const history = agent.agentClient.getHistoryService();
       if (history === null) throw new Error('Expected live history service');
       let failOnce = true;
       const interruptAdoption = (): void => {

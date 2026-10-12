@@ -225,6 +225,28 @@ interface ProbeOptions {
   readonly apiBodies?: boolean;
   readonly prompts?: boolean;
 }
+/**
+ * RootTelemetry reports every export failure on flush and shutdown. The probe
+ * injects EISDIR export failures on purpose, so only those are accepted here;
+ * any other failure still propagates.
+ */
+async function settleInducedExportFailure(
+  fault: CorrelatedFault,
+  operation: () => Promise<void>,
+): Promise<void> {
+  try {
+    await operation();
+  } catch (error: unknown) {
+    const failures = error instanceof AggregateError ? error.errors : [error];
+    const induced = failures.every(
+      (failure) =>
+        failure instanceof Error &&
+        'code' in failure &&
+        failure.code === 'EISDIR',
+    );
+    if (fault === 'none' || !induced) throw error;
+  }
+}
 async function prepareCorrelated(
   root: string,
   fault: CorrelatedFault,
@@ -317,7 +339,9 @@ async function prepareCorrelated(
     telemetry,
     cleanup: async (): Promise<void> => {
       manager.dispose();
-      await shutdownTelemetry(telemetry);
+      await settleInducedExportFailure(fault, () =>
+        shutdownTelemetry(telemetry),
+      );
       await settingsOwner.dispose();
       await config.dispose();
     },
@@ -368,7 +392,9 @@ export async function correlatedProbe(
     exporter.releaseLate();
     if (!firstSource) await input.fixture.source.close();
     if (!secondSource) await second.source.close();
-    await flushTelemetry(input.telemetry);
+    await settleInducedExportFailure(fault, () =>
+      flushTelemetry(input.telemetry),
+    );
     const receipt = {
       first,
       other,

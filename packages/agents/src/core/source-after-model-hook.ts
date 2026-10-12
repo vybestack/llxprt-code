@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import type { HookModelSnapshotRequest } from '@vybestack/llxprt-code-core/hooks/hookSnapshotAggregator.js';
 import type { HookLLMResponse } from '@vybestack/llxprt-code-core/hooks/hookTranslator.js';
 import { AfterModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
@@ -36,12 +37,20 @@ export async function fireSourceAfterModelHook(
     throw new Error('AfterModel requires a request payload or source request');
   request.signal?.throwIfAborted();
   const tools = request.tools;
-  const hook = await input.owner.afterModelSnapshot?.(
-    {
-      model: input.model,
-      contents: request.rows(),
-      ...(tools !== undefined && !input.omitTools ? { tools } : {}),
+  const openRows = request.rows;
+  let pinnedRows: ProviderRequestRows | undefined;
+  // The owner decides whether any hook runs; the rows are opened only on first
+  // read, so a call with no registered AfterModel hook never touches them.
+  const hookRequest: HookModelSnapshotRequest = {
+    model: input.model,
+    get contents(): ProviderRequestRows {
+      pinnedRows ??= openRows();
+      return pinnedRows;
     },
+    ...(tools !== undefined && !input.omitTools ? { tools } : {}),
+  };
+  const hook = await input.owner.afterModelSnapshot?.(
+    hookRequest,
     input.response,
     request.signal,
   );

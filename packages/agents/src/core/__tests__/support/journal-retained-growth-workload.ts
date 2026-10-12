@@ -239,6 +239,7 @@ export async function createWorkload(
   const runtimeId = randomUUID();
   const providerRuntime = createProviderRuntimeContext({
     settingsService: settings,
+    config,
     runtimeId,
   });
   const runtime = createAgentRuntimeContext({

@@ -124,7 +124,12 @@ export type { HistoryServiceJournalOptions } from './historyBatchContracts.js';
  * One durable history mutation in the P05b1 journal-op vocabulary. This is
  * the unit the overlay folds and the journal records — one op per envelope.
  */
-export type HistoryJournalOp =
+export type HistoryJournalOp = HistoryJournalOpBody & {
+  /** Persisted id of the owner that published the op; absent means unowned. */
+  readonly origin?: string;
+};
+
+type HistoryJournalOpBody =
   | {
       readonly kind: 'content';
       readonly content: IContent;

@@ -8,6 +8,18 @@ export function opToEnvelope(op: HistoryJournalOp): {
   readonly type: SessionEventType;
   readonly payload: unknown;
 } {
+  const envelope = bodyEnvelope(op);
+  if (op.origin === undefined) return envelope;
+  return {
+    type: envelope.type,
+    payload: { ...(envelope.payload as object), origin: op.origin },
+  };
+}
+
+function bodyEnvelope(op: HistoryJournalOp): {
+  readonly type: SessionEventType;
+  readonly payload: unknown;
+} {
   switch (op.kind) {
     case 'content':
       return {
