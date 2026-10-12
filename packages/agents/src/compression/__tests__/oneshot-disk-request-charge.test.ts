@@ -42,6 +42,7 @@ async function charge(size: number): Promise<number> {
           async () => ({
             provider: transport,
             runtime: runtime.providerRuntime,
+            invocation: runtime.prepareProviderInvocation(transport.name),
           }),
           async () => 'finish the experiment',
           () => '/fixture/session.jsonl',

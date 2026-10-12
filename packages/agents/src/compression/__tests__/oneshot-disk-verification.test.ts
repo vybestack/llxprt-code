@@ -35,6 +35,7 @@ async function verification(size: number, fail: boolean): Promise<number> {
           async () => ({
             provider: transport,
             runtime: runtime.providerRuntime,
+            invocation: runtime.prepareProviderInvocation(transport.name),
           }),
           undefined,
           undefined,

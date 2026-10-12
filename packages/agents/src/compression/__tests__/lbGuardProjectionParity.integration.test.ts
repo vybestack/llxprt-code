@@ -527,6 +527,7 @@ async function facadeCallback3(): Promise<void> {
     const prepared = await prepareAtSendSeam(
       lb as unknown as Parameters<typeof prepareAtSendSeam>[0],
       { contents: toStream(candidate), tools: TOOLSET },
+      tokenizerFactory,
     );
     try {
       return (

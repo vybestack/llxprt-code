@@ -277,10 +277,11 @@ async function facadeCallback2(): Promise<void> {
 }
 
 async function facadeCallback3(): Promise<void> {
-  const { settings, config, providerRuntime } = statefulRuntime(
-    createPromptTokenizerFactory(),
-    'stateful-responses-enforcement',
-  );
+  const { settings, config, providerRuntime, tokenizerFactory } =
+    statefulRuntime(
+      createPromptTokenizerFactory(),
+      'stateful-responses-enforcement',
+    );
 
   const provider = new OpenAIResponsesProvider(
     'stateful-test-token',
@@ -310,6 +311,7 @@ async function facadeCallback3(): Promise<void> {
     settings,
     config,
     providerRuntime,
+    tokenizerFactory,
     effectiveEstimates,
   );
 
@@ -379,10 +381,11 @@ async function facadeCallback3(): Promise<void> {
 }
 
 async function facadeCallback4(): Promise<void> {
-  const { settings, config, providerRuntime } = statefulRuntime(
-    createAmplifyingPromptTokenizerFactory(),
-    'stateful-responses-overflow',
-  );
+  const { settings, config, providerRuntime, tokenizerFactory } =
+    statefulRuntime(
+      createAmplifyingPromptTokenizerFactory(),
+      'stateful-responses-overflow',
+    );
 
   const provider = new OpenAIResponsesProvider(
     'stateful-overflow-token',
@@ -425,6 +428,7 @@ async function facadeCallback4(): Promise<void> {
     settings,
     config,
     providerRuntime,
+    tokenizerFactory,
     estimates,
   );
 
@@ -806,24 +810,29 @@ function createStatefulEstimator(
   settings: SettingsService,
   config: ReturnType<typeof createRuntimeConfigStub>,
   providerRuntime: ReturnType<typeof createProviderRuntimeContext>,
+  tokenizerFactory: ReturnType<typeof createPromptTokenizerFactory>,
   estimates: PromptEnvelopeEstimate[],
 ): (candidate: IContent[]) => Promise<number> {
   return async (candidate: IContent[]): Promise<number> => {
-    const prepared = await prepareAtSendSeam(provider, {
-      ...createProviderCallOptions({
-        providerName: provider.name,
-        settings,
-        config,
-        runtime: providerRuntime,
-        resolved: {
-          model: 'gpt-4o',
-          baseURL: 'https://api.openai.com/v1',
-          telemetry: { providerName: provider.name },
-        },
-        ephemerals: { 'responses-stateful': true },
-      }),
-      contents: toStream(candidate),
-    });
+    const prepared = await prepareAtSendSeam(
+      provider,
+      {
+        ...createProviderCallOptions({
+          providerName: provider.name,
+          settings,
+          config,
+          runtime: providerRuntime,
+          resolved: {
+            model: 'gpt-4o',
+            baseURL: 'https://api.openai.com/v1',
+            telemetry: { providerName: provider.name },
+          },
+          ephemerals: { 'responses-stateful': true },
+        }),
+        contents: toStream(candidate),
+      },
+      tokenizerFactory,
+    );
     return recordPreparedEstimate(prepared, estimates);
   };
 }
@@ -835,6 +844,7 @@ function statefulRuntime(
   settings: SettingsService;
   config: ReturnType<typeof createRuntimeConfigStub>;
   providerRuntime: ReturnType<typeof createProviderRuntimeContext>;
+  tokenizerFactory: ReturnType<typeof createPromptTokenizerFactory>;
 } {
   const settings = new SettingsService();
   const config = createRuntimeConfigStub(settings);
@@ -844,5 +854,5 @@ function statefulRuntime(
     runtimeId,
   });
 
-  return { settings, config, providerRuntime };
+  return { settings, config, providerRuntime, tokenizerFactory };
 }

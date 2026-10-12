@@ -31,8 +31,15 @@ import {
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+
+const retainedInvocationOwners: SessionSettingsOwner[] = [];
+
+async function disposeInvocationOwners(): Promise<void> {
+  for (const owner of retainedInvocationOwners.splice(0)) await owner.dispose();
+}
 
 void vi.mock('@vybestack/llxprt-code-core/utils/delay.js', () => ({
   delay: vi.fn().mockResolvedValue(undefined),
@@ -75,7 +82,19 @@ function makeChatSession(
   historyService.addAll(regressionHistory());
   vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(0);
 
+  const invocationOwner = new SessionSettingsOwner(
+    runtimeSetup.settingsService,
+  );
+  invocationOwner.bindTelemetry(runtimeSetup.config);
+  retainedInvocationOwners.push(invocationOwner);
   const view = createAgentRuntimeContext({
+    prepareProviderInvocation: (name, parameters, signal) =>
+      invocationOwner.prepareProviderInvocation(
+        runtimeState.runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
     state: runtimeState,
     history: historyService,
     settings: {
@@ -89,7 +108,10 @@ function makeChatSession(
       },
     },
     provider: createProviderAdapterFromManager(runtimeSetup.providerManager),
-    telemetry: createTelemetryAdapter(runtimeSetup.config),
+    telemetry: createTelemetryAdapter(
+      runtimeSetup.config,
+      invocationOwner.telemetry,
+    ),
     tools: createToolRegistryViewFromRegistry(),
     providerRuntime: providerRuntimeSnapshot,
   });
@@ -356,8 +378,9 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
       config: runtimeSetup.config,
     };
   });
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
+    await disposeInvocationOwners();
   });
   registerCompressionCase0();
   registerCompressionCase1();
@@ -375,8 +398,9 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
       config: runtimeSetup.config,
     };
   });
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
+    await disposeInvocationOwners();
   });
   registerCompressionCase5();
   registerCompressionCase6();

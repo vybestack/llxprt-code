@@ -71,6 +71,7 @@ async function charge(size: number): Promise<number> {
           async () => ({
             provider: transport,
             runtime: runtime.providerRuntime,
+            invocation: runtime.prepareProviderInvocation(transport.name),
           }),
           undefined,
           undefined,
