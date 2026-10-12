@@ -154,14 +154,13 @@ export function assembleCliProviderRuntime(
   try {
     if (input.registration && config) undoAdoption = registration.adopt(config);
     if (config !== undefined) input.settingsOwner?.bindTelemetry(config);
-    const runtime = {
+    const runtime: ProviderRuntimeContext = {
       settingsService,
-      config,
       runtimeId,
       runtimeKind: resolveRuntimeKind(undefined, metadata, 'cli-interactive'),
       metadata,
       providerFileLifecycle: registration.providerFileLifecycle,
-    } as ProviderRuntimeContext;
+    };
 
     const runtimeMessageBus = registration.messageBus;
     if (input.oauthManager !== undefined)
@@ -185,7 +184,7 @@ export function assembleCliProviderRuntime(
     const { manager, oauthManager } =
       borrowedManager === undefined
         ? createProviderManager(
-            runtime.settingsService,
+            settingsService,
             runtime,
             config,
             input.credentialAuthority,

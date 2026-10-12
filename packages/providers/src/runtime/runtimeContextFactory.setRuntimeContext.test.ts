@@ -25,6 +25,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { ProviderManager } from '../ProviderManager.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createIsolatedRuntimeContext,
   type IsolatedRuntimeContextHandle,
@@ -40,6 +41,17 @@ const activationBindings: RuntimeActivationBindings = {
   },
 };
 
+class RuntimeAdmissionObserver extends ProviderManager {
+  readonly admittedContexts: ProviderRuntimeContext[] = [];
+
+  override setRuntimeContext(
+    ...args: Parameters<ProviderManager['setRuntimeContext']>
+  ): void {
+    super.setRuntimeContext(...args);
+    this.admittedContexts.push(args[0]);
+  }
+}
+
 describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP4-004', () => {
   let handle: IsolatedRuntimeContextHandle | undefined;
 
@@ -47,6 +59,54 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
     if (handle) {
       await handle.cleanup();
       handle = undefined;
+    }
+  });
+
+  it('keeps the selected Config outside scoped runtime data across activations', async () => {
+    const root = createProviderConfigFixture({
+      sessionId: 'scoped-config-owner',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      model: 'scoped-model',
+      debugMode: false,
+    });
+    const manager = new RuntimeAdmissionObserver(
+      root.settingsService,
+      undefined,
+      undefined,
+      new CredentialAuthority(),
+      root.settingsOwner,
+    );
+    handle = createIsolatedRuntimeContext(
+      {
+        credentialAuthority: new CredentialAuthority(),
+        settingsOwner: root.settingsOwner,
+        activationBindings,
+        runtimeId: 'scoped-config-owner',
+        config: root.config,
+        providerManager: manager,
+      },
+      root.settingsService,
+    );
+    try {
+      await handle.activate({ runtimeId: 'first-activation' });
+      await handle.activate({ runtimeId: 'second-activation' });
+      expect(
+        manager.admittedContexts.map((runtime) => ({
+          runtimeId: runtime.runtimeId,
+          config: runtime.config,
+        })),
+      ).toStrictEqual([
+        { runtimeId: 'first-activation', config: undefined },
+        { runtimeId: 'second-activation', config: undefined },
+      ]);
+      expect(() => manager.prepareStatelessProviderInvocation()).not.toThrow();
+    } finally {
+      await handle.cleanup();
+      handle = undefined;
+      manager.dispose();
+      await root.settingsOwner.dispose();
+      await root.config.dispose();
     }
   });
 
