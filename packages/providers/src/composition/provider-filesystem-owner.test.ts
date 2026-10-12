@@ -35,26 +35,24 @@ describe('provider manager filesystem ownership', () => {
     const second = createOwner('anthropic');
     try {
       const a = createProviderManager(
+        first.settingsService,
         {
           runtimeId: 'shared-provider-label',
           settingsService: first.settingsService,
         },
-        {
-          credentialAuthority: new CredentialAuthority(),
-          config: first.config,
-          fileSystem: first.fileSystem,
-        },
+        first.config,
+        new CredentialAuthority(),
+        first.fileSystem,
       );
       const b = createProviderManager(
+        second.settingsService,
         {
           runtimeId: 'shared-provider-label',
           settingsService: second.settingsService,
         },
-        {
-          credentialAuthority: new CredentialAuthority(),
-          config: second.config,
-          fileSystem: second.fileSystem,
-        },
+        second.config,
+        new CredentialAuthority(),
+        second.fileSystem,
       );
       expect(a.manager.getActiveProviderName()).toBe('openai');
       expect(b.manager.getActiveProviderName()).toBe('anthropic');

@@ -69,20 +69,39 @@ function buildManager(
   cleanups: Array<() => void | Promise<void>>,
 ): OAuthManager {
   if (construction === 'composition-context')
-    return createProviderManager(owner, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new NodeFileSystem(),
-      activateConfiguredProvider: false,
-    }).oauthManager;
+    return createProviderManager(
+      owner.settingsService,
+      owner,
+      undefined,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      false,
+    ).oauthManager;
   if (construction === 'composition')
-    return createProviderManager(owner, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new NodeFileSystem(),
-      config: owner.config,
-      activateConfiguredProvider: false,
-    }).oauthManager;
+    return createProviderManager(
+      owner.settingsService,
+      owner,
+      owner.config,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      false,
+    ).oauthManager;
   if (construction === 'isolated') {
     const handle = createIsolatedRuntimeContext(
       {

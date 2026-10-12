@@ -490,35 +490,38 @@ describe('interactive runtime owner bridge', () => {
       !(second.providerManager instanceof ProviderManager)
     )
       throw new Error('Expected concrete fixture owners');
+    const runtimeId = 'alias-owner-shared-label';
     const firstManager = createProviderManager(
-      {
-        settingsService: first.settingsService,
-        runtimeId: 'alias-owner-shared-label',
-        config: first.config,
-      },
-      {
-        credentialAuthority: new CredentialAuthority(),
-
-        fileSystem: new NodeFileSystem(),
-        config: first.config,
-        manager: first.providerManager,
-        activateConfiguredProvider: false,
-      },
+      first.settingsService,
+      { settingsService: first.settingsService, runtimeId },
+      first.config,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      first.providerManager,
+      undefined,
+      undefined,
+      undefined,
+      false,
     ).manager;
     const secondManager = createProviderManager(
-      {
-        settingsService: second.settingsService,
-        runtimeId: 'alias-owner-shared-label',
-        config: second.config,
-      },
-      {
-        credentialAuthority: new CredentialAuthority(),
-
-        fileSystem: new NodeFileSystem(),
-        config: second.config,
-        manager: second.providerManager,
-        activateConfiguredProvider: false,
-      },
+      second.settingsService,
+      { settingsService: second.settingsService, runtimeId },
+      second.config,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      second.providerManager,
+      undefined,
+      undefined,
+      undefined,
+      false,
     ).manager;
     configureProviderRuntimeFactories(first.config, firstManager);
     configureProviderRuntimeFactories(second.config, secondManager);

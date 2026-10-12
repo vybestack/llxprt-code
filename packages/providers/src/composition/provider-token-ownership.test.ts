@@ -26,11 +26,11 @@ function root(
   runtimeId: string,
 ): ReturnType<typeof createProviderManager> {
   return createProviderManager(
+    new SettingsService(),
     { settingsService: new SettingsService(), runtimeId },
-    {
-      fileSystem: new NodeFileSystem(),
-      credentialAuthority: authority,
-    },
+    undefined,
+    authority,
+    new NodeFileSystem(),
   );
 }
 

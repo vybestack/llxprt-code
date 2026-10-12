@@ -95,13 +95,21 @@ describe('providerManagerInstance schema-default behavior (issue #2033)', () => 
       settingsService: new SettingsService(),
       metadata: { scope: 'test' },
     };
-    createProviderManager(activeContext, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new MockFileSystem(),
-      config: undefined,
-      allowBrowserEnvironment: false,
-    });
+    createProviderManager(
+      activeContext.settingsService,
+      activeContext,
+      undefined,
+      new CredentialAuthority(),
+      new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      false,
+    );
 
     expect(openaiCtor).toHaveBeenCalled();
     const ctorArgs = openaiCtor.mock.calls[0] as unknown[];
@@ -141,13 +149,21 @@ describe('providerManagerInstance schema-default behavior (issue #2033)', () => 
       settingsService: new SettingsService(),
       metadata: { scope: 'test' },
     };
-    createProviderManager(activeContext, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: fs,
-      config: undefined,
-      allowBrowserEnvironment: false,
-    });
+    createProviderManager(
+      activeContext.settingsService,
+      activeContext,
+      undefined,
+      new CredentialAuthority(),
+      fs,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      false,
+    );
 
     expect(openaiCtor).toHaveBeenCalled();
     const ctorArgs = openaiCtor.mock.calls[0] as unknown[];

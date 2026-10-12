@@ -48,6 +48,28 @@ function captureThrown(fn: () => unknown): { error: unknown } {
 }
 
 describe('createProviderManager: unconfigured state (#2481)', () => {
+  it('activates the provider from separately selected settings instead of the runtime settings', async () => {
+    const settings = new SettingsService();
+    settings.set('activeProvider', 'anthropic');
+    const foreign = new SettingsService();
+    foreign.set('activeProvider', 'openai');
+    const runtime = createProviderRuntimeContext({ settingsService: foreign });
+    const { manager, oauthManager } = createProviderManager(
+      settings,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new MockFileSystem(),
+    );
+    try {
+      expect(manager.getActiveProviderName()).toBe('anthropic');
+      expect(foreign.get('activeProvider')).toBe('openai');
+    } finally {
+      manager.dispose();
+      await oauthManager.dispose();
+    }
+  });
+
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -59,12 +81,21 @@ describe('createProviderManager: unconfigured state (#2481)', () => {
   function buildUnconfiguredManager() {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new MockFileSystem(),
-      allowBrowserEnvironment: true,
-    });
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
     return manager;
   }
 
@@ -109,12 +140,21 @@ describe('createProviderManager: explicit provider activation unchanged (#2481)'
   it('activates openai when explicitly set via setActiveProvider after creation', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new MockFileSystem(),
-      allowBrowserEnvironment: true,
-    });
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     // No provider should be active initially (#2481).
     expect(manager.hasActiveProvider()).toBe(false);
@@ -129,12 +169,21 @@ describe('createProviderManager: explicit provider activation unchanged (#2481)'
     const settingsService = new SettingsService();
     settingsService.set('activeProvider', 'openai');
     const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new MockFileSystem(),
-      allowBrowserEnvironment: true,
-    });
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     // When settingsService has activeProvider='openai',
     // createProviderManager must auto-activate it without needing a manual
@@ -155,12 +204,21 @@ describe('createProviderManager: invalid configured provider (#2481)', () => {
 
     // Build a valid unconfigured manager first, then test that a typo'd
     // explicit provider name surfaces as a structured error.
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new MockFileSystem(),
-      allowBrowserEnvironment: true,
-    });
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     // The manager has real providers registered. A typo'd name must throw
     // with the requested name preserved (not silently swallowed).
@@ -170,12 +228,21 @@ describe('createProviderManager: invalid configured provider (#2481)', () => {
   it('activateExplicitProvider does not swallow invalid provider errors', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new MockFileSystem(),
-      allowBrowserEnvironment: true,
-    });
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     // Verify the error preserves the requested name.
     const captured = captureThrown(() =>
@@ -193,12 +260,21 @@ describe('createProviderManager: invalid configured provider (#2481)', () => {
     const runtime = createProviderRuntimeContext({ settingsService });
 
     const captured = captureThrown(() =>
-      createProviderManager(runtime, {
-        credentialAuthority: new CredentialAuthority(),
-
-        fileSystem: new MockFileSystem(),
-        allowBrowserEnvironment: true,
-      }),
+      createProviderManager(
+        runtime.settingsService,
+        runtime,
+        undefined,
+        new CredentialAuthority(),
+        new MockFileSystem(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        true,
+      ),
     );
     expect(captured.error).toBeInstanceOf(Error);
     // The original underlying error must be preserved as `cause`.
@@ -215,12 +291,21 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
     const settingsService = new SettingsService();
     settingsService.set('activeProvider', '  openai  ');
     const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new MockFileSystem(),
-      allowBrowserEnvironment: true,
-    });
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     expect(manager.hasActiveProvider()).toBe(true);
     expect(manager.getActiveProviderName()).toBe('openai');
@@ -230,12 +315,21 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
     const settingsService = new SettingsService();
     settingsService.set('activeProvider', '   ');
     const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new MockFileSystem(),
-      allowBrowserEnvironment: true,
-    });
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     expect(manager.hasActiveProvider()).toBe(false);
   });
@@ -244,12 +338,21 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
     const settingsService = new SettingsService();
     settingsService.set('activeProvider', '   ');
     const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new MockFileSystem(),
-      allowBrowserEnvironment: true,
-    });
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     expect(manager.getActiveProviderName()).toBeUndefined();
   });
@@ -258,12 +361,21 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
     const settingsService = new SettingsService();
     settingsService.set('activeProvider', '   ');
     const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new MockFileSystem(),
-      allowBrowserEnvironment: true,
-    });
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     expect(manager.getActiveProvider()).toBeUndefined();
   });
@@ -278,12 +390,21 @@ describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#248
     const settingsService = new SettingsService();
     settingsService.set('activeProvider', 'unconfigured');
     const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new MockFileSystem(),
-      allowBrowserEnvironment: true,
-    });
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
+      undefined,
+      new CredentialAuthority(),
+      new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     // The sentinel must NOT activate a provider named 'unconfigured'.
     expect(manager.hasActiveProvider()).toBe(false);
@@ -297,13 +418,21 @@ describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#248
     settingsService.set('activeProvider', 'openai');
     const runtime = createProviderRuntimeContext({ settingsService });
     const config = makeMinimalConfig('unconfigured');
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new MockFileSystem(),
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
       config,
-      allowBrowserEnvironment: true,
-    });
+      new CredentialAuthority(),
+      new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     expect(manager.hasActiveProvider()).toBe(true);
     expect(manager.getActiveProviderName()).toBe('openai');
@@ -314,13 +443,21 @@ describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#248
     settingsService.set('activeProvider', 'openai');
     const runtime = createProviderRuntimeContext({ settingsService });
     const config = makeMinimalConfig('   ');
-    const { manager } = createProviderManager(runtime, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new MockFileSystem(),
+    const { manager } = createProviderManager(
+      runtime.settingsService,
+      runtime,
       config,
-      allowBrowserEnvironment: true,
-    });
+      new CredentialAuthority(),
+      new MockFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
 
     expect(manager.hasActiveProvider()).toBe(true);
     expect(manager.getActiveProviderName()).toBe('openai');

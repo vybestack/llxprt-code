@@ -185,17 +185,17 @@ export function assembleCliProviderRuntime(
     const { manager, oauthManager } =
       borrowedManager === undefined
         ? createProviderManager(
+            runtime.settingsService,
             runtime,
-            {
-              fileSystem: new NodeFileSystem(),
-              credentialAuthority: input.credentialAuthority,
-              config,
-              runtimeMessageBus,
-              oauthSettings: resolvedOAuthSettings,
-              providerContributions,
-            },
+            config,
+            input.credentialAuthority,
+            new NodeFileSystem(),
+            resolvedOAuthSettings,
+            runtimeMessageBus,
             undefined,
             input.settingsOwner,
+            undefined,
+            providerContributions,
           )
         : { manager: borrowedManager, oauthManager: input.oauthManager };
     if (borrowedManager !== undefined && config !== undefined)

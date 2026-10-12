@@ -504,17 +504,23 @@ describe('refreshAliasProviders registry reuse', () => {
     });
 
     const { manager } = createProviderManager(
+      new SettingsService(),
       {
         settingsService: new SettingsService(),
         runtimeId: 'issue2758-refresh-test',
-      } as never,
-      {
-        credentialAuthority: new CredentialAuthority(),
-
-        fileSystem: new NodeFileSystem(),
-        providerContributions: contributions,
-        activateConfiguredProvider: false,
       },
+      undefined,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      contributions,
+      undefined,
+      undefined,
+      false,
     );
 
     expect(
@@ -558,22 +564,30 @@ describe('refreshAliasProviders registry reuse', () => {
     };
 
     const a = createProviderManager(
-      { settingsService: new SettingsService(), runtimeId: 'shared' } as never,
-      {
-        credentialAuthority: new CredentialAuthority(),
-
-        fileSystem: new NodeFileSystem(),
-        providerContributions: await createContributions('plugin-a'),
-      },
+      new SettingsService(),
+      { settingsService: new SettingsService(), runtimeId: 'shared' },
+      undefined,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      await createContributions('plugin-a'),
     ).manager;
     const b = createProviderManager(
-      { settingsService: new SettingsService(), runtimeId: 'shared' } as never,
-      {
-        credentialAuthority: new CredentialAuthority(),
-
-        fileSystem: new NodeFileSystem(),
-        providerContributions: await createContributions('plugin-b'),
-      },
+      new SettingsService(),
+      { settingsService: new SettingsService(), runtimeId: 'shared' },
+      undefined,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      await createContributions('plugin-b'),
     ).manager;
 
     a.refreshAliases();

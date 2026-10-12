@@ -85,11 +85,13 @@ describe('Provider alias integration', () => {
     const runtimeContext = createProviderRuntimeContext({
       settingsService: new SettingsService(),
     });
-    providerManager = createProviderManager(runtimeContext, {
-      credentialAuthority: new CredentialAuthority(),
-
-      fileSystem: new NodeFileSystem(),
-    }).manager;
+    providerManager = createProviderManager(
+      runtimeContext.settingsService,
+      runtimeContext,
+      undefined,
+      new CredentialAuthority(),
+      new NodeFileSystem(),
+    ).manager;
   });
 
   afterEach(() => {
