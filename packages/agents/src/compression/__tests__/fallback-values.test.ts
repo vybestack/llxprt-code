@@ -16,7 +16,7 @@ import {
   transformPhaseSampler,
   pauseTransformFinalization,
 } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
-import { probedTransformInput } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers-fixtures.js';
+import { probedTransformInput } from '@vybestack/llxprt-code-core/services/history/__tests__/support/transform-value-fixtures-test-helpers.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import {
   detachedDigest,

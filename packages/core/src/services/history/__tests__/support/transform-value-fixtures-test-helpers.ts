@@ -1,13 +1,16 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { IContent, ProviderFileReferenceMetadata } from './IContent.js';
+import type {
+  IContent,
+  ProviderFileReferenceMetadata,
+} from '../../IContent.js';
 import {
   batchRow,
   type BatchOwnerCensus,
-} from './__tests__/support/addbatch-stream-test-helpers.js';
+} from './addbatch-stream-test-helpers.js';
 import {
   probeTransformRow,
   type TransformProbes,
-} from './transform-value-test-helpers.js';
+} from '../../transform-value-test-helpers.js';
 
 export const TRANSFORM_CONTENT_ID = `sha256:${'a'.repeat(64)}`;
 export const TRANSFORM_FILE: ProviderFileReferenceMetadata = {

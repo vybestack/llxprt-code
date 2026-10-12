@@ -6,7 +6,7 @@ import {
   fallbackCandidate,
 } from './provider-fallback-disk-helpers.js';
 import { withValueTransformFixture } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers.js';
-import { transformFixtureRows } from '@vybestack/llxprt-code-core/services/history/transform-value-test-helpers-fixtures.js';
+import { transformFixtureRows } from '@vybestack/llxprt-code-core/services/history/__tests__/support/transform-value-fixtures-test-helpers.js';
 import { DetachedHistoryJournal } from '@vybestack/llxprt-code-core/services/history/detachedHistoryJournal.js';
 import {
   detachedDigest,

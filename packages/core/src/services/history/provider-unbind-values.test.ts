@@ -21,7 +21,7 @@ import {
   transformFixtureRows,
   transformFixtureRow,
   probedTransformInput,
-} from './transform-value-test-helpers-fixtures.js';
+} from './__tests__/support/transform-value-fixtures-test-helpers.js';
 
 async function observeUnbind(size: number, rollback: boolean): Promise<number> {
   return withValueTransformFixture(async (fixture) => {
