@@ -13,6 +13,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { createProviderConfigFixture } from '../runtime/__tests__/provider-config-fixture.js';
 
 class HarnessProvider extends BaseProvider {
   lastOptions?: NormalizedGenerateChatOptions;
@@ -35,6 +36,20 @@ class HarnessProvider extends BaseProvider {
     yield {
       speaker: 'ai',
       blocks: [{ type: 'text', text: options.resolved.model }],
+    };
+  }
+}
+
+class WorkspaceProvider extends HarnessProvider {
+  readonly requestProviderFileBindings = undefined;
+  readonly requestWorkspaceDirectory: string | undefined = undefined;
+
+  protected async *generateChatCompletionWithOptions(
+    _options: NormalizedGenerateChatOptions,
+  ): AsyncIterableIterator<IContent> {
+    yield {
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: this.requestWorkspaceDirectory ?? '' }],
     };
   }
 }
@@ -367,5 +382,49 @@ describe('ProviderManager stateless preparation ownership', () => {
     expect(() => manager.prepareStatelessProviderInvocation()).toThrow(
       'config',
     );
+  });
+});
+
+describe('ProviderManager selected workspace binding', () => {
+  it('uses a separately selected Config directory instead of the context Config', async () => {
+    const selected = createProviderConfigFixture({
+      sessionId: 'workspace-selected',
+      targetDir: '/workspace-selected',
+      cwd: process.cwd(),
+      model: 'workspace-model',
+      debugMode: false,
+    });
+    const former = createRuntimeConfigStub(selected.settingsService, {
+      getTargetDir: () => '/workspace-former',
+    });
+    const manager = new ProviderManager(
+      {
+        settingsService: selected.settingsService,
+        config: selected.config,
+        runtime: {
+          settingsService: selected.settingsService,
+          config: former,
+          runtimeId: 'same-label',
+        },
+      },
+      undefined,
+      selected.settingsOwner,
+    );
+    try {
+      manager.registerProvider(new WorkspaceProvider());
+      manager.setActiveProvider('openai');
+      const provider = manager.getActiveProvider();
+      if (!provider) throw new Error('Fixture provider missing');
+      const chunks: IContent[] = [];
+      for await (const chunk of provider.generateChatCompletion({
+        contents: [],
+      }))
+        chunks.push(chunk);
+      expect(chunks).toMatchObject([
+        { blocks: [{ text: '/workspace-selected' }] },
+      ]);
+    } finally {
+      manager.dispose();
+    }
   });
 });

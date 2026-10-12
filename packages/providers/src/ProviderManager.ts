@@ -750,7 +750,7 @@ export class ProviderManager implements IProviderManager {
       owner?.requestMediaBudgetBytes,
       owner?.providerFileBindings,
       owner?.providerFileLifecycle,
-      owner?.config?.getTargetDir(),
+      this.config?.getTargetDir(),
     );
   }
 
