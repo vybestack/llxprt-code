@@ -20,7 +20,7 @@ import {
   readHookDefinitions,
 } from '../hook-configuration.js';
 import { HookType, type HookEventName, type HookOutput } from '../types.js';
-import { escapeShellArg } from '../../utils/shell-utils.js';
+import { physicalHookCommand } from './physical-hook-command.js';
 
 export function usePhysicalHook(): (
   event: HookEventName,
@@ -36,7 +36,7 @@ export function usePhysicalHook(): (
   const resources: Array<{ root: SessionHookOwner; directory: string }> = [];
   retirePhysicalHooks(resources);
   return async (event, output = {}, enabled = true, exitCode = 0) => {
-    const directory = await mkdtemp(join(tmpdir(), 'llxprt-physical-hook-'));
+    const directory = await mkdtemp(join(tmpdir(), "llxprt physical hook's-"));
     const script = join(directory, 'hook.ts');
     await writeFile(
       script,
@@ -61,7 +61,7 @@ process.exit(${exitCode});
             hooks: [
               {
                 type: HookType.Command,
-                command: `exec ${escapeShellArg(process.execPath, 'bash')} ${escapeShellArg(script, 'bash')}`,
+                command: physicalHookCommand(script),
               },
             ],
           },
