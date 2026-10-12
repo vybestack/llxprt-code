@@ -477,29 +477,36 @@ describe('OAuthManager wiring', () => {
       false,
     );
 
-    await expect(manager.getAnthropicUsageInfo()).resolves.toStrictEqual({
+    await expect(
+      manager.getAnthropicUsageInfo(globalThis.fetch),
+    ).resolves.toStrictEqual({
       usage: 1,
     });
     expect(wiring.getAnthropicUsageInfo).toHaveBeenCalledWith(
+      globalThis.fetch,
       tokenStore,
       'bucket-a',
     );
 
-    await expect(manager.getAllAnthropicUsageInfo()).resolves.toStrictEqual(
-      new Map([['bucket-a', { usage: 1 }]]),
+    await expect(
+      manager.getAllAnthropicUsageInfo(globalThis.fetch),
+    ).resolves.toStrictEqual(new Map([['bucket-a', { usage: 1 }]]));
+    expect(wiring.getAllAnthropicUsageInfo).toHaveBeenCalledWith(
+      globalThis.fetch,
+      tokenStore,
     );
-    expect(wiring.getAllAnthropicUsageInfo).toHaveBeenCalledWith(tokenStore);
 
-    await expect(manager.getAllCodexUsageInfo()).resolves.toStrictEqual(
-      new Map([['bucket-a', { usage: 2 }]]),
-    );
+    await expect(
+      manager.getAllCodexUsageInfo(globalThis.fetch),
+    ).resolves.toStrictEqual(new Map([['bucket-a', { usage: 2 }]]));
     expect(wiring.getAllCodexUsageInfo).toHaveBeenCalledWith(
+      globalThis.fetch,
       tokenStore,
       'https://api.example.test',
     );
 
     await expect(
-      manager.getAllCodexRateLimitResetCredits(),
+      manager.getAllCodexRateLimitResetCredits(globalThis.fetch),
     ).resolves.toStrictEqual(
       new Map([
         [
@@ -511,6 +518,7 @@ describe('OAuthManager wiring', () => {
       ]),
     );
     expect(wiring.getAllCodexRateLimitResetCredits).toHaveBeenCalledWith(
+      globalThis.fetch,
       tokenStore,
       'https://api.example.test',
     );
@@ -529,7 +537,9 @@ describe('OAuthManager wiring', () => {
     };
     providerRegistry.getProvider.mockReturnValue(undefined);
 
-    await expect(manager.getAnthropicUsageInfo()).resolves.toBeNull();
+    await expect(
+      manager.getAnthropicUsageInfo(globalThis.fetch),
+    ).resolves.toBeNull();
     expect(wiring.getAnthropicUsageInfo).not.toHaveBeenCalled();
   });
 

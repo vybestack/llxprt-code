@@ -25,13 +25,16 @@ describe('usageInfo', () => {
     });
 
     it('should return null for non-OAuth token', async () => {
-      const result = await fetchAnthropicUsage('sk-ant-api123-not-oat');
+      const result = await fetchAnthropicUsage(
+        globalThis.fetch,
+        'sk-ant-api123-not-oat',
+      );
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it('should return null for invalid token', async () => {
-      const result = await fetchAnthropicUsage('');
+      const result = await fetchAnthropicUsage(globalThis.fetch, '');
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -58,7 +61,10 @@ describe('usageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchAnthropicUsage('sk-ant-oat01-test-token');
+      const result = await fetchAnthropicUsage(
+        globalThis.fetch,
+        'sk-ant-oat01-test-token',
+      );
 
       expect(fetchMock).toHaveBeenCalledWith(
         'https://api.anthropic.com/api/oauth/usage',
@@ -81,7 +87,10 @@ describe('usageInfo', () => {
         statusText: 'Unauthorized',
       } as Response);
 
-      const result = await fetchAnthropicUsage('sk-ant-oat01-test-token');
+      const result = await fetchAnthropicUsage(
+        globalThis.fetch,
+        'sk-ant-oat01-test-token',
+      );
       expect(result).toBeNull();
     });
 
@@ -102,7 +111,10 @@ describe('usageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchAnthropicUsage('sk-ant-oat01-test-token');
+      const result = await fetchAnthropicUsage(
+        globalThis.fetch,
+        'sk-ant-oat01-test-token',
+      );
       expect(result).toStrictEqual(mockResponse);
       // Unknown fields should be preserved thanks to passthrough()
       expect(
@@ -113,7 +125,10 @@ describe('usageInfo', () => {
     it('should handle network errors', async () => {
       fetchMock.mockRejectedValueOnce(new Error('Network error'));
 
-      const result = await fetchAnthropicUsage('sk-ant-oat01-test-token');
+      const result = await fetchAnthropicUsage(
+        globalThis.fetch,
+        'sk-ant-oat01-test-token',
+      );
       expect(result).toBeNull();
     });
 
@@ -130,7 +145,10 @@ describe('usageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchAnthropicUsage('sk-ant-oat01-test-token');
+      const result = await fetchAnthropicUsage(
+        globalThis.fetch,
+        'sk-ant-oat01-test-token',
+      );
       expect(result).toStrictEqual(mockResponse);
     });
 
@@ -147,7 +165,10 @@ describe('usageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchAnthropicUsage('sk-ant-oat01-test-token');
+      const result = await fetchAnthropicUsage(
+        globalThis.fetch,
+        'sk-ant-oat01-test-token',
+      );
       expect(result).toStrictEqual(mockResponse);
     });
   });

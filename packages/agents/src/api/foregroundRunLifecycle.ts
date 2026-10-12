@@ -85,7 +85,12 @@ export async function* executeForegroundRun(
   if (owner.isApplying()) throw new AgentBusyError();
   owner.admitRun(run);
   try {
-    yield* streamAdmitted(owner, run, input, opts);
+    yield* streamAdmitted(
+      owner,
+      run,
+      structuredClone(input),
+      opts === undefined ? undefined : { ...opts },
+    );
   } finally {
     try {
       await finishRun(run);

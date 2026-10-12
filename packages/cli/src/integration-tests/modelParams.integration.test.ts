@@ -23,10 +23,9 @@ import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
 import { setCommand } from '../ui/commands/setCommand.js';
 import {
   setActiveModelParam,
-  getActiveModelParams,
-  buildRuntimeProfileSnapshot,
   clearActiveModelParam,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+} from '../../../agents/src/api/model-parameters.js';
+import { buildRuntimeProfileSnapshot } from '@vybestack/llxprt-code-providers/runtime.js';
 import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
 import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
 import { assertDefined } from '../__tests__/assertions.js';
@@ -138,7 +137,7 @@ describe('CLI model parameter command integration', () => {
   it('sets provider-scoped model params via /set modelparam', async () => {
     await runSetCommand('modelparam temperature 0.9');
     expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+      sessionRoot.agent.providerReads.getActiveModelParams(),
     ).toStrictEqual({
       temperature: 0.9,
     });
@@ -148,14 +147,14 @@ describe('CLI model parameter command integration', () => {
   it('clears model params using /set unset modelparam', async () => {
     await runSetCommand('modelparam max_tokens 4096');
     expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+      sessionRoot.agent.providerReads.getActiveModelParams(),
     ).toStrictEqual({
       max_tokens: 4096,
     });
 
     await runSetCommand('unset modelparam max_tokens');
     expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+      sessionRoot.agent.providerReads.getActiveModelParams(),
     ).toStrictEqual({});
     expect(
       settingsService.getProviderSettings('alpha').max_tokens,
@@ -184,7 +183,7 @@ describe('CLI model parameter command integration', () => {
   it('supports clearing params directly through helper', async () => {
     await runSetCommand('modelparam temperature 0.7');
     expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+      sessionRoot.agent.providerReads.getActiveModelParams(),
     ).toStrictEqual({
       temperature: 0.7,
     });
@@ -194,7 +193,7 @@ describe('CLI model parameter command integration', () => {
       ...modelParamInputs(sessionRoot, providerManager),
     );
     expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+      sessionRoot.agent.providerReads.getActiveModelParams(),
     ).toStrictEqual({});
   });
 });

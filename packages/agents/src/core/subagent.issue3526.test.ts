@@ -1,3 +1,4 @@
+import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 /**
  * @license
@@ -356,7 +357,7 @@ async function createHarness(params: {
     params.outputConfig === null
       ? undefined
       : (params.outputConfig ?? OUTPUT_CONFIG),
-    { ...overrides, hookOwner },
+    ...scopeInputs({ ...overrides, hookOwner }),
   );
   return { requests, scope };
 }

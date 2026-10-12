@@ -1,3 +1,4 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -6,8 +7,9 @@
 
 import { describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderConfigFixture } from './__tests__/provider-config-fixture.js';
-import { readProviderStatus } from './providerStatus.js';
+import { createProviderConfigFixture } from '../../../providers/src/runtime/__tests__/provider-config-fixture.js';
+import { SessionProviderReads } from './session-provider-reads.js';
+import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 
 function owner(
   label: string,
@@ -33,21 +35,23 @@ describe('provider status owner binding', () => {
     const second = owner('same-label', 'second', 'second-model');
     try {
       expect(
-        readProviderStatus(
-          first.settingsService,
-          null,
-          first.config.getModel(),
-        ),
+        new SessionProviderReads(
+          first.settingsOwner,
+          new TestRuntimeProviderManager(),
+          () => first.config.getModel(),
+          (provider) => first.settingsService.getProviderSettings(provider),
+        ).providerStatus(),
       ).toMatchObject({
         providerName: 'first',
         modelName: 'first-model',
       });
       expect(
-        readProviderStatus(
-          second.settingsService,
-          null,
-          second.config.getModel(),
-        ),
+        new SessionProviderReads(
+          second.settingsOwner,
+          new TestRuntimeProviderManager(),
+          () => second.config.getModel(),
+          (provider) => second.settingsService.getProviderSettings(provider),
+        ).providerStatus(),
       ).toMatchObject({
         providerName: 'second',
         modelName: 'second-model',
@@ -61,12 +65,17 @@ describe('provider status owner binding', () => {
   it('does not infer an owner from a neighboring runtime', async () => {
     const first = owner('same-label', 'first', 'first-model');
     try {
-      expect(readProviderStatus(new SettingsService(), null, '')).toMatchObject(
-        {
-          providerName: null,
-          modelName: null,
-        },
-      );
+      expect(
+        new SessionProviderReads(
+          new SessionSettingsOwner(new SettingsService()),
+          new TestRuntimeProviderManager(),
+          () => '',
+          () => ({}),
+        ).providerStatus(),
+      ).toMatchObject({
+        providerName: null,
+        modelName: null,
+      });
     } finally {
       await first.config.dispose();
     }

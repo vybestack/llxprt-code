@@ -1,3 +1,4 @@
+import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -138,7 +139,7 @@ async function createBudgetScope(
     runConfig,
     undefined,
     outputConfig,
-    overrides,
+    ...scopeInputs(overrides),
   );
 }
 

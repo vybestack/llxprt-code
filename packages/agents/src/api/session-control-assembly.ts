@@ -8,6 +8,48 @@ import {
   type SessionControlDeps,
 } from './control/sessionControl.js';
 import { createAgentSessionPersistence } from './control/recordedHistoryPersistence.js';
+import type { AgentProviderState } from './agentImpl.js';
+
+export function initialProviderState(
+  state: Pick<AgentProviderState, 'provider' | 'model' | 'baseUrl'> & {
+    readonly modelParams?: Readonly<Record<string, unknown>>;
+  },
+): AgentProviderState {
+  return {
+    provider: state.provider,
+    model: state.model,
+    modelParams: structuredClone(state.modelParams ?? {}),
+    baseUrl: state.baseUrl,
+  };
+}
+
+import type { Agent } from './agent.js';
+import type { AgentExecutionCoordinator } from './agentExecutionCoordinator.js';
+
+export function idleClient(
+  operations: Agent['sessionClient'],
+  coordinator: Pick<AgentExecutionCoordinator, 'withIdleBoundary'>,
+  rebuild: () => void,
+): Agent['sessionClient'] {
+  return {
+    ...operations,
+    refreshAuth: (method) =>
+      coordinator.withIdleBoundary(async () => {
+        await operations.refreshAuth(method);
+        rebuild();
+      }),
+  };
+}
+
+export async function resetIdleChat(
+  coordinator: Pick<AgentExecutionCoordinator, 'withIdleBoundary'>,
+  session: Pick<Agent['session'], 'getRecording' | 'clearHistory'>,
+  reset: () => Promise<void>,
+): Promise<void> {
+  await coordinator.withIdleBoundary(() =>
+    session.getRecording().enabled ? session.clearHistory() : reset(),
+  );
+}
 
 export function assembleSessionControl(
   config: SessionControlDeps['config'],

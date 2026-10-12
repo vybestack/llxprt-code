@@ -115,32 +115,43 @@ export interface TaskToolRegistration {
   /** static ToolClass.Name ('task') — becomes ToolRecord.displayName; also matched by allow-list */
   readonly staticName: string;
   /** Constructor args builder, stored in ToolRecord.args */
-  buildArgs(config: unknown, taskToolArgs: TaskToolArgs): unknown[];
+  buildArgs(
+    config: unknown,
+    profileManager: ProfileDefinitionReads | undefined,
+    subagentManager: SubagentDefinitionReads | undefined,
+    messageBus: MessageBus,
+    workspacePaths: WorkspacePathOperations,
+    readMcpInstructions: (() => string | undefined) | undefined,
+    instructions?: InstructionReadOperations,
+    createChildSettings?: () => SettingsService,
+    readTaskPolicy?: () => TaskExecutionPolicy,
+    readRunPolicy?: () => SubagentRunPolicy,
+    readGovernance?: () => ToolGovernance,
+    toolSelection?: ToolSelection,
+    hookOwner?: SessionHookOwner,
+    workspaceTrust?: WorkspaceTrustControlPort,
+    telemetry?: RootTelemetry,
+    requestInteractiveAuth?: InteractiveAuthPromptOperation,
+  ): unknown[];
   /** Create a tool instance */
-  create(config: unknown, args: TaskToolArgs): AnyDeclarativeTool;
-}
-
-/** TaskTool dependencies argument shape */
-export interface TaskToolArgs {
-  readonly requestInteractiveAuth?: InteractiveAuthPromptOperation;
-  readonly hookOwner?: SessionHookOwner;
-  readonly workspaceTrust?: WorkspaceTrustControlPort;
-  createChildSettings?: () => SettingsService;
-  readonly telemetry?: RootTelemetry;
-  readTaskPolicy?: () => TaskExecutionPolicy;
-  readRunPolicy?: () => SubagentRunPolicy;
-  readGovernance?: () => ToolGovernance;
-  instructions?: InstructionReadOperations;
-  readonly toolSelection?: ToolSelection;
-  workspacePaths?: WorkspacePathOperations;
-  readMcpInstructions?: () => string | undefined;
-  profileManager: ProfileDefinitionReads | undefined;
-  subagentManager: SubagentDefinitionReads | undefined;
-  /**
-   * Required session/runtime MessageBus threaded into the SubagentOrchestrator so
-   * child execution shares the parent approval routing.
-   */
-  messageBus: MessageBus;
+  create(
+    config: unknown,
+    profileManager: ProfileDefinitionReads | undefined,
+    subagentManager: SubagentDefinitionReads | undefined,
+    messageBus: MessageBus,
+    workspacePaths: WorkspacePathOperations,
+    readMcpInstructions: (() => string | undefined) | undefined,
+    instructions?: InstructionReadOperations,
+    createChildSettings?: () => SettingsService,
+    readTaskPolicy?: () => TaskExecutionPolicy,
+    readRunPolicy?: () => SubagentRunPolicy,
+    readGovernance?: () => ToolGovernance,
+    toolSelection?: ToolSelection,
+    hookOwner?: SessionHookOwner,
+    workspaceTrust?: WorkspaceTrustControlPort,
+    telemetry?: RootTelemetry,
+    requestInteractiveAuth?: InteractiveAuthPromptOperation,
+  ): AnyDeclarativeTool;
 }
 
 /** Tool record for settings UI */
@@ -318,11 +329,22 @@ function registerTaskTool(
   allPotentialTools: ToolRecord[],
   registration: TaskToolRegistration,
   config: unknown,
-  taskToolArgs: TaskToolArgs,
+  profileManager: ProfileDefinitionReads,
+  subagentManager: SubagentDefinitionReads,
+  messageBus: MessageBus,
+  paths: WorkspacePathOperations,
+  readMcpInstructions: (() => string | undefined) | undefined,
 ): void {
   const className = registration.className;
   const toolName = registration.staticName || className;
-  const args = registration.buildArgs(config, taskToolArgs);
+  const args = registration.buildArgs(
+    config,
+    profileManager,
+    subagentManager,
+    messageBus,
+    paths,
+    readMcpInstructions,
+  );
   let isEnabled = true;
   let reason: string | undefined;
 
@@ -354,7 +376,16 @@ function registerTaskTool(
   };
 
   if (isEnabled) {
-    registry.registerTool(registration.create(config, taskToolArgs));
+    registry.registerTool(
+      registration.create(
+        config,
+        profileManager,
+        subagentManager,
+        messageBus,
+        paths,
+        readMcpInstructions,
+      ),
+    );
     toolRecord.isRegistered = true;
     toolRecord.reason = undefined;
   } else if (!reason) {
@@ -535,14 +566,6 @@ function registerAgentTools(
       subagentManager,
     );
   } else {
-    const taskToolArgs = {
-      workspacePaths: paths,
-      readMcpInstructions,
-      profileManager,
-      subagentManager,
-      messageBus,
-    };
-
     registerTaskTool(
       registry,
       effectiveCoreTools,
@@ -550,7 +573,11 @@ function registerAgentTools(
       allPotentialTools,
       registration,
       config,
-      taskToolArgs,
+      profileManager,
+      subagentManager,
+      messageBus,
+      paths,
+      readMcpInstructions,
     );
   }
 

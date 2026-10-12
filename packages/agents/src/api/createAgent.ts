@@ -12,7 +12,7 @@ import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js'
 import {
   assembleModelSelection,
   type ModelSelectionOperations,
-} from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+} from './model-selection.js';
 
 import {
   prepareAgentShellOwner,
@@ -55,7 +55,6 @@ import type { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtim
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { type IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
-import { readActiveProviderName } from '@vybestack/llxprt-code-providers/runtime/providerReadOperations.js';
 import type {
   AgentRuntimeFactoryBindings,
   RuntimeProviderManager,
@@ -331,6 +330,7 @@ async function activateCreatedSession(
     handle.providerManager,
     (method) => client.refreshAuth(method),
     assembleModelSelection(handle.settingsOwner),
+    () => handle.settingsOwner.readSelectedProvider(),
   );
 }
 
@@ -688,6 +688,7 @@ export function resolveSchedulerFactory(
 async function applyActivation(
   parsed: {
     readonly activation?: ProviderActivationIntent;
+    readonly auth?: AgentAuth;
     readonly provider: string;
     readonly model: string;
   },
@@ -704,6 +705,7 @@ async function applyActivation(
   manager: RuntimeProviderManager,
   refreshClient: (method?: string) => Promise<void>,
   selection: ModelSelectionOperations,
+  readProviderName: () => string | undefined,
 ): Promise<{ readonly provider: string; readonly model: string }> {
   const intent: ProviderActivationIntent = parsed.activation ?? {
     provider: parsed.provider,
@@ -712,14 +714,12 @@ async function applyActivation(
       ? { model: parsed.model }
       : {}),
     authMethod: resolvedAuth.authMethod,
-    ...(resolvedAuth.apiKey !== undefined || resolvedAuth.baseUrl !== undefined
-      ? {
-          cliOverrides: {
-            key: resolvedAuth.apiKey,
-            baseUrl: resolvedAuth.baseUrl,
-          },
-        }
-      : {}),
+    cliOverrides: {
+      key: resolvedAuth.apiKey,
+      keyfile: parsed.auth?.apiKeyFile,
+      keyName: parsed.auth?.keyName,
+      baseUrl: resolvedAuth.baseUrl,
+    },
   };
   mcpRuntime.assertConfig(config, messageBus);
   await mcpRuntime.initialize();
@@ -746,7 +746,8 @@ async function applyActivation(
   const runtimeProvider =
     activationResult.activeProvider ??
     manager.getActiveProviderName() ??
-    safeActiveProviderName(settingsService, manager);
+    readProviderName() ??
+    '';
   const postProvider =
     parsed.activation === undefined
       ? parsed.provider
@@ -763,14 +764,6 @@ async function applyActivation(
   const runtimeModel = resolvedConfigModel || activeModel;
   const postModel = runtimeModel || parsed.model;
   return { provider: postProvider, model: postModel };
-}
-
-/** Reads the active provider name without throwing when unset. */
-function safeActiveProviderName(
-  settings: SettingsService,
-  manager: RuntimeProviderManager,
-): string {
-  return readActiveProviderName(settings, manager) ?? '';
 }
 
 /** Reads the active model name without throwing when unset. */

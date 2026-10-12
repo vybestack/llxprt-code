@@ -116,6 +116,7 @@ export const AppWrapper = (props: AppProps) => {
                   sessionId={props.uiRuntime.session.getSessionId()}
                 >
                   <RuntimeContextProvider
+                    requestFetch={props.agent.sessionClient.fetch}
                     agent={runtimeAgent}
                     owner={runtimeOwner}
                   >

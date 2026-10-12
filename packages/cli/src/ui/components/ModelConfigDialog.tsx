@@ -14,7 +14,7 @@ import { useKeypress } from '../hooks/useKeypress.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import { TextInput } from './ProfileCreateWizard/TextInput.js';
 import { parseValue } from '../commands/setCommand.js';
-import { parseEphemeralSettingValue } from '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js';
+import { parseEphemeralSettingValue } from '@vybestack/llxprt-code-settings/settings/ephemeral-settings.js';
 import { getSettingSpec } from '@vybestack/llxprt-code-settings';
 import { validateModelParam } from './modelConfigParamCommit.js';
 

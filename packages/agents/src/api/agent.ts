@@ -1,3 +1,8 @@
+import type { AgentModelParametersControl } from './model-parameters.js';
+import type { AgentSettingsControl } from './control/settings-control.js';
+import type { AgentToolFormatControl } from './control/tool-format-control.js';
+import type { SessionProviderReads } from './session-provider-reads.js';
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import type {
   SessionStartSource,
@@ -1061,7 +1066,12 @@ export interface AgentLspControl {
 }
 
 export interface Agent {
+  readonly modelParameters: AgentModelParametersControl;
+  readonly settings: AgentSettingsControl;
+  readonly toolFormat: AgentToolFormatControl;
+  readonly providerReads: SessionProviderReads;
   readonly sessionClient: {
+    readonly fetch: NetworkFetch;
     readonly runImageOperation: ImageOperationRunner;
     refreshAuth(authMethod?: string): Promise<void>;
     publishTools(): Promise<void>;

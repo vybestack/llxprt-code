@@ -1,7 +1,7 @@
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -12,35 +12,26 @@ import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/s
  */
 
 import { describe, expect, it, beforeEach, vi, type Mock } from 'bun:test';
-import { useRuntimeTestOwners } from './__tests__/runtime-owner-test-helpers.js';
-import { MissingProviderRuntimeError } from './messages.js';
+import { useRuntimeTestOwners } from '../../../providers/src/runtime/__tests__/runtime-owner-test-helpers.js';
 import type {
   RuntimeProvider,
   RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
+import { SessionProviderReads } from './session-provider-reads.js';
+import { assembleSettingsControl } from './control/settings-control.js';
+function settingsControl(owner: SessionSettingsOwner) {
+  return assembleSettingsControl(
+    () => owner,
+    () => {},
+    () => {},
+  );
+}
 import {
-  getActiveModelName,
-  listProviders,
-  getActiveProviderName,
-  getSessionTokenUsage,
-  listAvailableModels,
-  getActiveProviderMetrics,
-  getUnallowedParametersForActiveModel,
-} from './providerReadOperations.js';
-import {
-  getEphemeralSetting,
-  setEphemeralSetting,
-  clearEphemeralSetting,
-  getEphemeralSettings,
-} from './ownerSettingsOperations.js';
-import {
-  getActiveModelParams,
   setActiveModelParam,
   clearActiveModelParam,
-} from './providerModelParameters.js';
-import { readProviderStatus } from './providerStatus.js';
+} from './model-parameters.js';
 
 /**
  * Test suite for runtimeAccessors module
@@ -94,10 +85,22 @@ describe('runtimeAccessors', () => {
     settings.setProviderSetting('owner-provider', 'model', 'owner-model');
     const owner = roots.config('owner-runtime', settings).settingsOwner;
 
-    expect(getActiveModelName(owner)).toBe('owner-model');
-    expect(getActiveProviderName(owner, mockRuntimeProviderManager)).toBe(
-      'owner-provider',
-    );
+    expect(
+      new SessionProviderReads(
+        owner,
+        mockRuntimeProviderManager,
+        () => declaredModel,
+        (provider) => mockSettingsService.getProviderSettings(provider),
+      ).getActiveModelName(),
+    ).toBe('owner-model');
+    expect(
+      new SessionProviderReads(
+        owner,
+        mockRuntimeProviderManager,
+        () => declaredModel,
+        (provider) => mockSettingsService.getProviderSettings(provider),
+      ).getActiveProviderName(),
+    ).toBe('owner-provider');
   });
   it('keeps equal-label owners separate without requiring profile services', () => {
     const firstSettings = new SettingsService();
@@ -106,38 +109,61 @@ describe('runtimeAccessors', () => {
     secondSettings.set('activeProvider', 'second-provider');
     const first = roots.config('same-label', firstSettings).settingsOwner;
     const second = roots.config('same-label', secondSettings).settingsOwner;
-    expect(getActiveProviderName(first, mockRuntimeProviderManager)).toBe(
-      'first-provider',
-    );
-    expect(getActiveProviderName(second, mockRuntimeProviderManager)).toBe(
-      'second-provider',
-    );
+    expect(
+      new SessionProviderReads(
+        first,
+        mockRuntimeProviderManager,
+        () => declaredModel,
+        (provider) => mockSettingsService.getProviderSettings(provider),
+      ).getActiveProviderName(),
+    ).toBe('first-provider');
+    expect(
+      new SessionProviderReads(
+        second,
+        mockRuntimeProviderManager,
+        () => declaredModel,
+        (provider) => mockSettingsService.getProviderSettings(provider),
+      ).getActiveProviderName(),
+    ).toBe('second-provider');
   });
 
   it('rejects an incomplete supplied owner rather than borrowing the ambient runtime', () => {
     const owner = {};
-    expect(() => Reflect.apply(listProviders, undefined, [owner])).toThrow(
-      TypeError,
-    );
+    expect(() =>
+      Reflect.construct(SessionProviderReads, [
+        owner,
+        mockRuntimeProviderManager,
+        () => declaredModel,
+      ]).getActiveProviderName(),
+    ).toThrow('Provider reads require an explicit session owner');
   });
 
   describe('explicit owner capabilities', () => {
     it('rejects missing owner without selecting a registered runtime', () => {
-      expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
-        MissingProviderRuntimeError,
+      expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+        'Provider reads require an explicit session owner',
       );
     });
     it('resolves the supplied owner and its provider manager separately', () => {
-      expect(listProviders(mockRuntimeProviderManager)).toStrictEqual([
-        'openai',
-        'anthropic',
-      ]);
+      expect(
+        new SessionProviderReads(
+          mockConfig,
+          mockRuntimeProviderManager,
+          () => declaredModel,
+          (provider) => mockSettingsService.getProviderSettings(provider),
+        ).listProviders(),
+      ).toStrictEqual(['openai', 'anthropic']);
     });
   });
 
   describe('getActiveModelName', () => {
     it('should return model from config when available', () => {
-      const modelName = getActiveModelName(mockConfig);
+      const modelName = new SessionProviderReads(
+        mockConfig,
+        mockRuntimeProviderManager,
+        () => declaredModel,
+        (provider) => mockSettingsService.getProviderSettings(provider),
+      ).getActiveModelName();
       expect(typeof modelName).toBe('string');
     });
   });
@@ -147,38 +173,62 @@ describe('runtimeAccessors', () => {
     it('sets, reads, and clears an ephemeral on only its supplied owner', () => {
       const { settingsOwner: first } = owners.config();
       const { settingsOwner: second } = owners.config();
-      setEphemeralSetting('context-limit', 4096, first);
-      setEphemeralSetting('context-limit', 8192, second);
-      expect(getEphemeralSetting('context-limit', first)).toBe(4096);
-      clearEphemeralSetting('context-limit', first);
-      expect(getEphemeralSetting('context-limit', first)).toBeUndefined();
+      settingsControl(first).setEphemeralSetting('context-limit', 4096);
+      settingsControl(second).setEphemeralSetting('context-limit', 8192);
+      expect(first.readNamedParameter('context-limit')).toBe(4096);
+      settingsControl(first).setEphemeralSetting('context-limit', undefined);
+      expect(first.readNamedParameter('context-limit')).toBeUndefined();
       expect(first.isUserParameter('context-limit')).toBe(false);
-      expect(getEphemeralSetting('context-limit', second)).toBe(8192);
+      expect(second.readNamedParameter('context-limit')).toBe(8192);
     });
 
     it('returns the supplied owner ephemeral snapshot without including sibling writes', () => {
       const { settingsOwner: first } = owners.config();
       const { settingsOwner: second } = owners.config();
-      setEphemeralSetting('first-setting', 'first-value', first);
-      setEphemeralSetting('second-setting', 'second-value', second);
-      expect(getEphemeralSettings(first)).toMatchObject({
+      settingsControl(first).setEphemeralSetting(
+        'first-setting',
+        'first-value',
+      );
+      settingsControl(second).setEphemeralSetting(
+        'second-setting',
+        'second-value',
+      );
+      expect(first.captureNamedParameters()).toMatchObject({
         'first-setting': 'first-value',
       });
-      expect(getEphemeralSettings(first)).not.toHaveProperty('second-setting');
+      expect(first.captureNamedParameters()).not.toHaveProperty(
+        'second-setting',
+      );
     });
 
     it('sets and clears model parameters on exactly the supplied settings store and provider', () => {
       const first = new SettingsService();
       const second = new SettingsService();
+      first.set('activeProvider', 'openai');
+      second.set('activeProvider', 'openai');
+      const firstOwner = owners.config('params-first', first).settingsOwner;
+      const secondOwner = owners.config('params-second', second).settingsOwner;
+      const firstReads = new SessionProviderReads(
+        firstOwner,
+        mockRuntimeProviderManager,
+        () => '',
+        (provider) => first.getProviderSettings(provider),
+      );
+      const secondReads = new SessionProviderReads(
+        secondOwner,
+        mockRuntimeProviderManager,
+        () => '',
+        (provider) => second.getProviderSettings(provider),
+      );
       first.setProviderSetting('openai', 'model', 'reserved-model');
       setActiveModelParam('temperature', 0.7, first, 'openai');
       setActiveModelParam('temperature', 0.2, second, 'openai');
-      expect(getActiveModelParams(first, 'openai')).toStrictEqual({
+      expect(firstReads.getActiveModelParams()).toStrictEqual({
         temperature: 0.7,
       });
       clearActiveModelParam('temperature', first, 'openai');
-      expect(getActiveModelParams(first, 'openai')).toStrictEqual({});
-      expect(getActiveModelParams(second, 'openai')).toStrictEqual({
+      expect(firstReads.getActiveModelParams()).toStrictEqual({});
+      expect(secondReads.getActiveModelParams()).toStrictEqual({
         temperature: 0.2,
       });
       expect(first.getProviderSettings('openai').model).toBe('reserved-model');
@@ -194,7 +244,12 @@ describe('runtimeAccessors', () => {
     it('returns the kimi alias sampling params for kimi-k3', () => {
       useProviderModel('kimi', 'kimi-k3');
 
-      const result = getUnallowedParametersForActiveModel(mockConfig);
+      const result = new SessionProviderReads(
+        mockConfig,
+        mockRuntimeProviderManager,
+        () => declaredModel,
+        (provider) => mockSettingsService.getProviderSettings(provider),
+      ).getUnallowedParametersForActiveModel();
       expect(result).toStrictEqual(
         expect.arrayContaining([
           'temperature',
@@ -209,47 +264,71 @@ describe('runtimeAccessors', () => {
     it('returns the kimi alias sampling params for k3-256k (broad rule match)', () => {
       useProviderModel('kimi', 'k3-256k');
 
-      expect(getUnallowedParametersForActiveModel(mockConfig)).toContain(
-        'temperature',
-      );
+      expect(
+        new SessionProviderReads(
+          mockConfig,
+          mockRuntimeProviderManager,
+          () => declaredModel,
+          (provider) => mockSettingsService.getProviderSettings(provider),
+        ).getUnallowedParametersForActiveModel(),
+      ).toContain('temperature');
     });
 
     it('returns an empty array for a model whose alias has no unallowed rules', () => {
       useProviderModel('openai', 'gpt-4');
 
-      expect(getUnallowedParametersForActiveModel(mockConfig)).toStrictEqual(
-        [],
-      );
+      expect(
+        new SessionProviderReads(
+          mockConfig,
+          mockRuntimeProviderManager,
+          () => declaredModel,
+          (provider) => mockSettingsService.getProviderSettings(provider),
+        ).getUnallowedParametersForActiveModel(),
+      ).toStrictEqual([]);
     });
 
     it('returns an empty array when there is no active provider', () => {
       mockSettingsService.set('activeProvider', undefined);
-      expect(getUnallowedParametersForActiveModel(mockConfig)).toStrictEqual(
-        [],
-      );
+      expect(
+        new SessionProviderReads(
+          mockConfig,
+          mockRuntimeProviderManager,
+          () => declaredModel,
+          (provider) => mockSettingsService.getProviderSettings(provider),
+        ).getUnallowedParametersForActiveModel(),
+      ).toStrictEqual([]);
     });
   });
 
   describe('provider queries', () => {
     it('should list providers', () => {
-      const providers = listProviders(mockRuntimeProviderManager);
+      const providers = new SessionProviderReads(
+        mockConfig,
+        mockRuntimeProviderManager,
+        () => declaredModel,
+        (provider) => mockSettingsService.getProviderSettings(provider),
+      ).listProviders();
       expect(Array.isArray(providers)).toBe(true);
     });
 
-    it('should get active provider name', () => {
-      const name = getActiveProviderName(
+    it('reads owner selection before the manager cache', () => {
+      mockSettingsService.set('activeProvider', 'selected-before-cache');
+      const name = new SessionProviderReads(
         mockConfig,
         mockRuntimeProviderManager,
-      );
-      expect(name).toBe('openai');
+        () => declaredModel,
+        (provider) => mockSettingsService.getProviderSettings(provider),
+      ).getActiveProviderName();
+      expect(name).toBe('selected-before-cache');
     });
 
     it('should get active provider status', () => {
-      const status = readProviderStatus(
-        mockSettingsService,
+      const status = new SessionProviderReads(
+        mockConfig,
         mockRuntimeProviderManager,
-        declaredModel,
-      );
+        () => declaredModel,
+        (provider) => mockSettingsService.getProviderSettings(provider),
+      ).providerStatus();
       expect(status).toHaveProperty('providerName');
       expect(status).toHaveProperty('modelName');
       expect(status).toHaveProperty('displayLabel');
@@ -363,11 +442,12 @@ describe('runtimeAccessors', () => {
         providerSettingsModel: 'gpt-5.6-sol',
       });
 
-      const status = readProviderStatus(
-        mockSettingsService,
+      const status = new SessionProviderReads(
+        mockConfig,
         mockRuntimeProviderManager,
-        declaredModel,
-      );
+        () => declaredModel,
+        (provider) => mockSettingsService.getProviderSettings(provider),
+      ).providerStatus();
 
       expect(status).toStrictEqual({
         providerName: 'codex',
@@ -378,7 +458,7 @@ describe('runtimeAccessors', () => {
       });
     });
 
-    it('keeps the resolved name but omits metadata when the named provider lookup fails', () => {
+    it('propagates a failed named provider lookup', () => {
       (
         mockRuntimeProviderManager.getProviderByName as Mock<
           typeof mockRuntimeProviderManager.getProviderByName
@@ -392,27 +472,25 @@ describe('runtimeAccessors', () => {
         providerSettingsModel: 'gpt-5.6-sol',
       });
 
-      const status = readProviderStatus(
-        mockSettingsService,
-        mockRuntimeProviderManager,
-        declaredModel,
-      );
-
-      expect(status.providerName).toBe('codex');
-      expect(status.modelName).toBe('gpt-5.6-sol');
-      expect(status.displayLabel).toBe('codex:gpt-5.6-sol');
-      expect(status.isPaidMode).toBeUndefined();
-      expect(status.baseURL).toBeUndefined();
+      expect(() =>
+        new SessionProviderReads(
+          mockConfig,
+          mockRuntimeProviderManager,
+          () => declaredModel,
+          (provider) => mockSettingsService.getProviderSettings(provider),
+        ).providerStatus(),
+      ).toThrow('boom');
     });
 
     it('falls back to the active provider metadata when no provider name is configured', () => {
       configureFor({ providerName: '', model: '' });
 
-      const status = readProviderStatus(
-        mockSettingsService,
+      const status = new SessionProviderReads(
+        mockConfig,
         mockRuntimeProviderManager,
-        declaredModel,
-      );
+        () => declaredModel,
+        (provider) => mockSettingsService.getProviderSettings(provider),
+      ).providerStatus();
 
       expect(status).toStrictEqual({
         providerName: 'gemini',
@@ -423,7 +501,7 @@ describe('runtimeAccessors', () => {
       });
     });
 
-    it('degrades to null identity when manager lookups throw or the active provider is missing', () => {
+    it('propagates a failed manager lookup', () => {
       (
         mockRuntimeProviderManager.getActiveProvider as Mock<
           typeof mockRuntimeProviderManager.getActiveProvider
@@ -440,20 +518,17 @@ describe('runtimeAccessors', () => {
       });
       configureFor({ providerName: '', model: '' });
 
-      const status = readProviderStatus(
-        mockSettingsService,
-        mockRuntimeProviderManager,
-        declaredModel,
-      );
-
-      expect(status.providerName).toBeNull();
-      expect(status.modelName).toBeNull();
-      expect(status.isPaidMode).toBeUndefined();
-      expect(status.baseURL).toBeUndefined();
-      expect(status.displayLabel).toBe('unknown');
+      expect(() =>
+        new SessionProviderReads(
+          mockConfig,
+          mockRuntimeProviderManager,
+          () => declaredModel,
+          (provider) => mockSettingsService.getProviderSettings(provider),
+        ).providerStatus(),
+      ).toThrow('boom');
     });
 
-    it('isolates the resolved name from a throwing resolved-provider metadata method', () => {
+    it('propagates failed provider metadata reads', () => {
       (
         mockRuntimeProviderManager.getProviderByName as Mock<
           typeof mockRuntimeProviderManager.getProviderByName
@@ -472,19 +547,17 @@ describe('runtimeAccessors', () => {
         providerSettingsModel: 'gpt-5.6-sol',
       });
 
-      const status = readProviderStatus(
-        mockSettingsService,
-        mockRuntimeProviderManager,
-        declaredModel,
-      );
-
-      expect(status.providerName).toBe('codex');
-      expect(status.modelName).toBe('gpt-5.6-sol');
-      expect(status.baseURL).toBe('https://codex.example/v1');
-      expect(status.isPaidMode).toBeUndefined();
+      expect(() =>
+        new SessionProviderReads(
+          mockConfig,
+          mockRuntimeProviderManager,
+          () => declaredModel,
+          (provider) => mockSettingsService.getProviderSettings(provider),
+        ).providerStatus(),
+      ).toThrow('boom');
     });
 
-    it('omits baseURL when the active provider base URL accessor throws', () => {
+    it('propagates a failed provider base URL read', () => {
       (
         mockRuntimeProviderManager.getActiveProvider as Mock<
           typeof mockRuntimeProviderManager.getActiveProvider
@@ -515,37 +588,47 @@ describe('runtimeAccessors', () => {
       );
       configureFor({ providerName: '', model: '' });
 
-      const status = readProviderStatus(
-        mockSettingsService,
-        mockRuntimeProviderManager,
-        declaredModel,
-      );
-
-      expect(status.providerName).toBe('gemini');
-      expect(status.modelName).toBe('gemini-2.5-pro');
-      expect(status.isPaidMode).toBe(true);
-      expect(status.baseURL).toBeUndefined();
+      expect(() =>
+        new SessionProviderReads(
+          mockConfig,
+          mockRuntimeProviderManager,
+          () => declaredModel,
+          (provider) => mockSettingsService.getProviderSettings(provider),
+        ).providerStatus(),
+      ).toThrow('boom');
     });
   });
 
   describe('accessor functions', () => {
     it('should get session token usage', () => {
-      const usage = getSessionTokenUsage(mockRuntimeProviderManager);
+      const usage = new SessionProviderReads(
+        mockConfig,
+        mockRuntimeProviderManager,
+        () => declaredModel,
+        (provider) => mockSettingsService.getProviderSettings(provider),
+      ).getSessionTokenUsage();
       expect(usage).toHaveProperty('input');
       expect(usage).toHaveProperty('output');
       expect(usage).toHaveProperty('total');
     });
 
     it('should get active provider metrics', () => {
-      const metrics = getActiveProviderMetrics(mockRuntimeProviderManager);
+      const metrics = new SessionProviderReads(
+        mockConfig,
+        mockRuntimeProviderManager,
+        () => declaredModel,
+        (provider) => mockSettingsService.getProviderSettings(provider),
+      ).getActiveProviderMetrics();
       expect(metrics).toBeDefined();
     });
 
     it('should list available models', async () => {
-      const models = await listAvailableModels(
-        'openai',
+      const models = await new SessionProviderReads(
+        mockConfig,
         mockRuntimeProviderManager,
-      );
+        () => declaredModel,
+        (provider) => mockSettingsService.getProviderSettings(provider),
+      ).listAvailableModels('openai');
       expect(Array.isArray(models)).toBe(true);
     });
   });

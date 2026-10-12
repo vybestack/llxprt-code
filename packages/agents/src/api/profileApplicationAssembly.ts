@@ -1,10 +1,11 @@
+import { extractModelParams } from '@vybestack/llxprt-code-providers/model-parameter-data.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { assembleModelSelection } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { assembleModelSelection } from './model-selection.js';
 
 import type {
   Config,
@@ -19,7 +20,6 @@ import {
   type ProfileLoadOptions,
   type ProfileLoadResult,
 } from '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js';
-import { getActiveModelParams } from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
 
 import { checkpointProviderTransition } from './providerTransitionCheckpoint.js';
@@ -293,7 +293,9 @@ export function assembleAgentProfiles(
       settingsOwner,
       profiles,
       async (result, signal) => {
-        const modelParams = getActiveModelParams(settings, result.providerName);
+        const modelParams = extractModelParams(
+          settings.getProviderSettings(result.providerName),
+        );
         const replacement = await prepareReplacement(
           result.providerChanged,
           signal,

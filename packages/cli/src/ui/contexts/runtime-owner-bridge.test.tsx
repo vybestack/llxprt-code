@@ -33,7 +33,6 @@ import React, { act, useEffect } from 'react';
 import { render } from 'ink-testing-library';
 import { Text } from 'ink';
 import { fromConfig } from '@vybestack/llxprt-code-agents';
-import { listProviders } from '@vybestack/llxprt-code-providers/runtime.js';
 import { SessionController } from '../containers/SessionController.js';
 import { Colors } from '../colors.js';
 import { useSessionState } from './SessionStateContext.js';
@@ -104,41 +103,6 @@ describe('interactive runtime owner bridge', () => {
   afterFixtureTest(() => {
     fixtureFilesystem = undefined;
   });
-  it('rejects ownerless service reads while two same-label Agents are active', async () => {
-    const first = await buildCliStyleConfig('multi-turn-text.jsonl');
-    const second = await buildCliStyleConfig('multi-turn-text.jsonl');
-    const a = await fromConfig({
-      settingsOwner: first.settingsOwner,
-      settingsService: first.settingsService,
-      providerManager: first.providerManager,
-      config: first.config,
-      messageBus: first.messageBus,
-      mcpRuntime: first.mcpRuntime,
-      sessionId: 'shared-service-label',
-    });
-    const b = await fromConfig({
-      settingsOwner: second.settingsOwner,
-      settingsService: second.settingsService,
-      providerManager: second.providerManager,
-      config: second.config,
-      messageBus: second.messageBus,
-      mcpRuntime: second.mcpRuntime,
-      sessionId: 'shared-service-label',
-    });
-    try {
-      expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
-        'Provider listing requires an explicit owner',
-      );
-      expect(first.providerManager).not.toBe(second.providerManager);
-    } finally {
-      await a.dispose();
-      await b.dispose();
-      await first.config.dispose();
-      await second.config.dispose();
-      await first.cleanup();
-      await second.cleanup();
-    }
-  }, 30000);
   it('keeps two mounted roots with identical runtime labels independent across updates and unmounts', async () => {
     const first = await buildCliStyleConfig('multi-turn-text.jsonl');
     const second = await buildCliStyleConfig('multi-turn-text.jsonl');
@@ -167,6 +131,7 @@ describe('interactive runtime owner bridge', () => {
     const captured: { left?: RuntimeApi; right?: RuntimeApi } = {};
     const left = render(
       <RuntimeContextProvider
+        requestFetch={a.sessionClient.fetch}
         agent={a}
         owner={createRuntimeOwnerFeatures(
           first.config,
@@ -176,6 +141,10 @@ describe('interactive runtime owner bridge', () => {
           first.settingsOwner,
           first.settingsService,
           a.workspace,
+          a.modelParameters,
+          a.settings,
+          a.toolFormat,
+          a.providerReads,
         )}
       >
         <SessionController
@@ -193,6 +162,7 @@ describe('interactive runtime owner bridge', () => {
     );
     const right = render(
       <RuntimeContextProvider
+        requestFetch={b.sessionClient.fetch}
         agent={b}
         owner={createRuntimeOwnerFeatures(
           second.config,
@@ -202,6 +172,10 @@ describe('interactive runtime owner bridge', () => {
           second.settingsOwner,
           second.settingsService,
           b.workspace,
+          b.modelParameters,
+          b.settings,
+          b.toolFormat,
+          b.providerReads,
         )}
       >
         <SessionController
@@ -259,6 +233,7 @@ describe('interactive runtime owner bridge', () => {
       );
       right.rerender(
         <RuntimeContextProvider
+          requestFetch={b.sessionClient.fetch}
           agent={b}
           owner={createRuntimeOwnerFeatures(
             second.config,
@@ -268,6 +243,10 @@ describe('interactive runtime owner bridge', () => {
             second.settingsOwner,
             second.settingsService,
             b.workspace,
+            b.modelParameters,
+            b.settings,
+            b.toolFormat,
+            b.providerReads,
           )}
         >
           <SessionController
@@ -318,6 +297,7 @@ describe('interactive runtime owner bridge', () => {
     const captured: { left?: RuntimeApi; right?: RuntimeApi } = {};
     const left = render(
       <RuntimeContextProvider
+        requestFetch={a.sessionClient.fetch}
         agent={a}
         owner={createRuntimeOwnerFeatures(
           first.config,
@@ -327,6 +307,10 @@ describe('interactive runtime owner bridge', () => {
           first.settingsOwner,
           first.settingsService,
           a.workspace,
+          a.modelParameters,
+          a.settings,
+          a.toolFormat,
+          a.providerReads,
         )}
       >
         <OwnerView
@@ -339,6 +323,7 @@ describe('interactive runtime owner bridge', () => {
     );
     const right = render(
       <RuntimeContextProvider
+        requestFetch={b.sessionClient.fetch}
         agent={b}
         owner={createRuntimeOwnerFeatures(
           second.config,
@@ -348,6 +333,10 @@ describe('interactive runtime owner bridge', () => {
           second.settingsOwner,
           second.settingsService,
           b.workspace,
+          b.modelParameters,
+          b.settings,
+          b.toolFormat,
+          b.providerReads,
         )}
       >
         <OwnerView
@@ -554,6 +543,7 @@ describe('interactive runtime owner bridge', () => {
         refresh={createProviderAliasRefresh(a.providerManager)}
       >
         <RuntimeContextProvider
+          requestFetch={a.sessionClient.fetch}
           agent={a}
           owner={createRuntimeOwnerFeatures(
             first.config,
@@ -563,6 +553,10 @@ describe('interactive runtime owner bridge', () => {
             first.settingsOwner,
             first.settingsService,
             a.workspace,
+            a.modelParameters,
+            a.settings,
+            a.toolFormat,
+            a.providerReads,
           )}
         >
           <OwnerView label="left" onApi={(api) => (captured.left = api)} />
@@ -577,6 +571,7 @@ describe('interactive runtime owner bridge', () => {
         refresh={createProviderAliasRefresh(b.providerManager)}
       >
         <RuntimeContextProvider
+          requestFetch={b.sessionClient.fetch}
           agent={b}
           owner={createRuntimeOwnerFeatures(
             second.config,
@@ -586,6 +581,10 @@ describe('interactive runtime owner bridge', () => {
             second.settingsOwner,
             second.settingsService,
             b.workspace,
+            b.modelParameters,
+            b.settings,
+            b.toolFormat,
+            b.providerReads,
           )}
         >
           <OwnerView label="right" onApi={(api) => (captured.right = api)} />

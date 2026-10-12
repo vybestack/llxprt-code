@@ -26,13 +26,16 @@ describe('chutesUsageInfo', () => {
     });
 
     it('should return null for empty API key', async () => {
-      const result = await fetchChutesUsage('');
+      const result = await fetchChutesUsage(globalThis.fetch, '');
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it('should return null for invalid API key', async () => {
-      const result = await fetchChutesUsage(undefined as unknown as string);
+      const result = await fetchChutesUsage(
+        globalThis.fetch,
+        undefined as unknown as string,
+      );
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -67,7 +70,7 @@ describe('chutesUsageInfo', () => {
           json: async () => mockUser,
         } as Response);
 
-      const result = await fetchChutesUsage('test-key-123');
+      const result = await fetchChutesUsage(globalThis.fetch, 'test-key-123');
 
       expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(fetchMock).toHaveBeenCalledWith(
@@ -113,7 +116,7 @@ describe('chutesUsageInfo', () => {
           }),
         } as Response);
 
-      const result = await fetchChutesUsage('test-key-123');
+      const result = await fetchChutesUsage(globalThis.fetch, 'test-key-123');
       expect(result).toBeNull();
     });
 
@@ -137,14 +140,14 @@ describe('chutesUsageInfo', () => {
           statusText: 'Internal Server Error',
         } as Response);
 
-      const result = await fetchChutesUsage('test-key-123');
+      const result = await fetchChutesUsage(globalThis.fetch, 'test-key-123');
       expect(result).toBeNull();
     });
 
     it('should handle network errors', async () => {
       fetchMock.mockRejectedValueOnce(new Error('Network error'));
 
-      const result = await fetchChutesUsage('test-key-123');
+      const result = await fetchChutesUsage(globalThis.fetch, 'test-key-123');
       expect(result).toBeNull();
     });
 
@@ -176,7 +179,7 @@ describe('chutesUsageInfo', () => {
           json: async () => mockUser,
         } as Response);
 
-      const result = await fetchChutesUsage('test-key-123');
+      const result = await fetchChutesUsage(globalThis.fetch, 'test-key-123');
       expect(result).toBeDefined();
       expect(result?.balance).toBe(0.0);
     });

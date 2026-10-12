@@ -34,7 +34,8 @@ import type { IProvider } from '@vybestack/llxprt-code-providers';
 import {
   setActiveModelParam,
   clearActiveModelParam,
-  getActiveModelParams,
+} from '../../../agents/src/api/model-parameters.js';
+import {
   switchActiveProvider,
   buildRuntimeProfileSnapshot,
   setActiveModel,
@@ -130,7 +131,7 @@ describe('Runtime model parameter isolation', () => {
 
   it('keeps model parameters scoped to the active provider', async () => {
     expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+      sessionRoot.agent.providerReads.getActiveModelParams(),
     ).toStrictEqual({});
 
     setActiveModelParam(
@@ -145,7 +146,7 @@ describe('Runtime model parameter isolation', () => {
     );
 
     expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+      sessionRoot.agent.providerReads.getActiveModelParams(),
     ).toStrictEqual({
       temperature: 0.8,
       max_tokens: 2048,
@@ -160,7 +161,7 @@ describe('Runtime model parameter isolation', () => {
       )),
     );
     expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+      sessionRoot.agent.providerReads.getActiveModelParams(),
     ).toStrictEqual({});
     // Switching providers clears the previous provider's settings by design
     // (clearPreviousProviderSettings, PLAN-20260603-ISSUE1584.P14), so alpha no
@@ -175,7 +176,7 @@ describe('Runtime model parameter isolation', () => {
       ...modelParamInputs(sessionRoot, providerManager),
     );
     expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+      sessionRoot.agent.providerReads.getActiveModelParams(),
     ).toStrictEqual({
       temperature: 0.35,
     });
@@ -188,7 +189,7 @@ describe('Runtime model parameter isolation', () => {
       )),
     );
     expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+      sessionRoot.agent.providerReads.getActiveModelParams(),
     ).toStrictEqual({});
     expect(
       settingsService.getProviderSettings('alpha').temperature,
@@ -273,7 +274,7 @@ describe('Runtime model parameter isolation', () => {
       ...modelParamInputs(sessionRoot, providerManager),
     );
     expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+      sessionRoot.agent.providerReads.getActiveModelParams(),
     ).toStrictEqual({
       temperature: 0.42,
     });
@@ -283,7 +284,7 @@ describe('Runtime model parameter isolation', () => {
       ...modelParamInputs(sessionRoot, providerManager),
     );
     expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+      sessionRoot.agent.providerReads.getActiveModelParams(),
     ).toStrictEqual({});
   });
 });

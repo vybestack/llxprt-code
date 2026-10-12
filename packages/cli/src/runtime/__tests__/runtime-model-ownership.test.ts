@@ -5,9 +5,10 @@
  */
 import { afterEach, describe, expect, it } from 'bun:test';
 import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { fromConfig } from '@vybestack/llxprt-code-agents';
-import { listProviders } from '@vybestack/llxprt-code-providers/runtime.js';
-import { readActiveProviderName } from '@vybestack/llxprt-code-providers/runtime/providerReadOperations.js';
+import {
+  fromConfig,
+  SessionProviderReads,
+} from '@vybestack/llxprt-code-agents';
 import { createRuntimeApi } from '../../ui/contexts/RuntimeContext.js';
 import { createRuntimeOwnerFeatures } from '../createRuntimeOwnerFeatures.js';
 import { createSessionModelCommand } from '../session-model-command.js';
@@ -49,8 +50,8 @@ describe('CLI retained session model commands', () => {
       sessionId: 'shared-isolation-label',
     });
     try {
-      expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
-        'Provider listing requires an explicit owner',
+      expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+        'Provider reads require an explicit session owner',
       );
       expect(first.providerManager).not.toBe(second.providerManager);
       const firstApi = createRuntimeApi(
@@ -63,7 +64,12 @@ describe('CLI retained session model commands', () => {
           first.settingsOwner,
           first.settingsService,
           agentA.workspace,
+          agentA.modelParameters,
+          agentA.settings,
+          agentA.toolFormat,
+          agentA.providerReads,
         ),
+        agentA.sessionClient.fetch,
       );
       const secondApi = createRuntimeApi(
         agentB,
@@ -75,11 +81,16 @@ describe('CLI retained session model commands', () => {
           second.settingsOwner,
           second.settingsService,
           agentB.workspace,
+          agentB.modelParameters,
+          agentB.settings,
+          agentB.toolFormat,
+          agentB.providerReads,
         ),
+        agentB.sessionClient.fetch,
       );
-      expect(
-        readActiveProviderName(first.settingsService, first.providerManager),
-      ).toBe(firstApi.getActiveProviderName());
+      expect(agentA.providerReads.readActiveProviderName()).toBe(
+        firstApi.getActiveProviderName(),
+      );
       expect([
         firstApi.getActiveProviderName(),
         secondApi.getActiveProviderName(),
@@ -95,6 +106,8 @@ describe('CLI retained session model commands', () => {
       ]);
       firstApi.setActiveModelParam('temperature', 0.2);
       secondApi.setActiveModelParam('temperature', 0.8);
+      expect(agentA.getModelParams().temperature).toBe(0.2);
+      expect(agentB.getModelParams().temperature).toBe(0.8);
       await Promise.all([
         firstApi.updateActiveProviderApiKey('first-key'),
         secondApi.updateActiveProviderApiKey('second-key'),
@@ -109,6 +122,24 @@ describe('CLI retained session model commands', () => {
       expect(second.settingsOwner.readNamedParameter('auth-key')).toBe(
         'second-key',
       );
+      agentA.settings.setEphemeralSetting('context-limit', 4096);
+      agentB.settings.setEphemeralSetting('context-limit', 8192);
+      agentA.settings.setSessionSetting('dumpcontext', 'on');
+      agentB.settings.setSessionSetting('dumpcontext', 'error');
+      agentA.settings.clearSessionSetting('dumpcontext');
+      expect(agentA.settings.getSessionSetting('dumpcontext')).toBeUndefined();
+      expect(agentB.settings.getSessionSetting('dumpcontext')).toBe('error');
+      expect(firstApi.getEphemeralSetting('context-limit')).toBe(4096);
+      expect(secondApi.getEphemeralSetting('context-limit')).toBe(8192);
+      await agentA.toolFormat.setOverride('kimi');
+      await agentB.toolFormat.setOverride('openai');
+      expect((await firstApi.getActiveToolFormatState()).override).toBe('kimi');
+      expect((await secondApi.getActiveToolFormatState()).override).toBe(
+        'openai',
+      );
+      await firstApi.setActiveToolFormatOverride(null);
+      expect((await agentA.toolFormat.getState()).isAutoDetected).toBe(true);
+      expect((await agentB.toolFormat.getState()).override).toBe('openai');
       firstApi.clearActiveModelParam('temperature');
       await firstApi.updateActiveProviderApiKey(null);
       expect(firstApi.getActiveModelParams()).not.toHaveProperty('temperature');

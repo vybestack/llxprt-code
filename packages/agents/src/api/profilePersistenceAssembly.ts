@@ -1,7 +1,6 @@
-import {
-  setActiveModel,
-  assembleModelSelection,
-} from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { extractModelParams } from '@vybestack/llxprt-code-providers/model-parameter-data.js';
+import { setActiveModel } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { assembleModelSelection } from './model-selection.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 /**
@@ -21,7 +20,6 @@ import {
   deleteProfileByName,
   saveProfileSnapshot,
 } from '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js';
-import { getActiveModelParams } from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
 import type { Agent, ProviderStatus } from './agent.js';
 import type { AgentProviderState } from './agentImpl.js';
 import type { AuthWinner } from './control/authState.js';
@@ -126,7 +124,10 @@ function captureProfileDiagnostics(
         ? storedModel
         : config.getModel() || null,
     profileName: settings.getCurrentProfileName(),
-    modelParams: getActiveModelParams(settings, providerName ?? undefined),
+    modelParams:
+      providerName === null
+        ? {}
+        : extractModelParams(settings.getProviderSettings(providerName)),
     ephemeralSettings: captureParameters(),
   });
 }

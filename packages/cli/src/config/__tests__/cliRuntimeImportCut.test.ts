@@ -1,3 +1,6 @@
+import { assembleSettingsControl } from '../../../../agents/src/api/control/settings-control.js';
+import { assembleToolFormatControl } from '../../../../agents/src/api/control/tool-format-control.js';
+import { SessionProviderReads } from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -199,6 +202,31 @@ describe('CLI provider bootstrap across owners', () => {
             item.settingsOwner,
             item.settingsService,
             definitionFixture(),
+            {
+              set: () => {
+                throw new Error('Unexpected model parameter mutation');
+              },
+              clear: () => {
+                throw new Error('Unexpected model parameter clear');
+              },
+            },
+            assembleSettingsControl(
+              () => item.settingsOwner,
+              () => {},
+              () => {},
+            ),
+            assembleToolFormatControl(
+              () => item.settingsOwner,
+              () => item.runtimeState.providerManager.getActiveProvider(),
+              () => {},
+              () => {},
+            ),
+            new SessionProviderReads(
+              item.settingsOwner,
+              item.runtimeState.providerManager,
+              () => config.getModel(),
+              (provider) => item.settingsService.getProviderSettings(provider),
+            ),
           ).getActiveModelName(),
         ).toBe(item.model);
       }

@@ -1,4 +1,5 @@
 import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
+import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -6,12 +7,7 @@ import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
  */
 import { describe, expect, it } from 'bun:test';
 import { useRuntimeTestOwners } from './__tests__/runtime-owner-test-helpers.js';
-import {
-  createIsolatedRuntimeContext,
-  getActiveProviderName,
-  listProviders,
-  validateRuntimeId,
-} from './index.js';
+import { createIsolatedRuntimeContext, validateRuntimeId } from './index.js';
 
 describe('explicit owner identity at composition boundaries (issue #2300)', () => {
   const owners = useRuntimeTestOwners();
@@ -22,10 +18,20 @@ describe('explicit owner identity at composition boundaries (issue #2300)', () =
     first.settingsService.set('activeProvider', 'openai');
     second.settingsService.set('activeProvider', 'kimi');
     expect(
-      getActiveProviderName(first.settingsOwner, first.providerManager),
+      new SessionProviderReads(
+        first.settingsOwner,
+        first.providerManager,
+        () => first.config.getModel(),
+        (provider) => first.settingsService.getProviderSettings(provider),
+      ).getActiveProviderName(),
     ).toBe('openai');
     expect(
-      getActiveProviderName(second.settingsOwner, second.providerManager),
+      new SessionProviderReads(
+        second.settingsOwner,
+        second.providerManager,
+        () => second.config.getModel(),
+        (provider) => second.settingsService.getProviderSettings(provider),
+      ).getActiveProviderName(),
     ).toBe('kimi');
     expect(first.oauthManager).not.toBe(second.oauthManager);
   });
@@ -33,18 +39,18 @@ describe('explicit owner identity at composition boundaries (issue #2300)', () =
   it('does not borrow a foreground manager for an owner with no infrastructure', () => {
     owners.foreground();
     const { config: incomplete } = owners.config();
-    expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
-      'Provider listing requires an explicit owner',
+    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+      'Provider reads require an explicit session owner',
     );
     expect('runtimeOAuthManager' in incomplete).toBe(false);
   });
 
   it('requires an explicit owner even after foreground infrastructure exists', () => {
     const foreground = owners.foreground();
-    expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
-      'Provider listing requires an explicit owner',
+    expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+      'Provider reads require an explicit session owner',
     );
-    expect(listProviders(foreground.providerManager)).toContain('openai');
+    expect(foreground.providerManager.listProviders()).toContain('openai');
   });
 
   it('isolated construction before foreground bootstrap cannot select foreground infrastructure', async () => {

@@ -21,7 +21,7 @@ import {
   getRecommendedModel,
   getModelsDevProviderIds,
 } from '../../src/models/provider-integration.js';
-import { ModelRegistry, getModelRegistry } from '../../src/models/registry.js';
+import { ModelRegistry } from '../../src/models/registry.js';
 import type { LlxprtModel } from '../../src/models/schema.js';
 import {
   mockApiResponse,
@@ -48,29 +48,10 @@ void vi.mock('node:fs', () => {
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
-const registryState = {
-  instance: null as ModelRegistry | null,
-};
-
-// Reset singleton between tests
-const __actual2 = { ...(await import('../../src/models/registry.js')) };
-void vi.mock('../../src/models/registry.js', () => {
-  const actual = __actual2 as typeof import('../../src/models/registry.js');
-
-  return {
-    ...actual,
-    getModelRegistry: () => {
-      if (!registryState.instance) {
-        registryState.instance = new actual.ModelRegistry();
-      }
-      return registryState.instance;
-    },
-  };
-});
-
-const resetRegistry = () => {
-  registryState.instance?.dispose();
-  registryState.instance = null;
+let registry: ModelRegistry;
+const resetRegistry = (): void => {
+  registry?.dispose();
+  registry = new ModelRegistry(globalThis.fetch);
 };
 
 describe('llxprtModelToIModel', () => {
@@ -132,7 +113,7 @@ describe('hasModelInRegistry', () => {
   });
 
   it('returns false when registry not initialized', () => {
-    const result = hasModelInRegistry('openai', 'gpt-4');
+    const result = hasModelInRegistry(registry, 'openai', 'gpt-4');
     expect(result).toBe(false);
   });
 
@@ -148,23 +129,26 @@ describe('hasModelInRegistry', () => {
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
 
-      const registry = getModelRegistry();
       await registry.initialize();
     });
 
     it('returns true for existing model', () => {
-      const result = hasModelInRegistry('openai', 'gpt-4-turbo');
+      const result = hasModelInRegistry(registry, 'openai', 'gpt-4-turbo');
       expect(result).toBe(true);
     });
 
     it('returns false for non-existent model', () => {
-      const result = hasModelInRegistry('openai', 'nonexistent-model');
+      const result = hasModelInRegistry(
+        registry,
+        'openai',
+        'nonexistent-model',
+      );
       expect(result).toBe(false);
     });
 
     it('checks across mapped provider IDs', () => {
       // 'gemini' maps to ['google', 'google-vertex']
-      const result = hasModelInRegistry('gemini', 'gemini-2.0-flash');
+      const result = hasModelInRegistry(registry, 'gemini', 'gemini-2.0-flash');
       expect(result).toBe(true);
     });
   });
@@ -181,7 +165,7 @@ describe('getExtendedModelInfo', () => {
   });
 
   it('returns undefined when registry not initialized', () => {
-    const result = getExtendedModelInfo('openai', 'gpt-4');
+    const result = getExtendedModelInfo(registry, 'openai', 'gpt-4');
     expect(result).toBeUndefined();
   });
 
@@ -197,12 +181,11 @@ describe('getExtendedModelInfo', () => {
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
 
-      const registry = getModelRegistry();
       await registry.initialize();
     });
 
     it('returns LlxprtModel for existing model', () => {
-      const result = getExtendedModelInfo('openai', 'gpt-4-turbo');
+      const result = getExtendedModelInfo(registry, 'openai', 'gpt-4-turbo');
       expect(result).toBeDefined();
       expect(result?.id).toBe('openai/gpt-4-turbo');
       expect(result?.pricing).toBeDefined();
@@ -210,12 +193,16 @@ describe('getExtendedModelInfo', () => {
     });
 
     it('returns undefined for non-existent model', () => {
-      const result = getExtendedModelInfo('openai', 'nonexistent');
+      const result = getExtendedModelInfo(registry, 'openai', 'nonexistent');
       expect(result).toBeUndefined();
     });
 
     it('searches across mapped provider IDs', () => {
-      const result = getExtendedModelInfo('gemini', 'gemini-2.0-flash');
+      const result = getExtendedModelInfo(
+        registry,
+        'gemini',
+        'gemini-2.0-flash',
+      );
       expect(result).toBeDefined();
       expect(result?.name).toBe('Gemini 2.0 Flash');
     });
@@ -233,7 +220,7 @@ describe('getRecommendedModel', () => {
   });
 
   it('returns undefined when registry not initialized', () => {
-    const result = getRecommendedModel('openai');
+    const result = getRecommendedModel(registry, 'openai');
     expect(result).toBeUndefined();
   });
 
@@ -249,18 +236,17 @@ describe('getRecommendedModel', () => {
       );
       mockFetch.mockRejectedValue(new Error('Network error'));
 
-      const registry = getModelRegistry();
       await registry.initialize();
     });
 
     it('returns a model for valid provider', () => {
-      const result = getRecommendedModel('openai');
+      const result = getRecommendedModel(registry, 'openai');
       expect(result).toBeDefined();
       expect(result?.providerId).toBe('openai');
     });
 
     it('filters by requireToolCalling', () => {
-      const result = getRecommendedModel('openai', {
+      const result = getRecommendedModel(registry, 'openai', {
         requireToolCalling: true,
       });
       expect(result).toBeDefined();
@@ -268,25 +254,29 @@ describe('getRecommendedModel', () => {
     });
 
     it('filters by requireReasoning', () => {
-      const result = getRecommendedModel('openai', { requireReasoning: true });
+      const result = getRecommendedModel(registry, 'openai', {
+        requireReasoning: true,
+      });
       expect(result).toBeDefined();
       expect(result?.capabilities.reasoning).toBe(true);
     });
 
     it('sorts by price when preferCheaper: true', () => {
-      const result = getRecommendedModel('openai', { preferCheaper: true });
+      const result = getRecommendedModel(registry, 'openai', {
+        preferCheaper: true,
+      });
       expect(result).toBeDefined();
       // Should return model with lowest input price
     });
 
     it('sorts by context window by default', () => {
-      const result = getRecommendedModel('openai');
+      const result = getRecommendedModel(registry, 'openai');
       expect(result).toBeDefined();
       // Should return model with highest context window
     });
 
     it('returns undefined when no candidates match', () => {
-      const result = getRecommendedModel('openai', {
+      const result = getRecommendedModel(registry, 'openai', {
         requireToolCalling: true,
         requireReasoning: true,
       });
@@ -296,12 +286,12 @@ describe('getRecommendedModel', () => {
     });
 
     it('excludes deprecated models', () => {
-      const result = getRecommendedModel('openai');
+      const result = getRecommendedModel(registry, 'openai');
       expect(result?.metadata?.status).not.toBe('deprecated');
     });
 
     it('returns undefined for unknown provider', () => {
-      const result = getRecommendedModel('nonexistent');
+      const result = getRecommendedModel(registry, 'nonexistent');
       expect(result).toBeUndefined();
     });
   });

@@ -14,7 +14,6 @@ import {
 } from '@vybestack/llxprt-code-core';
 import type { OAuthUICallback } from '@vybestack/llxprt-code-auth';
 import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { getProviderSettingsSnapshot } from './providerModelParameters.js';
 import { extractProviderBaseUrl } from './providerMutations.js';
 import {
   loadProviderAliasEntries,
@@ -198,12 +197,10 @@ function captureSwitchRequest(
     previousSettings: Object.freeze(
       currentProvider === null
         ? {}
-        : structuredClone(
-            getProviderSettingsSnapshot(settingsService, currentProvider),
-          ),
+        : structuredClone(settingsService.getProviderSettings(currentProvider)),
     ),
     targetSettings: Object.freeze(
-      structuredClone(getProviderSettingsSnapshot(settingsService, name)),
+      structuredClone(settingsService.getProviderSettings(name)),
     ),
   });
 }

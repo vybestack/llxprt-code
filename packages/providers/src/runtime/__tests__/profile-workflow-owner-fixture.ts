@@ -5,7 +5,7 @@ import { CredentialAuthority } from '../../auth/proxy/credential-store-factory.j
  * SPDX-License-Identifier: Apache-2.0
  */
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { assembleModelSelection } from '../providerMutations.js';
+import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import { afterEach, beforeEach } from 'bun:test';
 import {

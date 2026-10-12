@@ -1,3 +1,4 @@
+import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
@@ -173,7 +174,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -244,7 +245,7 @@ describe('subagent.ts', () => {
           defaultRunConfig,
           undefined,
           undefined,
-          overrides,
+          ...scopeInputs(overrides),
         );
 
         await scope.runNonInteractive(new ContextState());
@@ -291,7 +292,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         outputConfig,
-        emitOverrides,
+        ...scopeInputs(emitOverrides),
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -332,7 +333,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         outputConfig,
-        emitOverrides,
+        ...scopeInputs(emitOverrides),
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -411,7 +412,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         toolConfig,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -491,7 +492,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         toolConfig,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -576,7 +577,7 @@ describe('subagent.ts', () => {
           defaultRunConfig,
           toolConfig,
           undefined,
-          overrides,
+          ...scopeInputs(overrides),
         );
 
         await scope.runNonInteractive(new ContextState());
@@ -689,7 +690,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         { tools: ['write_file'] },
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -731,7 +732,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         outputConfig,
-        nudgeOverrides,
+        ...scopeInputs(nudgeOverrides),
       );
 
       await scope.runNonInteractive(new ContextState());

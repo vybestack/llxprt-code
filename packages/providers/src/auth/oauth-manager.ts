@@ -1,3 +1,4 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type { InteractiveAuthRequestPort } from './interactive-auth-coordinator.js';
 import type {
   InteractiveAuthPrompt,
@@ -730,6 +731,7 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * @param bucket - Optional bucket name, defaults to current session bucket or 'default'
    */
   async getAnthropicUsageInfo(
+    requestFetch: NetworkFetch,
     bucket?: string,
   ): Promise<Record<string, unknown> | null> {
     const provider = this.providerRegistry.getProvider('claudecode');
@@ -748,25 +750,28 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
       )) ??
       'default';
 
-    return getAnthropicUsageInfo(this.tokenStore, bucketToUse);
+    return getAnthropicUsageInfo(requestFetch, this.tokenStore, bucketToUse);
   }
 
   /**
    * Get Anthropic usage information for all authenticated buckets.
    * Returns a map of bucket name to usage info for all buckets that have valid OAuth tokens.
    */
-  async getAllAnthropicUsageInfo(): Promise<
-    Map<string, Record<string, unknown>>
-  > {
-    return getAllAnthropicUsageInfo(this.tokenStore);
+  async getAllAnthropicUsageInfo(
+    requestFetch: NetworkFetch,
+  ): Promise<Map<string, Record<string, unknown>>> {
+    return getAllAnthropicUsageInfo(requestFetch, this.tokenStore);
   }
 
   /**
    * Get Codex usage information for all authenticated buckets.
    * Returns a map of bucket name to usage info for all buckets that have valid OAuth tokens with account_id.
    */
-  async getAllCodexUsageInfo(): Promise<Map<string, Record<string, unknown>>> {
+  async getAllCodexUsageInfo(
+    requestFetch: NetworkFetch,
+  ): Promise<Map<string, Record<string, unknown>>> {
     return getAllCodexUsageInfo(
+      requestFetch,
       this.tokenStore,
       this.readSessionAuthPolicy().baseUrl,
     );
@@ -777,10 +782,11 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
    * Returns a map of bucket name to reset-credits info for all buckets that
    * have valid OAuth tokens with account_id.
    */
-  async getAllCodexRateLimitResetCredits(): ReturnType<
-    typeof getAllCodexRateLimitResetCredits
-  > {
+  async getAllCodexRateLimitResetCredits(
+    requestFetch: NetworkFetch,
+  ): ReturnType<typeof getAllCodexRateLimitResetCredits> {
     return getAllCodexRateLimitResetCredits(
+      requestFetch,
       this.tokenStore,
       this.readSessionAuthPolicy().baseUrl,
     );

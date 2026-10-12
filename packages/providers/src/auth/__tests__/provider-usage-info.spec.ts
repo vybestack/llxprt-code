@@ -130,7 +130,11 @@ describe('getAnthropicUsageInfo', () => {
 
   it('returns null when no token exists for the bucket', async () => {
     const store = makeTokenStore();
-    const result = await getAnthropicUsageInfo(store, 'default');
+    const result = await getAnthropicUsageInfo(
+      globalThis.fetch,
+      store,
+      'default',
+    );
     expect(result).toBeNull();
     expect(mockFetchAnthropicUsage).not.toHaveBeenCalled();
   });
@@ -146,9 +150,14 @@ describe('getAnthropicUsageInfo', () => {
     });
     mockFetchAnthropicUsage.mockResolvedValue({ plan: 'legacy-single-bucket' });
 
-    const result = await getAnthropicUsageInfo(store, 'default');
+    const result = await getAnthropicUsageInfo(
+      globalThis.fetch,
+      store,
+      'default',
+    );
 
     expect(mockFetchAnthropicUsage).toHaveBeenCalledWith(
+      globalThis.fetch,
       'sk-ant-api03-not-oauth',
     );
     expect(result).toStrictEqual({ plan: 'legacy-single-bucket' });
@@ -161,7 +170,11 @@ describe('getAnthropicUsageInfo', () => {
     });
     mockFetchAnthropicUsage.mockRejectedValue(new Error('network error'));
 
-    const result = await getAnthropicUsageInfo(store, 'default');
+    const result = await getAnthropicUsageInfo(
+      globalThis.fetch,
+      store,
+      'default',
+    );
     expect(result).toBeNull();
   });
 
@@ -172,9 +185,16 @@ describe('getAnthropicUsageInfo', () => {
     });
     mockFetchAnthropicUsage.mockResolvedValue({ plan: 'max' });
 
-    const result = await getAnthropicUsageInfo(store, 'my-bucket');
+    const result = await getAnthropicUsageInfo(
+      globalThis.fetch,
+      store,
+      'my-bucket',
+    );
 
-    expect(mockFetchAnthropicUsage).toHaveBeenCalledWith(token.access_token);
+    expect(mockFetchAnthropicUsage).toHaveBeenCalledWith(
+      globalThis.fetch,
+      token.access_token,
+    );
     expect(result).toStrictEqual({ plan: 'max' });
   });
 
@@ -185,7 +205,7 @@ describe('getAnthropicUsageInfo', () => {
     });
     mockFetchAnthropicUsage.mockResolvedValue({ plan: 'free' });
 
-    await getAnthropicUsageInfo(store, undefined);
+    await getAnthropicUsageInfo(globalThis.fetch, store, undefined);
 
     expect(store.getToken).toHaveBeenCalledWith('claudecode', 'default');
   });
@@ -197,7 +217,11 @@ describe('getAnthropicUsageInfo', () => {
     });
     mockFetchAnthropicUsage.mockResolvedValue(null);
 
-    const result = await getAnthropicUsageInfo(store, 'default');
+    const result = await getAnthropicUsageInfo(
+      globalThis.fetch,
+      store,
+      'default',
+    );
     expect(result).toBeNull();
   });
 });
@@ -217,7 +241,7 @@ describe('getAllAnthropicUsageInfo', () => {
       getToken: vi.fn().mockResolvedValue(null),
     });
 
-    const result = await getAllAnthropicUsageInfo(store);
+    const result = await getAllAnthropicUsageInfo(globalThis.fetch, store);
     expect(result.size).toBe(0);
   });
 
@@ -227,7 +251,7 @@ describe('getAllAnthropicUsageInfo', () => {
       getToken: vi.fn().mockResolvedValue(null),
     });
 
-    await getAllAnthropicUsageInfo(store);
+    await getAllAnthropicUsageInfo(globalThis.fetch, store);
 
     expect(store.listBuckets).toHaveBeenCalledWith('claudecode');
     expect(store.getToken).toHaveBeenCalledWith('claudecode', 'default');
@@ -244,7 +268,7 @@ describe('getAllAnthropicUsageInfo', () => {
       getToken: vi.fn().mockResolvedValue(expiredToken),
     });
 
-    const result = await getAllAnthropicUsageInfo(store);
+    const result = await getAllAnthropicUsageInfo(globalThis.fetch, store);
     expect(result.size).toBe(0);
     expect(mockFetchAnthropicUsage).not.toHaveBeenCalled();
   });
@@ -260,7 +284,7 @@ describe('getAllAnthropicUsageInfo', () => {
       getToken: vi.fn().mockResolvedValue(apiKeyToken),
     });
 
-    const result = await getAllAnthropicUsageInfo(store);
+    const result = await getAllAnthropicUsageInfo(globalThis.fetch, store);
     expect(result.size).toBe(0);
     expect(mockFetchAnthropicUsage).not.toHaveBeenCalled();
   });
@@ -284,7 +308,7 @@ describe('getAllAnthropicUsageInfo', () => {
       .mockResolvedValueOnce({ plan: 'max', bucket: 'bucket-a' })
       .mockResolvedValueOnce({ plan: 'pro', bucket: 'bucket-b' });
 
-    const result = await getAllAnthropicUsageInfo(store);
+    const result = await getAllAnthropicUsageInfo(globalThis.fetch, store);
 
     expect(result.size).toBe(2);
     expect(result.get('bucket-a')).toStrictEqual({
@@ -316,7 +340,7 @@ describe('getAllAnthropicUsageInfo', () => {
       .mockRejectedValueOnce(new Error('network error'))
       .mockResolvedValueOnce({ plan: 'pro' });
 
-    const result = await getAllAnthropicUsageInfo(store);
+    const result = await getAllAnthropicUsageInfo(globalThis.fetch, store);
 
     expect(result.size).toBe(1);
     expect(result.get('bucket-b')).toStrictEqual({ plan: 'pro' });
@@ -330,7 +354,7 @@ describe('getAllAnthropicUsageInfo', () => {
     });
     mockFetchAnthropicUsage.mockResolvedValue(null);
 
-    const result = await getAllAnthropicUsageInfo(store);
+    const result = await getAllAnthropicUsageInfo(globalThis.fetch, store);
     expect(result.size).toBe(0);
   });
 });
@@ -350,7 +374,7 @@ describe('getAllCodexUsageInfo', () => {
       getToken: vi.fn().mockResolvedValue(null),
     });
 
-    const result = await getAllCodexUsageInfo(store);
+    const result = await getAllCodexUsageInfo(globalThis.fetch, store);
     expect(result.size).toBe(0);
   });
 
@@ -360,7 +384,7 @@ describe('getAllCodexUsageInfo', () => {
       getToken: vi.fn().mockResolvedValue(null),
     });
 
-    await getAllCodexUsageInfo(store);
+    await getAllCodexUsageInfo(globalThis.fetch, store);
 
     expect(store.getToken).toHaveBeenCalledWith('codex', 'default');
   });
@@ -377,7 +401,7 @@ describe('getAllCodexUsageInfo', () => {
       getToken: vi.fn().mockResolvedValue(expiredToken),
     });
 
-    const result = await getAllCodexUsageInfo(store);
+    const result = await getAllCodexUsageInfo(globalThis.fetch, store);
     expect(result.size).toBe(0);
     expect(mockFetchCodexUsage).not.toHaveBeenCalled();
   });
@@ -393,7 +417,7 @@ describe('getAllCodexUsageInfo', () => {
       getToken: vi.fn().mockResolvedValue(tokenWithoutAccountId),
     });
 
-    const result = await getAllCodexUsageInfo(store);
+    const result = await getAllCodexUsageInfo(globalThis.fetch, store);
     expect(result.size).toBe(0);
     expect(mockFetchCodexUsage).not.toHaveBeenCalled();
   });
@@ -411,9 +435,10 @@ describe('getAllCodexUsageInfo', () => {
     });
     mockFetchCodexUsage.mockResolvedValue({ quota: 1000 });
 
-    const result = await getAllCodexUsageInfo(store);
+    const result = await getAllCodexUsageInfo(globalThis.fetch, store);
 
     expect(mockFetchCodexUsage).toHaveBeenCalledWith(
+      globalThis.fetch,
       'codex-access-token',
       'acct-abc123',
       undefined,
@@ -440,11 +465,13 @@ describe('getAllCodexUsageInfo', () => {
     };
 
     await getAllCodexUsageInfo(
+      globalThis.fetch,
       store,
       mockConfig.getEphemeralSetting('base-url'),
     );
 
     expect(mockFetchCodexUsage).toHaveBeenCalledWith(
+      globalThis.fetch,
       'codex-access-token',
       'acct-xyz',
       'https://custom.codex.io',
@@ -469,11 +496,13 @@ describe('getAllCodexUsageInfo', () => {
     };
 
     await getAllCodexUsageInfo(
+      globalThis.fetch,
       store,
       mockConfig.getEphemeralSetting('base-url'),
     );
 
     expect(mockFetchCodexUsage).toHaveBeenCalledWith(
+      globalThis.fetch,
       'codex-token',
       'acct-empty',
       undefined,
@@ -509,7 +538,7 @@ describe('getAllCodexUsageInfo', () => {
       .mockRejectedValueOnce(new Error('fetch failed'))
       .mockResolvedValueOnce({ quota: 999 });
 
-    const result = await getAllCodexUsageInfo(store);
+    const result = await getAllCodexUsageInfo(globalThis.fetch, store);
     expect(result.size).toBe(1);
     expect(result.get('bucket-b')).toStrictEqual({ quota: 999 });
   });
@@ -530,7 +559,10 @@ describe('getAllCodexRateLimitResetCredits', () => {
       getToken: vi.fn().mockResolvedValue(null),
     });
 
-    const result = await getAllCodexRateLimitResetCredits(store);
+    const result = await getAllCodexRateLimitResetCredits(
+      globalThis.fetch,
+      store,
+    );
     expect(result.size).toBe(0);
   });
 
@@ -540,7 +572,7 @@ describe('getAllCodexRateLimitResetCredits', () => {
       getToken: vi.fn().mockResolvedValue(null),
     });
 
-    await getAllCodexRateLimitResetCredits(store);
+    await getAllCodexRateLimitResetCredits(globalThis.fetch, store);
 
     expect(store.getToken).toHaveBeenCalledWith('codex', 'default');
   });
@@ -557,7 +589,10 @@ describe('getAllCodexRateLimitResetCredits', () => {
       getToken: vi.fn().mockResolvedValue(expiredToken),
     });
 
-    const result = await getAllCodexRateLimitResetCredits(store);
+    const result = await getAllCodexRateLimitResetCredits(
+      globalThis.fetch,
+      store,
+    );
     expect(result.size).toBe(0);
     expect(mockFetchCodexRateLimitResetCredits).not.toHaveBeenCalled();
   });
@@ -573,7 +608,10 @@ describe('getAllCodexRateLimitResetCredits', () => {
       getToken: vi.fn().mockResolvedValue(tokenWithoutAccountId),
     });
 
-    const result = await getAllCodexRateLimitResetCredits(store);
+    const result = await getAllCodexRateLimitResetCredits(
+      globalThis.fetch,
+      store,
+    );
     expect(result.size).toBe(0);
     expect(mockFetchCodexRateLimitResetCredits).not.toHaveBeenCalled();
   });
@@ -591,7 +629,10 @@ describe('getAllCodexRateLimitResetCredits', () => {
     });
     mockFetchCodexRateLimitResetCredits.mockResolvedValue(null);
 
-    const result = await getAllCodexRateLimitResetCredits(store);
+    const result = await getAllCodexRateLimitResetCredits(
+      globalThis.fetch,
+      store,
+    );
     expect(result.size).toBe(0);
   });
 
@@ -610,9 +651,13 @@ describe('getAllCodexRateLimitResetCredits', () => {
       rate_limit_reset_credits: { available_count: 1, credits: [] },
     });
 
-    const result = await getAllCodexRateLimitResetCredits(store);
+    const result = await getAllCodexRateLimitResetCredits(
+      globalThis.fetch,
+      store,
+    );
 
     expect(mockFetchCodexRateLimitResetCredits).toHaveBeenCalledWith(
+      globalThis.fetch,
       'codex-access-token',
       'acct-abc123',
       undefined,
@@ -643,11 +688,13 @@ describe('getAllCodexRateLimitResetCredits', () => {
     };
 
     await getAllCodexRateLimitResetCredits(
+      globalThis.fetch,
       store,
       mockConfig.getEphemeralSetting('base-url'),
     );
 
     expect(mockFetchCodexRateLimitResetCredits).toHaveBeenCalledWith(
+      globalThis.fetch,
       'codex-access-token',
       'acct-xyz',
       'https://custom.codex.io',
@@ -674,11 +721,13 @@ describe('getAllCodexRateLimitResetCredits', () => {
     };
 
     await getAllCodexRateLimitResetCredits(
+      globalThis.fetch,
       store,
       mockConfig.getEphemeralSetting('base-url'),
     );
 
     expect(mockFetchCodexRateLimitResetCredits).toHaveBeenCalledWith(
+      globalThis.fetch,
       'codex-token',
       'acct-empty',
       undefined,
@@ -720,7 +769,10 @@ describe('getAllCodexRateLimitResetCredits', () => {
         rate_limit_reset_credits: { available_count: 1, credits: [] },
       });
 
-    const result = await getAllCodexRateLimitResetCredits(store);
+    const result = await getAllCodexRateLimitResetCredits(
+      globalThis.fetch,
+      store,
+    );
     expect(result.size).toBe(1);
     expect(result.get('bucket-b')).toStrictEqual({
       rate_limit_reset_credits: { available_count: 1, credits: [] },

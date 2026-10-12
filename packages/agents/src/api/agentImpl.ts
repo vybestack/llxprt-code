@@ -1,3 +1,5 @@
+import { assembleSettingsControl } from './control/settings-control.js';
+import { assembleToolFormatControl } from './control/tool-format-control.js';
 import { AuxiliaryWork } from '../core/auxiliary-work.js';
 /**
  * @license
@@ -30,10 +32,7 @@ import {
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
 } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
-import {
-  setActiveModelParam,
-  clearActiveModelParam,
-} from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
+import { assembleModelParameterControl } from './model-parameters.js';
 import {
   setAgentSelectedModel,
   restoreAgentChatVisibility,
@@ -52,7 +51,6 @@ import type {
   AgentInput,
   AgentMessage,
   AgentResult,
-  AuthStatus,
   CompressionResult,
   GenerateOptions,
   ProviderInfo,
@@ -83,7 +81,12 @@ import { PolicyControl } from './control/policyControl.js';
 import { createTasksControl } from './control/tasksControl.js';
 import type { TasksControl } from './control/tasksControl.js';
 import type { SessionControl } from './control/sessionControl.js';
-import { assembleSessionControl } from './session-control-assembly.js';
+import {
+  assembleSessionControl,
+  idleClient,
+  initialProviderState,
+  resetIdleChat,
+} from './session-control-assembly.js';
 import {
   createRecordingExecution,
   currentRecordingPath,
@@ -112,9 +115,14 @@ import {
   type OwnershipRecord,
 } from './agentBootstrap.js';
 import type { EditorCallbacks } from './config-types.js';
-import { createAgentAuthState } from './control/authState.js';
-import type { AgentAuthState, AuthWinner } from './control/authState.js';
-import { computeAuthWinner } from './control/authState.js';
+import {
+  createAgentAuthState,
+  seedAgentAuthState,
+  type AgentAuthState,
+  type AuthWinner,
+  computeAuthWinner,
+  authStatusForWinner,
+} from './control/authState.js';
 import type { AgentSchedulerHandle } from './config-types.js';
 import { toRuntimeSwitchOptions } from './providerSwitchOptionsAdapter.js';
 import {
@@ -277,13 +285,37 @@ export class AgentImpl implements Agent {
   readonly getProviderContextLimit: Agent['getProviderContextLimit'];
   readonly listAvailableModels: Agent['listAvailableModels'];
 
+  readonly providerReads: Agent['providerReads'];
+  readonly modelParameters: Agent['modelParameters'] =
+    assembleModelParameterControl(
+      () => this.deps.settingsService,
+      () => this.deps.providerManager.getActiveProviderName(),
+      () => this.providerState.modelParams,
+      () => this.coordinator.assertNoCommit(),
+    );
+  readonly settings: Agent['settings'] = assembleSettingsControl(
+    () => this.deps.settingsOwner,
+    () => this.coordinator.assertSettingsAdmission(),
+    () => this.assertProfileIdle(),
+  );
+  readonly toolFormat: Agent['toolFormat'] = assembleToolFormatControl(
+    () => this.deps.settingsOwner,
+    () => this.deps.providerManager.getActiveProvider(),
+    () => this.coordinator.assertSettingsAdmission(),
+    () => this.assertProfileIdle(),
+  );
+
   constructor(private readonly deps: AgentDeps) {
     this.metrics = deps.settingsOwner.telemetry.localMetrics;
-    this.sessionClient = deps.sessionClient.operations;
+    this.sessionClient = this.buildSessionClient();
     const reads = assembleProviderReads(
       deps.providerManager,
       () => this.getProviderStatus().provider,
+      deps.settingsOwner,
+      () => this.providerState.model,
+      (provider) => deps.settingsService.getProviderSettings(provider),
     );
+    this.providerReads = reads.providerReads;
     this.hasActiveProvider = reads.hasActiveProvider;
     this.getProviderContextLimit = reads.getProviderContextLimit;
     this.listAvailableModels = reads.listAvailableModels;
@@ -310,18 +342,14 @@ export class AgentImpl implements Agent {
     // genuine live objects dispose() tears down (no second bus, no clones).
     this.messageBus = deps.messageBus;
 
-    const rs = deps.runtimeState;
-    this.providerState = {
-      provider: rs.provider,
-      model: rs.model,
-      modelParams: Object.assign(
-        Object.create(null) as Record<string, unknown>,
-        rs.modelParams ?? {},
-      ),
-      baseUrl: rs.baseUrl,
-    };
+    this.providerState = initialProviderState(deps.runtimeState);
     // @plan:PLAN-20260617-COREAPI.P18 @requirement:REQ-008
-    this.seedAuthState(rs.provider);
+    seedAgentAuthState(
+      deps.initialAuth,
+      this.authState,
+      this.providerState,
+      deps.runtimeState.provider,
+    );
     // Shared mutable holders threaded from finalizeAgent.
     this.editorCallbacksHolder = deps.editorCallbacksHolder;
     this.tools = assembleAgentTools(deps, this.coordinator);
@@ -337,7 +365,7 @@ export class AgentImpl implements Agent {
       this.captureProfile,
       (changed, signal) => this.prepareReplacement(changed, signal),
       deps.mcpOperations.profileDefinitions,
-      () => this.coordinator.assertNoCommit(),
+      () => this.coordinator.assertIdle(),
     );
     this.auth = this.buildAuthControl();
     this.mcp = this.buildMcpControl();
@@ -387,6 +415,11 @@ export class AgentImpl implements Agent {
       () => this.deps.sessionClient.prepareProfileClientReplacement(),
       () => this.activeRun,
     )(changed, signal);
+
+  private buildSessionClient(): Agent['sessionClient'] {
+    const { operations } = this.deps.sessionClient;
+    return idleClient(operations, this.coordinator, () => this.rebuild());
+  }
 
   private buildSessionControl(): SessionControl {
     const config = this.deps.config;
@@ -471,21 +504,6 @@ export class AgentImpl implements Agent {
    * @plan:PLAN-20260617-COREAPI.P18
    * @requirement:REQ-008
    */
-  private seedAuthState(provider: string): void {
-    const initialAuth = this.deps.initialAuth;
-    if (initialAuth === undefined) {
-      return;
-    }
-    this.authState.inlineKeyPresent = initialAuth.apiKey !== undefined;
-    this.authState.keyFile = initialAuth.apiKeyFile;
-    this.authState.baseUrl = initialAuth.baseUrl;
-    if (initialAuth.oauth === true) {
-      this.authState.oauthEnabled.add(provider);
-    }
-    if (initialAuth.keyName !== undefined) {
-      this.providerState.keyName = initialAuth.keyName;
-    }
-  }
 
   /**
    * Builds the AuthControl wired with the per-agent auth-state deps bundle.
@@ -519,7 +537,8 @@ export class AgentImpl implements Agent {
       authState: this.authState,
       getCurrentProvider: () => this.providerState.provider,
       getKeyName: () => this.providerState.keyName,
-      getStatus: (provider) => this.computeAuthStatusForProvider(provider),
+      getStatus: (provider) =>
+        authStatusForWinner(this.computeWinner(provider)),
       onOAuthPrompt: onOAuthPromptHandler,
       setBaseUrl: async (baseUrl) => {
         this.providerState.baseUrl = baseUrl ?? undefined;
@@ -704,9 +723,7 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-004
    */
   getModel(): string {
-    return (
-      this.deps.settingsOwner.readSelectedModel() ?? this.providerState.model
-    );
+    return this.providerReads.getActiveModelName();
   }
 
   /**
@@ -771,20 +788,17 @@ export class AgentImpl implements Agent {
 
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 20-22 */
   getEphemeralSetting(key: string): unknown {
-    this.coordinator.assertSettingsAdmission();
-    return this.deps.settingsOwner.readNamedParameter(key);
+    return this.settings.getEphemeralSetting(key);
   }
 
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 30-33 */
   setEphemeralSetting(key: string, value: unknown): void {
-    this.assertProfileIdle();
-    this.deps.settingsOwner.writeUserParameter(key, value);
+    this.settings.setEphemeralSetting(key, value);
   }
 
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 40-42 */
   getEphemeralSettings(): Readonly<Record<string, unknown>> {
-    this.coordinator.assertSettingsAdmission();
-    return this.deps.settingsOwner.captureNamedParameters();
+    return this.settings.getEphemeralSettings();
   }
 
   /**
@@ -829,11 +843,7 @@ export class AgentImpl implements Agent {
    * @pseudocode switch-rebind.md steps 90-94
    */
   setModelParam(key: string, value: unknown): void {
-    this.coordinator.assertNoCommit();
-    const { providerManager, settingsService } = this.deps;
-    const providerName = providerManager.getActiveProviderName();
-    setActiveModelParam(key, value, settingsService, providerName);
-    this.providerState.modelParams[key] = value;
+    this.modelParameters.set(key, value);
   }
 
   /**
@@ -843,11 +853,7 @@ export class AgentImpl implements Agent {
    * @pseudocode switch-rebind.md steps 100-103
    */
   clearModelParam(key: string): void {
-    this.coordinator.assertNoCommit();
-    const { providerManager, settingsService } = this.deps;
-    const providerName = providerManager.getActiveProviderName();
-    clearActiveModelParam(key, settingsService, providerName);
-    delete this.providerState.modelParams[key];
+    this.modelParameters.clear(key);
   }
 
   async getHistory(): Promise<readonly AgentMessage[]> {
@@ -898,11 +904,10 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-010
    */
   async resetChat(): Promise<void> {
-    if (this.session.getRecording().enabled) {
-      await this.session.clearHistory();
-      return;
-    }
-    await this.deps.resolveClient().resetChat();
+    this.assertProfileIdle();
+    await resetIdleChat(this.coordinator, this.session, () =>
+      this.deps.resolveClient().resetChat(),
+    );
   }
 
   /**
@@ -1234,10 +1239,6 @@ export class AgentImpl implements Agent {
   }
 
   /** Computes the auth status for an explicit provider. @plan:PLAN-20260617-COREAPI.P18 @requirement:REQ-008 */
-  private computeAuthStatusForProvider(provider: string): AuthStatus {
-    const winner = this.computeWinner(provider);
-    return winner !== 'none' ? 'authenticated' : 'unauthenticated';
-  }
 
   /** Computes the REQ-008 precedence winner. @plan:PLAN-20260617-COREAPI.P18 @requirement:REQ-008 */
   private computeWinner(provider: string): AuthWinner {

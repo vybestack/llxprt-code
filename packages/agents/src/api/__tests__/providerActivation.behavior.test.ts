@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { assembleModelSelection } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { assembleModelSelection } from '../model-selection.js';
 
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { makeFakeConfigForOauth } from './helpers/provider-auth-fixtures.js';
@@ -29,7 +29,7 @@ import {
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
 import { buildAgent, fixturesDir } from './helpers/agentHarness.js';
-import { getActiveModelParams } from '@vybestack/llxprt-code-providers/runtime.js';
+import { SessionProviderReads } from '../session-provider-reads.js';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
@@ -809,10 +809,12 @@ describe('provider-or-oauth runtime overrides (Zed features) (#2374 finding 4)',
       expect(result.authFailed).toBe(false);
       // Observable: the model params were pushed onto the active provider
       // runtime via setActiveModelParam.
-      const params = getActiveModelParams(
-        built.settingsService,
-        built.providerManager.getActiveProviderName(),
-      );
+      const params = new SessionProviderReads(
+        built.settingsOwner,
+        built.providerManager,
+        () => built.config.getModel(),
+        (provider) => built.settingsService.getProviderSettings(provider),
+      ).getActiveModelParams();
       expect(params['temperature']).toBe(0.42);
       expect(params['top_p']).toBe(0.9);
     } finally {

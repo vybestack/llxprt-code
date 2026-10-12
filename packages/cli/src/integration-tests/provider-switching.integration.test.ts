@@ -37,11 +37,8 @@ import {
   initializeTestSessionRoot,
   type CliTestSessionRoot,
 } from './test-utils.js';
-import {
-  switchActiveProvider,
-  setActiveModelParam,
-  getActiveModelParams,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+import { setActiveModelParam } from '../../../agents/src/api/model-parameters.js';
+import { switchActiveProvider } from '@vybestack/llxprt-code-providers/runtime.js';
 import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
 import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
 import { setProviderApiKey } from '@vybestack/llxprt-code-providers/runtime/providerConfigUtils.js';
@@ -179,7 +176,7 @@ describe('Runtime Provider Switching Integration', () => {
       ...modelParamInputs(sessionRoot, providerManager),
     );
     expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+      sessionRoot.agent.providerReads.getActiveModelParams(),
     ).toStrictEqual({
       temperature: 0.7,
       top_p: 0.9,
@@ -196,7 +193,7 @@ describe('Runtime Provider Switching Integration', () => {
       settingsService.getProviderSettings('providerA').temperature,
     ).toBeUndefined();
     expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+      sessionRoot.agent.providerReads.getActiveModelParams(),
     ).toStrictEqual({});
 
     setActiveModelParam(
@@ -205,7 +202,7 @@ describe('Runtime Provider Switching Integration', () => {
       ...modelParamInputs(sessionRoot, providerManager),
     );
     expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+      sessionRoot.agent.providerReads.getActiveModelParams(),
     ).toStrictEqual({
       temperature: 0.3,
     });
@@ -221,7 +218,7 @@ describe('Runtime Provider Switching Integration', () => {
       settingsService.getProviderSettings('providerB').temperature,
     ).toBeUndefined();
     expect(
-      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+      sessionRoot.agent.providerReads.getActiveModelParams(),
     ).toStrictEqual({});
   });
 

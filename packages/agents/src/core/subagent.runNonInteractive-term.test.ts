@@ -1,3 +1,4 @@
+import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -220,7 +221,7 @@ describe('subagent.ts', () => {
         runConfig,
         undefined,
         undefined,
-        maxTurnOverrides,
+        ...scopeInputs(maxTurnOverrides),
       );
 
       await scope.runNonInteractive(new ContextState());
@@ -270,7 +271,7 @@ describe('subagent.ts', () => {
           runConfig,
           undefined,
           undefined,
-          timeoutOverrides,
+          ...scopeInputs(timeoutOverrides),
         );
 
         runPromise = scope.runNonInteractive(new ContextState());
@@ -382,7 +383,7 @@ describe('subagent.ts', () => {
           runConfig,
           undefined,
           undefined,
-          overrides,
+          ...scopeInputs(overrides),
         );
 
         const runPromise = scope.runNonInteractive(new ContextState());
@@ -434,7 +435,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        errorOverrides,
+        ...scopeInputs(errorOverrides),
       );
 
       await expect(scope.runNonInteractive(new ContextState())).rejects.toThrow(
@@ -504,7 +505,7 @@ describe('subagent.ts', () => {
           runConfig,
           undefined,
           undefined,
-          overrides,
+          ...scopeInputs(overrides),
         );
 
         const runPromise = scope.runNonInteractive(new ContextState());
@@ -590,7 +591,7 @@ describe('subagent.ts', () => {
       runConfig,
       { tools: ['external_tool'] },
       undefined,
-      overrides,
+      ...scopeInputs(overrides),
     );
 
     mockSendMessageStream.mockImplementation(
@@ -664,7 +665,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // Model returns stop immediately to complete normally
@@ -702,7 +703,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
         parentAbortController.signal,
       );
 
@@ -735,7 +736,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // Should not throw
@@ -764,7 +765,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // Start an operation to create an abort controller
@@ -824,7 +825,7 @@ describe('subagent.ts', () => {
           runConfig,
           undefined,
           undefined,
-          overrides,
+          ...scopeInputs(overrides),
         );
 
         runPromise = scope.runNonInteractive(new ContextState());

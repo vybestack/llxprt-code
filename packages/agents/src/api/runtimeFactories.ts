@@ -42,10 +42,7 @@ import type {
   ToolSchedulerFactory,
   ToolSchedulerContract,
 } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
-import type {
-  TaskToolArgs,
-  TaskToolRegistration,
-} from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
+import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
 import type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
 import { buildAgentClientFactory } from './agentBootstrap.js';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
@@ -137,45 +134,56 @@ export function createTaskRegistration(
     toolClass: TaskTool,
     className: 'TaskTool',
     staticName: TaskTool.Name,
-    buildArgs(config: unknown, taskToolArgs: TaskToolArgs): unknown[] {
-      assertConfig(config, 'TaskToolRegistration.buildArgs');
-      return [
-        config,
-        {
-          ...taskToolArgs,
-          credentialAuthority,
-          readMcpInstructions:
-            taskToolArgs.readMcpInstructions ?? (() => undefined),
-        },
-      ];
+    buildArgs(...args: Parameters<TaskToolRegistration['create']>): unknown[] {
+      return [...args];
     },
-    create(config: unknown, taskToolArgs: TaskToolArgs) {
+    create(
+      config,
+      profileManager,
+      subagentManager,
+      messageBus,
+      workspacePaths,
+      readMcpInstructions,
+      instructions,
+      createChildSettings,
+      readTaskPolicy,
+      readRunPolicy,
+      readGovernance,
+      toolSelection,
+      hookOwner,
+      workspaceTrust,
+      telemetry,
+      requestInteractiveAuth,
+    ) {
       assertConfig(config, 'TaskToolRegistration.create');
-      if (taskToolArgs.instructions === undefined)
+      if (instructions === undefined)
         throw new Error('Task requires explicit instruction operations');
-      if (taskToolArgs.workspacePaths === undefined)
-        throw new Error('Task requires explicit workspace paths');
       if (
-        taskToolArgs.createChildSettings === undefined ||
-        taskToolArgs.readTaskPolicy === undefined ||
-        taskToolArgs.readRunPolicy === undefined ||
-        taskToolArgs.readGovernance === undefined
+        createChildSettings === undefined ||
+        readTaskPolicy === undefined ||
+        readRunPolicy === undefined ||
+        readGovernance === undefined
       )
         throw new Error(
           'Task requires explicit session policy and child settings',
         );
       return new TaskTool(config, {
         credentialAuthority,
-        createChildSettings: taskToolArgs.createChildSettings,
-        readTaskPolicy: taskToolArgs.readTaskPolicy,
-        readRunPolicy: taskToolArgs.readRunPolicy,
-        readGovernance: taskToolArgs.readGovernance,
-        ...taskToolArgs,
-        toolRegistry: taskToolArgs.toolSelection,
-        workspacePaths: taskToolArgs.workspacePaths,
-        instructions: taskToolArgs.instructions,
-        readMcpInstructions:
-          taskToolArgs.readMcpInstructions ?? (() => undefined),
+        profileManager,
+        subagentManager,
+        messageBus,
+        workspacePaths,
+        readMcpInstructions: readMcpInstructions ?? (() => undefined),
+        instructions,
+        createChildSettings,
+        readTaskPolicy,
+        readRunPolicy,
+        readGovernance,
+        toolRegistry: toolSelection,
+        hookOwner,
+        workspaceTrust,
+        telemetry,
+        requestInteractiveAuth,
       });
     },
   };

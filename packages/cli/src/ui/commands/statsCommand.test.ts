@@ -77,10 +77,15 @@ describe('statsCommand', () => {
           logger: Parameters<typeof discoverProviderBuckets>[1],
         ) => discoverProviderBuckets(oauthManagerMock(), logger),
         getAllAnthropicUsageInfo: () =>
-          oauthManagerMock().getAllAnthropicUsageInfo(),
-        getAllCodexUsageInfo: () => oauthManagerMock().getAllCodexUsageInfo(),
+          oauthManagerMock().getAllAnthropicUsageInfo(globalThis.fetch),
+        getAllCodexUsageInfo: () =>
+          oauthManagerMock().getAllCodexUsageInfo(globalThis.fetch),
       },
       runtimeApi: {
+        fetch: (
+          input: RequestInfo | URL,
+          init?: RequestInit,
+        ): Promise<Response> => globalThis.fetch(input, init),
         getEphemeralSetting: getEphemeralSettingMock,
         getActiveProviderName: getActiveProviderNameMock,
         detectProviderQuota: (name: string) => {

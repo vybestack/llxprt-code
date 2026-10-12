@@ -101,10 +101,12 @@ export function createOAuthControl(
       manager().clearBrowserProfileAssociation(provider, bucket),
     setBrowserProfileAssociation: (provider, bucket, association) =>
       manager().setBrowserProfileAssociation(provider, bucket, association),
-    getAllAnthropicUsageInfo: () => manager().getAllAnthropicUsageInfo(),
-    getAllCodexUsageInfo: () => manager().getAllCodexUsageInfo(),
-    getAllCodexRateLimitResetCredits: () =>
-      manager().getAllCodexRateLimitResetCredits(),
+    getAllAnthropicUsageInfo: (requestFetch) =>
+      manager().getAllAnthropicUsageInfo(requestFetch),
+    getAllCodexUsageInfo: (requestFetch) =>
+      manager().getAllCodexUsageInfo(requestFetch),
+    getAllCodexRateLimitResetCredits: (requestFetch) =>
+      manager().getAllCodexRateLimitResetCredits(requestFetch),
     hasCodexToken: async () => (await manager().getToken('codex')) !== null,
     attachProviderMessages: (callback) =>
       manager().attachAddItemToProviders(callback),

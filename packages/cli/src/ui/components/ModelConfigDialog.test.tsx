@@ -8,20 +8,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { act } from 'react';
 import { renderWithProviders } from '../../__tests__/render.js';
 import { waitFor } from '../../__tests__/async.js';
-
-// Mock the providers runtime barrel to avoid the broken dist dependency
-// chain, but delegate parseEphemeralSettingValue to the REAL source
-// implementation so tests exercise actual parsing/validation behavior.
-const real = await import(
-  '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js'
-);
-
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  parseEphemeralSettingValue: real.parseEphemeralSettingValue,
-  ephemeralSettingHelp: real.ephemeralSettingHelp,
-}));
-
-// Use the real parseValue from setCommand (source-resolved, no broken deps)
 import { ModelConfigDialog } from './ModelConfigDialog.js';
 
 function isModelFieldLine(line: string): boolean {

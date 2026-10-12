@@ -10,7 +10,7 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import type { ToolFormatOverrideLiteral } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import type { ToolFormatOverrideLiteral } from '@vybestack/llxprt-code-agents';
 
 const STRUCTURED_FORMATS = [
   'openai',

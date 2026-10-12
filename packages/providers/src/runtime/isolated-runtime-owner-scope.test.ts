@@ -1,4 +1,5 @@
 import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
+import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
@@ -12,7 +13,6 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   activateIsolatedRuntimeContext,
   createIsolatedRuntimeContext,
-  listProviders,
 } from './index.js';
 
 function sameLabelOwner() {
@@ -45,8 +45,8 @@ describe('isolated runtime owner activation', () => {
     })();
     try {
       await handle.activate();
-      expect(() => Reflect.apply(listProviders, undefined, [])).toThrow(
-        'Provider listing requires an explicit owner',
+      expect(() => Reflect.construct(SessionProviderReads, [])).toThrow(
+        'Provider reads require an explicit session owner',
       );
       expect('providerManager' in handle.config).toBe(false);
     } finally {

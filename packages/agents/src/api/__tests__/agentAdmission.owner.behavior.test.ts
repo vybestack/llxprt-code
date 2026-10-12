@@ -15,6 +15,7 @@ import {
   type TurnOptions,
 } from '@vybestack/llxprt-code-agents';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
+import { usePromptFixture } from './helpers/prompt-fixture.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '@vybestack/llxprt-code-providers';
 import { FakeProvider, OpenAIProvider } from '@vybestack/llxprt-code-providers';
@@ -173,6 +174,8 @@ async function withModelBoundary(
 }
 
 describe('Agent admission ownership (#2616 S2/C)', () => {
+  usePromptFixture();
+
   it('does not reserve admission for a never-started iterator and releases it on return', async () => {
     await withAgent(async (agent) => {
       await withModelBoundary(async (model) => {

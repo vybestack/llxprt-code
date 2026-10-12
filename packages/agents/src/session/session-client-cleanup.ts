@@ -1,3 +1,4 @@
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -136,4 +137,16 @@ export function finishCleanup(
     .flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
   if (failures.length > 0)
     throw new AggregateError(failures, 'Session client cleanup failed');
+}
+
+export async function cleanupProviderScope(
+  files: ProviderFileLifecycle,
+  scope: string,
+): Promise<void> {
+  const result = await files.cleanupScope('session', scope);
+  if (result.failed > 0)
+    throw new Error(
+      `Provider file cleanup incomplete for scope ${scope}: ${JSON.stringify(files.snapshot().deletionFailures)}`,
+    );
+  if (result.deferred > 0) await files.waitForScopeCleanup('session', scope);
 }

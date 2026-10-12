@@ -1,4 +1,5 @@
 import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
+import type { ModelRegistry } from '../../models/registry.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -80,6 +81,7 @@ export interface RuntimeProviderManager {
     input: RequestInfo | URL,
     init?: RequestInit,
   ): Promise<Response>;
+  bindModelRegistry?(registry: ModelRegistry): void;
   bindNetworkFetch?(
     requestFetch: (
       input: RequestInfo | URL,

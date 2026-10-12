@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { describe, it, expect } from 'bun:test';
-import type { EphemeralSettingTarget } from './cliEphemeralSettings.js';
-import { applyCliSetArguments } from './cliEphemeralSettings.js';
+import type { EphemeralSettingTarget } from './cli-ephemeral-settings.js';
+import { applyCliSetArguments } from './cli-ephemeral-settings.js';
 
 class TestTarget implements EphemeralSettingTarget {
   private readonly values = new Map<string, unknown>();

@@ -630,24 +630,48 @@ describe('tool registry assembly', () => {
           ? undefined
           : {
               ...registration,
-              create: (config, args) =>
-                registration.create(config, {
-                  ...args,
-                  createChildSettings: () => settingsOwner.createChildStore(),
-                  readTaskPolicy: () => settingsOwner.readTaskPolicy(),
-                  readRunPolicy: () => settingsOwner.readSubagentRunPolicy(),
-                  readGovernance: () => settingsOwner.readToolGovernance([]),
-                  instructions: emptyInstructionReads,
-                }),
-              buildArgs: (config, args) =>
-                registration.buildArgs(config, {
-                  ...args,
-                  createChildSettings: () => settingsOwner.createChildStore(),
-                  readTaskPolicy: () => settingsOwner.readTaskPolicy(),
-                  readRunPolicy: () => settingsOwner.readSubagentRunPolicy(),
-                  readGovernance: () => settingsOwner.readToolGovernance([]),
-                  instructions: emptyInstructionReads,
-                }),
+              create: (
+                config,
+                profiles,
+                subagents,
+                bus,
+                paths,
+                readMcpInstructions,
+              ) =>
+                registration.create(
+                  config,
+                  profiles,
+                  subagents,
+                  bus,
+                  paths,
+                  readMcpInstructions,
+                  emptyInstructionReads,
+                  () => settingsOwner.createChildStore(),
+                  () => settingsOwner.readTaskPolicy(),
+                  () => settingsOwner.readSubagentRunPolicy(),
+                  () => settingsOwner.readToolGovernance([]),
+                ),
+              buildArgs: (
+                config,
+                profiles,
+                subagents,
+                bus,
+                paths,
+                readMcpInstructions,
+              ) =>
+                registration.buildArgs(
+                  config,
+                  profiles,
+                  subagents,
+                  bus,
+                  paths,
+                  readMcpInstructions,
+                  emptyInstructionReads,
+                  () => settingsOwner.createChildStore(),
+                  () => settingsOwner.readTaskPolicy(),
+                  () => settingsOwner.readSubagentRunPolicy(),
+                  () => settingsOwner.readToolGovernance([]),
+                ),
             },
         undefined,
         true,

@@ -3,7 +3,6 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 
 /**
@@ -21,31 +20,9 @@ import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import type { ModelDefaultRule } from '../composition/index.js';
-import { getProviderSettingsSnapshot } from './providerModelParameters.js';
 
 function logger(): DebugLogger {
   return new DebugLogger('llxprt:runtime:providerMutations');
-}
-
-/**
- * Compute merged ephemeral settings from modelDefaults rules that match a model name.
- * Rules are applied in order — later rules override earlier for the same key.
- * Returns a flat Record of the merged settings.
- */
-export function computeModelDefaults(
-  modelName: string,
-  modelDefaultRules: readonly ModelDefaultRule[],
-): Record<string, unknown> {
-  const merged: Record<string, unknown> = {};
-  for (const rule of modelDefaultRules) {
-    const regex = new RegExp(rule.pattern, 'i');
-    if (regex.test(modelName)) {
-      for (const [key, value] of Object.entries(rule.ephemeralSettings)) {
-        merged[key] = value;
-      }
-    }
-  }
-  return merged;
 }
 
 /**
@@ -179,25 +156,6 @@ export interface BaseUrlUpdateResult {
   baseUrl?: string;
 }
 
-export interface ToolFormatState {
-  providerName: string;
-  currentFormat: string | null;
-  override: string | null;
-  isAutoDetected: boolean;
-}
-
-export type ToolFormatOverrideLiteral =
-  | 'auto'
-  | 'openai'
-  | 'qwen'
-  | 'kimi'
-  | 'hermes'
-  | 'xml'
-  | 'anthropic'
-  | 'deepseek'
-  | 'gemma'
-  | 'llama';
-
 export interface ModelChangeResult {
   providerName: string;
   previousModel?: string;
@@ -208,22 +166,6 @@ export interface ModelChangeResult {
 export interface ModelSelectionOperations {
   readModel(): string | undefined;
   selectModel(model: string, rules: readonly ModelDefaultRule[]): void;
-}
-
-export function assembleModelSelection(
-  owner: SessionSettingsOwner,
-): ModelSelectionOperations {
-  return {
-    readModel: () => owner.readSelectedModel(),
-    selectModel: (model, rules) => {
-      const previous = owner.readSelectedModel();
-      owner.selectModel(model, {
-        departing:
-          previous === undefined ? {} : computeModelDefaults(previous, rules),
-        arriving: computeModelDefaults(model, rules),
-      });
-    },
-  };
 }
 
 export async function updateActiveProviderApiKey(
@@ -329,57 +271,6 @@ export async function updateActiveProviderBaseUrl(
   };
 }
 
-export async function getActiveToolFormatState(
-  owner: Pick<SessionSettingsOwner, 'readToolFormat' | 'writeToolFormat'>,
-  provider:
-    | Pick<
-        NonNullable<ReturnType<RuntimeProviderManager['getActiveProvider']>>,
-        'name' | 'getToolFormat'
-      >
-    | undefined,
-): Promise<ToolFormatState> {
-  if (!provider) throw new Error('No active provider is configured.');
-
-  const rawOverride = owner.readToolFormat();
-  const override = typeof rawOverride === 'string' ? rawOverride : 'auto';
-
-  const isAutoDetected = !override || override === 'auto';
-
-  // When auto-detecting, call the provider's getToolFormat() to get the actual detected format
-  // This shows users what format will actually be used based on the model name
-  const detectedFormat = isAutoDetected
-    ? (provider.getToolFormat?.() ?? null)
-    : null;
-
-  return {
-    providerName: provider.name,
-    currentFormat: isAutoDetected ? detectedFormat : override,
-    override: isAutoDetected ? null : override,
-    isAutoDetected,
-  };
-}
-
-export async function setActiveToolFormatOverride(
-  formatName: ToolFormatOverrideLiteral | null,
-  owner: Pick<SessionSettingsOwner, 'readToolFormat' | 'writeToolFormat'>,
-  provider:
-    | Pick<
-        NonNullable<ReturnType<RuntimeProviderManager['getActiveProvider']>>,
-        'name' | 'getToolFormat'
-      >
-    | undefined,
-): Promise<ToolFormatState> {
-  if (!provider) throw new Error('No active provider is configured.');
-
-  if (!formatName || formatName === 'auto') {
-    await owner.writeToolFormat('auto');
-    return getActiveToolFormatState(owner, provider);
-  }
-
-  await owner.writeToolFormat(formatName);
-  return getActiveToolFormatState(owner, provider);
-}
-
 /**
  * Update the active model for the current provider while keeping Config and
  * SettingsService in sync.
@@ -403,8 +294,7 @@ export async function setActiveModel(
     throw new Error('No active provider is available.');
   }
 
-  const providerSettings = getProviderSettingsSnapshot(
-    settingsService,
+  const providerSettings = settingsService.getProviderSettings(
     activeProvider.name,
   );
   // #2534 Domain C2: read the previous model from the store this

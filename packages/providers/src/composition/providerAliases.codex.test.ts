@@ -11,7 +11,7 @@ import {
   loadProviderAliasEntries,
   type ProviderAliasEntry,
 } from './providerAliases.js';
-import { computeModelDefaults } from '../runtime/providerMutations.js';
+import { computeModelDefaults } from '../model-defaults.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';

@@ -1,3 +1,4 @@
+import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -101,7 +102,7 @@ describe('subagent.ts', () => {
           defaultRunConfig,
           undefined,
           undefined,
-          overrides,
+          ...scopeInputs(overrides),
         );
 
         expect(getProviderManagerSpy).not.toHaveBeenCalled();
