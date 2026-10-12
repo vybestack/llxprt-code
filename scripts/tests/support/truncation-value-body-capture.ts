@@ -50,8 +50,8 @@ function prepareOpenAI(
     config: createRuntimeConfigStub(settings),
   });
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
     providerName: 'openai',
     ephemeralsSnapshot: {
       'prompt-caching': caching ? 'on' : 'off',

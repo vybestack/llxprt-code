@@ -6,13 +6,15 @@ import { createHash } from 'node:crypto';
 import { admitDeferredHistorySource } from '../../packages/agents/src/core/deferredHistorySource.js';
 import {
   buildAgent,
-  internalConfig,
+  internalAgentClient,
 } from '../../packages/agents/src/api/__tests__/helpers/agentHarness.js';
 import { captureCompressionBody } from './support/compression-value-openai-body.js';
 import { buildProviderContent } from '../../packages/core/src/services/history/historyProviderPipeline.js';
 import { DebugLogger } from '../../packages/core/src/debug/index.js';
 import { withValueTransformFixture } from '../../packages/core/src/services/history/transform-value-test-helpers.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
+import type { AgentClientContract } from '../../packages/core/src/core/clientContract.js';
+import type { LocalMediaStore } from '../../packages/core/src/storage/local-media-store.js';
 import type { HistoryService } from '../../packages/core/src/services/history/HistoryService.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 
@@ -83,6 +85,11 @@ async function compareBodies(
   return compared;
 }
 
+function requireMediaStore(client: AgentClientContract): LocalMediaStore {
+  if (client.mediaStore === undefined) throw new Error('Missing media store');
+  return client.mediaStore;
+}
+
 async function verifyBody(size: number, bytes: number): Promise<number> {
   const { agent, cleanup } = await buildAgent('plain-text.jsonl');
   try {
@@ -90,7 +97,7 @@ async function verifyBody(size: number, bytes: number): Promise<number> {
       const release = await admitDeferredHistorySource(
         history,
         bodyInput(size, bytes),
-        internalConfig(agent).getLocalMediaStore(),
+        requireMediaStore(internalAgentClient(agent)),
         { ownership: owners },
         'fake-model',
       );

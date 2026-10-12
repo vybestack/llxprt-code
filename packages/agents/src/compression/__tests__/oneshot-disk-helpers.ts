@@ -46,7 +46,11 @@ export async function oneshotOracle(
     'oracle',
     runtime,
     history,
-    async () => ({ provider: transport, runtime: runtime.providerRuntime }),
+    async () => ({
+      provider: transport,
+      runtime: runtime.providerRuntime,
+      invocation: runtime.prepareProviderInvocation(transport.name),
+    }),
     async () => 'finish the experiment',
     () => '/fixture/session.jsonl',
     logger,

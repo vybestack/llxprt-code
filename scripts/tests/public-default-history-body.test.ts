@@ -5,13 +5,13 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { accountingRow } from '../../packages/core/src/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { withPublicHistory } from '../../packages/agents/src/api/__tests__/helpers/public-history-fixture.js';
-import { internalConfig } from '../../packages/agents/src/api/__tests__/helpers/agentHarness.js';
+import { internalAgentClient } from '../../packages/agents/src/api/__tests__/helpers/agentHarness.js';
 import { captureCuratedBody } from './provider-curated-body-gemini.js';
 
 async function bodyPairs(size: number, active: boolean): Promise<number> {
   return withPublicHistory(size, active, async (agent, _history, reader) => {
     let comparisons = 0;
-    const client = internalConfig(agent).getAgentClient();
+    const client = internalAgentClient(agent);
     const expectedRows = Array.from({ length: size }, (_, index) =>
       accountingRow(index),
     );

@@ -8,6 +8,7 @@ import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '../../packages/core/src/runtime/providerRuntimeContext.js';
+import { bindProviderMedia } from '../../packages/core/src/runtime/bindProviderMedia.js';
 import { createRuntimeInvocationContext } from '../../packages/core/src/runtime/RuntimeInvocationContext.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
@@ -87,8 +88,8 @@ export async function captureWithAdapter(
     mediaResolver,
   });
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
     providerName: name,
     ephemeralsSnapshot: {
       'prompt-caching': caching ? 'on' : 'off',
@@ -120,13 +121,17 @@ export async function captureWithAdapter(
       return adapter.response();
     },
   );
-  const provider = orchestrated
-    ? new RetryOrchestrator(adapter.makeProvider(), {
-        maxAttempts: 2,
-        initialDelayMs: 1,
-        maxDelayMs: 1,
-      })
-    : adapter.makeProvider();
+  const provider = bindProviderMedia(
+    orchestrated
+      ? new RetryOrchestrator(adapter.makeProvider(), {
+          maxAttempts: 2,
+          initialDelayMs: 1,
+          maxDelayMs: 1,
+        })
+      : adapter.makeProvider(),
+    mediaResolver,
+    undefined,
+  );
   try {
     for await (const chunk of provider.generateChatCompletion({
       ...options,

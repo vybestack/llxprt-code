@@ -41,7 +41,12 @@ async function ratio(size: number): Promise<number> {
       const resolveProvider = async (): Promise<{
         provider: typeof transport;
         runtime: typeof runtime.providerRuntime;
-      }> => ({ provider: transport, runtime: runtime.providerRuntime });
+        invocation: ReturnType<typeof runtime.prepareProviderInvocation>;
+      }> => ({
+        provider: transport,
+        runtime: runtime.providerRuntime,
+        invocation: runtime.prepareProviderInvocation(transport.name),
+      });
       const logger = new DebugLogger('test:highdensity-ratio');
       const metadata = await buildCompressionMetadata(
         'oracle',

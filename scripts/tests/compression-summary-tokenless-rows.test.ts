@@ -216,8 +216,8 @@ function runtimeFor(family: Family) {
     config: createRuntimeConfigStub(settings),
   });
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
     providerName: family,
     ephemeralsSnapshot: { streaming: 'disabled', retries: 0, retrywait: 1 },
   });

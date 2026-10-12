@@ -106,7 +106,11 @@ export function middleoutSetup(
     runtime,
     history,
     {},
-    async () => ({ provider: transport, runtime: runtime.providerRuntime }),
+    async () => ({
+      provider: transport,
+      runtime: runtime.providerRuntime,
+      invocation: runtime.prepareProviderInvocation(transport.name),
+    }),
     hook,
   );
   handler.setActiveTodosProvider(async () => 'finish the experiment');
@@ -131,7 +135,11 @@ export async function middleoutOracle(
     'oracle',
     runtime,
     history,
-    async () => ({ provider: transport, runtime: runtime.providerRuntime }),
+    async () => ({
+      provider: transport,
+      runtime: runtime.providerRuntime,
+      invocation: runtime.prepareProviderInvocation(transport.name),
+    }),
     async () => 'finish the experiment',
     () => '/fixture/session.jsonl',
     logger,

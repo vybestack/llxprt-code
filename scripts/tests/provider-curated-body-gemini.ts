@@ -13,9 +13,11 @@ import {
 const GEMINI_ADAPTER: CuratedProviderAdapter = {
   model: 'gemini-2.5-flash',
   makeProvider: () => new GeminiProvider('test-key'),
+  // The capture invocation sets streaming to "disabled", and the provider
+  // now reads that from the admitted invocation, so it calls generateContent.
   response: () =>
     new Response(
-      `data: ${JSON.stringify({
+      JSON.stringify({
         candidates: [
           {
             content: { role: 'model', parts: [{ text: 'ok' }] },
@@ -27,8 +29,8 @@ const GEMINI_ADAPTER: CuratedProviderAdapter = {
           candidatesTokenCount: 1,
           totalTokenCount: 2,
         },
-      })}\n\n`,
-      { headers: { 'content-type': 'text/event-stream' } },
+      }),
+      { headers: { 'content-type': 'application/json' } },
     ),
 };
 

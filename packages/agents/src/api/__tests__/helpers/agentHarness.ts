@@ -5,6 +5,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { AgentImpl } from '../../agentImpl.js';
 import { McpRuntimeOwner } from '../../mcpRuntimeAssembly.js';
 
 /**
@@ -36,6 +37,7 @@ import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
   FakeProvider,
   OpenAIProvider,
@@ -89,6 +91,13 @@ export function internalConfig(agent: Agent): Config {
     throw new Error('Expected an AgentImpl with its owned Config dependency');
   }
   return agent.deps.config;
+}
+
+export function internalAgentClient(agent: Agent): AgentClientContract {
+  if (!(agent instanceof AgentImpl)) {
+    throw new Error('Expected an AgentImpl with an owned agent client');
+  }
+  return agent.agentClient;
 }
 
 export function internalSettingsService(agent: Agent): SettingsService {

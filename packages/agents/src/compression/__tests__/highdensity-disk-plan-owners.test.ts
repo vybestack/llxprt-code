@@ -21,7 +21,11 @@ function ownerMetadata(
     'owners',
     runtime,
     history,
-    async () => ({ provider: transport, runtime: runtime.providerRuntime }),
+    async () => ({
+      provider: transport,
+      runtime: runtime.providerRuntime,
+      invocation: runtime.prepareProviderInvocation(transport.name),
+    }),
     undefined,
     undefined,
     new DebugLogger('test:highdensity-owner'),

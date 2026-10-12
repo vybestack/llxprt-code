@@ -51,7 +51,11 @@ function harnessFor(history: HistoryService, state: State): FallbackHarness {
       prompt,
       runtime,
       history,
-      async () => ({ provider: transport, runtime: runtime.providerRuntime }),
+      async () => ({
+        provider: transport,
+        runtime: runtime.providerRuntime,
+        invocation: runtime.prepareProviderInvocation(transport.name),
+      }),
       undefined,
       undefined,
       logger,

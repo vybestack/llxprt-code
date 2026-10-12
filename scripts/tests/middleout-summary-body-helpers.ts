@@ -99,8 +99,8 @@ function summaryRuntime(
     config: createRuntimeConfigStub(settings),
   });
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
     providerName: name,
     ephemeralsSnapshot: {
       'prompt-caching': caching ? 'on' : 'off',
