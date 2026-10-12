@@ -730,6 +730,20 @@ export class ChatSession {
       this.runtimeContext.providerRuntime.providerFileLifecycle,
       this.runtimeState.runtimeId,
     );
+    await this.clearHistoryRows();
+  }
+
+  /**
+   * Clears history while the runtime context is being disposed. The runtime
+   * context owns session provider-file cleanup and runs it once, so a failed
+   * remote deletion stays retained for an explicit retry instead of being
+   * retried here as a side effect of clearing rows.
+   */
+  clearHistoryForDisposal(): Promise<void> {
+    return this.clearHistoryRows();
+  }
+
+  private async clearHistoryRows(): Promise<void> {
     const releaseFailures = await this.releaseSessionHistoryAdmissions(
       this.retainedHistoryAdmissions,
     );

@@ -24,7 +24,7 @@ export async function clearClientHistoryForDisposal(
   chat: ChatSession,
   streamed: boolean,
 ): Promise<void> {
-  await chat.clearHistory();
+  await chat.clearHistoryForDisposal();
   if (streamed) {
     const history = chat.getHistoryService();
     await history.waitForOwnershipSettlement();

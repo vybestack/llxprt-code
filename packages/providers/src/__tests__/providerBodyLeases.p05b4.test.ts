@@ -312,4 +312,23 @@ describe('P05b4 transport body leases @plan:PLAN-20260917-ISSUE854.P05b4', () =>
     await expect(lease.release()).resolves.toBeUndefined();
     expect(activeRequestBodyCount()).toBe(0);
   });
+
+  it('releases a body that carries a caller-owned frozen array and leaves that array intact', async () => {
+    interface AdmittedParamBody {
+      readonly rows: string[];
+      readonly stop: readonly string[];
+    }
+    const admittedStop: readonly string[] = Object.freeze(['stop-here']);
+    const lease = acquireRequestScopedBody<AdmittedParamBody>('openai', {
+      rows: ['wire-row'],
+      stop: admittedStop,
+    });
+    const body = lease.value;
+
+    await expect(lease.release()).resolves.toBeUndefined();
+
+    expect(body.rows).toStrictEqual([]);
+    expect(admittedStop).toStrictEqual(['stop-here']);
+    expect(activeRequestBodyCount()).toBe(0);
+  });
 });

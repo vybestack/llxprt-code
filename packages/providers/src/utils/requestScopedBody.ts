@@ -34,7 +34,9 @@ function spliceOwnedArrays(value: unknown): void {
   const graph = value as BodyGraph;
   for (const key of Object.keys(graph)) {
     const entry = graph[key];
-    if (Array.isArray(entry)) entry.splice(0);
+    // A frozen array is caller-owned immutable data (for example an admitted
+    // `stop` model parameter), not wire storage this lease built.
+    if (Array.isArray(entry) && !Object.isFrozen(entry)) entry.splice(0);
   }
 }
 

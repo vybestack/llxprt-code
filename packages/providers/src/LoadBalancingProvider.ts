@@ -443,16 +443,15 @@ export class LoadBalancingProvider
     // A neutral requestRows selection is already repeatable and pinned: every
     // attempt reopens it, so nothing is collected here. Only the legacy
     // contents stream is collected once and replayed per attempt (issue #854).
-    const options = await this.replayableCallOptions(
-      optionsOrContent,
-      tools,
-      signal,
-    );
+    const { promptEnvelopeTransportToken: peekToken, ...callOptions } =
+      await this.replayableCallOptions(optionsOrContent, tools, signal);
+    const options: GenerateChatOptions = callOptions;
     // The send projects the member it selects itself, so a peek's delegate
-    // lease (issue #854) is spent once the send starts.
-    await releaseEstimateOnlyPromptEnvelope(
-      options.promptEnvelopeTransportToken,
-    );
+    // lease (issue #854) is spent once the send starts. The spent token is
+    // dropped from the options: a member that saw it beside its own request
+    // would treat the call as already prepared and blank the system
+    // instruction and tools instead of preparing them itself.
+    await releaseEstimateOnlyPromptEnvelope(peekToken);
     this.resetTokenAccountingDiagnostics();
 
     // Branch on strategy
