@@ -543,7 +543,7 @@ async function executeAutoProvider(
     await applyCliArgumentOverrides(
       toArgvShape(intent),
       toBootstrapArgsShape(intent),
-      { setEphemeralSetting: (key, value) => settingsService.set(key, value) },
+      createActivationCredentialTarget(config, settingsService),
       settingsService,
       manager.getActiveProvider(),
     );
@@ -760,6 +760,18 @@ function isPureAlreadyActiveRefresh(
     intent.model === undefined &&
     intent.modelParams === undefined
   );
+}
+
+function createActivationCredentialTarget(
+  config: Config,
+  settingsService: SettingsService,
+): Pick<Config, 'getProviderKeys'> & {
+  setEphemeralSetting(key: string, value: unknown): void;
+} {
+  return {
+    getProviderKeys: () => config.getProviderKeys(),
+    setEphemeralSetting: (key, value) => settingsService.set(key, value),
+  };
 }
 
 function resolveActiveProviderName(
