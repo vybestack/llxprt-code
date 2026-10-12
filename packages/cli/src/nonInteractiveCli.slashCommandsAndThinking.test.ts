@@ -1,3 +1,4 @@
+import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { runHeadlessPolicyFixture } from './__tests__/headless-policy-fixture.js';
 import { makeBootstrapProfileArgs } from './test-utils/bootstrap-config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -152,6 +153,7 @@ function buildFakeAgent(): Agent {
     getModel: () => PLACEHOLDER_MODEL,
     getCurrentSequenceModel: () => null,
     getActiveProfileName: () => null,
+    metrics: new UiTelemetryService(),
     stream: (input: AgentInput, opts?: TurnOptions) => {
       agentState.streamInput = input;
       agentState.streamOpts = opts ?? null;

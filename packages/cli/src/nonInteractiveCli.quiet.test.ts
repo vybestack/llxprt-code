@@ -1,3 +1,5 @@
+import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+let metricSource: UiTelemetryService;
 import { createStreamSettingsFixture } from './__tests__/stream-settings-fixture.js';
 /**
  * @license
@@ -9,7 +11,6 @@ import {
   type EmojiFilter,
   JsonStreamEventType,
   StreamJsonFormatter,
-  uiTelemetryService,
 } from '@vybestack/llxprt-code-core';
 import type { AgentEvent } from '@vybestack/llxprt-code-agents';
 import { processAgentStream } from './nonInteractiveCliSupport.js';
@@ -72,6 +73,7 @@ describe('processAgentStream — quiet mode', () => {
   let processStderrSpy: Mock<typeof process.stderr.write>;
 
   beforeEach(() => {
+    metricSource = new UiTelemetryService();
     processStdoutSpy = vi
       .spyOn(process.stdout, 'write')
       .mockImplementation(() => true);
@@ -130,7 +132,7 @@ describe('processAgentStream — quiet mode', () => {
       streamFromEvents(events),
       createContext({ quiet: true }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const stdoutContent = processStdoutSpy.mock.calls
@@ -164,7 +166,7 @@ describe('processAgentStream — quiet mode', () => {
       streamFromEvents(events),
       createContext({ quiet: true }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const stdoutContent = processStdoutSpy.mock.calls
@@ -185,7 +187,7 @@ describe('processAgentStream — quiet mode', () => {
       streamFromEvents(events),
       createContext({ quiet: true }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const stdoutContent = processStdoutSpy.mock.calls
@@ -211,7 +213,7 @@ describe('processAgentStream — quiet mode', () => {
         config: createMockConfig({ includeInResponse: true }),
       }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const stdoutContent = processStdoutSpy.mock.calls
@@ -253,7 +255,7 @@ describe('processAgentStream — quiet mode', () => {
         config: createMockConfig({ includeInResponse: true }),
       }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const stdoutContent = processStdoutSpy.mock.calls
@@ -281,7 +283,7 @@ describe('processAgentStream — quiet mode', () => {
       streamFromEvents(events),
       createContext({ quiet: true }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const stdoutContent = processStdoutSpy.mock.calls
@@ -292,7 +294,7 @@ describe('processAgentStream — quiet mode', () => {
   });
 
   it('emits a JSON object containing only the final turn text in JSON mode', async () => {
-    const metrics = uiTelemetryService.getMetrics();
+    const metrics = metricSource.getMetrics();
     const events: AgentEvent[] = [
       { type: 'text', text: 'Intermediate text' },
       {
@@ -357,7 +359,7 @@ describe('processAgentStream — quiet mode', () => {
       streamFromEvents(events),
       createContext({ quiet: true, streamFormatter }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     return parseJsonStdoutEvents(processStdoutSpy.mock.calls);
@@ -435,7 +437,7 @@ describe('processAgentStream — quiet mode', () => {
       streamFromEvents(events),
       createContext({ quiet: true, streamFormatter }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
@@ -498,7 +500,7 @@ describe('processAgentStream — quiet mode', () => {
       streamFromEvents(events),
       createContext({ quiet: true }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const stdoutContent = processStdoutSpy.mock.calls
@@ -538,7 +540,7 @@ describe('processAgentStream — quiet mode', () => {
       streamFromEvents(events),
       createContext({ quiet: true, streamFormatter }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const jsonEvents = parseJsonStdoutEvents(processStdoutSpy.mock.calls);
@@ -562,7 +564,7 @@ describe('processAgentStream — quiet mode', () => {
       streamFromEvents(events),
       createContext({ quiet: true }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const stderrContent = processStderrSpy.mock.calls
@@ -589,7 +591,7 @@ describe('processAgentStream — quiet mode', () => {
         streamFromEvents(events),
         createContext({ quiet: true, streamFormatter }),
         Date.now(),
-        () => uiTelemetryService.getMetrics(),
+        () => metricSource.getMetrics(),
       ),
     ).rejects.toThrow('timed out');
 
@@ -610,7 +612,7 @@ describe('processAgentStream — quiet mode', () => {
       streamFromEvents(events),
       createContext({ quiet: true }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const stderrContent = processStderrSpy.mock.calls
@@ -634,7 +636,7 @@ describe('processAgentStream — quiet mode', () => {
       streamFromEvents(events),
       createContext({ quiet: true }),
       Date.now(),
-      () => uiTelemetryService.getMetrics(),
+      () => metricSource.getMetrics(),
     );
 
     const stderrContent = processStderrSpy.mock.calls

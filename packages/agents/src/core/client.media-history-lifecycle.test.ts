@@ -214,12 +214,6 @@ void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => {
     ),
   };
 });
-void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
-  uiTelemetryService: {
-    setLastPromptTokenCount: vi.fn(),
-    getLastPromptTokenCount: vi.fn(),
-  },
-}));
 
 const PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';

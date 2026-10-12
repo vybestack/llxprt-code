@@ -32,7 +32,6 @@ import type {
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../IProvider.js';
-import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry/telemetry/uiTelemetry.js';
 import * as sdk from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
 import { hasTokenBearingOutput } from '../logging/streamChunkUtils.js';
 import { extractTokenCountsFromTokenUsage } from '../logging/tokenCounts.js';
@@ -69,7 +68,6 @@ describe('Focused lifecycle review findings', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
-    uiTelemetryService.reset();
   });
 
   // Finding #10: Exact assertions throughout
@@ -81,7 +79,7 @@ describe('Focused lifecycle review findings', () => {
       await consumeStream(
         wrapper.generateChatCompletion(makeOptions(config, makeContent())),
       );
-      const snap = uiTelemetryService.getSessionSnapshot();
+      const snap = wrapper.metrics.getSessionSnapshot();
       expect(snap.totalApiRequests).toBe(1);
       expect(snap.totalApiErrors).toBe(0);
     });
@@ -100,7 +98,7 @@ describe('Focused lifecycle review findings', () => {
       await expect(
         consumeStream(wrapper.generateChatCompletion(options)),
       ).rejects.toThrow(/abort/i);
-      const snap = uiTelemetryService.getSessionSnapshot();
+      const snap = wrapper.metrics.getSessionSnapshot();
       // Zero attempts because pre-abort throws before any attempt is started
       expect(snap.totalApiRequests).toBe(0);
       expect(snap.totalApiErrors).toBe(0);
@@ -116,11 +114,14 @@ describe('Focused lifecycle review findings', () => {
         config,
         new SettingsService(),
       ).settingsOwner;
-      const wrapper = new LoggingProviderWrapper(
-        new SyncThrowProvider(),
-        config,
-        undefined,
-        () => captureProviderRequestDiagnostics(config, wrapperSettings1),
+      const wrapper = Object.assign(
+        new LoggingProviderWrapper(
+          new SyncThrowProvider(),
+          config,
+          undefined,
+          () => captureProviderRequestDiagnostics(config, wrapperSettings1),
+        ),
+        { metrics: wrapperSettings1.telemetry.localMetrics },
       );
       wrapper.setRuntimeContextResolver(() => ({
         runtimeId: 'test-exact',
@@ -133,7 +134,7 @@ describe('Focused lifecycle review findings', () => {
           wrapper.generateChatCompletion(makeOptions(config, makeContent())),
         ),
       ).rejects.toThrow('Synchronous throw');
-      const snap = uiTelemetryService.getSessionSnapshot();
+      const snap = wrapper.metrics.getSessionSnapshot();
       // Exactly 1 error terminal record, not 0
       expect(snap.totalApiRequests).toBe(1);
       expect(snap.totalApiErrors).toBe(1);
@@ -153,11 +154,11 @@ describe('Focused lifecycle review findings', () => {
         config,
         new SettingsService(),
       ).settingsOwner;
-      const wrapper = new LoggingProviderWrapper(
-        providerOwned,
-        config,
-        undefined,
-        () => captureProviderRequestDiagnostics(config, wrapperSettings2),
+      const wrapper = Object.assign(
+        new LoggingProviderWrapper(providerOwned, config, undefined, () =>
+          captureProviderRequestDiagnostics(config, wrapperSettings2),
+        ),
+        { metrics: wrapperSettings2.telemetry.localMetrics },
       );
       wrapper.setRuntimeContextResolver(() => ({
         runtimeId: 'test-exact',
@@ -176,7 +177,7 @@ describe('Focused lifecycle review findings', () => {
       expect(chunks).toHaveLength(1);
       // But no telemetry was emitted because wrapper is NOT the owner
       // and the transport doesn't fire lifecycle events
-      const snap = uiTelemetryService.getSessionSnapshot();
+      const snap = wrapper.metrics.getSessionSnapshot();
       expect(snap.totalApiRequests).toBe(0);
     });
 
@@ -266,7 +267,7 @@ describe('Focused lifecycle review findings', () => {
       await consumeStream(
         wrapper.generateChatCompletion(makeOptions(config, makeContent())),
       );
-      const snap = uiTelemetryService.getSessionSnapshot();
+      const snap = wrapper.metrics.getSessionSnapshot();
       // Exactly 1 request recorded
       expect(snap.totalApiRequests).toBe(1);
     });
@@ -491,7 +492,7 @@ describe('Focused lifecycle review findings', () => {
       expect(result.done).toBe(false);
       await stream.return?.(undefined);
       await waitFor(() => {
-        const snap = uiTelemetryService.getSessionSnapshot();
+        const snap = wrapper.metrics.getSessionSnapshot();
         // 1 request. The abort emits an ApiErrorEvent with error_type='consumer_abort',
         // so totalApiErrors is 1 (abort counts as a terminal error event).
         expect(snap.totalApiRequests).toBe(1);

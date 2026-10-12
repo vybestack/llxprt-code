@@ -9,7 +9,6 @@ import {
   SessionStartSource,
 } from '@vybestack/llxprt-code-core';
 import { AgentBusyError } from '@vybestack/llxprt-code-agents';
-import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { CommandKind, type SlashCommand } from './types.js';
 export const clearCommand: SlashCommand = {
   name: 'clear',
@@ -57,7 +56,6 @@ export const clearCommand: SlashCommand = {
       context.ui.setDebugMessage('Clearing terminal.');
     }
 
-    uiTelemetryService.reset();
     context.ui.updateHistoryTokenCount(0);
     context.ui.clear();
     return undefined;

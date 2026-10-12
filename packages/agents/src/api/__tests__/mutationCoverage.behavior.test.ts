@@ -23,7 +23,7 @@
 //
 // NON-OBSERVABLE (documented honestly, NOT faked):
 //   3. agentImpl.ts:1035-1042 token-tracking ternaries — the model token sums
-//      in uiTelemetryService.getMetrics().models stay 0 under the FakeProvider
+//      in session metric reads.models stay 0 under the FakeProvider
 //      drive (that map is populated by the CLI UI's setTokenTrackingMetrics,
 //      not by the agent stream path), so the `promptTokens > 0` branch is
 //      never taken and the asserted value is the sessionUsage fallback for

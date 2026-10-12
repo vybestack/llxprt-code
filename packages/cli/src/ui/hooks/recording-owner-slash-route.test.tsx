@@ -1,3 +1,5 @@
+import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+const metrics = new UiTelemetryService();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -33,7 +35,9 @@ function wrapper({ children }: { children: React.ReactNode }): React.ReactNode {
   return (
     <ProviderAliasRefreshProvider refresh={async () => {}}>
       <OAuthControlProvider control={createMockCommandContext().oauthControl}>
-        <SessionStatsProvider>{children}</SessionStatsProvider>
+        <SessionStatsProvider metrics={metrics}>
+          {children}
+        </SessionStatsProvider>
       </OAuthControlProvider>
     </ProviderAliasRefreshProvider>
   );

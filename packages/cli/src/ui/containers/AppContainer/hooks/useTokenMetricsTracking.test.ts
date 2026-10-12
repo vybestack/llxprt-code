@@ -14,7 +14,7 @@ const realLlxprtCodeTelemetryModule = {
 };
 
 const useRuntimeApiMock = vi.fn();
-const setTokenTrackingMetricsMock = vi.fn();
+let metricSource = new realLlxprtCodeTelemetryModule.UiTelemetryService();
 
 void vi.mock('../../../contexts/RuntimeContext.js', () => ({
   useRuntimeApi: useRuntimeApiMock,
@@ -32,9 +32,6 @@ void vi.mock('@vybestack/llxprt-code-telemetry', () => {
   return {
     ...actual,
     DebugLogger: DebugLoggerStub,
-    uiTelemetryService: {
-      setTokenTrackingMetrics: setTokenTrackingMetricsMock,
-    },
   };
 });
 
@@ -105,6 +102,7 @@ const makeRuntimeApi = (
 
 describe('useTokenMetricsTracking', () => {
   beforeEach(() => {
+    metricSource = new realLlxprtCodeTelemetryModule.UiTelemetryService();
     vi.useFakeTimers();
     vi.clearAllMocks();
   });
@@ -139,6 +137,7 @@ describe('useTokenMetricsTracking', () => {
 
     const { result } = renderHook(() =>
       useTokenMetricsTracking({
+        metrics: metricSource,
         uiRuntime: config as never,
         updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
@@ -153,8 +152,8 @@ describe('useTokenMetricsTracking', () => {
       tokensPerSecond: 0,
     });
 
-    expect(setTokenTrackingMetricsMock).toHaveBeenCalledWith({
-      tokensPerMinute: 42,
+    expect(metricSource.getMetrics().tokenTracking).toStrictEqual({
+      tokensPerMinute: 0,
       throttleWaitTimeMs: 75,
       timeToFirstToken: null,
       tokensPerSecond: 0,
@@ -179,6 +178,7 @@ describe('useTokenMetricsTracking', () => {
 
     renderHook(() =>
       useTokenMetricsTracking({
+        metrics: metricSource,
         uiRuntime: config as never,
         updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
@@ -231,6 +231,7 @@ describe('useTokenMetricsTracking', () => {
 
     const { unmount } = renderHook(() =>
       useTokenMetricsTracking({
+        metrics: metricSource,
         uiRuntime: config as never,
         updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
@@ -283,21 +284,27 @@ describe('useTokenMetricsTracking', () => {
     const updateHistoryTokenCount = vi.fn();
     const recordingIntegrationRef = { current: null };
 
+    const updates: number[] = [];
+    const unsubscribe = metricSource.subscribe((update) => {
+      updates.push(update.metrics.tokenTracking.sessionTokenUsage.total);
+    });
     renderHook(() =>
       useTokenMetricsTracking({
+        metrics: metricSource,
         uiRuntime: config as never,
         updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
       }),
     );
 
-    expect(setTokenTrackingMetricsMock).toHaveBeenCalledTimes(1);
+    expect(updates).toStrictEqual([5]);
 
     act(() => {
       vi.advanceTimersByTime(5000);
     });
 
-    expect(setTokenTrackingMetricsMock).toHaveBeenCalledTimes(1);
+    expect(updates).toStrictEqual([5]);
+    unsubscribe();
   });
 
   it('notifies recording integration when history service appears and changes', () => {
@@ -327,6 +334,7 @@ describe('useTokenMetricsTracking', () => {
 
     renderHook(() =>
       useTokenMetricsTracking({
+        metrics: metricSource,
         uiRuntime: config as never,
         updateHistoryTokenCount,
         recordingIntegrationRef: recordingIntegrationRef as never,
@@ -366,6 +374,7 @@ describe('useTokenMetricsTracking', () => {
     const { rerender, unmount } = renderHook(
       ({ uiRuntime }) =>
         useTokenMetricsTracking({
+          metrics: metricSource,
           uiRuntime: uiRuntime as never,
           recordingOwner: 'agent',
           updateHistoryTokenCount: (value) => {

@@ -1,3 +1,5 @@
+import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
+const metrics = new UiTelemetryService();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -78,7 +80,7 @@ describe('<HistoryItemDisplay />', () => {
       duration: '1s',
     };
     const { lastFrame } = renderWithProviders(
-      <SessionStatsProvider>
+      <SessionStatsProvider metrics={metrics}>
         <HistoryItemDisplay {...baseItem} item={item} />
       </SessionStatsProvider>,
     );
@@ -111,7 +113,7 @@ describe('<HistoryItemDisplay />', () => {
       type: 'model_stats',
     };
     const { lastFrame } = renderWithProviders(
-      <SessionStatsProvider>
+      <SessionStatsProvider metrics={metrics}>
         <HistoryItemDisplay {...baseItem} item={item} />
       </SessionStatsProvider>,
     );
@@ -126,7 +128,7 @@ describe('<HistoryItemDisplay />', () => {
       type: 'tool_stats',
     };
     const { lastFrame } = renderWithProviders(
-      <SessionStatsProvider>
+      <SessionStatsProvider metrics={metrics}>
         <HistoryItemDisplay {...baseItem} item={item} />
       </SessionStatsProvider>,
     );
@@ -142,7 +144,7 @@ describe('<HistoryItemDisplay />', () => {
       duration: '1s',
     };
     const { lastFrame } = renderWithProviders(
-      <SessionStatsProvider>
+      <SessionStatsProvider metrics={metrics}>
         <HistoryItemDisplay {...baseItem} item={item} />
       </SessionStatsProvider>,
     );

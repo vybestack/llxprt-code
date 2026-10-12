@@ -621,10 +621,13 @@ export class AgentClient
 
   /**
    * Updates the UI telemetry service with the current prompt token count from chat.
-   * This decouples ChatSession from directly knowing about uiTelemetryService.
+   * This decouples ChatSession from directly knowing about session metrics.
    */
   private updateTelemetryTokenCount(): void {
-    publishClientPromptTokens(this.chat?.getLastPromptTokenCount());
+    publishClientPromptTokens(
+      this.chat?.getLastPromptTokenCount(),
+      this.requireTelemetry().localMetrics,
+    );
   }
 
   async resetChat(): Promise<void> {

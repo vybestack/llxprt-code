@@ -24,7 +24,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { logToolCall } from './loggers.js';
 import { ToolCallEvent } from './types.js';
 import type { CompletedToolCallShape } from '../internal/interfaces.js';
-import * as uiTelemetry from './uiTelemetry.js';
 import {
   setPerfPhaseObserver,
   getPerfPhaseObserver,
@@ -95,7 +94,7 @@ describe('logToolCall perf phase observer (P07)', () => {
       maxBytes: 1048576,
       maxFiles: 2,
     });
-    vi.spyOn(uiTelemetry.uiTelemetryService, 'addEvent').mockImplementation(
+    vi.spyOn(selectedTelemetry.localMetrics, 'addEvent').mockImplementation(
       () => undefined,
     );
     setPerfPhaseObserver(null);

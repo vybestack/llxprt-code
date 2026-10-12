@@ -1,3 +1,4 @@
+import { createSessionMetrics } from '@vybestack/llxprt-code-telemetry';
 type SessionSettingsOwner = NonNullable<FromConfigOptions['settingsOwner']>;
 /**
  * @license
@@ -16,7 +17,6 @@ import {
 } from '@vybestack/llxprt-code-core';
 
 import { parseSlashCommand } from './utils/commands.js';
-import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { CommandService } from './services/CommandService.js';
 import { FileCommandLoader } from './services/FileCommandLoader.js';
 import type { CommandContext, SlashCommand } from './ui/commands/types.js';
@@ -141,7 +141,8 @@ function buildHeadlessCommandContext(
   const sessionStats: SessionStatsState = {
     sessionId: firstNonEmptyString(config.getSessionId(), 'unknown'),
     sessionStartTime: new Date(),
-    metrics: uiTelemetryService.getMetrics(),
+    metrics:
+      agent === undefined ? createSessionMetrics() : agent.metrics.getMetrics(),
     lastPromptTokenCount: 0,
     historyTokenCount: 0,
     promptCount: 1,

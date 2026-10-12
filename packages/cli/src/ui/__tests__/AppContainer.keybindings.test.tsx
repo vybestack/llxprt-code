@@ -426,7 +426,6 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
     },
   ),
   debugLogger: { debug: vi.fn(), log: vi.fn() },
-  uiTelemetryService: { setTokenTrackingMetrics: vi.fn() },
   ideContext: {
     subscribeToIdeContext: vi.fn(() => vi.fn()),
     getIdeContext: vi.fn(() => undefined),

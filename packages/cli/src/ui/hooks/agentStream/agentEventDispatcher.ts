@@ -23,7 +23,6 @@ import type {
   CanonicalFinishReason,
 } from '@vybestack/llxprt-code-core';
 import { isCanonicalFinishReason } from '@vybestack/llxprt-code-core';
-import { uiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import type {
   AgentEvent,
   AgentStopInfo,
@@ -42,6 +41,7 @@ import { observeAssistantMessageCommitted } from '../../../observation/jspWiring
 import type { PendingResponseBuffer } from './pendingResponseBuffer.js';
 
 export interface AgentEventDeps {
+  setLastPromptTokenCount: (count: number) => void;
   addItem: (item: HistoryItemWithoutId, timestamp: number) => void;
   sanitizeContent: (text: string) => {
     text: string;
@@ -487,7 +487,7 @@ function dispatchUsageEvent(
   agentMessageBuffer: string,
 ): DispatchResult {
   if (event.usage.promptTokenCount !== undefined) {
-    uiTelemetryService.setLastPromptTokenCount(event.usage.promptTokenCount);
+    deps.setLastPromptTokenCount(event.usage.promptTokenCount);
   }
   return { agentMessageBuffer };
 }

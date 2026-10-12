@@ -105,7 +105,7 @@ export const AppWrapper = (props: AppProps) => {
     <KeypressProvider>
       <MouseProvider mouseEventsEnabled={mouseEventsEnabled}>
         <ScrollProvider>
-          <SessionStatsProvider>
+          <SessionStatsProvider metrics={props.agent.metrics}>
             <VimModeProvider settings={props.settings}>
               <ShellCommandDisplayProvider
                 alwaysDisplayFullShellCommand={

@@ -69,6 +69,10 @@ import type {
   ToolUpdate,
 } from './event-types.js';
 
+import type { SessionStats } from './agentMetrics.js';
+import type { SessionMetricOperations } from '@vybestack/llxprt-code-telemetry';
+export type { SessionStats } from './agentMetrics.js';
+
 export type Unsubscribe = () => void;
 
 export type AgentMessage = IContent;
@@ -116,27 +120,6 @@ export interface GenerateOptions {
   readonly promptId?: string;
   readonly readHistory?: boolean;
   readonly writeHistory?: boolean;
-}
-
-export interface SessionStats {
-  readonly promptTokens: number;
-  readonly candidateTokens: number;
-  readonly totalTokens: number;
-  readonly cachedTokens: number;
-  readonly contextWindowSize: number;
-  readonly contextWindowUsed: number;
-  readonly turnCount: number;
-  readonly apiRequests: number;
-  readonly apiErrors: number;
-  readonly toolCalls: number;
-  readonly toolSuccesses: number;
-  readonly toolFailures: number;
-  readonly toolCancellations: number;
-  readonly totalApiLatencyMs: number;
-  readonly totalToolDurationMs: number;
-  readonly completeTokensPerMinute: number;
-  readonly agentActiveTimeMs: number;
-  readonly sessionWallMs: number;
 }
 
 export interface AgentResult {
@@ -1180,6 +1163,7 @@ export interface Agent {
   readonly auth: AgentAuthControl;
   readonly ide: AgentIdeControl;
   readonly session: AgentSessionControl;
+  readonly metrics: SessionMetricOperations;
   readonly hooks: AgentHookControl;
   readonly policy: AgentPolicyControl;
   /** @plan:PLAN-20260622-COREAPIGAP.P08 @requirement:REQ-003 */
