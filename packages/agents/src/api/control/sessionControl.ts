@@ -298,6 +298,7 @@ export class SessionControl implements AgentSessionControl {
         sessionId: this.recordingSessionId,
       },
       (integration) => this.publishAdopted(result, integration),
+      this,
     );
     return result.boot.streamRows();
   }
@@ -341,7 +342,7 @@ export class SessionControl implements AgentSessionControl {
       return;
     }
     try {
-      await integration.subscribeToJournal(historyService);
+      await integration.subscribeToJournal(historyService, this);
       this.integrationNeedsSubscribe = false;
     } catch (error) {
       const deadRecording = this.recording;
@@ -797,6 +798,7 @@ export class SessionControl implements AgentSessionControl {
         sessionId: this.recordingSessionId,
       },
       (integration) => this.publishAdopted(result, integration),
+      this,
       true,
     );
     return result.boot;
@@ -919,7 +921,7 @@ export class SessionControl implements AgentSessionControl {
   ): Promise<boolean> {
     const historyService = this.deps.resolveClient().getHistoryService();
     if (historyService !== null) {
-      await integration.subscribeToJournal(historyService);
+      await integration.subscribeToJournal(historyService, this);
       return true;
     }
     // No HistoryService yet: the integration is left unsubscribed, so NO

@@ -423,7 +423,9 @@ async function commitDetachedHistory(
   const publication = new DetachedHistoryPublication(
     host.journal,
     host.ownership,
+    options.origin,
   );
+  const scope = host.journal.openPublication();
   try {
     options.signal?.throwIfAborted();
     if (restoredState === undefined) stampCandidate(host, next, options.signal);
@@ -453,6 +455,7 @@ async function commitDetachedHistory(
       effects,
       options,
     );
+    scope.close(true);
   } catch (error) {
     const failures: unknown[] = [];
     let compensated = true;
@@ -481,6 +484,7 @@ async function commitDetachedHistory(
     failures.push(...(await rollbackMutationEffects(effects)));
     throw historyMutationFailure(error, failures);
   } finally {
+    scope.close(false);
     publication.close();
   }
 }

@@ -55,6 +55,7 @@ import {
   appendHistoryJournal,
   HistoryAttachmentError,
   type AttachmentCommit,
+  type AttachmentSource,
 } from './attachHistoryJournal.js';
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
@@ -103,6 +104,11 @@ import {
 } from './historyJournalFold.js';
 import { DurableFoldCheckpoint } from '../../recording/durableFoldCheckpoint.js';
 import { HistoryPendingTickets } from './history-pending-tickets.js';
+import {
+  HistoryFanoutFeed,
+  HistoryRecorderFanout,
+} from './historyRecorderFanout.js';
+import { acceptsHistoryOrigin } from './historyOriginId.js';
 import type { ResumeProjection } from './historyResumeProjection.js';
 import {
   capturePendingFold,
@@ -178,8 +184,17 @@ export interface HistoryJournalAdoption {
   rollback(): void;
 }
 
+/** Brackets one logical publication so the fan-out sees it only if it succeeds. */
+export interface HistoryPublicationScope {
+  close(published: boolean): void;
+}
+
 export class HistoryJournalStore {
   private binding: JournalBinding;
+  private readonly fanout = new HistoryRecorderFanout();
+  private readonly fanoutFeed = new HistoryFanoutFeed(this.fanout);
+  private primaryOrigin: string | undefined;
+  private publicationDepth = 0;
   private adoptionPending = false;
   private attachmentPending = false;
   private disposed = false;
@@ -203,6 +218,11 @@ export class HistoryJournalStore {
 
   isRecorder(recorder: SessionRecordingService): boolean {
     return this.binding.recorder === recorder;
+  }
+
+  /** A resumed recorder became the primary on behalf of this origin. */
+  adoptedOrigin(origin: string | undefined): void {
+    this.primaryOrigin = origin;
   }
 
   isAdoptingRecorder(recorder: SessionRecordingService): boolean {
@@ -258,6 +278,34 @@ export class HistoryJournalStore {
     binding.rowCount = nextLength;
     binding.durableTail = current.durableTail;
     this.publicationOrdinals.admitted(line.seq);
+    if (this.fanout.active && this.publicationDepth === 0)
+      this.fanoutFeed.schedule(recorder, line.seq, 'feed');
+  }
+
+  /**
+   * Hold back fan-out until the caller knows whether its publication
+   * survived: `close(true)` delivers the ops it admitted to the mirrors,
+   * `close(false)` drops them together with their compensation.
+   */
+  openPublication(): HistoryPublicationScope {
+    this.publicationDepth++;
+    let closed = false;
+    return {
+      close: (published) => {
+        if (closed) return;
+        closed = true;
+        this.publicationDepth--;
+        const recorder = this.binding.recorder;
+        const seq = this.binding.lastSeq;
+        if (
+          this.publicationDepth === 0 &&
+          this.fanout.active &&
+          recorder !== undefined &&
+          seq !== null
+        )
+          this.fanoutFeed.schedule(recorder, seq, published ? 'feed' : 'skip');
+      },
+    };
   }
 
   withPublicationOrdinals(action: () => Promise<void>): Promise<void> {
@@ -283,6 +331,11 @@ export class HistoryJournalStore {
    * observed after this resolves folds exactly the journal bytes.
    */
   async waitForDurable(): Promise<void> {
+    await this.waitForPrimaryDurable();
+    await this.fanoutFeed.settle();
+  }
+
+  private async waitForPrimaryDurable(): Promise<void> {
     const binding = this.binding;
     const seq = binding.lastSeq;
     if (seq === null) return;
@@ -412,10 +465,19 @@ export class HistoryJournalStore {
     this.adoptionPending = true;
     let settled = false;
     let retirementPrepared = false;
+    const mirrored = this.fanout.active;
+    // Mirrors outlive a replaced primary, so their retirement listeners move
+    // to the adopted binding instead of firing.
+    if (mirrored)
+      for (const listener of previous.retired)
+        this.binding.retired.add(listener);
+    const retire = (): void => {
+      if (!mirrored) for (const listener of previous.retired) listener();
+    };
     const prepareCommit = (): void => {
       if (settled) throw new Error('Journal adoption is already settled');
       if (retirementPrepared) return;
-      for (const listener of previous.retired) listener();
+      retire();
       retirementPrepared = true;
     };
     const settle = (): void => {
@@ -437,8 +499,11 @@ export class HistoryJournalStore {
       prepareCommit,
       commit: async () => {
         settle();
-        if (!retirementPrepared)
-          for (const listener of previous.retired) listener();
+        if (!retirementPrepared) retire();
+        if (mirrored) {
+          await this.fanoutFeed.settle();
+          this.fanoutFeed.reset(recorder, this.binding.durableTail);
+        }
         retireHistoryPending(previous);
         removeTempDir(previous.projection?.directory ?? null);
         if (previous.ownsRecorder) {
@@ -463,7 +528,14 @@ export class HistoryJournalStore {
    * was built before recording started. Resume must use adoptJournal instead.
    */
   async detachJournal(recorder: SessionRecordingService): Promise<void> {
-    if (this.disposed || this.binding.recorder !== recorder) return;
+    if (this.disposed) return;
+    if (this.fanout.has(recorder)) {
+      this.assertNoAdoption();
+      await this.waitForDurable();
+      this.fanout.unbind(recorder);
+      return;
+    }
+    if (this.binding.recorder !== recorder) return;
     this.assertNoAdoption();
     await this.waitForDurable();
     if (this.binding.pending.length > 0)
@@ -483,6 +555,7 @@ export class HistoryJournalStore {
       lastLine: null,
       lastSeq: null,
     };
+    this.primaryOrigin = undefined;
     for (const listener of previous.retired) listener();
     if (previous.ownsRecorder) {
       await previous.recorder?.dispose();
@@ -494,42 +567,63 @@ export class HistoryJournalStore {
     recorder: SessionRecordingService,
     replace = false,
     onAttached?: () => void,
+    origin?: string,
   ): Promise<void> {
     this.assertNoAdoption();
     if (this.disposed)
       return Promise.reject(new Error('History journal store is disposed'));
-    if (recorder === this.binding.recorder) {
+    if (this.fanout.has(recorder)) {
       onAttached?.();
       return Promise.resolve();
     }
-    return this.transferJournal(recorder, replace, onAttached);
+    if (recorder === this.binding.recorder) {
+      this.primaryOrigin ??= origin;
+      onAttached?.();
+      return Promise.resolve();
+    }
+    if (
+      origin !== undefined &&
+      (this.fanout.active ||
+        (this.primaryOrigin !== undefined && this.primaryOrigin !== origin))
+    )
+      return this.attachMirror(recorder, replace, origin, onAttached);
+    return this.transferJournal(recorder, replace, onAttached, origin);
+  }
+
+  /** The primary journal's committed rows, as an attachment source. */
+  private attachmentSource(): AttachmentSource {
+    const filePath = this.journalPath();
+    const fileSize = filePath === null ? 0 : fs.statSync(filePath).size;
+    return {
+      filePath,
+      byteOffset:
+        this.binding.seeded || this.binding.durableTail > 0
+          ? this.binding.durableTail
+          : fileSize,
+      resumeBoundary: this.binding.resumeBoundary,
+      projection: this.binding.projection,
+    };
+  }
+
+  private async settleForAttachment(): Promise<void> {
+    await this.waitForDurable();
+    if (this.binding.pending.length > 0)
+      throw new Error('History journal contains uncommitted mutations');
+    await this.binding.recorder?.flush();
   }
 
   private async transferJournal(
     recorder: SessionRecordingService,
     replace: boolean,
     onAttached?: () => void,
+    origin?: string,
   ): Promise<void> {
     this.attachmentPending = true;
     let transferred: AttachmentCommit;
     try {
-      await this.waitForDurable();
-      if (this.binding.pending.length > 0)
-        throw new Error('History journal contains uncommitted mutations');
-      await this.binding.recorder?.flush();
-      const filePath = this.journalPath();
-      const fileSize = filePath === null ? 0 : fs.statSync(filePath).size;
-      const byteOffset =
-        this.binding.seeded || this.binding.durableTail > 0
-          ? this.binding.durableTail
-          : fileSize;
+      await this.settleForAttachment();
       transferred = await appendHistoryJournal(
-        {
-          filePath,
-          byteOffset,
-          resumeBoundary: this.binding.resumeBoundary,
-          projection: this.binding.projection,
-        },
+        this.attachmentSource(),
         recorder,
         replace,
         () => this.disposed,
@@ -550,7 +644,76 @@ export class HistoryJournalStore {
         transferred.destinationRewound,
       );
     }
+    this.primaryOrigin = origin;
     await adoption.commit();
+  }
+
+  /**
+   * A second origin attached to a history whose primary recorder belongs to
+   * another origin. The first such attach hides the primary (a clone of the
+   * first origin's file) and turns both recorders into filtered mirrors, so
+   * neither retires the other. The new mirror is seeded with own and unowned
+   * rows only, streamed through the filter.
+   */
+  private async attachMirror(
+    recorder: SessionRecordingService,
+    replace: boolean,
+    origin: string,
+    onAttached?: () => void,
+  ): Promise<void> {
+    this.attachmentPending = true;
+    let transferred: AttachmentCommit;
+    try {
+      await this.settleForAttachment();
+      if (!this.fanout.active) await this.hidePrimary();
+      transferred = await appendHistoryJournal(
+        this.attachmentSource(),
+        recorder,
+        replace,
+        () => this.disposed,
+        this.attachmentCounters,
+        (rowOrigin) => acceptsHistoryOrigin(origin, rowOrigin),
+      );
+    } finally {
+      this.attachmentPending = false;
+    }
+    this.fanout.bind(origin, recorder);
+    try {
+      onAttached?.();
+    } catch (error) {
+      this.fanout.unbind(recorder);
+      throw new HistoryAttachmentError(
+        error,
+        transferred.committedRows,
+        transferred.destinationRewound,
+      );
+    }
+  }
+
+  private async hidePrimary(): Promise<void> {
+    const previous = this.binding;
+    const visible = previous.recorder;
+    const owner = this.primaryOrigin;
+    if (visible === undefined || owner === undefined)
+      throw new Error('History primary journal has no owner to mirror');
+    const copy = await cloneHistoryJournal(visible, () => this.disposed);
+    previous.unsubscribeWatermark?.();
+    // The visible recorder keeps recording as a mirror, so its listeners stay.
+    this.binding = {
+      ...previous,
+      recorder: copy.recorder,
+      ownsRecorder: true,
+      tempDir: copy.directory,
+      pending: new HistoryPendingTickets(),
+      unsubscribeWatermark: undefined,
+      durableTail: copy.byteOffset,
+      seeded: true,
+      lastLine: null,
+      lastSeq: null,
+    };
+    this.fanout.bind(owner, visible);
+    this.fanout.active = true;
+    this.fanoutFeed.reset(copy.recorder, copy.byteOffset);
   }
 
   /** Flush and retire the journal; a self-owned temp store is removed. */
@@ -567,8 +730,11 @@ export class HistoryJournalStore {
       removeTempDir(tempDir);
       return;
     }
-    void recorder
-      .dispose()
+    // Mirrors may still be reading the hidden primary's committed range.
+    void this.fanoutFeed
+      .settle()
+      .catch(() => undefined)
+      .then(() => recorder.dispose())
       .catch(() => undefined)
       .then(() => {
         if (this.binding.ownsRecorder) removeTempDir(tempDir);

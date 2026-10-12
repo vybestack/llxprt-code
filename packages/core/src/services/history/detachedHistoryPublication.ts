@@ -11,6 +11,7 @@ import { trackMutationOwners } from './historyMutationOwnership.js';
 import { journalPublicationOwners } from './historyPublicationOwners.js';
 import type { DetachedHistoryJournal } from './detachedHistoryJournal.js';
 import { densityShapeOps } from './detachedDensityOps.js';
+import { historyOriginId } from './historyOriginId.js';
 
 interface TruncationCut {
   readonly itemsRemoved: number;
@@ -120,7 +121,12 @@ export class DetachedHistoryPublication {
   constructor(
     private readonly journal: HistoryJournalStore,
     private readonly ownership?: RowOwnership,
-  ) {}
+    origin?: object,
+  ) {
+    this.origin = origin === undefined ? undefined : historyOriginId(origin);
+  }
+
+  private readonly origin: string | undefined;
 
   async publish(
     previous: DetachedHistoryJournal,
@@ -271,7 +277,9 @@ export class DetachedHistoryPublication {
       this.ownership,
     );
     try {
-      this.journal.apply(op);
+      this.journal.apply(
+        this.origin === undefined ? op : { ...op, origin: this.origin },
+      );
       this.admittedCount++;
       const releaseEnvelope = trackMutationOwners(
         this.journal.capturePublicationOwners(),

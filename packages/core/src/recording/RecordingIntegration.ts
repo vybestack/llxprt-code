@@ -161,19 +161,24 @@ export class RecordingIntegration {
    * @requirement REQ-INT-001, REQ-INT-002
    * @pseudocode recording-integration.md lines 39-71
    */
-  subscribeToJournal(history: HistoryService): Promise<void> {
+  subscribeToJournal(history: HistoryService, owner?: object): Promise<void> {
     if (this.journalHistory === history) return this.attachmentOperation;
     this.unsubscribeFromHistory();
     if (this.disposed) return Promise.resolve();
     const generation = this.subscriptionGeneration;
     this.journalHistory = history;
     try {
-      const operation = history.attachJournal(this.recording, true, () => {
-        if (generation !== this.subscriptionGeneration) return;
-        this.historySubscription = history.onJournalRetired(() => {
-          this.unsubscribeFromHistory();
-        });
-      });
+      const operation = history.attachJournal(
+        this.recording,
+        true,
+        () => {
+          if (generation !== this.subscriptionGeneration) return;
+          this.historySubscription = history.onJournalRetired(() => {
+            this.unsubscribeFromHistory();
+          });
+        },
+        owner,
+      );
       this.attachmentOperation = operation;
       this.attachmentSettlement = operation.catch((error: unknown) => {
         if (generation === this.subscriptionGeneration) {

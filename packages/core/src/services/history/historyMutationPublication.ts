@@ -10,6 +10,7 @@ import { planMutation } from './planHistoryMutation.js';
 import { OpenReplaceTracker } from './historyReplaceOps.js';
 import { trackMutationOwners } from './historyMutationOwnership.js';
 import { journalPublicationOwners } from './historyPublicationOwners.js';
+import { historyOriginId } from './historyOriginId.js';
 
 export class HistoryMutationPublication {
   admittedCount = 0;
@@ -17,6 +18,7 @@ export class HistoryMutationPublication {
   readonly replacements = new OpenReplaceTracker();
   private releaseOwners = (): void => {};
   private releaseEnvelopeOwners = (): void => {};
+  private origin: string | undefined;
 
   constructor(
     private readonly journal: HistoryJournalStore,
@@ -28,6 +30,10 @@ export class HistoryMutationPublication {
     input: HistoryMutationInput,
   ): void | Promise<void> {
     const streaming = input.streamPublication === true;
+    this.origin =
+      input.options.origin === undefined
+        ? undefined
+        : historyOriginId(input.options.origin);
     if (streaming) this.journal.adoptMutationBoundary(previous.durableTail);
     const plan = planMutation(
       previous,
@@ -70,7 +76,9 @@ export class HistoryMutationPublication {
   }
 
   private admit(op: HistoryJournalOp): void {
-    this.journal.apply(op);
+    this.journal.apply(
+      this.origin === undefined ? op : { ...op, origin: this.origin },
+    );
     this.admittedCount++;
     this.replacements.observe(op);
   }

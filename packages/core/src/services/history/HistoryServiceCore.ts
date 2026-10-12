@@ -19,6 +19,7 @@ import {
   type DetachedHistoryAPI,
 } from './detachedHistoryAPI.js';
 import { finalizeHistoryMutation } from './finalizeHistoryMutation.js';
+import { historyOriginId } from './historyOriginId.js';
 import { CompressionOperationQueue } from './historyCompressionQueue.js';
 import { HistoryTokenTickets } from './history-token-tickets.js';
 import { type IContent } from './IContent.js';
@@ -300,13 +301,16 @@ export abstract class HistoryServiceCore
     recorder: SessionRecordingService,
     replace = false,
     onAttached?: () => void,
+    origin?: object,
   ): Promise<void> {
+    const originId = origin === undefined ? undefined : historyOriginId(origin);
     if (this.journal.isAdoptingRecorder(recorder)) {
+      this.journal.adoptedOrigin(originId);
       onAttached?.();
       return Promise.resolve();
     }
     return this.enqueueAsynchronousHistoryMutation(() =>
-      this.journal.attachJournal(recorder, replace, onAttached),
+      this.journal.attachJournal(recorder, replace, onAttached, originId),
     );
   }
 
@@ -680,10 +684,15 @@ export abstract class HistoryServiceCore
     const wasEmpty = this.journal.getLength() === 0;
     const token = this.tokenTickets.prepare(content, modelName, generation);
     let tokenPublished = false;
+    const scope = this.journal.openPublication();
     try {
       // Durable write first: the postcondition of every mutation is "journal
       // appended (awaitable ack) + observers notified" (#854).
-      this.journal.apply({ kind: 'content', content });
+      this.journal.apply({
+        kind: 'content',
+        content,
+        origin: origin === undefined ? undefined : historyOriginId(origin),
+      });
 
       try {
         this.emit('contentAdded', content, origin);
@@ -702,6 +711,7 @@ export abstract class HistoryServiceCore
         });
         throw error;
       }
+      scope.close(true);
 
       // Empty→first entry is a context boundary event (#854): the curated
       // context came into existence, so observers must learn its boundary even
@@ -718,6 +728,7 @@ export abstract class HistoryServiceCore
       this.tokenTickets.publish(token);
       tokenPublished = true;
     } finally {
+      scope.close(false);
       if (!tokenPublished) this.tokenTickets.cancel(token);
     }
   }
@@ -964,6 +975,7 @@ export abstract class HistoryServiceCore
       this.journal,
       this.mutationOwnership,
     );
+    const scope = this.journal.openPublication();
     try {
       input.signal?.throwIfAborted();
       stampMutationChronology(this.chronology, input);
@@ -997,6 +1009,7 @@ export abstract class HistoryServiceCore
         this.spanWindow.get(),
         () => this.emitContextRangeChanged(),
       );
+      scope.close(true);
     } catch (error: unknown) {
       const failures: unknown[] = [];
       restorePendingChronologyFailure(previousHistory, failures);
@@ -1014,6 +1027,7 @@ export abstract class HistoryServiceCore
       failures.push(...(await rollbackMutationEffects(effects)));
       throw historyMutationFailure(error, failures);
     } finally {
+      scope.close(false);
       publication.close();
     }
   }

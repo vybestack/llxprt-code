@@ -1,10 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { open, rm, stat } from 'node:fs/promises';
+import { open, rm, stat, type FileHandle } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { JournalResolver } from '../../recording/journalResolver.js';
+import {
+  JournalResolver,
+  type ResolvedEntry,
+} from '../../recording/journalResolver.js';
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
 import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 import type { CommitWatermark } from '../../recording/types.js';
@@ -131,14 +134,14 @@ async function stageSource(
  */
 async function commitReplacement(
   destination: SessionRecordingService,
-  resolver: JournalResolver,
+  entries: AsyncIterable<ResolvedEntry>,
   isCancelled: () => boolean,
 ): Promise<{ watermark: CommitWatermark; rows: number }> {
   const txId = randomUUID();
   let rows = 0;
   await destination.commit('replace_begin', { txId });
   try {
-    for await (const entry of resolver.resolve()) {
+    for await (const entry of entries) {
       requireLiveSource(isCancelled);
       await destination.commit('content', { content: entry.content, tx: txId });
       rows++;
@@ -175,12 +178,52 @@ async function abortReplacement(
   }
 }
 
+/** Row origin ids sit on the journal line, not on the resolved content. */
+async function lineOrigin(
+  handle: FileHandle,
+  entry: ResolvedEntry,
+): Promise<string | undefined> {
+  const buffer = Buffer.alloc(entry.length);
+  const { bytesRead } = await handle.read(
+    buffer,
+    0,
+    entry.length,
+    entry.offset,
+  );
+  if (bytesRead !== entry.length)
+    throw new Error('History attachment source line was truncated');
+  const origin = (
+    JSON.parse(buffer.toString('utf8')) as { payload?: { origin?: unknown } }
+  ).payload?.origin;
+  return typeof origin === 'string' ? origin : undefined;
+}
+
+/** Resolved rows, streamed through an optional origin filter. */
+async function* acceptedEntries(
+  resolver: JournalResolver,
+  stagedPath: string,
+  accept: ((origin: string | undefined) => boolean) | undefined,
+): AsyncIterable<ResolvedEntry> {
+  if (accept === undefined) {
+    yield* resolver.resolve();
+    return;
+  }
+  const handle = await open(stagedPath, 'r');
+  try {
+    for await (const entry of resolver.resolve())
+      if (accept(await lineOrigin(handle, entry))) yield entry;
+  } finally {
+    await handle.close();
+  }
+}
+
 export async function appendHistoryJournal(
   source: AttachmentSource,
   destination: SessionRecordingService,
   replace: boolean,
   isCancelled: () => boolean,
   counters?: JournalReadCounters,
+  accept?: (origin: string | undefined) => boolean,
 ): Promise<AttachmentCommit> {
   const directory = await createScratchDir('history-attachment-');
   let committedRows = 0;
@@ -201,7 +244,7 @@ export async function appendHistoryJournal(
       if (count > 0) {
         const replaced = await commitReplacement(
           destination,
-          resolver,
+          acceptedEntries(resolver, staged, accept),
           isCancelled,
         );
         return {
@@ -213,7 +256,7 @@ export async function appendHistoryJournal(
       let watermark = await destination.commit('rewind', {
         itemsRemoved: count,
       });
-      for await (const entry of resolver.resolve()) {
+      for await (const entry of acceptedEntries(resolver, staged, accept)) {
         requireLiveSource(isCancelled);
         watermark = await destination.commit('content', {
           content: entry.content,

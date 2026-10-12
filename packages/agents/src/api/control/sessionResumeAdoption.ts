@@ -28,6 +28,7 @@ export async function adoptSessionResume(
     sessionId: string;
   },
   publish: (integration: RecordingIntegration) => void,
+  owner: object,
   discardOnFailure = false,
 ): Promise<void> {
   const client = deps.resolveClient();
@@ -44,7 +45,7 @@ export async function adoptSessionResume(
         'History service unavailable after resume initialization',
       );
     await history.adoptResumeBoot(result.recording, result.boot, async () => {
-      await integration.subscribeToJournal(history);
+      await integration.subscribeToJournal(history, owner);
       adoptRecordingSessionId(
         deps.config,
         deps.sessionIdentityOwnership,

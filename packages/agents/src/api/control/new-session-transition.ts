@@ -58,7 +58,7 @@ export async function startNewSessionTransition(
       const history = candidate.client.getHistoryService();
       if (history === null)
         throw new Error('New session client has no history service');
-      await integration.subscribeToJournal(history);
+      await integration.subscribeToJournal(history, state.owner);
     }
     retirementStarted = true;
     await state.retire();
