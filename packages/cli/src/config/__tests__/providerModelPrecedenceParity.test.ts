@@ -46,12 +46,6 @@ import { loadPrecedenceProviderContributions } from './precedenceProviderContrib
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 const realTrustedFoldersModule = { ...(await import('../trustedFolders.js')) };
-const realProfileBootstrapModule = {
-  ...(await import('../profileBootstrap.js')),
-};
-const realLlxprtCodeSettingsModule = {
-  ...(await import('@vybestack/llxprt-code-settings')),
-};
 const realLlxprtCodeCoreModule = {
   ...(await import('@vybestack/llxprt-code-core')),
 };
@@ -100,34 +94,6 @@ void vi.mock('read-package-up', () => ({
     Promise.resolve({ packageJson: { version: 'test-version' } }),
   ),
 }));
-
-void vi.mock('../profileBootstrap.js', () => {
-  const actual = realProfileBootstrapModule;
-  const { SettingsService: RealSettingsService } = realLlxprtCodeSettingsModule;
-  return {
-    ...actual,
-    prepareRuntimeForProfile: vi.fn(async () => ({
-      runtime: {
-        settingsService: new RealSettingsService(),
-        config: null,
-        runtimeId: 'mock-runtime',
-        metadata: {},
-      },
-      runtimeMessageBus: undefined,
-      providerManager: {
-        listProviders: vi.fn(() => []),
-        getActiveProviderName: vi.fn(() => null),
-        setActiveProvider: vi.fn(),
-        getActiveProvider: vi.fn(() => undefined),
-        getAvailableModels: vi.fn(async () => []),
-        getProviderByName: vi.fn(() => ({
-          getDefaultModel: () => 'gemini-2.5-pro',
-        })),
-      },
-      oauthManager: undefined,
-    })),
-  };
-});
 
 const runtimeSettingsState = {
   context: null as {

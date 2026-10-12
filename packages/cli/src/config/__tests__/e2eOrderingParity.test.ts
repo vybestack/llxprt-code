@@ -39,10 +39,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as ServerConfig from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  ProviderManager,
-  type IProvider,
-} from '@vybestack/llxprt-code-providers';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { loadCliConfig } from '../config.js';
 import { parseArguments } from '../cliArgParser.js';
 import type { Settings } from '../settings.js';
@@ -56,12 +53,6 @@ import {
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
 const realTrustedFoldersModule = { ...(await import('../trustedFolders.js')) };
-const realProfileBootstrapModule = {
-  ...(await import('../profileBootstrap.js')),
-};
-const realLlxprtCodeSettingsModule = {
-  ...(await import('@vybestack/llxprt-code-settings')),
-};
 const realLlxprtCodeCoreModule = {
   ...(await import('@vybestack/llxprt-code-core')),
 };
@@ -107,39 +98,6 @@ void vi.mock('read-package-up', () => ({
     Promise.resolve({ packageJson: { version: 'test-version' } }),
   ),
 }));
-
-void vi.mock('../profileBootstrap.js', () => {
-  const actual = realProfileBootstrapModule;
-  const { SettingsService: RealSettingsService } = realLlxprtCodeSettingsModule;
-  return {
-    ...actual,
-    prepareRuntimeForProfile: vi.fn(async () => {
-      const settingsService = new RealSettingsService();
-      const providerManager = new ProviderManager({ settingsService });
-      const provider: IProvider = {
-        name: 'openai',
-        getDefaultModel: () => 'mock-default-model',
-        getModels: async () => [],
-        async *generateChatCompletion() {
-          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ready' }] };
-        },
-      };
-      providerManager.registerProvider(provider);
-      runtimeSettingsState.providerManager = providerManager;
-      return {
-        runtime: {
-          settingsService,
-          config: null,
-          runtimeId: 'mock-runtime',
-          metadata: {},
-        },
-        runtimeMessageBus: undefined,
-        providerManager,
-        oauthManager: null,
-      };
-    }),
-  };
-});
 
 /**
  * Shared call log — populated by mock implementations below.
