@@ -15,6 +15,7 @@
  */
 
 import { rewriteToolResponse } from './historyToolRewrite.js';
+import { StagedProfileReplacement } from './historyProfileReplacement.js';
 import { HistoryValidationRepair } from './historyValidationRepair.js';
 import {
   removeHistoryTail,
@@ -103,6 +104,11 @@ export type {
  * compression coordination, and serialization. All state lives in the
  * journal (#854): reads materialize transiently, writes append durable ops.
  */
+/** Commit flips the live history synchronously; rollback discards the staging. */
+export type PreparedProfileAdoption = (() => void) & {
+  rollback(): Promise<void>;
+};
+
 export class HistoryService extends HistoryServiceCore {
   /**
    * @param options.recording injects the journal store. Omitted, the service
@@ -240,7 +246,16 @@ export class HistoryService extends HistoryServiceCore {
     return this.contentOrigins.get(content);
   }
 
-  async prepareProfileAdoption(candidate: HistoryService): Promise<() => void> {
+  /**
+   * Stage the candidate's rows against the live journal and return the commit.
+   * Preparing changes nothing visible; the returned function flips rows and
+   * derived accounting synchronously and throws, leaving the live history
+   * untouched, when the live journal changed since preparation. `rollback()`
+   * discards the staged rows instead.
+   */
+  async prepareProfileAdoption(
+    candidate: HistoryService,
+  ): Promise<PreparedProfileAdoption> {
     await Promise.all([
       this.waitForTokenUpdates(),
       candidate.waitForTokenUpdates(),
@@ -256,15 +271,20 @@ export class HistoryService extends HistoryServiceCore {
     if (this.isCompressing || candidate.isCompressing) {
       throw new Error('Profile history adoption requires idle histories');
     }
-    // Contents live in each service's own journal and cannot be swapped
-    // synchronously at commit. The prepared profile client is built from the
-    // live history, so the journals must still describe the same context.
-    if (this.journal.getLength() !== candidate.journal.getLength()) {
-      throw new Error(
-        'Profile history adoption requires a candidate journal that matches the live journal',
+    const holder: { staged?: StagedProfileReplacement } = {};
+    await this.enqueueAsynchronousHistoryMutation(async () => {
+      holder.staged = await StagedProfileReplacement.stage(
+        this.journal,
+        candidate.journal,
+        this.mutationOwnership,
+        this.journal.primaryOriginId(),
       );
-    }
-    return () => {
+    });
+    const replacement = holder.staged;
+    if (replacement === undefined)
+      throw new Error('Profile history adoption was not staged');
+    const commitDerivedState = () => {
+      replacement.commit();
       this.invalidatePendingSyncs();
       candidate.invalidatePendingSyncs();
       this.totalTokens = candidate.totalTokens;
@@ -283,6 +303,9 @@ export class HistoryService extends HistoryServiceCore {
       candidate.chronology = new ChronologyStamper();
       candidate.cacheAnchorSeq = 0;
     };
+    return Object.assign(commitDerivedState, {
+      rollback: () => replacement.rollback(),
+    });
   }
 
   /**

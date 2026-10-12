@@ -621,10 +621,10 @@ async function testMediaHistory17(): Promise<void> {
   );
   expect(direct.content.blocks.length).toBeGreaterThan(0);
   expect(await rawRows(live)).toStrictEqual(beforeDirect);
-  // The journal facade keeps each service's rows where they were written, so
-  // adoption cannot empty the detached service. What must hold is that none of
-  // the post-adoption traffic reached it.
-  expect(await rawRows(detached)).toStrictEqual(staged);
+  // The retired chat was rebound to the detached service, and clearing it
+  // emptied that service; none of the post-adoption traffic reached it.
+  expect(staged).not.toStrictEqual([]);
+  expect(await rawRows(detached)).toStrictEqual([]);
   await live.waitForTokenUpdates();
   expect(live.getTotalTokens()).toBeGreaterThan(0);
   const store = new LocalMediaStore({

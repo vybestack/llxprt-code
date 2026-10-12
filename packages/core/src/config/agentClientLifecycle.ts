@@ -217,6 +217,7 @@ export async function prepareProfileClient(
     discard: () => Promise<void>;
   }
 > {
+  let adoption: { rollback(): Promise<void> } | undefined;
   // A cold row stream: the replacement client's deferred admission pulls
   // rows from the live journal, so no context-sized copy exists here.
   const history = previousClient.streamHistory();
@@ -249,6 +250,7 @@ export async function prepareProfileClient(
       if (candidate === null)
         throw new Error('Prepared profile chat has no history');
       const adopt = await live.prepareProfileAdoption(candidate);
+      adoption = adopt;
       const detachPrevious = previousClient.prepareHistoryRebind(candidate);
       const attachCandidate = client.prepareHistoryRebind(
         live,
@@ -257,13 +259,21 @@ export async function prepareProfileClient(
           : undefined,
       );
       return () => {
-        detachPrevious();
+        // Adoption validates the live journal first: when it throws, neither
+        // client has been rebound.
         adopt();
+        detachPrevious();
         attachCandidate();
       };
     },
     retire: () => previousClient.dispose(),
-    discard: () => client.dispose(),
+    discard: async () => {
+      try {
+        await adoption?.rollback();
+      } finally {
+        await client.dispose();
+      }
+    },
   };
 }
 

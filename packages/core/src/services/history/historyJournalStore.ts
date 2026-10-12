@@ -184,6 +184,12 @@ export interface HistoryJournalAdoption {
   rollback(): void;
 }
 
+/** Opaque journal position; see {@link HistoryJournalStore.mutationMark}. */
+export interface HistoryMutationMark {
+  readonly binding: object;
+  readonly lastSeq: number | null;
+}
+
 /** Brackets one logical publication so the fan-out sees it only if it succeeds. */
 export interface HistoryPublicationScope {
   close(published: boolean): void;
@@ -218,6 +224,25 @@ export class HistoryJournalStore {
 
   isRecorder(recorder: SessionRecordingService): boolean {
     return this.binding.recorder === recorder;
+  }
+
+  /**
+   * Identifies the journal state after the latest admitted record. Any later
+   * record, or a swap of the primary binding, makes the mark stale.
+   */
+  mutationMark(): HistoryMutationMark {
+    return { binding: this.binding, lastSeq: this.binding.lastSeq };
+  }
+
+  isCurrentMutationMark(mark: HistoryMutationMark): boolean {
+    return (
+      mark.binding === this.binding && mark.lastSeq === this.binding.lastSeq
+    );
+  }
+
+  /** The origin id recorded on the primary journal's rows, if any. */
+  primaryOriginId(): string | undefined {
+    return this.primaryOrigin;
   }
 
   /** A resumed recorder became the primary on behalf of this origin. */
