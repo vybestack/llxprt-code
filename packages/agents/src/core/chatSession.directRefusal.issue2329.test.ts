@@ -131,6 +131,8 @@ describe('Issue 2329: direct-path refusal preservation @issue:2329', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       {},
       [],

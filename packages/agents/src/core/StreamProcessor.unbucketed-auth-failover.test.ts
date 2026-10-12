@@ -27,10 +27,10 @@ describe('StreamProcessor._handleBucketFailover', () => {
         },
         providerRuntime: {
           runtimeId: 'provider-runtime-1739',
-          tryBucketFailover: tryFailover,
-          readCurrentBucket: () => 'default',
         },
       },
+      tryBucketFailover: tryFailover,
+      readCurrentBucket: () => 'default',
       logger: {
         debug: vi.fn(),
       },

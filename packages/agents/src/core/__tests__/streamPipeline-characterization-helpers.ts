@@ -1,3 +1,4 @@
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import { afterEach as closeInvocationRoots } from 'bun:test';
@@ -153,6 +154,8 @@ export function createFullLoopHarness(
     hookConfig?: Config;
     historyService?: HistoryService;
   },
+  tryBucketFailover?: ProviderRetryOperations['tryBucketFailover'],
+  readCurrentBucket?: ProviderRetryOperations['readCurrentBucket'],
 ): FullLoopHarness {
   const settingsService = new SettingsService();
   const config = new Config(createConfigParams(settingsService));
@@ -179,7 +182,6 @@ export function createFullLoopHarness(
     sessionId: config.getSessionId(),
   });
   const historyService = options?.historyService ?? new HistoryService();
-  const effectiveConfig = options?.hookConfig ?? config;
   const invocationOwner = createSessionSettingsFixture(config).settingsOwner;
   retainedInvocationOwners.push(invocationOwner);
   const view = createAgentRuntimeContext({
@@ -208,25 +210,23 @@ export function createFullLoopHarness(
     providerRuntime: { ...providerRuntime },
   });
 
-  const generationConfig = fullLoopGenerationConfig(options?.tools);
-
   const chat = new ChatSession(
     view,
-    effectiveConfig,
+    options?.hookConfig ?? config,
     undefined,
     undefined,
     undefined,
     undefined,
+    tryBucketFailover,
+    readCurrentBucket,
     {} as unknown as ContentGenerator,
-    generationConfig,
+    fullLoopGenerationConfig(options?.tools),
     [],
   );
 
-  const turn = new Turn(chat, 'prompt-p06', DEFAULT_AGENT_ID, 'stub');
-
   return {
     chat,
-    turn,
+    turn: new Turn(chat, 'prompt-p06', DEFAULT_AGENT_ID, 'stub'),
     historyService,
     provider,
     generateChatCompletionMock,

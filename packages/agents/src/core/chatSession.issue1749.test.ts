@@ -150,6 +150,8 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       {},
       [],

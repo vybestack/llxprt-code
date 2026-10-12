@@ -188,6 +188,8 @@ function buildFixture(
     undefined,
     undefined,
     undefined,
+    undefined,
+    undefined,
     {} as unknown as ContentGenerator,
     generationConfig,
     [],
@@ -450,6 +452,8 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
     const chat = new ChatSession(
       view,
       config,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,

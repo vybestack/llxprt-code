@@ -243,6 +243,8 @@ describe('Issue #1150 REPRO: thinking/tool-call round-trip and history persisten
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       {},
       [],
@@ -431,6 +433,8 @@ describe('Issue #1150 REPRO: thinking/tool-call round-trip and history persisten
     const chat = new ChatSession(
       view,
       config,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,

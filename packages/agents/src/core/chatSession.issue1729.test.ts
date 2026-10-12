@@ -114,6 +114,8 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       {},
       [],

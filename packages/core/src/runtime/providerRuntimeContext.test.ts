@@ -20,6 +20,21 @@ describe('createProviderRuntimeContext', () => {
     expect('settingsService' in context).toBe(false);
   });
 
+  it('publishes identity data without retry operations', () => {
+    const context = createProviderRuntimeContext({ runtimeId: 'retry-data' });
+    for (const operation of [
+      'readRetryAuthToken',
+      'handleAuthError',
+      'tryBucketFailover',
+      'readFailoverBuckets',
+      'readCurrentBucket',
+      'readFailoverReasons',
+      'resetBucketSession',
+    ]) {
+      expect(context).not.toHaveProperty(operation);
+    }
+  });
+
   it('constructs contexts without a settings service', () => {
     expect(createProviderRuntimeContext({}).runtimeId).toBeUndefined();
     expect(createProviderRuntimeContext().runtimeId).toBeUndefined();

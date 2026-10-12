@@ -219,6 +219,8 @@ describe('Mounted CLI child execution ownership', () => {
             admitParameters,
             lifecycle,
             hooks,
+            retryFailover,
+            readBucket,
             signal,
           ) => {
             let turn = 0;
@@ -245,6 +247,8 @@ describe('Mounted CLI child execution ownership', () => {
               admitParameters,
               lifecycle,
               hooks,
+              retryFailover,
+              readBucket,
               signal,
               {
                 createTurn: (_chat, promptId, agentId) => {

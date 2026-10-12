@@ -97,6 +97,8 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
       mockContentGenerator,
       {},
       [],
@@ -162,6 +164,8 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
         undefined,
         undefined,
         undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -190,6 +194,8 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
 
     const chat = new ChatSession(
       runtimeContext,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -225,6 +231,8 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
 
     const chat = new ChatSession(
       runtimeContext,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -281,6 +289,8 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
         undefined,
         undefined,
         undefined,
@@ -378,6 +388,8 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
         undefined,
         undefined,
         undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -426,6 +438,8 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
     historyService.add(makeUserMessage('previous assistant context'));
     const chat = new ChatSession(
       runtimeContext,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -497,6 +511,8 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
       };
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
         undefined,
         undefined,
         undefined,

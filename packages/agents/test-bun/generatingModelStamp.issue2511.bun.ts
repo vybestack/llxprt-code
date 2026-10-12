@@ -332,6 +332,8 @@ function buildChatSessionWithLiveProvider(
     undefined,
     undefined,
     undefined,
+    undefined,
+    undefined,
     {
       generateContent: async () => emptyModelOutput(),
       // Intentionally yields nothing; these tests exercise the non-streaming

@@ -191,6 +191,8 @@ describe('Compression Dispatcher Integration (P13)', () => {
           undefined,
           undefined,
           undefined,
+          undefined,
+          undefined,
           mockContentGenerator,
           {},
           [],
@@ -254,6 +256,8 @@ describe('Compression Dispatcher Integration (P13)', () => {
           undefined,
           undefined,
           undefined,
+          undefined,
+          undefined,
           mockContentGenerator,
           {},
           [],
@@ -310,6 +314,8 @@ describe('Compression Dispatcher Integration (P13)', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -357,6 +363,8 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
         const chat = new ChatSession(
           runtimeContext,
+          undefined,
+          undefined,
           undefined,
           undefined,
           undefined,
@@ -415,6 +423,8 @@ describe('Compression Dispatcher Integration (P13)', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -463,6 +473,8 @@ describe('Compression Dispatcher Integration (P13)', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -506,6 +518,8 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
         undefined,
         undefined,
         undefined,
@@ -593,6 +607,8 @@ describe('Compression Dispatcher Integration (P13)', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -627,6 +643,8 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
         undefined,
         undefined,
         undefined,
@@ -669,6 +687,8 @@ describe('Compression Dispatcher Integration (P13)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
         undefined,
         undefined,
         undefined,

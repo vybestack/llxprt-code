@@ -168,13 +168,6 @@ export function makeChatSession(
     providerRuntime: providerRuntimeSnapshot,
   });
 
-  const mockContentGenerator = {
-    generateContent: vi.fn(),
-    generateContentStream: vi.fn(),
-    countTokens: vi.fn().mockResolvedValue({ totalTokens: 100 }),
-    embedContent: vi.fn(),
-  };
-
   return new ChatSession(
     view,
     runtimeSetup.config,
@@ -182,7 +175,9 @@ export function makeChatSession(
     undefined,
     undefined,
     undefined,
-    mockContentGenerator,
+    undefined,
+    undefined,
+    compressionContentGenerator(),
     {},
     [],
   );
@@ -255,5 +250,14 @@ export function mockStrategyFactoryWithEmptySummaryFallback(): {
     getFallbackCalled: () => fallbackCalled,
     getPrimaryCallCount: () => primaryCallCount,
     restore: () => spy.mockRestore(),
+  };
+}
+
+function compressionContentGenerator() {
+  return {
+    generateContent: vi.fn(),
+    generateContentStream: vi.fn(),
+    countTokens: vi.fn().mockResolvedValue({ totalTokens: 100 }),
+    embedContent: vi.fn(),
   };
 }

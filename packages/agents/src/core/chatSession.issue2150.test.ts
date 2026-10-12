@@ -140,6 +140,8 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       {},
       [],

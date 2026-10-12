@@ -79,6 +79,8 @@ describe('Density Optimization Integration (P19)', () => {
           undefined,
           undefined,
           undefined,
+          undefined,
+          undefined,
           mockContentGenerator,
           {},
           [],
@@ -143,6 +145,8 @@ describe('Density Optimization Integration (P19)', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -193,6 +197,8 @@ describe('Density Optimization Integration (P19)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
         undefined,
         undefined,
         undefined,
@@ -270,6 +276,8 @@ describe('Density Optimization Integration (P19)', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -335,6 +343,8 @@ describe('Density Optimization Integration (P19)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
         undefined,
         undefined,
         undefined,

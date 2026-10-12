@@ -308,6 +308,8 @@ async function createFixture(
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
       contentGenerator,
       {},
       [],

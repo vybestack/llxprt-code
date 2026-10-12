@@ -480,6 +480,8 @@ describe('ChatSession media history boundaries', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
+        undefined,
         contentGenerator,
         {},
         [],

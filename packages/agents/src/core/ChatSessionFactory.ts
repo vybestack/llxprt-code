@@ -190,15 +190,8 @@ async function readActiveTodosPrompt(
   return active.map((todo) => `- [${todo.status}] ${todo.content}`).join('\n');
 }
 
-function chatRuntime(
-  config: Config,
-  runtimeState: AgentRuntimeState,
-  composeRetryOperations: CreateChatSessionDeps['composeRetryOperations'],
-) {
-  const retryOperations = composeRetryOperations?.(runtimeState.provider) ?? {};
+function chatRuntime(runtimeState: AgentRuntimeState) {
   return {
-    ...retryOperations,
-    config,
     runtimeId: runtimeState.runtimeId,
     metadata: { source: 'AgentClient.startChat' },
   };
@@ -248,6 +241,7 @@ async function buildChatFromRuntime(
   telemetry: RootTelemetry,
   requestDiagnostics: ProviderRequestDiagnostics | undefined,
 ): Promise<ChatSession> {
+  const operations = retry?.(runtimeState.provider);
   const runtimeBundle = await (loadRuntime ?? loadAgentRuntime)({
     mediaStore,
     profile: {
@@ -257,7 +251,7 @@ async function buildChatFromRuntime(
       state: runtimeState,
       settings: readRuntimeSettings(),
       promptEstimator,
-      providerRuntime: chatRuntime(config, runtimeState, retry),
+      providerRuntime: chatRuntime(runtimeState),
       readRuntimeSettings,
       readToolGovernance,
       prepareProviderInvocation,
@@ -269,12 +263,6 @@ async function buildChatFromRuntime(
       providerAdapter: providerSelection,
     },
   });
-
-  const tools = chatDeclarations(
-    runtimeBundle.toolsView,
-    toolRegistry,
-    todoContinuationService,
-  );
 
   return bindActiveTodos(
     createChatSessionInstance(
@@ -288,12 +276,18 @@ async function buildChatFromRuntime(
       config.getImagePayloadBudgetBytes(),
       createHistoryProviderFileBindingStore(historyService),
       lifecycle,
+      operations?.tryBucketFailover,
+      operations?.readCurrentBucket,
       runtimeBundle.contentGenerator,
       buildGenerateContentConfig(
         generateContentConfig,
         runtimeState.model,
         systemInstruction,
-        tools,
+        chatDeclarations(
+          runtimeBundle.toolsView,
+          toolRegistry,
+          todoContinuationService,
+        ),
       ),
       [],
       triggerPreCompressHook,

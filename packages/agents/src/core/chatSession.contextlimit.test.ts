@@ -155,6 +155,8 @@ describe('ChatSession Context Limit Enforcement', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
       mockContentGenerator,
       {},
       [],
@@ -222,6 +224,8 @@ describe('ChatSession Context Limit Enforcement', () => {
     chat = new ChatSession(
       view,
       mockConfig,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -295,6 +299,8 @@ describe('ChatSession Context Limit Enforcement', () => {
     chat = new ChatSession(
       view,
       mockConfig,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,

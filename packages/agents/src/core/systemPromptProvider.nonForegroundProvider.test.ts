@@ -205,6 +205,8 @@ describe('System prompt provider — non-foreground subagent (issue #3176, D5)',
         context: new ContextState(),
       },
       undefined,
+      undefined,
+      undefined,
     );
 
     expect(chat).not.toBeNull();

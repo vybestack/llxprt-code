@@ -1,5 +1,7 @@
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 import {
   chatResolvedBaseUrl,
+  buildChatProviderRuntime,
   tryReadActiveProvider,
   supportsChatCompletion,
   completedToolResponseIds,
@@ -236,7 +238,6 @@ export class ChatSession {
     string,
     number
   >();
-  private readonly systemPromptAssembler?: SystemPromptAssembler;
   /** Serializes per-turn system-prompt resolution against send hand-off. */
   private systemPromptTurnChain: Promise<void> = Promise.resolve();
   private setHistoryAdmission?: SessionHistoryAdmission;
@@ -251,11 +252,13 @@ export class ChatSession {
     private readonly requestMediaBudgetBytes: number | undefined,
     private providerFileBindings: ProviderFileBindingStore | undefined,
     private readonly providerFileLifecycle: object | undefined,
+    tryBucketFailover: ProviderRetryOperations['tryBucketFailover'],
+    readCurrentBucket: ProviderRetryOperations['readCurrentBucket'],
     _contentGenerator: ContentGenerator,
     generationConfig: ChatSessionConfig = {},
     initialHistory: readonly IContent[] = [],
     triggerCompressionHook: typeof triggerPreCompressHook = triggerPreCompressHook,
-    systemPromptAssembler?: SystemPromptAssembler,
+    private readonly systemPromptAssembler?: SystemPromptAssembler,
   ) {
     this.runtimeState = this.runtimeContext.state;
     this.historyService = this.runtimeContext.history;
@@ -264,7 +267,6 @@ export class ChatSession {
       this.runtimeContext,
       this.historyService,
     );
-    this.systemPromptAssembler = systemPromptAssembler;
     // Carry the assembler onto the generation config so the three send seams
     // (TurnProcessor/StreamProcessor/DirectMessageProcessor) thread it onto
     // the provider options alongside systemInstruction. A router provider
@@ -317,6 +319,8 @@ export class ChatSession {
       this.requestMediaBudgetBytes,
       this.providerFileBindings,
       this.providerFileLifecycle,
+      tryBucketFailover,
+      readCurrentBucket,
       this.conversationManager,
       this.compressionHandler,
       this.resolveProviderForRuntime.bind(this),
@@ -432,11 +436,10 @@ export class ChatSession {
 
   // ── Provider resolution (stays on coordinator) ───────────────────
 
-  private getActiveProvider(): IProvider | undefined {
-    return tryReadActiveProvider(() =>
+  private getActiveProvider = (): IProvider | undefined =>
+    tryReadActiveProvider(() =>
       this.runtimeContext.provider.getActiveProvider(),
     );
-  }
 
   private lookupProviderByName(
     adapter: AgentRuntimeProviderAdapter,
@@ -573,18 +576,12 @@ export class ChatSession {
     source: string,
     metadata: Record<string, unknown> = {},
   ): ProviderRequestCollaborators {
-    const baseRuntime = this.runtimeContext.providerRuntime;
-    const runtimeId = baseRuntime.runtimeId ?? this.runtimeState.runtimeId;
-
-    return {
-      ...baseRuntime,
-      runtimeId,
-      metadata: {
-        ...(baseRuntime.metadata ?? {}),
-        source,
-        ...metadata,
-      },
-    };
+    return buildChatProviderRuntime(
+      this.runtimeContext.providerRuntime,
+      this.runtimeState.runtimeId,
+      source,
+      metadata,
+    );
   }
 
   // ── Public API — thin delegation ─────────────────────────────────

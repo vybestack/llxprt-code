@@ -588,10 +588,7 @@ export { ToolFormatter } from '@vybestack/llxprt-code-tools';
 
 export { createProviderRuntimeContext } from './runtime/providerRuntimeContext.js';
 export { createRuntimeSettingsService } from './runtime/settingsRuntimeAdapter.js';
-export type {
-  ProviderRuntimeContext,
-  ProviderRuntimeContextInit,
-} from './runtime/providerRuntimeContext.js';
+export type { ProviderRuntimeContext } from './runtime/providerRuntimeContext.js';
 
 // @plan PLAN-20251027-STATELESS5.P06
 // Export AgentRuntimeState types and functions for CLI adapter integration

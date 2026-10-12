@@ -1,3 +1,7 @@
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { ChatSession } from './chatSession.js';
 import type { ProviderInvocationData } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 /**
@@ -52,4 +56,21 @@ export function configureHistoryProviderSettings(
   settingsService.set('providers.stub.base-url', 'https://stub.example.com');
   settingsService.set('providers.stub.auth-key', 'stub-api-key');
   settingsService.set('providers.stub.model', 'stub-model');
+}
+
+export function createHistoryChat(
+  view: AgentRuntimeContext,
+  config: Config,
+): ChatSession {
+  return new ChatSession(
+    view,
+    config,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    {} as unknown as ContentGenerator,
+  );
 }

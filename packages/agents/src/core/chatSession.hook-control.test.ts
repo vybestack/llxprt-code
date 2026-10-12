@@ -157,6 +157,8 @@ describe('ChatSession hook execution control', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
       mockContentGenerator,
       {},
       [],
@@ -384,6 +386,8 @@ describe('ChatSession hook execution control', () => {
         }
       ).runtimeContext,
       chat.getConfig(),
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,

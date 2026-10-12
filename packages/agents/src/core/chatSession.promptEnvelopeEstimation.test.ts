@@ -257,6 +257,8 @@ function buildChatSession(fixture: TestFixture): ChatSession {
     undefined,
     undefined,
     undefined,
+    undefined,
+    undefined,
     fixture.mockContentGenerator,
     {},
     [],

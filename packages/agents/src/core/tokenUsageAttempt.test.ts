@@ -151,6 +151,8 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       {},
       [],

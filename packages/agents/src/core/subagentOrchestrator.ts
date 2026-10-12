@@ -223,6 +223,13 @@ export class SubagentOrchestrator {
     isolatedHandle: IsolatedRuntimeContextHandle,
     signal?: AbortSignal,
   ): Promise<SubAgentScope> {
+    const retry = isolatedHandle.oauthManager.composeRetryOperations(
+      runtimeResult.runtimeContext.state.provider,
+      {
+        profileId:
+          isolatedHandle.settingsService.getCurrentProfileName() ?? undefined,
+      },
+    );
     return this.scopeFactory(
       subagent.name,
       this.options.foregroundConfig,
@@ -265,6 +272,8 @@ export class SubagentOrchestrator {
         transcriptPath: () => undefined,
         signal,
       }),
+      retry.tryBucketFailover,
+      retry.readCurrentBucket,
       signal,
     );
   }
@@ -642,7 +651,6 @@ export class SubagentOrchestrator {
   }): Promise<AgentRuntimeLoaderResult> {
     const providerRuntime = createSubagentProviderRuntime(
       params.isolatedHandle,
-      params.effectiveProfile.provider,
       params.subagentName,
     );
     const settingsSnapshot = createSettingsSnapshot(

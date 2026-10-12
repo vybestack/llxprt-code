@@ -253,6 +253,8 @@ describe('ProviderContentEnforcer compression-callback escalation (issue #3499)'
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
       buildMockContentGenerator(),
       {},
       [],

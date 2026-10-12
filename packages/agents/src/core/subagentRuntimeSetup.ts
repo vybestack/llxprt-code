@@ -1,3 +1,4 @@
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 import { createHistoryProviderFileBindingStore } from '@vybestack/llxprt-code-core/services/history/provider-file-binding.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { buildToolGovernance } from '@vybestack/llxprt-code-tools';
@@ -605,6 +606,8 @@ export interface CreateChatObjectParams {
 export async function createChatObject(
   params: CreateChatObjectParams,
   providerFileLifecycle: object | undefined,
+  tryBucketFailover: ProviderRetryOperations['tryBucketFailover'],
+  readCurrentBucket: ProviderRetryOperations['readCurrentBucket'],
 ): Promise<ChatSession | null> {
   const { promptConfig, modelConfig, outputConfig, toolConfig } = params;
   const { runtimeContext, contentGenerator, environmentContextLoader } = params;
@@ -678,6 +681,8 @@ export async function createChatObject(
     systemPromptAssembler,
     providerFileLifecycle,
     config.getImagePayloadBudgetBytes(),
+    tryBucketFailover,
+    readCurrentBucket,
   );
 }
 
@@ -764,6 +769,8 @@ function instantiateChat(
   systemPromptAssembler: SystemPromptAssembler | undefined,
   providerFileLifecycle: object | undefined,
   requestMediaBudgetBytes: number,
+  tryBucketFailover: ProviderRetryOperations['tryBucketFailover'],
+  readCurrentBucket: ProviderRetryOperations['readCurrentBucket'],
 ): ChatSession | null {
   try {
     const generationConfig: ChatSessionConfig = {
@@ -780,6 +787,8 @@ function instantiateChat(
       requestMediaBudgetBytes,
       createHistoryProviderFileBindingStore(runtimeContext.history),
       providerFileLifecycle,
+      tryBucketFailover,
+      readCurrentBucket,
       contentGenerator,
       generationConfig,
       startHistory,
@@ -800,13 +809,9 @@ function instantiateChat(
 
 export function createSubagentProviderRuntime(
   handle: IsolatedRuntimeContextHandle,
-  provider: string,
   subagent: string,
 ): ProviderRuntimeContext {
-  const profileId = handle.settingsService.getCurrentProfileName() ?? undefined;
   return createProviderRuntimeContext({
-    ...handle.oauthManager.composeRetryOperations(provider, { profileId }),
-
     runtimeId: handle.runtimeId,
     metadata: { source: 'SubagentOrchestrator', subagent },
   });

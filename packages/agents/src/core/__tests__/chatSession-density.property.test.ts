@@ -89,6 +89,8 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
               undefined,
               undefined,
               undefined,
+              undefined,
+              undefined,
               gen,
               {},
               [],
@@ -132,6 +134,8 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
             const gen = buildMockContentGenerator();
             const chat = new ChatSession(
               ctx,
+              undefined,
+              undefined,
               undefined,
               undefined,
               undefined,
@@ -187,6 +191,8 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
           const gen = buildMockContentGenerator();
           const chat = new ChatSession(
             ctx,
+            undefined,
+            undefined,
             undefined,
             undefined,
             undefined,
@@ -250,6 +256,8 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
           undefined,
           undefined,
           undefined,
+          undefined,
+          undefined,
           gen,
           {},
           [],
@@ -308,6 +316,8 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
             undefined,
             undefined,
             undefined,
+            undefined,
+            undefined,
             gen,
             {},
             [],
@@ -353,6 +363,8 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
             const gen = buildMockContentGenerator();
             const chat = new ChatSession(
               ctx,
+              undefined,
+              undefined,
               undefined,
               undefined,
               undefined,
@@ -423,6 +435,8 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
             undefined,
             undefined,
             undefined,
+            undefined,
+            undefined,
             gen,
             {},
             [],
@@ -479,6 +493,8 @@ describe('Density Optimization Property-Based Tests (P19)', () => {
         const gen = buildMockContentGenerator();
         const chat = new ChatSession(
           ctx,
+          undefined,
+          undefined,
           undefined,
           undefined,
           undefined,

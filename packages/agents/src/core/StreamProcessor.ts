@@ -1,3 +1,4 @@
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -130,6 +131,8 @@ export class StreamProcessor {
     private readonly requestMediaBudgetBytes: number | undefined,
     private providerFileBindings: ProviderFileBindingStore | undefined,
     private readonly providerFileLifecycle: object | undefined,
+    private readonly tryBucketFailover: ProviderRetryOperations['tryBucketFailover'],
+    private readonly readCurrentBucket: ProviderRetryOperations['readCurrentBucket'],
     private readonly conversationManager: ConversationManager,
     private readonly compressionHandler: CompressionHandler,
     private readonly providerResolver: (contextLabel: string) => IProvider,
@@ -369,8 +372,11 @@ export class StreamProcessor {
       this._buildRequestContents(userContent, semanticMediaPurge);
 
     const toolSelection = await this._selectHookRequestTools(params);
-    const { requestPayload, baseRuntimeContext, runtimeContext } =
-      this._prepareRequestPayload(requestContents, toolSelection, params);
+    const { requestPayload, runtimeContext } = this._prepareRequestPayload(
+      requestContents,
+      toolSelection,
+      params,
+    );
 
     provider = this._bindProviderMediaAndFiles(provider);
 
@@ -397,7 +403,6 @@ export class StreamProcessor {
             promptId,
             { contents, tools: toolSelection.tools },
             runtimeContext.metadata,
-            baseRuntimeContext,
             params,
             this.generationConfig,
             this.currentRawTokenDeltaBridge,
@@ -420,7 +425,6 @@ export class StreamProcessor {
         provider,
         { ...requestPayload, contents: streamPreparation.contents },
         runtimeContext,
-        baseRuntimeContext,
         params,
         promptId,
         toolSelection.allowedFunctionNames,
@@ -476,7 +480,6 @@ export class StreamProcessor {
     provider: IProvider,
     requestPayload: PreparedRequest['requestPayload'],
     runtimeContext: ProviderRequestCollaborators,
-    baseRuntimeContext: ProviderRequestCollaborators,
     params: SendMessageParams,
     promptId: string,
     hookRestrictedAllowedTools: string[] | undefined,
@@ -490,7 +493,6 @@ export class StreamProcessor {
         promptId,
         requestPayload,
         runtimeContext.metadata,
-        baseRuntimeContext,
         params,
         this.generationConfig,
         this.currentRawTokenDeltaBridge,
@@ -614,8 +616,7 @@ export class StreamProcessor {
   private async _handleBucketFailover(
     signal: AbortSignal | undefined,
   ): Promise<boolean | null> {
-    const failoverHandler =
-      this.runtimeContext.providerRuntime.tryBucketFailover;
+    const failoverHandler = this.tryBucketFailover;
     if (!failoverHandler) return null;
 
     this.logger.debug(() => 'Attempting bucket failover on persistent 429');
@@ -623,7 +624,7 @@ export class StreamProcessor {
     if (success) {
       this.logger.debug(
         () =>
-          `Bucket failover successful, new bucket: ${this.runtimeContext.providerRuntime.readCurrentBucket?.()}`,
+          `Bucket failover successful, new bucket: ${this.readCurrentBucket?.()}`,
       );
       return true;
     }

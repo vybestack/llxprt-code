@@ -104,6 +104,8 @@ function makeChatSession(
     undefined,
     undefined,
     undefined,
+    undefined,
+    undefined,
     mockContentGenerator,
     {},
     [],

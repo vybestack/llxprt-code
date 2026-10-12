@@ -118,6 +118,8 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
       mockContentGenerator,
       {},
       [],
@@ -142,6 +144,8 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
       mockContentGenerator,
       {},
       [],
@@ -160,6 +164,8 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
 
     const chat = new ChatSession(
       runtimeContext,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,

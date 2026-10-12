@@ -23,9 +23,8 @@
  * Issue #2616 PR A: this module is explicit-only. The former module-level
  * activeContext pointer, its set/clear/peek/get accessors, and the
  * defaultRuntimeStateFactory fallback are deleted — a context exists only
- * when a caller supplies its identity and retry operations.
+ * when a caller supplies its identity data.
  */
-import type { ProviderRetryOperations } from './contracts/ProviderRetryOperations.js';
 import type { ProviderFileReferenceMetadata } from '../services/history/IContent.js';
 
 export interface ProviderFileBindingStore {
@@ -67,42 +66,22 @@ export interface RuntimeSettingsState {
  * @requirement REQ-D01-003
  * @pseudocode lines 122-133
  */
-export interface ProviderRequestCollaborators extends ProviderRetryOperations {
+export interface ProviderRequestCollaborators {
   readonly runtimeId?: string;
   readonly runtimeKind?: RuntimeKind;
   readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
-export interface ProviderRuntimeContext extends ProviderRetryOperations {
-  runtimeId?: string;
-  runtimeKind?: RuntimeKind;
-  metadata?: Record<string, unknown>;
-}
-
-/**
- * @plan PLAN-20260309-MESSAGEBUS-DI-REMEDIATION.P11
- * @requirement REQ-D01-002
- * @requirement REQ-D01-003
- * @pseudocode lines 122-133
- */
-export interface ProviderRuntimeContextInit extends ProviderRetryOperations {
+export interface ProviderRuntimeContext {
   runtimeId?: string;
   runtimeKind?: RuntimeKind;
   metadata?: Record<string, unknown>;
 }
 
 export function createProviderRuntimeContext(
-  init: ProviderRuntimeContextInit = {},
+  init: ProviderRuntimeContext = {},
 ): ProviderRuntimeContext {
   return {
-    readRetryAuthToken: init.readRetryAuthToken,
-    handleAuthError: init.handleAuthError,
-    tryBucketFailover: init.tryBucketFailover,
-    readFailoverBuckets: init.readFailoverBuckets,
-    readCurrentBucket: init.readCurrentBucket,
-    readFailoverReasons: init.readFailoverReasons,
-    resetBucketSession: init.resetBucketSession,
-
     runtimeId: init.runtimeId,
     runtimeKind: init.runtimeKind,
     metadata: init.metadata,

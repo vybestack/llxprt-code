@@ -128,6 +128,8 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       {},
       [],

@@ -146,6 +146,8 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
       mockContentGenerator,
       { maxOutputTokens },
       [],

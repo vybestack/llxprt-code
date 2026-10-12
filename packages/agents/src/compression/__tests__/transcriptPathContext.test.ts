@@ -239,6 +239,8 @@ describe('ChatSession forwards the journal path into compression (#2933)', () =>
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       {},
       [],
@@ -284,6 +286,8 @@ describe('ChatSession forwards the journal path into compression (#2933)', () =>
     }
     const chat = new ChatSession(
       runtime,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,

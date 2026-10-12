@@ -1,3 +1,4 @@
+import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { splitPartsByRole } from './agenticLoop/loopHelpers.js';
@@ -143,4 +144,21 @@ export function supportsChatCompletion(
 ): boolean {
   if (!provider) return false;
   return typeof provider.generateChatCompletion === 'function';
+}
+
+export function buildChatProviderRuntime(
+  baseRuntime: ProviderRequestCollaborators,
+  selectedRuntimeId: string,
+  source: string,
+  metadata: Record<string, unknown>,
+): ProviderRequestCollaborators {
+  return {
+    ...baseRuntime,
+    runtimeId: baseRuntime.runtimeId ?? selectedRuntimeId,
+    metadata: {
+      ...(baseRuntime.metadata ?? {}),
+      source,
+      ...metadata,
+    },
+  };
 }

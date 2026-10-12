@@ -1,3 +1,4 @@
+import { createHistoryChat } from './chatSession-runtime-helpers.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
@@ -27,9 +28,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
-import { ChatSession } from './chatSession.js';
 
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
@@ -119,15 +118,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       providerRuntime: { ...providerRuntime },
     });
 
-    const chat = new ChatSession(
-      view,
-      config,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      {} as unknown as ContentGenerator,
-    );
+    const chat = createHistoryChat(view, config);
 
     const inputToolCall: IContent = {
       speaker: 'ai',
@@ -223,15 +214,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       providerRuntime: { ...providerRuntime },
     });
 
-    const chat = new ChatSession(
-      view,
-      config,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      {} as unknown as ContentGenerator,
-    );
+    const chat = createHistoryChat(view, config);
 
     const completed = [
       {
@@ -360,15 +343,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       providerRuntime: { ...providerRuntime },
     });
 
-    const chat = new ChatSession(
-      view,
-      config,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      {} as unknown as ContentGenerator,
-    );
+    const chat = createHistoryChat(view, config);
 
     const completed = [
       {
@@ -541,15 +516,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       providerRuntime: { ...providerRuntime },
     });
 
-    const chat = new ChatSession(
-      view,
-      config,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      {} as unknown as ContentGenerator,
-    );
+    const chat = createHistoryChat(view, config);
 
     const stream = await chat.sendMessageStream(
       { message: 'Trigger tool call' },
@@ -645,15 +612,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       providerRuntime: { ...providerRuntime },
     });
 
-    const chat = new ChatSession(
-      view,
-      config,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      {} as unknown as ContentGenerator,
-    );
+    const chat = createHistoryChat(view, config);
 
     await chat.sendMessage({ message: 'Continue' }, 'prompt-123');
 
@@ -756,15 +715,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       providerRuntime: { ...providerRuntime },
     });
 
-    const chat = new ChatSession(
-      view,
-      config,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      {} as unknown as ContentGenerator,
-    );
+    const chat = createHistoryChat(view, config);
 
     await chat.sendMessage({ message: 'Hello there!' }, 'prompt-123');
 
@@ -844,15 +795,7 @@ describe('ChatSession runtime history and tool-call behavior', () => {
         providerRuntime: { ...providerRuntime },
       });
 
-      const chat = new ChatSession(
-        view,
-        config,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        {} as unknown as ContentGenerator,
-      );
+      const chat = createHistoryChat(view, config);
       const { Turn, AgentEventType } = await import('./turn.js');
       const turn = new Turn(chat, 'prompt-123');
 

@@ -1,3 +1,4 @@
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
@@ -153,6 +154,8 @@ export class SubAgentScope {
     private readonly readMcpInstructions: () => string | undefined,
     private readonly instructions: InstructionReadOperations,
     private readonly providerFileLifecycle: object | undefined,
+    private readonly tryBucketFailover: ProviderRetryOperations['tryBucketFailover'],
+    private readonly readCurrentBucket: ProviderRetryOperations['readCurrentBucket'],
     private readonly messageBus?: MessageBus,
     private readonly toolConfig?: ToolConfig,
     private readonly outputConfig?: OutputConfig,
@@ -208,6 +211,8 @@ export class SubAgentScope {
     admitModelParameters: (() => AdmittedModelParameters) | undefined,
     providerFileLifecycle: object | undefined,
     hookOwner: HookExecutionOwner | undefined,
+    tryBucketFailover: ProviderRetryOperations['tryBucketFailover'],
+    readCurrentBucket: ProviderRetryOperations['readCurrentBucket'],
     parentSignal?: AbortSignal,
     dependencies: SubAgentDependencies = {},
   ): Promise<SubAgentScope> {
@@ -228,20 +233,8 @@ export class SubAgentScope {
         'SubAgentScope.create requires a ToolRegistry in the runtime bundle or overrides.',
       );
 
-    toolConfig =
-      toolConfig === undefined
-        ? undefined
-        : await filterToolsAgainstRuntime({ toolConfig, toolsView });
-
-    const toolExecutorContext = createToolExecutionConfig(
-      telemetry,
-      () => admittedRuntime.readToolExecutionPolicy(),
-      () => admittedRuntime.state.sessionId,
-      toolRegistry,
-      settingsSnapshot,
-      toolConfig,
-      readApprovalMode,
-    );
+    if (toolConfig !== undefined)
+      toolConfig = await filterToolsAgainstRuntime({ toolConfig, toolsView });
 
     return new SubAgentScope(
       name,
@@ -250,13 +243,23 @@ export class SubAgentScope {
       runConfig,
       promptConfig,
       contentGenerator,
-      toolExecutorContext,
+      createToolExecutionConfig(
+        telemetry,
+        () => admittedRuntime.readToolExecutionPolicy(),
+        () => admittedRuntime.state.sessionId,
+        toolRegistry,
+        settingsSnapshot,
+        toolConfig,
+        readApprovalMode,
+      ),
       environmentContextLoader ?? defaultEnvironmentContextLoader,
       foregroundConfig,
       workspacePaths,
       readMcpInstructions,
       instructions,
       providerFileLifecycle,
+      tryBucketFailover,
+      readCurrentBucket,
       messageBus,
       toolConfig,
       outputConfig,
@@ -334,6 +337,8 @@ export class SubAgentScope {
         context,
       },
       this.providerFileLifecycle,
+      this.tryBucketFailover,
+      this.readCurrentBucket,
     );
     if (!chat) {
       this.output.terminate_reason = SubagentTerminateMode.ERROR;

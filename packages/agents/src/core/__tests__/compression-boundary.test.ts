@@ -272,6 +272,8 @@ describe('Compression Boundary Logic (Issue #982)', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -312,6 +314,8 @@ describe('Compression Boundary Logic (Issue #982)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
         undefined,
         undefined,
         undefined,
@@ -390,6 +394,8 @@ describe('Compression Boundary Logic (Issue #982)', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -433,6 +439,8 @@ describe('Compression Boundary Logic (Issue #982)', () => {
 
         const chat = new ChatSession(
           runtimeContext,
+          undefined,
+          undefined,
           undefined,
           undefined,
           undefined,
@@ -483,6 +491,8 @@ describe('Compression Boundary Logic (Issue #982)', () => {
         undefined,
         undefined,
         undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -513,6 +523,8 @@ describe('Compression Boundary Logic (Issue #982)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
         undefined,
         undefined,
         undefined,

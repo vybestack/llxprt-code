@@ -234,6 +234,8 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
         context: { get: () => undefined, get_keys: () => [], set: () => {} },
       },
       undefined,
+      undefined,
+      undefined,
     );
 
     expect(chat).not.toBeNull();

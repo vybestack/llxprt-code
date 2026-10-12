@@ -151,6 +151,8 @@ export function createMediaHistoryChat(
     1024 * 1024,
     createHistoryProviderFileBindingStore(history),
     lifecycle,
+    undefined,
+    undefined,
     contentGenerator,
   );
 }
