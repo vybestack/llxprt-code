@@ -112,7 +112,7 @@ export async function withOrchestratorHistory<T>(
         throw new Error('Missing controlled history');
       const { agent, cleanup } = await buildAgent('plain-text.jsonl');
       const config = internalConfig(agent);
-      internalSettingsOwner(agent).writeSessionOverride(
+      internalSettingsOwner(agent).writeNamedParameter(
         'context-limit',
         100_000_000,
       );

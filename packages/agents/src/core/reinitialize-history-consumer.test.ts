@@ -19,7 +19,7 @@ for (const size of [512, 8192]) {
     it('charges the actual pending consumer and rolls back its injected tokenizer failure', async () => {
       await withReinitializeHistory(
         size,
-        async (client, _source, owners, config) => {
+        async (client, _source, owners) => {
           const entered = deferred();
           const release = deferred();
           const fault = new Error('candidate tokenizer consumer failed');
@@ -37,7 +37,7 @@ for (const size of [512, 8192]) {
             }),
           );
           const result = client
-            .initialize(reinitializeConfig(config), { ownership: owners })
+            .initialize(reinitializeConfig(client), { ownership: owners })
             .then(
               () => undefined,
               (error: unknown) => error,

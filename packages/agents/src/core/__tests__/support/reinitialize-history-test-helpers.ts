@@ -30,8 +30,10 @@ function requireSessionClient(agent: Agent): SessionClientOwner {
   return deps.sessionClient;
 }
 
-export function reinitializeConfig(config: Config): ContentGeneratorConfig {
-  const composed = config.getContentGeneratorConfig();
+export function reinitializeConfig(
+  client: AgentClientContract,
+): ContentGeneratorConfig {
+  const composed = client.getContentGeneratorConfig();
   if (composed === undefined)
     throw new Error('Missing composed provider config');
   return composed;

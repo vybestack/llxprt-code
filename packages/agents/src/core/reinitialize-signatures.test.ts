@@ -58,7 +58,7 @@ for (const previousVertexai of [false, true]) {
     it('removes signatures only for GenAI to Vertex and preserves all other row bytes', async () => {
       await withReinitializeHistory(
         1,
-        async (_old, _source, owners, config) => {
+        async (previous, _source, owners, config) => {
           const receiver = new AgentClient(
             config,
             createAgentRuntimeState({
@@ -83,7 +83,7 @@ for (const previousVertexai of [false, true]) {
               receiver,
               source(),
               null,
-              { ...reinitializeConfig(config), vertexai: true },
+              { ...reinitializeConfig(previous), vertexai: true },
               previousVertexai,
               { ownership: owners },
             );

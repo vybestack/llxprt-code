@@ -27,9 +27,9 @@ function registerTransfer(size: number): void {
     it('transfers the invoked raw caller to disk, pins a paused consumer, and sends after startup', async () => {
       await withReinitializeHistory(
         size,
-        async (client, _source, owners, config) => {
+        async (client, _source, owners) => {
           const counters = createRowCounters();
-          await client.initialize(reinitializeConfig(config), {
+          await client.initialize(reinitializeConfig(client), {
             ownership: owners,
             counters: { ...counters.counters, ownership: owners },
           });
@@ -85,11 +85,11 @@ function registerSourceFailure(size: number): void {
     it('does not advance a paused source and preserves active membership on source failure', async () => {
       await withReinitializeHistory(
         size,
-        async (client, source, owners, config) => {
+        async (client, source, owners) => {
           source.pauseAfter = 31;
           const fault = new Error('active disk source failed');
           source.fault = fault;
-          const operation = client.initialize(reinitializeConfig(config));
+          const operation = client.initialize(reinitializeConfig(client));
           const result = operation.then(
             () => undefined,
             (error: unknown) => error,
@@ -129,10 +129,10 @@ function registerCancellation(size: number): void {
     it('propagates cancellation without replacing the active chat', async () => {
       await withReinitializeHistory(
         size,
-        async (client, source, owners, config) => {
+        async (client, source, owners) => {
           const abort = new AbortController();
           source.pauseAfter = 31;
-          const operation = client.initialize(reinitializeConfig(config), {
+          const operation = client.initialize(reinitializeConfig(client), {
             signal: abort.signal,
             ownership: owners,
           });
@@ -168,9 +168,9 @@ function registerControls(size: number): void {
       it(`charges ${retaining} consumer identities instead of excusing retention`, async () => {
         await withReinitializeHistory(
           size,
-          async (client, source, _owners, config) => {
+          async (client, source) => {
             source.retaining = retaining;
-            await client.initialize(reinitializeConfig(config));
+            await client.initialize(reinitializeConfig(client));
             expect(source.consumer.snapshot().liveRows).toBe(size);
             recordReinitializeOwners(size, retaining, source.consumer);
             expect(source.consumer.within(reinitializeBounds)).toBe(
@@ -198,9 +198,9 @@ describe('large active journal row', () => {
   it('preserves a valid nine-MiB row without a byte admission cap', async () => {
     await withReinitializeHistory(
       1,
-      async (client, _source, _reader, config) => {
+      async (client) => {
         const owners = new RowOwnership();
-        await client.initialize(reinitializeConfig(config), {
+        await client.initialize(reinitializeConfig(client), {
           ownership: owners,
         });
         await client.startChat([]);
