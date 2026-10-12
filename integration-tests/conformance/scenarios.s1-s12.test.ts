@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'bun:test';
 import { runTwoAgentIdentity } from '../../packages/agents/src/api/__tests__/two-agent-identity.driver.js';
 import { usePromptFixture } from '../../packages/agents/src/api/__tests__/helpers/prompt-fixture.js';
+import { runSameAgentAdmission } from '../../packages/agents/src/api/__tests__/same-agent-admission.driver.js';
 
 /**
  * Frozen slice A contract: #3633, architecture report 2026-09-08, section 8.
@@ -61,7 +62,13 @@ describe('Slice A conformance targets (#3633)', () => {
    * Skip tracking: #2616, slice C under #2619; #3647's profile-command boundary
    * does not prove public ordinary-turn admission or rebuild exclusion.
    */
-  it.skip('S2: Same-agent admission');
+  it('S2: Same-agent admission', async () => {
+    expect(await runSameAgentAdmission()).toStrictEqual([
+      'capture-a',
+      'capture-a',
+      'after-safe-boundary',
+    ]);
+  }, 30_000);
 
   /**
    * S3 | Failure injection matrix | Gates: D.
