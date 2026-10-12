@@ -20,6 +20,7 @@ import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 import type { Settings } from './settings.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 
 function streamReply(text: string): string {
   const chunk = {
@@ -60,6 +61,7 @@ async function loadOwner(
   ];
   const argv = await parseArguments({} as Settings);
   let registration: CliRuntimeRegistrationHandle | undefined;
+  const credentialAuthority = new CredentialAuthority();
   const settingsService = new SettingsService();
   const settingsOwner = new SessionSettingsOwner(settingsService);
   const config = await loadCliConfig(
@@ -70,6 +72,7 @@ async function loadOwner(
     argv,
     process.cwd(),
     {
+      credentialAuthority,
       settingsService,
       sessionSettingsOwner: settingsOwner,
       onActivationBootstrapReady: (operation) =>
@@ -83,6 +86,7 @@ async function loadOwner(
   return {
     config,
     agent: await fromConfig({
+      credentialAuthority,
       settingsService,
       settingsOwner,
       config,

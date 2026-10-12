@@ -981,12 +981,11 @@ export interface McpCommandRuntime {
  * been migrated to the nested UiRuntime pattern. The streaming path and
  * AppContainer MUST NOT use this type — they use StreamRuntime/UiRuntime.
  */
-export type CliUiRuntime = {
+export type CliUiRuntime = UiRuntimeBareSource & {
   getProviderKeys(): ProviderKeyStorageLike;
   listKeyCompletionNames(): Promise<readonly string[]>;
   invalidateKeyCompletion(): void;
-} & UiRuntimeBareSource &
-  CheckpointRuntime &
+} & CheckpointRuntime &
   ToolRuntime &
   McpState &
   FileWorkspaceState &

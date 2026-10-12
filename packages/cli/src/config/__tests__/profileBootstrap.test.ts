@@ -20,6 +20,7 @@ import {
   createBootstrapResult,
 } from '../profileBootstrap.js';
 import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 
 // The pre-Config provider-runtime assembly (identity binding → session
 // MessageBus construction → provider/OAuth manager → CLI infra registration,
@@ -80,6 +81,7 @@ type MockConfig = {
 };
 
 type RuntimeMetadata = {
+  credentialAuthority?: CredentialAuthority;
   settingsService?: MockSettingsService;
   config?: MockConfig;
   runtimeId?: string;
@@ -177,6 +179,7 @@ describe('profileBootstrap helpers', () => {
   it('prepares runtime before applying profile state @plan:PLAN-20251020-STATELESSPROVIDER3.P05 @requirement:REQ-SP3-001', async () => {
     process.argv = ['node', 'llxprt', '--profile-load', 'workspace'];
     const parsed = parseArgs();
+    parsed.runtimeMetadata.credentialAuthority = new CredentialAuthority();
     const runtimeState = await prepareRuntime(parsed);
     const bootstrapResult = finalizeBootstrap({
       runtime: runtimeState.runtime,
@@ -210,6 +213,7 @@ describe('profileBootstrap helpers', () => {
         debug: null,
       },
       runtimeMetadata: {
+        credentialAuthority: new CredentialAuthority(),
         runtimeId: 'cli-runtime',
         metadata: { sessionId: 'bootstrap-session', source: 'test' },
       },
@@ -263,6 +267,7 @@ describe('prepareRuntimeForProfile delegates assembly to the providers boundary 
         debug: null,
       },
       runtimeMetadata: {
+        credentialAuthority: new CredentialAuthority(),
         runtimeId: explicitRuntimeId,
         metadata: { source: 'ordering-test' },
       },
@@ -301,6 +306,7 @@ describe('prepareRuntimeForProfile delegates assembly to the providers boundary 
         debug: null,
       },
       runtimeMetadata: {
+        credentialAuthority: new CredentialAuthority(),
         // No runtimeId supplied — prepareRuntimeForProfile must choose a
         // deterministic default rather than a process-derived random id.
       },
