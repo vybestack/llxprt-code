@@ -191,7 +191,10 @@ function observeLegacy(setup: Setup, telemetry: RootTelemetry): Trace {
 async function assemble(root: string, mode: Mode, large: boolean) {
   const controller = new AbortController();
   const http = httpEndpoint(mode, controller);
-  const prompts = !['disabled', 'conversation', 'shape'].includes(mode);
+  const bodies = !['disabled', 'conversation', 'shape'].includes(mode);
+  // Conversation export requires both logConversations and logPrompts; only
+  // 'conversation' mode keeps API-body logging off to stay distinct from 'enabled'.
+  const prompts = bodies || mode === 'conversation';
   const setup = await processorFixture(
     root,
     `http://127.0.0.1:${http.server.port}/v1`,
@@ -200,7 +203,7 @@ async function assemble(root: string, mode: Mode, large: boolean) {
     {
       enabled: true,
       logPrompts: prompts,
-      logApiBodies: prompts,
+      logApiBodies: bodies,
       logApiBodyMaxChars: 32 * 1024 * 1024,
       logConversations: !['disabled', 'shape'].includes(mode),
       conversationLogPath: root,
