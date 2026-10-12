@@ -37,6 +37,7 @@ describe('source prepared transactional cleanup failure', () => {
     let retries = 0;
     const stream = await enforceAndStreamSourcePromptEnvelopeRetries({
       provider: setup.provider,
+      tokenizerFactory: setup.tokenizerFactory,
       source,
       buildOptions: (rows) =>
         buildSourceProviderChatOptions(

@@ -23,6 +23,7 @@ export interface LogExportReceipt {
 }
 export class AcknowledgedLogExporter implements LogRecordExporter {
   private readonly receipts = new Map<string, (error?: unknown) => void>();
+  private readonly abandonExports = new Map<string, (error: Error) => void>();
   constructor(private readonly exporter: LogRecordExporter) {}
 
   assertArtifactSupport(): void {
@@ -51,11 +52,15 @@ export class AcknowledgedLogExporter implements LogRecordExporter {
         else reject(error);
       };
       const abort = (): void => settle(signal?.reason);
-      const timeout = setTimeout(
-        () =>
-          settle(new Error('Telemetry record export acknowledgement missing')),
-        5000,
-      );
+      const timeout = setTimeout(() => {
+        const missing = new Error(
+          'Telemetry record export acknowledgement missing',
+        );
+        settle(missing);
+        // An export that never reports back would otherwise keep the root's
+        // accepted-export join, and so its flush and close, waiting forever.
+        this.abandonExports.get(id)?.(missing);
+      }, 5000);
       fail = settle;
       this.receipts.set(id, settle);
       signal?.addEventListener('abort', abort, { once: true });
@@ -83,6 +88,7 @@ export class AcknowledgedLogExporter implements LogRecordExporter {
     const complete = (result: ExportResult): void => {
       if (completed) return;
       completed = true;
+      for (const id of ids) this.abandonExports.delete(id);
       const error =
         result.code === ExportResultCode.SUCCESS
           ? undefined
@@ -90,6 +96,9 @@ export class AcknowledgedLogExporter implements LogRecordExporter {
       for (const id of ids) this.receipts.get(id)?.(error);
       callback(result);
     };
+    const abandon = (error: Error): void =>
+      complete({ code: ExportResultCode.FAILED, error });
+    for (const id of ids) this.abandonExports.set(id, abandon);
     try {
       this.exporter.export(records, complete);
     } catch (error: unknown) {

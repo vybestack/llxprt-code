@@ -38,6 +38,7 @@ async function prepareCycle(large: boolean, trap: boolean): Promise<void> {
   let callbacks = 0;
   const stream = await enforceAndStreamSourcePromptEnvelopeRetries({
     provider: setup.provider,
+    tokenizerFactory: setup.tokenizerFactory,
     source: fixture.source,
     signal: controller.signal,
     buildOptions: (source) =>

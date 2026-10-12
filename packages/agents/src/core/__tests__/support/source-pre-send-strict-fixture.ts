@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { settleInducedExportFailure } from './induced-export-failure.js';
 import { mkdirSync } from 'node:fs';
 import { appendFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -159,7 +160,9 @@ export async function mixedPreSendProbe(
     } finally {
       await disk.source.close();
     }
-    await flushTelemetry(input.telemetry);
+    await settleInducedExportFailure(input.faultPath !== undefined, () =>
+      flushTelemetry(input.telemetry),
+    );
     const receipt = {
       source: results[eagerFirst ? 1 : 0],
       eager: results[eagerFirst ? 0 : 1],

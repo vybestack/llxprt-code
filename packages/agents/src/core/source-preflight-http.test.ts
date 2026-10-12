@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { settleInducedExportFailure } from './__tests__/support/induced-export-failure.js';
 import { describe, expect, it } from 'bun:test';
 import { mkdir, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -80,6 +81,7 @@ async function publication(large: boolean, fault: Fault) {
     artifactIds: new Array<string>(),
     estimates: new Array<object>(),
     transactions: new Array<Promise<void>>(),
+    rejections: new Array<unknown>(),
   };
 }
 async function publish(
@@ -211,6 +213,7 @@ async function rejectedAttempt(
     () => undefined,
     (error: unknown) => error,
   );
+  input.rejections.push(outcome);
   if (fault === 'abort')
     expect(outcome).toMatchObject({
       name: 'AbortError',
@@ -257,7 +260,12 @@ async function runPublication(large: boolean, fault: Fault): Promise<number> {
     await send.settled;
     await send.stream.return?.();
     await input.http.server.stop(true);
-    await shutdownTelemetry(input.telemetry);
+    // The root reports the exporter failures this fault injected on purpose, and only those.
+    await settleInducedExportFailure(
+      fault === 'reject' || fault === 'no-ack',
+      () => shutdownTelemetry(input.telemetry),
+      (failure) => input.rejections.includes(failure),
+    );
     await input.setup.config.dispose();
   }
 }
@@ -283,6 +291,7 @@ describe('awaited source prepared preflight with actual Responses and validated 
     const held = barrier();
     const stream = await enforceAndStreamSourcePromptEnvelopeRetries({
       provider: input.setup.provider,
+      tokenizerFactory: input.setup.tokenizerFactory,
       source: input.fixture.source,
       signal: input.controller.signal,
       buildOptions: (source) =>

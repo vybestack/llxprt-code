@@ -73,6 +73,7 @@ async function write(
 async function start(input: Awaited<ReturnType<typeof fixture>>) {
   const stream = await enforceAndStreamSourcePromptEnvelopeRetries({
     provider: input.setup.provider,
+    tokenizerFactory: input.setup.tokenizerFactory,
     source: input.disk.source,
     signal: input.controller.signal,
     buildOptions: (source) =>

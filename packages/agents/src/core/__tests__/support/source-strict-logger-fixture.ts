@@ -33,6 +33,7 @@ import {
   enforceAndStreamSourcePromptEnvelopeRetries,
   type PreparedSourcePromptEnvelopeSend,
 } from '../../prompt-envelope-source-send.js';
+import { settleInducedExportFailure } from './induced-export-failure.js';
 import { stageTurnRequestArtifact } from '../../turn-request-artifact.js';
 
 export type StrictFault =
@@ -253,7 +254,9 @@ export async function assembleStrict(
   );
   const cleanup = async (): Promise<void> => {
     manager.dispose();
-    await shutdownTelemetry(telemetry);
+    await settleInducedExportFailure(base.faultPath !== undefined, () =>
+      shutdownTelemetry(telemetry),
+    );
     await settingsOwner.dispose();
     await config.dispose();
   };
@@ -333,7 +336,9 @@ export async function strictProbe(
     failure = error;
   } finally {
     if (!source) await fixture.source.close();
-    await flushTelemetry(input.telemetry);
+    await settleInducedExportFailure(input.faultPath !== undefined, () =>
+      flushTelemetry(input.telemetry),
+    );
     await http.server.stop(true);
   }
   return captureStrictReceipt(input, fault, source, {

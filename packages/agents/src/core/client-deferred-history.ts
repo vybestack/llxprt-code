@@ -149,25 +149,31 @@ export async function discardDeferredHistory(
   port.clearPrevious();
 }
 
-async function replaceDeferredHistory(
+/**
+ * Deliberately not an async function: a suspended async frame would keep the
+ * caller's array alive for the whole admission, so the input is handed to the
+ * admission and nothing here retains it while the operation is pending.
+ */
+function replaceDeferredHistory(
   port: DeferredHistoryPort,
   history: readonly IContent[],
   options: DeferredHistorySourceOptions = {},
 ): Promise<void> {
-  const next = await replaceDeferredArray(
+  return replaceDeferredArray(
     port.admissions,
     history,
     port.admission(),
     port.stored(),
     options,
-  );
-  const priorRelease = port.release();
-  port.clearPrevious();
-  port.setAdmission(next.retained);
-  port.setStored(next.journal);
-  port.setRelease(undefined);
-  port.markStreamed();
-  await priorRelease?.();
+  ).then(async (next) => {
+    const priorRelease = port.release();
+    port.clearPrevious();
+    port.setAdmission(next.retained);
+    port.setStored(next.journal);
+    port.setRelease(undefined);
+    port.markStreamed();
+    await priorRelease?.();
+  });
 }
 
 /**

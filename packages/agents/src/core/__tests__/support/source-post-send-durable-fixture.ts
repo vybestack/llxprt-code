@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { settleInducedExportFailure } from './induced-export-failure.js';
 import { mkdirSync } from 'node:fs';
 import { appendFile, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -202,7 +203,9 @@ async function prepareMixed(
     telemetry,
     cleanup: async (): Promise<void> => {
       manager.dispose();
-      await shutdownTelemetry(telemetry);
+      await settleInducedExportFailure(assembled.faultPath !== undefined, () =>
+        shutdownTelemetry(telemetry),
+      );
       await settingsOwner.dispose();
       await config.dispose();
     },
@@ -239,7 +242,9 @@ export async function mixedPostSendProbe(
       : [sendSource(input), sendEager(input, disk)];
     const results = await Promise.all(tasks);
     await disk.source.close();
-    await flushTelemetry(input.telemetry);
+    await settleInducedExportFailure(input.faultPath !== undefined, () =>
+      flushTelemetry(input.telemetry),
+    );
     const receipt = {
       source: results[eagerFirst ? 1 : 0],
       eager: results[eagerFirst ? 0 : 1],
