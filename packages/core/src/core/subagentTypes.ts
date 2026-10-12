@@ -4,11 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ApprovalMode } from '../config/configTypes.js';
-import type { HookExecutionOwner } from '../hooks/hookEventHandler.js';
-import type { InstructionReadOperations } from '../services/workspace-memory-owner.js';
-import type { WorkspacePathOperations } from '../services/workspace-filesystem-owner.js';
-
 /**
  * @fileoverview Foundational types, interfaces, enums, and simple value classes
  * for the subagent subsystem. This is the leaf of the dependency graph — all
@@ -18,14 +13,7 @@ import type { WorkspacePathOperations } from '../services/workspace-filesystem-o
  */
 
 import type { ToolDeclaration } from '../llm-types/toolDeclaration.js';
-import type {
-  AgentRuntimeContext,
-  ReadonlySettingsSnapshot,
-} from '../runtime/AgentRuntimeContext.js';
-import type { AgentRuntimeLoaderResult } from '../runtime/AgentRuntimeLoader.js';
-import type { AdmittedModelParameters } from '../runtime/admittedModelParameters.js';
-import type { ToolSelection } from '@vybestack/llxprt-code-tools';
-import type { MessageBus } from '../confirmation-bus/message-bus.js';
+import type { AgentRuntimeContext } from '../runtime/AgentRuntimeContext.js';
 /**
  * Describes the possible termination modes for a subagent.
  * This enum provides a clear indication of why a subagent's execution might have ended.
@@ -126,22 +114,6 @@ export interface OutputConfig {
    * The subagent is prompted to generate these values before terminating.
    */
   outputs: Record<string, string>;
-}
-
-export interface SubAgentRuntimeOverrides {
-  readonly readApprovalMode?: () => ApprovalMode;
-  readonly hookOwner?: HookExecutionOwner;
-  instructions: InstructionReadOperations;
-  workspacePaths: WorkspacePathOperations;
-  readMcpInstructions: () => string | undefined;
-  admitModelParameters?: () => AdmittedModelParameters;
-  settingsSnapshot?: ReadonlySettingsSnapshot;
-  toolRegistry?: ToolSelection;
-  environmentContextLoader?: (
-    runtime: AgentRuntimeContext,
-  ) => Promise<Array<{ text?: string }>>;
-  runtimeBundle?: AgentRuntimeLoaderResult;
-  messageBus?: MessageBus;
 }
 
 export type EnvironmentContextLoader = (

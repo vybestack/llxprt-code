@@ -239,7 +239,6 @@
     "../providers/src/runtime/__tests__/profileApplication.unavailableProvider.test.ts",
     "../providers/src/runtime/__tests__/providerManagerAdoption.behavior.test.ts",
     "../providers/src/runtime/assembleCliProviderRuntime.test.ts",
-    "../providers/src/runtime/ephemeralSettings.mediaPdf.test.ts",
     "../providers/src/runtime/isolatedRuntimeDefaultPointer.behavior.test.ts",
     "../providers/src/runtime/profileSnapshot.test.ts",
     "../providers/src/runtime/providerSwitch.spec.ts",

@@ -14,7 +14,7 @@ import { coreEvents } from '@vybestack/llxprt-code-core';
 import {
   ephemeralSettingHelp,
   parseEphemeralSettingValue,
-} from '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js';
+} from '@vybestack/llxprt-code-settings/settings/ephemeral-settings.js';
 import {
   isStrictNumericString,
   LEGACY_SETTING_KEY_MIGRATIONS,

@@ -1,3 +1,4 @@
+import { scopeInputs } from '../../core/__tests__/subagent-test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -283,14 +284,14 @@ describe('MCP instruction ownership', () => {
         { max_turns: 1, max_time_minutes: 1 },
         undefined,
         undefined,
-        {
+        ...scopeInputs({
           instructions: emptyInstructionReads,
           workspacePaths: candidate.mcp.workspacePaths,
           runtimeBundle,
           messageBus: candidate.mcp.messageBus,
           readMcpInstructions: candidate.mcp.readInstructions,
           environmentContextLoader: async () => [],
-        },
+        }),
       );
       try {
         await scope.runNonInteractive(new ContextState());

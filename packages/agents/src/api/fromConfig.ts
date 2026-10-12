@@ -394,16 +394,18 @@ function bindAdoptedDefinitions(
   mcpRuntime: McpRuntimeOwner,
   options: FromConfigOptions,
 ): void {
+  const definitions = assembleAdoptedDefinitionOperations(
+    mcpRuntime,
+    options.definitionOwner,
+    options.config,
+    options.definitionOwnership,
+    ownsMcpRuntime(options),
+  );
   sessionClient.bindMcpRuntime(
     mcpRuntime,
     options.runtimeFactoryBindings?.taskToolRegistration(),
-    assembleAdoptedDefinitionOperations(
-      mcpRuntime,
-      options.definitionOwner,
-      options.config,
-      options.definitionOwnership,
-      ownsMcpRuntime(options),
-    ),
+    definitions.profileDefinitions,
+    definitions.subagentDefinitions,
   );
 }
 

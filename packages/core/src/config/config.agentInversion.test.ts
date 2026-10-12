@@ -78,29 +78,47 @@ async function assemble(config: Config, descriptor?: TaskToolRegistration) {
       : {
           ...descriptor,
           create: (
-            config: unknown,
-            args: Parameters<TaskToolRegistration['create']>[1],
+            config,
+            profiles,
+            subagents,
+            bus,
+            paths,
+            readMcpInstructions,
           ) =>
-            descriptor.create(config, {
-              ...args,
-              createChildSettings: () => settingsOwner.createChildStore(),
-              readTaskPolicy: () => settingsOwner.readTaskPolicy(),
-              readRunPolicy: () => settingsOwner.readSubagentRunPolicy(),
-              readGovernance: () => settingsOwner.readToolGovernance([]),
-              instructions: emptyInstructionReads,
-            }),
+            descriptor.create(
+              config,
+              profiles,
+              subagents,
+              bus,
+              paths,
+              readMcpInstructions,
+              emptyInstructionReads,
+              () => settingsOwner.createChildStore(),
+              () => settingsOwner.readTaskPolicy(),
+              () => settingsOwner.readSubagentRunPolicy(),
+              () => settingsOwner.readToolGovernance([]),
+            ),
           buildArgs: (
-            config: unknown,
-            args: Parameters<TaskToolRegistration['buildArgs']>[1],
+            config,
+            profiles,
+            subagents,
+            bus,
+            paths,
+            readMcpInstructions,
           ) =>
-            descriptor.buildArgs(config, {
-              ...args,
-              createChildSettings: () => settingsOwner.createChildStore(),
-              readTaskPolicy: () => settingsOwner.readTaskPolicy(),
-              readRunPolicy: () => settingsOwner.readSubagentRunPolicy(),
-              readGovernance: () => settingsOwner.readToolGovernance([]),
-              instructions: emptyInstructionReads,
-            }),
+            descriptor.buildArgs(
+              config,
+              profiles,
+              subagents,
+              bus,
+              paths,
+              readMcpInstructions,
+              emptyInstructionReads,
+              () => settingsOwner.createChildStore(),
+              () => settingsOwner.readTaskPolicy(),
+              () => settingsOwner.readSubagentRunPolicy(),
+              () => settingsOwner.readToolGovernance([]),
+            ),
         };
   const result = await createToolRegistry(
     config,
@@ -146,6 +164,37 @@ describe('P01 construction inversion contracts', () => {
     );
     if (errors.length > 0)
       throw new AggregateError(errors, 'Config fixture disposal failed');
+  });
+
+  it('builds a child task from independently supplied session policy ports', () => {
+    const config = configuration();
+    const settings = new SessionSettingsOwner(new SettingsService());
+    settingsOwners = [...settingsOwners, settings];
+    const policy = new RuntimePolicyOwner(config);
+    policies = [...policies, policy];
+    const filesystem = createFilesystem({
+      targetDir: config.getTargetDir(),
+      includeDirectories: [],
+      isTrusted: () => true,
+    });
+    const tool = createTaskRegistration().create(
+      config,
+      undefined,
+      undefined,
+      policy.session.messageBus,
+      filesystem.paths,
+      () => undefined,
+      emptyInstructionReads,
+      () => settings.createChildStore(),
+      () => settings.readTaskPolicy(),
+      () => settings.readSubagentRunPolicy(),
+      () => settings.readToolGovernance([]),
+    );
+    expect(
+      tool
+        .build({ subagent_name: 'child', goal_prompt: 'Use parent policy' })
+        .getDescription(),
+    ).toContain('child');
   });
 
   it('initializes workspace infrastructure without constructing a session client', async () => {
@@ -198,12 +247,7 @@ describe('P01 construction inversion contracts', () => {
     expect(record.isRegistered).toBe(true);
     expect(record.toolName).not.toBe(record.toolClass?.name);
     expect(record.args[0]).toBe(config);
-    const args = record.args[1];
-    if (typeof args !== 'object' || args === null || !('messageBus' in args))
-      throw new Error(
-        'Missing session message bus in actual task construction',
-      );
-    expect(args.messageBus).toBe(messageBus);
+    expect(record.args[3]).toBe(messageBus);
     const tool = registry.getTool('task');
     if (tool === undefined || record.toolClass === undefined)
       throw new Error('Missing actual constructed task');

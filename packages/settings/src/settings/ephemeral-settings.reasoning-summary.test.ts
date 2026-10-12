@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  *
  * TDD tests for reasoning.summary ephemeral setting
@@ -11,7 +11,7 @@ import { describe, it, expect } from 'bun:test';
 import {
   isValidEphemeralSetting,
   ephemeralSettingHelp,
-} from './ephemeralSettings.js';
+} from './ephemeral-settings.js';
 
 describe('reasoning.summary ephemeral setting @issue:922', () => {
   describe('ephemeralSettingHelp', () => {

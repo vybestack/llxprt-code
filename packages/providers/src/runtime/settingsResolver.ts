@@ -11,9 +11,9 @@ import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
  * Handles CLI argument resolution into runtime overrides.
  */
 
-import type { EphemeralSettingTarget } from './cliEphemeralSettings.js';
+import type { EphemeralSettingTarget } from '@vybestack/llxprt-code-settings/settings/cli-ephemeral-settings.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { applyCliSetArguments } from './cliEphemeralSettings.js';
+import { applyCliSetArguments } from '@vybestack/llxprt-code-settings/settings/cli-ephemeral-settings.js';
 import { updateActiveProviderBaseUrl } from './providerMutations.js';
 import {
   resolveFromKeyArg,

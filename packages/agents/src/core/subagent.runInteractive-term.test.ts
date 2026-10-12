@@ -1,3 +1,4 @@
+import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
@@ -208,7 +209,7 @@ describe('subagent.ts', () => {
         runConfig,
         { tools: ['external_tool'] },
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       const interactiveResponseStream = (async function* () {
@@ -348,7 +349,7 @@ describe('subagent.ts', () => {
           runConfig,
           { tools: ['hanging_tool'] },
           undefined,
-          overrides,
+          ...scopeInputs(overrides),
         );
 
         // Stream yields a tool call then ends

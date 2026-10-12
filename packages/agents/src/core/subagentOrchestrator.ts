@@ -229,39 +229,39 @@ export class SubagentOrchestrator {
       runConfig,
       request.toolConfig,
       request.outputConfig,
-      {
-        runtimeBundle: runtimeResult,
-        readApprovalMode: () =>
-          this.options.workspaceTrust?.isTrustedFolder() === true
-            ? this.options.foregroundConfig.getApprovalMode()
-            : ApprovalMode.DEFAULT,
-        hookOwner: isolatedHandle.sessionClient.hookOperations.execution({
-          sessionId: () => runtimeResult.runtimeContext.state.sessionId,
-          transcriptPath: () => undefined,
-          signal,
-        }),
-        workspacePaths: this.options.workspacePaths,
-        instructions: this.options.instructions,
-        readMcpInstructions: this.options.readMcpInstructions,
-        environmentContextLoader: async (_runtime) =>
-          getEnvironmentContext(
-            this.options.instructions.snapshot().environmentMemory,
-            this.options.workspacePaths.directories(),
-          ),
-        messageBus: this.options.messageBus,
-        admitModelParameters: () => {
-          const providerName = runtimeResult.runtimeContext.state.provider;
-          return providerName === LOAD_BALANCER_PROVIDER_NAME
-            ? admitLoadBalancerModelParameters(
-                isolatedHandle.providerManager.getActiveProvider(),
-                isolatedHandle.settingsService,
-              )
-            : admitModelParameters(
-                isolatedHandle.settingsService,
-                providerName,
-              );
-        },
+      runtimeResult.runtimeContext,
+      runtimeResult.contentGenerator,
+      runtimeResult.telemetryRoot,
+      runtimeResult.toolRegistry,
+      runtimeResult.runtimeContext.tools,
+      this.options.instructions,
+      this.options.workspacePaths,
+      this.options.readMcpInstructions,
+      this.options.messageBus,
+      runtimeResult.settingsSnapshot,
+      async (_runtime) =>
+        getEnvironmentContext(
+          this.options.instructions.snapshot().environmentMemory,
+          this.options.workspacePaths.directories(),
+        ),
+      () =>
+        this.options.workspaceTrust?.isTrustedFolder() === true
+          ? this.options.foregroundConfig.getApprovalMode()
+          : ApprovalMode.DEFAULT,
+      () => {
+        const providerName = runtimeResult.runtimeContext.state.provider;
+        return providerName === LOAD_BALANCER_PROVIDER_NAME
+          ? admitLoadBalancerModelParameters(
+              isolatedHandle.providerManager.getActiveProvider(),
+              isolatedHandle.settingsService,
+            )
+          : admitModelParameters(isolatedHandle.settingsService, providerName);
       },
+      isolatedHandle.sessionClient.hookOperations.execution({
+        sessionId: () => runtimeResult.runtimeContext.state.sessionId,
+        transcriptPath: () => undefined,
+        signal,
+      }),
       signal,
     );
   }

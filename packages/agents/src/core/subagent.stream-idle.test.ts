@@ -1,3 +1,6 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { scopeInputs } from './__tests__/subagent-test-helpers.js';
+import type { SubagentTestInputs } from './__tests__/subagent-test-helpers.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createToolRegistryViewFromRegistry } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
@@ -34,7 +37,6 @@ import {
   SubagentTerminateMode,
   type ModelConfig,
   type RunConfig,
-  type SubAgentRuntimeOverrides,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { ChatSession, StreamEventType } from './chatSession.js';
 import { mockChunk } from './__tests__/turn-test-helpers.js';
@@ -192,6 +194,12 @@ describe('subagent.ts', () => {
         tools: createToolRegistryViewFromRegistry(toolRegistry),
       });
       return {
+        telemetryRoot: RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'child-idle',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
         runtimeContext,
         history,
         providerAdapter: provider,
@@ -234,7 +242,7 @@ describe('subagent.ts', () => {
         configWithTimeout,
         settingsService,
       );
-      const overrides: SubAgentRuntimeOverrides = {
+      const overrides: SubagentTestInputs = {
         instructions: mcpRuntime.workspaceMemory.operations,
         workspacePaths: mcpRuntime.workspaceFilesystem.paths,
         readMcpInstructions: () => undefined,
@@ -254,7 +262,7 @@ describe('subagent.ts', () => {
         localDefaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // Mock a slow stream that yields after the timeout
@@ -333,7 +341,7 @@ describe('subagent.ts', () => {
         configWithTimeout,
         settingsService,
       );
-      const overrides: SubAgentRuntimeOverrides = {
+      const overrides: SubagentTestInputs = {
         instructions: mcpRuntime.workspaceMemory.operations,
         workspacePaths: mcpRuntime.workspaceFilesystem.paths,
         readMcpInstructions: () => undefined,
@@ -353,7 +361,7 @@ describe('subagent.ts', () => {
         { ...localDefaultRunConfig, max_time_minutes: 60 }, // Long enough for test
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       let resolveIterator: () => void;
@@ -468,7 +476,7 @@ describe('subagent.ts', () => {
         configWithTimeout,
         settingsService,
       );
-      const overrides: SubAgentRuntimeOverrides = {
+      const overrides: SubagentTestInputs = {
         instructions: mcpRuntime.workspaceMemory.operations,
         workspacePaths: mcpRuntime.workspaceFilesystem.paths,
         readMcpInstructions: () => undefined,
@@ -488,7 +496,7 @@ describe('subagent.ts', () => {
         localDefaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       let gapReached = false;

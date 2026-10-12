@@ -407,7 +407,12 @@ async function runInteractiveDirect(responses: readonly IContent[]): Promise<{
     history: new HistoryService(),
     providerAdapter,
   });
-  const toolExecutorContext = createToolExecutionConfig(bundle, toolRegistry);
+  const toolExecutorContext = createToolExecutionConfig(
+    bundle.telemetryRoot,
+    () => bundle.runtimeContext.readToolExecutionPolicy(),
+    () => bundle.runtimeContext.state.sessionId,
+    toolRegistry,
+  );
   const scope = new (SubAgentScope as unknown as new (
     ...args: unknown[]
   ) => SubAgentScope)(

@@ -131,21 +131,6 @@
       "bun": "./src/runtime/messages.ts",
       "import": "./dist/src/runtime/messages.js"
     },
-    "./runtime/cliEphemeralSettings.js": {
-      "types": "./dist/src/runtime/cliEphemeralSettings.d.ts",
-      "bun": "./src/runtime/cliEphemeralSettings.ts",
-      "import": "./dist/src/runtime/cliEphemeralSettings.js"
-    },
-    "./runtime/ephemeralSettings.js": {
-      "types": "./dist/src/runtime/ephemeralSettings.d.ts",
-      "bun": "./src/runtime/ephemeralSettings.ts",
-      "import": "./dist/src/runtime/ephemeralSettings.js"
-    },
-    "./runtime/modelParamParser.js": {
-      "types": "./dist/src/runtime/modelParamParser.d.ts",
-      "bun": "./src/runtime/modelParamParser.ts",
-      "import": "./dist/src/runtime/modelParamParser.js"
-    },
     "./BaseProvider.js": {
       "bun": "./src/BaseProvider.ts",
       "import": "./dist/src/BaseProvider.js"

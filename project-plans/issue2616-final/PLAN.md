@@ -69,6 +69,12 @@ Each row confirms present source rather than claiming a reproduced cross-root in
 
 ## Ordered implementation workstreams
 
+### S1 execution evidence (step 43, 2026-10-11)
+
+The public two-root driver in `packages/agents/src/api/__tests__/two-agent-identity.driver.ts` now executes from the frozen S1 entry. It checks equal session labels with separate OpenAI and Anthropic providers, key files and workspaces; interleaved requests, profile/model changes, auth prompts, tool policy, counters, history and physical file effects; and continued operation after one root closes. Its unchanged-peer snapshots extend the #2300 foreground invariant to model and settings. The driver exposed dropped `auth.apiKeyFile` activation input, which `createAgent` now forwards.
+
+MCP ownership evidence remains the measured six-test notice lane and nine-test auth/discovery lane above, with global callback dispatch removed from `packages/mcp/src/host/hostServices.ts`. This change does not replace or alter those MCP tests. Step-specific combined verification lives under `tmp/verify2616-c/s43/`; the frozen S1 entry is executed rather than counted as a skip.
+
 Numbered titles establish dependency order. Where a title has lettered handoffs below, assign each lettered handoff separately, never the parent workstream as one implementation session. Each handoff must be completed, verified and committed within the requested single-session limit. An unsubdivided title is itself one handoff. A handoff must migrate its affected callers and leave the build green. Contract-only preparation can add narrow interfaces before callers move. A replacement must remove the old path for the migrated functionality in that same handoff; when a shared old export still has another unmigrated functional caller, delete it in the handoff migrating its last caller. No duplicate implementation, alias, re-export bridge, ambient fallback or keyed services bag is permitted.
 
 Common exit E for every handoff: run its focused Bun behavioral/negative-control tests, `npm run typecheck`, `npm run lint`, and `npm run check:runtime-boundary -- --output tmp/plan2616/step-N.json`. All nonratcheted rules and diagnostics stay zero; ratcheted counts never rise. Reconcile changed consumers against `findings.tsv` and `imports.tsv`; lower baseline entries to actual reductions rather than creating slack. Every implementation PR additionally passes the full AC8 cycle before landing. Do not relax scanner identities, package roots, assertions, required checks or ownership rules to reduce findings.

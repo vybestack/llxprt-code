@@ -1,3 +1,4 @@
+import { scopeInputs } from './__tests__/subagent-test-helpers.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -185,7 +186,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // Track onMessage calls
@@ -251,7 +252,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // Track onMessage calls
@@ -316,7 +317,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // Track onMessage calls
@@ -399,7 +400,7 @@ describe('subagent.ts', () => {
           defaultRunConfig,
           undefined,
           undefined,
-          overrides,
+          ...scopeInputs(overrides),
         );
 
         // Simulate error completed calls with tool_call in responseParts
@@ -490,7 +491,7 @@ describe('subagent.ts', () => {
           defaultRunConfig,
           undefined,
           undefined,
-          overrides,
+          ...scopeInputs(overrides),
         );
 
         const completedCalls = makePartsCalls([
@@ -580,7 +581,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         undefined,
         undefined,
-        overrides,
+        ...scopeInputs(overrides),
       );
 
       // Track onMessage calls
@@ -701,7 +702,7 @@ describe('subagent.ts', () => {
         defaultRunConfig,
         { tools: ['read_file'] },
         undefined,
-        {
+        ...scopeInputs({
           ...createRuntimeOverrides(mcpRuntime.workspaceFilesystem.paths, {
             runtimeBundle,
             toolRegistry,
@@ -711,7 +712,7 @@ describe('subagent.ts', () => {
             sessionId: () => 'hook-child',
             transcriptPath: () => undefined,
           }),
-        },
+        }),
       );
       try {
         await scope.runNonInteractive(new ContextState());

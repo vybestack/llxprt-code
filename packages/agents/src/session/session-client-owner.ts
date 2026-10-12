@@ -53,7 +53,7 @@ import { SessionToolCatalogOwner } from './session-tool-catalog-owner.js';
 import { buildToolDeclarationsFromView } from '../core/clientToolGovernance.js';
 import { createTaskRegistration } from '../api/runtimeFactories.js';
 import type { TaskToolRegistration } from '@vybestack/llxprt-code-core/config/toolRegistryFactory.js';
-import { summarizeToolOutput } from '@vybestack/llxprt-code-core/utils/summarizer.js';
+import { bindToolOutputSummary } from './session-tool-catalog-owner.js';
 import { SessionPolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { createMcpApprovalPolicy } from '@vybestack/llxprt-code-core/policy/mcp-approval.js';
 import { persistPolicyToToml } from '@vybestack/llxprt-code-core/policy/config.js';
@@ -374,10 +374,8 @@ export class SessionClientOwner {
   bindMcpRuntime(
     workspace: McpRuntimeOwner,
     registration: TaskToolRegistration = createTaskRegistration(),
-    definitions: Pick<
-      McpRuntimeOwner,
-      'profileDefinitions' | 'subagentDefinitions'
-    > = workspace,
+    profiles: ProfileDefinitionReads = workspace.profileDefinitions,
+    subagents: SubagentDefinitionReads = workspace.subagentDefinitions,
   ): void {
     if (this.boundWorkspace === workspace) return;
     if (this.boundWorkspace !== undefined)
@@ -387,32 +385,34 @@ export class SessionClientOwner {
       () => workspace.ide.getClient()?.getIdeContext(),
       () => workspace.ide.isEnabled(),
     );
-    this.bindDefinitionReads(
-      definitions.profileDefinitions,
-      definitions.subagentDefinitions,
-    );
+    this.bindDefinitionReads(profiles, subagents);
     this.bindWorkspaceInstructions(workspace.workspaceMemory);
     const { policy, sessionApproval } = this.bindSessionApproval(workspace);
     this.prepareTools = () =>
       this.toolCatalog.initialize(
-        workspace,
+        () => workspace.isStopped(),
+        workspace.workspacePaths,
+        workspace.workspaceFiles,
+        workspace.workspaceIgnore,
+        workspace.workspaceScans,
+        workspace.workspaceLsp.diagnostics,
+        workspace.ide,
+        workspace.trust,
+        workspace.toolSelection,
+        workspace.readInstructions,
         policy.messageBus,
         registration,
-        (content, signal, budget) =>
-          summarizeToolOutput(
-            content,
-            this.getAgentClient(),
-            signal,
-            budget,
-            this.config.getUtilityModel(),
-          ),
+        bindToolOutputSummary(
+          () => this.getAgentClient(),
+          () => this.config.getUtilityModel(),
+        ),
         sessionApproval,
         this.instructionReads,
         () => this.settingsOwner.createChildStore(),
         () => this.settingsOwner.readTaskPolicy(),
         () => this.settingsOwner.readSubagentRunPolicy(),
-        definitions.profileDefinitions,
-        definitions.subagentDefinitions,
+        profiles,
+        subagents,
         this.hookOperations,
         this.settingsOwner.telemetry,
         this.requestInteractiveAuth,

@@ -1,5 +1,3 @@
-import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import type { AgentProviderState } from './agentImpl.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -39,19 +37,5 @@ export function assembleProviderReads(
       manager.getActiveProvider()?.getContextLimit?.(),
     listAvailableModels: (provider) =>
       manager.getAvailableModels(provider ?? readProviderName()),
-  };
-}
-
-export function createProviderState(
-  state: Pick<
-    AgentRuntimeState,
-    'provider' | 'model' | 'modelParams' | 'baseUrl'
-  >,
-): AgentProviderState {
-  return {
-    provider: state.provider,
-    model: state.model,
-    modelParams: Object.fromEntries(Object.entries(state.modelParams ?? {})),
-    baseUrl: state.baseUrl,
   };
 }

@@ -1,3 +1,10 @@
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
+import type { SubAgentScope } from '../subagent.js';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { createSessionPolicyFixture } from './session-policy-fixture.js';
 import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
@@ -45,7 +52,6 @@ import type { ToolErrorType } from '@vybestack/llxprt-code-tools';
 import type {
   ModelConfig,
   RunConfig,
-  SubAgentRuntimeOverrides,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 
@@ -398,7 +404,7 @@ export function createRuntimeOverrides(
     settings?: SettingsService;
   } = {},
 ): {
-  overrides: SubAgentRuntimeOverrides;
+  overrides: SubagentTestInputs;
   runtimeBundle: AgentRuntimeLoaderResult;
   environmentLoader: EnvironmentLoader;
 } {
@@ -412,7 +418,7 @@ export function createRuntimeOverrides(
   const environmentLoader =
     options.environmentLoader ?? defaultEnvironmentLoader();
 
-  const overrides: SubAgentRuntimeOverrides = {
+  const overrides: SubagentTestInputs = {
     instructions: emptyInstructionReads,
     workspacePaths,
     readMcpInstructions: () => undefined,
@@ -428,3 +434,56 @@ export function createRuntimeOverrides(
 }
 
 export type { ContentGenerator, Mock, ToolRegistryView };
+
+export interface SubagentTestInputs {
+  readonly readApprovalMode?: () => ApprovalMode;
+  readonly hookOwner?: HookExecutionOwner;
+  instructions: InstructionReadOperations;
+  workspacePaths: WorkspacePathOperations;
+  readMcpInstructions: () => string | undefined;
+  admitModelParameters?: () => AdmittedModelParameters;
+  settingsSnapshot?: ReadonlySettingsSnapshot;
+  toolRegistry?: ToolSelection;
+  environmentContextLoader?: (
+    runtime: AgentRuntimeContext,
+  ) => Promise<Array<{ text?: string }>>;
+  runtimeBundle?: AgentRuntimeLoaderResult;
+  messageBus?: MessageBus;
+}
+
+export function scopeInputs(
+  inputs: SubagentTestInputs,
+): [
+  Parameters<typeof SubAgentScope.create>[7],
+  Parameters<typeof SubAgentScope.create>[8],
+  Parameters<typeof SubAgentScope.create>[9],
+  Parameters<typeof SubAgentScope.create>[10],
+  Parameters<typeof SubAgentScope.create>[11],
+  Parameters<typeof SubAgentScope.create>[12],
+  Parameters<typeof SubAgentScope.create>[13],
+  Parameters<typeof SubAgentScope.create>[14],
+  Parameters<typeof SubAgentScope.create>[15],
+  Parameters<typeof SubAgentScope.create>[16],
+  Parameters<typeof SubAgentScope.create>[17],
+  Parameters<typeof SubAgentScope.create>[18],
+  Parameters<typeof SubAgentScope.create>[19],
+  Parameters<typeof SubAgentScope.create>[20],
+] {
+  const runtime = inputs.runtimeBundle;
+  return [
+    runtime?.runtimeContext,
+    runtime?.contentGenerator,
+    runtime?.telemetryRoot,
+    inputs.toolRegistry ?? runtime?.toolRegistry,
+    runtime?.runtimeContext.tools ?? runtime?.toolsView,
+    inputs.instructions,
+    inputs.workspacePaths,
+    inputs.readMcpInstructions,
+    inputs.messageBus,
+    inputs.settingsSnapshot ?? runtime?.settingsSnapshot,
+    inputs.environmentContextLoader,
+    inputs.readApprovalMode,
+    inputs.admitModelParameters,
+    inputs.hookOwner,
+  ];
+}

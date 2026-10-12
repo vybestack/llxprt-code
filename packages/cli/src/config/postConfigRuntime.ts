@@ -21,7 +21,7 @@ import type {
   EphemeralSettings,
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
-import { applyCliSetArguments } from '@vybestack/llxprt-code-providers/runtime/cliEphemeralSettings.js';
+import { applyCliSetArguments } from '@vybestack/llxprt-code-settings/settings/cli-ephemeral-settings.js';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import {

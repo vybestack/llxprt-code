@@ -866,9 +866,8 @@ describe('SubagentOrchestrator - MessageBus threading (Issue #2312)', () => {
 
     expect(factory).toHaveBeenCalledTimes(1);
     const factoryCall = factory.mock.calls[0];
-    // SubAgentScope.create(name, config, prompt, model, run, toolConfig, outputConfig, overrides, signal)
-    const overridesArg = factoryCall[7];
-    expect(overridesArg).toBeDefined();
-    expect(overridesArg.messageBus).toBe(sessionMessageBus);
+    const runtimeArg = factoryCall[7];
+    expect(runtimeArg).toBeDefined();
+    expect(factoryCall[15]).toBe(sessionMessageBus);
   });
 });
