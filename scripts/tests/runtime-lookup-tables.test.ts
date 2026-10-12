@@ -19,7 +19,7 @@ const tables = Object.freeze(
       ['messages.ts', 'MISSING_RUNTIME_REQUIREMENTS'],
       ['messages.ts', 'NORMALIZATION_REQUIREMENTS'],
       [
-        'profile-application/switchProfileProvider.ts',
+        '../../../agents/src/api/profile-application/switchProfileProvider.ts',
         'PRESERVED_PROFILE_EPHEMERALS',
       ],
       ['promptEnvelopeProjections.ts', 'STATEFUL_INCREMENTAL_PROMPT_KEYS'],
