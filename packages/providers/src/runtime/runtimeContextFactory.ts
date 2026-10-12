@@ -557,8 +557,9 @@ export function createIsolatedRuntimeContext(
   const runtimeId = isolatedRuntimeId(options.runtimeId);
 
   const metadata = initialRuntimeMetadata(options.metadata);
-  const owner = adoptSessionSettings(options.settingsOwner, settingsService);
-  owner.bindTelemetry(options.config, options.borrowedTelemetry);
+  const suppliedOwner = options.settingsOwner;
+  const settingsOwner = adoptSessionSettings(suppliedOwner, settingsService);
+  settingsOwner.bindTelemetry(options.config, options.borrowedTelemetry);
   const providerFileLifecycle = createOwnerFileLifecycle(
     options.providerFileLifecycle,
   );
@@ -582,14 +583,14 @@ export function createIsolatedRuntimeContext(
       settingsService,
       options.config,
       initialProviderContext(
-        { ...options, settingsOwner: owner },
+        { ...options, settingsOwner },
         settingsService,
         providerFileLifecycle,
         runtimeId,
         metadata,
       ),
       options.credentialAuthority,
-      owner,
+      settingsOwner,
     );
   const selectedFactories = configureProviderRuntimeFactories(
     options.config,
@@ -612,7 +613,7 @@ export function createIsolatedRuntimeContext(
     settingsService,
     manager,
     oauthManager,
-    { ...options, settingsOwner: owner },
+    { ...options, settingsOwner },
     sessionMessageBus,
     providerFileLifecycle,
     ownedAuth,
@@ -629,12 +630,12 @@ export function createIsolatedRuntimeContext(
     oauthManager,
     providerFileLifecycle,
     activate,
-    settingsOwner: owner,
+    settingsOwner,
     cleanup: closeRuntimeOwners(
-      owner,
+      settingsOwner,
       cleanup,
       policyOwner,
-      options.settingsOwner === undefined,
+      suppliedOwner === undefined,
       options.settingsOwnerOwnership,
     ),
   };
