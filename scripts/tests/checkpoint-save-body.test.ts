@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
 import { writeBodyFile } from '../../packages/test-utils/src/body-evidence-writer.js';
-import { describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { join, basename } from 'node:path';
 import { withBatchFixture } from '../../packages/core/src/services/history/__tests__/support/addbatch-stream-test-helpers.js';
@@ -14,8 +14,9 @@ import type { IContent } from '../../packages/core/src/services/history/IContent
 import { RequestMediaResolver } from '../../packages/core/src/storage/request-media-resolver.js';
 import {
   buildAgent,
-  internalConfig,
+  internalAgentClient,
 } from '../../packages/agents/src/api/__tests__/helpers/agentHarness.js';
+import { bindClientTokenization } from '../../packages/agents/src/session/session-client-binding.js';
 import { createToolCheckpoint } from '../../packages/cli/src/ui/hooks/agentStream/checkpointPersistence.js';
 import {
   checkpointGit,
@@ -93,19 +94,14 @@ async function roundTrip(size: number): Promise<void> {
   await withBatchFixture(async ({ history, recorder }) => {
     await seedRows(recorder, size);
     const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-    const config = internalConfig(agent);
+    const client = internalAgentClient(agent);
     const root = await mkdtemp(join(tmpdir(), 'checkpoint-body-'));
     try {
-      vi.spyOn(config, 'getTokenizerFactory').mockReturnValue(exactTokenizer());
-      const client = config.getAgentClient();
+      bindClientTokenization(client, exactTokenizer());
       client.storeHistoryServiceForReuse(history);
       await history.recalculateTokens();
       const expectedTokens = size * (6 + 1000);
       const tokenCountBeforeSave = history.getTotalTokens();
-      vi.spyOn(config.storage, 'getProjectTempCheckpointsDir').mockReturnValue(
-        root,
-      );
-      vi.spyOn(config, 'getCheckpointingEnabled').mockReturnValue(true);
       await createToolCheckpoint(
         checkpointTool,
         root,
@@ -117,11 +113,19 @@ async function roundTrip(size: number): Promise<void> {
       const saved = await savedCheckpoint(root);
       let loadedUi = '';
       const context = createMockCommandContext();
-      context.services.config = config;
+      context.services.agent = agent;
+      if (context.services.config === null)
+        throw new Error('Missing fixture runtime');
+      const runtime = {
+        ...context.services.config,
+        projectCheckpointsDir: root,
+        getCheckpointingEnabled: () => true,
+      };
+      context.services.config = runtime;
       context.ui.loadHistory = (rows) => {
         loadedUi = JSON.stringify(rows);
       };
-      const outcome = await restoreCommand(config)?.action?.(
+      const outcome = await restoreCommand(runtime)?.action?.(
         context,
         basename(saved.path),
       );
@@ -137,14 +141,15 @@ async function roundTrip(size: number): Promise<void> {
         expectedTokens,
         expectedTokens,
       ]);
+      if (client.mediaStore === undefined)
+        throw new Error('Missing session media store');
       await bodyPairs(
         size,
         () => client.streamHistory(),
-        new RequestMediaResolver(config.getLocalMediaStore()),
+        new RequestMediaResolver(client.mediaStore),
         saved.bytes,
       );
     } finally {
-      vi.restoreAllMocks();
       await cleanup();
       await rm(root, { recursive: true, force: true });
     }

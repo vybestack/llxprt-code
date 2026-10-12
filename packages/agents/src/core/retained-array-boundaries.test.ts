@@ -18,7 +18,7 @@ import {
   detachedRows,
   withDetachedFixture,
 } from '../../../core/src/services/history/detached-rollback-test-helpers.js';
-import { withRetainedClient } from './retained-array-test-helpers.js';
+import { withRetainedClient } from './__tests__/support/retained-array-test-helpers.js';
 import {
   clientArrayRows,
   forbidClientArrayRollback,

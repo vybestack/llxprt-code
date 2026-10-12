@@ -6,13 +6,13 @@ import { join } from 'node:path';
 import {
   buildAgent,
   internalConfig,
-} from '../api/__tests__/helpers/agentHarness.js';
-import { createAgentRuntimeState } from '../../../core/src/runtime/AgentRuntimeState.js';
-import { LocalMediaStore } from '../../../core/src/storage/local-media-store.js';
-import type { DetachedFixture } from '../../../core/src/services/history/detached-rollback-test-helpers.js';
+} from '../../../api/__tests__/helpers/agentHarness.js';
+import { createAgentRuntimeState } from '../../../../../core/src/runtime/AgentRuntimeState.js';
+import { LocalMediaStore } from '../../../../../core/src/storage/local-media-store.js';
+import type { DetachedFixture } from '../../../../../core/src/services/history/detached-rollback-test-helpers.js';
 import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { AgentClient } from './client.js';
-import type { Config } from '../../../core/src/config/config.js';
+import { AgentClient } from '../../client.js';
+import type { Config } from '../../../../../core/src/config/config.js';
 
 const fixturePaths = installTestWorkspacePaths({
   targetDir: process.cwd(),

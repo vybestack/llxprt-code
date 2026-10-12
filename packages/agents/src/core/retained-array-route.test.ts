@@ -11,7 +11,7 @@ import {
   forbidClientArrayRollback,
   withClientOracle,
 } from './client-array-test-helpers.js';
-import { withRetainedClient } from './retained-array-test-helpers.js';
+import { withRetainedClient } from './__tests__/support/retained-array-test-helpers.js';
 
 function registerRoute(size: number, set: boolean): void {
   describe('registerRoute', () => {

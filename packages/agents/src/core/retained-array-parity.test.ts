@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { withRetainedClient } from './retained-array-test-helpers.js';
+import { withRetainedClient } from './__tests__/support/retained-array-test-helpers.js';
 import { describe, expect, it } from 'bun:test';
 import type { HistoryService } from '../../../core/src/services/history/HistoryService.js';
 import type { IContent } from '../../../core/src/services/history/IContent.js';

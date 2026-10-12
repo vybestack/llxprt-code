@@ -365,10 +365,6 @@
       "bun": "./src/telemetry/file-exporters.ts",
       "import": "./dist/src/telemetry/file-exporters.js"
     },
-    "./test-utils/ephemeral-default-ownership.js": {
-      "types": "./src/config/ephemeralDefaultOwnership.ts",
-      "bun": "./src/config/ephemeralDefaultOwnership.ts"
-    },
     "./utils/summarizer.js": {
       "bun": "./src/utils/summarizer.ts",
       "import": "./dist/src/utils/summarizer.js"

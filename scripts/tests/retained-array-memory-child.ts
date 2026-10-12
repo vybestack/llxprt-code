@@ -19,7 +19,7 @@ import {
   clientArrayRows,
   forbidClientArrayRollback,
 } from '../../packages/agents/src/core/client-array-test-helpers.js';
-import { withRetainedClient } from '../../packages/agents/src/core/retained-array-test-helpers.js';
+import { withRetainedClient } from '../../packages/agents/src/core/__tests__/support/retained-array-test-helpers.js';
 import type { AgentClientContract } from '../../packages/core/src/core/clientContract.js';
 import type { IContent } from '../../packages/core/src/services/history/IContent.js';
 

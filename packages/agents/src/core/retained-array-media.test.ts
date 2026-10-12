@@ -15,7 +15,7 @@ import type {
   MediaReferenceBlock,
 } from '../../../core/src/services/history/IContent.js';
 import { bindClientTokenization } from '../session/session-client-binding.js';
-import { withRetainedClient } from './retained-array-test-helpers.js';
+import { withRetainedClient } from './__tests__/support/retained-array-test-helpers.js';
 import {
   clientRows,
   forbidClientArrayRollback,
