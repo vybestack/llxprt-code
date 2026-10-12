@@ -1,6 +1,6 @@
 import { finishClientDisposal } from './client-disposal.js';
 import { AuxiliaryWork } from './auxiliary-work.js';
-import { ClientModelSubscriptions } from './client-model-subscriptions.js';
+import * as modelNotifications from './client-model-subscriptions.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -292,13 +292,15 @@ export class AgentClient
     };
   }
 
-  private readonly modelNotifications = new ClientModelSubscriptions();
+  private releaseModelNotifications: (() => void) | undefined;
 
   bindModelNotifications(subscribe: SubscribeModelChanges): void {
-    this.modelNotifications.bind(
+    this.releaseModelNotifications = modelNotifications.subscribe(
       subscribe,
       this.handleModelChanged,
       this.handleModelProfileChanged,
+      this.releaseModelNotifications,
+      () => (this.releaseModelNotifications = undefined),
     );
   }
 
@@ -331,7 +333,7 @@ export class AgentClient
   dispose(): Promise<void> {
     return finishClientDisposal(
       this.auxiliary.close(),
-      () => this.modelNotifications.release(),
+      () => modelNotifications.release(this.releaseModelNotifications),
       this._previousHistory,
       () => this.chat?.clearHistory(),
       () => {
