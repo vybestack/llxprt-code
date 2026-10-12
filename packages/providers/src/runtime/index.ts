@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export { admitModelParameters } from './admitModelParameters.js';
 export { createProviderKeyStorage } from '../auth/index.js';
 export {
   createRuntimeActivationBindings,

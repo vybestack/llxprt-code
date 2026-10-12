@@ -44,10 +44,8 @@ import {
   type SessionTokenUsage,
 } from './tokenUsageTracker.js';
 import { ProviderCapabilitiesService } from './providerCapabilitiesService.js';
-import {
-  buildEphemeralsSnapshot,
-  normalizeRuntimeInputs,
-} from './runtimeNormalizer.js';
+import { normalizeRuntimeInputs } from './runtimeNormalizer.js';
+import { buildProviderSettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/admit-model-parameters.js';
 import {
   captureProviderInvocation,
   type ProviderInvocationData,
@@ -198,7 +196,11 @@ export class ProviderManager implements IProviderManager {
     settingsService: SettingsService,
     providerName: string,
   ): Record<string, unknown> {
-    return buildEphemeralsSnapshot(settingsService, providerName);
+    return buildProviderSettingsSnapshot(
+      settingsService.getAllGlobalSettings(),
+      settingsService.getProviderSettings(providerName),
+      providerName,
+    );
   }
 
   private requireSessionSettings(): SessionSettingsOwner {

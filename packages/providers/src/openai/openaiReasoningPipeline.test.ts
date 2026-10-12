@@ -22,7 +22,7 @@ import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runt
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { prepareRequest } from './OpenAIRequestPreparation.js';
 import { REASONING_WIRE_KEYS } from './openaiReasoningDialect.js';
-import { buildEphemeralsSnapshot } from '../runtimeNormalizer.js';
+import { buildProviderSettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/admit-model-parameters.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
@@ -50,7 +50,11 @@ function optionsFrom(
     runtimeId: 'test-runtime',
 
     providerName: PROVIDER,
-    ephemeralsSnapshot: buildEphemeralsSnapshot(settings, PROVIDER),
+    ephemeralsSnapshot: buildProviderSettingsSnapshot(
+      settings.getAllGlobalSettings(),
+      settings.getProviderSettings(PROVIDER),
+      PROVIDER,
+    ),
   });
   return {
     contents: [],

@@ -13,8 +13,10 @@ import {
   ownModelParameters,
   type AdmittedModelParameters,
 } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
-import { admitModelParameters } from '../runtime/admitModelParameters.js';
-import { buildEphemeralsSnapshot } from '../runtimeNormalizer.js';
+import {
+  admitModelParameters,
+  buildProviderSettingsSnapshot,
+} from '@vybestack/llxprt-code-core/runtime/admit-model-parameters.js';
 import {
   isResolvedSubProfile,
   type LoadBalancingProviderConfig,
@@ -26,7 +28,11 @@ export function captureLoadBalancerParameters(
   selectionRevision: symbol,
   memberIdentities: WeakMap<object, symbol>,
 ): AdmittedModelParameters {
-  const lb = admitModelParameters(settings, 'load-balancer');
+  const lb = admitModelParameters(
+    settings.getAllGlobalSettings(),
+    settings.getProviderSettings('load-balancer'),
+    'load-balancer',
+  );
   const session = Object.fromEntries(
     Object.entries(settings.getAllGlobalSettings()).filter(([key]) =>
       isSessionScopedSettingKey(key),
@@ -39,7 +45,11 @@ export function captureLoadBalancerParameters(
       );
     }
     const provider = separateSettings(
-      buildEphemeralsSnapshot(settings, member.providerName),
+      buildProviderSettingsSnapshot(
+        settings.getAllGlobalSettings(),
+        settings.getProviderSettings(member.providerName),
+        member.providerName,
+      ),
       member.providerName,
     );
     const profile = separateSettings(

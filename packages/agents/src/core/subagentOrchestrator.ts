@@ -86,7 +86,7 @@ import {
   type IsolatedRuntimeContextHandle as ProviderIsolatedRuntimeContextHandle,
   type RuntimeActivationBindings,
 } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
-import { admitModelParameters } from '@vybestack/llxprt-code-providers/runtime/admitModelParameters.js';
+import { admitModelParameters } from '@vybestack/llxprt-code-core/runtime/admit-model-parameters.js';
 import { admitLoadBalancerModelParameters } from '../api/admit-load-balancer-model-parameters.js';
 import { assembleProfileApplication } from '../api/profileApplicationAssembly.js';
 import { assembleSessionProviderSwitch } from '../api/providerSwitchAssembly.js';
@@ -264,7 +264,11 @@ export class SubagentOrchestrator {
               isolatedHandle.providerManager.getActiveProvider(),
               isolatedHandle.settingsService,
             )
-          : admitModelParameters(isolatedHandle.settingsService, providerName);
+          : admitModelParameters(
+              isolatedHandle.settingsService.getAllGlobalSettings(),
+              isolatedHandle.settingsService.getProviderSettings(providerName),
+              providerName,
+            );
       },
       isolatedHandle.providerFileLifecycle,
       isolatedHandle.sessionClient.hookOperations.execution({

@@ -51,11 +51,6 @@
       "bun": "./src/runtime/index.ts",
       "import": "./dist/src/runtime/index.js"
     },
-    "./runtime/admitModelParameters.js": {
-      "types": "./dist/src/runtime/admitModelParameters.d.ts",
-      "bun": "./src/runtime/admitModelParameters.ts",
-      "import": "./dist/src/runtime/admitModelParameters.js"
-    },
     "./runtime/runtimeLifecycle.js": {
       "types": "./dist/src/runtime/runtimeLifecycle.d.ts",
       "bun": "./src/runtime/runtimeLifecycle.ts",
