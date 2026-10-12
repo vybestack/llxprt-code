@@ -21,7 +21,7 @@
 
 import { describe, it, expect } from 'bun:test';
 
-import { resolveLazyClaudeCodeOAuthDecision } from '../providerSwitch.js';
+import { resolveLazyClaudeCodeOAuthDecision } from '../../../../agents/src/api/provider-switch/provider-switch-oauth.js';
 import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 // A real config-shaped object whose isInteractive() returns the configured

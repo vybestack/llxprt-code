@@ -15,7 +15,7 @@ import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import {
   switchActiveProvider,
   DEFAULT_PRESERVE_EPHEMERALS,
-} from './providerSwitch.js';
+} from '../../../agents/src/api/provider-switch/provider-switch.js';
 import { OAuthManager } from '../auth/oauth-manager.js';
 import {
   MemoryTokenStore,

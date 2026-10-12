@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { ModelProfileInfoPayload } from '@vybestack/llxprt-code-core/utils/events.js';
-import type { ProviderAliasConfig } from '../composition/providerAliases.js';
+import type { ProviderAliasConfig } from '@vybestack/llxprt-code-providers/composition.js';
 import type { ProviderSwitchResult } from '@vybestack/llxprt-code-core';
 import {
   applySwitchDefaults,

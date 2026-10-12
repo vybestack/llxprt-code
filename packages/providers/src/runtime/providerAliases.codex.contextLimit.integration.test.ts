@@ -15,7 +15,7 @@ import { assembleCliProviderRuntime } from './assembleCliProviderRuntime.js';
 import { setActiveModel } from '../../../agents/src/api/providerMutations.js';
 import { assembleModelSelection } from '../../../agents/src/api/model-selection.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { switchActiveProvider } from './providerSwitch.js';
+import { switchActiveProvider } from '../../../agents/src/api/provider-switch/provider-switch.js';
 
 const RUNTIME_ID = 'issue3576-codex-context-limit';
 

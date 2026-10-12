@@ -61,7 +61,7 @@ import {
   createProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { switchActiveProvider } from '@vybestack/llxprt-code-providers/runtime.js';
+import { switchActiveProvider } from '@vybestack/llxprt-code-agents';
 import {
   createTempDirectory,
   cleanupTempDirectory,

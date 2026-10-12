@@ -12,7 +12,7 @@ import {
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
-import { switchActiveProvider } from './providerSwitch.js';
+import { switchActiveProvider } from '../../../agents/src/api/provider-switch/provider-switch.js';
 import { switchProviderForProfile } from '../../../agents/src/api/profile-application/switchProfileProvider.js';
 
 class LocalConfig extends Config {}

@@ -152,7 +152,7 @@ describe('providerSwitch', () => {
   describe('DEFAULT_PRESERVE_EPHEMERALS', () => {
     it('should include expected keys for context preservation', async () => {
       const { DEFAULT_PRESERVE_EPHEMERALS } = await import(
-        './providerSwitch.js'
+        '../../../agents/src/api/provider-switch/provider-switch.js'
       );
       expect(DEFAULT_PRESERVE_EPHEMERALS).toContain('context-limit');
       expect(DEFAULT_PRESERVE_EPHEMERALS).toContain('max_tokens');
@@ -161,7 +161,7 @@ describe('providerSwitch', () => {
 
     it('should be a readonly array', async () => {
       const { DEFAULT_PRESERVE_EPHEMERALS } = await import(
-        './providerSwitch.js'
+        '../../../agents/src/api/provider-switch/provider-switch.js'
       );
       expect(Array.isArray(DEFAULT_PRESERVE_EPHEMERALS)).toBe(true);
     });
@@ -169,7 +169,9 @@ describe('providerSwitch', () => {
 
   describe('switchActiveProvider', () => {
     it('should return unchanged result when switching to the same provider', async () => {
-      const { switchActiveProvider } = await import('./providerSwitch.js');
+      const { switchActiveProvider } = await import(
+        '../../../agents/src/api/provider-switch/provider-switch.js'
+      );
 
       const result = await switchActiveProvider(
         'openai',
@@ -184,7 +186,9 @@ describe('providerSwitch', () => {
     });
 
     it('registers the claudecode OAuth identity for lazy authentication when switched directly', async () => {
-      const { switchActiveProvider } = await import('./providerSwitch.js');
+      const { switchActiveProvider } = await import(
+        '../../../agents/src/api/provider-switch/provider-switch.js'
+      );
       const { ensureOAuthProviderRegistered } = await import(
         '../composition/index.js'
       );
@@ -216,7 +220,9 @@ describe('providerSwitch', () => {
     });
 
     it('does not register an OAuth identity for API-key-only anthropic', async () => {
-      const { switchActiveProvider } = await import('./providerSwitch.js');
+      const { switchActiveProvider } = await import(
+        '../../../agents/src/api/provider-switch/provider-switch.js'
+      );
       const { ensureOAuthProviderRegistered } = await import(
         '../composition/index.js'
       );
@@ -227,7 +233,9 @@ describe('providerSwitch', () => {
     });
 
     it('should throw error when provider name is empty string', async () => {
-      const { switchActiveProvider } = await import('./providerSwitch.js');
+      const { switchActiveProvider } = await import(
+        '../../../agents/src/api/provider-switch/provider-switch.js'
+      );
 
       await expect(
         switchActiveProvider('', {}, ...stubSwitchInputs()),
@@ -235,7 +243,9 @@ describe('providerSwitch', () => {
     });
 
     it('should throw error when provider name is whitespace only', async () => {
-      const { switchActiveProvider } = await import('./providerSwitch.js');
+      const { switchActiveProvider } = await import(
+        '../../../agents/src/api/provider-switch/provider-switch.js'
+      );
 
       await expect(
         switchActiveProvider('   ', {}, ...stubSwitchInputs()),
@@ -243,7 +253,9 @@ describe('providerSwitch', () => {
     });
 
     it('emits ModelProfileChanged with resolved model when modelToApply is empty', async () => {
-      const { switchActiveProvider } = await import('./providerSwitch.js');
+      const { switchActiveProvider } = await import(
+        '../../../agents/src/api/provider-switch/provider-switch.js'
+      );
       const emittedProfiles = observeModelProfiles();
 
       // computeModelDefaults mock returns {} so modelToApply stays empty.
@@ -259,7 +271,9 @@ describe('providerSwitch', () => {
     });
 
     it('does not emit empty model/displayLabel even when no default model exists', async () => {
-      const { switchActiveProvider } = await import('./providerSwitch.js');
+      const { switchActiveProvider } = await import(
+        '../../../agents/src/api/provider-switch/provider-switch.js'
+      );
       // Make the provider return no default model so modelToApply resolves to ''
       const { config, settingsService, providerManager } = {
         config: new Config({
@@ -306,7 +320,9 @@ describe('providerSwitch', () => {
     });
 
     it('does not emit empty displayLabel when no profile and no modelToApply', async () => {
-      const { switchActiveProvider } = await import('./providerSwitch.js');
+      const { switchActiveProvider } = await import(
+        '../../../agents/src/api/provider-switch/provider-switch.js'
+      );
       const emittedProfiles = observeModelProfiles();
 
       await switchActiveProvider('gemini', {}, ...stubSwitchInputs());
@@ -318,7 +334,9 @@ describe('providerSwitch', () => {
     });
 
     it('falls back to provider name when active model, config model, and provider default are all empty', async () => {
-      const { switchActiveProvider } = await import('./providerSwitch.js');
+      const { switchActiveProvider } = await import(
+        '../../../agents/src/api/provider-switch/provider-switch.js'
+      );
       // Override mocks so ALL model sources return empty.
       // Provider manager active name must differ from the target ('gemini')
       // so that switchActiveProvider actually performs a switch.
@@ -370,7 +388,9 @@ describe('providerSwitch', () => {
     });
 
     it('does not use stale getActiveModelName when modelToApply is empty; prefers context-scoped config model', async () => {
-      const { switchActiveProvider } = await import('./providerSwitch.js');
+      const { switchActiveProvider } = await import(
+        '../../../agents/src/api/provider-switch/provider-switch.js'
+      );
 
       // modelToApply will be empty because provider has no default model.
       // config.getModel reflects the post-switch model.
@@ -423,7 +443,9 @@ describe('providerSwitch', () => {
     });
 
     it('multi-provider: emitting context-scoped model, not stale global, when switching from openai to anthropic', async () => {
-      const { switchActiveProvider } = await import('./providerSwitch.js');
+      const { switchActiveProvider } = await import(
+        '../../../agents/src/api/provider-switch/provider-switch.js'
+      );
 
       const { config, settingsService, providerManager } = {
         config: new Config({

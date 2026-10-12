@@ -111,3 +111,5 @@ export type { IFileSystem } from './IFileSystem.js';
 
 // ─── Composition types ───────────────────────────────────────────────────────
 export { ContentGeneratorRole } from './types.js';
+
+export { extractProviderBaseUrl } from '../baseUrlResolver.js';

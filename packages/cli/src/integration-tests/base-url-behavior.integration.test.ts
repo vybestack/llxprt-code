@@ -37,7 +37,7 @@ import {
   initializeTestSessionRoot,
   type CliTestSessionRoot,
 } from './test-utils.js';
-import { switchActiveProvider } from '@vybestack/llxprt-code-providers/runtime.js';
+import { switchActiveProvider } from '@vybestack/llxprt-code-agents';
 import { setProviderBaseUrl } from '../../../agents/src/api/providerConfigUtils.js';
 
 /**

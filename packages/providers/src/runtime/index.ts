@@ -34,8 +34,3 @@ export type {
   AssembleCliProviderRuntimeInput,
   AssembledCliProviderRuntime,
 } from './assembleCliProviderRuntime.js';
-
-export {
-  switchActiveProvider,
-  DEFAULT_PRESERVE_EPHEMERALS,
-} from './providerSwitch.js';

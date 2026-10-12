@@ -26,7 +26,7 @@ import {
   applyProfileCascade,
   type ProfileApplicationResult,
 } from '../../../../agents/src/api/profileApplication.js';
-import { switchActiveProvider } from '../providerSwitch.js';
+import { switchActiveProvider } from '../../../../agents/src/api/provider-switch/provider-switch.js';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 
 export function standardProfile(
