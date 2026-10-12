@@ -673,6 +673,7 @@ export function resolveSchedulerFactory(
 async function applyActivation(
   parsed: {
     readonly activation?: ProviderActivationIntent;
+    readonly auth?: AgentAuth;
     readonly provider: string;
     readonly model: string;
   },
@@ -697,14 +698,12 @@ async function applyActivation(
       ? { model: parsed.model }
       : {}),
     authMethod: resolvedAuth.authMethod,
-    ...(resolvedAuth.apiKey !== undefined || resolvedAuth.baseUrl !== undefined
-      ? {
-          cliOverrides: {
-            key: resolvedAuth.apiKey,
-            baseUrl: resolvedAuth.baseUrl,
-          },
-        }
-      : {}),
+    cliOverrides: {
+      key: resolvedAuth.apiKey,
+      keyfile: parsed.auth?.apiKeyFile,
+      keyName: parsed.auth?.keyName,
+      baseUrl: resolvedAuth.baseUrl,
+    },
   };
   mcpRuntime.assertConfig(config, messageBus);
   await mcpRuntime.initialize();
