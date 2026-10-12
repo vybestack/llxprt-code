@@ -79,6 +79,10 @@ function createHarnessWithDumpContext(): Harness {
   const { config, runtimeContext } =
     createHarnessRuntimeContext(settingsService);
   const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     settingsService,
     config,
     runtimeContext,

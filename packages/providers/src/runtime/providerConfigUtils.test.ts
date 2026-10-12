@@ -27,7 +27,13 @@ describe('providerConfigUtils owner mutations', () => {
   beforeEach(() => {
     settings = new SettingsService();
     owner = new SessionSettingsOwner(settings);
-    manager = new ProviderManager(settings);
+    manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+    );
     manager.registerProvider(new OpenAIProvider(undefined));
     manager.setActiveProvider('openai');
   });

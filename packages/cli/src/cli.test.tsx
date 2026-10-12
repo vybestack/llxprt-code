@@ -229,7 +229,14 @@ function makeInteractiveConfig(
     interactive: true,
     debugMode: false,
   });
-  const manager = new ProviderManager(new SettingsService(), config);
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new SettingsService(),
+    config,
+  );
   const provider: IProvider = {
     name: 'gemini',
     getDefaultModel: () => 'gemini-2.5-pro',

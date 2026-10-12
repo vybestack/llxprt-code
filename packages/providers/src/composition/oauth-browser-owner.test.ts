@@ -83,6 +83,10 @@ function buildManager(
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       false,
     ).oauthManager;
   if (construction === 'composition')
@@ -92,6 +96,10 @@ function buildManager(
       owner.config,
       new CredentialAuthority(),
       new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,

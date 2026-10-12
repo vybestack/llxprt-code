@@ -54,6 +54,10 @@ describe('explicit provider switch ownership', () => {
     });
     configs.push(config);
     const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settings,
       config,
       createProviderRuntimeContext({

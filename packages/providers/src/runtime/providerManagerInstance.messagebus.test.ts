@@ -74,6 +74,10 @@ describe('provider manager runtime OAuth MessageBus composition', () => {
         new CredentialAuthority(),
         new NodeFileSystem(),
         undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         sessionMessageBus,
       );
     const manager = explicitManager;

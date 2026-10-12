@@ -63,7 +63,13 @@ function makeAliasEntry(
 }
 
 function makeManager(): ProviderManager {
-  return new ProviderManager(new SettingsService() as never);
+  return new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new SettingsService() as never,
+  );
 }
 
 /**
@@ -517,6 +523,10 @@ describe('refreshAliasProviders registry reuse', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       contributions,
       undefined,
       undefined,
@@ -574,6 +584,10 @@ describe('refreshAliasProviders registry reuse', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       await createContributions('plugin-a'),
     ).manager;
     const b = createProviderManager(
@@ -582,6 +596,10 @@ describe('refreshAliasProviders registry reuse', () => {
       undefined,
       new CredentialAuthority(),
       new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,

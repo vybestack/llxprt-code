@@ -177,6 +177,10 @@ describe('LoadBalancingProvider - Failover aggregate retryability (issue #2450)'
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
       undefined,

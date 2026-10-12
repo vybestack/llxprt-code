@@ -81,6 +81,10 @@ describe('Config-independent provider owner lifecycle', () => {
     settings.set('model', 'test-model');
     settings.set('base-url', 'http://127.0.0.1:10');
     const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settings,
       host,
       undefined,
@@ -149,7 +153,14 @@ describe('Config-independent provider owner lifecycle', () => {
   it('keeps borrowed manager subscriptions usable after facade runtime cleanup', async () => {
     const settings = new SettingsService();
     const owner = config(settings);
-    const manager = new ProviderManager(settings, owner.config);
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+      owner.config,
+    );
     const provider = new CacheProvider();
     manager.registerProvider(provider);
     manager.setActiveProvider(provider.name);
@@ -249,6 +260,10 @@ describe('Config-independent provider owner lifecycle', () => {
     const left = config(new SettingsService());
     const right = config(new SettingsService());
     const a = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       left.settingsService,
       left.config,
       undefined,
@@ -256,6 +271,10 @@ describe('Config-independent provider owner lifecycle', () => {
       left.settingsOwner,
     );
     const b = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       right.settingsService,
       right.config,
       undefined,
@@ -299,6 +318,10 @@ describe('Config-independent provider owner lifecycle', () => {
     const left = config(new SettingsService());
     const right = config(new SettingsService());
     const a = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       left.settingsService,
       left.config,
       undefined,
@@ -306,6 +329,10 @@ describe('Config-independent provider owner lifecycle', () => {
       left.settingsOwner,
     );
     const b = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       right.settingsService,
       right.config,
       undefined,

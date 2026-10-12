@@ -91,6 +91,10 @@ describe('Provider alias integration', () => {
       undefined,
       new CredentialAuthority(),
       new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
     ).manager;
   });
 

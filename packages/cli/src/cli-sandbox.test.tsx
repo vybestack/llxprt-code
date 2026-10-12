@@ -395,7 +395,13 @@ describe('cli sandbox integration', () => {
 });
 
 function sandboxProviderOwner(): ProviderManager {
-  const manager = new ProviderManager(new HandoffSettingsService());
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new HandoffSettingsService(),
+  );
   manager.registerProvider({
     name: 'gemini',
     getDefaultModel: () => 'gemini-model',

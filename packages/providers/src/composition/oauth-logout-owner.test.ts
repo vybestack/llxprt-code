@@ -67,6 +67,10 @@ describe('logout ownership', () => {
             undefined,
             undefined,
             undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
             false,
           );
         }

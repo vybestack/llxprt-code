@@ -284,6 +284,10 @@ describe('AgentClient (client.ts)', () => {
     const selectedOwner = new SessionSettingsOwner(settingsService);
     selectedOwner.bindTelemetry(config);
     const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
       undefined,

@@ -1,3 +1,8 @@
+import {
+  OwnerView,
+  AliasRefreshView,
+  ModelEventView,
+} from './runtime-owner-bridge-views.fixture.js';
 import { CredentialAuthority } from '../../../../providers/src/auth/proxy/credential-store-factory.js';
 /**
  * @license
@@ -30,12 +35,11 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import React, { act, useEffect } from 'react';
-import { render } from 'ink-testing-library';
 import { Text } from 'ink';
+import { Colors } from '../colors.js';
+import { render } from 'ink-testing-library';
 import { fromConfig } from '@vybestack/llxprt-code-agents';
 import { SessionController } from '../containers/SessionController.js';
-import { Colors } from '../colors.js';
-import { useSessionState } from './SessionStateContext.js';
 import { buildCliStyleConfig } from '../../../../agents/src/api/__tests__/helpers/buildCliStyleConfig.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import {
@@ -48,56 +52,13 @@ import {
   useOAuthControl,
 } from './OAuthControlContext.js';
 import { authCommand } from '../commands/authCommand.js';
-import {
-  ProviderAliasRefreshProvider,
-  useProviderAliasRefresh,
-} from './ProviderAliasRefreshContext.js';
+import { ProviderAliasRefreshProvider } from './ProviderAliasRefreshContext.js';
 import { setCommand } from '../commands/setCommand.js';
 import { modelCommand } from '../commands/modelCommand.js';
 import { keyCommand } from '../commands/keyCommand.js';
 import { providerCommand } from '../commands/providerCommand.js';
 import { profileCommand } from '../commands/profileCommand.js';
-import {
-  RuntimeContextProvider,
-  useRuntimeApi,
-  type RuntimeApi,
-} from './RuntimeContext.js';
-
-function OwnerView({
-  label,
-  onApi,
-}: {
-  label: string;
-  onApi?: (api: RuntimeApi) => void;
-}): React.ReactElement {
-  const runtime = useRuntimeApi();
-  useEffect(() => {
-    onApi?.(runtime);
-  }, [onApi, runtime]);
-  return (
-    <Text color={Colors.Foreground}>
-      {label}:{runtime.getActiveProviderName()}:{runtime.getActiveModelName()}:
-      {String(runtime.getEphemeralSetting('bridge-owner-key'))}
-    </Text>
-  );
-}
-
-function AliasRefreshView({
-  onRefresh,
-}: {
-  onRefresh: (refresh: () => Promise<void>) => void;
-}): React.ReactElement {
-  const refresh = useProviderAliasRefresh();
-  useEffect(() => onRefresh(refresh), [onRefresh, refresh]);
-  return <Text color={Colors.Foreground}>alias-refresh-ready</Text>;
-}
-
-function ModelEventView(): React.ReactElement {
-  const [state] = useSessionState();
-  return (
-    <Text color={Colors.Foreground}>event-model:{state.currentModel}</Text>
-  );
-}
+import { RuntimeContextProvider, type RuntimeApi } from './RuntimeContext.js';
 
 describe('interactive runtime owner bridge', () => {
   afterFixtureTest(() => {
@@ -501,6 +462,10 @@ describe('interactive runtime owner bridge', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       first.providerManager,
       undefined,
       undefined,
@@ -513,6 +478,10 @@ describe('interactive runtime owner bridge', () => {
       second.config,
       new CredentialAuthority(),
       new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,

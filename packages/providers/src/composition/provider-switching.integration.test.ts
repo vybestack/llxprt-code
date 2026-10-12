@@ -28,6 +28,10 @@ function createManager() {
     undefined,
     undefined,
     undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     true,
   );
   return manager;

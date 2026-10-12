@@ -17,7 +17,14 @@ export function createConnectionProviderManager(
   config: Config,
   settingsService: SettingsService,
 ): ProviderManager {
-  const manager = new ProviderManager(settingsService, config);
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    settingsService,
+    config,
+  );
   managers.push(manager);
   return manager;
 }

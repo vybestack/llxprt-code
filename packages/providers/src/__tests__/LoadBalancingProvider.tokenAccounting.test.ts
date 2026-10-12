@@ -246,6 +246,10 @@ describe('LoadBalancingProvider - Token Accounting (issue #2207)', () => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
       undefined,

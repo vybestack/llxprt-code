@@ -44,6 +44,10 @@ function createProjectionFixture(
     runtimeId: 'projection-test',
   };
   const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     settings,
     config,
     runtime,

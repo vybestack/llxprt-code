@@ -195,7 +195,14 @@ async function createConfig(
   const settingsService = new SettingsService();
   const settingsOwner = new SessionSettingsOwner(settingsService);
   settingsOwner.bindTelemetry(config);
-  const manager = new ProviderManager(settingsService, config);
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    settingsService,
+    config,
+  );
   const client = createAgentClient(history, store, config, manager);
   const factories = configureProviderRuntimeFactories(config, manager);
   const sessionClient = await SessionClientOwner.create(

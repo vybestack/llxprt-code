@@ -137,6 +137,10 @@ describe('Ephemeral Settings Integration Tests', () => {
     it('should make custom headers available for API requests', async () => {
       // Create a ProviderManager bound to this config's runtime
       const providerManager = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         sessionRoot.settingsService,
         config,
       );
@@ -170,6 +174,10 @@ describe('Ephemeral Settings Integration Tests', () => {
     it('should default to streaming enabled when not set', async () => {
       // Create a ProviderManager bound to this config's runtime
       const providerManager = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         sessionRoot.settingsService,
         config,
       );

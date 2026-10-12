@@ -23,7 +23,14 @@ describe('LoadBalancingProvider.getContextLimit() (issue #2251)', () => {
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager(settingsService, config);
+    providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      config,
+    );
   });
 
   it('returns the config-level contextLimit when set', () => {

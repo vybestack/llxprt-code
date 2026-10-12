@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -52,12 +53,17 @@ async function owner() {
     'runtime',
   );
   const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     settingsService,
     config,
     createProviderRuntimeContext({
       config,
       settingsService,
     }),
+    new CredentialAuthority(),
   );
   manager.registerProvider(
     new FakeProvider(

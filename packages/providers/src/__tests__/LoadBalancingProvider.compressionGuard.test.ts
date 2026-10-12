@@ -119,6 +119,10 @@ describe('LoadBalancingProvider - compression guard facts (issue #3499)', () => 
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       settingsService,
       config,
       undefined,

@@ -43,7 +43,13 @@ function heldLogin() {
     refreshToken: async () => null,
   });
   const messages: string[] = [];
-  const providers = new ProviderManager(new SettingsService());
+  const providers = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new SettingsService(),
+  );
   const control = createOAuthControl(() => manager, providers);
   return {
     manager,

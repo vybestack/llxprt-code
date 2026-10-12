@@ -62,7 +62,14 @@ describe('LB stats through the REAL registerProvider wrapping chain', () => {
   it('getProviderByName().getStats() returns real, live stats after wrapping', async () => {
     const settingsService = new SettingsService();
     const config = createRuntimeConfigStub(settingsService);
-    const providerManager = new ProviderManager(settingsService, config);
+    const providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      config,
+    );
 
     const lbConfig: LoadBalancingProviderConfig = {
       profileName: 'glm',

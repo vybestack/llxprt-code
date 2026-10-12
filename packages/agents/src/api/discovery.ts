@@ -139,6 +139,10 @@ export function listProviders(): readonly ProviderInfo[] {
     undefined,
     new CredentialAuthority(),
     new NodeFileSystem(),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
   );
   const names = manager.listProviders();
   return projectProviderInfos(names);

@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../providers/src/auth/proxy/credential-store-factory.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
@@ -49,6 +50,7 @@ describe('foreground MCP plugin ownership', () => {
 
   async function build(owner: string): Promise<{
     config: Config;
+    credentialAuthority: CredentialAuthority;
     providerManager: ProviderManager;
     settingsService: SettingsService;
     settingsOwner: SessionSettingsOwner;
@@ -102,7 +104,16 @@ describe('foreground MCP plugin ownership', () => {
         },
       },
     });
-    const providerManager = new ProviderManager(settingsService, config);
+    const providerManager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settingsService,
+      config,
+      undefined,
+      new CredentialAuthority(),
+    );
     providerManager.registerProvider(
       new FakeProvider(process.env.LLXPRT_FAKE_RESPONSES, directory),
     );
@@ -111,6 +122,7 @@ describe('foreground MCP plugin ownership', () => {
     configs.push(config);
     return {
       config,
+      credentialAuthority: new CredentialAuthority(),
       settingsService,
       settingsOwner,
       providerManager,
@@ -167,6 +179,13 @@ describe('foreground MCP plugin ownership', () => {
         undefined,
         undefined,
         built.getMcpAuthProviderFactory,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        built.credentialAuthority,
       );
       await waitFor(() => expect(agent.mcp.discoveryState()).toBe('failed'));
       expect(feedback.join('\n')).toContain('spinner credentials rejected');

@@ -101,7 +101,7 @@ export interface ZedSessionProviderInputs {
   readonly credentialAuthority?: CredentialAuthority;
   readonly providerContributions?: ProviderContributionRegistry;
   readonly oauthSettings?: NonNullable<
-    Parameters<typeof createProviderManager>[5]
+    Parameters<typeof createProviderManager>[9]
   >;
 }
 
@@ -336,6 +336,10 @@ async function composeSessionProviderManager(
     config,
     providerInputs.credentialAuthority,
     new NodeFileSystem(),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     providerInputs.oauthSettings,
     policy.session.messageBus,
     undefined,

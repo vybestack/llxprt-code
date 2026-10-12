@@ -1,3 +1,4 @@
+import { observeFakeProviderRegistration } from './fake-provider-registration-fixture.js';
 import { CredentialAuthority } from '../../../providers/src/auth/proxy/credential-store-factory.js';
 import {
   createContentGeneratorConfig,
@@ -125,6 +126,10 @@ describe('CLI provider manager creation uses concrete providers', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       true,
     );
 
@@ -140,71 +145,6 @@ describe('CLI provider manager creation uses concrete providers', () => {
    * from the providers package and sets it as active. This proves the
    * FakeProvider wiring path is reachable through the CLI creation path.
    */
-  function observeFakeProviderRegistration(): {
-    readonly registeredProviderNames: readonly string[];
-    readonly activeProviderName: string | undefined;
-    readonly activeProviderImplementationName: string | undefined;
-  } {
-    const tempDir = fs.mkdtempSync(path.join(nodeOs.tmpdir(), 'p13-fake-'));
-    try {
-      // Write a minimal JSONL fixture
-      const fixturePath = path.join(tempDir, 'fake.jsonl');
-      fs.writeFileSync(
-        fixturePath,
-        JSON.stringify({
-          chunks: [{ speaker: 'ai', blocks: [{ type: 'text', text: 'test' }] }],
-        }),
-        'utf-8',
-      );
-
-      const originalEnv = process.env.LLXPRT_FAKE_RESPONSES;
-      process.env.LLXPRT_FAKE_RESPONSES = fixturePath;
-
-      try {
-        const settingsService = new SettingsService();
-        const cfg = new Config({
-          sessionId: 'p13-fake',
-          targetDir: tempDir,
-          debugMode: false,
-          cwd: tempDir,
-          model: 'fake-model',
-        });
-        const rt = createProviderRuntimeContext({
-          settingsService,
-          config: cfg,
-        });
-        const { manager } = createProviderManager(
-          rt.settingsService,
-          rt,
-          cfg,
-          new CredentialAuthority(),
-          new NodeFileSystem(),
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          true,
-        );
-
-        return {
-          registeredProviderNames: manager.listProviders(),
-          activeProviderName: manager.getActiveProviderName(),
-          activeProviderImplementationName: manager.getActiveProvider()?.name,
-        };
-      } finally {
-        if (originalEnv === undefined) {
-          delete process.env.LLXPRT_FAKE_RESPONSES;
-        } else {
-          process.env.LLXPRT_FAKE_RESPONSES = originalEnv;
-        }
-      }
-    } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
-  }
 
   it('registers FakeProvider from providers package when LLXPRT_FAKE_RESPONSES is set', () => {
     const fakeProviderRegistration = observeFakeProviderRegistration();
@@ -268,6 +208,10 @@ describe('CLI provider manager creation uses concrete providers', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       true,
     );
 
@@ -308,6 +252,10 @@ describe('CLI provider manager creation uses concrete providers', () => {
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       true,
     );
 
@@ -337,6 +285,10 @@ describe('CLI provider manager creation uses concrete providers', () => {
       undefined,
       new CredentialAuthority(),
       new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -390,6 +342,10 @@ describe('CLI provider manager creation uses concrete providers', () => {
       undefined,
       new CredentialAuthority(),
       new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -619,6 +575,10 @@ describe('Provider-backed content generator path reachable through runtime', () 
       undefined,
       undefined,
       undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       true,
     );
 
@@ -683,6 +643,10 @@ describe('Provider-backed content generator path reachable through runtime', () 
       undefined,
       new CredentialAuthority(),
       new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -769,6 +733,10 @@ describe('Provider-backed content generator path reachable through runtime', () 
       undefined,
       new CredentialAuthority(),
       new NodeFileSystem(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined,

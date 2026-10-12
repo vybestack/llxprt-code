@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../providers/src/auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -210,6 +211,10 @@ describe('ZedAgent.newSession', () => {
         capturedOptions.push(options);
         capturedConfigs.push(options.config);
         const providerManager = new ProviderManager(
+          undefined,
+          undefined,
+          undefined,
+          undefined,
           options.settingsService,
           options.config,
         );
@@ -248,10 +253,19 @@ describe('ZedAgent.newSession', () => {
       baseConfig,
       connection as never,
       unusedProfileApplication,
-      new ProviderManager(settingsService, baseConfig),
+      new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        settingsService,
+        baseConfig,
+      ),
       () => new SettingsService({ sessionSource: settingsService }),
       undefined,
       definitionFixture(),
+      undefined,
+      { credentialAuthority: new CredentialAuthority() },
     );
 
     await zedAgent.initialize({

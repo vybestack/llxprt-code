@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../providers/src/auth/proxy/credential-store-factory.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
@@ -124,6 +125,7 @@ function makeUnconfiguredConfig(outputFormat?: OutputFormat): {
   });
   const store = new SettingsService();
   const owner = new SessionSettingsOwner(store);
+  owner.bindTelemetry(config);
   ownedConfigs.push({ config, directory, owner });
   return { config, runtimeSettings: { store, owner } };
 }
@@ -133,7 +135,16 @@ function configureProvider(
   name: string,
   runtimeSettings: { store: SettingsService; owner: SessionSettingsOwner },
 ): ProviderManager {
-  const manager = new ProviderManager(runtimeSettings.store, config);
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    runtimeSettings.store,
+    config,
+    undefined,
+    new CredentialAuthority(),
+  );
   const provider: IProvider = {
     name,
     getDefaultModel: () => PLACEHOLDER_MODEL,
@@ -385,6 +396,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
       settings: makeSettings(),
       input: 'hello',
       providerManager,
+      credentialAuthority: new CredentialAuthority(),
       prompt_id: 'test-configured',
     });
 
@@ -406,6 +418,7 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
       settings: makeSettings(),
       input: 'hello',
       providerManager,
+      credentialAuthority: new CredentialAuthority(),
       prompt_id: 'test-env-provider',
     });
 

@@ -512,6 +512,10 @@ function registerProvidersOntoManager(
     undefined,
     undefined,
     undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     isolatedManager,
   );
   for (const name of registered.listProviders()) {

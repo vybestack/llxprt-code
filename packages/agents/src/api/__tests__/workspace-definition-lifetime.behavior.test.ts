@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../../../providers/src/auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -310,7 +311,16 @@ describe('public Agent workspace definition lifetime', () => {
         workingDir: root,
       },
     );
-    const manager = new ProviderManager(caller.settingsService, caller.config);
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      caller.settingsService,
+      caller.config,
+      undefined,
+      new CredentialAuthority(),
+    );
     manager.registerProvider(
       new FakeProvider(join(fixturesDir, 'multi-turn-text.jsonl')),
     );

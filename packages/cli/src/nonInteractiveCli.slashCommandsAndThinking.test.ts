@@ -1,3 +1,5 @@
+import { CredentialAuthority } from '../../providers/src/auth/proxy/credential-store-factory.js';
+import { createSlashCommandProviderFixture } from './__tests__/slash-command-provider-fixture.js';
 import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { runHeadlessPolicyFixture } from './__tests__/headless-policy-fixture.js';
 import { makeBootstrapProfileArgs } from './test-utils/bootstrap-config.js';
@@ -7,7 +9,6 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
@@ -17,10 +18,7 @@ import {
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  OpenAIProvider,
-  ProviderManager,
-} from '@vybestack/llxprt-code-providers';
+import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import {} from '@vybestack/llxprt-code-providers/runtime.js';
 import { beginCliRuntimeRegistration } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
 import { setCommand } from './ui/commands/setCommand.js';
@@ -74,30 +72,10 @@ type ConfigWithActivationParams = Config & {
   _bootstrapArgs?: BootstrapProfileArgs;
 };
 
-function makeConfig(sessionId: string): {
-  config: Config;
-  manager: ProviderManager;
-  settingsService: SettingsService;
-  settingsOwner: SessionSettingsOwner;
-} {
-  const settingsService = new SettingsService();
-  const config = new Config({
-    cwd: process.cwd(),
-    targetDir: process.cwd(),
-    debugMode: false,
-    sessionId,
-    model: PLACEHOLDER_MODEL,
-    provider: 'openai',
-  });
-  const settingsOwner = new SessionSettingsOwner(settingsService);
-  settingsOwner.bindTelemetry(config);
-  settingsOwner.initializeProviderSelection('openai', PLACEHOLDER_MODEL);
-  const manager = new ProviderManager(settingsService, config);
-  manager.registerProvider(new OpenAIProvider(undefined));
-  manager.setActiveProvider('openai');
-  configureProviderRuntimeFactories(config, manager);
-  fixtureRoots.push({ config, manager, settingsOwner });
-  return { config, manager, settingsOwner, settingsService };
+function makeConfig(sessionId: string) {
+  const root = createSlashCommandProviderFixture(sessionId);
+  fixtureRoots.push(root);
+  return root;
 }
 
 let mockProviderManager: ProviderManager;
@@ -115,7 +93,7 @@ function runWithMcpBus(
   params: Parameters<typeof runNonInteractive>[0],
 ): Promise<void> {
   return runHeadlessPolicyFixture(
-    params,
+    { ...params, credentialAuthority: new CredentialAuthority() },
     mockRuntimeSettings,
     mockProviderManager,
   );

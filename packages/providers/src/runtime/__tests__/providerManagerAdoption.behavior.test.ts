@@ -84,7 +84,14 @@ async function cleanupIfNotCaptured(
 function buildRealManager(): ProviderManager {
   const settingsService = new SettingsService();
   const config = createRuntimeConfigStub(settingsService);
-  return new ProviderManager(settingsService, config);
+  return new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    settingsService,
+    config,
+  );
 }
 
 /** Builds a manager that already has a registered+active provider (for T3). */
@@ -96,7 +103,14 @@ function buildSeededManager(): {
 } {
   const settingsService = new SettingsService();
   const config = createRuntimeConfigStub(settingsService);
-  const manager = new ProviderManager(settingsService, config);
+  const manager = new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    settingsService,
+    config,
+  );
   const provider = new StubAdoptedProvider();
   manager.registerProvider(provider);
   settingsService.set('activeProvider', provider.name);

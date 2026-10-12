@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '../../../../providers/src/auth/proxy/credential-store-factory.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -123,7 +124,13 @@ void vi.mock('../profileBootstrap.js', () => {
     ...actual,
     prepareRuntimeForProfile: vi.fn(async () => {
       const settingsService = new RealSettingsService();
-      const providerManager = new ProviderManager(settingsService);
+      const providerManager = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        settingsService,
+      );
       const provider: IProvider = {
         name: 'openai',
         getDefaultModel: () => 'test-model',
@@ -311,6 +318,7 @@ async function runConfig(settings: Settings, argv: string[] = []) {
     parsedArgv,
     undefined,
     {
+      credentialAuthority: new CredentialAuthority(),
       settingsService: runtimeSettingsService,
       sessionSettingsOwner: settingsOwner,
       providerContributions: await loadPrecedenceProviderContributions(),
