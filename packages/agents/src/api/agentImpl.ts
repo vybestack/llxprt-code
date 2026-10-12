@@ -297,7 +297,8 @@ export class AgentImpl implements Agent {
     this.getProviderContextLimit = reads.getProviderContextLimit;
     this.listAvailableModels = reads.listAvailableModels;
     this.profilePersistence = assembleProfilePersistence(
-      deps.config,
+      () => deps.config.getModel(),
+      () => deps.config.getProvider(),
       deps.settingsService,
       deps.providerManager,
       () => deps.settingsOwner.captureNamedParameters(),

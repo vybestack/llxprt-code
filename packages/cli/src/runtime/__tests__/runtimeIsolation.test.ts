@@ -1,3 +1,4 @@
+import { buildRuntimeProfileSnapshot } from '../../../../agents/src/api/profileSnapshot.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { assembleModelSelection } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
 import {
@@ -28,7 +29,6 @@ import { SettingsService, type Profile } from '@vybestack/llxprt-code-settings';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import {
   activateIsolatedRuntimeContext,
-  buildRuntimeProfileSnapshot,
   createIsolatedRuntimeContext,
   setActiveModel,
   setActiveModelParam,

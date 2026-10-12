@@ -1,3 +1,4 @@
+import { buildRuntimeProfileSnapshot } from '../../../agents/src/api/profileSnapshot.js';
 import { modelParamInputs } from '../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
 /**
  * @license
@@ -23,7 +24,6 @@ import { setCommand } from '../ui/commands/setCommand.js';
 import {
   setActiveModelParam,
   getActiveModelParams,
-  buildRuntimeProfileSnapshot,
   clearActiveModelParam,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';

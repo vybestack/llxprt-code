@@ -22,3 +22,8 @@ export {
 } from './src/api/profileApplicationAssembly.js';
 
 export { McpRuntimeOwner } from './src/api/mcpRuntimeAssembly.js';
+
+export {
+  assembleProfileDefinitions,
+  type AgentProfileDefinitions,
+} from './src/api/profileDefinitions.js';

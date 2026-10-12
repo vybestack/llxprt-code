@@ -1,3 +1,4 @@
+import { buildRuntimeProfileSnapshot } from '../profileSnapshot.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -11,7 +12,6 @@ import { AgentExecutionCoordinator } from '../agentExecutionCoordinator.js';
 import { assembleProviderSwitch } from '../providerSwitchAssembly.js';
 import { createAgentAuthState } from '../control/authState.js';
 import type { AgentProviderState } from '../agentImpl.js';
-import { buildRuntimeProfileSnapshot } from '@vybestack/llxprt-code-providers/runtime.js';
 
 describe('Profile finalization', () => {
   it('keeps facade and owner state unchanged when the final loop rebuild fails', async () => {

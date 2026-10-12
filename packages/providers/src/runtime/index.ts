@@ -101,19 +101,3 @@ export {
   setProviderBaseUrl,
 } from './providerConfigUtils.js';
 export type { ProviderConfigResult } from './providerConfigUtils.js';
-
-export {
-  PROFILE_EPHEMERAL_KEYS,
-  buildRuntimeProfileSnapshot,
-  finishProfileApplication,
-  saveProfileSnapshot,
-  saveLoadBalancerProfile,
-  deleteProfileByName,
-  listSavedProfiles,
-  getProfileByName,
-} from './profileSnapshot.js';
-export type {
-  ProfileLoadOptions,
-  ProfileLoadResult,
-  RuntimeDiagnosticsSnapshot,
-} from './profileSnapshot.js';

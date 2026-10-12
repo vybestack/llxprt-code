@@ -18,7 +18,7 @@ import {
   finishProfileApplication,
   type ProfileLoadOptions,
   type ProfileLoadResult,
-} from '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js';
+} from './profileSnapshot.js';
 import { getActiveModelParams } from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
 

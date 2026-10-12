@@ -18,17 +18,11 @@ import type {
   LoadBalancerProfile,
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
-import { extractModelParams } from './providerModelParameters.js';
-import type { OAuthManager } from '../auth/oauth-manager.js';
-import type { ProfileOAuthWork } from '../auth/types.js';
-import type { ProfileApplicationResult } from './profileApplication.js';
-import type { LoadBalancingProviderConfig } from '../loadBalancing/loadBalancerTypes.js';
-import {
-  getProfileEphemeralSettings,
-  getProfileModel,
-  getProfileModelParams,
-  getProfileProvider,
-} from './profile-application/profileAccessors.js';
+import { extractModelParams } from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+type ProfileOAuthWork = ReturnType<OAuthManager['createProfileOAuthWork']>;
+import type { ProfileApplicationResult } from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
+import type { LoadBalancingProviderConfig } from '@vybestack/llxprt-code-providers';
 
 type LoadBalancerProfileDetail = {
   name: string;
@@ -601,20 +595,6 @@ export async function saveProfileSnapshot(
   return finalProfile;
 }
 
-/**
- * @deprecated This function saves old-style load balancer profiles (type='loadbalancer').
- * The old architecture did round-robin at profile-load time (selecting a profile once).
- * Use the new subProfiles architecture instead which does per-request load balancing.
- * This function is kept for backward compatibility only.
- */
-export async function saveLoadBalancerProfile(
-  profileName: string,
-  profile: LoadBalancerProfile,
-  manager: Pick<ProfileManager, 'saveProfile'>,
-): Promise<void> {
-  await manager.saveProfile(profileName, profile);
-}
-
 export async function deleteProfileByName(
   profileName: string,
   settingsService: Pick<
@@ -638,12 +618,12 @@ async function resolveLoadBalancerProfileDetail(
       return { name: memberName, loadError: true };
     }
 
-    const ephemerals = getProfileEphemeralSettings(memberProfile);
-    const modelParams = getProfileModelParams(memberProfile);
+    const ephemerals = memberProfile.ephemeralSettings;
+    const modelParams = memberProfile.modelParams;
     return {
       name: memberName,
-      provider: getProfileProvider(memberProfile),
-      model: getProfileModel(memberProfile),
+      provider: memberProfile.provider,
+      model: memberProfile.model,
       contextLimit:
         typeof ephemerals['context-limit'] === 'number'
           ? ephemerals['context-limit']
