@@ -98,7 +98,7 @@ import type { HistoryMutationSnapshot } from './historyMutationSnapshot.js';
 import type { HistoryMutationInput } from './historyBatchContracts.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 
-// Preserve the CompressionConfig export from the same path for consumers.
+// Preserve the CompressionConfig type export from the same path for consumers.
 export type { CompressionConfig };
 
 // The journal options type rides the Core surface for facade consumers.
@@ -118,6 +118,8 @@ import type {
   HistoryMediaOwner,
   HistoryBatchOptions,
 } from './historyBatchContracts.js';
+
+type HistoryTokenizerSelection = Pick<RuntimeTokenizerFactory, 'getTokenizer'>;
 
 /**
  * Service for managing conversation history in a provider-agnostic way.
@@ -161,6 +163,12 @@ export abstract class HistoryServiceCore
    */
   protected spanWindow = new SpanWindow();
 
+  /**
+   * Origin of each content object published through `add`. Weak so the
+   * facade never retains context-sized state (#854); contents published
+   * through journal batches are row-streamed and carry no object identity.
+   */
+  protected contentOrigins = new WeakMap<IContent, object>();
   protected totalTokens: number = 0;
   protected baseTokenOffset: number = 0;
   protected tokenizerCache = new Map<string, ITokenizer>();
@@ -221,7 +229,7 @@ export abstract class HistoryServiceCore
    * to obtain tokenizers instead of constructing provider tokenizers directly.
    * This eliminates the core→providers import dependency on the injection path.
    */
-  private tokenizerFactory?: RuntimeTokenizerFactory;
+  protected tokenizerFactory?: HistoryTokenizerSelection;
   protected activeTokenizationModel = 'gpt-4.1';
   protected activeTokenizationProvider?: string;
 
@@ -338,7 +346,7 @@ export abstract class HistoryServiceCore
    * When set, getTokenizerForModel will prefer the factory over
    * constructing provider tokenizers directly.
    */
-  setTokenizerFactory(factory: RuntimeTokenizerFactory): void {
+  setTokenizerFactory(factory: HistoryTokenizerSelection): void {
     this.runSynchronousHistoryMutation(() => {
       this.tokenizerFactory = factory;
       this.tokenizerCache.clear();
@@ -582,19 +590,19 @@ export abstract class HistoryServiceCore
    * provider-facing history (z.ai rejects empty human turns with HTTP 400
    * error 1213). All other content with a valid speaker is accepted.
    */
-  add(content: IContent, modelName?: string): void {
+  add(content: IContent, modelName?: string, origin?: object): void {
     if (this.isCompressing) {
       logQueuedDuringCompression(this.logger, content);
       this.queueCompressionOperation(() => {
         this.runSynchronousHistoryMutation(() => {
-          this.addInternal(content, modelName);
+          this.addInternal(content, modelName, origin);
         });
       });
       return;
     }
 
     this.runSynchronousHistoryMutation(() => {
-      this.addInternal(content, modelName);
+      this.addInternal(content, modelName, origin);
     });
   }
 
@@ -635,7 +643,11 @@ export abstract class HistoryServiceCore
     }
   }
 
-  private addInternal(content: IContent, modelName?: string): void {
+  private addInternal(
+    content: IContent,
+    modelName?: string,
+    origin?: object,
+  ): void {
     // Reject zero-block turns: a Content with no blocks corrupts provider-
     // facing history (notably z.ai rejects empty human turns with HTTP 400
     // error 1213, issue #2410). This is a systemic safety net — earlier
@@ -674,8 +686,10 @@ export abstract class HistoryServiceCore
       this.journal.apply({ kind: 'content', content });
 
       try {
-        this.emit('contentAdded', content);
+        this.emit('contentAdded', content, origin);
         this.mediaOwner?.adopt([content]);
+        if (origin !== undefined) this.contentOrigins.set(content, origin);
+        else this.contentOrigins.delete(content);
       } catch (error: unknown) {
         // Roll back the insertion with a compensating rewind. The consumed
         // chronology sequence number is intentionally NOT reclaimed: sequence
@@ -1047,7 +1061,7 @@ export abstract class HistoryServiceCore
    */
   async estimateTokensForContents(
     contents: Iterable<IContent> | AsyncIterable<IContent>,
-    modelName?: string,
+    modelName = this.activeTokenizationModel,
     signal?: AbortSignal,
   ): Promise<number> {
     return estimateTokensForContentsImpl(

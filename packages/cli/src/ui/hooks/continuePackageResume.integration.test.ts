@@ -1,23 +1,49 @@
+import { buildSettingsRuntime } from '../../runtime/createRuntimeOwnerFeatures.js';
+import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 
+import {
+  createTestFilesystem,
+  installTestWorkspaceFilesystem,
+  testConfigInitialization,
+} from '@vybestack/llxprt-code-test-utils/core/config.js';
+import { afterEach, describe, expect, it } from 'bun:test';
+const makeFixtureFilesystem = installTestWorkspaceFilesystem();
+let fixtureFilesystem: ReturnType<typeof makeFixtureFilesystem> | undefined;
+function fixturePaths() {
+  fixtureFilesystem ??= makeFixtureFilesystem({
+    targetDir: process.cwd(),
+    isTrusted: () => true,
+  });
+  return fixtureFilesystem.paths;
+}
+import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
+const composeFixtureRuntime = installWorkspaceRuntimeFixture();
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+
+import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { requireMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import {
   assertDefined,
   assertNotNull,
 } from '@vybestack/llxprt-code-test-utils';
-import { describe, expect, it } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   Config,
   DebugLogger,
   LocalMediaStore,
-  MessageBus,
   PerformCompressionResult,
   SessionDiscovery,
   SessionRecordingService,
@@ -27,6 +53,7 @@ import {
   type AgentChatContract,
   type AgentClientContract,
   type IContent,
+  type RuntimeProviderManager,
   type LockHandle,
   type MediaReferenceBlock,
   type RecordingIntegration,
@@ -43,6 +70,12 @@ import {
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import type { Message } from '../types.js';
+import { CliSessionPersistence } from '../../cliSessionPersistence.js';
+import { setupSessionRecording } from '../../cliSessionBootstrap.js';
+import {
+  __resetCleanupStateForTesting,
+  runExitCleanup,
+} from '../../utils/cleanup.js';
 
 interface ActiveRecordingState {
   recording: SessionRecordingService | null;
@@ -56,10 +89,16 @@ interface PackageFixture {
   readonly references: readonly MediaReferenceBlock[];
 }
 
-function createAgentClient(history: HistoryService): AgentClientContract {
+function createAgentClient(
+  history: HistoryService,
+  mediaStore: LocalMediaStore,
+  config: Config,
+  manager: RuntimeProviderManager,
+): AgentClientContract {
   async function* emptyStream() {}
   let deferredHistory: readonly IContent[] | undefined;
   const chat: AgentChatContract = {
+    takeHistoryAdmissions: () => [],
     sendMessage: async () => emptyModelOutput(),
     sendMessageStream: async () => emptyStream(),
     generateDirectMessage: async () => emptyModelOutput(),
@@ -72,7 +111,27 @@ function createAgentClient(history: HistoryService): AgentClientContract {
     performCompression: async () => PerformCompressionResult.SKIPPED_EMPTY,
     recordCompletedToolCalls: () => {},
   };
+  let tools: AgentClientContract['tools'] | undefined;
   return {
+    get tools() {
+      if (tools === undefined)
+        throw new Error('Missing fixture tool selection');
+      return tools;
+    },
+    bindRuntimeSettings: () => {},
+    bindTelemetry: () => {},
+    bindProviderInvocation: () => {},
+    getContentGeneratorConfig: () => undefined,
+    bindToolSelection: (selection) => {
+      tools = selection;
+    },
+    mediaStore,
+    assertConfig: (expected) => {
+      if (expected !== config) throw new Error('Different fixture Config');
+    },
+    assertProviderManager: (expected) => {
+      if (expected !== manager) throw new Error('Different fixture manager');
+    },
     initialize: async () => {},
     isInitialized: () => true,
     hasChatInitialized: () => true,
@@ -81,6 +140,11 @@ function createAgentClient(history: HistoryService): AgentClientContract {
     streamHistory: (signal) => history.streamRawHistory(signal),
     getHistoryService: () => history,
     storeHistoryServiceForReuse: () => {},
+    prepareHistoryRebind: () => {
+      throw new Error(
+        'Profile history rebinding is not used by session resume tests',
+      );
+    },
     storeHistoryForLaterUse: async (next) => {
       const rows: IContent[] = [];
       for await (const row of next) rows.push(row);
@@ -131,8 +195,14 @@ async function createConfig(
   projectRoot: string,
   sessionId: string,
   history: HistoryService,
-): Promise<Config> {
-  const client = createAgentClient(history);
+  continueSession?: string,
+): Promise<{
+  config: Config;
+  sessionClient: SessionClientOwner;
+  settingsOwner: SessionSettingsOwner;
+  dispose(): Promise<void>;
+}> {
+  await mkdir(projectRoot, { recursive: true });
   const config = new Config({
     sessionId,
     targetDir: projectRoot,
@@ -141,19 +211,57 @@ async function createConfig(
     model: 'resume-test-model',
     provider: 'resume-test-provider',
     interactive: true,
-    agentClientFactory: () => client,
-    toolSchedulerFactory: () => ({
-      schedule: async () => {},
-      cancelAll: () => {},
-      dispose: () => {},
-      setCallbacks: () => {},
-      handleConfirmationResponse: async () => {},
-    }),
+    continueSession,
   });
-  await config.initialize({
-    messageBus: new MessageBus(config.getPolicyEngine(), false),
+  const configPolicy = new RuntimePolicyOwner(config);
+  const store = new LocalMediaStore({
+    rootDirectory: join(new Storage(projectRoot).getProjectTempDir(), 'media'),
+    quotaBytes: 1024 * 1024,
   });
-  return config;
+  const settingsService = new SettingsService();
+  const settingsOwner = new SessionSettingsOwner(settingsService);
+  settingsOwner.bindTelemetry(config);
+  const manager = new ProviderManager({
+    config,
+    settingsService,
+  });
+  const client = createAgentClient(history, store, config, manager);
+  const factories = configureProviderRuntimeFactories(config, manager);
+  const sessionClient = await SessionClientOwner.create(
+    config,
+    assembleTaskSchemaPolicy(settingsService),
+    manager,
+    () => client,
+    store,
+    () => undefined,
+    fixturePaths(),
+    settingsOwner,
+    factories.contentGeneratorFactory,
+    factories.tokenizerFactory,
+    client,
+  );
+  await config.initialize(
+    testConfigInitialization(
+      config,
+      configPolicy.session.messageBus,
+      configPolicy,
+      createTestFilesystem(config),
+    ),
+  );
+  return {
+    config,
+    sessionClient,
+    settingsOwner,
+    dispose: async () => {
+      await sessionClient.dispose();
+      await settingsOwner.dispose();
+      await client.dispose();
+      manager.dispose();
+      await configPolicy.dispose();
+      await config.dispose();
+      await store.close();
+    },
+  };
 }
 
 async function createPackage(
@@ -255,16 +363,32 @@ function createRecordingCallbacks(
 
 function createHandlerDeps(
   config: Config,
+  sessionClient: SessionClientOwner,
   callbacks: RecordingSwapCallbacks,
   messages: Message[],
+  persistence: CliSessionPersistence,
+  settingsOwner: SessionSettingsOwner,
 ): SlashCommandHandlerDeps {
   const commandContext = createMockCommandContext({
-    services: { config },
+    services: {
+      config,
+      agent: {
+        get agentClient() {
+          return sessionClient.getAgentClient();
+        },
+        setHistory: async (next: readonly IContent[]) =>
+          sessionClient.getAgentClient().setHistory(next),
+      },
+    },
     recordingSwapCallbacks: callbacks,
   });
   return {
     commands: [continueCommand],
-    config,
+    config: {
+      ...composeFixtureRuntime(config),
+      ...buildSettingsRuntime(config, createUiSessionOwner(), settingsOwner),
+    },
+    sessionPersistence: persistence,
     commandContext,
     actions: createActions(),
     addItem: commandContext.ui.addItem,
@@ -296,19 +420,6 @@ function historyText(history: readonly IContent[]): string {
     .join('\n');
 }
 
-async function readChatEntries(directory: string): Promise<string[]> {
-  return readdir(directory).catch((error: unknown) => {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === 'ENOENT'
-    ) {
-      return [];
-    }
-    throw error;
-  });
-}
 async function readHistoryText(history: HistoryService): Promise<string> {
   let text = '';
   await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
@@ -317,150 +428,263 @@ async function readHistoryText(history: HistoryService): Promise<string> {
   return text;
 }
 
-async function verifySuccessfulImport(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'continue-package-resume-'));
-  const history = new HistoryService();
-  history.add({
-    speaker: 'human',
-    blocks: [{ type: 'text', text: 'prior session history' }],
+describe('continue package perform_resume integration', () => {
+  afterEach(() => {
+    fixtureFilesystem = undefined;
   });
-  const originalSessionId = randomUUID();
-  const config = await createConfig(
-    join(root, 'destination-workspace'),
-    originalSessionId,
-    history,
-  );
-  const projectTemp = config.storage.getProjectTempDir();
-  const state: ActiveRecordingState = {
-    recording: null,
-    integration: null,
-    lock: null,
-    metadata: null,
-  };
-  const messages: Message[] = [];
 
-  try {
-    const sessionPackage = await createPackage(root, []);
-    const result = await processSlashCommand(
-      createHandlerDeps(
-        config,
-        createRecordingCallbacks(state, false),
-        messages,
-      ),
-      `/continue import ${sessionPackage.directory}`,
-    );
-    const sessions = await SessionDiscovery.listSessions(
-      config.storage.getProjectChatsDir(),
-      getProjectHash(config.getProjectRoot()),
-    );
-
-    expect(result).toStrictEqual({ type: 'handled' });
-    expect(sessions).toHaveLength(1);
-    expect(config.getSessionId()).toBe(sessions[0]?.sessionId);
-    expect(state.recording?.getSessionId()).toBe(config.getSessionId());
-    await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
-      expect(historyText(rows)).not.toContain('prior session history');
+  it('publishes the validated package and assigns it only after real resume activation succeeds', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'continue-package-resume-'));
+    const history = new HistoryService();
+    history.add({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'prior session history' }],
     });
-    expect(messages).toStrictEqual([]);
-    return await readHistoryText(history);
-  } finally {
-    await disposeActiveState(state);
-    await config.dispose();
-    await rm(projectTemp, { recursive: true, force: true });
-    await rm(root, { recursive: true, force: true });
-  }
-}
-
-async function verifyFailedImport(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), 'continue-package-rollback-'));
-  const history = new HistoryService();
-  history.add({
-    speaker: 'human',
-    blocks: [{ type: 'text', text: 'original active history' }],
-  });
-  const originalSessionId = randomUUID();
-  const config = await createConfig(
-    join(root, 'destination-workspace'),
-    originalSessionId,
-    history,
-  );
-  const projectTemp = config.storage.getProjectTempDir();
-  const destinationStore = config.getLocalMediaStore();
-  const deduplicatedBytes = new Uint8Array([10, 20, 30]);
-  const importedOnlyBytes = new Uint8Array([40, 50, 60, 70]);
-  const preExistingReference = await destinationStore.admit({
-    bytes: deduplicatedBytes,
-    mimeType: 'image/png',
-    semanticMetadata: {},
-  });
-  const sessionPackage = await createPackage(root, [
-    deduplicatedBytes,
-    importedOnlyBytes,
-  ]);
-  const importedOnlyReference = sessionPackage.references.find(
-    (_reference, index) => index === 1,
-  );
-  assertDefined(
-    importedOnlyReference,
-    'Expected imported-only package reference',
-  );
-  const state: ActiveRecordingState = {
-    recording: null,
-    integration: null,
-    lock: null,
-    metadata: null,
-  };
-  const messages: Message[] = [];
-
-  try {
-    await processSlashCommand(
-      createHandlerDeps(
-        config,
-        createRecordingCallbacks(state, true),
-        messages,
-      ),
-      `/continue import ${sessionPackage.directory}`,
+    const originalSessionId = randomUUID();
+    const built = await createConfig(
+      join(root, 'destination-workspace'),
+      originalSessionId,
+      history,
     );
-    const chatEntries = await readChatEntries(
-      config.storage.getProjectChatsDir(),
+    const config = built.config;
+    const projectTemp = config.projectTempDir;
+    const state: ActiveRecordingState = {
+      recording: null,
+      integration: null,
+      lock: null,
+      metadata: null,
+    };
+    const messages: Message[] = [];
+    const persistence = new CliSessionPersistence(
+      { projectRoot: config.storageRoot, chatsDir: config.projectChatsDir },
+      {
+        mediaStore: requireMediaStore(built.sessionClient.getAgentClient()),
+        maxQueueBytes: config.getSessionPersistenceQueueByteLimit(),
+      },
     );
+    Object.defineProperty(config, 'createSessionPersistenceService', {
+      value: () => {
+        throw new Error('Config persistence factory must not be used');
+      },
+    });
 
-    expect(chatEntries).toStrictEqual([]);
-    expect(config.getSessionId()).toBe(originalSessionId);
-    await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
-      expect(historyText(rows)).not.toContain(
+    try {
+      const sessionPackage = await createPackage(root, []);
+      const result = await processSlashCommand(
+        createHandlerDeps(
+          config,
+          built.sessionClient,
+          createRecordingCallbacks(state, false),
+          messages,
+          persistence,
+          built.settingsOwner,
+        ),
+        `/continue import ${sessionPackage.directory}`,
+      );
+      const sessions = await SessionDiscovery.listSessions(
+        config.projectChatsDir,
+        getProjectHash(config.getProjectRoot()),
+      );
+
+      expect(result).toStrictEqual({ type: 'handled' });
+      expect(sessions).toHaveLength(1);
+      expect(config.getSessionId()).toBe(sessions[0]?.sessionId);
+      expect(state.recording?.getSessionId()).toBe(config.getSessionId());
+      await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+        expect(historyText(rows)).not.toContain('prior session history');
+      });
+      expect(await readHistoryText(history)).toContain(
         'history restored through perform_resume',
       );
-    });
-    expect(
-      await destinationStore.hasReservations(importedOnlyReference.contentId),
-    ).toBe(false);
-    expect(await destinationStore.getStoredByteLength()).toBe(
-      deduplicatedBytes.byteLength,
-    );
-    expect(
-      await destinationStore.readVerified(preExistingReference),
-    ).toStrictEqual(deduplicatedBytes);
-    await expect(
-      destinationStore.readVerified(importedOnlyReference),
-    ).rejects.toThrow(importedOnlyReference.contentId);
-    expect(messages.some((message) => message.type === 'error')).toBe(true);
-    return await readHistoryText(history);
-  } finally {
-    await disposeActiveState(state);
-    await config.dispose();
-    await rm(projectTemp, { recursive: true, force: true });
-    await rm(root, { recursive: true, force: true });
-  }
-}
-
-describe('continue package perform_resume integration', () => {
-  it('publishes the validated package and assigns it only after real resume activation succeeds', async () => {
-    expect(await verifySuccessfulImport()).toContain(
-      'history restored through perform_resume',
-    );
+      expect(messages).toStrictEqual([]);
+    } finally {
+      await disposeActiveState(state);
+      persistence.close();
+      await built.dispose();
+      await rm(projectTemp, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
+    }
   });
+
   it('rolls back only new import artifacts when real resume activation fails', async () => {
-    expect(await verifyFailedImport()).toContain('original active history');
+    const root = await mkdtemp(join(tmpdir(), 'continue-package-rollback-'));
+    const history = new HistoryService();
+    history.add({
+      speaker: 'human',
+      blocks: [{ type: 'text', text: 'original active history' }],
+    });
+    const originalSessionId = randomUUID();
+    const built = await createConfig(
+      join(root, 'destination-workspace'),
+      originalSessionId,
+      history,
+    );
+    const config = built.config;
+    const projectTemp = config.projectTempDir;
+    const destinationStore = requireMediaStore(
+      built.sessionClient.getAgentClient(),
+    );
+    const deduplicatedBytes = new Uint8Array([10, 20, 30]);
+    const importedOnlyBytes = new Uint8Array([40, 50, 60, 70]);
+    const preExistingReference = await destinationStore.admit({
+      bytes: deduplicatedBytes,
+      mimeType: 'image/png',
+      semanticMetadata: {},
+    });
+    const sessionPackage = await createPackage(root, [
+      deduplicatedBytes,
+      importedOnlyBytes,
+    ]);
+    const importedOnlyReference = sessionPackage.references.find(
+      (_reference, index) => index === 1,
+    );
+    assertDefined(
+      importedOnlyReference,
+      'Expected imported-only package reference',
+    );
+    const state: ActiveRecordingState = {
+      recording: null,
+      integration: null,
+      lock: null,
+      metadata: null,
+    };
+    const messages: Message[] = [];
+    const persistence = new CliSessionPersistence(
+      { projectRoot: config.storageRoot, chatsDir: config.projectChatsDir },
+      {
+        mediaStore: requireMediaStore(built.sessionClient.getAgentClient()),
+        maxQueueBytes: config.getSessionPersistenceQueueByteLimit(),
+      },
+    );
+
+    try {
+      await processSlashCommand(
+        createHandlerDeps(
+          config,
+          built.sessionClient,
+          createRecordingCallbacks(state, true),
+          messages,
+          persistence,
+          built.settingsOwner,
+        ),
+        `/continue import ${sessionPackage.directory}`,
+      );
+      const chatEntries = await readdir(config.projectChatsDir).catch(
+        (error: unknown) => {
+          if (
+            typeof error === 'object' &&
+            error !== null &&
+            'code' in error &&
+            error.code === 'ENOENT'
+          ) {
+            return [];
+          }
+          throw error;
+        },
+      );
+
+      expect(chatEntries).toStrictEqual([]);
+      expect(config.getSessionId()).toBe(originalSessionId);
+      await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
+        expect(historyText(rows)).not.toContain(
+          'history restored through perform_resume',
+        );
+      });
+      expect(await readHistoryText(history)).toContain(
+        'original active history',
+      );
+      expect(
+        await destinationStore.hasReservations(importedOnlyReference.contentId),
+      ).toBe(false);
+      expect(await destinationStore.getStoredByteLength()).toBe(
+        deduplicatedBytes.byteLength,
+      );
+      expect(
+        await destinationStore.readVerified(preExistingReference),
+      ).toStrictEqual(deduplicatedBytes);
+      await expect(
+        destinationStore.readVerified(importedOnlyReference),
+      ).rejects.toThrow(importedOnlyReference.contentId);
+      expect(messages.some((message) => message.type === 'error')).toBe(true);
+    } finally {
+      await disposeActiveState(state);
+      persistence.close();
+      await built.dispose();
+      await rm(projectTemp, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('resumes before Agent construction and releases the lock and journal on exit', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'legacy-cli-resume-'));
+    const workspace = join(root, 'workspace');
+    const first = await createConfig(
+      workspace,
+      randomUUID(),
+      new HistoryService(),
+    );
+    const projectTemp = first.config.projectTempDir;
+    let resumed: Awaited<ReturnType<typeof createConfig>> | undefined;
+    try {
+      Object.defineProperty(first.config, 'createSessionPersistenceService', {
+        value: () => {
+          throw new Error('Config persistence factory must not be used');
+        },
+      });
+      const started = await setupSessionRecording(
+        first.config,
+        { listSessions: false, deleteSession: undefined },
+        null,
+        first.sessionClient,
+      );
+      const sessionId = started.recordingService.getSessionId();
+      started.recordingService.recordContent({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'legacy early resume' }],
+      });
+      await started.recordingService.flush();
+      const oldJournal = started.sessionPersistence
+        .forRecording(sessionId)
+        .getSessionFilePath();
+      await runExitCleanup();
+      __resetCleanupStateForTesting();
+      expect(() => started.sessionPersistence.forRecording(sessionId)).toThrow(
+        'CLI session persistence is closed',
+      );
+      expect(
+        (await readdir(first.config.projectChatsDir)).filter((file) =>
+          file.endsWith('.lock'),
+        ),
+      ).toStrictEqual([]);
+      const resumedHistoryService = new HistoryService();
+      resumed = await createConfig(
+        workspace,
+        randomUUID(),
+        resumedHistoryService,
+        sessionId,
+      );
+      const resumedSetup = await setupSessionRecording(
+        resumed.config,
+        { listSessions: false, deleteSession: undefined },
+        null,
+        resumed.sessionClient,
+      );
+      expect(await readHistoryText(resumedHistoryService)).toContain(
+        'legacy early resume',
+      );
+      expect(resumedSetup.recordingService.getSessionId()).toBe(sessionId);
+      expect(
+        resumedSetup.sessionPersistence
+          .forRecording(sessionId)
+          .getSessionFilePath(),
+      ).not.toBe(oldJournal);
+    } finally {
+      await runExitCleanup();
+      __resetCleanupStateForTesting();
+      await resumed?.dispose();
+      await first.dispose();
+      await rm(projectTemp, { recursive: true, force: true });
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

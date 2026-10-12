@@ -5,6 +5,7 @@
  * @plan PLAN-20250909-TOKTRACK.P08
  */
 
+import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import {
   type IProvider,
   type IModel,
@@ -95,6 +96,7 @@ export class LoggingProviderWrapper implements IProvider {
     return this.wrapped.buildContextDumpBody?.bind(this.wrapped);
   }
 
+  private readonly readRequestDiagnostics?: () => ProviderRequestDiagnostics;
   private conversationId: string;
   private turnNumber: number = 0;
   private redactor: ConversationDataRedactor | null = null;
@@ -119,7 +121,9 @@ export class LoggingProviderWrapper implements IProvider {
     private readonly wrapped: IProvider,
     configOrRedactor?: Config | ConversationDataRedactor | null,
     injectedRedactor?: ConversationDataRedactor,
+    readDiagnostics?: () => ProviderRequestDiagnostics,
   ) {
+    this.readRequestDiagnostics = readDiagnostics;
     this.conversationId = this.generateConversationId();
 
     // Constructor accepts either an explicit redactor or a config-derived redactor.
@@ -132,6 +136,7 @@ export class LoggingProviderWrapper implements IProvider {
       'getConversationLoggingEnabled' in configOrRedactor
     ) {
       const config = configOrRedactor;
+      this.readRequestDiagnostics = readDiagnostics;
       this.redactor = new ConfigBasedRedactor(config.getRedactionConfig());
     }
 
@@ -416,14 +421,18 @@ export class LoggingProviderWrapper implements IProvider {
   /** Resolve config and validate it has required prototype methods. */
   private resolveAndValidateConfig(
     normalizedOptions: GenerateChatOptions,
-  ): Config {
-    return resolveAndValidateConfig(normalizedOptions, this.debug);
+  ): ProviderRequestDiagnostics {
+    return resolveAndValidateConfig(
+      normalizedOptions.requestDiagnostics ?? this.readRequestDiagnostics?.(),
+      normalizedOptions.invocation?.runtimeId,
+      this.debug,
+    );
   }
 
   /** Set up per-call redactor and check conversation logging flag. */
   private setupRedactorAndLogging(
     normalizedOptions: GenerateChatOptions,
-    activeConfig: Config,
+    activeConfig: ProviderRequestDiagnostics,
   ): void {
     this.redactor = setupRedactor(normalizedOptions, activeConfig, {
       providerName: this.wrapped.name,
@@ -437,7 +446,9 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   /** Check whether conversation logging is enabled, re-throwing on failure. */
-  private checkConversationLoggingEnabled(activeConfig: Config): boolean {
+  private checkConversationLoggingEnabled(
+    activeConfig: ProviderRequestDiagnostics,
+  ): boolean {
     return checkConversationLoggingEnabled(activeConfig, this.debug);
   }
 
@@ -456,7 +467,7 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   private async logPreSendRequest(
-    activeConfig: Config,
+    activeConfig: ProviderRequestDiagnostics,
     normalizedOptions: GenerateChatOptions,
     promptId: string,
     conversationLoggingEnabled: boolean,
@@ -486,7 +497,7 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   private async *processStreamWithRecorder(
-    config: Config | undefined,
+    config: ProviderRequestDiagnostics | undefined,
     stream: AsyncIterableIterator<IContent>,
     modelName: string,
     promptId: string,
@@ -509,7 +520,7 @@ export class LoggingProviderWrapper implements IProvider {
   }
 
   private async *logResponseStreamWithRecorder(
-    config: Config,
+    config: ProviderRequestDiagnostics,
     stream: AsyncIterableIterator<IContent>,
     promptId: string,
     modelName: string,

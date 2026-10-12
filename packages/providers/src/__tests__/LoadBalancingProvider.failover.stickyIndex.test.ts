@@ -1,3 +1,5 @@
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+const fixtureOwners = installRuntimeTestOwners();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -171,7 +173,11 @@ function makeMultiRequestConfig(): LoadBalancingProviderConfig {
 function makeProviderManager(): ProviderManager {
   const settingsService = new SettingsService();
   const config = createRuntimeConfigStub(settingsService);
-  return new ProviderManager({ settingsService, config });
+  return new ProviderManager({
+    sessionSettings: fixtureOwners.adopt(config, settingsService).settingsOwner,
+    settingsService,
+    config,
+  });
 }
 
 describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492) [part 1]', () => {

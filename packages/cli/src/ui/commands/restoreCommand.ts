@@ -43,8 +43,7 @@ const restoreSchema: CommandArgumentSchema = [
      * Deprecation: Legacy completion removed in favour of schema completer.
      */
     completer: withFuzzyFilter(async (ctx) => {
-      const checkpointDir =
-        ctx.services.config?.storage.getProjectTempCheckpointsDir();
+      const checkpointDir = ctx.services.config?.projectCheckpointsDir;
       if (!checkpointDir) {
         return [];
       }
@@ -92,7 +91,6 @@ function listCheckpoints(jsonFiles: string[]): SlashCommandActionReturn {
 
 async function applyCheckpointRestoration(
   context: CommandContext,
-  config: CliUiRuntime,
   checkpoint: DiskCheckpoint,
 ): Promise<void> {
   const { data, rows } = checkpoint;
@@ -110,8 +108,10 @@ async function applyCheckpointRestoration(
     context.signal.throwIfAborted();
   };
   if (rows !== undefined) {
+    const agent = context.services.agent;
+    if (!agent) throw new Error('Session agent is unavailable');
     // Snapshot failure rejects the admission source before durable publication.
-    await config.getAgentClient().setHistoryFromSource(
+    await agent.agentClient.setHistoryFromSource(
       (async function* () {
         yield* rows;
         await checkpoint.close();
@@ -136,7 +136,6 @@ async function applyCheckpointRestoration(
 
 async function restoreCheckpoint(
   context: CommandContext,
-  config: CliUiRuntime,
   args: string,
   checkpointDir: string,
   jsonFiles: string[],
@@ -154,7 +153,7 @@ async function restoreCheckpoint(
   const filePath = path.join(checkpointDir, selectedFile);
   const checkpoint = await openDiskCheckpoint(filePath, context.signal);
   try {
-    await applyCheckpointRestoration(context, config, checkpoint);
+    await applyCheckpointRestoration(context, checkpoint);
     return {
       type: 'tool',
       toolName: checkpoint.data.toolCall.name,
@@ -180,7 +179,7 @@ async function restoreAction(
     };
   }
 
-  const checkpointDir = config.storage.getProjectTempCheckpointsDir();
+  const checkpointDir = config.projectCheckpointsDir;
 
   if (!checkpointDir) {
     return {
@@ -199,13 +198,7 @@ async function restoreAction(
       return listCheckpoints(jsonFiles);
     }
 
-    return await restoreCheckpoint(
-      context,
-      config,
-      args,
-      checkpointDir,
-      jsonFiles,
-    );
+    return await restoreCheckpoint(context, args, checkpointDir, jsonFiles);
   } catch (error) {
     if (
       error instanceof Error &&

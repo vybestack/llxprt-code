@@ -47,7 +47,7 @@ function getRecording(context: CommandContext): SessionRecordingService | null {
 function getChatsDir(context: CommandContext): string | null {
   const recording = getRecording(context);
   if (recording !== null) return recording.getChatsDir();
-  return context.services.config?.storage.getProjectChatsDir() ?? null;
+  return context.services.config?.projectChatsDir ?? null;
 }
 
 type CheckpointResolution =
@@ -85,7 +85,7 @@ async function listProjectCheckpoints(
   const detailed = await SessionDiscovery.listContinueTargetsDetailed(
     chatsDir,
     projectHash,
-    context.services.config?.getLocalMediaStore(),
+    context.services.agent?.agentClient.mediaStore,
   );
   warnUnreadableRecordings('/chat checkpoints', detailed.unreadableRecordings);
   return detailed.targets.filter(
@@ -175,7 +175,7 @@ const saveCommand: SlashCommand = {
 
     try {
       await new CheckpointService(
-        context.services.config?.getLocalMediaStore(),
+        context.services.agent?.agentClient.mediaStore,
       ).createCheckpoint(
         recording,
         projectHash,
@@ -292,7 +292,7 @@ const deleteCommand: SlashCommand = {
 
     try {
       const service = new CheckpointService(
-        context.services.config?.getLocalMediaStore(),
+        context.services.agent?.agentClient.mediaStore,
       );
       if (recording?.getSessionId() === target.source.sessionId) {
         await service.deleteCheckpoint(
@@ -333,7 +333,7 @@ async function renameCheckpointTarget(
 ): Promise<void> {
   const recording = getRecording(context);
   const service = new CheckpointService(
-    context.services.config?.getLocalMediaStore(),
+    context.services.agent?.agentClient.mediaStore,
   );
   if (recording?.getSessionId() === target.source.sessionId) {
     await service.renameCheckpoint(
@@ -435,7 +435,7 @@ const clearCommand: SlashCommand = {
   description: 'Clear the current conversation history',
   kind: CommandKind.BUILT_IN,
   action: async (context): Promise<MessageActionReturn | void> => {
-    const client = context.services.config?.getAgentClient();
+    const client = context.services.agent?.agentClient;
     if (client?.hasChatInitialized() !== true) {
       return {
         type: 'message',
@@ -461,7 +461,7 @@ const restoreHistory = async (
   context: CommandContext,
   turns: number,
 ): Promise<SlashCommandActionReturn | void> => {
-  const client = context.services.config?.getAgentClient();
+  const client = context.services.agent?.agentClient;
   if (client?.hasChatInitialized() !== true) {
     return {
       type: 'message',
@@ -547,7 +547,7 @@ const nameCommand: SlashCommand = {
 
     try {
       await new CheckpointService(
-        context.services.config?.getLocalMediaStore(),
+        context.services.agent?.agentClient.mediaStore,
       ).setSessionName(
         recording,
         projectHash,
@@ -594,7 +594,7 @@ const debugCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   action: async (context): Promise<SlashCommandActionReturn> => {
     const { config } = context.services;
-    const client = config?.getAgentClient();
+    const client = context.services.agent?.agentClient;
 
     const debugInfo: string[] = [];
 

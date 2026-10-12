@@ -1,3 +1,6 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { CoreToolScheduler } from './coreToolScheduler.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -5,12 +8,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
-import {
-  executeToolCall,
-  type ToolExecutionConfig,
-} from './nonInteractiveToolExecutor.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import { executeToolCall } from './nonInteractiveToolExecutor.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   DEFAULT_AGENT_ID,
   type ToolCallRequestInfo,
@@ -23,8 +22,7 @@ import { MockTool } from '@vybestack/llxprt-code-test-utils/core/tools.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import { CoreToolScheduler } from './coreToolScheduler.js';
-import { createSchedulerRegistryDelegate } from './__tests__/scheduler-registry-test-helpers.js';
+import { bindSchedulerOwner } from '../session/assembleSchedulerOwner.js';
 
 describe('executeToolCall response structure', () => {
   let mockToolRegistry: ToolRegistry;
@@ -32,84 +30,40 @@ describe('executeToolCall response structure', () => {
   let abortController: AbortController;
   let request: ToolCallRequestInfo;
   const testSessionId = 'test-session-structure';
-  // Stable per-suite registry owner: executeToolCall acquires and releases
-  // on this same object, so the per-config registry refcount balances.
-  const executionOwner = { label: 'non-interactive-executor' };
 
-  function createMockConfig(options?: {
-    ephemerals?: Record<string, unknown>;
-    approvalMode?: ApprovalMode;
-    allowedTools?: string[] | undefined;
-    policyEngine?: PolicyEngine;
-    messageBus?: MessageBus;
-    includePolicyEngine?: boolean;
-    includeMessageBus?: boolean;
-    policyEngineReturnsUndefined?: boolean;
-  }): ToolExecutionConfig {
-    const ephemerals = options?.ephemerals ?? {};
-    const policyEngine =
-      options?.policyEngine ??
-      new PolicyEngine({
-        rules: [],
-        defaultDecision: PolicyDecision.ALLOW,
-        nonInteractive: false,
-      });
-    const messageBus =
-      options?.messageBus ?? new MessageBus(policyEngine, false);
-    const includePolicyEngine = options?.includePolicyEngine ?? true;
-    const policyEngineReturnsUndefined =
-      options?.policyEngineReturnsUndefined ?? false;
-
-    const getPolicyEngineFunc = (): PolicyEngine => {
-      if (includePolicyEngine && policyEngineReturnsUndefined) {
-        return undefined as unknown as PolicyEngine;
-      }
-      return policyEngine;
-    };
-
-    // Build the base config fixture, then attach a per-config scheduler
-    // registry delegate keyed by owner object identity, matching production
-    // Config semantics.
-    const fixture = {
-      getToolRegistry: () => mockToolRegistry,
-      getSessionId: () => testSessionId,
-      getTelemetryLogPromptsEnabled: () => false,
-      getExcludeTools: () => [],
-      getEphemeralSettings: () => ephemerals,
-      getEphemeralSetting: (key: string) => ephemerals[key],
-      getPolicyEngine: getPolicyEngineFunc,
-      getMessageBus: () => messageBus,
-      getApprovalMode: () => options?.approvalMode ?? ApprovalMode.DEFAULT,
-      getAllowedTools: () => options?.allowedTools,
-      getToolSchedulerFactory:
-        () =>
-        (
-          schedulerOptions: ConstructorParameters<typeof CoreToolScheduler>[0],
-        ) =>
-          new CoreToolScheduler(schedulerOptions),
-    };
-
-    const delegate = createSchedulerRegistryDelegate({
-      config: fixture as unknown as Config,
-      messageBus,
-      toolRegistry: mockToolRegistry,
-      createScheduler: async (schedulerOptions) =>
-        fixture.getToolSchedulerFactory()({
-          config: fixture as unknown as Config,
-          messageBus,
-          toolRegistry: mockToolRegistry,
-          toolContextInteractiveMode: schedulerOptions.interactiveMode ?? true,
-          getPreferredEditor: () => undefined,
-          onEditorClose: () => {},
-        }),
+  function createExecutionOwner(): Parameters<typeof executeToolCall>[0] {
+    const policyEngine = new PolicyEngine({
+      rules: [],
+      defaultDecision: PolicyDecision.ALLOW,
+      nonInteractive: false,
     });
-
-    const config: ToolExecutionConfig = {
-      ...fixture,
-      ...delegate,
-    } as unknown as ToolExecutionConfig;
-
-    return config;
+    const config = new Config({
+      sessionId: testSessionId,
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      model: 'test-model',
+      debugMode: false,
+    });
+    const settingsRoot = createSessionSettingsFixture(config);
+    return bindSchedulerOwner(
+      config,
+      new MessageBus(policyEngine, false),
+      false,
+      mockToolRegistry,
+      (options) => new CoreToolScheduler(options),
+      () => settingsRoot.settingsOwner.readToolExecutionPolicy(),
+      () =>
+        settingsRoot.settingsOwner.readToolGovernance(
+          config.getExcludeTools() ?? [],
+        ),
+      undefined,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'isolated-caller-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+    );
   }
 
   beforeEach(() => {
@@ -143,10 +97,9 @@ describe('executeToolCall response structure', () => {
       });
 
       const { response } = await executeToolCall(
-        createMockConfig(),
+        createExecutionOwner(),
         request,
         abortController.signal,
-        { owner: executionOwner },
       );
 
       expect(response.callId).toBe('call1');
@@ -169,10 +122,9 @@ describe('executeToolCall response structure', () => {
       });
 
       const { response } = await executeToolCall(
-        createMockConfig(),
+        createExecutionOwner(),
         request,
         abortController.signal,
-        { owner: executionOwner },
       );
 
       const parts = response.responseParts;
@@ -201,10 +153,9 @@ describe('executeToolCall response structure', () => {
       const requestWithAgentId = { ...request, agentId: customAgentId };
 
       const { response } = await executeToolCall(
-        createMockConfig(),
+        createExecutionOwner(),
         requestWithAgentId,
         abortController.signal,
-        { owner: executionOwner },
       );
 
       expect(response.agentId).toBe(customAgentId);
@@ -222,10 +173,9 @@ describe('executeToolCall response structure', () => {
       const requestWithoutAgentId = { ...request, agentId: undefined };
 
       const { response } = await executeToolCall(
-        createMockConfig(),
+        createExecutionOwner(),
         requestWithoutAgentId,
         abortController.signal,
-        { owner: executionOwner },
       );
 
       expect(response.agentId).toBe(DEFAULT_AGENT_ID);
@@ -245,10 +195,9 @@ describe('executeToolCall response structure', () => {
       const results: ToolCallResponseInfo[] = [];
       for (let i = 0; i < 3; i++) {
         const { response } = await executeToolCall(
-          createMockConfig(),
+          createExecutionOwner(),
           { ...request, callId: `call${i}` },
           abortController.signal,
-          { owner: executionOwner },
         );
         results.push(response);
       }
@@ -277,10 +226,9 @@ describe('executeToolCall response structure', () => {
       try {
         for (let i = 0; i < 15; i++) {
           const { response } = await executeToolCall(
-            createMockConfig(),
+            createExecutionOwner(),
             { ...request, callId: `call-${i}` },
             abortController.signal,
-            { owner: executionOwner },
           );
           expect(response.error).toBeUndefined();
         }
@@ -308,10 +256,9 @@ describe('executeToolCall response structure', () => {
         throw new Error('Tool failed');
       });
       const { response: failedResult } = await executeToolCall(
-        createMockConfig(),
+        createExecutionOwner(),
         { ...request, callId: 'fail' },
         abortController.signal,
-        { owner: executionOwner },
       );
       expect(failedResult.error).toBeDefined();
 
@@ -320,10 +267,9 @@ describe('executeToolCall response structure', () => {
         returnDisplay: 'Success!',
       });
       const { response: successResult } = await executeToolCall(
-        createMockConfig(),
+        createExecutionOwner(),
         { ...request, callId: 'success' },
         abortController.signal,
-        { owner: executionOwner },
       );
       expect(successResult.error).toBeUndefined();
     });
@@ -371,10 +317,9 @@ describe('executeToolCall response structure', () => {
       );
 
       const executionPromise = executeToolCall(
-        createMockConfig(),
+        createExecutionOwner(),
         request,
         localAbortController.signal,
-        { owner: executionOwner },
       );
       await startedPromise;
       localAbortController.abort();
@@ -395,10 +340,9 @@ describe('executeToolCall response structure', () => {
       });
 
       const { response } = await executeToolCall(
-        createMockConfig(),
+        createExecutionOwner(),
         request,
         abortController.signal,
-        { owner: executionOwner },
       );
 
       expect(response.error).toBeDefined();
@@ -414,10 +358,9 @@ describe('executeToolCall response structure', () => {
       });
 
       const { response } = await executeToolCall(
-        createMockConfig(),
+        createExecutionOwner(),
         request,
         abortController.signal,
-        { owner: executionOwner },
       );
 
       const parts = response.responseParts;
@@ -435,10 +378,9 @@ describe('executeToolCall response structure', () => {
       ).mockReturnValue(undefined);
 
       const { response } = await executeToolCall(
-        createMockConfig(),
+        createExecutionOwner(),
         { ...request, name: 'nonexistent_tool' },
         abortController.signal,
-        { owner: executionOwner },
       );
 
       expect(response.error).toBeDefined();
@@ -454,10 +396,9 @@ describe('executeToolCall response structure', () => {
       });
 
       const { response } = await executeToolCall(
-        createMockConfig(),
+        createExecutionOwner(),
         { ...request, args: {} },
         abortController.signal,
-        { owner: executionOwner },
       );
 
       expect(response.error).toBeDefined();

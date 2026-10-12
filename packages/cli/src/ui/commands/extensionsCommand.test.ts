@@ -273,6 +273,7 @@ describe('extensionsCommand', () => {
         name: 'ext-one',
         version: '1.0.0',
         isActive: true,
+        contextFiles: [],
         path: '/test/dir/ext-one',
         installMetadata: {
           type: 'git',
@@ -284,6 +285,7 @@ describe('extensionsCommand', () => {
         name: 'another-ext',
         version: '1.0.0',
         isActive: true,
+        contextFiles: [],
         path: '/test/dir/another-ext',
         installMetadata: {
           type: 'git',
@@ -295,6 +297,7 @@ describe('extensionsCommand', () => {
         name: 'all-ext',
         version: '1.0.0',
         isActive: true,
+        contextFiles: [],
         path: '/test/dir/all-ext',
         installMetadata: {
           type: 'git',
@@ -332,7 +335,7 @@ describe('extensionsCommand', () => {
       ])('$description', async ({ extensions, partialArg, expected }) => {
         mockGetExtensions.mockReturnValue(extensions);
         const suggestions = await updateCompletion(mockContext, partialArg);
-        expect(suggestions).toStrictEqual(expected);
+        expect(suggestions).toStrictEqual([...expected]);
       });
     });
   });

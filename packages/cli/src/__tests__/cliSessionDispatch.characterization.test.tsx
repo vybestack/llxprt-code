@@ -53,7 +53,6 @@ import {
   createMinimalConfig,
   createMinimalSettings,
   createFakeAgent,
-  emptyRecording,
   dispatchTrace,
   renderCalls,
   useDispatchRenderSeams,
@@ -77,15 +76,18 @@ function registerSuite1(): void {
     });
 
     it('dispatch branch selection: interactive when config.isInteractive() returns true', async () => {
-      const config = createMinimalConfig({ interactive: true });
+      const { config: config, ...configRoot } = createMinimalConfig({
+        interactive: true,
+      });
       const settings = createMinimalSettings({ hideWindowTitle: true });
 
       await dispatchInteractiveOrNonInteractive({
+        runtimeSettings: configRoot.runtimeSettings,
         config: config as never,
         agent: createFakeAgent() as never,
         settings: settings as never,
         workspaceRoot: '/tmp/test',
-        recording: emptyRecording(),
+        recordingOwner: 'agent',
         hasPipedInput: false,
         readStdinData: async () => '',
       });
@@ -99,7 +101,7 @@ function registerSuite1(): void {
     });
 
     it('dispatch branch selection: non-interactive piped/prompt when config.isInteractive() returns false', async () => {
-      const config = createMinimalConfig({
+      const { config: config, ...configRoot } = createMinimalConfig({
         interactive: false,
         question: 'hello',
       });
@@ -110,11 +112,12 @@ function registerSuite1(): void {
       // (runPipedOrPromptSession propagates it), so we expect the sentinel.
       await expect(
         dispatchInteractiveOrNonInteractive({
+          runtimeSettings: configRoot.runtimeSettings,
           config: config as never,
           agent: createFakeAgent() as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
-          recording: emptyRecording(),
+          recordingOwner: 'agent',
           hasPipedInput: false,
           readStdinData: async () => '',
         }),
@@ -387,7 +390,7 @@ function registerSuite4(): void {
 let readStdinCalls: number;
 
 async function verifyExits1WhenPipedStdinAndPromptAreBothEmptyNoInputNonInteractivePath() {
-  const config = createMinimalConfig({
+  const { config: config, ...configRoot } = createMinimalConfig({
     interactive: false,
     question: '',
   });
@@ -396,11 +399,12 @@ async function verifyExits1WhenPipedStdinAndPromptAreBothEmptyNoInputNonInteract
   let caught: ExitCalledError | undefined;
   try {
     await dispatchInteractiveOrNonInteractive({
+      runtimeSettings: configRoot.runtimeSettings,
       config: config as never,
       agent: createFakeAgent() as never,
       settings: settings as never,
       workspaceRoot: '/tmp/test',
-      recording: emptyRecording(),
+      recordingOwner: 'agent',
       hasPipedInput: true,
       readStdinData: async () => '',
     });
@@ -437,7 +441,7 @@ function registerPipedInputTest(): void {
     });
     it('drives the non-interactive session using piped stdin when hasPipedInput is true', async () => {
       const pipedContent = 'piped prompt content';
-      const config = createMinimalConfig({
+      const { config: config, ...configRoot } = createMinimalConfig({
         interactive: false,
         question: '',
       });
@@ -446,11 +450,12 @@ function registerPipedInputTest(): void {
       // The real dispatch reads stdin via readStdinData when hasPipedInput.
       await expect(
         dispatchInteractiveOrNonInteractive({
+          runtimeSettings: configRoot.runtimeSettings,
           config: config as never,
           agent: createFakeAgent() as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
-          recording: emptyRecording(),
+          recordingOwner: 'agent',
           hasPipedInput: true,
           readStdinData: async () => {
             readStdinCalls++;
@@ -494,7 +499,7 @@ function registerSuite5(): void {
     });
 
     it('uses the --prompt value directly when hasPipedInput is false and prompt is present', async () => {
-      const config = createMinimalConfig({
+      const { config: config, ...configRoot } = createMinimalConfig({
         interactive: false,
         question: 'cli-prompt-value',
       });
@@ -502,11 +507,12 @@ function registerSuite5(): void {
 
       await expect(
         dispatchInteractiveOrNonInteractive({
+          runtimeSettings: configRoot.runtimeSettings,
           config: config as never,
           agent: createFakeAgent() as never,
           settings: settings as never,
           workspaceRoot: '/tmp/test',
-          recording: emptyRecording(),
+          recordingOwner: 'agent',
           hasPipedInput: false,
           readStdinData: async () => {
             readStdinCalls++;
@@ -541,7 +547,9 @@ function registerSuite6(): void {
     });
 
     it('startInteractiveUI registers a process exit handler for terminal protocol restoration', async () => {
-      const config = createMinimalConfig({ interactive: true });
+      const { config: config, ...configRoot } = createMinimalConfig({
+        interactive: true,
+      });
       const settings = createMinimalSettings({
         hideWindowTitle: true,
         enableMouseEvents: false,
@@ -552,10 +560,14 @@ function registerSuite6(): void {
 
       await startInteractiveUI(
         config as never,
-        { fake: true } as never,
+        createFakeAgent() as never,
         settings as never,
         [],
         '/tmp/test',
+        {
+          recordingOwner: 'agent',
+          runtimeSettings: configRoot.runtimeSettings,
+        },
       );
 
       // Observable effect: the real code registered process.on('exit') handlers
@@ -565,7 +577,9 @@ function registerSuite6(): void {
     });
 
     it('startInteractiveUI registers mouse-events exit handler when mouse events are enabled', async () => {
-      const config = createMinimalConfig({ interactive: true });
+      const { config: config, ...configRoot } = createMinimalConfig({
+        interactive: true,
+      });
       const settings = createMinimalSettings({
         hideWindowTitle: true,
         enableMouseEvents: true,
@@ -576,10 +590,14 @@ function registerSuite6(): void {
 
       await startInteractiveUI(
         config as never,
-        { fake: true } as never,
+        createFakeAgent() as never,
         settings as never,
         [],
         '/tmp/test',
+        {
+          recordingOwner: 'agent',
+          runtimeSettings: configRoot.runtimeSettings,
+        },
       );
 
       // Observable effect: with mouse events enabled, the real code registers
@@ -591,17 +609,23 @@ function registerSuite6(): void {
     });
 
     it('startInteractiveUI calls Ink render with the AppWrapper element tree', async () => {
-      const config = createMinimalConfig({ interactive: true });
+      const { config: config, ...configRoot } = createMinimalConfig({
+        interactive: true,
+      });
       const settings = createMinimalSettings({
         hideWindowTitle: true,
       });
 
       await startInteractiveUI(
         config as never,
-        { fake: true } as never,
+        createFakeAgent() as never,
         settings as never,
         ['startup warning'],
         '/tmp/test',
+        {
+          recordingOwner: 'agent',
+          runtimeSettings: configRoot.runtimeSettings,
+        },
       );
 
       // Observable effect: the real code called Ink render (the recording fake

@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { randomUUID } from 'node:crypto';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type {
   DetachedHistorySink,
@@ -59,9 +59,23 @@ function appendAdmittedRows(
   }
 }
 
+/** Owners a deferred history journal needs; supplied by the client, never read from Config. */
+export interface DeferredHistoryDeps {
+  readonly mediaStore: LocalMediaStore;
+  readonly historyTokenization?: RuntimeTokenizerFactory['getTokenizer'];
+}
+
+export function bindDeferredHistoryTokenizer(
+  journal: HistoryService,
+  deps: DeferredHistoryDeps,
+): void {
+  if (deps.historyTokenization !== undefined)
+    journal.setTokenizerFactory({ getTokenizer: deps.historyTokenization });
+}
+
 export async function prepareDeferredHistorySource(
   source: AsyncIterable<IContent>,
-  config: Config,
+  deps: DeferredHistoryDeps,
   runtime: AgentRuntimeState,
   stored: HistoryService | undefined,
   options: DeferredHistorySourceOptions,
@@ -70,8 +84,7 @@ export async function prepareDeferredHistorySource(
     mutationOwnership: options.ownership,
     attachmentCounters: options.counters,
   });
-  const factory = config.getTokenizerFactory();
-  if (factory) journal.setTokenizerFactory(factory);
+  bindDeferredHistoryTokenizer(journal, deps);
   journal.setActiveTokenizationTarget(runtime.model, runtime.provider);
   try {
     options.signal?.throwIfAborted();
@@ -79,7 +92,7 @@ export async function prepareDeferredHistorySource(
     const release = await admitDeferredHistorySource(
       journal,
       source,
-      config.getLocalMediaStore(),
+      deps.mediaStore,
       options,
       runtime.model,
     );

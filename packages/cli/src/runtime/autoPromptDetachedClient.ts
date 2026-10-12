@@ -1,34 +1,33 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import type {
+  AgentClientContract,
+  ContentGeneratorConfig,
+} from '@vybestack/llxprt-code-core';
 
-import type { AgentClientContract } from '@vybestack/llxprt-code-core';
+export type DetachedAutoPromptClientSource = {
+  readonly sessionClient: Pick<
+    Agent['sessionClient'],
+    'createDetachedAgentClient'
+  >;
+};
 
-/**
- * Minimal source contract for creating a detached auto-prompt client. In
- * practice the source is always a {@link Config} instance, but this interface
- * keeps the dependency narrow so the auto-prompt generator does not need the
- * full Config type.
- */
-export interface DetachedAutoPromptClientSource {
-  createDetachedAgentClient?(runtimeId?: string): Promise<AgentClientContract>;
-}
-
-/**
- * Creates a detached agent client for subagent auto-prompt generation. The
- * client has a fresh runtime state (isolated from the session's primary
- * client) and its tool set cleared. Runtime assembly is handled inside
- * {@link Config.createDetachedAgentClient} (core), not in CLI code (#2378).
- */
 export async function createDetachedAutoPromptClient(
   source: DetachedAutoPromptClientSource,
+  config: ContentGeneratorConfig | undefined,
 ): Promise<AgentClientContract> {
-  if (typeof source.createDetachedAgentClient !== 'function') {
-    throw new Error(
-      'createDetachedAgentClient is not available on this runtime source.',
-    );
+  if (!config)
+    throw new Error('Content generator configuration is unavailable');
+  const client = await source.sessionClient.createDetachedAgentClient();
+  try {
+    await client.initialize(config);
+    return client;
+  } catch (error) {
+    await client.dispose();
+    throw error;
   }
-  return source.createDetachedAgentClient();
 }

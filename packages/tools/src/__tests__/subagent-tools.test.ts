@@ -13,7 +13,7 @@
  * Subagent Tools Behavioral Tests
  *
  * Verifies observable behavior of ListSubagents/CheckAsyncTasks
- * through ISubagentService and IAsyncTaskService adapters. Primary
+ * through ISubagentCatalog and IAsyncTaskService adapters. Primary
  * assertions are on ToolResult content, not method call counts.
  *
  * STATUS: RED — Tests compile but will fail at runtime until P11
@@ -23,35 +23,20 @@
 import { describe, it, expect } from 'bun:test';
 import { CheckAsyncTasksTool, ListSubagentsTool } from '../index.js';
 import type {
-  ISubagentService,
+  ISubagentCatalog,
   IAsyncTaskService,
-  SubagentResult,
   SubagentInfo,
   AsyncTaskInfo,
 } from '../interfaces/index.js';
 import { executeToolForBehavioralAssertion } from './red-test-helpers.js';
 
 /**
- * Fake ISubagentService with controllable subagent results.
+ * Fake ISubagentCatalog with controllable metadata.
  */
 function createFakeSubagentService(
   agents: SubagentInfo[] = [],
-): ISubagentService {
+): ISubagentCatalog {
   return {
-    executeSubagent: async (request) => {
-      const agent = agents.find((a) => a.name === request.name);
-      if (agent) {
-        return {
-          output: `Subagent ${request.name} executed: ${request.prompt}`,
-          success: true,
-        } satisfies SubagentResult;
-      }
-      return {
-        output: '',
-        success: false,
-        error: `Unknown subagent: ${request.name}`,
-      } satisfies SubagentResult;
-    },
     listSubagents: async () => agents,
     getSubagentConfig: async (name: string) => {
       const agent = agents.find((a) => a.name === name);

@@ -19,6 +19,7 @@ import reactRenderSafety from './eslint-rules/react-render-safety.js';
 import noInlineDeps from './eslint-rules/no-inline-deps.js';
 import inkTextColorRequired from './eslint-rules/ink-text-color-required.js';
 import noAliasProbes from './eslint-rules/no-alias-probes.js';
+import packageImportBoundary from './eslint-rules/package-import-boundary.ts';
 import path from 'node:path';
 import url from 'node:url';
 
@@ -463,6 +464,16 @@ export default tseslint.config(
         },
       ],
       'react/jsx-no-constructed-context-values': 'error',
+    },
+  },
+
+  // Core must not reach into sibling workspace packages through relative paths.
+  // import/no-relative-packages only fires when the resolver can find the
+  // target, which is not the case for .js specifiers that map to .ts sources.
+  {
+    files: ['packages/core/src/**/*.{ts,tsx}'],
+    rules: {
+      'custom/package-import-boundary': 'error',
     },
   },
 
@@ -1512,6 +1523,7 @@ export default tseslint.config(
           'no-inline-deps': noInlineDeps,
           'ink-text-color-required': inkTextColorRequired,
           'no-alias-probes': noAliasProbes,
+          'package-import-boundary': packageImportBoundary,
         },
       },
     },

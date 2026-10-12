@@ -20,7 +20,7 @@ for (const size of [512, 8192]) {
           createMockCommandContext({
             services: {
               config: {
-                getAgentClient: () => fixture.config.getAgentClient(),
+                getAgentClient: () => fixture.fixture.client,
                 getModel: () => fixture.config.getModel(),
                 getSessionRecordingService: () =>
                   fixture.config.getSessionRecordingService(),
@@ -45,7 +45,7 @@ for (const size of [512, 8192]) {
 describe('default clear rollback media lifetime', () => {
   it('keeps removed media reserved until rollback has consumed its disk snapshot', async () => {
     await withCleanupHistory(6, true, async (fixture) => {
-      const client = fixture.config.getAgentClient();
+      const client = fixture.fixture.client;
       const store = fixture.config.getLocalMediaStore();
       const control = new SessionControl({
         config: fixture.config,

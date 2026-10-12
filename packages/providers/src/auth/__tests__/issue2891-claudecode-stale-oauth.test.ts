@@ -37,10 +37,7 @@ import type {
 } from '@vybestack/llxprt-code-auth';
 
 import { OAuthManager } from '../oauth-manager.js';
-import {
-  registerStandardOAuthProviders,
-  resetRegisteredProviders,
-} from '../../composition/oauth-provider-registration.js';
+import { registerStandardOAuthProviders } from '../../composition/oauth-provider-registration.js';
 import { AnthropicProvider } from '../../anthropic/AnthropicProvider.js';
 
 // ─── File-backed ISecureStore (temp directory, never touches keychain) ──────
@@ -257,7 +254,6 @@ describe('Issue #2891 — in-session stale OAuth state', () => {
 
   beforeEach(() => {
     tempDir = mkdtempSync(join(tmpdir(), 'issue2891-'));
-    resetRegisteredProviders();
   });
 
   afterEach(() => {

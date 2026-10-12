@@ -1,3 +1,11 @@
+import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
+import { afterEach as closeInvocationRoots } from 'bun:test';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+const retainedInvocationOwners: SessionSettingsOwner[] = [];
+closeInvocationRoots(async () => {
+  for (const owner of retainedInvocationOwners.splice(0)) await owner.dispose();
+});
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -35,8 +43,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
-  createToolRegistryViewFromRegistry,
+  createTelemetryAdapter,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
@@ -150,9 +157,7 @@ export function createFullLoopHarness(
   const settingsService = new SettingsService();
   const config = new Config(createConfigParams(settingsService));
 
-  settingsService.set('providers.stub.base-url', 'https://stub.example.com');
-  settingsService.set('providers.stub.auth-key', 'stub-api-key');
-  settingsService.set('providers.stub.model', 'stub-model');
+  seedStubProviderSettings(settingsService);
 
   const providerRuntime = createProviderRuntimeContext({
     settingsService,
@@ -163,15 +168,9 @@ export function createFullLoopHarness(
 
   const manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  config.setProviderManager(manager);
+  configureProviderRuntimeFactories(config, manager);
 
-  const provider: IProvider = {
-    name: 'stub',
-    isDefault: true,
-    getModels: vi.fn(async () => []),
-    getDefaultModel: () => 'stub-model',
-    generateChatCompletion: generateChatCompletionMock,
-  };
+  const provider = scriptedStreamProvider(generateChatCompletionMock);
 
   manager.registerProvider(provider);
 
@@ -183,7 +182,16 @@ export function createFullLoopHarness(
   });
   const historyService = options?.historyService ?? new HistoryService();
   const effectiveConfig = options?.hookConfig ?? config;
+  const invocationOwner = createSessionSettingsFixture(config).settingsOwner;
+  retainedInvocationOwners.push(invocationOwner);
   const view = createAgentRuntimeContext({
+    prepareProviderInvocation: (name, parameters, signal) =>
+      invocationOwner.prepareProviderInvocation(
+        runtimeState.runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
     state: runtimeState,
     history: historyService,
     settings: {
@@ -196,9 +204,9 @@ export function createFullLoopHarness(
       },
       'reasoning.includeInContext': true,
     },
-    provider: createProviderAdapterFromManager(config.getProviderManager()),
-    telemetry: createTelemetryAdapterFromConfig(config),
-    tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+    provider: createProviderAdapterFromManager(manager),
+    telemetry: createTelemetryAdapter(config, invocationOwner.telemetry),
+    tools: { listToolNames: () => [], getToolMetadata: () => undefined },
     providerRuntime: { ...providerRuntime, config: effectiveConfig },
   });
 
@@ -314,4 +322,22 @@ export function extractToolCallRequests(
 
 export function extractEventTypes(events: ServerAgentStreamEvent[]): string[] {
   return events.map((e) => e.type);
+}
+
+function seedStubProviderSettings(settingsService: SettingsService): void {
+  settingsService.set('providers.stub.base-url', 'https://stub.example.com');
+  settingsService.set('providers.stub.auth-key', 'stub-api-key');
+  settingsService.set('providers.stub.model', 'stub-model');
+}
+
+function scriptedStreamProvider(
+  generateChatCompletionMock: FullLoopHarness['generateChatCompletionMock'],
+): IProvider {
+  return {
+    name: 'stub',
+    isDefault: true,
+    getModels: vi.fn(async () => []),
+    getDefaultModel: () => 'stub-model',
+    generateChatCompletion: generateChatCompletionMock,
+  };
 }

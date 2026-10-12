@@ -1,3 +1,4 @@
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -49,6 +50,10 @@ describe('MiddleOutStrategy empty summary handling', () => {
     const ctx = buildContext({
       history,
       resolveProvider: () => ({
+        invocation: captureProviderInvocation(
+          testProviderRuntime,
+          emptyProvider.name,
+        ),
         provider: emptyProvider,
         runtime: testProviderRuntime,
       }),
@@ -68,6 +73,10 @@ describe('MiddleOutStrategy empty summary handling', () => {
     const ctx = buildContext({
       history,
       resolveProvider: () => ({
+        invocation: captureProviderInvocation(
+          testProviderRuntime,
+          whitespaceProvider.name,
+        ),
         provider: whitespaceProvider,
         runtime: testProviderRuntime,
       }),
@@ -119,6 +128,10 @@ describe('MiddleOutStrategy enriched EmptySummaryError diagnostics (issue #2333)
     const ctx = buildContext({
       history,
       resolveProvider: () => ({
+        invocation: captureProviderInvocation(
+          testProviderRuntime,
+          thinkingOnlyProvider.name,
+        ),
         provider: thinkingOnlyProvider,
         runtime: testProviderRuntime,
       }),

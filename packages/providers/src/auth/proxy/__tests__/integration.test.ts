@@ -1,3 +1,4 @@
+import { createProviderConfigFixture } from '../../../runtime/__tests__/provider-config-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -22,6 +23,7 @@ import {
   resetFactorySingletons,
 } from '../credential-store-factory.js';
 import { CredentialProxyServer } from '../credential-proxy-server.js';
+import { createIsolatedRuntimeContext } from '../../../runtime/index.js';
 import {
   createAndStartProxy,
   stopProxy,
@@ -41,6 +43,15 @@ function hasRefreshToken(value: object | null): boolean {
 
 function isNullOrObject(value: unknown): boolean {
   return value === null || typeof value === 'object';
+}
+
+function isSocketConnected(store: ProxyTokenStore): boolean {
+  const client: object = store.getClient();
+  const read: unknown = Reflect.get(client, 'isConnected');
+  if (typeof read !== 'function') {
+    throw new Error('Expected a proxy socket connection');
+  }
+  return Reflect.apply(read, client, []) === true;
 }
 
 /** @plan:PLAN-20250214-CREDPROXY.P31 */
@@ -217,6 +228,41 @@ describe('proxy integration (phase 31)', () => {
     delete process.env.LLXPRT_CREDENTIAL_SOCKET;
     const store = createTokenStore();
     expect(store).not.toBeInstanceOf(ProxyTokenStore);
+  });
+
+  it('closes an owner-created proxy token store when its unused runtime is cleaned up', async () => {
+    const started = await startServer();
+    process.env.LLXPRT_CREDENTIAL_SOCKET = started.socketPath;
+    const { config: config, settingsService: configSettingsService } =
+      createProviderConfigFixture({
+        sessionId: 'proxy-owned-runtime',
+        targetDir: tmpDir,
+        cwd: tmpDir,
+        model: 'test-model',
+        debugMode: false,
+      });
+    const owner = createIsolatedRuntimeContext(
+      {
+        runtimeId: 'proxy-owned-runtime',
+        config,
+      },
+      configSettingsService,
+    );
+    const store = owner.oauthManager.getTokenStore();
+    if (!(store instanceof ProxyTokenStore)) {
+      throw new Error('Expected proxy token store');
+    }
+    try {
+      await store.listProviders();
+      expect(isSocketConnected(store)).toBe(true);
+      await owner.cleanup();
+      expect(isSocketConnected(store)).toBe(false);
+    } finally {
+      await owner.cleanup();
+      await config.dispose();
+      store.getClient().close();
+      await started.server.stop();
+    }
   });
 
   it('returns the same token store instance across repeated factory calls', () => {

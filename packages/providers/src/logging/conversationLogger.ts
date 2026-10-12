@@ -10,9 +10,8 @@
  * line budget.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { logConversationRequest } from '@vybestack/llxprt-code-core/telemetry/loggers.js';
 import { ConversationRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import {
   getConversationFileWriter,
@@ -44,7 +43,7 @@ function requestTools(
 }
 
 export async function logConversationRequestEntry(
-  config: Config,
+  config: ProviderRequestDiagnostics,
   content: IContent[],
   tools: ProviderToolset | undefined,
   promptId: string | undefined,
@@ -63,7 +62,7 @@ export async function logConversationRequestEntry(
 }
 
 export async function writeRedactedRequest(
-  config: Config,
+  config: ProviderRequestDiagnostics,
   content: AsyncIterable<IContent>,
   tools: ProviderToolset | undefined,
   promptId: string,
@@ -83,7 +82,7 @@ export async function writeRedactedRequest(
     }
   }
   return getConversationFileWriter(
-    config.getConversationLogPath(),
+    config.conversationLogPath,
   ).writeRequestStream(
     ctx.providerName,
     redactedRows(),
@@ -99,7 +98,7 @@ export async function writeRedactedRequest(
 }
 
 export async function logStreamingConversationRequestEntry(
-  config: Config,
+  config: ProviderRequestDiagnostics,
   content: AsyncIterable<IContent>,
   tools: ProviderToolset | undefined,
   promptId: string,
@@ -116,8 +115,7 @@ export async function logStreamingConversationRequestEntry(
     signal,
   );
   const redactedTools = requestTools(tools, ctx);
-  await logConversationRequest(
-    config,
+  await config.recordConversationRequest(
     new ConversationRequestEvent(
       ctx.providerName,
       ctx.conversationId,
@@ -127,15 +125,14 @@ export async function logStreamingConversationRequestEntry(
       redactedTools,
       'default',
     ),
-    signal,
-    acknowledged,
+    { signal, acknowledged },
   );
   return artifact;
 }
 
 /** Log a tool call event to disk with optional redaction. */
 export async function logToolCallEntry(
-  config: Config | undefined,
+  config: ProviderRequestDiagnostics | undefined,
   toolName: string,
   params: unknown,
   result: unknown,
@@ -166,7 +163,7 @@ export async function logToolCallEntry(
       }).function.parameters
     : (params as object);
 
-  const fileWriter = getConversationFileWriter(config.getConversationLogPath());
+  const fileWriter = getConversationFileWriter(config.conversationLogPath);
   await fileWriter.writeToolCall(ctx.providerName, toolName, {
     conversationId: ctx.conversationId,
     turnNumber: ctx.turnNumber,

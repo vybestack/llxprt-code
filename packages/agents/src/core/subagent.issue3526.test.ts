@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import { BeforeToolSelectionHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
   afterAll,
@@ -179,35 +181,27 @@ function mockCancelledPause(callId: string): void {
   });
 }
 
-function createHookConfig(config: Config, mode: HookMode): Config {
-  const hookConfig = Object.create(config) as Config;
-  Object.defineProperties(hookConfig, {
-    getEnableHooks: { value: () => mode.enabled },
-    getHookSystem: {
-      value: () => {
-        if (!mode.enabled) return undefined;
-        return {
-          initialize: async () => undefined,
-          isInitialized: () => true,
-          getRegistry: () => ({ getHooksForEvent: () => [] }),
-          fireBeforeToolSelectionEvent: async () => ({
-            applyToolChoiceModifications: () =>
-              mode.allowedFunctionNames === undefined
-                ? { toolChoice: { mode: 'auto' } }
-                : {
-                    toolChoice: {
-                      mode: 'auto',
-                      allowedToolNames: [...mode.allowedFunctionNames],
-                    },
-                  },
-          }),
-          fireBeforeModelEvent: async () => undefined,
-          fireAfterModelEvent: async () => undefined,
-        };
-      },
-    },
-  });
-  return hookConfig;
+function createHookExecution(
+  config: Config,
+  mode: HookMode,
+): HookExecutionOwner {
+  return {
+    sessionId: () => config.getSessionId(),
+    transcriptPath: () => undefined,
+    beforeToolSelection: async () =>
+      mode.enabled
+        ? new BeforeToolSelectionHookOutput({
+            hookSpecificOutput: {
+              toolChoice: {
+                mode: 'auto',
+                ...(mode.allowedFunctionNames === undefined
+                  ? {}
+                  : { allowedToolNames: [...mode.allowedFunctionNames] }),
+              },
+            },
+          })
+        : undefined,
+  };
 }
 
 /** Providers consume the request snapshot during the call; later assertions replay the rows. */
@@ -266,7 +260,7 @@ async function createHarness(params: {
   readonly toolConfig?: { readonly tools: readonly string[] };
   readonly outputConfig?: OutputConfig | null;
 }): Promise<RuntimeHarness> {
-  const { config, toolRegistry } = await createMockConfig();
+  const { config, toolRegistry, mcpRuntime } = await createMockConfig();
   const requests: GenerateChatOptions[] = [];
   const provider = createScriptedProvider(params.responses, requests);
   const providerAdapter: AgentRuntimeProviderAdapter = {
@@ -288,7 +282,7 @@ async function createHarness(params: {
     toolsView,
     history: new HistoryService(),
   });
-  const hookConfig = createHookConfig(
+  const hookOwner = createHookExecution(
     config,
     params.hookMode ?? { enabled: false },
   );
@@ -296,11 +290,14 @@ async function createHarness(params: {
     ...baseBundle.runtimeContext,
     providerRuntime: {
       ...baseBundle.runtimeContext.providerRuntime,
-      config: hookConfig,
+      config,
     },
   };
   const runtimeBundle = { ...baseBundle, runtimeContext };
-  const { overrides } = createRuntimeOverrides({ runtimeBundle, toolRegistry });
+  const { overrides } = createRuntimeOverrides(
+    mcpRuntime.workspaceFilesystem.paths,
+    { runtimeBundle, toolRegistry },
+  );
   const toolConfig = params.toolConfig
     ? { tools: [...params.toolConfig.tools] }
     : undefined;
@@ -314,7 +311,7 @@ async function createHarness(params: {
     params.outputConfig === null
       ? undefined
       : (params.outputConfig ?? OUTPUT_CONFIG),
-    overrides,
+    { ...overrides, hookOwner },
   );
   return { requests, scope };
 }

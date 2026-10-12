@@ -3,15 +3,18 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import * as path from 'node:path';
+import type * as acp from '@agentclientprotocol/sdk';
 import { RecordingConnection } from './__tests__/zed-test-helpers.js';
 import {
+  actual,
   emptyChatsLister,
   mockFromConfig,
   buildStubAgent,
-  modelMessage,
   makeZedAgent,
+  makeUninitializedZedAgent,
+  buildInitializeRequest,
 } from './zedIntegration.loadSession.test-helpers.js';
 
 describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
@@ -27,6 +30,10 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     mockFromConfig.mockReset();
   });
 
+  afterEach(() => {
+    mockFromConfig.mockImplementation(actual.fromConfig);
+  });
+
   it('continues creating a session when optional recording setup fails', async () => {
     const stub = buildStubAgent({
       recordingError: new Error('recording unavailable'),
@@ -38,7 +45,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     );
 
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 
@@ -54,7 +61,7 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     const zedAgent = await makeZedAgent(connection, emptyChatsLister);
 
     await expect(
-      zedAgent.newSession({ cwd: '/project', mcpServers: [] }),
+      zedAgent.newSession({ cwd: process.cwd(), mcpServers: [] }),
     ).rejects.toThrow('transport unavailable');
     expect(stub.dispose).toHaveBeenCalledTimes(1);
   });
@@ -67,13 +74,13 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     const connection = new RecordingConnection();
     const zedAgent = await makeZedAgent(connection, async () => []);
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 
     const response = await zedAgent.resumeSession({
       sessionId: created.sessionId,
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 
@@ -89,10 +96,108 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
     await expect(
       zedAgent.resumeSession({
         sessionId: 'missing-session',
-        cwd: '/project',
+        cwd: process.cwd(),
         mcpServers: [],
       }),
     ).rejects.toMatchObject({ code: -32002 });
     expect(connection.onlySessionUpdates()).toStrictEqual([]);
+  });
+
+  it('closeSession disposes a live session and is idempotent', async () => {
+    const stub = buildStubAgent({});
+    mockFromConfig.mockResolvedValue(stub.agent);
+    const zedAgent = await makeZedAgent(
+      new RecordingConnection(),
+      async () => [],
+    );
+    const created = await zedAgent.newSession({
+      cwd: process.cwd(),
+      mcpServers: [],
+    });
+
+    await expect(
+      zedAgent.closeSession({ sessionId: created.sessionId }),
+    ).resolves.toStrictEqual({});
+    await expect(
+      zedAgent.closeSession({ sessionId: created.sessionId }),
+    ).resolves.toStrictEqual({});
+    expect(stub.dispose).toHaveBeenCalledTimes(1);
+    await expect(
+      zedAgent.prompt({ sessionId: created.sessionId, prompt: [] }),
+    ).rejects.toThrow(/Session not found/);
+  });
+
+  it('resumeSession rejects a live session when cwd does not match', async () => {
+    const stub = buildStubAgent({});
+    mockFromConfig.mockResolvedValue(stub.agent);
+    const zedAgent = await makeZedAgent(
+      new RecordingConnection(),
+      async () => [],
+    );
+    const created = await zedAgent.newSession({
+      cwd: process.cwd(),
+      mcpServers: [],
+    });
+
+    await expect(
+      zedAgent.resumeSession({
+        sessionId: created.sessionId,
+        cwd: path.join(process.cwd(), 'src'),
+        mcpServers: [],
+      }),
+    ).rejects.toMatchObject({ code: -32002 });
+  });
+
+  it('deleteSession succeeds for a live session before recording materializes', async () => {
+    const stub = buildStubAgent({});
+    mockFromConfig.mockResolvedValue(stub.agent);
+    const zedAgent = await makeZedAgent(
+      new RecordingConnection(),
+      async () => [],
+    );
+    const created = await zedAgent.newSession({
+      cwd: process.cwd(),
+      mcpServers: [],
+    });
+
+    await expect(
+      zedAgent.deleteSession({ sessionId: created.sessionId }),
+    ).resolves.toStrictEqual({});
+    expect(stub.dispose).toHaveBeenCalledTimes(1);
+    await expect(
+      zedAgent.prompt({ sessionId: created.sessionId, prompt: [] }),
+    ).rejects.toThrow(/Session not found/);
+  });
+
+  it('closeSession succeeds and removes the session even when agent disposal fails', async () => {
+    const stub = buildStubAgent({});
+    stub.dispose.mockRejectedValueOnce(new Error('dispose failed'));
+    mockFromConfig.mockResolvedValue(stub.agent);
+    const zedAgent = await makeZedAgent(
+      new RecordingConnection(),
+      async () => [],
+    );
+    const created = await zedAgent.newSession({
+      cwd: process.cwd(),
+      mcpServers: [],
+    });
+
+    await expect(
+      zedAgent.closeSession({ sessionId: created.sessionId }),
+    ).resolves.toStrictEqual({});
+    await expect(
+      zedAgent.prompt({ sessionId: created.sessionId, prompt: [] }),
+    ).rejects.toThrow(/Session not found/);
+  });
+
+  it('initialize() advertises loadSession: true', async () => {
+    const connection = new RecordingConnection();
+    const zedAgent = await makeUninitializedZedAgent(connection);
+    const response = await zedAgent.initialize(buildInitializeRequest());
+    expect(response.agentCapabilities?.loadSession).toBe(true);
+    expect(response.agentCapabilities?.sessionCapabilities).toStrictEqual({
+      list: {},
+      resume: {},
+    });
   });
 });

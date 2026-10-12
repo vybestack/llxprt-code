@@ -1,3 +1,8 @@
+import { RootTelemetry } from './root-telemetry.js';
+import { FileLogExporter, FileSpanExporter } from './file-exporters.js';
+import { mkdirSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -5,18 +10,11 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import {
-  diag,
-  DiagLogLevel,
-  metrics,
-  type DiagLogger,
-} from '@opentelemetry/api';
+import { diag, DiagLogLevel, type DiagLogger } from '@opentelemetry/api';
 import {
   AggregationTemporality,
   DataPointType,
   InMemoryMetricExporter,
-  MeterProvider,
-  PeriodicExportingMetricReader,
   type HistogramMetricData,
   type MetricData,
   type ResourceMetrics,
@@ -25,7 +23,6 @@ import {
   initializeMetrics,
   recordApiResponseMetrics,
   recordToolCallMetrics,
-  resetMetricsState,
 } from './metrics.js';
 import {
   METRIC_API_REQUEST_LATENCY,
@@ -90,12 +87,11 @@ function summarizeHistogram(
 }
 
 describe('latency histogram value types (real OpenTelemetry SDK)', () => {
-  let meterProvider: MeterProvider;
-  let reader: PeriodicExportingMetricReader;
+  let selected: RootTelemetry;
+  let exporter: InMemoryMetricExporter;
   let diagMessages: string[];
 
-  beforeEach((): void => {
-    resetMetricsState();
+  beforeEach(async (): Promise<void> => {
     diagMessages = [];
     const capture = (message: string): void => {
       diagMessages.push(message);
@@ -109,32 +105,48 @@ describe('latency histogram value types (real OpenTelemetry SDK)', () => {
     };
     diag.setLogger(capturingLogger, DiagLogLevel.WARN);
 
-    reader = new PeriodicExportingMetricReader({
-      exporter: new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE),
-    });
-    meterProvider = new MeterProvider({ readers: [reader] });
-    metrics.setGlobalMeterProvider(meterProvider);
+    const E = join(tmpdir(), 'llxprt-telemetry-listener');
+    mkdirSync(E, { recursive: true });
+    const file = join(
+      mkdtempSync(join(E, 'fractional-metrics-')),
+      'metrics.jsonl',
+    );
+    exporter = new InMemoryMetricExporter(AggregationTemporality.CUMULATIVE);
+    selected = await RootTelemetry.create(
+      {
+        enabled: true,
+        sessionId: testConfig.getSessionId(),
+        outfile: file,
+        maxBytes: 1048576,
+        maxFiles: 2,
+      },
+      () => ({
+        meter: exporter,
+        logger: new FileLogExporter(file),
+        tracer: new FileSpanExporter(file),
+      }),
+    );
   });
 
   afterEach(async (): Promise<void> => {
-    resetMetricsState();
     try {
-      await meterProvider.shutdown();
+      await selected.close();
     } finally {
-      metrics.disable();
       diag.disable();
     }
   });
 
   it('stores the exact fractional API request latency without an INT truncation warning', async (): Promise<void> => {
-    initializeMetrics(testConfig);
-    recordApiResponseMetrics(testConfig, 'test-model', 823.5471);
+    await initializeMetrics(selected);
+    recordApiResponseMetrics(selected, 'test-model', 823.5471);
 
-    const collection = await reader.collect();
-    const summary = summarizeHistogram(
-      collection.resourceMetrics,
-      METRIC_API_REQUEST_LATENCY,
-    );
+    await selected.flush();
+    const collection = exporter
+      .getMetrics()
+      .find((_entry, index, entries) => index === entries.length - 1);
+    if (collection === undefined)
+      throw new Error('Private meter did not export');
+    const summary = summarizeHistogram(collection, METRIC_API_REQUEST_LATENCY);
 
     expect(summary?.count).toBe(1);
     expect(summary?.sum).toBe(823.5471);
@@ -146,14 +158,16 @@ describe('latency histogram value types (real OpenTelemetry SDK)', () => {
   });
 
   it('stores the exact fractional tool call latency without an INT truncation warning', async (): Promise<void> => {
-    initializeMetrics(testConfig);
-    recordToolCallMetrics(testConfig, 'test-tool', 17.25, true);
+    await initializeMetrics(selected);
+    recordToolCallMetrics(selected, 'test-tool', 17.25, true);
 
-    const collection = await reader.collect();
-    const summary = summarizeHistogram(
-      collection.resourceMetrics,
-      METRIC_TOOL_CALL_LATENCY,
-    );
+    await selected.flush();
+    const collection = exporter
+      .getMetrics()
+      .find((_entry, index, entries) => index === entries.length - 1);
+    if (collection === undefined)
+      throw new Error('Private meter did not export');
+    const summary = summarizeHistogram(collection, METRIC_TOOL_CALL_LATENCY);
 
     expect(summary?.count).toBe(1);
     expect(summary?.sum).toBe(17.25);

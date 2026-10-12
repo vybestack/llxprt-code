@@ -4,9 +4,12 @@ import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/Ag
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { RuntimeProviderToolset } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import { sourceBeforeModelHook } from './source-before-model-hook.js';
 import type { CompressionHandler } from '../compression/CompressionHandler.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { SourcePendingRows } from '../compression/source-candidate.js';
 import {
   enforceAndStreamSourcePromptEnvelopeRetries,
@@ -52,6 +55,9 @@ interface StreamDiskSourceInput {
     attemptIndex: number,
   ) => AsyncIterableIterator<IContent>;
   readonly onReleased?: () => void;
+  readonly recordingExecution?: AgentChatRecordingExecution;
+  readonly hookOwner?: HookExecutionOwner;
+  readonly modelParameters?: AdmittedModelParameters;
 }
 
 /** Raw pending input for recomposition, which is not the normalized output membership. */
@@ -83,6 +89,7 @@ export async function streamDiskSource(
 ): Promise<AsyncIterableIterator<IContent>> {
   assertSourceRuntimeConfig(input.runtime);
   input.signal?.throwIfAborted();
+  const hookOwner = input.hookOwner ?? input.recordingExecution?.hookOwner;
   const preparedPending = preparePendingContents(
     input.userContent,
     input.history,
@@ -93,7 +100,7 @@ export async function streamDiskSource(
     input.historyOverride,
   );
   const source = await sourceBeforeModelHook({
-    config: input.runtime.providerRuntime.config,
+    owner: hookOwner,
     snapshot,
     pending: input.userContent,
     model: input.runtime.state.model,
@@ -128,6 +135,7 @@ export async function streamDiskSource(
     source,
     signal: input.signal,
     fallbackEstimate: sourceFallbackEstimate(input),
+    tokenizerFactory: input.runtime.promptEstimator,
     buildOptions: (rows) => ({
       ...input.buildOptions(
         { [Symbol.asyncIterator]: () => rows.openReader(input.signal) },
@@ -145,6 +153,12 @@ export async function streamDiskSource(
         reopen,
         source.pendingSelection !== undefined,
         pending,
+        {
+          transcriptPathProvider: input.recordingExecution?.transcriptPath,
+          historyOrigin: input.recordingExecution?.historyOrigin,
+          hookOwner,
+          modelParameters: input.modelParameters,
+        },
       ),
     onPrepared: input.onPrepared,
     send: input.send,

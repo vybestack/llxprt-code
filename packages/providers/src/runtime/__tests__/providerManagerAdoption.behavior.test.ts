@@ -3,6 +3,7 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 
 /**
  * @plan:PLAN-20260621-COREAPIREMED.P04
@@ -29,7 +30,7 @@
  * fail for behavioral (identity-mismatch) reasons.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { afterEach, describe, expect, it, vi } from 'bun:test';
 import * as fc from 'fast-check';
 import { MessageBus } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -37,12 +38,19 @@ import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ProviderManager } from '../../ProviderManager.js';
 import type { IProvider } from '../../IProvider.js';
-import type { IsolatedRuntimeContextHandle } from '../runtimeSettings.js';
 import {
   createIsolatedRuntimeContext,
-  activateIsolatedRuntimeContext,
-  resetCliProviderInfrastructure,
-} from '../runtimeSettings.js';
+  type IsolatedRuntimeContextHandle,
+  type RuntimeActivationBindings,
+} from '../runtimeContextFactory.js';
+
+const activationBindings: RuntimeActivationBindings = {
+  resetInfrastructure: () => {},
+  setRuntimeContext: () => {},
+  registerInfrastructure: () => {},
+  linkProviderManager: (config, manager) =>
+    configureProviderRuntimeFactories(config, manager),
+};
 
 /**
  * A real, minimal IProvider registered onto the fixture manager so that T3 can
@@ -140,12 +148,7 @@ function trackProviderManagerConstructions(): {
 }
 
 describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-20260621-COREAPIREMED.P04 @requirement:REQ-005.2', () => {
-  beforeEach(() => {
-    resetCliProviderInfrastructure();
-  });
-
-  afterEach(async () => {
-    resetCliProviderInfrastructure();
+  afterEach(() => {
     vi.restoreAllMocks();
   });
 
@@ -161,12 +164,23 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
    */
   it('IDENTITY — providerManager: pm yields handle.providerManager === pm', async () => {
     const pm = buildRealManager();
-    const handle: IsolatedRuntimeContextHandle = createIsolatedRuntimeContext({
-      runtimeId: 'p04-pm-identity',
-      config: buildIsolatedTestConfig('p04-pm-identity', 'p04-identity-model'),
-      providerManager: pm,
-      prepare: async () => {},
-    });
+    const handle: IsolatedRuntimeContextHandle = (() => {
+      const capturedConfig5 = buildIsolatedTestConfig(
+        'p04-pm-identity',
+        'p04-identity-model',
+      );
+      const capturedConfig5Settings = new SettingsService();
+      return createIsolatedRuntimeContext(
+        {
+          activationBindings,
+          runtimeId: 'p04-pm-identity',
+          config: capturedConfig5,
+          providerManager: pm,
+          prepare: async () => {},
+        },
+        capturedConfig5Settings,
+      );
+    })();
 
     try {
       expect(handle.providerManager).toBe(pm);
@@ -186,11 +200,22 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
    */
   it('DEFAULT — omitting providerManager yields a fresh manager !== a caller-held pm', async () => {
     const callerHeld = buildRealManager();
-    const handle: IsolatedRuntimeContextHandle = createIsolatedRuntimeContext({
-      runtimeId: 'p04-pm-default',
-      config: buildIsolatedTestConfig('p04-pm-default', 'p04-default-model'),
-      prepare: async () => {},
-    });
+    const handle: IsolatedRuntimeContextHandle = (() => {
+      const capturedConfig6 = buildIsolatedTestConfig(
+        'p04-pm-default',
+        'p04-default-model',
+      );
+      const capturedConfig6Settings = new SettingsService();
+      return createIsolatedRuntimeContext(
+        {
+          activationBindings,
+          runtimeId: 'p04-pm-default',
+          config: capturedConfig6,
+          prepare: async () => {},
+        },
+        capturedConfig6Settings,
+      );
+    })();
 
     try {
       expect(handle.providerManager).toBeDefined();
@@ -212,18 +237,26 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
    */
   it('ADOPTED ACTIVATION — after activate, the handle resolves the adopted manager and its provider state', async () => {
     const { manager: pm, provider } = buildSeededManager();
-    const handle: IsolatedRuntimeContextHandle = createIsolatedRuntimeContext({
-      runtimeId: 'p04-pm-adopted-activation',
-      config: buildIsolatedTestConfig(
+    const handle: IsolatedRuntimeContextHandle = (() => {
+      const capturedConfig7 = buildIsolatedTestConfig(
         'p04-pm-adopted-activation',
         'p04-adopted-model',
-      ),
-      providerManager: pm,
-      prepare: async () => {},
-    });
+      );
+      const capturedConfig7Settings = new SettingsService();
+      return createIsolatedRuntimeContext(
+        {
+          activationBindings,
+          runtimeId: 'p04-pm-adopted-activation',
+          config: capturedConfig7,
+          providerManager: pm,
+          prepare: async () => {},
+        },
+        capturedConfig7Settings,
+      );
+    })();
 
     try {
-      await activateIsolatedRuntimeContext(handle, {
+      await handle.activate({
         runtimeId: handle.runtimeId,
         metadata: { source: 'p04-adopted-activation' },
       });
@@ -256,15 +289,23 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
     const pm = buildRealManager();
     const tracker = trackProviderManagerConstructions();
 
-    const handle: IsolatedRuntimeContextHandle = createIsolatedRuntimeContext({
-      runtimeId: 'p04-pm-no-second',
-      config: buildIsolatedTestConfig(
+    const handle: IsolatedRuntimeContextHandle = (() => {
+      const capturedConfig8 = buildIsolatedTestConfig(
         'p04-pm-no-second',
         'p04-no-second-model',
-      ),
-      providerManager: pm,
-      prepare: async () => {},
-    });
+      );
+      const capturedConfig8Settings = new SettingsService();
+      return createIsolatedRuntimeContext(
+        {
+          activationBindings,
+          runtimeId: 'p04-pm-no-second',
+          config: capturedConfig8,
+          providerManager: pm,
+          prepare: async () => {},
+        },
+        capturedConfig8Settings,
+      );
+    })();
 
     try {
       expect(tracker.count()).toBe(0);
@@ -288,16 +329,24 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
   it('INDEPENDENT SEAMS — messageBus and providerManager adoption compose', async () => {
     const providedBus = new MessageBus(undefined, false);
     const pm = buildRealManager();
-    const handle: IsolatedRuntimeContextHandle = createIsolatedRuntimeContext({
-      runtimeId: 'p04-pm-independent',
-      config: buildIsolatedTestConfig(
+    const handle: IsolatedRuntimeContextHandle = (() => {
+      const capturedConfig9 = buildIsolatedTestConfig(
         'p04-pm-independent',
         'p04-independent-model',
-      ),
-      messageBus: providedBus,
-      providerManager: pm,
-      prepare: async () => {},
-    });
+      );
+      const capturedConfig9Settings = new SettingsService();
+      return createIsolatedRuntimeContext(
+        {
+          activationBindings,
+          runtimeId: 'p04-pm-independent',
+          config: capturedConfig9,
+          messageBus: providedBus,
+          providerManager: pm,
+          prepare: async () => {},
+        },
+        capturedConfig9Settings,
+      );
+    })();
 
     try {
       expect(handle.providerManager).toBe(pm);
@@ -322,20 +371,31 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
   it('CLEANUP CONTRACT — onCleanup receives the adopted manager and cleanup disposes neither manager', async () => {
     const pm = buildRealManager();
     let captured: { providerManager: unknown } | undefined;
-    const handle: IsolatedRuntimeContextHandle = createIsolatedRuntimeContext({
-      runtimeId: 'p04-pm-cleanup',
-      config: buildIsolatedTestConfig('p04-pm-cleanup', 'p04-cleanup-model'),
-      providerManager: pm,
-      prepare: async () => {},
-      onCleanup: (ctx) => {
-        captured = { providerManager: ctx.providerManager };
-      },
-    });
+    const handle: IsolatedRuntimeContextHandle = (() => {
+      const capturedConfig10 = buildIsolatedTestConfig(
+        'p04-pm-cleanup',
+        'p04-cleanup-model',
+      );
+      const capturedConfig10Settings = new SettingsService();
+      return createIsolatedRuntimeContext(
+        {
+          activationBindings,
+          runtimeId: 'p04-pm-cleanup',
+          config: capturedConfig10,
+          providerManager: pm,
+          prepare: async () => {},
+          onCleanup: (ctx) => {
+            captured = { providerManager: ctx.providerManager };
+          },
+        },
+        capturedConfig10Settings,
+      );
+    })();
 
     const disposeBefore = (pm as unknown as { disposed?: boolean }).disposed;
 
     try {
-      await activateIsolatedRuntimeContext(handle, {
+      await handle.activate({
         runtimeId: handle.runtimeId,
         metadata: { source: 'p04-cleanup' },
       });
@@ -369,16 +429,23 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
           .filter((s) => !s.includes('\0')),
         async (runtimeId: string) => {
           const pm = buildRealManager();
-          const handle: IsolatedRuntimeContextHandle =
-            createIsolatedRuntimeContext({
-              runtimeId: `p04-prop-${runtimeId}`,
-              config: buildIsolatedTestConfig(
-                `p04-prop-${runtimeId}`,
-                'p04-prop-model',
-              ),
-              providerManager: pm,
-              prepare: async () => {},
-            });
+          const handle: IsolatedRuntimeContextHandle = (() => {
+            const capturedConfig11 = buildIsolatedTestConfig(
+              `p04-prop-${runtimeId}`,
+              'p04-prop-model',
+            );
+            const capturedConfig11Settings = new SettingsService();
+            return createIsolatedRuntimeContext(
+              {
+                activationBindings,
+                runtimeId: `p04-prop-${runtimeId}`,
+                config: capturedConfig11,
+                providerManager: pm,
+                prepare: async () => {},
+              },
+              capturedConfig11Settings,
+            );
+          })();
 
           try {
             expect(handle.providerManager).toBe(pm);
@@ -406,15 +473,22 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
           .filter((s) => !s.includes('\0')),
         async (runtimeId: string) => {
           const callerHeld = buildRealManager();
-          const handle: IsolatedRuntimeContextHandle =
-            createIsolatedRuntimeContext({
-              runtimeId: `p04-prop-omit-${runtimeId}`,
-              config: buildIsolatedTestConfig(
-                `p04-prop-omit-${runtimeId}`,
-                'p04-prop-omit-model',
-              ),
-              prepare: async () => {},
-            });
+          const handle: IsolatedRuntimeContextHandle = (() => {
+            const capturedConfig12 = buildIsolatedTestConfig(
+              `p04-prop-omit-${runtimeId}`,
+              'p04-prop-omit-model',
+            );
+            const capturedConfig12Settings = new SettingsService();
+            return createIsolatedRuntimeContext(
+              {
+                activationBindings,
+                runtimeId: `p04-prop-omit-${runtimeId}`,
+                config: capturedConfig12,
+                prepare: async () => {},
+              },
+              capturedConfig12Settings,
+            );
+          })();
 
           try {
             expect(handle.providerManager).not.toBe(callerHeld);
@@ -440,13 +514,23 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
         fc.stringMatching(/^[a-zA-Z0-9_-]{1,32}$/),
         async (model: string) => {
           const pm = buildRealManager();
-          const handle: IsolatedRuntimeContextHandle =
-            createIsolatedRuntimeContext({
-              runtimeId: 'p04-prop-model-var',
-              config: buildIsolatedTestConfig('p04-prop-model-var', model),
-              providerManager: pm,
-              prepare: async () => {},
-            });
+          const handle: IsolatedRuntimeContextHandle = (() => {
+            const capturedConfig13 = buildIsolatedTestConfig(
+              'p04-prop-model-var',
+              model,
+            );
+            const capturedConfig13Settings = new SettingsService();
+            return createIsolatedRuntimeContext(
+              {
+                activationBindings,
+                runtimeId: 'p04-prop-model-var',
+                config: capturedConfig13,
+                providerManager: pm,
+                prepare: async () => {},
+              },
+              capturedConfig13Settings,
+            );
+          })();
 
           try {
             expect(handle.providerManager).toBe(pm);
@@ -472,24 +556,38 @@ describe('runtime context providerManager adoption seam (P04 RED) @plan:PLAN-202
         fc.stringMatching(/^[a-zA-Z0-9_-]{1,16}$/),
         fc.stringMatching(/^[a-zA-Z0-9_-]{1,16}$/),
         async (idA: string, idB: string) => {
-          const handleA: IsolatedRuntimeContextHandle =
-            createIsolatedRuntimeContext({
-              runtimeId: `p04-prop-distinct-${idA}`,
-              config: buildIsolatedTestConfig(
-                `p04-prop-distinct-${idA}`,
-                'p04-prop-distinct',
-              ),
-              prepare: async () => {},
-            });
-          const handleB: IsolatedRuntimeContextHandle =
-            createIsolatedRuntimeContext({
-              runtimeId: `p04-prop-distinct-${idB}`,
-              config: buildIsolatedTestConfig(
-                `p04-prop-distinct-${idB}`,
-                'p04-prop-distinct',
-              ),
-              prepare: async () => {},
-            });
+          const handleA: IsolatedRuntimeContextHandle = (() => {
+            const capturedConfig14 = buildIsolatedTestConfig(
+              `p04-prop-distinct-${idA}`,
+              'p04-prop-distinct',
+            );
+            const capturedConfig14Settings = new SettingsService();
+            return createIsolatedRuntimeContext(
+              {
+                activationBindings,
+                runtimeId: `p04-prop-distinct-${idA}`,
+                config: capturedConfig14,
+                prepare: async () => {},
+              },
+              capturedConfig14Settings,
+            );
+          })();
+          const handleB: IsolatedRuntimeContextHandle = (() => {
+            const capturedConfig15 = buildIsolatedTestConfig(
+              `p04-prop-distinct-${idB}`,
+              'p04-prop-distinct',
+            );
+            const capturedConfig15Settings = new SettingsService();
+            return createIsolatedRuntimeContext(
+              {
+                activationBindings,
+                runtimeId: `p04-prop-distinct-${idB}`,
+                config: capturedConfig15,
+                prepare: async () => {},
+              },
+              capturedConfig15Settings,
+            );
+          })();
 
           try {
             expect(handleA.providerManager).not.toBe(handleB.providerManager);

@@ -1,8 +1,17 @@
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { instructionFixture } from './__tests__/instruction-fixture.js';
+
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'bun:test';
 import * as fs from 'node:fs';
@@ -21,7 +30,7 @@ import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/c
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -93,7 +102,7 @@ describe('System prompt provider — non-foreground subagent (issue #3176, D5)',
     const withSettings = await getCoreSystemPromptAsync({
       model: SUBAGENT_MODEL,
       coreMemory: '',
-      settings,
+      provider: AMBIENT_PROVIDER,
     });
     expect(withSettings).toContain(AMBIENT_SENTINEL);
     expect(withSettings).not.toContain(SUBAGENT_SENTINEL);
@@ -138,10 +147,9 @@ describe('System prompt provider — non-foreground subagent (issue #3176, D5)',
     const manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
     manager.registerProvider(provider);
-    config.setProviderManager(manager);
+    configureProviderRuntimeFactories(config, manager);
     Object.defineProperties(config, {
       getModel: { value: () => SUBAGENT_MODEL },
-      getCoreMemory: { value: () => '' },
       getConversationLoggingEnabled: { value: () => false },
       getEnableHooks: { value: () => false },
       getHookSystem: {
@@ -153,7 +161,15 @@ describe('System prompt provider — non-foreground subagent (issue #3176, D5)',
         }),
       },
     });
+    const settingsRoot = createSessionSettingsFixture(config, settings);
     const runtimeContext = createAgentRuntimeContext({
+      prepareProviderInvocation: (name, parameters, signal) =>
+        settingsRoot.settingsOwner.prepareProviderInvocation(
+          'test.subagent.nonforeground',
+          name,
+          parameters,
+          signal,
+        ),
       state: createAgentRuntimeState({
         runtimeId: 'test.subagent.nonforeground',
         provider: SUBAGENT_PROVIDER,
@@ -170,11 +186,17 @@ describe('System prompt provider — non-foreground subagent (issue #3176, D5)',
         'reasoning.includeInContext': true,
       },
       provider: createProviderAdapterFromManager(manager),
-      telemetry: createTelemetryAdapterFromConfig(config),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      telemetry: createTelemetryAdapter(
+        config,
+        createSessionSettingsFixture(config).settingsOwner.telemetry,
+      ),
+      tools: createToolRegistryViewFromRegistry(undefined),
       providerRuntime,
     });
     const chat = await createChatObject({
+      instructions: instructionFixture(config.getProvidedInstructions()),
+      workspaceDirectories: () => fixturePaths().directories(),
+      readMcpInstructions: () => undefined,
       promptConfig: { systemPrompt: 'You are a subagent.' },
       modelConfig: { model: SUBAGENT_MODEL, temp: 0, top_p: 1 },
       runtimeContext,

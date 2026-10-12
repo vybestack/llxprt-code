@@ -17,18 +17,21 @@ interface RestoreSubmission {
   rows: AsyncIterable<IContent> | undefined;
   readonly retained: RetainedHistoryAdmission;
   readonly count: number;
+  readonly origin?: object;
   discardInput(): void;
 }
 
 export function restoreClientHistory(
   host: RestoreHistoryHost,
   rows: readonly IContent[],
+  origin?: object,
 ): Promise<void> {
   const admitted = host.admissions.prepareDeferredArray(rows, {});
   return publishRestoredHistory(host, {
     rows: admitted.rows,
     retained: admitted.retained,
     count: rows.length,
+    origin,
     discardInput: admitted.discardInput,
   });
 }
@@ -65,6 +68,7 @@ async function publishRestoredHistory(
         undefined,
         {
           publishBatch: true,
+          origin: submission.origin,
           afterPublication: () => releaseRestoredAdmission(host, submission),
         },
       );

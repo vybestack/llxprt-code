@@ -4,37 +4,63 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createClientComplexity } from './clientHelpers.js';
+import { resolveModelForSystemPrompt } from './systemPromptModel.js';
+import { ClientSessionPolicy } from './client-session-policy.js';
+import type { AgentRuntimeProviderAdapter } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+
+import {
+  requireInstructionReads,
+  refreshClientSystemInstruction,
+  createDirectoryContextMessage,
+} from './chat-system-prompt.js';
+import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
+
+import {
+  assertSessionClientConfig,
+  assertSessionClientProvider,
+  assertClientRuntimeState,
+} from './client-tool-selection.js';
+import { releaseClientModelSubscriptions } from './client-model-subscriptions.js';
+import { publishClientPromptTokens } from './client-telemetry.js';
+import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderManager.js';
+
+import type {
+  AgentChatContract,
+  AgentRequestInput,
+  AgentChatRecordingExecution,
+  AgentClientContract,
+} from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type {
   ModelGenerationSettings,
   ModelOutput,
+  ToolDeclaration,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { AgentRequestInput } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { getDirectoryContextString } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import type { Turn, ServerAgentStreamEvent } from './turn.js';
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { updateClientSystemInstruction } from './clientSystemInstruction.js';
+import { getEnabledToolNamesForPrompt } from './clientToolGovernance.js';
 import { setClientTools } from './clientSetTools.js';
 import { ChatSession, type SendMessageParams } from './chatSession.js';
 import { resetClientHistory } from './clientResetHistory.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { createClientHistoryReader } from './clientHistoryReader.js';
 
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
+  createContentGenerator,
   type ContentGenerator,
   type ContentGeneratorConfig,
-  createContentGenerator,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
 import { restoreClientHistory } from './clientRestoreHistory.js';
-import { LoopDetectionService } from '@vybestack/llxprt-code-core/services/loopDetectionService.js';
-import { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
+import type { LoopDetectionService } from '@vybestack/llxprt-code-core/services/loopDetectionService.js';
+import type { ComplexityAnalyzer } from '@vybestack/llxprt-code-core/services/complexity-analyzer.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
-import { uiTelemetryService } from '@vybestack/llxprt-code-core/telemetry/uiTelemetry.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { subscribeToAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { BaseLLMClient } from './baseLlmClient.js';
 import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
 
@@ -42,7 +68,6 @@ import {
   coreEvents,
   CoreEvent,
 } from '@vybestack/llxprt-code-core/utils/events.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 export {
   isThinkingSupported,
   findCompressSplitPoint,
@@ -56,16 +81,15 @@ import { TodoContinuationService } from './TodoContinuationService.js';
 export { PostTurnAction } from './TodoContinuationService.js';
 import { IdeContextTracker } from './IdeContextTracker.js';
 import { AgentHookManager } from './AgentHookManager.js';
-import { createChatSessionSafe } from './ChatSessionFactory.js';
+import {
+  createChatSessionSafe,
+  type CreateChatSessionDeps,
+} from './ChatSessionFactory.js';
 import {
   MessageStreamOrchestrator,
   type MessageStreamDeps,
 } from './MessageStreamOrchestrator.js';
-import {
-  buildEffectiveModelIdentity,
-  type EffectiveModelIdentity,
-  type RoutedModelProvider,
-} from './modelInfoHelpers.js';
+import { resolveClientModelIdentity } from './modelInfoHelpers.js';
 import {
   RetainedHistoryAdmissions,
   replaceDeferredArray,
@@ -77,6 +101,7 @@ import {
   isHistorySource,
   clearClientHistoryForDisposal,
   hasReferenceMedia,
+  type DeferredHistoryDeps,
 } from './deferredHistorySource.js';
 import type { DeferredHistorySourceOptions } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { transferReinitializedHistory } from './reinitializeHistorySource.js';
@@ -85,8 +110,12 @@ import {
   replaceClientArrayHistory,
   replaceDeferredClientSource,
 } from './clientHistoryReplacement.js';
+import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 
-export class AgentClient implements AgentClientContract {
+export class AgentClient
+  extends ClientSessionPolicy
+  implements AgentClientContract
+{
   private chat?: ChatSession;
   private contentGenerator?: ContentGenerator;
   private embeddingModel: string;
@@ -96,8 +125,7 @@ export class AgentClient implements AgentClientContract {
     topP: 1,
   };
   private sessionTurnCount = 0;
-  private readonly MAX_TURNS = 100;
-  private _pendingConfig?: ContentGeneratorConfig;
+  private sessionContentGeneratorConfig?: ContentGeneratorConfig;
   private _previousHistory?: readonly IContent[];
   private _deferredHistoryAdmission?: RetainedHistoryAdmission;
   private _releaseDeferredSource?: () => Promise<void>;
@@ -115,6 +143,12 @@ export class AgentClient implements AgentClientContract {
   private readonly todoContinuationService: TodoContinuationService;
 
   private readonly ideContextTracker: IdeContextTracker;
+
+  bindIdeContext(
+    ...readers: Parameters<IdeContextTracker['bindContext']>
+  ): void {
+    this.ideContextTracker.bindContext(...readers);
+  }
   private readonly agentHookManager: AgentHookManager;
 
   /**
@@ -125,7 +159,6 @@ export class AgentClient implements AgentClientContract {
    */
   private readonly runtimeState: AgentRuntimeState;
   private _historyService?: HistoryService;
-  private _unsubscribe?: () => void;
 
   /**
    * BaseLLMClient for stateless utility operations (generateJson, embeddings, etc.)
@@ -144,32 +177,63 @@ export class AgentClient implements AgentClientContract {
    * When provided, client operates in stateless mode using runtime state
    * Otherwise falls back to Config-based operation (backward compatibility)
    */
+  private selectionManager: RuntimeProviderManager | undefined;
+  private providerSelection?: AgentRuntimeProviderAdapter;
+
+  assertConfig(config: Config): void {
+    assertSessionClientConfig(this.config, config);
+  }
+
+  assertProviderManager(manager: RuntimeProviderManager): void {
+    assertSessionClientProvider(this.selectionManager, manager);
+  }
+
+  private providerFileLifecycle: object | undefined;
+  private composeRetryOperations: CreateChatSessionDeps['composeRetryOperations'];
+  bindProviderFiles(
+    lifecycle: object,
+    composeRetryOperations: NonNullable<
+      CreateChatSessionDeps['composeRetryOperations']
+    >,
+  ): void {
+    this.providerFileLifecycle = lifecycle;
+    this.composeRetryOperations = composeRetryOperations;
+  }
+  private historyTokenization: CreateChatSessionDeps['historyTokenization'];
+  private promptEstimator: CreateChatSessionDeps['promptEstimator'];
+  bindTokenization(
+    ...operations: Parameters<
+      NonNullable<AgentClientContract['bindTokenization']>
+    >
+  ): void {
+    [this.historyTokenization, this.promptEstimator] = operations;
+  }
+
+  bindProviderSelection(
+    selection: AgentRuntimeProviderAdapter,
+    manager: RuntimeProviderManager,
+  ): void {
+    this.providerSelection = selection;
+    this.selectionManager = manager;
+  }
+
   constructor(
     private readonly config: Config,
     runtimeState: AgentRuntimeState,
+    private readonly readMcpInstructions: () => string | undefined,
+    readonly mediaStore: LocalMediaStore,
+    private readonly workspacePaths: WorkspacePathOperations,
     historyService?: HistoryService,
     createTurn?: MessageStreamDeps['createTurn'],
+    private readonly instructions?: InstructionReadOperations,
   ) {
-    if (!runtimeState.provider || runtimeState.provider === '') {
-      throw new Error('AgentRuntimeState must have a valid provider');
-    }
-    if (!runtimeState.model || runtimeState.model === '') {
-      throw new Error('AgentRuntimeState must have a valid model');
-    }
+    super();
+    assertClientRuntimeState(runtimeState);
 
     this.runtimeState = runtimeState;
-    this.historyAdmissions = new RetainedHistoryAdmissions(() =>
-      this.config.getLocalMediaStore(),
-    );
+    this.historyAdmissions = new RetainedHistoryAdmissions(mediaStore);
     this._historyService = historyService;
     this.logger = new DebugLogger('llxprt:core:client');
-
-    this._unsubscribe = subscribeToAgentRuntimeState(
-      runtimeState.runtimeId,
-      (event) => {
-        this.logger.debug('Runtime state changed', event);
-      },
-    );
 
     void this._historyService;
 
@@ -178,19 +242,16 @@ export class AgentClient implements AgentClientContract {
       setGlobalDispatcher(new ProxyAgent(proxyUrl));
     }
 
-    const embeddingModel = config.getEmbeddingModel();
-    this.embeddingModel = embeddingModel ?? runtimeState.model;
-    this.loopDetector = new LoopDetectionService(config);
+    this.embeddingModel = config.getEmbeddingModel() ?? runtimeState.model;
+    this.loopDetector = this.createLoopDetector(config);
     this.lastPromptId = runtimeState.sessionId;
 
     // Initialize complexity analyzer with config settings
-    const complexitySettings = config.getComplexityAnalyzerSettings();
-    this.complexityAnalyzer = new ComplexityAnalyzer({
-      complexityThreshold: complexitySettings.complexityThreshold,
-      minTasksForSuggestion: complexitySettings.minTasksForSuggestion,
-    });
-    const complexitySuggestionCooldown =
-      complexitySettings.suggestionCooldownMs ?? 300000;
+    const complexity = createClientComplexity(
+      config.getComplexityAnalyzerSettings(),
+    );
+    this.complexityAnalyzer = complexity.analyzer;
+    const complexitySuggestionCooldown = complexity.cooldown;
 
     this.todoReminderService = new TodoReminderService();
 
@@ -202,7 +263,7 @@ export class AgentClient implements AgentClientContract {
     });
 
     this.ideContextTracker = new IdeContextTracker(config);
-    this.agentHookManager = new AgentHookManager(config);
+    this.agentHookManager = new AgentHookManager();
 
     this.messageStreamOrchestrator = new MessageStreamOrchestrator(
       this._buildOrchestratorDeps(createTurn),
@@ -226,7 +287,13 @@ export class AgentClient implements AgentClientContract {
       todoContinuationService: this.todoContinuationService,
       ideContextTracker: this.ideContextTracker,
       agentHookManager: this.agentHookManager,
-      getEffectiveModelIdentity: () => this._getEffectiveModelIdentity(),
+      getEffectiveModelIdentity: () =>
+        resolveClientModelIdentity(
+          this.runtimeState.model,
+          this.runtimeState.provider,
+          this.currentSequenceModel,
+          this.chat,
+        ),
       streamHistory: (signal) => this.streamHistory(signal),
       getSessionTurnCount: () => this.sessionTurnCount,
       incrementSessionTurnCount: () => {
@@ -249,22 +316,7 @@ export class AgentClient implements AgentClientContract {
         this.currentSequenceModel = null;
       },
       updateTelemetryTokenCount: () => this.updateTelemetryTokenCount(),
-      sendMessageStream: (
-        req,
-        sig,
-        pid,
-        trns,
-        isInvalidStreamRetry,
-        isPayloadRecoveryRetry,
-      ) =>
-        this.sendMessageStream(
-          req,
-          sig,
-          pid,
-          trns,
-          isInvalidStreamRetry,
-          isPayloadRecoveryRetry,
-        ),
+      sendMessageStream: (...args) => this.sendMessageStream(...args),
       createTurn,
     };
   }
@@ -294,24 +346,10 @@ export class AgentClient implements AgentClientContract {
   }
 
   async dispose(): Promise<void> {
-    const failures: unknown[] = [];
-    try {
-      coreEvents.off(CoreEvent.ModelChanged, this.handleModelChanged);
-      coreEvents.off(
-        CoreEvent.ModelProfileChanged,
-        this.handleModelProfileChanged,
-      );
-    } catch (error: unknown) {
-      failures.push(error);
-    }
-    if (this._unsubscribe) {
-      try {
-        this._unsubscribe();
-        this._unsubscribe = undefined;
-      } catch (error: unknown) {
-        failures.push(error);
-      }
-    }
+    const failures = releaseClientModelSubscriptions(
+      this.handleModelChanged,
+      this.handleModelProfileChanged,
+    );
     const hasChatHistoryMedia = hasReferenceMedia(this._previousHistory);
     if (
       this.chat !== undefined &&
@@ -353,7 +391,7 @@ export class AgentClient implements AgentClientContract {
     if (activeChat !== undefined) {
       await transferReinitializedHistory(
         activeChat,
-        this.config,
+        this.deferredHistoryDeps(),
         this.runtimeState,
         options,
         {
@@ -368,7 +406,7 @@ export class AgentClient implements AgentClientContract {
             this._deferredHistoryAdmission = undefined;
             this.contentGenerator = undefined;
             this.chat = undefined;
-            this._pendingConfig = contentGeneratorConfig;
+            this.sessionContentGeneratorConfig = contentGeneratorConfig;
           },
         },
       );
@@ -376,19 +414,17 @@ export class AgentClient implements AgentClientContract {
     }
     options.signal?.throwIfAborted();
     this.contentGenerator = undefined;
-    this._pendingConfig = contentGeneratorConfig;
+    this.sessionContentGeneratorConfig = contentGeneratorConfig;
   }
 
   private async lazyInitialize() {
     if (this.isInitialized()) {
       return;
     }
-    // Use pending config if available (from initialize() call), otherwise fall back to current config
-    const contentGenConfig =
-      this._pendingConfig ?? this.config.getContentGeneratorConfig();
+    const contentGenConfig = this.sessionContentGeneratorConfig;
     if (!contentGenConfig) {
       throw new Error(
-        'Content generator config not initialized. Call config.refreshAuth() first.',
+        'Content generator config not initialized. Initialize the session client owner first.',
       );
     }
     this.contentGenerator = await createContentGenerator(
@@ -399,10 +435,12 @@ export class AgentClient implements AgentClientContract {
 
     // Don't create chat here - that causes infinite recursion with startChat()
     // The chat will be created when needed
+  }
 
-    // Clear pending config after successful initialization
-    // Note: We do NOT clear _previousHistory as it may be needed for the chat context
-    this._pendingConfig = undefined;
+  getContentGeneratorConfig(): ContentGeneratorConfig | undefined {
+    return this.sessionContentGeneratorConfig === undefined
+      ? undefined
+      : { ...this.sessionContentGeneratorConfig };
   }
 
   getContentGenerator(): ContentGenerator {
@@ -417,8 +455,9 @@ export class AgentClient implements AgentClientContract {
    * This is lazily initialized to avoid creating it when not needed.
    */
   private getBaseLlmClient(): BaseLLMClient {
-    this._baseLlmClient ??= new BaseLLMClient(this.getContentGenerator());
-    return this._baseLlmClient;
+    return (this._baseLlmClient ??= new BaseLLMClient(
+      this.getContentGenerator(),
+    ));
   }
 
   async addHistory(content: IContent) {
@@ -429,16 +468,38 @@ export class AgentClient implements AgentClientContract {
     await this.getChat().admitAndAddHistory(content);
   }
 
-  async updateSystemInstruction(): Promise<void> {
+  async updateSystemInstruction(
+    instructions: InstructionReadOperations = requireInstructionReads(
+      this.instructions,
+    ),
+  ): Promise<void> {
     if (!this.isInitialized()) {
       return;
     }
 
-    await updateClientSystemInstruction(
+    const model = resolveModelForSystemPrompt(this.runtimeState.model);
+    const systemInstruction = await refreshClientSystemInstruction(
       this.config,
+      this.tools,
+      this.readMcpInstructions,
       this.runtimeState.provider,
-      this.getChat(),
+      this.workspacePaths.directories(),
+      instructions,
+      model,
+      this.requireRuntimeSettings().promptPolicy ?? {},
+      this.subagentDefinitions,
     );
+
+    this.getChat().setSystemInstruction(systemInstruction);
+
+    const historyService = this.getHistoryService();
+    if (historyService) {
+      const systemPromptTokens = await historyService.estimateTokensForText(
+        systemInstruction,
+        model,
+      );
+      historyService.setBaseTokenOffset(systemPromptTokens);
+    }
   }
 
   getChat(): ChatSession {
@@ -454,9 +515,8 @@ export class AgentClient implements AgentClientContract {
    */
   getHistoryService(): HistoryService | null {
     // Removed verbose debug logging
-    if (!this.hasChatInitialized()) return this._storedHistoryService ?? null;
     // Removed verbose debug logging
-    return this.getChat().getHistoryService();
+    return this.chat?.getHistoryService() ?? this._storedHistoryService ?? null;
   }
 
   hasChatInitialized(): boolean {
@@ -483,7 +543,10 @@ export class AgentClient implements AgentClientContract {
 
   async setHistory(
     history: readonly IContent[],
-    { stripThoughts = false }: { stripThoughts?: boolean } = {},
+    {
+      stripThoughts = false,
+      historyOrigin,
+    }: { stripThoughts?: boolean; historyOrigin?: object } = {},
   ): Promise<void> {
     return this.settleClientHistoryUpdate(
       replaceClientArrayHistory(
@@ -494,6 +557,7 @@ export class AgentClient implements AgentClientContract {
         this.replaceDeferredHistory.bind(this),
         this.publishActiveArrayHistory.bind(this),
         stripThoughts,
+        historyOrigin,
       ),
     );
   }
@@ -501,6 +565,13 @@ export class AgentClient implements AgentClientContract {
   private publishActiveArrayHistory(): void {
     this._previousHistory = undefined;
     this.streamedDeferredHistory = true;
+  }
+
+  private deferredHistoryDeps(): DeferredHistoryDeps {
+    return {
+      mediaStore: this.mediaStore,
+      historyTokenization: this.historyTokenization,
+    };
   }
 
   private async settleClientHistoryUpdate(
@@ -516,7 +587,7 @@ export class AgentClient implements AgentClientContract {
     options: DeferredHistorySourceOptions = {},
   ): Promise<void> {
     await replaceClientHistorySource(source, options, this.chat !== undefined, {
-      config: this.config,
+      deps: this.deferredHistoryDeps(),
       runtime: this.runtimeState,
       existing: this.chat?.getHistoryService() ?? this._storedHistoryService,
       admissions: this.historyAdmissions,
@@ -581,7 +652,7 @@ export class AgentClient implements AgentClientContract {
     if (this.hasChatInitialized())
       throw new Error('Streamed deferred history requires an inactive chat');
     return replaceDeferredClientSource(history, options, {
-      config: this.config,
+      deps: this.deferredHistoryDeps(),
       runtime: this.runtimeState,
       existing: this._storedHistoryService,
       admissions: this.historyAdmissions,
@@ -602,6 +673,18 @@ export class AgentClient implements AgentClientContract {
     this._releaseDeferredSource = undefined;
   }
 
+  prepareHistoryRebind(
+    history: HistoryService,
+    previousChat?: AgentChatContract,
+  ): () => void {
+    const rebindChat = this.chat?.prepareHistoryRebind(history, previousChat);
+    return () => {
+      rebindChat?.();
+      this._storedHistoryService =
+        this.chat === undefined ? history : undefined;
+    };
+  }
+
   /**
    * Store HistoryService instance for reuse after refreshAuth.
    * This preserves the UI's conversation display across provider switches.
@@ -613,9 +696,12 @@ export class AgentClient implements AgentClientContract {
     this._storedHistoryService = historyService;
   }
 
-  async setTools(): Promise<void> {
+  async setTools(
+    publicationDeclarations?: readonly ToolDeclaration[],
+  ): Promise<void> {
     await setClientTools(
-      this.config.getToolRegistry(),
+      this.tools,
+      publicationDeclarations,
       this.chat,
       () => this.startChat(this._previousHistory ?? []),
       this.todoContinuationService,
@@ -633,11 +719,7 @@ export class AgentClient implements AgentClientContract {
    * This decouples ChatSession from directly knowing about uiTelemetryService.
    */
   private updateTelemetryTokenCount(): void {
-    if (this.chat) {
-      uiTelemetryService.setLastPromptTokenCount(
-        this.chat.getLastPromptTokenCount(),
-      );
-    }
+    publishClientPromptTokens(this.chat?.getLastPromptTokenCount());
   }
 
   async resetChat(
@@ -680,7 +762,10 @@ export class AgentClient implements AgentClientContract {
    * @returns Promise that resolves when history is fully restored and chat is ready
    * @throws Error if initialization fails (e.g., auth not ready, config missing)
    */
-  async restoreHistory(historyItems: readonly IContent[]): Promise<void> {
+  async restoreHistory(
+    historyItems: readonly IContent[],
+    historyOrigin?: object,
+  ): Promise<void> {
     this.logger.debug('restoreHistory called', {
       itemCount: historyItems.length,
       hasContentGenerator: !!this.contentGenerator,
@@ -700,6 +785,7 @@ export class AgentClient implements AgentClientContract {
         getHistory: () => this.getHistoryService(),
       },
       historyItems,
+      historyOrigin,
     );
   }
 
@@ -733,21 +819,19 @@ export class AgentClient implements AgentClientContract {
   async addDirectoryContext(): Promise<void> {
     if (!this.chat) return;
 
-    this.getChat().addHistory({
-      speaker: 'human',
-      blocks: [
-        { type: 'text', text: await getDirectoryContextString(this.config) },
-      ],
-    });
+    this.getChat().addHistory(
+      await createDirectoryContextMessage(this.workspacePaths.directories()),
+    );
   }
 
   async generateDirectMessage(
     params: SendMessageParams,
     promptId: string,
+    execution?: AgentChatRecordingExecution,
   ): Promise<ModelOutput> {
     await this.lazyInitialize();
     this.chat ??= await this.startChat([]);
-    return this.getChat().generateDirectMessage(params, promptId);
+    return this.getChat().generateDirectMessage(params, promptId, execution);
   }
 
   async startChat(extraHistory?: readonly IContent[]): Promise<ChatSession> {
@@ -759,6 +843,14 @@ export class AgentClient implements AgentClientContract {
     try {
       chat = await createChatSessionSafe({
         config: this.config,
+        historyTokenization: this.historyTokenization,
+        providerFileLifecycle: this.providerFileLifecycle,
+        composeRetryOperations: this.composeRetryOperations,
+        promptEstimator: this.promptEstimator,
+        mediaStore: this.mediaStore,
+        readMcpInstructions: this.readMcpInstructions,
+        instructions: requireInstructionReads(this.instructions),
+        workspaceDirectories: () => this.workspacePaths.directories(),
         runtimeState: this.runtimeState,
         contentGenerator: this.getContentGenerator(),
         storedHistoryService: this._storedHistoryService,
@@ -773,9 +865,12 @@ export class AgentClient implements AgentClientContract {
             : [],
         generateContentConfig: this.generateContentConfig,
         todoContinuationService: this.todoContinuationService,
-        toolRegistry: this.config.getToolRegistry(),
+        toolRegistry: this.tools,
         createHistoryService: () => new HistoryService(),
         createChatSessionInstance: (...args) => new ChatSession(...args),
+        providerSelection: this.providerSelection,
+        prepareProviderInvocation: this.prepareProviderInvocation,
+        ...this.chatPolicyInputs(),
       });
     } catch (error: unknown) {
       if (deferredAdmission === undefined) throw error;
@@ -821,34 +916,6 @@ export class AgentClient implements AgentClientContract {
     return chat;
   }
 
-  private _getEffectiveModelIdentity(): EffectiveModelIdentity {
-    const configFallback = this.config.getModel();
-    const runtimeProviderName = this.runtimeState.provider;
-    let routedProviderName = runtimeProviderName;
-    let routedProvider: RoutedModelProvider | undefined = undefined;
-    if (
-      this.chat &&
-      typeof this.chat.resolveProviderForRuntime === 'function'
-    ) {
-      try {
-        const provider = this.chat.resolveProviderForRuntime(
-          'AgentClient.getEffectiveModelIdentity',
-        );
-        routedProviderName = provider.name;
-        routedProvider = provider;
-      } catch {
-        routedProviderName = runtimeProviderName;
-        routedProvider = undefined;
-      }
-    }
-    return buildEffectiveModelIdentity(
-      routedProviderName,
-      routedProvider,
-      this.currentSequenceModel,
-      configFallback,
-    );
-  }
-
   async *sendMessageStream(
     initialRequest: AgentRequestInput,
     signal: AbortSignal,
@@ -856,6 +923,8 @@ export class AgentClient implements AgentClientContract {
     turns: number = this.MAX_TURNS,
     isInvalidStreamRetry: boolean = false,
     isPayloadRecoveryRetry: boolean = false,
+    recordingExecution?: AgentChatRecordingExecution,
+    modelParameters?: AdmittedModelParameters,
   ): AsyncGenerator<ServerAgentStreamEvent, Turn> {
     this.activeStreamCount++;
     try {
@@ -866,6 +935,8 @@ export class AgentClient implements AgentClientContract {
         turns,
         isInvalidStreamRetry,
         isPayloadRecoveryRetry,
+        recordingExecution,
+        modelParameters,
       );
     } finally {
       this.activeStreamCount--;
@@ -888,6 +959,7 @@ export class AgentClient implements AgentClientContract {
     await this.lazyInitialize();
     return clientLlmGenerateJson(
       this.config,
+      this.readMcpInstructions,
       this.getContentGenerator(),
       this.getBaseLlmClient(),
       contents,
@@ -897,6 +969,10 @@ export class AgentClient implements AgentClientContract {
       { ...this.generateContentConfig, ...config },
       this.lastPromptId ?? this.config.getSessionId(),
       this.runtimeState.provider,
+      getEnabledToolNamesForPrompt(this.tools),
+      requireInstructionReads(this.instructions),
+      this.requireRuntimeSettings().promptPolicy ?? {},
+      this.subagentDefinitions,
     );
   }
 
@@ -907,8 +983,9 @@ export class AgentClient implements AgentClientContract {
     model: string,
   ): Promise<ModelOutput> {
     await this.lazyInitialize();
-    const output = await clientLlmGenerateContent(
+    return clientLlmGenerateContent(
       this.config,
+      this.readMcpInstructions,
       this.getContentGenerator(),
       contents,
       generationConfig,
@@ -917,8 +994,11 @@ export class AgentClient implements AgentClientContract {
       this.lastPromptId ?? this.config.getSessionId(),
       this.generateContentConfig,
       this.runtimeState.provider,
+      getEnabledToolNamesForPrompt(this.tools),
+      requireInstructionReads(this.instructions),
+      this.requireRuntimeSettings().promptPolicy ?? {},
+      this.subagentDefinitions,
     );
-    return output;
   }
 
   async generateEmbedding(texts: string[]): Promise<number[][]> {

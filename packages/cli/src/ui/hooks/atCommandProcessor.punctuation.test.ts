@@ -11,6 +11,7 @@ import type { CliUiRuntime } from '../cliUiRuntime.js';
 import * as path from 'path';
 import {
   createTestFile,
+  unexpectedResourceRead,
   setupAtCommandTest,
   teardownAtCommandTest,
   type AtCommandTestSetup,
@@ -138,6 +139,8 @@ describe('handleAtCommand (punctuation)', () => {
         const query = queryTemplate(fileName);
 
         const result = await handleAtCommand({
+          readResource: unexpectedResourceRead,
+          findResource: () => undefined,
           query,
           config: mockConfig,
           addItem: mockAddItem,
@@ -169,6 +172,8 @@ describe('handleAtCommand (punctuation)', () => {
       const query = "Compare @first.txt, @second.txt; what's different?";
 
       const result = await handleAtCommand({
+        readResource: unexpectedResourceRead,
+        findResource: () => undefined,
         query,
         config: mockConfig,
         addItem: mockAddItem,
@@ -201,6 +206,8 @@ describe('handleAtCommand (punctuation)', () => {
       const query = `Check @${escapedPath}, it has spaces.`;
 
       const result = await handleAtCommand({
+        readResource: unexpectedResourceRead,
+        findResource: () => undefined,
         query,
         config: mockConfig,
         addItem: mockAddItem,
@@ -227,6 +234,8 @@ describe('handleAtCommand (punctuation)', () => {
       const query = 'Analyze @example.d.ts for type definitions.';
 
       const result = await handleAtCommand({
+        readResource: unexpectedResourceRead,
+        findResource: () => undefined,
         query,
         config: mockConfig,
         addItem: mockAddItem,
@@ -253,6 +262,8 @@ describe('handleAtCommand (punctuation)', () => {
       const query = 'Check @config.json. This file contains settings.';
 
       const result = await handleAtCommand({
+        readResource: unexpectedResourceRead,
+        findResource: () => undefined,
         query,
         config: mockConfig,
         addItem: mockAddItem,
@@ -279,6 +290,8 @@ describe('handleAtCommand (punctuation)', () => {
       const query = 'Review @package.json, then check dependencies.';
 
       const result = await handleAtCommand({
+        readResource: unexpectedResourceRead,
+        findResource: () => undefined,
         query,
         config: mockConfig,
         addItem: mockAddItem,
@@ -308,6 +321,8 @@ describe('handleAtCommand (punctuation)', () => {
       const query = 'Check @version.1.2.3.txt contains version information.';
 
       const result = await handleAtCommand({
+        readResource: unexpectedResourceRead,
+        findResource: () => undefined,
         query,
         config: mockConfig,
         addItem: mockAddItem,
@@ -334,6 +349,8 @@ describe('handleAtCommand (punctuation)', () => {
       const query = 'Show me @end.txt.';
 
       const result = await handleAtCommand({
+        readResource: unexpectedResourceRead,
+        findResource: () => undefined,
         query,
         config: mockConfig,
         addItem: mockAddItem,
@@ -363,6 +380,8 @@ describe('handleAtCommand (punctuation)', () => {
       const query = 'Check @file$with&special#chars.txt for content.';
 
       const result = await handleAtCommand({
+        readResource: unexpectedResourceRead,
+        findResource: () => undefined,
         query,
         config: mockConfig,
         addItem: mockAddItem,
@@ -398,6 +417,8 @@ describe('handleAtCommand (punctuation)', () => {
       const query = 'Check @basicfile.txt please.';
 
       const result = await handleAtCommand({
+        readResource: unexpectedResourceRead,
+        findResource: () => undefined,
         query,
         config: mockConfig,
         addItem: mockAddItem,

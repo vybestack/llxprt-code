@@ -17,7 +17,10 @@
 import * as crypto from 'node:crypto';
 import { BaseTokenStorage } from './base-token-storage.js';
 import type { OAuthCredentials } from './types.js';
-import { emitHostFeedback } from '../../host/hostServices.js';
+import {
+  captureHostFeedback,
+  type HostFeedbackSink,
+} from '../../host/hostServices.js';
 import { createDefaultKeyringAdapter } from '@vybestack/llxprt-code-storage/storage/secure-store.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry/utils/debugLogger.js';
 
@@ -78,20 +81,21 @@ const defaultKeytarLoader: KeytarLoader = async () => {
         Promise.resolve([] as Array<{ account: string; password: string }>)),
   } as Keytar;
 };
-let keyringLoader: KeytarLoader = defaultKeytarLoader;
-
-export function setKeytarLoader(loader: KeytarLoader): void {
-  keyringLoader = loader;
-}
-
-export function resetKeytarLoader(): void {
-  keyringLoader = defaultKeytarLoader;
-}
-
 export class KeychainTokenStorage extends BaseTokenStorage {
   private keychainAvailable: boolean | null = null;
   private keytarModule: Keytar | null = null;
   private keytarLoadAttempted = false;
+
+  private readonly emitFeedback: HostFeedbackSink;
+
+  constructor(
+    serviceName: string,
+    feedback?: HostFeedbackSink,
+    private readonly keytarLoader: KeytarLoader = defaultKeytarLoader,
+  ) {
+    super(serviceName);
+    this.emitFeedback = captureHostFeedback(feedback);
+  }
 
   async getKeytar(): Promise<Keytar | null> {
     // If we've already tried loading (successfully or not), return the result
@@ -103,7 +107,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
 
     try {
       // Try to import keytar without any timeout - let the OS handle it
-      const module = await keyringLoader();
+      const module = await this.keytarLoader();
       this.keytarModule = 'default' in module ? module.default : module;
     } catch (error) {
       const err = error as NodeJS.ErrnoException;
@@ -211,7 +215,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
         .filter((cred) => !cred.account.startsWith(KEYCHAIN_TEST_PREFIX))
         .map((cred: { account: string }) => cred.account);
     } catch (error) {
-      emitHostFeedback('error', 'Failed to list servers from keychain', error);
+      this.emitFeedback('error', 'Failed to list servers from keychain', error);
       return [];
     }
   }
@@ -238,7 +242,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
           this.validateCredentials(data);
           result.set(cred.account, data);
         } catch (error) {
-          emitHostFeedback(
+          this.emitFeedback(
             'error',
             `Failed to parse credentials for ${cred.account}`,
             error,
@@ -246,7 +250,7 @@ export class KeychainTokenStorage extends BaseTokenStorage {
         }
       }
     } catch (error) {
-      emitHostFeedback(
+      this.emitFeedback(
         'error',
         'Failed to get all credentials from keychain',
         error,

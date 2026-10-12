@@ -673,7 +673,8 @@ async function testShouldRecursivelyCallSendMessageStreamWithPleaseContinueWhen1
         blocks: initialRequest,
       },
     ],
-    expect.any(Object),
+    signal,
+    undefined,
   );
 
   // Second call with "Please continue."
@@ -685,7 +686,8 @@ async function testShouldRecursivelyCallSendMessageStreamWithPleaseContinueWhen1
         blocks: [{ type: 'text', text: 'System: Please continue.' }],
       },
     ],
-    expect.any(Object),
+    signal,
+    undefined,
   );
 }
 

@@ -14,7 +14,7 @@ import {
   SessionRecordingService,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createUiSessionOwner } from './__tests__/uiSessionOwner.js';
 import { createOrResumeRecording } from './cliSessionBootstrap.js';
 
 const PROJECT_HASH = 'startup-recording-test';
@@ -36,6 +36,13 @@ function recordingConfig(
 let root: string;
 
 let chatsDir: string;
+
+function sessionClientFor(config: Config) {
+  return {
+    getAgentClient: () => createUiSessionOwner(config).agentClient,
+    workspaceDirectories: () => [root],
+  };
+}
 
 describe('recording bootstrap checkpoint resolution', () => {
   beforeEach(async () => {
@@ -82,9 +89,13 @@ async function verifyReturnsTheCheckpointChildBootDirectlyAndKeepsThePrefixIndep
     model: 'test-model',
     provider: 'test-provider',
     continueSession: 'startup-cut',
-    settingsService: new SettingsService(),
   });
-  const result = await createOrResumeRecording(config, PROJECT_HASH, chatsDir);
+  const result = await createOrResumeRecording(
+    config,
+    PROJECT_HASH,
+    chatsDir,
+    sessionClientFor(config),
+  );
   try {
     if (result.resumedBoot === null) throw new Error('Missing checkpoint boot');
     expect(result.discardOnFailure).toBe(true);
@@ -132,10 +143,14 @@ async function verifyReportsAnAmbiguousCheckpointReferenceInsteadOfStartingAFres
     model: 'test-model',
     provider: 'test-provider',
     continueSession: 'duplicate-name',
-    settingsService: new SettingsService(),
   });
 
   await expect(
-    createOrResumeRecording(config, PROJECT_HASH, chatsDir),
+    createOrResumeRecording(
+      config,
+      PROJECT_HASH,
+      chatsDir,
+      sessionClientFor(config),
+    ),
   ).rejects.toThrow(/Ambiguous continue target name/);
 }

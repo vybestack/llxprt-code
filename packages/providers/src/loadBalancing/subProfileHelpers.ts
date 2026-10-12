@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { IModel } from '../IModel.js';
 import type {
   LoadBalancerSubProfile,
   LoadBalancingProviderConfig,
@@ -44,4 +45,20 @@ export function resolveSubProfileModel(
   return isResolvedSubProfile(subProfile)
     ? subProfile.model
     : (subProfile.modelId ?? '');
+}
+
+export function loadBalancerModels(
+  config: LoadBalancingProviderConfig,
+  providerName: string,
+): IModel[] {
+  const contextWindow = getEffectiveLoadBalancerContextLimit(config);
+  return [
+    {
+      id: config.profileName,
+      name: config.profileName,
+      provider: providerName,
+      supportedToolFormats: [],
+      ...(contextWindow !== undefined && { contextWindow }),
+    },
+  ];
 }

@@ -83,7 +83,7 @@ export function watchChatsDir(
   onWatcherError?: () => void,
 ): ChatsDirWatchHandle | null {
   try {
-    if (process.platform === 'win32') {
+    if (process.platform === 'win32' || process.platform === 'darwin') {
       const listener = (currentStats: Stats): void => {
         if (currentStats.nlink === 0) {
           handleChatsDirChange(chatsDir, sessionId, currentFilePath());

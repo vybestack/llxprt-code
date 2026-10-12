@@ -1,3 +1,4 @@
+import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -118,10 +119,12 @@ const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
 function registerExecutionCase1(): void {
   describe('runNonInteractive - Execution and Tool Use', () => {
     it('should terminate with GOAL if no outputs are expected and model stops', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
-      const { overrides } = createRuntimeOverrides();
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+      );
       const scope = await SubAgentScope.create(
         'test-agent',
         config,
@@ -169,7 +172,7 @@ function registerExecutionCase2(): void {
 
     const observePromptsTheModelToFinishOutstandingTodosBeforeCompleting =
       async () => {
-        const { config } = await createMockConfig();
+        const { config, mcpRuntime } = await createMockConfig();
 
         mockSendMessageStream.mockImplementation(
           createMockStream(['stop', 'stop']),
@@ -194,7 +197,9 @@ function registerExecutionCase2(): void {
             },
           ]);
 
-        const { overrides } = createRuntimeOverrides();
+        const { overrides } = createRuntimeOverrides(
+          mcpRuntime.workspaceFilesystem.paths,
+        );
         const scope = await SubAgentScope.create(
           'test-agent',
           config,
@@ -224,7 +229,7 @@ function registerExecutionCase2(): void {
 function registerExecutionCase3(): void {
   describe('runNonInteractive - Execution and Tool Use — emitted outputs', () => {
     it('should handle self_emitvalue and terminate with GOAL when outputs are met', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const outputConfig: OutputConfig = {
         outputs: { result: 'The final result' },
       };
@@ -243,7 +248,9 @@ function registerExecutionCase3(): void {
         ]),
       );
 
-      const { overrides: emitOverrides } = createRuntimeOverrides();
+      const { overrides: emitOverrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+      );
       const scope = await SubAgentScope.create(
         'test-agent',
         config,
@@ -268,7 +275,7 @@ function registerExecutionCase3(): void {
 function registerExecutionCase4(): void {
   describe('runNonInteractive - Execution and Tool Use — invalid output', () => {
     it('rejects a malformed self_emitvalue call with null arguments (issue 3540)', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const outputConfig: OutputConfig = {
         outputs: { result: 'The final result' },
       };
@@ -287,7 +294,9 @@ function registerExecutionCase4(): void {
         ]),
       );
 
-      const { overrides: emitOverrides } = createRuntimeOverrides();
+      const { overrides: emitOverrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+      );
       const scope = await SubAgentScope.create(
         'test-agent',
         config,
@@ -316,18 +325,18 @@ async function createListFilesConfig() {
     parameters: { type: 'object', properties: {} },
   };
 
-  const { config } = await createMockConfig({
+  const { config, mcpRuntime } = await createMockConfig({
     getFunctionDeclarationsFiltered: vi
       .fn()
       .mockReturnValue([listFilesToolDef]),
   });
-  return config;
+  return { config, mcpRuntime };
 }
 
 function registerExecutionCase5(): void {
   describe('runNonInteractive - Execution and Tool Use — external tool', () => {
     it('should execute external tools and provide the response to the model', async () => {
-      const config = await createListFilesConfig();
+      const { config, mcpRuntime } = await createListFilesConfig();
       const toolConfig: ToolConfig = { tools: ['list_files'] };
       mockSendMessageStream.mockImplementation(
         createMockStream([
@@ -350,7 +359,7 @@ function registerExecutionCase5(): void {
         }),
       });
       const runtimeBundle = createStatelessRuntimeBundle({
-        toolRegistry: config.getToolRegistry(),
+        toolRegistry: mcpRuntime.toolSelection,
         toolsView: {
           listToolNames: () => ['list_files'],
           getToolMetadata: () => ({
@@ -366,10 +375,13 @@ function registerExecutionCase5(): void {
         },
       });
       const historyAddSpy = vi.spyOn(runtimeBundle.history, 'add');
-      const { overrides } = createRuntimeOverrides({
-        runtimeBundle,
-        toolRegistry: config.getToolRegistry(),
-      });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        {
+          runtimeBundle,
+          toolRegistry: mcpRuntime.toolSelection,
+        },
+      );
 
       const scope = await SubAgentScope.create(
         'test-agent',
@@ -384,7 +396,7 @@ function registerExecutionCase5(): void {
 
       await scope.runNonInteractive(new ContextState());
 
-      const [toolExecutorConfig, toolRequest, abortSignal] = (
+      const [createSchedulerOwner, toolRequest, abortSignal] = (
         executeToolCall as Mock<typeof executeToolCall>
       ).mock.calls[0];
       expect(toolRequest).toMatchObject({
@@ -392,7 +404,7 @@ function registerExecutionCase5(): void {
         args: { path: '.' },
       });
       expect(abortSignal).toBeInstanceOf(AbortSignal);
-      expect(typeof toolExecutorConfig.getToolRegistry).toBe('function');
+      expect(typeof createSchedulerOwner).toBe('function');
 
       const secondCallArgs = mockSendMessageStream.mock.calls[1][0];
       expect(secondCallArgs.message).toStrictEqual([
@@ -408,7 +420,7 @@ function registerExecutionCase5(): void {
 function registerExecutionCase6(): void {
   describe('runNonInteractive - Execution and Tool Use — tool error', () => {
     it('should provide specific tool error responses to the model', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const toolConfig: ToolConfig = { tools: ['failing_tool'] };
 
       mockSendMessageStream.mockImplementation(
@@ -437,7 +449,7 @@ function registerExecutionCase6(): void {
       });
 
       const runtimeBundle = createStatelessRuntimeBundle({
-        toolRegistry: config.getToolRegistry(),
+        toolRegistry: mcpRuntime.toolSelection,
         toolsView: {
           listToolNames: () => ['failing_tool'],
           getToolMetadata: () => ({
@@ -447,10 +459,13 @@ function registerExecutionCase6(): void {
           }),
         },
       });
-      const { overrides } = createRuntimeOverrides({
-        runtimeBundle,
-        toolRegistry: config.getToolRegistry(),
-      });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        {
+          runtimeBundle,
+          toolRegistry: mcpRuntime.toolSelection,
+        },
+      );
 
       const scope = await SubAgentScope.create(
         'test-agent',
@@ -491,7 +506,7 @@ function registerExecutionCase7(): void {
 
 const observeFilterFunctionCallFromErrorResponsePartsInNonInteractiveFlowAnthropicBoundary =
   async () => {
-    const { config } = await createMockConfig();
+    const { config, mcpRuntime } = await createMockConfig();
     const toolConfig: ToolConfig = { tools: ['erroring_tool'] };
 
     mockSendMessageStream.mockImplementation(
@@ -525,7 +540,7 @@ const observeFilterFunctionCallFromErrorResponsePartsInNonInteractiveFlowAnthrop
     });
 
     const runtimeBundle = createStatelessRuntimeBundle({
-      toolRegistry: config.getToolRegistry(),
+      toolRegistry: mcpRuntime.toolSelection,
       toolsView: {
         listToolNames: () => ['erroring_tool'],
         getToolMetadata: () => ({
@@ -535,10 +550,13 @@ const observeFilterFunctionCallFromErrorResponsePartsInNonInteractiveFlowAnthrop
         }),
       },
     });
-    const { overrides } = createRuntimeOverrides({
-      runtimeBundle,
-      toolRegistry: config.getToolRegistry(),
-    });
+    const { overrides } = createRuntimeOverrides(
+      mcpRuntime.workspaceFilesystem.paths,
+      {
+        runtimeBundle,
+        toolRegistry: mcpRuntime.toolSelection,
+      },
+    );
 
     const scope = await SubAgentScope.create(
       'test-agent',
@@ -581,7 +599,7 @@ async function createDisabledToolConfig() {
     },
   });
 
-  const { config } = await createMockConfig({
+  const { config, mcpRuntime } = await createMockConfig({
     getFunctionDeclarationsFiltered: vi.fn().mockReturnValue([
       {
         name: 'write_file',
@@ -597,26 +615,29 @@ async function createDisabledToolConfig() {
     ]),
     getTool: vi.fn().mockReturnValue({}),
   });
-  return { config, listToolNames, getToolMetadata };
+  return { config, mcpRuntime, listToolNames, getToolMetadata };
 }
 
 function registerExecutionCase8(): void {
   describe('runNonInteractive - Execution and Tool Use — disabled tool', () => {
     it('fails fast when a tool is disabled in the current profile', async () => {
-      const { config, listToolNames, getToolMetadata } =
+      const { config, mcpRuntime, listToolNames, getToolMetadata } =
         await createDisabledToolConfig();
 
       const runtimeBundle = createStatelessRuntimeBundle({
-        toolRegistry: config.getToolRegistry(),
+        toolRegistry: mcpRuntime.toolSelection,
         toolsView: {
           listToolNames,
           getToolMetadata,
         },
       });
-      const { overrides } = createRuntimeOverrides({
-        runtimeBundle,
-        toolRegistry: config.getToolRegistry(),
-      });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        {
+          runtimeBundle,
+          toolRegistry: mcpRuntime.toolSelection,
+        },
+      );
 
       mockSendMessageStream.mockImplementation(
         createMockStream([
@@ -680,7 +701,7 @@ function registerExecutionCase8(): void {
 function registerExecutionCase9(): void {
   describe('runNonInteractive - Execution and Tool Use — missing outputs', () => {
     it('should nudge the model if it stops before emitting all required variables', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const outputConfig: OutputConfig = {
         outputs: { required_var: 'Must be present' },
       };
@@ -700,7 +721,9 @@ function registerExecutionCase9(): void {
         ]),
       );
 
-      const { overrides: nudgeOverrides } = createRuntimeOverrides();
+      const { overrides: nudgeOverrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+      );
       const scope = await SubAgentScope.create(
         'test-agent',
         config,
@@ -765,6 +788,7 @@ describe('subagent.ts', () => {
     ).mockImplementation(
       () =>
         ({
+          ...createChatPolicyFixture(),
           sendMessageStream: mockSendMessageStream,
           getHistory: vi.fn().mockReturnValue([]),
           getHistoryService: vi.fn().mockReturnValue({

@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { afterEach as disposeOwnedPolicies } from 'bun:test';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 
 /**
  * Regression tests for issue #2659: authorization desynchronization on
@@ -146,7 +148,12 @@ function buildTomlStylePolicyConfig(): PolicyEngineConfig {
   };
 }
 
+const ownedPolicies: Array<{ dispose(): void }> = [];
+
 describe('Config approval-mode policy synchronization (issue #2659)', () => {
+  disposeOwnedPolicies(() => {
+    for (const owner of ownedPolicies.splice(0)) owner.dispose();
+  });
   let settingsService: SettingsService;
   let baseParams: ConfigParameters;
 
@@ -169,8 +176,10 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
   it('YOLO→DEFAULT: ast_edit reverts from ALLOW to ASK_USER after transition', () => {
     const config = makeConfig({ approvalMode: ApprovalMode.YOLO });
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
 
-    const engine = config.getPolicyEngine();
+    const engine = configPolicy.session.decisions;
 
     expect(engine.evaluate('ast_edit', {})).toBe(PolicyDecision.ALLOW);
 
@@ -181,8 +190,10 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
   it('YOLO→DEFAULT: representative tools revert to ASK_USER after transition', () => {
     const config = makeConfig({ approvalMode: ApprovalMode.YOLO });
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
 
-    const engine = config.getPolicyEngine();
+    const engine = configPolicy.session.decisions;
 
     expect(engine.evaluate('replace', {})).toBe(PolicyDecision.ALLOW);
     expect(engine.evaluate('run_shell_command', { command: 'ls' })).toBe(
@@ -201,8 +212,10 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
   it('AUTO_EDIT→DEFAULT: all six edit tools revert from ALLOW to ASK_USER', () => {
     const config = makeConfig({ approvalMode: ApprovalMode.AUTO_EDIT });
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
 
-    const engine = config.getPolicyEngine();
+    const engine = configPolicy.session.decisions;
 
     for (const tool of AUTO_EDIT_TOOLS) {
       expect(engine.evaluate(tool, {})).toBe(PolicyDecision.ALLOW);
@@ -219,8 +232,10 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
   it('AUTO_EDIT→YOLO: edit tools stay ALLOW, shell becomes ALLOW', () => {
     const config = makeConfig({ approvalMode: ApprovalMode.AUTO_EDIT });
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
 
-    const engine = config.getPolicyEngine();
+    const engine = configPolicy.session.decisions;
 
     expect(engine.evaluate('run_shell_command', { command: 'ls' })).toBe(
       PolicyDecision.ASK_USER,
@@ -240,8 +255,10 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
   it('YOLO→AUTO_EDIT: shell reverts to ASK_USER, edit tools stay ALLOW', () => {
     const config = makeConfig({ approvalMode: ApprovalMode.YOLO });
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
 
-    const engine = config.getPolicyEngine();
+    const engine = configPolicy.session.decisions;
 
     expect(engine.evaluate('run_shell_command', { command: 'ls' })).toBe(
       PolicyDecision.ALLOW,
@@ -261,8 +278,10 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
   it('rapid transitions do not accumulate or lose rules', () => {
     const config = makeConfig({ approvalMode: ApprovalMode.DEFAULT });
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
 
-    const engine = config.getPolicyEngine();
+    const engine = configPolicy.session.decisions;
 
     for (let i = 0; i < 5; i++) {
       config.setApprovalMode(ApprovalMode.YOLO);
@@ -286,8 +305,10 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
   it('non-mode ALLOW rules in base survive mode transitions', () => {
     const config = makeConfig({ approvalMode: ApprovalMode.DEFAULT });
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
 
-    const engine = config.getPolicyEngine();
+    const engine = configPolicy.session.decisions;
 
     expect(engine.evaluate('glob', {})).toBe(PolicyDecision.ALLOW);
 
@@ -301,8 +322,10 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
   it('MessageBus sees updated policy after mode transition (identity preserved)', async () => {
     const config = makeConfig({ approvalMode: ApprovalMode.YOLO });
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
 
-    const engine = config.getPolicyEngine();
+    const engine = configPolicy.session.decisions;
     const bus = new MessageBus(engine, false);
 
     // Before transition (YOLO): requestConfirmation fast-approves
@@ -342,24 +365,30 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
 
   it('initial YOLO construction produces same policy as YOLO transition from DEFAULT', () => {
     const configFromYolo = makeConfig({ approvalMode: ApprovalMode.YOLO });
+    const configFromYoloPolicy = new RuntimePolicyOwner(configFromYolo);
+    ownedPolicies.push(configFromYoloPolicy);
 
     const configFromDefault = makeConfig({
       approvalMode: ApprovalMode.DEFAULT,
     });
+    const configFromDefaultPolicy = new RuntimePolicyOwner(configFromDefault);
+    ownedPolicies.push(configFromDefaultPolicy);
     configFromDefault.setApprovalMode(ApprovalMode.YOLO);
 
-    expect(configFromYolo.getPolicyEngine().evaluate('ast_edit', {})).toBe(
-      configFromDefault.getPolicyEngine().evaluate('ast_edit', {}),
-    );
-    expect(configFromYolo.getPolicyEngine().evaluate('ast_edit', {})).toBe(
-      PolicyDecision.ALLOW,
-    );
+    expect(
+      configFromYoloPolicy.session.decisions.evaluate('ast_edit', {}),
+    ).toBe(configFromDefaultPolicy.session.decisions.evaluate('ast_edit', {}));
+    expect(
+      configFromYoloPolicy.session.decisions.evaluate('ast_edit', {}),
+    ).toBe(PolicyDecision.ALLOW);
   });
 
   it('initial AUTO_EDIT construction includes ast_edit ALLOW', () => {
     const config = makeConfig({ approvalMode: ApprovalMode.AUTO_EDIT });
+    const configPolicy = new RuntimePolicyOwner(config);
+    ownedPolicies.push(configPolicy);
 
-    const engine = config.getPolicyEngine();
+    const engine = configPolicy.session.decisions;
 
     expect(engine.evaluate('ast_edit', {})).toBe(PolicyDecision.ALLOW);
   });
@@ -367,7 +396,7 @@ describe('Config approval-mode policy synchronization (issue #2659)', () => {
   // ── ast_edit is in the AUTO_EDIT_TOOLS list ──────────────────────────
 
   it('AUTO_EDIT_TOOLS includes all six edit tools', () => {
-    expect([...AUTO_EDIT_TOOLS].sort()).toStrictEqual(
+    expect(Array.from<string>(AUTO_EDIT_TOOLS).sort()).toStrictEqual(
       [
         'replace',
         'write_file',

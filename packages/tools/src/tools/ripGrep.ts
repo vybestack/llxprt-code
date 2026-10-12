@@ -475,7 +475,7 @@ File: ${resolved.basename}
     return [searchDirAbs];
   }
 
-  private resolveIgnoreOptions(): RipgrepIgnoreOptions {
+  private resolveIgnoreOptions(directory?: string): RipgrepIgnoreOptions {
     const defaults = this.host.getFileFilteringOptions();
     const respectGitIgnore =
       this.params.file_filtering_options?.respect_git_ignore ??
@@ -484,7 +484,7 @@ File: ${resolved.basename}
       this.params.file_filtering_options?.respect_llxprt_ignore ??
       defaults.respectLlxprtIgnore;
     const llxprtIgnoreFilePath = respectLlxprtIgnore
-      ? this.host.getLlxprtIgnoreFilePath()
+      ? this.host.getLlxprtIgnoreFilePath(directory)
       : null;
     return {
       respectGitIgnore,
@@ -501,7 +501,6 @@ File: ${resolved.basename}
       searchDirectories,
       signal,
       DEFAULT_TOTAL_MAX_MATCHES,
-      this.resolveIgnoreOptions(),
     );
   }
 
@@ -509,7 +508,6 @@ File: ${resolved.basename}
     searchDirectories: readonly string[],
     signal: AbortSignal,
     totalMaxMatches: number,
-    ignoreOptions: RipgrepIgnoreOptions,
   ): Promise<{ matches: GrepMatch[]; wasTruncated: boolean }> {
     let allMatches: GrepMatch[] = [];
     let wasTruncated = false;
@@ -523,6 +521,7 @@ File: ${resolved.basename}
     let lastSearchedIndex = -1;
     for (let di = 0; di < searchDirectories.length && !stop; di++) {
       const searchDir = searchDirectories[di];
+      const directoryIgnoreOptions = this.resolveIgnoreOptions(searchDir);
       const remaining = totalMaxMatches - allMatches.length;
       if (remaining <= 0) {
         allMatches = allMatches.slice(0, totalMaxMatches);
@@ -536,7 +535,7 @@ File: ${resolved.basename}
         path: searchDir,
         include: this.params.include,
         signal,
-        ignoreOptions,
+        ignoreOptions: directoryIgnoreOptions,
         maxMatches: remaining,
         semanticBudget: aggregateBudget,
       });
@@ -677,7 +676,9 @@ File: ${resolved.basename}
         workspaceContext,
       );
       const { matches: allMatches, wasTruncated: dirWasTruncated } =
-        await this.collectDirectoryMatches(searchDirectories, signal);
+        await this.host.runSearch(searchDirectories, () =>
+          this.collectDirectoryMatches(searchDirectories, signal),
+        );
 
       const searchLocationDescription = this.buildSearchLocationDescription(
         searchDirAbs,

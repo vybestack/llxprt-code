@@ -169,7 +169,7 @@ export function limitStringOutput(
   toolName: string,
   config?: ToolOutputSettingsProvider,
 ): string {
-  if (!config || typeof config.getEphemeralSettings !== 'function') {
+  if (!config) {
     return text;
   }
   const limited = limitOutputTokens(text, config, toolName);

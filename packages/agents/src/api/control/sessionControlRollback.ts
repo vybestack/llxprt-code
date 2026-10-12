@@ -5,11 +5,12 @@
  */
 
 import {
+  RecordingIntegration,
   withRecordingFailureReport,
   type LockHandle,
-  type RecordingIntegration,
   type SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 
 export async function captureRollbackFailure(
   failures: unknown[],
@@ -52,4 +53,50 @@ export function rollbackPreparedSessionArtifacts(input: {
     input.recording,
     input.lockHandle,
   );
+}
+
+export function adoptRecordingSessionId(
+  config: Config,
+  sessionIdentityOwnership: 'config' | 'facade',
+  priorSessionId: string,
+  recording: SessionRecordingService,
+  beforeAdoption: () => void,
+): void {
+  if (sessionIdentityOwnership === 'facade') return;
+  const configId = config.getSessionId();
+  if (configId !== priorSessionId) {
+    throw new Error(
+      `Cannot adopt recording session ${recording.getSessionId()}: shared Config session ${configId} does not belong to facade recording session ${priorSessionId}`,
+    );
+  }
+  beforeAdoption();
+  config.adoptSessionId(recording.getSessionId());
+}
+
+export async function restoreConfigSessionId(
+  config: Config,
+  sessionIdentityOwnership: 'config' | 'facade',
+  priorSessionId: string,
+  adoptionAttempted: boolean,
+  failures: unknown[],
+): Promise<void> {
+  if (sessionIdentityOwnership === 'facade') return;
+  if (adoptionAttempted && config.getSessionId() !== priorSessionId) {
+    await captureRollbackFailure(failures, () =>
+      config.adoptSessionId(priorSessionId),
+    );
+  }
+}
+
+export function rethrowSessionTransitionFailure(
+  error: unknown,
+  failures: unknown[],
+): never {
+  if (failures.length > 0) {
+    throw new AggregateError(
+      [error, ...failures],
+      'Session transition and rollback both failed',
+    );
+  }
+  throw error;
 }

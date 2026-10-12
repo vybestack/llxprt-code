@@ -675,7 +675,13 @@ function facadeCallback21(): void {
   const { cfg, settingsService } =
     observeGetCompletionBudgetPrefersTheLiveSettingsServiceMaxOutputTokensOverAllOtherSources();
   expect(
-    getCompletionBudget(cfg as never, 'm', undefined, settingsService, 131_072),
+    getCompletionBudget(
+      cfg as never,
+      'm',
+      undefined,
+      settingsService.get('maxOutputTokens'),
+      131_072,
+    ),
   ).toBe(32768);
 }
 
@@ -689,7 +695,13 @@ function facadeCallback23(): void {
   const { settingsService } =
     observeGetCompletionBudgetRejectsALiveBudgetThatConsumesTheContext();
   expect(() =>
-    getCompletionBudget({}, 'm', undefined, settingsService, 131_072),
+    getCompletionBudget(
+      {},
+      'm',
+      undefined,
+      settingsService.get('maxOutputTokens'),
+      131_072,
+    ),
   ).toThrow(InvalidContextBudgetError);
 }
 
@@ -825,9 +837,7 @@ function statefulRuntime(
   providerRuntime: ReturnType<typeof createProviderRuntimeContext>;
 } {
   const settings = new SettingsService();
-  const config = createRuntimeConfigStub(settings, {
-    getTokenizerFactory: () => tokenizerFactory,
-  });
+  const config = createRuntimeConfigStub(settings);
   const providerRuntime = createProviderRuntimeContext({
     settingsService: settings,
     config,

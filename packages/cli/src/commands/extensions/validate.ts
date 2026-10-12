@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { configureCommandOptions } from '../command-configuration.js';
 import type { CommandModule } from 'yargs';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
 import * as fs from 'node:fs';
@@ -126,11 +127,13 @@ export const validateCommand: CommandModule = {
   command: 'validate <path>',
   describe: 'Validates an extension from a local path.',
   builder: (yargs) =>
-    yargs.positional('path', {
-      describe: 'The path of the extension to validate.',
-      type: 'string',
-      demandOption: true,
-    }),
+    configureCommandOptions(yargs, (configuration) =>
+      configuration.positional('path', {
+        describe: 'The path of the extension to validate.',
+        type: 'string',
+        demandOption: true,
+      }),
+    ),
   handler: async (args) => {
     await handleValidate({
       path: args['path'] as string,

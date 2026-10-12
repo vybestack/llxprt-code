@@ -22,7 +22,7 @@ import {
   AgentExecutionStoppedError,
   AgentExecutionBlockedError,
 } from './chatSession.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProviderToolset as ProviderToolset } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import {
@@ -40,7 +40,7 @@ export interface BeforeModelHookFireResult {
 
 /** Inputs to fireBeforeModelHook. */
 export interface BeforeModelHookFireOptions {
-  configForHooks: AgentRuntimeContext['providerRuntime']['config'];
+  owner?: HookExecutionOwner;
   requestContents: IContent[];
   pendingUserIContents: IContent[];
   tools: ProviderToolset | undefined;
@@ -60,7 +60,7 @@ export async function fireBeforeModelHook(
   options: BeforeModelHookFireOptions,
 ): Promise<BeforeModelHookFireResult> {
   const {
-    configForHooks,
+    owner,
     requestContents,
     pendingUserIContents,
     tools,
@@ -82,29 +82,19 @@ export async function fireBeforeModelHook(
       log,
     ),
   });
-  if (
-    configForHooks === undefined ||
-    typeof configForHooks.getEnableHooks !== 'function' ||
-    configForHooks.getEnableHooks() !== true
-  ) {
-    return passthrough();
-  }
-  const hookSystem =
-    typeof configForHooks.getHookSystem === 'function'
-      ? configForHooks.getHookSystem()
-      : undefined;
-  if (hookSystem === undefined) return passthrough();
-
-  await hookSystem.initialize();
+  if (owner?.beforeModel === undefined) return passthrough();
   // Capture a projection snapshot BEFORE firing the hook so in-place
   // mutations (hooks that mutate the live array/elements and return no
   // llm_request) are detected by differential recovery (G1, issue #2306).
   const snapshot = snapshotContents(requestContents);
-  const beforeModelResult = await hookSystem.fireBeforeModelEvent({
-    model,
-    contents: requestContents,
-    ...(tools !== undefined ? { tools } : {}),
-  });
+  const beforeModelResult = await owner.beforeModel(
+    {
+      model,
+      contents: requestContents,
+      ...(tools !== undefined ? { tools } : {}),
+    },
+    owner.signal,
+  );
 
   enforceBeforeModelHookDecision(beforeModelResult, hookRestrictedAllowedTools);
 
@@ -127,7 +117,7 @@ export async function fireBeforeModelHook(
 export interface BeforeModelSnapshotHookOptions
   extends Pick<
     BeforeModelHookFireOptions,
-    'configForHooks' | 'model' | 'tools' | 'log'
+    'owner' | 'model' | 'tools' | 'log'
   > {
   readonly requestContents: ProviderRequestRows;
   readonly rawPending: ProviderRequestRows;
@@ -154,25 +144,17 @@ function enforceSnapshotDecision(
   }
 }
 
-/** Returned selections own disk copies independently of the hook command output. */
+/**
+ * Returned selections own disk copies independently of the hook command output.
+ * Resolves `undefined` when the owner reports that hooks are disabled or no
+ * BeforeModel hook is registered, so the caller keeps its unmodified selection
+ * without copying the request to disk.
+ */
 export async function fireBeforeModelSnapshotHook(
   options: BeforeModelSnapshotHookOptions,
-): Promise<BoundarySnapshotResult> {
+): Promise<BoundarySnapshotResult | undefined> {
   options.signal?.throwIfAborted();
-  const config = options.configForHooks;
-  const system =
-    config?.getEnableHooks() === true ? config.getHookSystem() : undefined;
-  if (system === undefined) {
-    return resolvePendingBoundarySnapshot({
-      before: options.requestContents,
-      after: options.requestContents,
-      rawPending: options.rawPending,
-      root: options.root,
-      signal: options.signal,
-    });
-  }
-  await system.initialize(options.signal);
-  const hook = await system.fireBeforeModelSnapshotEvent(
+  const hook = await options.owner?.beforeModelSnapshot?.(
     {
       model: options.model,
       contents: options.requestContents,
@@ -180,6 +162,7 @@ export async function fireBeforeModelSnapshotHook(
     },
     options.signal,
   );
+  if (hook === undefined) return undefined;
   let resolved: BoundarySnapshotResult | undefined;
   try {
     enforceSnapshotDecision(hook.finalOutput);

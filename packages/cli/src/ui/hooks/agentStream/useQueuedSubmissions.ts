@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useStateAndRef } from '../useStateAndRef.js';
 import type { QueuedSubmission } from './types.js';
 
@@ -85,8 +85,18 @@ export function useQueuedSubmissions() {
   }, [queuedSubmissionsRef, setQueuedSubmissions]);
 
   const clearSubmissions = useCallback((): void => {
+    for (const submission of queuedSubmissionsRef.current)
+      submission.onConsumed?.();
     setQueuedSubmissions([]);
-  }, [setQueuedSubmissions]);
+  }, [queuedSubmissionsRef, setQueuedSubmissions]);
+
+  useEffect(
+    () => () => {
+      for (const submission of queuedSubmissionsRef.current)
+        submission.onConsumed?.();
+    },
+    [queuedSubmissionsRef],
+  );
 
   const tryReserveDrain = useCallback((): boolean => {
     if (drainInFlightRef.current) {

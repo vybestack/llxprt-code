@@ -1,3 +1,4 @@
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -18,6 +19,7 @@
  * stubbed because it crosses a network/LLM boundary.
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, it, expect } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { UsageStats } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -154,11 +156,7 @@ function buildContext(
         },
       },
       providerRuntime: {
-        settingsService: {
-          get: () => undefined,
-          set: () => {},
-          getProviderSettings: () => ({}),
-        },
+        settingsService: new SettingsService(),
         config: undefined,
         runtimeId: 'test-provider-runtime',
         metadata: { source: 'test' },
@@ -183,16 +181,16 @@ function buildContext(
     } as unknown as Logger,
     resolveProvider: () => {
       const runtime = {
-        settingsService: {
-          get: () => undefined,
-          set: () => {},
-          getProviderSettings: () => ({}),
-        },
+        settingsService: new SettingsService(),
         config: undefined,
         runtimeId: 'test-provider-runtime',
         metadata: { source: 'test' },
       };
-      return { provider, runtime };
+      return {
+        invocation: captureProviderInvocation(runtime, provider.name),
+        provider,
+        runtime,
+      };
     },
     promptResolver: {
       resolveFile: () => ({ found: false, path: null, source: null }),

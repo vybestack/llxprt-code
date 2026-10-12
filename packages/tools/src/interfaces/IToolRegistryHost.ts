@@ -35,7 +35,6 @@ export interface IToolRegistryHost {
   getToolCallCommand?(): string | undefined;
 
   /** Returns the prompt registry boundary used by discovery refreshes. */
-  getPromptRegistry?(): { clear(): void } | undefined;
 
   /** Whether a specific tool is enabled. */
   isToolEnabled?(name: string): boolean;

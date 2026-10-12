@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { parseOutputLimits } from '@vybestack/llxprt-code-core';
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
  * @requirement:REQ-API-001
@@ -16,34 +17,15 @@ import type {
   MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
-import { getHistoryServiceFromConfig as getHistoryService } from './historyServiceAccess.js';
+import { getHistoryServiceFromAgent as getHistoryService } from './historyServiceAccess.js';
 import type { CommandArgumentSchema } from './schema/types.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   type DumpMode,
   buildProviderDumpBodyStream,
   dumpRequestContextStream,
-  type IProvider,
 } from '@vybestack/llxprt-code-providers';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import * as path from 'node:path';
-
-type ActiveProviderDumpView = {
-  getCurrentModel?: () => string | undefined;
-  baseURL?: string;
-  /**
-   * Optional plugin-owned dump conversion. The Gemini provider (contributed by
-   * @vybestack/llxprt-plugin-google-gemini) exposes it; the base
-   * buildProviderDumpBody dispatcher does not know Gemini wire shapes (#2763).
-   */
-  contextDumpVersion?: number;
-  buildContextDumpBody?: IProvider['buildContextDumpBody'];
-};
-
-type ProviderManagerWithActive = {
-  getActiveProviderName?: () => string | undefined;
-  getActiveProvider?: () => ActiveProviderDumpView | undefined;
-};
 
 const historyUnavailableMessage =
   'History is not available. Start a conversation first before dumping context.';
@@ -52,34 +34,6 @@ const validModes: DumpMode[] = ['now', 'status', 'on', 'error', 'off'];
 
 function isValidMode(mode: string): mode is DumpMode {
   return validModes.includes(mode as DumpMode);
-}
-
-function getProviderDumpMetadata(
-  config: NonNullable<CommandContext['services']['config']>,
-): {
-  providerName: string;
-  activeProvider: ActiveProviderDumpView | undefined;
-  activeModel: string | undefined;
-  activeBaseURL: string | undefined;
-} {
-  const providerManager = config.getProviderManager() as
-    | ProviderManagerWithActive
-    | undefined;
-  if (!providerManager) {
-    return {
-      providerName: 'backend',
-      activeProvider: undefined,
-      activeModel: undefined,
-      activeBaseURL: undefined,
-    };
-  }
-  const activeProvider = providerManager.getActiveProvider?.();
-  return {
-    providerName: providerManager.getActiveProviderName?.() ?? 'backend',
-    activeProvider,
-    activeModel: activeProvider?.getCurrentModel?.(),
-    activeBaseURL: activeProvider?.baseURL,
-  };
 }
 
 function isGeminiFamilyProviderName(providerName: string): boolean {
@@ -91,7 +45,7 @@ async function dumpImmediateContext(
   context: CommandContext,
 ): Promise<MessageActionReturn> {
   const config = context.services.config;
-  const historyService = getHistoryService(config);
+  const historyService = getHistoryService(context.services.agent);
   if (!config || !historyService) {
     return {
       type: 'message',
@@ -99,13 +53,16 @@ async function dumpImmediateContext(
       content: historyUnavailableMessage,
     };
   }
-  const { providerName, activeProvider, activeModel, activeBaseURL } =
-    getProviderDumpMetadata(config);
-  const pluginConverter = activeProvider?.buildContextDumpBody;
-  if (
-    pluginConverter !== undefined &&
-    activeProvider?.contextDumpVersion !== 2
-  ) {
+  const policy = config.getEphemeralSettings();
+  const limits = parseOutputLimits(policy);
+  const {
+    providerName,
+    contextDumpVersion,
+    buildContextDumpBody: pluginConverter,
+    activeModel,
+    activeBaseURL,
+  } = context.runtimeApi.getProviderDumpMetadata();
+  if (pluginConverter !== undefined && contextDumpVersion !== 2) {
     throw new Error(
       `Provider '${providerName}' uses an unsupported eager context dump hook. Upgrade the plugin to contextDumpVersion 2 with async bounded conversion.`,
     );
@@ -120,22 +77,19 @@ async function dumpImmediateContext(
   }
   const history = await historyService.openDumpSnapshot();
   try {
+    // Plugin-owned providers (Gemini) build their own wire body at runtime;
+    // the base package never imports plugin code.
     const body =
       pluginConverter === undefined
         ? buildProviderDumpBodyStream({
             providerName,
             history,
-            settings: context.services.settings,
-            config,
+            policy,
+            config: limits,
             model: activeModel,
             baseURL: activeBaseURL,
           })
-        : await pluginConverter.call(
-            activeProvider,
-            history,
-            activeModel,
-            config,
-          );
+        : await pluginConverter(history, activeModel, limits);
     const request = { url: 'immediate-context-dump', method: 'DUMP', body };
     const result = await dumpRequestContextStream(
       request,
@@ -196,7 +150,7 @@ export const dumpcontextCommand: SlashCommand = {
     args: string,
   ): Promise<MessageActionReturn> => {
     try {
-      const runtime = getRuntimeApi();
+      const runtime = context.runtimeApi;
       const mode = args.trim().toLowerCase() || 'status';
 
       if (!isValidMode(mode)) {

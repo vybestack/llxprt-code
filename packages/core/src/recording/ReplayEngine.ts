@@ -15,6 +15,7 @@
  */
 import { JournalResolver } from './journalResolver.js';
 import { createAccumulators, finalizeReplay } from './replayMetadataFold.js';
+import { hydrateRecordedMedia } from '../storage/recorded-media-transfer.js';
 import {
   ReplayMetadataFailure,
   ResolverReplayMetadata,
@@ -242,6 +243,7 @@ async function verifyReplayMedia(
     return replay;
   }
   try {
+    await hydrateRecordedMedia(options.mediaStore, replay.history);
     const admissionContext = {
       turnId: 'session-replay',
       source: 'session-replay',

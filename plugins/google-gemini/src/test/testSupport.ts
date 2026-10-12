@@ -96,6 +96,10 @@ export function createRuntimeConfigStub(
 ): Config {
   const noop = () => {};
   const base = {
+    getTargetDir: () => process.cwd(),
+    getTokenizerFactory: () => undefined,
+    getConversationLogPath: () => '',
+
     getConversationLoggingEnabled: () => false,
     setConversationLoggingEnabled: noop,
     getTelemetryLogPromptsEnabled: () => false,
@@ -161,17 +165,10 @@ export function makeFakeConfig(options?: {
     debugMode: false,
     cwd: '/tmp/test',
     model: 'gemini-2.0-flash-exp',
+    initialSettings: options?.ephemeralSettings,
   };
 
   const config = new Config(params);
-
-  config.setModel('gemini-2.0-flash-exp');
-
-  if (options?.ephemeralSettings) {
-    for (const [key, value] of Object.entries(options.ephemeralSettings)) {
-      config.setEphemeralSetting(key, value);
-    }
-  }
 
   const mockContentGeneratorConfig: ContentGeneratorConfig = {
     model: 'gemini-2.0-flash-exp',
@@ -372,8 +369,9 @@ function ensureInvocation(
       : undefined;
 
   return createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
+
     providerName,
     metadata,
     ephemeralsSnapshot,
@@ -392,9 +390,6 @@ function ensureInvocation(
 export function createProviderCallOptions(
   init: ProviderCallOptionsInit,
 ): GenerateChatOptions & {
-  settings: SettingsService;
-  config: Config;
-  runtime: ProviderRuntimeContext;
   invocation: RuntimeInvocationContext;
 } {
   if (!init.providerName) {
@@ -433,9 +428,6 @@ export function createProviderCallOptions(
     contents: toAsyncContents(init.contents ?? []),
     tools: init.tools,
     metadata: mergedMetadata,
-    settings,
-    config,
-    runtime,
     invocation,
     resolved: init.resolved,
     userMemory: init.userMemory,

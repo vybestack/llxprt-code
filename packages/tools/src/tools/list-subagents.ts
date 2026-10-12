@@ -11,22 +11,9 @@ import {
   type ToolResult,
 } from './tools.js';
 import type { IToolMessageBus } from '../interfaces/IToolMessageBus.js';
-import type { ISubagentService, SubagentConfig } from '../interfaces/index.js';
+import type { ISubagentCatalog, SubagentConfig } from '../interfaces/index.js';
 
 type ListSubagentsParams = Record<string, never>;
-
-export interface ListSubagentsToolDependencies {
-  getSubagentService?: () => ISubagentService | undefined;
-}
-
-function resolveSubagentService(
-  dependenciesOrService: ListSubagentsToolDependencies | ISubagentService,
-): ISubagentService | undefined {
-  if ('listSubagents' in dependenciesOrService) {
-    return dependenciesOrService;
-  }
-  return dependenciesOrService.getSubagentService?.();
-}
 
 interface SubagentSummary {
   name: string;
@@ -59,7 +46,7 @@ class ListSubagentsToolInvocation extends BaseToolInvocation<
 > {
   constructor(
     params: ListSubagentsParams,
-    private readonly subagentService: ISubagentService,
+    private readonly catalog: ISubagentCatalog,
     messageBus?: IToolMessageBus,
   ) {
     super(params, messageBus);
@@ -70,7 +57,7 @@ class ListSubagentsToolInvocation extends BaseToolInvocation<
   }
 
   override async execute(): Promise<ToolResult> {
-    const subagents = await this.subagentService.listSubagents();
+    const subagents = await this.catalog.listSubagents();
     if (subagents.length === 0) {
       const message =
         'No subagents are currently registered. Use the /subagent CLI command to create one.';
@@ -86,7 +73,7 @@ class ListSubagentsToolInvocation extends BaseToolInvocation<
       a.name.localeCompare(b.name),
     )) {
       try {
-        const config = await this.subagentService.getSubagentConfig(name);
+        const config = await this.catalog.getSubagentConfig(name);
         if (!config) {
           throw new Error(`Subagent '${name}' not found.`);
         }
@@ -142,11 +129,7 @@ export class ListSubagentsTool extends BaseDeclarativeTool<
 > {
   static readonly Name = 'list_subagents';
 
-  constructor(
-    private readonly dependencies:
-      | ListSubagentsToolDependencies
-      | ISubagentService = {},
-  ) {
+  constructor(private readonly catalog: ISubagentCatalog) {
     super(
       ListSubagentsTool.Name,
       'ListSubagents',
@@ -164,25 +147,11 @@ export class ListSubagentsTool extends BaseDeclarativeTool<
     params: ListSubagentsParams,
     messageBus: IToolMessageBus,
   ): ListSubagentsToolInvocation {
-    const service = resolveSubagentService(this.dependencies);
-
-    if (!service) {
-      throw new Error(
-        'SubagentManager service is unavailable. Please configure subagents before invoking this tool.',
-      );
-    }
-
-    return new ListSubagentsToolInvocation(params, service, messageBus);
+    return new ListSubagentsToolInvocation(params, this.catalog, messageBus);
   }
 
   async execute(params: ListSubagentsParams): Promise<ToolResult> {
-    const service = resolveSubagentService(this.dependencies);
-    if (!service) {
-      throw new Error(
-        'SubagentManager service is unavailable. Please configure subagents before invoking this tool.',
-      );
-    }
-    return new ListSubagentsToolInvocation(params, service).execute();
+    return new ListSubagentsToolInvocation(params, this.catalog).execute();
   }
 
   protected override validateToolParamValues(): string | null {

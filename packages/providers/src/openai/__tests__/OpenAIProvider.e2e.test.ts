@@ -5,8 +5,8 @@
  * @requirement REQ-THINK-003, REQ-THINK-004, REQ-THINK-005, EC-006
  */
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
-import { OpenAIProvider } from '../OpenAIProvider';
-import { buildMessagesWithReasoning } from '../OpenAIRequestBuilder';
+import { OpenAIProvider } from '../OpenAIProvider.js';
+import { buildMessagesWithReasoning } from '../OpenAIRequestBuilder.js';
 import type {
   IContent,
   ThinkingBlock,
@@ -17,7 +17,7 @@ import { initializeTestProviderRuntime } from '@vybestack/llxprt-code-test-utils
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type OpenAI from 'openai';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
 import { createOpenAIRawPostTestAdapter } from '../../__tests__/rawPostTestAdapters.js';
 
 // Mock OpenAI client at the instance level
@@ -69,7 +69,7 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
     settingsService = runtime.settingsService;
     runtimeConfig = runtime.config;
     provider = new OpenAIProvider('test-api-key', 'https://api.openai.com/v1');
-    provider.setRuntimeSettingsService?.(settingsService);
+    provider.setRuntimeSettingsService(settingsService);
     provider.setConfig?.(runtime.config);
 
     settingsService.set('activeProvider', provider.name);
@@ -154,7 +154,7 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
       for await (const content of provider.generateChatCompletion(
         createProviderCallOptions({
           providerName: provider.name,
-          settings: settingsService,
+          invocation: { ephemerals: settingsService.getAllGlobalSettings() },
           contents: messages,
         }),
       )) {
@@ -218,7 +218,7 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
 
       // Build messages using the extracted function
       const messages = buildMessagesWithReasoning(history, {
-        settings: settingsService,
+        invocation: { ephemerals: settingsService.getAllGlobalSettings() },
         config: runtimeConfig,
       } as unknown as NormalizedGenerateChatOptions);
 
@@ -268,7 +268,7 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
       for await (const content of provider.generateChatCompletion(
         createProviderCallOptions({
           providerName: provider.name,
-          settings: settingsService,
+          invocation: { ephemerals: settingsService.getAllGlobalSettings() },
           contents: messages,
         }),
       )) {
@@ -329,7 +329,7 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
       settingsService.set('reasoning.stripFromContext', 'none');
 
       const messages = buildMessagesWithReasoning(history, {
-        settings: settingsService,
+        invocation: { ephemerals: settingsService.getAllGlobalSettings() },
         config: runtimeConfig,
       } as unknown as NormalizedGenerateChatOptions);
 
@@ -382,7 +382,7 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
       settingsService.set('reasoning.includeInContext', false);
 
       const messages = buildMessagesWithReasoning(history, {
-        settings: settingsService,
+        invocation: { ephemerals: settingsService.getAllGlobalSettings() },
         config: runtimeConfig,
       } as unknown as NormalizedGenerateChatOptions);
 
@@ -451,7 +451,7 @@ describe('OpenAIProvider E2E Tests @plan:PLAN-20251202-THINKING.P16', () => {
       settingsService.set('reasoning.stripFromContext', 'allButLast');
 
       const messages = buildMessagesWithReasoning(history, {
-        settings: settingsService,
+        invocation: { ephemerals: settingsService.getAllGlobalSettings() },
         config: runtimeConfig,
       } as unknown as NormalizedGenerateChatOptions);
 

@@ -4,17 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { KeychainTokenStorage } from './token-storage/keychain-token-storage.js';
 import type {
   OAuthCredentials,
   OAuthToken,
   TokenStorage,
-} from './token-storage/types.js';
+} from './token-storage/index.js';
 import type { MCPOAuthToken, MCPOAuthCredentials } from './token-store.js';
 
 export type { MCPOAuthToken, MCPOAuthCredentials } from './token-store.js';
 
-const DEFAULT_SERVICE_NAME = 'llxprt-cli-mcp-oauth';
 const EXPIRY_BUFFER_MS = 5 * 60 * 1000;
 
 function isInvalidExpiry(expiresAt: unknown): boolean {
@@ -39,90 +37,8 @@ function isInvalidExpiry(expiresAt: unknown): boolean {
   return false;
 }
 
-/**
- * Token storage wrapper that bridges the legacy static API with the new
- * shared TokenStorage interface used across the MCP stack. By default it
- * delegates to a KeychainTokenStorage that uses SecureStore internally
- * for keychain + encrypted-file fallback.
- *
- * @plan PLAN-20260211-SECURESTORE.P09
- */
 export class MCPOAuthTokenStorage implements TokenStorage {
-  private static tokenStore: TokenStorage = new KeychainTokenStorage(
-    DEFAULT_SERVICE_NAME,
-  );
-
-  constructor(
-    private readonly storage: TokenStorage = MCPOAuthTokenStorage.tokenStore,
-  ) {}
-
-  /**
-   * Swap out the underlying token store implementation. Useful for testing or
-   * for embedding environments that need a custom persistence layer.
-   */
-  static setTokenStore(store: TokenStorage): void {
-    this.tokenStore = store;
-  }
-
-  static getTokenStore(): TokenStorage {
-    return this.tokenStore;
-  }
-
-  /**
-   * Legacy helper that loads all stored credentials.
-   */
-  static async loadTokens(): Promise<Map<string, MCPOAuthCredentials>> {
-    return (await this.tokenStore.getAllCredentials()) as Map<
-      string,
-      MCPOAuthCredentials
-    >;
-  }
-
-  /**
-   * Legacy helper that persists credentials for a server.
-   */
-  static async saveToken(
-    serverName: string,
-    token: MCPOAuthToken,
-    clientId?: string,
-    tokenUrl?: string,
-    mcpServerUrl?: string,
-  ): Promise<void> {
-    const credentials = this.createCredentials(
-      serverName,
-      token,
-      clientId,
-      tokenUrl,
-      mcpServerUrl,
-    );
-    await this.tokenStore.setCredentials(credentials);
-  }
-
-  /**
-   * Legacy helper that retrieves credentials for a server.
-   */
-  static async getToken(
-    serverName: string,
-  ): Promise<MCPOAuthCredentials | null> {
-    this.validateServerName(serverName);
-    const credentials = await this.tokenStore.getCredentials(serverName);
-    return credentials as MCPOAuthCredentials | null;
-  }
-
-  /**
-   * Legacy helper that removes credentials for a server.
-   */
-  static async removeToken(serverName: string): Promise<void> {
-    this.validateServerName(serverName);
-    await this.tokenStore.deleteCredentials(serverName);
-  }
-
-  /**
-   * Legacy helper that clears all persisted credentials.
-   */
-  static async clearAllTokens(): Promise<void> {
-    await this.tokenStore.clearAll();
-  }
+  constructor(private readonly storage: TokenStorage) {}
 
   /**
    * Determine whether a token is expired (with a buffer to avoid clock skew).

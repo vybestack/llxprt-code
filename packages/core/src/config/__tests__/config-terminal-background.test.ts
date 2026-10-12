@@ -21,7 +21,7 @@ describe('Config - Terminal Background', () => {
       userMemory: '',
       sessionId: 'test-session',
       model: 'test-model',
-      settingsService,
+      initialSettings: settingsService.getAllGlobalSettings(),
     });
   });
 

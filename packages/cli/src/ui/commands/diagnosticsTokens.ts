@@ -5,10 +5,11 @@
  */
 
 import type { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import { MCPOAuthTokenStorage } from '@vybestack/llxprt-code-mcp';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
-import { discoverProviderBuckets } from './oauthBucketDiscovery.js';
+import {
+  MCPOAuthTokenStorage,
+  type TokenStorage,
+} from '@vybestack/llxprt-code-mcp';
+import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 
 interface McpServerToken {
   readonly expiresAt?: number;
@@ -19,20 +20,18 @@ interface McpServerToken {
 
 interface ProviderToken {
   readonly expiry?: number;
-  readonly refresh_token?: string;
+  readonly hasRefreshToken: boolean;
 }
 
 async function appendProviderTokens(
   diagnostics: string[],
   logger: DebugLogger,
-  oauthManager: OAuthManager,
+  oauthManager: OAuthControl,
 ): Promise<void> {
-  const discovered = await discoverProviderBuckets(oauthManager, logger);
+  const discovered = await oauthManager.discoverBuckets(logger);
   if (discovered.length === 0) {
     return;
   }
-
-  const tokenStore = oauthManager.getTokenStore();
 
   for (const { provider, buckets } of discovered) {
     diagnostics.push('### Provider Tokens');
@@ -42,10 +41,11 @@ async function appendProviderTokens(
     for (const { bucket } of buckets) {
       let token: ProviderToken | null;
       try {
-        token = (await tokenStore.getToken(
+        const summary = await oauthManager.readStoredTokenSummary(
           provider,
           bucket,
-        )) as ProviderToken | null;
+        );
+        token = summary;
       } catch (error) {
         logger.debug(
           () =>
@@ -78,7 +78,7 @@ function appendProviderBucketToken(
   diagnostics.push(`    - Expires: ${expiryDate.toISOString()}`);
   diagnostics.push(`    - Time Remaining: ${hours}h ${minutes}m`);
   diagnostics.push(
-    `    - Refresh Token: ${token.refresh_token ? 'Available' : 'None'}`,
+    `    - Refresh Token: ${token.hasRefreshToken ? 'Available' : 'None'}`,
   );
 }
 
@@ -130,12 +130,12 @@ function formatMcpServerToken(
 }
 
 async function appendMcpTokens(
+  readCredentials: TokenStorage['getAllCredentials'],
   diagnostics: string[],
   logger: DebugLogger,
 ): Promise<boolean> {
   try {
-    const mcpTokenStorage = new MCPOAuthTokenStorage();
-    const mcpTokens = await mcpTokenStorage.getAllCredentials();
+    const mcpTokens = await readCredentials();
 
     if (mcpTokens.size > 0) {
       diagnostics.push('\n### MCP Server Tokens');
@@ -157,15 +157,15 @@ async function appendMcpTokens(
  * is independently testable.
  */
 export async function appendOAuthTokens(
+  readCredentials: TokenStorage['getAllCredentials'],
   diagnostics: string[],
   logger: DebugLogger,
+  oauthManager: OAuthControl,
 ): Promise<void> {
   diagnostics.push('\n## OAuth Tokens');
 
   try {
-    const runtimeApi = getRuntimeApi();
-    const oauthManager = runtimeApi.maybeGetCliOAuthManager();
-    if (oauthManager == null) {
+    if (!oauthManager.isAvailable()) {
       diagnostics.push('- No OAuth tokens configured');
       return;
     }
@@ -175,7 +175,11 @@ export async function appendOAuthTokens(
     await appendProviderTokens(diagnostics, logger, oauthManager);
     const hasProviderTokens = diagnostics.length > beforeLength;
 
-    const hasMCPTokens = await appendMcpTokens(diagnostics, logger);
+    const hasMCPTokens = await appendMcpTokens(
+      readCredentials,
+      diagnostics,
+      logger,
+    );
 
     if (!hasProviderTokens && !hasMCPTokens) {
       diagnostics.push('- No OAuth tokens configured');

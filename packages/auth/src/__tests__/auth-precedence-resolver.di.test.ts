@@ -8,15 +8,13 @@
  *
  * AuthPrecedenceResolver DI behavioral tests.
  * Uses in-memory ISettingsService and DI doubles.
- * Assertions focus on resolution results and observable cache behavior.
+ * Assertions focus on resolution results and observable resolution behavior.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { AuthPrecedenceResolver } from '../auth-precedence-resolver.js';
 import type { OAuthManager } from '../precedence.js';
-import { ensureRuntimeState, runtimeScopedStates } from '../precedence.js';
 import type { ISettingsService } from '../interfaces/settings-service.js';
-import type { IProviderRuntimeContext } from '../interfaces/runtime-context.js';
 import type { IProviderKeyStorage } from '../interfaces/provider-key-storage.js';
 
 // ─── Test doubles ────────────────────────────────────────────────────────────
@@ -64,19 +62,6 @@ function createInMemoryKeyStorage(
   };
 }
 
-function createTestRuntimeContext(
-  runtimeId: string,
-  settingsService?: ISettingsService,
-): IProviderRuntimeContext {
-  const context: IProviderRuntimeContext = {
-    settingsService: settingsService ?? createInMemorySettingsService(),
-    runtimeId,
-    metadata: {},
-  };
-  ensureRuntimeState(context);
-  return context;
-}
-
 function createOAuthManager(
   tokenValue: string = 'oauth-token-value',
 ): OAuthManager & { tokenCallCount: number } {
@@ -97,16 +82,9 @@ function createOAuthManager(
 describe('AuthPrecedenceResolver DI behavioral tests', () => {
   beforeEach(() => {
     // Clean up runtime states
-    for (const key of [...runtimeScopedStates.keys()]) {
-      runtimeScopedStates.delete(key);
-    }
   });
 
-  afterEach(() => {
-    for (const key of [...runtimeScopedStates.keys()]) {
-      runtimeScopedStates.delete(key);
-    }
-  });
+  afterEach(() => {});
 
   describe('precedence chain resolution', () => {
     it.each(['oauth', 'apikey', undefined])(
@@ -329,11 +307,6 @@ describe('AuthPrecedenceResolver DI behavioral tests', () => {
 
     it('resolves OAuth token when includeOAuth=true and no higher-priority auth', async () => {
       const settings = createInMemorySettingsService();
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-oauth-test',
-        settings,
-      );
-
       const resolver = new AuthPrecedenceResolver(
         {
           providerId: 'anthropic',
@@ -344,7 +317,6 @@ describe('AuthPrecedenceResolver DI behavioral tests', () => {
         {
           settingsService: settings,
           oauthManager: createOAuthManager('oauth-resolved-token'),
-          getActiveRuntimeContext: () => runtimeContext,
         },
       );
 
@@ -383,207 +355,6 @@ describe('AuthPrecedenceResolver DI behavioral tests', () => {
 
       const result = await resolver.resolveAuthentication();
       expect(result).toBe('named-key-value');
-    });
-  });
-
-  describe('OAuthManager injection', () => {
-    it('OAuth token is cached and served from cache on subsequent call', async () => {
-      const settings = createInMemorySettingsService();
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-cache-test',
-        settings,
-      );
-
-      let fetchCount = 0;
-      const oauthManager: OAuthManager = {
-        getToken: async () => {
-          fetchCount++;
-          return 'cached-oauth-token';
-        },
-        isAuthenticated: async () => true,
-        getOAuthToken: async () => ({
-          access_token: 'cached-oauth-token',
-          token_type: 'Bearer' as const,
-          expiry: Math.floor(Date.now() / 1000) + 3600,
-        }),
-      };
-
-      const resolver = new AuthPrecedenceResolver(
-        {
-          providerId: 'anthropic',
-          isOAuthEnabled: true,
-          supportsOAuth: true,
-          oauthProvider: 'anthropic',
-        },
-        {
-          settingsService: settings,
-          oauthManager,
-          getActiveRuntimeContext: () => runtimeContext,
-        },
-      );
-
-      // First call: fetches from OAuth
-      const first = await resolver.resolveAuthentication({
-        includeOAuth: true,
-      });
-      expect(first).toBe('cached-oauth-token');
-      expect(fetchCount).toBe(1);
-
-      // Second call: served from cache
-      const second = await resolver.resolveAuthentication({
-        includeOAuth: true,
-      });
-      expect(second).toBe('cached-oauth-token');
-      expect(fetchCount).toBe(1); // No additional fetch
-    });
-  });
-
-  describe('cache invalidation via ISettingsService events', () => {
-    it('provider-change event invalidates cached entries for matching provider', async () => {
-      const settings = createInMemorySettingsService();
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-invalidation-event',
-        settings,
-      );
-
-      let fetchCount = 0;
-      const oauthManager: OAuthManager = {
-        getToken: async () => {
-          fetchCount++;
-          return `token-v${fetchCount}`;
-        },
-        isAuthenticated: async () => true,
-        getOAuthToken: async () => ({
-          access_token: `token-v${fetchCount}`,
-          token_type: 'Bearer' as const,
-          expiry: Math.floor(Date.now() / 1000) + 3600,
-        }),
-      };
-
-      const resolver = new AuthPrecedenceResolver(
-        {
-          providerId: 'anthropic',
-          isOAuthEnabled: true,
-          supportsOAuth: true,
-          oauthProvider: 'anthropic',
-        },
-        {
-          settingsService: settings,
-          oauthManager,
-          getActiveRuntimeContext: () => runtimeContext,
-        },
-      );
-
-      // Prime the cache
-      const first = await resolver.resolveAuthentication({
-        includeOAuth: true,
-      });
-      expect(first).toBe('token-v1');
-      expect(fetchCount).toBe(1);
-
-      // Emit provider-change event for anthropic
-      settings.emit('provider-change', { provider: 'anthropic' });
-
-      // After invalidation, should refetch
-      const second = await resolver.resolveAuthentication({
-        includeOAuth: true,
-      });
-      expect(second).toBe('token-v2');
-      expect(fetchCount).toBe(2);
-    });
-
-    it('profile-change event invalidates all cached entries', async () => {
-      const settings = createInMemorySettingsService();
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-profile-change',
-        settings,
-      );
-
-      let fetchCount = 0;
-      const oauthManager: OAuthManager = {
-        getToken: async () => {
-          fetchCount++;
-          return `token-profile-${fetchCount}`;
-        },
-        isAuthenticated: async () => true,
-        getOAuthToken: async () => ({
-          access_token: `token-profile-${fetchCount}`,
-          token_type: 'Bearer' as const,
-          expiry: Math.floor(Date.now() / 1000) + 3600,
-        }),
-      };
-
-      const resolver = new AuthPrecedenceResolver(
-        {
-          providerId: 'anthropic',
-          isOAuthEnabled: true,
-          supportsOAuth: true,
-          oauthProvider: 'anthropic',
-        },
-        {
-          settingsService: settings,
-          oauthManager,
-          getActiveRuntimeContext: () => runtimeContext,
-        },
-      );
-
-      // Prime the cache
-      await resolver.resolveAuthentication({ includeOAuth: true });
-      expect(fetchCount).toBe(1);
-
-      // Emit profile change
-      settings.emit('change', { key: 'currentProfile' });
-
-      // After profile change, cache should be invalidated
-      await resolver.resolveAuthentication({ includeOAuth: true });
-      expect(fetchCount).toBe(2);
-    });
-
-    it('settings-cleared event invalidates all cached entries', async () => {
-      const settings = createInMemorySettingsService();
-      const runtimeContext = createTestRuntimeContext(
-        'runtime-cleared',
-        settings,
-      );
-
-      let fetchCount = 0;
-      const oauthManager: OAuthManager = {
-        getToken: async () => {
-          fetchCount++;
-          return `token-cleared-${fetchCount}`;
-        },
-        isAuthenticated: async () => true,
-        getOAuthToken: async () => ({
-          access_token: `token-cleared-${fetchCount}`,
-          token_type: 'Bearer' as const,
-          expiry: Math.floor(Date.now() / 1000) + 3600,
-        }),
-      };
-
-      const resolver = new AuthPrecedenceResolver(
-        {
-          providerId: 'anthropic',
-          isOAuthEnabled: true,
-          supportsOAuth: true,
-          oauthProvider: 'anthropic',
-        },
-        {
-          settingsService: settings,
-          oauthManager,
-          getActiveRuntimeContext: () => runtimeContext,
-        },
-      );
-
-      // Prime the cache
-      await resolver.resolveAuthentication({ includeOAuth: true });
-      expect(fetchCount).toBe(1);
-
-      // Emit settings cleared
-      settings.emit('cleared');
-
-      // After cleared event, cache should be invalidated
-      await resolver.resolveAuthentication({ includeOAuth: true });
-      expect(fetchCount).toBe(2);
     });
   });
 

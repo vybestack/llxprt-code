@@ -31,7 +31,6 @@ import type { Config } from '../config/config.js';
  * factory is set on ContentGeneratorConfig, it is preferred.
  */
 import type { RuntimeContentGeneratorFactory } from '../runtime/contracts/RuntimeContentGeneratorFactory.js';
-import type { RuntimeProviderManager } from '../runtime/contracts/RuntimeProviderManager.js';
 
 /**
  * Neutral ContentGenerator interface. All request/response types come from the
@@ -58,7 +57,6 @@ export type ContentGeneratorConfig = {
   model: string;
   apiKey?: string;
   vertexai?: boolean;
-  providerManager?: RuntimeProviderManager;
   /**
    * @plan:PLAN-20260603-ISSUE1584.P05
    * @requirement:REQ-DEP-001
@@ -86,9 +84,10 @@ function firstNonEmptyEnvironmentValue(
   return undefined;
 }
 
-export function createContentGeneratorConfig(
-  config: Config,
-): ContentGeneratorConfig {
+export function createContentGeneratorConfig(selection: {
+  readonly model: string;
+  readonly proxy?: string;
+}): ContentGeneratorConfig {
   const envProviderApiKey = process.env.GEMINI_API_KEY ?? undefined;
   const googleApiKey = process.env.GOOGLE_API_KEY ?? undefined;
   const googleCloudProject = firstNonEmptyEnvironmentValue(
@@ -99,11 +98,11 @@ export function createContentGeneratorConfig(
 
   // No implicit Gemini model fallback: when no model is configured, use the
   // placeholder sentinel so the unconfigured state is observable.
-  const effectiveModel = config.getModel() || PLACEHOLDER_MODEL;
+  const effectiveModel = selection.model || PLACEHOLDER_MODEL;
 
   const contentGeneratorConfig: ContentGeneratorConfig = {
     model: effectiveModel,
-    proxy: config.getProxy(),
+    proxy: selection.proxy,
   };
 
   if (envProviderApiKey) {
@@ -129,15 +128,8 @@ export async function createContentGenerator(
   // @plan:PLAN-20260603-ISSUE1584.P05
   // @requirement:REQ-DEP-001
   // Prefer factory injection when available — eliminates core→providers construction
-  if (config.providerManager != null) {
-    if (config.contentGeneratorFactory != null) {
-      return config.contentGeneratorFactory.createContentGenerator(
-        config.providerManager,
-      );
-    }
-    throw new Error(
-      'Provider content generator factory is required when a provider manager is configured',
-    );
+  if (config.contentGeneratorFactory !== undefined) {
+    return config.contentGeneratorFactory.createContentGenerator();
   }
 
   // @plan:PLAN-20260603-ISSUE1584.P11

@@ -1,3 +1,4 @@
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
 import { OpenAIProvider } from './OpenAIProvider.js';
@@ -708,9 +709,11 @@ describe('OpenAIProvider empty response retry (issue #584)', () => {
     const options = {
       settings: settingsService,
       config: undefined,
-      invocation: {
-        modelParams: {},
-      },
+      invocation: createRuntimeInvocationContext({
+        runtimeId: 'empty-retry',
+        providerName: 'openai',
+        ephemeralsSnapshot: settingsService.getAllGlobalSettings(),
+      }),
       metadata: {},
       resolved: {
         model: 'MiniMaxAI/MiniMax-M2.1-TEE',

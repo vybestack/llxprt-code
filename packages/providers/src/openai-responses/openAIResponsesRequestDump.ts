@@ -12,8 +12,8 @@
  * self-contained diagnostics concern with no callers outside the executor.
  */
 
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
+import type { ResponsesRequest } from './responses-request.js';
 import {
   shouldDumpSDKContext,
   dumpSDKRequestContext,
@@ -60,7 +60,7 @@ export async function dumpFinalizedRequest(
   requestContext: RequestContext,
   invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   sentOverHttp = false,
 ): Promise<DumpFinalizedResult> {
   const dumpMode = invocationEphemerals['dumpcontext'] as DumpMode | undefined;
@@ -177,15 +177,15 @@ export async function buildWebSocketHandshakeHeaders(
 ): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${params.apiKey}`,
-    ...(deps.getCustomHeaders(params.normalizedOptions) ?? {}),
+    ...params.normalizedOptions.headers,
   };
   headers['ChatGPT-Account-ID'] = await deps.getCodexAccountId();
   headers['originator'] = 'codex_cli_rs';
-  const invocationSessionId = params.normalizedOptions.invocation.runtimeId;
+  const invocationSessionId = params.normalizedOptions.invocation.sessionId;
   const sessionId =
     typeof invocationSessionId === 'string' && invocationSessionId.trim() !== ''
       ? invocationSessionId
-      : params.normalizedOptions.runtime?.runtimeId;
+      : undefined;
   if (typeof sessionId === 'string' && sessionId.trim() !== '') {
     headers['session-id'] = sessionId;
     headers['thread-id'] = sessionId;

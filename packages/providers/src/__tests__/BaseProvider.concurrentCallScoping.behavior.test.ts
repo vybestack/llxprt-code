@@ -49,12 +49,12 @@ class ScopingProbeProvider extends BaseProvider {
   protected async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
-    const firstRead = this.resolveSettingsService().get('probe-key');
+    const firstRead = options.invocation.getEphemeral('probe-key');
     yield {
       speaker: 'ai' as const,
       blocks: [{ type: 'text' as const, text: String(firstRead) }],
     };
-    const secondRead = this.resolveSettingsService().get('probe-key');
+    const secondRead = options.invocation.getEphemeral('probe-key');
     yield {
       speaker: 'ai' as const,
       blocks: [{ type: 'text' as const, text: String(secondRead) }],

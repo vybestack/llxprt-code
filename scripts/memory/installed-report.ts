@@ -4,20 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  clearInstalledEntryLoading,
-  markInstalledEntryLoading,
-} from './entrypoint.ts';
 import { resolveInstalledMemprofileRoot } from './runtime-paths.ts';
 
-markInstalledEntryLoading();
-const { INSTALLED_REPORT_USAGE, runReportCliMain } = await import(
-  './report.ts'
-);
-clearInstalledEntryLoading();
+export async function main(): Promise<void> {
+  const { INSTALLED_REPORT_USAGE, runReportCliMain } = await import(
+    './report.ts'
+  );
 
-runReportCliMain({
-  usage: INSTALLED_REPORT_USAGE,
-  memprofileRoot: resolveInstalledMemprofileRoot(),
-  startCommandHint: 'llxprt --memprofile',
-});
+  runReportCliMain({
+    usage: INSTALLED_REPORT_USAGE,
+    memprofileRoot: resolveInstalledMemprofileRoot(),
+    startCommandHint: 'llxprt --memprofile',
+  });
+}

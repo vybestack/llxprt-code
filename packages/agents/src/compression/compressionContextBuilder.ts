@@ -9,6 +9,7 @@ import type { HistoryService } from '@vybestack/llxprt-code-core/services/histor
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import { PromptResolver } from '@vybestack/llxprt-code-core/prompt-config/prompt-resolver.js';
 import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
 import path from 'node:path';
@@ -52,19 +53,18 @@ export async function buildCompressionMetadata(
   activeTodosProvider: (() => Promise<string | undefined>) | undefined,
   transcriptPathProvider: (() => string | undefined) | undefined,
   logger: DebugLogger,
-  options?: { targetTokenCount?: number },
+  options?: {
+    targetTokenCount?: number;
+    modelParameters?: AdmittedModelParameters;
+  },
 ): Promise<Omit<CompressionAttemptContext, 'history'>> {
+  const modelParameters = runtimeContext.ephemerals.compressionProfile()
+    ? undefined
+    : options?.modelParameters;
   const promptResolver = new PromptResolver();
   const promptBaseDir = path.join(Storage.getGlobalConfigDir(), 'prompts');
 
-  let activeTodos: string | undefined;
-  if (activeTodosProvider) {
-    try {
-      activeTodos = await activeTodosProvider();
-    } catch (error) {
-      logger.debug('Failed to fetch active todos for compression', error);
-    }
-  }
+  const activeTodos = await resolveActiveTodos(activeTodosProvider, logger);
 
   // Resolved on every build so a recording service that is enabled, disabled,
   // or swapped mid-session (resume) is reflected at the next compression.
@@ -73,6 +73,7 @@ export async function buildCompressionMetadata(
   const config = runtimeContext.providerRuntime.config;
 
   return {
+    ...(modelParameters ? { modelParameters } : {}),
     runtimeContext,
     runtimeState: runtimeContext.state,
     estimateTokens: (contents) =>
@@ -82,12 +83,35 @@ export async function buildCompressionMetadata(
       ? { targetTokenCount: options.targetTokenCount }
       : {}),
     logger,
-    resolveProvider: providerResolver,
+    resolveProvider: (profileName) => {
+      const route = modelParameters?.route;
+      if (route && !profileName) {
+        return Promise.resolve({
+          provider: route.provider,
+          runtime: runtimeContext.providerRuntime,
+          config,
+          invocation: runtimeContext.prepareProviderInvocation(
+            route.provider.name,
+            modelParameters,
+          ),
+          ...(route.provider.name === 'load-balancer'
+            ? {}
+            : {
+                resolved: {
+                  model: route.model,
+                  ...(route.baseURL ? { baseURL: route.baseURL } : {}),
+                },
+              }),
+        });
+      }
+      return providerResolver(profileName);
+    },
     promptResolver,
     promptBaseDir,
     promptContext: {
-      provider: runtimeContext.state.provider,
-      model: runtimeContext.state.model,
+      provider:
+        modelParameters?.route?.provider.name ?? runtimeContext.state.provider,
+      model: modelParameters?.route?.model ?? runtimeContext.state.model,
     },
     promptId,
     ...(activeTodos ? { activeTodos } : {}),
@@ -97,4 +121,20 @@ export async function buildCompressionMetadata(
     ...(config ? { config } : {}),
     cacheAnchorSeq: historyService.getCacheAnchorSeq(),
   };
+}
+
+async function resolveActiveTodos(
+  activeTodosProvider: (() => Promise<string | undefined>) | undefined,
+  logger: DebugLogger,
+): Promise<string | undefined> {
+  let activeTodos: string | undefined;
+  if (activeTodosProvider) {
+    try {
+      activeTodos = await activeTodosProvider();
+    } catch (error) {
+      logger.debug('Failed to fetch active todos for compression', error);
+    }
+  }
+
+  return activeTodos;
 }

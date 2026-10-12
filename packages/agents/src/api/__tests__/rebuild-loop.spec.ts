@@ -90,7 +90,7 @@ describe('rebuildLoop @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001 @requ
     expect(probe.holder.subscriptions).toBeUndefined();
   });
 
-  it('a throwing unsubscribe does not abort the rebuild (best-effort teardown) @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-007', () => {
+  it('a throwing unsubscribe reports cleanup failure after publishing the replacement @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-007', () => {
     const probe = createRebuildLoopProbe();
     probe.setClient(makeClient('first'));
     probe.rebuild();
@@ -104,12 +104,14 @@ describe('rebuildLoop @plan:PLAN-20260617-COREAPI.P15 @requirement:REQ-001 @requ
     ];
 
     probe.setClient(makeClient('second'));
-    const secondLoop = probe.rebuild();
+    const priorLoop = probe.holder.current;
+    expect(() => probe.rebuild()).toThrow(AggregateError);
 
-    // teardown continued past the throwing unsubscribe to the next one
     expect(order).toStrictEqual(['after-throw']);
-    // and the rebuild still produced the new loop
-    expect(probe.holder.current).toBe(secondLoop);
+    expect(probe.holder.current).not.toBe(priorLoop);
+    expect(probe.holder.boundClient).toBe(
+      probe.constructions[1].options.agentClient,
+    );
     expect(probe.constructions).toHaveLength(2);
     expect(probe.holder.subscriptions).toBeUndefined();
   });

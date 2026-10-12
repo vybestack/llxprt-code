@@ -19,7 +19,7 @@ import type {
   SessionRecordingService,
   SessionSummary,
 } from '@vybestack/llxprt-code-core';
-import type { PerformResumeResult } from '../../services/performResume.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type { Key } from './useKeypress.js';
 import { useSessionBrowserController } from './useSessionBrowserHelpers.js';
 
@@ -57,7 +57,14 @@ export interface UseSessionBrowserProps {
   /** ID of the currently active session (to exclude from list) */
   currentSessionId: string;
   /** Callback to handle unified target selection/resume */
-  onSelect: (target: ContinueTarget) => Promise<PerformResumeResult>;
+  onSelect: (
+    target: ContinueTarget,
+  ) => Promise<
+    | { ok: true; history?: unknown; metadata?: unknown; warnings?: unknown }
+    | { ok: false; error: string }
+  >;
+  /** Explicit owner branch. The raw recording remains attached unless selected. */
+  ownerAgent?: Agent;
   /** Active recording, used to tombstone checkpoints in the current session. */
   activeRecording?: SessionRecordingService | null;
   /** Project store used to validate references during discovery. */

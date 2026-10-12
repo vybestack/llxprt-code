@@ -12,8 +12,10 @@ import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { SessionControlDeps } from './sessionControl.js';
 import { warnSkippedRecordings } from './skippedRecordings.js';
 import {
+  adoptRecordingSessionId,
   cleanupSessionResources,
   captureRollbackFailure,
+  restoreConfigSessionId,
 } from './sessionControlRollback.js';
 
 export async function adoptSessionResume(
@@ -23,18 +25,17 @@ export async function adoptSessionResume(
     integration: RecordingIntegration | null;
     recording: SessionRecordingService | null;
     lock: LockHandle | null;
+    sessionId: string;
   },
   publish: (integration: RecordingIntegration) => void,
   discardOnFailure = false,
 ): Promise<void> {
   const client = deps.resolveClient();
-  const priorRecording = deps.config.getSessionRecordingService();
   const integration = new RecordingIntegration(
     result.recording,
-    deps.config.createSessionPersistenceService(
-      result.recording.getSessionId(),
-    ),
+    deps.persistence.forRecording(result.recording.getSessionId()),
   );
+  let adoptionAttempted = false;
   try {
     if (client.getHistoryService() === null) await client.resumeChat([]);
     const history = client.getHistoryService();
@@ -44,7 +45,15 @@ export async function adoptSessionResume(
       );
     await history.adoptResumeBoot(result.recording, result.boot, async () => {
       await integration.subscribeToJournal(history);
-      deps.config.setSessionRecordingService(result.recording);
+      adoptRecordingSessionId(
+        deps.config,
+        deps.sessionIdentityOwnership,
+        prior.sessionId,
+        result.recording,
+        () => {
+          adoptionAttempted = true;
+        },
+      );
       publish(integration);
     });
   } catch (error) {
@@ -54,8 +63,12 @@ export async function adoptSessionResume(
       result.recording,
       result.lockHandle,
     );
-    await captureRollbackFailure(failures, () =>
-      deps.config.setSessionRecordingService(priorRecording),
+    await restoreConfigSessionId(
+      deps.config,
+      deps.sessionIdentityOwnership,
+      prior.sessionId,
+      adoptionAttempted,
+      failures,
     );
     if (filePath !== null)
       await captureRollbackFailure(failures, () =>
@@ -90,12 +103,12 @@ export async function openSessionResume(
   const result = await resumeSession({
     continueRef: target === 'latest' ? CONTINUE_LATEST : target,
     projectHash,
-    chatsDir: deps.config.storage.getProjectChatsDir(),
+    chatsDir: deps.config.projectChatsDir,
     currentProvider: deps.getProvider(),
     currentModel: deps.getModel(),
-    workspaceDirs: [...deps.config.getWorkspaceContext().getDirectories()],
-    mediaStore: deps.config.getLocalMediaStore(),
-    maxQueueBytes: deps.config.getSessionRecordingQueueByteLimit(),
+    workspaceDirs: [...deps.directories()],
+    mediaStore: deps.mediaStore,
+    maxQueueBytes: deps.readRecordingQueueLimit(),
   });
   warnSkippedRecordings(logger, result.skippedRecordings ?? []);
   if (!result.ok) throw new Error(`Failed to resume session: ${result.error}`);

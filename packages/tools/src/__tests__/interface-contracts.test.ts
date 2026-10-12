@@ -1,12 +1,14 @@
-/**
- * @plan:PLAN-20260608-ISSUE1585.P04
- * @requirement:REQ-INTERFACE-OWNERSHIP, REQ-BEHAVIORAL-TDD
- */
-
+import { limitOutputTokens } from '../utils/toolOutputLimiter.js';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { physicalFiles } from './helpers/physical-files.js';
+/**
+ * @plan:PLAN-20260608-ISSUE1585.P04
+ * @requirement:REQ-INTERFACE-OWNERSHIP, REQ-BEHAVIORAL-TDD
  */
 
 /**
@@ -31,7 +33,7 @@ import type {
   IToolRegistryHost,
   IToolMessageBus,
   IShellExecutionService,
-  ISubagentService,
+  ISubagentCatalog,
   IAsyncTaskService,
   ISkillService,
   IMcpToolService,
@@ -71,12 +73,17 @@ function settingsLookup(
 describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04', () => {
   describe('IToolHost contract', () => {
     const createHost = (overrides: Partial<IToolHost> = {}): IToolHost => ({
+      ...physicalFiles,
       getTargetDir: () => '/tmp/workspace',
       getWorkspaceRoots: () => ['/tmp/workspace'],
       getApprovalMode: () => 'auto',
       setApprovalMode: () => {},
       isInteractive: () => false,
-      hasFeatureFlag: () => false,
+
+      runSearch: <T>(
+        _directories: readonly string[],
+        operation: () => Promise<T>,
+      ): Promise<T> => operation(),
       getFileService: () => ({
         shouldGitIgnoreFile: () => false,
         shouldLlxprtIgnoreFile: () => false,
@@ -93,7 +100,7 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
       getLlxprtIgnoreFilePath: () => '/tmp/workspace/.llxprtignore',
       recordFileRead: () => {},
       getLlxprtIgnorePatterns: () => ['*.secret'],
-      getEphemeralSettings: () => ({}),
+      readExecutionPolicy: () => ({}),
       getDebugMode: () => false,
       ...overrides,
     });
@@ -113,6 +120,7 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
 
     it('requires getWorkspaceRoots returning string array', () => {
       const host: IToolHost = createHost({
+        ...physicalFiles,
         getTargetDir: () => '/tmp',
         getWorkspaceRoots: () => ['/root1', '/root2'],
       });
@@ -122,15 +130,19 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
       expect(roots).toHaveLength(2);
     });
 
-    it('requires hasFeatureFlag accepting string flag', () => {
-      const host: IToolHost = createHost({
-        getTargetDir: () => '/tmp',
-        getWorkspaceRoots: () => [],
-        hasFeatureFlag: (flag: string) => flag === 'experimental',
+    it('provides finite execution policy to real output limiting', () => {
+      const host = createHost({
+        readExecutionPolicy: () => ({
+          'tool-output-max-tokens': 100,
+          'tool-output-truncate-mode': 'warn',
+        }),
       });
-
-      expect(host.hasFeatureFlag('experimental')).toBe(true);
-      expect(host.hasFeatureFlag('unknown')).toBe(false);
+      const result = limitOutputTokens('x'.repeat(1000), host, 'contract-tool');
+      expect(result.wasTruncated).toBe(true);
+      expect(result.content).toBe('');
+      expect(result.message).toContain(
+        'contract-tool output exceeded token limit',
+      );
     });
   });
 
@@ -281,13 +293,9 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
     });
   });
 
-  describe('ISubagentService contract', () => {
-    it('requires executeSubagent, listSubagents, getSubagentConfig', async () => {
-      const service: ISubagentService = {
-        executeSubagent: async (request) => ({
-          output: `Ran ${request.name}`,
-          success: true,
-        }),
+  describe('ISubagentCatalog contract', () => {
+    it('requires listSubagents and getSubagentConfig', async () => {
+      const catalog: ISubagentCatalog = {
         listSubagents: async () => [
           { name: 'typescript-expert', description: 'TS expert' },
         ],
@@ -296,21 +304,14 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
             ? { name: 'typescript-expert', instructions: 'Be helpful' }
             : undefined,
       };
-      assertImplements<ISubagentService>(service);
+      assertImplements<ISubagentCatalog>(catalog);
 
-      const result = await service.executeSubagent({
-        name: 'typescript-expert',
-        prompt: 'Fix this',
-      });
-      expect(result.success).toBe(true);
-      expect(result.output).toContain('typescript-expert');
-
-      const agents = await service.listSubagents();
+      const agents = await catalog.listSubagents();
       expect(agents).toHaveLength(1);
 
-      const config = await service.getSubagentConfig('typescript-expert');
+      const config = await catalog.getSubagentConfig('typescript-expert');
       expect(config?.name).toBe('typescript-expert');
-      expect(await service.getSubagentConfig('nonexistent')).toBeUndefined();
+      expect(await catalog.getSubagentConfig('nonexistent')).toBeUndefined();
     });
   });
 
@@ -537,11 +538,6 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
           name === 'pr-creator'
             ? { success: true, instructions: 'PR creation skill' }
             : { success: false, availableSkills: ['pr-creator'] },
-        getSkillManager: () => ({
-          getSkills: () => skills,
-          getSkill: (name: string) =>
-            skills.find((skill) => skill.name === name) ?? null,
-        }),
         listSkills: () => skills,
         getSkill: (name: string) =>
           skills.find((skill) => skill.name === name) ?? null,
@@ -552,8 +548,7 @@ describe('Interface Contract Behavioral Tests @plan:PLAN-20260608-ISSUE1585.P04'
       expect(result.success).toBe(true);
       expect(result.instructions).toBe('PR creation skill');
 
-      const mgr = service.getSkillManager();
-      expect(mgr.getSkills?.()).toHaveLength(1);
+      expect(service.listSkills()).toHaveLength(1);
       expect(service.listSkills()).toStrictEqual(skills);
       expect(service.getSkill('pr-creator')?.description).toBe(
         'Creates pull requests',

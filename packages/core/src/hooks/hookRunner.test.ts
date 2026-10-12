@@ -12,15 +12,12 @@
 
 import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import type { Mock } from 'bun:test';
-import { spawn } from 'node:child_process';
 import { HookEventName } from './types.js';
+import { fixtureHookRuntime } from './__tests__/hook-runtime-fixture.js';
 import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { HookRunner as HookRunnerInstance } from './hookRunner.js';
 import type { MockChildProcessWithoutNullStreams } from './hookRunner-test-helpers.js';
-
-const realDebugModule = { ...(await import('../debug/index.js')) };
 
 function restoreHookRunnerGlobals(): void {
   restoreGlobals();
@@ -38,24 +35,10 @@ void vi.mock('node:child_process', () => {
 });
 
 // Mock debugLogger using vi.hoisted
-const mockDebugLogger = {
-  log: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-};
-
-void vi.mock('../debug/index.js', () => {
-  // Create a constructor function that returns the mock
-  const DebugLogger = vi.fn().mockImplementation(() => mockDebugLogger);
-  // Add getLogger as a static method
-  DebugLogger.getLogger = vi.fn().mockReturnValue(mockDebugLogger);
-
-  return {
-    ...realDebugModule,
-    DebugLogger,
-  };
-});
+const { DebugLogger: ActualDebugLogger } = await import(
+  '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js'
+);
+const mockDebugLogger = ActualDebugLogger.getLogger('llxprt:core:hooks:runner');
 
 // Mock console methods
 const mockConsole = {
@@ -96,13 +79,20 @@ let mockSpawn: MockChildProcessWithoutNullStreams;
 
 function setupRunner(): void {
   vi.resetAllMocks();
+  vi.spyOn(mockDebugLogger, 'log');
+  vi.spyOn(mockDebugLogger, 'warn');
+  vi.spyOn(mockDebugLogger, 'debug');
 
-  hookRunner = new HookRunner(mockConfig);
+  hookRunner = new HookRunner(
+    fixtureHookRuntime(mockConfig).process,
+    fixtureHookRuntime(mockConfig).isTrustedFolder,
+    () => new AbortController().signal,
+  );
 
   mockSpawn = createMockSpawn();
   configureRunnerTests(hookRunner, mockSpawn, mockDebugLogger, spawnMock);
 
-  (spawn as Mock<typeof spawn>).mockReturnValue(mockSpawn);
+  spawnMock.mockReturnValue(mockSpawn);
 }
 
 function teardownRunner(): void {

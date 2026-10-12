@@ -212,6 +212,8 @@ let client: AgentClient;
 
 let getModelSpy: ReturnType<typeof vi.spyOn>;
 
+let routedModel = 'test-model';
+
 let mediaRoot: string;
 
 /**
@@ -507,14 +509,13 @@ async function verifyContinuationModelChange(): Promise<{
         yield { type: AgentEventType.InvalidStream };
       })();
       // Simulate model change before continuation
-      getModelSpy.mockReturnValue('changed-model');
-      // Reset sequence model so orchestrator re-reads from config
       coreEvents.emitModelProfileChanged({
         model: 'changed-model',
         providerName: 'anthropic',
         profileName: null,
         displayLabel: 'changed-model',
       });
+      routedModel = 'changed-model';
       return stream;
     }
     return mockStream2;
@@ -632,11 +633,20 @@ async function verifyContinuationStableProvider(): Promise<{
 }
 
 function setupContinuationChat(): void {
+  routedModel = 'test-model';
   vi.spyOn(client['config'], 'getContinueOnFailedApiCall').mockReturnValue(
     true,
   );
 
   const mockChat: Partial<ChatSession> = {
+    resolveProviderForRuntime: () => ({
+      name: 'gemini',
+      getCurrentModel: () => routedModel,
+      getModels: async () => [],
+      generateChatCompletion(): AsyncGenerator<IContent> {
+        throw new Error('Unexpected transport in model-info test');
+      },
+    }),
     addHistory: vi.fn(),
     getHistory: vi.fn().mockReturnValue([]),
     getHistoryService: vi.fn().mockReturnValue({

@@ -36,10 +36,8 @@ import { useSessionStats } from '../../../contexts/SessionContext.js';
 import { useFocus } from '../../../hooks/useFocus.js';
 import type { AppState, AppAction } from '../../../reducers/appReducer.js';
 import type { UpdateObject } from '../../../utils/updateCheck.js';
-import {
-  useRuntimeApi,
-  useRuntimeBridge,
-} from '../../../contexts/RuntimeContext.js';
+import { useRuntimeApi } from '../../../contexts/RuntimeContext.js';
+import { useOAuthControl } from '../../../contexts/OAuthControlContext.js';
 import { useTodoContext } from '../../../contexts/TodoContext.js';
 import { useRecordingInfrastructure } from './useRecordingInfrastructure.js';
 import {
@@ -73,6 +71,7 @@ export interface AppBootstrapProps {
   appState: AppState;
   appDispatch: React.Dispatch<AppAction>;
   recordingIntegration?: RecordingIntegration;
+  recordingOwner?: 'agent' | 'raw';
   initialRecordingService?: SessionRecordingService;
   initialLockHandle?: LockHandle | null;
   /** P12: optional memory telemetry controller (perf+memory enabled only). */
@@ -110,7 +109,7 @@ export interface AppBootstrapResult {
   >['clearConsoleMessages'];
   todos: ReturnType<typeof useTodoContext>['todos'];
   updateTodos: ReturnType<typeof useTodoContext>['updateTodos'];
-  recordingIntegrationRef: React.MutableRefObject<RecordingIntegration | null>;
+  recordingIntegrationRef?: React.MutableRefObject<RecordingIntegration | null>;
   recordingSwapCallbacks: ReturnType<
     typeof useRecordingInfrastructure
   >['recordingSwapCallbacks'];
@@ -135,6 +134,7 @@ export interface AppBootstrapResult {
   startupWarnings: string[];
   resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>;
   recordingIntegration?: RecordingIntegration;
+  recordingOwner?: 'agent' | 'raw';
 }
 
 /** Initializes history, session, and IO primitives */
@@ -219,14 +219,26 @@ function useBootstrapTodo() {
   return { todos, updateTodos };
 }
 
+function useIdeClientCleanup(uiRuntime: UiRuntime): void {
+  useEffect(() => {
+    const ideClient = uiRuntime.ide.getIdeClient();
+    if (ideClient === undefined) {
+      return undefined;
+    }
+    registerCleanup(() => {
+      void ideClient.disconnect();
+    });
+    return undefined;
+  }, [uiRuntime]);
+}
+
 /** Initializes recording, IDE prompt, messages, and token metrics */
 function useBootstrapEvents(
   props: AppBootstrapProps,
   addItem: UseHistoryManagerReturn['addItem'],
   setUpdateInfo: React.Dispatch<React.SetStateAction<UpdateObject | null>>,
-  runtime: ReturnType<typeof useRuntimeApi>,
 ) {
-  const { runWithScope } = useRuntimeBridge();
+  const oauthControl = useOAuthControl();
   const {
     uiRuntime,
     settings,
@@ -239,19 +251,11 @@ function useBootstrapEvents(
       initialRecordingService,
       recordingIntegration,
       initialLockHandle,
+      props.recordingOwner,
     );
   const [idePromptAnswered, setIdePromptAnswered] = useState(false);
   const currentIDE = uiRuntime.ide.getIdeClient()?.getCurrentIde();
-  useEffect(() => {
-    const ideClient = uiRuntime.ide.getIdeClient();
-    if (ideClient === undefined) {
-      return undefined;
-    }
-    registerCleanup(() => {
-      void ideClient.disconnect();
-    });
-    return undefined;
-  }, [uiRuntime]);
+  useIdeClientCleanup(uiRuntime);
   const shouldShowIdePrompt =
     Boolean(currentIDE) &&
     !uiRuntime.ide.getIdeMode() &&
@@ -260,8 +264,7 @@ function useBootstrapEvents(
   useUpdateAndOAuthBridges({
     addItem,
     setUpdateInfo,
-    getCliOAuthManager: runtime.getCliOAuthManager,
-    runInInteractiveHostScope: runWithScope,
+    oauthControl,
   });
   const {
     consoleMessages,
@@ -273,12 +276,15 @@ function useBootstrapEvents(
     handleNewMessage,
     uiRuntime,
     recordingIntegrationRef,
+    recordingOwner: props.recordingOwner,
+    agent: props.agent,
   });
   const { stats: sessionStats, updateHistoryTokenCount } = useSessionStats();
   const { tokenMetrics } = useTokenMetricsTracking({
     uiRuntime,
     updateHistoryTokenCount,
     recordingIntegrationRef,
+    recordingOwner: props.recordingOwner,
   });
   // Store mirrors: the footer renders token metrics from the settings store.
   useEffect(() => {
@@ -307,10 +313,19 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
   const streamRuntime: StreamRuntime = uiRuntime;
   const h = useBootstrapHistory(props);
   const t = useBootstrapTodo();
-  const e = useBootstrapEvents(props, h.addItem, h.setUpdateInfo, h.runtime);
+  const e = useBootstrapEvents(props, h.addItem, h.setUpdateInfo);
+  const agentJournalSource = useMemo(
+    () => ({
+      getCurrentRecording: () => {
+        const path = props.agent.session.getRecording().path;
+        return path ? { getFilePath: () => path } : null;
+      },
+    }),
+    [props.agent],
+  );
   const sb = useScrollbackBootstrap({
     settings: props.settings,
-    recordingSwapCallbacks: e.recordingSwapCallbacks,
+    recordingSwapCallbacks: e.recordingSwapCallbacks ?? agentJournalSource,
     addItem: h.addItem,
   });
   useEffect(() => {
@@ -326,6 +341,7 @@ export function useAppBootstrap(props: AppBootstrapProps): AppBootstrapResult {
     startupWarnings: props.startupWarnings ?? [],
     resumedBoot: props.resumedBoot,
     recordingIntegration: props.recordingIntegration,
+    recordingOwner: props.recordingOwner,
     nightly: h.nightly,
     runtime: h.runtime,
     setLlxprtMdFileCount: h.setLlxprtMdFileCount,

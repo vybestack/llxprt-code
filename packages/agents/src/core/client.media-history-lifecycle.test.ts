@@ -15,6 +15,8 @@ import {
   errorMessage,
 } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 import { AgentClient } from './client.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -30,9 +32,11 @@ import type {
   MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
+  fixturePaths,
   setupAgentClient,
   type MockResponseShape,
 } from './__tests__/client-test-helpers.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
 
 // Mock prompts module before imports
@@ -40,10 +44,11 @@ const realConfigModule = {
   ...(await import('@vybestack/llxprt-code-core/config/config.js')),
 };
 
+const promptAssembly = vi.fn(
+  async (): Promise<string> => 'Test system instruction',
+);
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
-  getCoreSystemPromptAsync: vi.fn(() =>
-    Promise.resolve('Test system instruction'),
-  ),
+  getCoreSystemPromptAsync: promptAssembly,
   getCoreSystemPrompt: vi.fn(() => 'Test system instruction'),
   getCompressionPrompt: vi.fn(() => 'Test compression prompt'),
   initializePromptSystem: vi.fn(() => Promise.resolve(undefined)),
@@ -261,25 +266,43 @@ function leafErrorMessages(error: unknown): readonly string[] {
 }
 
 let client: AgentClient;
+let ownerManager: ProviderManager;
+let ownerSettingsService: SettingsService;
 
 let directory: string;
 
-function configureMediaStore(quotaBytes = 1024 * 1024): LocalMediaStore {
+async function rebuildClientWithMediaStore(
+  store: LocalMediaStore,
+): Promise<void> {
+  const config = client['config'];
+  await client.dispose();
+  const context = await setupAgentClient(
+    { mockChatCreateFn, mockGenerateContentFn, mockEmbedContentFn },
+    config,
+    store,
+  );
+  client = context.client;
+}
+
+async function configureMediaStore(
+  quotaBytes = 1024 * 1024,
+): Promise<LocalMediaStore> {
   const store = new LocalMediaStore({
     rootDirectory: join(directory, 'media'),
     quotaBytes,
   });
-  Object.defineProperty(client['config'], 'getLocalMediaStore', {
-    configurable: true,
-    value: () => store,
-  });
+  await rebuildClientWithMediaStore(store);
   return store;
 }
 
-async function deferredRows(): Promise<IContent[]> {
-  const journal = client['_storedHistoryService'];
+async function deferredRowsOf(target: AgentClient): Promise<IContent[]> {
+  const journal = target['_storedHistoryService'];
   if (journal === undefined) throw new Error('Missing deferred journal');
   return collectHistoryFixture(journal.streamRawHistory());
+}
+
+async function deferredRows(): Promise<IContent[]> {
+  return deferredRowsOf(client);
 }
 
 async function deferredReference(): Promise<MediaReferenceBlock> {
@@ -290,7 +313,10 @@ async function deferredReference(): Promise<MediaReferenceBlock> {
   return block;
 }
 
-function configureRealChatStartup(store: LocalMediaStore): ChatSession {
+async function configureRealChatStartup(
+  store: LocalMediaStore,
+): Promise<ChatSession> {
+  await rebuildClientWithMediaStore(store);
   const initializedChat = client['chat'];
   assertDefined(initializedChat, 'Expected initialized test chat');
   const provider: IProvider = {
@@ -301,24 +327,152 @@ function configureRealChatStartup(store: LocalMediaStore): ChatSession {
       yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
     },
   };
-  const manager = new ProviderManager({
-    settingsService: new SettingsService(),
-  });
+  const manager = ownerManager;
+  assertInstanceOf(manager, ProviderManager, 'Expected owned provider manager');
   manager.registerProvider(provider);
   manager.setActiveProvider(provider.name);
-  client['config'].getProviderManager = () => manager;
-  client['config'].getExcludeTools = () => [];
-  client['config'].getTokenizerFactory = () => undefined;
-  Object.defineProperty(client['config'], 'getLocalMediaStore', {
-    configurable: true,
-    value: () => store,
-  });
+  ownerSettingsService.set('activeProvider', provider.name);
   return initializedChat;
+}
+
+function registerAdmissionCase0(): void {
+  describe('history admission lifecycle [0]', () => {
+    it('retains history in the supplied store instead of the config store', async () => {
+      const supplied = new LocalMediaStore({
+        rootDirectory: join(directory, 'supplied'),
+        quotaBytes: 1024 * 1024,
+      });
+      const configStore = new LocalMediaStore({
+        rootDirectory: join(directory, 'config'),
+        quotaBytes: 1024 * 1024,
+      });
+      const config = client['config'];
+      Object.defineProperty(config, 'getLocalMediaStore', {
+        configurable: true,
+        value: () => configStore,
+      });
+      const retainedClient = new AgentClient(
+        config,
+        client['runtimeState'],
+        () => undefined,
+        supplied,
+        fixturePaths(),
+      );
+      const retainedClientPolicy = createSessionPolicyFixture();
+      retainedClientPolicy.owner.bindTelemetry(config);
+      retainedClient.bindRuntimeSettings(
+        retainedClientPolicy.readRuntimeSettings,
+        retainedClientPolicy.readToolGovernance,
+      );
+      retainedClient.bindProviderInvocation(
+        retainedClientPolicy.prepareProviderInvocation,
+      );
+      try {
+        await retainedClient.storeHistoryForLaterUse(inlineMediaHistory());
+        // The retained snapshot lives in the deferred journal, not in an array.
+        const block = (await deferredRowsOf(retainedClient))[0]?.blocks[0];
+        if (block?.type !== 'media' || block.encoding !== 'reference') {
+          throw new Error('Expected retained reference');
+        }
+        expect({
+          supplied: await supplied.hasReservations(block.contentId),
+          config: await configStore.hasReservations(block.contentId),
+        }).toStrictEqual({ supplied: true, config: false });
+        await retainedClient.dispose();
+        expect(await supplied.hasReservations(block.contentId)).toBe(false);
+      } finally {
+        await retainedClient.dispose();
+        await supplied.close();
+        await configStore.close();
+      }
+    });
+  });
+}
+function registerAdmissionCase0b(): void {
+  describe('history admission lifecycle [0b]', () => {
+    it('isolates same-label clients with distinct supplied stores', async () => {
+      const config = client['config'];
+      const firstStore = new LocalMediaStore({
+        rootDirectory: join(directory, 'first'),
+        quotaBytes: 1024 * 1024,
+      });
+      const secondStore = new LocalMediaStore({
+        rootDirectory: join(directory, 'second'),
+        quotaBytes: 1024 * 1024,
+      });
+      const first = new AgentClient(
+        config,
+        client['runtimeState'],
+        () => undefined,
+        firstStore,
+        fixturePaths(),
+      );
+      const firstPolicy = createSessionPolicyFixture();
+      firstPolicy.owner.bindTelemetry(config);
+      first.bindRuntimeSettings(
+        firstPolicy.readRuntimeSettings,
+        firstPolicy.readToolGovernance,
+      );
+      first.bindTelemetry(firstPolicy.owner.telemetry);
+      first.bindProviderInvocation(firstPolicy.prepareProviderInvocation);
+      const second = new AgentClient(
+        config,
+        client['runtimeState'],
+        () => undefined,
+        secondStore,
+        fixturePaths(),
+      );
+      const secondPolicy = createSessionPolicyFixture();
+      secondPolicy.owner.bindTelemetry(config);
+      second.bindRuntimeSettings(
+        secondPolicy.readRuntimeSettings,
+        secondPolicy.readToolGovernance,
+      );
+      second.bindTelemetry(secondPolicy.owner.telemetry);
+      second.bindProviderInvocation(secondPolicy.prepareProviderInvocation);
+      try {
+        await first.storeHistoryForLaterUse(inlineMediaHistory());
+        await second.storeHistoryForLaterUse(
+          inlineMediaHistory(SECOND_IMAGE_BASE64),
+        );
+        const firstBlock = (await deferredRowsOf(first))[0]?.blocks[0];
+        const secondBlock = (await deferredRowsOf(second))[0]?.blocks[0];
+        if (
+          firstBlock?.type !== 'media' ||
+          firstBlock.encoding !== 'reference' ||
+          secondBlock?.type !== 'media' ||
+          secondBlock.encoding !== 'reference'
+        ) {
+          throw new Error('Expected retained media references');
+        }
+        expect({
+          firstOwn: await firstStore.hasReservations(firstBlock.contentId),
+          firstOther: await secondStore.hasReservations(firstBlock.contentId),
+          secondOwn: await secondStore.hasReservations(secondBlock.contentId),
+          secondOther: await firstStore.hasReservations(secondBlock.contentId),
+        }).toStrictEqual({
+          firstOwn: true,
+          firstOther: false,
+          secondOwn: true,
+          secondOther: false,
+        });
+        await first.dispose();
+        expect(await secondStore.hasReservations(secondBlock.contentId)).toBe(
+          true,
+        );
+      } finally {
+        await first.dispose();
+        await second.dispose();
+        await firstStore.close();
+        await secondStore.close();
+      }
+    });
+  });
 }
 function registerAdmissionCase1(): void {
   describe('history admission lifecycle [1]', () => {
     it('admits local media before retaining history for deferred startup', async () => {
-      const store = configureMediaStore();
+      const store = await configureMediaStore();
       client['chat'] = undefined;
       const history = inlineMediaHistory();
 
@@ -345,7 +499,7 @@ function registerAdmissionCase1(): void {
 function registerAdmissionCase2(): void {
   describe('history admission lifecycle [2]', () => {
     it('admits deferred history through the awaited storage seam', async () => {
-      const store = configureMediaStore();
+      const store = await configureMediaStore();
       client['chat'] = undefined;
 
       await client.storeHistoryForLaterUse(inlineMediaHistory());
@@ -363,7 +517,7 @@ function registerAdmissionCase2(): void {
 function registerAdmissionCase3(): void {
   describe('history admission lifecycle [3]', () => {
     it('leaves no retained snapshot when quota rejects deferred admission', async () => {
-      const store = configureMediaStore(1);
+      const store = await configureMediaStore(1);
       client['chat'] = undefined;
 
       await expect(
@@ -380,7 +534,7 @@ function registerAdmissionCase3(): void {
 function registerAdmissionCase4(): void {
   describe('history admission lifecycle [4]', () => {
     it('releases deferred media ownership when stored history is replaced or deleted', async () => {
-      const store = configureMediaStore();
+      const store = await configureMediaStore();
       client['chat'] = undefined;
       await client.storeHistoryForLaterUse(inlineMediaHistory());
       const first = await deferredReference();
@@ -409,7 +563,7 @@ function registerAdmissionCase4(): void {
 function registerAdmissionCase5(): void {
   describe('history admission lifecycle [5]', () => {
     it('releases deferred ownership on dispose so quota-backed blobs can be reclaimed', async () => {
-      const store = configureMediaStore();
+      const store = await configureMediaStore();
       client['chat'] = undefined;
       await client.storeHistoryForLaterUse(inlineMediaHistory());
       const reference = await deferredReference();
@@ -435,8 +589,8 @@ function registerAdmissionCase5(): void {
 function registerAdmissionCase6(): void {
   describe('history admission lifecycle [6]', () => {
     it('transfers deferred media ownership once when real chat startup succeeds', async () => {
-      const store = configureMediaStore();
-      configureRealChatStartup(store);
+      const store = await configureMediaStore();
+      await configureRealChatStartup(store);
       client['chat'] = undefined;
       await client.storeHistoryForLaterUse(inlineMediaHistory());
       const deferredHistory = await deferredRows();
@@ -466,17 +620,19 @@ function registerAdmissionCase6(): void {
 function registerAdmissionCase7(): void {
   describe('history admission lifecycle [7]', () => {
     it('releases deferred ownership when real chat setup fails', async () => {
-      const store = configureMediaStore();
-      configureRealChatStartup(store);
+      const store = await configureMediaStore();
+      await configureRealChatStartup(store);
       client['chat'] = undefined;
       await client.storeHistoryForLaterUse(inlineMediaHistory());
       const deferredHistory = await deferredRows();
       assertDefined(deferredHistory, 'Expected deferred history');
       const reference = await deferredReference();
-      client['config'].getModel = () => '';
+      promptAssembly.mockRejectedValueOnce(
+        new Error('Induced prompt assembly failure'),
+      );
 
       await expect(client.startChat(deferredHistory)).rejects.toThrow(
-        /no model identity/i,
+        /Induced prompt assembly failure/,
       );
 
       expect(await store.hasReservations(reference.contentId)).toBe(false);
@@ -490,17 +646,15 @@ function registerAdmissionCase8(): void {
         rootDirectory: join(directory, 'media'),
         quotaBytes: 1024 * 1024,
       });
-      Object.defineProperty(client['config'], 'getLocalMediaStore', {
-        configurable: true,
-        value: () => store,
-      });
-      configureRealChatStartup(store);
+      await configureRealChatStartup(store);
       client['chat'] = undefined;
       await client.storeHistoryForLaterUse(inlineMediaHistory());
       const deferredHistory = await deferredRows();
       assertDefined(deferredHistory, 'Expected deferred history');
       const reference = await deferredReference();
-      client['config'].getModel = () => '';
+      promptAssembly.mockRejectedValueOnce(
+        new Error('Induced prompt assembly failure'),
+      );
 
       let failure: unknown;
       try {
@@ -533,8 +687,8 @@ function registerAdmissionCase8(): void {
 function registerAdmissionCase9(): void {
   describe('history admission lifecycle [9]', () => {
     it('keeps initialized media on disk without an array snapshot and releases it on dispose', async () => {
-      const store = configureMediaStore();
-      configureRealChatStartup(store);
+      const store = await configureMediaStore();
+      await configureRealChatStartup(store);
       const chat = await client.startChat([]);
       const history = inlineMediaHistory();
 
@@ -576,8 +730,8 @@ function registerAdmissionCase9(): void {
 function registerAdmissionCase10(): void {
   describe('history admission lifecycle [10]', () => {
     it('transfers initialized media into deferred ownership during reinitialization', async () => {
-      const store = configureMediaStore();
-      configureRealChatStartup(store);
+      const store = await configureMediaStore();
+      await configureRealChatStartup(store);
       const chat = await client.startChat([]);
       await client.setHistory(inlineMediaHistory());
       const activeBlock = (await collectHistoryFixture(chat.getHistory()))[0]
@@ -630,8 +784,8 @@ function registerAdmissionCase10(): void {
 function registerAdmissionCase11(): void {
   describe('history admission lifecycle [11]', () => {
     it('releases initialized chat media when setHistory replaces or deletes it', async () => {
-      const store = configureMediaStore();
-      configureRealChatStartup(store);
+      const store = await configureMediaStore();
+      await configureRealChatStartup(store);
       const chat = await client.startChat([]);
 
       await client.setHistory(inlineMediaHistory());
@@ -673,11 +827,7 @@ function registerAdmissionCase12(): void {
         rootDirectory: join(directory, 'media'),
         quotaBytes: 1024 * 1024,
       });
-      Object.defineProperty(client['config'], 'getLocalMediaStore', {
-        configurable: true,
-        value: () => store,
-      });
-      configureRealChatStartup(store);
+      await configureRealChatStartup(store);
       const chat = await client.startChat([]);
       await client.setHistory(inlineMediaHistory());
       const block = (await collectHistoryFixture(chat.getHistory()))[0]
@@ -706,11 +856,38 @@ function registerAdmissionCase12(): void {
 describe('AgentClient (client.ts)', () => {
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'agent-client-lifecycle-'));
-    const ctx = await setupAgentClient({
-      mockChatCreateFn,
-      mockGenerateContentFn,
-      mockEmbedContentFn,
+    const settingsService = new SettingsService();
+    ownerSettingsService = settingsService;
+    const config = new realConfigModule.Config({
+      cwd: directory,
+      targetDir: directory,
+      debugMode: false,
+      question: undefined,
+      userMemory: '',
+      embeddingModel: 'test-embedding-model',
+      sandbox: undefined,
+      sessionId: 'test-session-id',
+      model: 'test-model',
+      provider: 'gemini',
     });
+    const selectedOwner = new SessionSettingsOwner(settingsService);
+    selectedOwner.bindTelemetry(config);
+    const manager = new ProviderManager({
+      settingsService,
+      config,
+      sessionSettings: selectedOwner,
+    });
+    ownerManager = manager;
+    configureProviderRuntimeFactories(config, manager);
+    settingsService.set('activeProvider', 'gemini');
+    const ctx = await setupAgentClient(
+      { mockChatCreateFn, mockGenerateContentFn, mockEmbedContentFn },
+      config,
+      new LocalMediaStore({
+        rootDirectory: config.projectTempDir + '/media',
+        quotaBytes: config.getMediaStoreQuotaByteLimit(),
+      }),
+    );
     client = ctx.client;
 
     mockTodoStoreConstructor.mockImplementation(() => ({
@@ -727,6 +904,8 @@ describe('AgentClient (client.ts)', () => {
     vi.restoreAllMocks();
     await rm(directory, { recursive: true, force: true });
   });
+  registerAdmissionCase0();
+  registerAdmissionCase0b();
   registerAdmissionCase1();
   registerAdmissionCase2();
   registerAdmissionCase3();

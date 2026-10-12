@@ -3,6 +3,13 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
 
 /**
  * Issue #3031 — `task` tool timeout ceiling semantics.
@@ -19,7 +26,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { TaskTool } from '../src/tools/task.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { installTaskSettingsFixtures } from './task-settings-fixture.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { SubagentOrchestrator } from '../src/core/subagentOrchestrator.js';
 import { SubagentTerminateMode } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
@@ -37,13 +44,7 @@ interface StubHandles {
   aborted: Promise<boolean>;
 }
 
-function makeConfig(settings: Record<string, number>): Config {
-  return {
-    getSessionId: () => 'session-3031',
-    getEphemeralSettings: () => ({ ...settings }),
-    isInteractive: () => false,
-  } as unknown as Config;
-}
+const makeConfig = installTaskSettingsFixtures('session-3031');
 
 /**
  * Builds a stub orchestrator whose scope either completes immediately or
@@ -108,13 +109,18 @@ function makeStubOrchestrator(mode: StubMode): StubHandles {
 describe('Issue #3031 — task tool timeout ceiling semantics', () => {
   it('bounds timeout_seconds: -1 under a finite maximum (subagent is aborted)', async () => {
     const { orchestrator, aborted } = makeStubOrchestrator({ run: 'hang' });
-    const tool = new TaskTool(
-      makeConfig({
-        'task-default-timeout-seconds': 60,
-        'task-max-timeout-seconds': 0.1,
-      }),
-      { messageBus: new MessageBus(), orchestratorFactory: () => orchestrator },
-    );
+    const fixture = makeConfig({
+      'task-default-timeout-seconds': 60,
+      'task-max-timeout-seconds': 0.1,
+    });
+    const tool = new TaskTool(fixture.config, {
+      ...fixture.policies,
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
+      messageBus: new MessageBus(),
+      orchestratorFactory: () => orchestrator,
+    });
 
     const invocation = tool.build({
       subagent_name: 'helper',
@@ -139,13 +145,18 @@ describe('Issue #3031 — task tool timeout ceiling semantics', () => {
 
   it('clamps an above-maximum request and surfaces it in the result', async () => {
     const { orchestrator } = makeStubOrchestrator({ run: 'complete' });
-    const tool = new TaskTool(
-      makeConfig({
-        'task-default-timeout-seconds': 60,
-        'task-max-timeout-seconds': 0.1,
-      }),
-      { messageBus: new MessageBus(), orchestratorFactory: () => orchestrator },
-    );
+    const fixture = makeConfig({
+      'task-default-timeout-seconds': 60,
+      'task-max-timeout-seconds': 0.1,
+    });
+    const tool = new TaskTool(fixture.config, {
+      ...fixture.policies,
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
+      messageBus: new MessageBus(),
+      orchestratorFactory: () => orchestrator,
+    });
 
     const invocation = tool.build({
       subagent_name: 'helper',
@@ -166,13 +177,18 @@ describe('Issue #3031 — task tool timeout ceiling semantics', () => {
 
   it('honours a below-maximum request exactly with no clamp notice', async () => {
     const { orchestrator } = makeStubOrchestrator({ run: 'complete' });
-    const tool = new TaskTool(
-      makeConfig({
-        'task-default-timeout-seconds': 60,
-        'task-max-timeout-seconds': 100,
-      }),
-      { messageBus: new MessageBus(), orchestratorFactory: () => orchestrator },
-    );
+    const fixture = makeConfig({
+      'task-default-timeout-seconds': 60,
+      'task-max-timeout-seconds': 100,
+    });
+    const tool = new TaskTool(fixture.config, {
+      ...fixture.policies,
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
+      messageBus: new MessageBus(),
+      orchestratorFactory: () => orchestrator,
+    });
 
     const invocation = tool.build({
       subagent_name: 'helper',
@@ -192,13 +208,18 @@ describe('Issue #3031 — task tool timeout ceiling semantics', () => {
 
   it('arms no timer when both the maximum and request are -1 (unbounded)', async () => {
     const { orchestrator } = makeStubOrchestrator({ run: 'complete' });
-    const tool = new TaskTool(
-      makeConfig({
-        'task-default-timeout-seconds': 60,
-        'task-max-timeout-seconds': -1,
-      }),
-      { messageBus: new MessageBus(), orchestratorFactory: () => orchestrator },
-    );
+    const fixture = makeConfig({
+      'task-default-timeout-seconds': 60,
+      'task-max-timeout-seconds': -1,
+    });
+    const tool = new TaskTool(fixture.config, {
+      ...fixture.policies,
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
+      messageBus: new MessageBus(),
+      orchestratorFactory: () => orchestrator,
+    });
 
     const invocation = tool.build({
       subagent_name: 'helper',
@@ -215,13 +236,18 @@ describe('Issue #3031 — task tool timeout ceiling semantics', () => {
 
   it('rejects timeout_seconds: -2 at validation with a clear message', () => {
     const { orchestrator } = makeStubOrchestrator({ run: 'complete' });
-    const tool = new TaskTool(
-      makeConfig({
-        'task-default-timeout-seconds': 60,
-        'task-max-timeout-seconds': 100,
-      }),
-      { messageBus: new MessageBus(), orchestratorFactory: () => orchestrator },
-    );
+    const fixture = makeConfig({
+      'task-default-timeout-seconds': 60,
+      'task-max-timeout-seconds': 100,
+    });
+    const tool = new TaskTool(fixture.config, {
+      ...fixture.policies,
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
+      messageBus: new MessageBus(),
+      orchestratorFactory: () => orchestrator,
+    });
     let error: unknown;
     try {
       tool.build({
@@ -239,13 +265,18 @@ describe('Issue #3031 — task tool timeout ceiling semantics', () => {
 
   it('rejects timeout_seconds: 0 at validation with a clear message', () => {
     const { orchestrator } = makeStubOrchestrator({ run: 'complete' });
-    const tool = new TaskTool(
-      makeConfig({
-        'task-default-timeout-seconds': 60,
-        'task-max-timeout-seconds': 100,
-      }),
-      { messageBus: new MessageBus(), orchestratorFactory: () => orchestrator },
-    );
+    const fixture = makeConfig({
+      'task-default-timeout-seconds': 60,
+      'task-max-timeout-seconds': 100,
+    });
+    const tool = new TaskTool(fixture.config, {
+      ...fixture.policies,
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
+      messageBus: new MessageBus(),
+      orchestratorFactory: () => orchestrator,
+    });
     expect(() =>
       tool.build({
         subagent_name: 'helper',
@@ -257,13 +288,18 @@ describe('Issue #3031 — task tool timeout ceiling semantics', () => {
 
   it('accepts timeout_seconds: -1 at validation (unlimited ask)', () => {
     const { orchestrator } = makeStubOrchestrator({ run: 'complete' });
-    const tool = new TaskTool(
-      makeConfig({
-        'task-default-timeout-seconds': 60,
-        'task-max-timeout-seconds': 100,
-      }),
-      { messageBus: new MessageBus(), orchestratorFactory: () => orchestrator },
-    );
+    const fixture = makeConfig({
+      'task-default-timeout-seconds': 60,
+      'task-max-timeout-seconds': 100,
+    });
+    const tool = new TaskTool(fixture.config, {
+      ...fixture.policies,
+      workspacePaths: fixturePaths(),
+      readMcpInstructions: () => undefined,
+      instructions: emptyInstructionReads,
+      messageBus: new MessageBus(),
+      orchestratorFactory: () => orchestrator,
+    });
     expect(() =>
       tool.build({
         subagent_name: 'helper',

@@ -10,3 +10,15 @@
  */
 
 export * from './src/index.js';
+
+export {
+  assembleProviderSwitch,
+  assembleAgentActivationBootstrap,
+} from './src/api/providerSwitchAssembly.js';
+
+export {
+  assembleProfileApplication,
+  type AgentProfileApplication,
+} from './src/api/profileApplicationAssembly.js';
+
+export { McpRuntimeOwner } from './src/api/mcpRuntimeAssembly.js';

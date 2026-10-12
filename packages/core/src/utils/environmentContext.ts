@@ -4,18 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '../config/config.js';
-
 /**
  * Returns the working-directory preamble for the environment context: a single
  * directory line, or a bulleted list for multiple directories. Folder-tree
  * listing is removed (issue #3072); this only names the working directories.
  */
 export async function getDirectoryContextString(
-  config: Config,
+  workspaceDirectories: readonly string[],
 ): Promise<string> {
-  const workspaceDirectories = config.getWorkspaceContext().getDirectories();
-
   let workingDirPreamble: string;
   if (workspaceDirectories.length === 1) {
     workingDirPreamble = `I'm currently working in the directory: ${workspaceDirectories[0]}`;
@@ -35,7 +31,8 @@ export async function getDirectoryContextString(
  * @returns A promise that resolves to a single text part with the environment info.
  */
 export async function getEnvironmentContext(
-  config: Config,
+  environmentMemory: string,
+  workspaceDirectories: readonly string[],
 ): Promise<Array<{ text: string }>> {
   const today = new Date().toLocaleDateString(undefined, {
     weekday: 'long',
@@ -44,8 +41,8 @@ export async function getEnvironmentContext(
     day: 'numeric',
   });
   const platform = process.platform;
-  const directoryContext = await getDirectoryContextString(config);
-  const environmentMemory = config.getEnvironmentMemory();
+  const directoryContext =
+    await getDirectoryContextString(workspaceDirectories);
 
   const context = `
 This is LLxprt Code. We are setting up the context for our chat.

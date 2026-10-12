@@ -1,8 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { ResponsesRequest } from './responses-request.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import {
   buildOpenAIResponsesInput,
   type ResponsesInputBuildContext,
@@ -21,16 +20,13 @@ import type {
 } from './OpenAIResponsesTypes.js';
 
 export function resolveInvocationEphemerals(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
 ): Record<string, unknown> {
-  const invocation = options.invocation as {
-    ephemerals?: Record<string, unknown>;
-  };
-  return invocation.ephemerals ?? {};
+  return options.invocation.ephemerals;
 }
 
 export async function resolveApiKey(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
 ): Promise<string> {
   const promptAuthToken = await deps.resolveAuthTokenForPrompt();
@@ -57,79 +53,33 @@ export async function resolveApiKey(
   );
 }
 
-export function isResponsesPdfEnabled(
-  options: NormalizedGenerateChatOptions,
-): boolean {
-  const invocationEphemerals = resolveInvocationEphemerals(options);
-  const setting =
-    (invocationEphemerals['media.pdf.enabled'] as boolean | undefined) ??
-    options.invocation.getModelBehavior<boolean>('media.pdf.enabled') ??
-    readOptionalSetting(options, 'media.pdf.enabled');
-  return setting !== false;
-}
-
-/**
- * Read a setting through the structurally optional `SettingsService.get`
- * seam. `get` is declared optional on the contract, so a settings object that
- * omits it must fall through to the caller's default rather than throwing.
- */
-export function readOptionalSetting(
-  options: NormalizedGenerateChatOptions,
-  key: string,
-): unknown {
-  const get = (
-    options as { settings?: { get?: (settingKey: string) => unknown } }
-  ).settings?.get;
-  return typeof get === 'function'
-    ? get.call(options.settings, key)
-    : undefined;
+export function isResponsesPdfEnabled(options: ResponsesRequest): boolean {
+  return options.pdfEnabled;
 }
 
 export function buildInput(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   patchedContent: IContent[],
-  invocationEphemerals: Record<string, unknown>,
   deps: ResponsesExecutorDeps,
   serverSideParentActive: boolean = false,
 ): ResponsesInputItem[] {
   return buildOpenAIResponsesInput(
     patchedContent,
-    responsesInputContext(
-      options,
-      invocationEphemerals,
-      deps,
-      serverSideParentActive,
-    ),
+    responsesInputContext(options, deps, serverSideParentActive),
   );
 }
 
 export function responsesInputContext(
-  options: NormalizedGenerateChatOptions,
-  invocationEphemerals: Record<string, unknown>,
+  options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
   serverSideParentActive: boolean = false,
   reasoningIdTime?: number,
 ): ResponsesInputBuildContext {
-  const includeReasoningInContextSetting =
-    (invocationEphemerals['reasoning.includeInContext'] as
-      | boolean
-      | undefined) ??
-    options.invocation.getModelBehavior<boolean>(
-      'reasoning.includeInContext',
-    ) ??
-    readOptionalSetting(options, 'reasoning.includeInContext');
-  const outputLimiterConfig =
-    options.config ??
-    options.runtime?.config ??
-    deps.getGlobalConfig() ??
-    ({
-      getEphemeralSettings: () => ({}),
-    } satisfies ToolOutputSettingsProvider);
   const requestReasoningIdTime =
     reasoningIdTime ?? readRequestReasoningIdTime(options);
   return {
-    includeReasoningInContext: includeReasoningInContextSetting !== false,
-    outputLimiterConfig,
+    includeReasoningInContext: options.includeReasoningInContext,
+    outputLimits: options.outputLimits,
     debug: (messageFactory) => deps.logger.debug(messageFactory),
     serverSideParentActive,
     mediaPdfEnabled: isResponsesPdfEnabled(options),
@@ -146,13 +96,12 @@ export function normalizeBaseURL(baseURLCandidate: string): string {
 }
 
 export function createRequest(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   input: ResponsesInputItem[],
   requestOverrides: Record<string, unknown>,
-  deps: ResponsesExecutorDeps,
 ): OpenAIResponsesRequest {
   return {
-    model: options.resolved.model || deps.getDefaultModel(),
+    model: options.resolved.model,
     input,
     stream: true,
     ...requestOverrides,
@@ -162,7 +111,7 @@ export function createRequest(
 export function applyInstructionsAndTools(
   request: OpenAIResponsesRequest,
   systemPrompt: string,
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
 ): void {
   if (systemPrompt) request.instructions = systemPrompt;
 
@@ -182,30 +131,13 @@ export function applyInstructionsAndTools(
 
 export function applyReasoningSettings(
   request: OpenAIResponsesRequest,
-  options: NormalizedGenerateChatOptions,
-  invocationEphemerals: Record<string, unknown>,
+  options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
 ): AppliedOpenAIResponsesReasoning {
   const reasoning = applyOpenAIResponsesReasoning({
     request,
     modelBehavior: options.invocation.modelBehavior,
-    fallbacks: {
-      enabled:
-        invocationEphemerals['reasoning.enabled'] ??
-        readOptionalSetting(options, 'reasoning.enabled'),
-      effort:
-        invocationEphemerals['reasoning.effort'] ??
-        readOptionalSetting(options, 'reasoning.effort'),
-      budgetTokens:
-        invocationEphemerals['reasoning.budgetTokens'] ??
-        readOptionalSetting(options, 'reasoning.budgetTokens'),
-      summary:
-        invocationEphemerals['reasoning.summary'] ??
-        readOptionalSetting(options, 'reasoning.summary'),
-      includeInResponse:
-        invocationEphemerals['reasoning.includeInResponse'] ??
-        readOptionalSetting(options, 'reasoning.includeInResponse'),
-    },
+    fallbacks: options.reasoningFallbacks,
     providerName: deps.providerName,
     logger: deps.logger,
   });
@@ -227,15 +159,10 @@ export function applyReasoningSettings(
 
 export function applyTextVerbosity(
   request: OpenAIResponsesRequest,
-  options: NormalizedGenerateChatOptions,
-  ephemerals: Record<string, unknown>,
+  options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
 ): void {
-  const textVerbosity =
-    (ephemerals['text.verbosity'] as string | undefined) ??
-    (options as { settings?: { get: (key: string) => unknown } }).settings?.get(
-      'text.verbosity',
-    );
+  const textVerbosity = options.textVerbosity;
   if (
     typeof textVerbosity !== 'string' ||
     textVerbosity === '' ||
@@ -272,23 +199,10 @@ export function applyCodexRequestSettings(
 
 export function applyPromptCaching(
   request: OpenAIResponsesRequest,
-  options: NormalizedGenerateChatOptions,
-  ephemerals: Record<string, unknown>,
+  options: ResponsesRequest,
   isCodex: boolean,
-  deps: ResponsesExecutorDeps,
 ): void {
-  const promptCachingSetting =
-    (ephemerals['prompt-caching'] as string | undefined) ??
-    ((
-      options as {
-        settings?: {
-          getProviderSettings: (name: string) => Record<string, unknown>;
-        };
-      }
-    ).settings?.getProviderSettings(deps.providerName)['prompt-caching'] as
-      | string
-      | undefined) ??
-    '1h';
+  const promptCachingSetting = options.promptCaching;
   if (promptCachingSetting === 'off') return;
 
   if (
@@ -299,9 +213,7 @@ export function applyPromptCaching(
     return;
   }
 
-  const cacheKey =
-    (options.invocation as { runtimeId?: string } | undefined)?.runtimeId ??
-    options.runtime?.runtimeId;
+  const cacheKey = options.invocation.runtimeId;
   if (typeof cacheKey !== 'string' || cacheKey.trim() === '') return;
 
   request.prompt_cache_key = sanitizePromptCacheKey(cacheKey);

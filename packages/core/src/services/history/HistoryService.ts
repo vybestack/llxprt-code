@@ -67,6 +67,7 @@ import {
 } from './history-export.js';
 export type { HistoryJsonSink } from './history-export.js';
 import {
+  ChronologyStamper,
   projectChronologyTraceEntry,
   findCurrentTurnMarker,
   type CurrentTurnMarker,
@@ -233,6 +234,55 @@ export class HistoryService extends HistoryServiceCore {
       },
       afterPublication,
     });
+  }
+
+  getContentOrigin(content: IContent): object | undefined {
+    return this.contentOrigins.get(content);
+  }
+
+  async prepareProfileAdoption(candidate: HistoryService): Promise<() => void> {
+    await Promise.all([
+      this.waitForTokenUpdates(),
+      candidate.waitForTokenUpdates(),
+      this.waitForOwnershipSettlement(),
+      candidate.waitForOwnershipSettlement(),
+    ]);
+    // A no-op mutation on each FIFO resolves only after every queued or
+    // in-flight mutation has drained, which is what "idle" means here.
+    await Promise.all([
+      this.enqueueAsynchronousHistoryMutation(async () => {}),
+      candidate.enqueueAsynchronousHistoryMutation(async () => {}),
+    ]);
+    if (this.isCompressing || candidate.isCompressing) {
+      throw new Error('Profile history adoption requires idle histories');
+    }
+    // Contents live in each service's own journal and cannot be swapped
+    // synchronously at commit. The prepared profile client is built from the
+    // live history, so the journals must still describe the same context.
+    if (this.journal.getLength() !== candidate.journal.getLength()) {
+      throw new Error(
+        'Profile history adoption requires a candidate journal that matches the live journal',
+      );
+    }
+    return () => {
+      this.invalidatePendingSyncs();
+      candidate.invalidatePendingSyncs();
+      this.totalTokens = candidate.totalTokens;
+      this.baseTokenOffset = candidate.baseTokenOffset;
+      this.tokenizerFactory = candidate.tokenizerFactory;
+      this.tokenizerCache = candidate.tokenizerCache;
+      this.activeTokenizationModel = candidate.activeTokenizationModel;
+      this.activeTokenizationProvider = candidate.activeTokenizationProvider;
+      this.chronology = candidate.chronology;
+      this.cacheAnchorSeq = candidate.cacheAnchorSeq;
+      this.mediaOwner = candidate.mediaOwner;
+      candidate.mediaOwner = undefined;
+      candidate.totalTokens = 0;
+      candidate.baseTokenOffset = 0;
+      candidate.tokenizerCache = new Map();
+      candidate.chronology = new ChronologyStamper();
+      candidate.cacheAnchorSeq = 0;
+    };
   }
 
   /**
@@ -913,10 +963,10 @@ export class HistoryService extends HistoryServiceCore {
    * Mark compression as starting
    * This will cause add() operations to queue until compression completes
    */
-  startCompression(): void {
+  startCompression(origin?: object): void {
     this.logger.debug('Starting compression - locking history');
     this.isCompressing = true;
-    this.emit('compressionStarted');
+    this.emit('compressionStarted', origin);
   }
 
   /**
@@ -925,7 +975,11 @@ export class HistoryService extends HistoryServiceCore {
    * When summary and itemsCompressed are provided, emits a compressionEnded
    * event so the recording service can log the compression.
    */
-  endCompression(summary?: IContent, itemsCompressed?: number): void {
+  endCompression(
+    summary?: IContent,
+    itemsCompressed?: number,
+    origin?: object,
+  ): void {
     this.logger.debug('Compression complete - unlocking history', {
       pendingCount: this.pendingOperations.length,
     });
@@ -940,10 +994,10 @@ export class HistoryService extends HistoryServiceCore {
         // suppression window), then the streaming content after them (#3264). When
         // nothing is in flight this executes inline, behavior unchanged.
         this.runSynchronousHistoryMutation(() => {
-          this.emit('compressionLockReleased');
+          this.emit('compressionLockReleased', origin);
 
           if (summary && itemsCompressed !== undefined) {
-            this.emit('compressionEnded', summary, itemsCompressed);
+            this.emit('compressionEnded', summary, itemsCompressed, origin);
           }
         });
       });

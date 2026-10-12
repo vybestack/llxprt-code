@@ -62,7 +62,7 @@ export async function testToolNameRetry(
   const stream = client.sendMessageStream(initialRequest, signal, promptId);
   const events = await fromAsync(stream);
 
-  // Assert: model_info, then error event and retried content
+  // The recovered 413 is not surfaced; only the retried content is emitted.
   expect(events).toStrictEqual([
     {
       type: AgentEventType.ModelInfo,
@@ -71,12 +71,6 @@ export async function testToolNameRetry(
         providerName: 'gemini',
         profileName: null,
         displayLabel: 'test-model',
-      },
-    },
-    {
-      type: AgentEventType.Error,
-      value: {
-        error: { message: 'Payload too large', status: 413 },
       },
     },
     { type: AgentEventType.Content, value: 'Retried content' },
@@ -96,7 +90,8 @@ export async function testToolNameRetry(
         ],
       },
     ],
-    expect.any(Object),
+    signal,
+    undefined,
   );
 
   // A tool-payload 413 must not run compression or enforcement (REQ-3251-5)
@@ -137,15 +132,12 @@ export async function testContextCompressionRetry(
   client['chat'] = mockChat as ChatSession;
 
   const initialRequest: ContentBlock[] = [{ type: 'text', text: 'Hi' }];
+  const signal = new AbortController().signal;
   const events = await fromAsync(
-    client.sendMessageStream(
-      initialRequest,
-      new AbortController().signal,
-      promptId,
-    ),
+    client.sendMessageStream(initialRequest, signal, promptId),
   );
 
-  // The retried Content flows to the consumer after the surfaced 413.
+  // The retried Content flows to the consumer without the recovered 413.
   expect(events).toStrictEqual([
     {
       type: AgentEventType.ModelInfo,
@@ -156,7 +148,6 @@ export async function testContextCompressionRetry(
         displayLabel: 'test-model',
       },
     },
-    { type: AgentEventType.Error, value: requestTooLarge },
     { type: AgentEventType.Content, value: 'Retried content' },
   ]);
 
@@ -170,6 +161,7 @@ export async function testContextCompressionRetry(
   expect(mockTurnRunFn).toHaveBeenNthCalledWith(
     2,
     [{ speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] }],
-    expect.any(Object),
+    signal,
+    undefined,
   );
 }

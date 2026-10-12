@@ -23,7 +23,7 @@ import {
   type SchedulerHandle,
   type SchedulerPurpose,
 } from '@vybestack/llxprt-code-core';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { ToolLookup } from '@vybestack/llxprt-code-tools';
 
 /**
  * The setCallbacks payload the acquired scheduler expects. The config field
@@ -40,11 +40,11 @@ export interface SchedulerRegistryDelegateOptions {
   /** Fallback MessageBus when an acquisition supplies none. */
   messageBus: MessageBus;
   /** Fallback tool registry when an acquisition supplies none. */
-  toolRegistry: ToolRegistry;
+  toolRegistry: ToolLookup;
   createScheduler(options: {
     interactiveMode?: boolean;
     messageBus?: MessageBus;
-    toolRegistry?: ToolRegistry;
+    toolRegistry?: ToolLookup;
   }): Promise<SchedulerHandle>;
 }
 
@@ -56,7 +56,7 @@ export interface SchedulerRegistryDelegate {
     options?: { interactiveMode?: boolean },
     dependencies?: {
       messageBus?: MessageBus;
-      toolRegistry?: ToolRegistry;
+      toolRegistry?: ToolLookup;
     },
   ): Promise<SchedulerHandle>;
   disposeScheduler(

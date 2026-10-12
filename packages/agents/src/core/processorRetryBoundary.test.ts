@@ -1,10 +1,12 @@
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, expect, it } from 'bun:test';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
@@ -59,6 +61,7 @@ async function facadeCallback0(): Promise<void> {
       clearProviderCompressionCallback: () => undefined,
     },
     runtimeContext: {
+      ...createSessionPolicyFixture(),
       state: { model: 'test-model' },
       providerRuntime: {},
       telemetry: {
@@ -73,7 +76,7 @@ async function facadeCallback0(): Promise<void> {
     },
     providerRuntimeBuilder: () => ({
       config: undefined,
-      settingsService: {},
+      settingsService: new SettingsService(),
       metadata: {},
     }),
     resolveProviderBaseUrl: () => undefined,

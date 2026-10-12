@@ -4,16 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  MCPServerConfig,
-  McpExtensionConfig,
-} from '../config/mcpServerConfig.js';
+import type { MCPServerConfig, McpExtensionConfig } from '../config/index.js';
 import type {
   McpPromptRegistry,
   McpResourceRegistry,
 } from '../host/hostInterfaces.js';
-import type { McpClient } from './mcp-client.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import { McpClient } from './mcp-client.js';
+import type { McpOAuthBinding } from '../auth/index.js';
+import type {
+  McpApprovalPolicy,
+  McpHostConfig,
+} from '../host/hostInterfaces.js';
+import type { HostFeedbackSink } from '../host/hostServices.js';
+import { MCPServerStatus } from './mcp-status.js';
+import type { McpOwnerStatus } from './mcp-owner-status.js';
+import { getErrorMessage } from '@vybestack/llxprt-code-tools/utils/errors.js';
+import type { McpToolPublication } from '@vybestack/llxprt-code-tools';
 import { isDeepStrictEqual } from 'node:util';
 import { appendFailures } from './trust-revocation-errors.js';
 
@@ -281,6 +287,27 @@ export async function restartMcpClients({
   await refresh();
 }
 
+export async function restartMcpServer({
+  name,
+  clients,
+  configured,
+  discover,
+  refresh,
+}: {
+  name: string;
+  clients: ReadonlyMap<string, McpClient>;
+  configured: Readonly<Record<string, MCPServerConfig>> | undefined;
+  discover: (name: string, config: MCPServerConfig) => Promise<void> | void;
+  refresh: () => Promise<void>;
+}): Promise<void> {
+  const config = clients.get(name)?.getServerConfig() ?? configured?.[name];
+  if (!config) {
+    throw new Error(`No MCP server registered with the name "${name}"`);
+  }
+  await discover(name, config);
+  await refresh();
+}
+
 export function removeMcpServerState(
   name: string,
   updateStatus: () => void,
@@ -298,7 +325,7 @@ export function removeMcpServerState(
 
 export function removeMcpServerArtifacts(
   name: string,
-  toolRegistry: ToolRegistry,
+  toolRegistry: McpToolPublication,
   promptRegistry: McpPromptRegistry,
   resourceRegistry: McpResourceRegistry,
 ): void {
@@ -320,4 +347,215 @@ export function removeMcpServerArtifacts(
       `Failed to remove MCP artifacts for '${name}'`,
     );
   }
+}
+
+export function createConfiguredMcpClient(
+  oauth: McpOAuthBinding,
+  approvalPolicy: McpApprovalPolicy,
+  version: string,
+  tools: McpToolPublication,
+  promptPublication: McpPromptRegistry,
+  resourcePublication: McpResourceRegistry,
+  host: McpHostConfig,
+  name: string,
+  config: MCPServerConfig,
+  onToolsUpdated: () => Promise<void>,
+  feedback: HostFeedbackSink,
+  onStatus: (status: MCPServerStatus, requiresOAuth: boolean) => void,
+): McpClient {
+  return new McpClient(
+    oauth,
+    approvalPolicy,
+    name,
+    config,
+    tools,
+    promptPublication,
+    resourcePublication,
+    {
+      getDirectories: () => host.getWorkspaceDirectories(),
+      onDirectoriesChanged: (listener) =>
+        host.onWorkspaceDirectoriesChanged(listener),
+    },
+    host,
+    host.getDebugMode(),
+    version,
+    onToolsUpdated,
+    feedback,
+    onStatus,
+  );
+}
+
+export function recordMcpDiscoveryFailure(
+  name: string,
+  error: unknown,
+  failures: Map<string, string>,
+  status: McpOwnerStatus,
+  feedback: HostFeedbackSink,
+): void {
+  const message = getErrorMessage(error);
+  failures.set(name, message);
+  status.update(name, MCPServerStatus.DISCONNECTED);
+  feedback(
+    'error',
+    `Error during discovery for server '${name}': ${message}`,
+    error,
+  );
+}
+
+export function rejectConflictingMcpExtension(
+  name: string,
+  config: MCPServerConfig,
+  existing: McpClient | undefined,
+  warn: (message: string) => void,
+): boolean {
+  if (!existing || existing.getServerConfig().extension === config.extension)
+    return false;
+  const extensionText = config.extension
+    ? ` from extension "${config.extension.name}"`
+    : '';
+  warn(
+    `Skipping MCP config for server with name "${name}"${extensionText} as it already exists.`,
+  );
+  return true;
+}
+
+export function rejectReservedExtensionMcpServer(
+  name: string,
+  config: MCPServerConfig,
+  servers: Record<string, MCPServerConfig> | undefined,
+  warn: (message: string) => void,
+): boolean {
+  if (
+    !config.extension ||
+    !Object.prototype.hasOwnProperty.call(servers ?? {}, name)
+  )
+    return false;
+  warn(
+    `Skipping MCP config for server with name "${name}" from extension "${config.extension.name}" because configured server names are reserved.`,
+  );
+  return true;
+}
+
+export async function joinMcpDiscoveryCancellation(
+  operations: ReadonlyArray<Promise<unknown> | undefined>,
+): Promise<void> {
+  const results = await Promise.allSettled(operations);
+  const failures = results.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : [],
+  );
+  if (failures.length > 0)
+    throw new AggregateError(failures, 'MCP discovery cancellation failed');
+}
+
+export function cancelMcpDiscoveryWork(
+  clients: Iterable<McpClient>,
+  connecting: Iterable<McpClient>,
+  disconnect: (client: McpClient) => Promise<void>,
+  discoveries: Iterable<Promise<void>>,
+  pendingRefresh: Promise<void> | null,
+): Promise<void> {
+  for (const client of clients) client.abortDiscovery();
+  return joinMcpDiscoveryCancellation([
+    ...discoveries,
+    ...Array.from(connecting, disconnect),
+    pendingRefresh ?? undefined,
+  ]);
+}
+
+export function rejectMcpReconciliationErrors(
+  discoveries: ConfiguredMcpReconciliation['discoveries'],
+  errors: ReadonlyMap<string, unknown>,
+): void {
+  const failures = discoveries.flatMap(([name]) =>
+    errors.has(name) ? [errors.get(name)] : [],
+  );
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1)
+    throw new AggregateError(failures, 'MCP settings reconciliation failed');
+}
+
+export async function settleMcpDisconnections(
+  operations: ReadonlyArray<Promise<void>>,
+  names: Iterable<string>,
+  notify: (name: string) => void,
+): Promise<unknown[]> {
+  const failures: unknown[] = [];
+  for (const result of await Promise.allSettled(operations))
+    if (result.status === 'rejected') failures.push(result.reason);
+  for (const name of names) {
+    try {
+      notify(name);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  return failures;
+}
+
+export function abortMcpDiscoveryControllers(
+  controllers: Iterable<AbortController>,
+  clients: Iterable<McpClient>,
+  connecting: Iterable<McpClient>,
+  disconnect: (client: McpClient) => Promise<void>,
+  discoveries: Iterable<Promise<void>>,
+  pendingRefresh: Promise<void> | null,
+): Promise<void> {
+  for (const controller of controllers) controller.abort();
+  return cancelMcpDiscoveryWork(
+    clients,
+    connecting,
+    disconnect,
+    discoveries,
+    pendingRefresh,
+  );
+}
+
+export function quarantineMcpClients(
+  clients: ReadonlyMap<string, McpClient>,
+  retireStatus: (name: string) => void,
+  retain: (name: string, client: McpClient) => void,
+  failures: unknown[],
+): void {
+  for (const [name, client] of clients) {
+    retireStatus(name);
+    try {
+      client.invalidateCapabilities();
+    } catch (error) {
+      appendFailures(failures, error);
+    }
+    try {
+      client.abortDiscovery();
+    } catch (error) {
+      appendFailures(failures, error);
+    }
+    retain(name, client);
+  }
+}
+
+export function cancelMcpRefreshTimer(
+  timer: ReturnType<typeof setTimeout> | undefined,
+  resolve: (() => void) | undefined,
+): void {
+  if (timer !== undefined) {
+    clearTimeout(timer);
+    resolve?.();
+  }
+}
+
+export function collectMcpRetirementClients(
+  failed: ReadonlySet<McpClient>,
+  collections: ReadonlyArray<ReadonlyMap<string, McpClient>>,
+  discovering: Iterable<string>,
+): { serverNames: Set<string>; clientsByIdentity: Map<McpClient, string> } {
+  const serverNames = new Set(discovering);
+  const clientsByIdentity = new Map(
+    Array.from(failed, (client): [McpClient, string] => [client, 'retired']),
+  );
+  for (const collection of collections) {
+    for (const [name, client] of collection) {
+      serverNames.add(name);
+      clientsByIdentity.set(client, clientsByIdentity.get(client) ?? name);
+    }
+  }
+  return { serverNames, clientsByIdentity };
 }

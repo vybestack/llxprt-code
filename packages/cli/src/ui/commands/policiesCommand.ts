@@ -163,18 +163,6 @@ function getPolicyInfo(context: CommandContext): PolicyInfo | null {
     };
   }
 
-  const config = context.services.config;
-  if (config) {
-    const engine = config.getPolicyEngine();
-    const rules: PolicyRuleDisplay[] = engine
-      .getRules()
-      .map((r) => toPolicyRuleDisplay(r, (rule) => rule.argsPattern?.source));
-    return {
-      rules,
-      defaultDecision: engine.getDefaultDecision(),
-      nonInteractive: engine.isNonInteractive(),
-    };
-  }
   return null;
 }
 

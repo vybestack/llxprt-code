@@ -1,4 +1,5 @@
 import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { createSessionPolicyFixture } from './session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -15,6 +16,9 @@ import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/cu
  * These tests are written TDD-style: they WILL FAIL until P14 refactors
  * performCompression() to use the strategy pattern via the factory.
  */
+
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -65,20 +69,23 @@ function buildRuntimeContext(
     model: 'test-model',
     sessionId: 'test-session',
   });
+
+  const settingsService = new SettingsService();
   const mockProviderAdapter = {
-    getActiveProvider: vi.fn(() => ({
-      name: 'test-provider',
-      generateChatCompletion: vi.fn(),
-    })),
+    getActiveProvider: () => buildMockProvider('default compression response'),
+    setActiveProvider: () => {},
   };
   const mockTelemetryAdapter = {
-    recordTokenUsage: vi.fn(),
-    recordEvent: vi.fn(),
+    logApiRequest: () => {},
+    logApiResponse: () => {},
+    logApiError: () => {},
   };
   const mockToolsView = {
-    getToolRegistry: vi.fn(() => undefined),
+    listToolNames: () => [],
+    getToolMetadata: () => undefined,
   };
   return createAgentRuntimeContext({
+    ...createSessionPolicyFixture(settingsService, runtimeState.runtimeId),
     state: runtimeState,
     history: historyService,
     settings: {
@@ -92,25 +99,31 @@ function buildRuntimeContext(
     provider: mockProviderAdapter,
     telemetry: mockTelemetryAdapter,
     tools: mockToolsView,
-    providerRuntime: {
-      runtimeId: 'test-runtime',
-      settingsService: { get: vi.fn(() => undefined) } as never,
-      config: {} as never,
-    },
+    providerRuntime: createProviderRuntimeContext({
+      runtimeId: runtimeState.runtimeId,
+      settingsService,
+    }),
   });
 }
 function buildMockContentGenerator(): ContentGenerator {
   return {
-    generateContent: vi.fn(),
-    generateContentStream: vi.fn(),
-    countTokens: vi.fn().mockResolvedValue({ totalTokens: 100 }),
-    embedContent: vi.fn(),
-  } as unknown as ContentGenerator;
+    generateContent: async () => {
+      throw new Error('Unexpected content generation');
+    },
+    generateContentStream: async () => {
+      throw new Error('Unexpected stream generation');
+    },
+    countTokens: async () => ({ totalTokens: 100 }),
+    embedContent: async () => {
+      throw new Error('Unexpected embedding');
+    },
+  };
 }
 function buildMockProvider(summaryText: string) {
   return {
     name: 'test-provider',
-    generateChatCompletion: vi.fn(async function* () {
+    getModels: async () => [],
+    generateChatCompletion: vi.fn(async function* (): AsyncGenerator<IContent> {
       yield {
         speaker: 'ai',
         blocks: [{ type: 'text', text: summaryText }],
@@ -453,8 +466,8 @@ async function legacyTest13() {
   expect(triggerPreCompressHook).toHaveBeenCalledTimes(1);
   // Assert: triggerPreCompressHook was called with correct parameters
   expect(triggerPreCompressHook).toHaveBeenCalledWith(
-    expect.anything(), // config
     PreCompressTrigger.Manual,
+    undefined,
   );
 }
 async function legacyTest14() {
@@ -495,8 +508,8 @@ async function legacyTest15() {
   expect(result).toBe(PerformCompressionResult.SKIPPED_EMPTY);
   expect(triggerPreCompressHook).toHaveBeenCalledTimes(1);
   expect(triggerPreCompressHook).toHaveBeenCalledWith(
-    expect.anything(),
     PreCompressTrigger.Manual,
+    undefined,
   );
   expect(mockContentGenerator).not.toHaveBeenCalled();
 }

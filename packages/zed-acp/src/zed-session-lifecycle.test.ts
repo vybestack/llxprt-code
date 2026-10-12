@@ -3,13 +3,20 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { installZedDefinitionFixture } from './__tests__/definition-fixture.js';
+const definitionFixture = installZedDefinitionFixture();
+import { createConnectionProviderManager } from './__tests__/connection-provider-fixture.js';
+import { unusedProfileApplication } from './test-profile-application.js';
+
+import type { ZedAgent } from './zedIntegration.js';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { mkdtempSync, rmSync } from 'node:fs';
 import type * as acp from '@agentclientprotocol/sdk';
-import type { Config, IContent } from '@vybestack/llxprt-code-core';
+import { Config, type IContent } from '@vybestack/llxprt-code-core';
 import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
 import type { ChatSessionFileLister } from './zed-session-loader.js';
 
@@ -35,13 +42,6 @@ const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
 void vi.mock('@vybestack/llxprt-code-agents', () => ({
   ...actual,
   fromConfig: (...args: unknown[]) => mockFromConfig(...args),
-}));
-
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  clearActiveModelParam: vi.fn(),
-  getActiveModelParams: vi.fn(),
-  loadProfileByName: vi.fn(),
-  setCliRuntimeContext: vi.fn(),
 }));
 
 const actualActual = { ...(await import('@vybestack/llxprt-code-core')) };
@@ -83,7 +83,12 @@ function buildStubAgent(options: {
     async *stream() {
       yield { type: 'done', reason: 'stop' };
     },
-    session: { resume, setRecording },
+    session: {
+      resume,
+      setRecording,
+      getRecordingTitle: () => undefined,
+      recordRecordingTitle: async () => undefined,
+    },
     tools: { respondToConfirmation: vi.fn() },
   } as unknown as Agent;
   return {
@@ -96,25 +101,15 @@ function buildStubAgent(options: {
 }
 
 function buildBaseConfig(root: string): Config {
-  return {
-    getFileSystemService: () => ({
-      readTextFile: vi.fn(async () => 'base'),
-      writeTextFile: vi.fn(async () => undefined),
-    }),
-    getProviderManager: () => ({ id: 'base' }),
-    setProviderManager: vi.fn(),
-    getProfileManager: () => undefined,
-    getEphemeralSetting: () => undefined,
-    getDebugMode: () => false,
-    getTargetDir: () => '/project',
-    getProjectRoot: () => '/project',
-    getMaxSessionTurns: () => 50,
-    getSessionRecordingService: () => undefined,
-    storage: {
-      getProjectTempDir: () => root,
-      getProjectChatsDir: () => path.join(root, 'chats'),
-    },
-  } as unknown as Config;
+  return new Config({
+    sessionId: 'base',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    storageRoot: root,
+    model: 'test-model',
+    debugMode: false,
+    maxSessionTurns: 50,
+  });
 }
 
 function buildInitializeRequest(): acp.InitializeRequest {
@@ -123,12 +118,18 @@ function buildInitializeRequest(): acp.InitializeRequest {
 
 async function makeZedAgent(
   root: string,
-): Promise<InstanceType<typeof import('./zedIntegration.js').ZedAgent>> {
+): Promise<InstanceType<typeof ZedAgent>> {
   const mod = await import('./zedIntegration.js');
+  const config = buildBaseConfig(root);
+  const settingsService = new SettingsService();
   const zedAgent = new mod.ZedAgent(
-    buildBaseConfig(root),
+    config,
     new RecordingConnection() as unknown as acp.AgentSideConnection,
+    unusedProfileApplication,
+    createConnectionProviderManager(config, settingsService),
+    () => new SettingsService({ sessionSource: settingsService }),
     emptyChatsLister,
+    definitionFixture(),
   );
   await zedAgent.initialize(buildInitializeRequest());
   return zedAgent;
@@ -142,6 +143,8 @@ function defaultNotFoundDelete(): void {
 }
 
 function cleanupTmpRoots(): void {
+  mockFromConfig.mockImplementation(actual.fromConfig);
+  mockDeleteSessionById.mockImplementation(actualActual.deleteSessionById);
   while (tmpRoots.length > 0) {
     const root = tmpRoots.pop();
     if (root !== undefined) {
@@ -167,7 +170,7 @@ describe('ACP lifecycle close and unknown-session deletion (issue #2564)', () =>
     const zedAgent = await makeZedAgent(root);
 
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 
@@ -215,7 +218,7 @@ describe('ACP lifecycle live-session deletion retries (issue #2564)', () => {
     const zedAgent = await makeZedAgent(root);
 
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 
@@ -234,7 +237,7 @@ describe('ACP lifecycle live-session deletion retries (issue #2564)', () => {
     const zedAgent = await makeZedAgent(root);
 
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 
@@ -251,7 +254,7 @@ describe('ACP lifecycle live-session deletion retries (issue #2564)', () => {
     const zedAgent = await makeZedAgent(root);
 
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
     mockDeleteSessionById.mockRejectedValueOnce(
@@ -274,7 +277,7 @@ describe('ACP lifecycle live-session deletion retries (issue #2564)', () => {
     const zedAgent = await makeZedAgent(root);
 
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
     mockDeleteSessionById.mockResolvedValueOnce({
@@ -311,7 +314,7 @@ describe('ACP lifecycle close/delete serialization and persisted deletion (issue
     const zedAgent = await makeZedAgent(root);
 
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 
@@ -338,7 +341,7 @@ describe('ACP lifecycle close/delete serialization and persisted deletion (issue
     const zedAgent = await makeZedAgent(root);
 
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 
@@ -368,7 +371,7 @@ describe('ACP lifecycle close/delete serialization and persisted deletion (issue
     const zedAgent = await makeZedAgent(root);
 
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 
@@ -402,7 +405,7 @@ describe('ACP lifecycle restored sessions and known-closed markers (issue #2564)
     const zedAgent = await makeZedAgent(root);
 
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 
@@ -414,7 +417,7 @@ describe('ACP lifecycle restored sessions and known-closed markers (issue #2564)
     // known-closed marker persists (issue #2564 stale marker regression)
     await zedAgent.loadSession({
       sessionId: created.sessionId,
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 
@@ -436,7 +439,7 @@ describe('ACP lifecycle restored sessions and known-closed markers (issue #2564)
     const zedAgent = await makeZedAgent(root);
 
     const created = await zedAgent.newSession({
-      cwd: '/project',
+      cwd: process.cwd(),
       mcpServers: [],
     });
 

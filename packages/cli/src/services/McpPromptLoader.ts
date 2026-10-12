@@ -40,9 +40,8 @@ export class McpPromptLoader implements ICommandLoader {
       return Promise.resolve([]);
     }
     const mcpServers = this.config.getMcpServers() ?? {};
-    const promptRegistry = this.config.getPromptRegistry();
     for (const serverName in mcpServers) {
-      const prompts = promptRegistry.getPromptsByServer(serverName);
+      const prompts = this.config.listPrompts(serverName);
       for (const prompt of prompts) {
         promptCommands.push(this.buildPromptCommand(prompt, serverName));
       }
@@ -138,7 +137,12 @@ export class McpPromptLoader implements ICommandLoader {
       }
 
       try {
-        return await this.invokePrompt(prompt, promptInputs, serverName);
+        return await this.invokePrompt(
+          prompt,
+          promptInputs,
+          serverName,
+          context.signal,
+        );
       } catch (error) {
         return {
           type: 'message',
@@ -153,6 +157,7 @@ export class McpPromptLoader implements ICommandLoader {
     prompt: DiscoveredMCPPrompt,
     promptInputs: Record<string, unknown>,
     serverName: string,
+    signal: AbortSignal,
   ): Promise<SlashCommandActionReturn> {
     const mcpServers = this.config?.getMcpServers() ?? {};
     if (!Object.hasOwn(mcpServers, serverName)) {
@@ -162,7 +167,7 @@ export class McpPromptLoader implements ICommandLoader {
         content: `MCP server config not found for '${serverName}'.`,
       };
     }
-    const result = await prompt.invoke(promptInputs);
+    const result = await prompt.invoke(promptInputs, signal);
 
     if (result.error != null) {
       return {

@@ -171,8 +171,7 @@ describe('OpenAI provider stateless contract tests', () => {
 
     const secondCallOptions = buildCallOptions(provider, {
       settings,
-      runtime: firstCallOptions.runtime,
-      config: firstCallOptions.config,
+      runtimeId: firstCallOptions.invocation.runtimeId,
     });
     await provider.generateChatCompletion(secondCallOptions).next();
 
@@ -274,8 +273,9 @@ describe('OpenAI provider stateless contract: ephemeral overrides', () => {
       config,
     });
     const invocation = createRuntimeInvocationContext({
-      runtime,
-      settings,
+      runtimeId: runtime.runtimeId,
+      runtimeMetadata: runtime.metadata,
+
       providerName: 'openai',
       ephemeralsSnapshot: {
         temperature: 0.17,

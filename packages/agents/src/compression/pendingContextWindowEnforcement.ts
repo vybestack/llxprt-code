@@ -48,6 +48,7 @@ import {
 
 export interface PendingContextWindowEnforcerDeps extends PendingFallbackDeps {
   historyService: HistoryService;
+  historyOrigin?: object;
   logger: DebugLogger;
   ineffectiveCompressionReductionThreshold: number;
   getContextLimits(provider?: IProvider): ContextLimits;

@@ -12,13 +12,11 @@ const mockGetAuthStatus = vi.fn();
 const mockAuthenticate = vi.fn();
 const mockToggleOAuthEnabled = vi.fn();
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => ({
-    getCliOAuthManager: () => ({
-      authenticate: mockAuthenticate,
-      getAuthStatus: mockGetAuthStatus,
-      toggleOAuthEnabled: mockToggleOAuthEnabled,
-    }),
+void vi.mock('../contexts/OAuthControlContext.js', () => ({
+  useOAuthControl: () => ({
+    authenticate: mockAuthenticate,
+    getAuthStatus: mockGetAuthStatus,
+    toggleOAuthEnabled: mockToggleOAuthEnabled,
   }),
 }));
 

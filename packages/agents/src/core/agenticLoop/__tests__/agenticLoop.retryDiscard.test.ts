@@ -1,3 +1,5 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { CoreToolScheduler } from '../../coreToolScheduler.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -18,6 +20,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import { bindSchedulerOwner } from '../../../session/assembleSchedulerOwner.js';
 import { AgenticLoop } from '../AgenticLoop.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -47,15 +50,35 @@ describe('AgenticLoop discards abandoned tool-call requests on Retry (issue 3048
     const tool = new MockTool({ name: 'echo' });
     const toolRegistry = createToolRegistryForTest([tool]);
     const messageBus = new MessageBus(createAllowPolicyEngine(), false);
-    const config = createTestConfig({
-      messageBus,
-      toolRegistry,
-      policyEngine: createAllowPolicyEngine(),
-      interactive: false,
-      approvalMode: ApprovalMode.YOLO,
-    });
+    const { config: config, settingsOwner: configSettingsOwner } =
+      createTestConfig({
+        messageBus,
+        toolRegistry,
+        policyEngine: createAllowPolicyEngine(),
+        interactive: false,
+        approvalMode: ApprovalMode.YOLO,
+      });
     const scripted = createScriptedAgentClient(scripts);
     const loop = new AgenticLoop({
+      createSchedulerOwner: bindSchedulerOwner(
+        config,
+        messageBus,
+        config.isInteractive(),
+        toolRegistry,
+        (options) => new CoreToolScheduler(options),
+        () => configSettingsOwner.readToolExecutionPolicy(),
+        () =>
+          configSettingsOwner.readToolGovernance(
+            config.getExcludeTools() ?? [],
+          ),
+        undefined,
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-caller-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+      ),
       agentClient: scripted.client,
       config,
       messageBus,

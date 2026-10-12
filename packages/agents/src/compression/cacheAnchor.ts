@@ -66,6 +66,7 @@ export function applyCompressionWithAnchor(
   topPreserved: number,
   model: string,
   signal?: AbortSignal,
+  historyOrigin?: object,
 ): Promise<void> {
   try {
     resolveHeadAnchorSeq(newHistory, topPreserved);
@@ -78,5 +79,6 @@ export function applyCompressionWithAnchor(
     Math.max(0, topPreserved),
     model,
     signal,
+    historyOrigin,
   );
 }

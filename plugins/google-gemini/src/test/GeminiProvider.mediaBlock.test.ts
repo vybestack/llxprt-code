@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import { assertInstanceOf } from './testSupport.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { GeminiProvider } from '../gemini/GeminiProvider.js';
@@ -620,10 +621,11 @@ async function preservesGenerationAndReleaseFailures(): Promise<void> {
     providerName: provider.name,
     contents: [{ speaker: 'human', blocks: [reference] }],
   });
-  const iterator = provider.generateChatCompletion({
-    ...options,
-    runtime: { ...options.runtime, mediaResolver },
-  });
+  const iterator = bindProviderMedia(
+    provider,
+    mediaResolver,
+    undefined,
+  ).generateChatCompletion(options);
 
   let error: unknown;
   try {

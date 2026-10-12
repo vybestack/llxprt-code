@@ -6,14 +6,11 @@ import type {
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import { raceWithAbort } from '@vybestack/llxprt-code-providers/utils/abortSignal.js';
-import {
-  extractSystemInstructionText,
-  resolveUserMemory,
-} from './streamRequestHelpers.js';
+import { extractSystemInstructionText } from './streamRequestHelpers.js';
 import {
   prepareAtSendSeam,
   type PromptEnvelopeEstimate,
@@ -36,6 +33,11 @@ export interface PreparedSourcePromptEnvelopeSend {
   releaseIfUnsent(): Promise<void>;
 }
 
+/** The session's prompt estimator; projection estimates require it. */
+type SourceTokenizerFactory = NonNullable<
+  AgentRuntimeContext['promptEstimator']
+>;
+
 type SourceOptionsBuilder = (
   source: PromptEnvelopeSource,
 ) => SourceProviderChatOptions;
@@ -56,9 +58,7 @@ function sourceContents(
 export function buildSourceProviderChatOptions(
   source: PromptEnvelopeSource,
   tools: ToolDeclaration[] | undefined,
-  runtimeContext: ProviderRuntimeContext & {
-    settingsService: NonNullable<RuntimeGenerateChatOptions['settings']>;
-  },
+  metadata: Readonly<Record<string, unknown>> | undefined,
   invocation: RuntimeGenerateChatOptions['invocation'],
   requestContext: Record<string, unknown> | undefined,
   systemInstruction: unknown,
@@ -69,15 +69,11 @@ export function buildSourceProviderChatOptions(
     requestRows: source,
     contentCount: source.count,
     tools,
-    config: runtimeContext.config,
-    runtime: runtimeContext,
     invocation,
-    settings: runtimeContext.settingsService,
     metadata: {
-      ...runtimeContext.metadata,
+      ...metadata,
       _retryRequestContext: requestContext,
     },
-    userMemory: resolveUserMemory(runtimeContext.config),
     systemInstruction: extractSystemInstructionText(systemInstruction),
     ...(systemPromptAssembler === undefined ? {} : { systemPromptAssembler }),
   };
@@ -108,6 +104,7 @@ export class SourcePromptEnvelopePreparer {
     private readonly buildOptions: SourceOptionsBuilder,
     private readonly signal?: AbortSignal,
     private readonly fallbackEstimate?: SourceFallbackEstimate,
+    private readonly tokenizerFactory?: SourceTokenizerFactory,
   ) {}
 
   own(source: PromptEnvelopeSource): void {
@@ -136,6 +133,7 @@ export class SourcePromptEnvelopePreparer {
       this.signal === undefined
         ? options
         : bindSourceOptions(options, source, this.signal),
+      this.tokenizerFactory,
     );
     let estimatedPromptTokens: number;
     if (prepared.estimate !== null) {
@@ -187,12 +185,14 @@ export function createSourcePromptEnvelopePreparer(
   buildOptions: SourceOptionsBuilder,
   signal?: AbortSignal,
   fallbackEstimate?: SourceFallbackEstimate,
+  tokenizerFactory?: SourceTokenizerFactory,
 ): SourcePromptEnvelopePreparer {
   return new SourcePromptEnvelopePreparer(
     provider,
     buildOptions,
     signal,
     fallbackEstimate,
+    tokenizerFactory,
   );
 }
 
@@ -206,6 +206,7 @@ interface SourceEnforcementInput {
   ) => Promise<PromptEnvelopeSource>;
   readonly signal?: AbortSignal;
   readonly fallbackEstimate?: SourceFallbackEstimate;
+  readonly tokenizerFactory?: SourceTokenizerFactory;
 }
 
 export async function prepareSourcePromptEnvelopeAfterEnforcement(
@@ -220,6 +221,7 @@ export async function prepareSourcePromptEnvelopeAfterEnforcement(
     input.buildOptions,
     input.signal,
     input.fallbackEstimate,
+    input.tokenizerFactory,
   );
   preparer.own(input.source);
   try {

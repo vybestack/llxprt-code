@@ -1,3 +1,9 @@
+import { afterEach as closeInvocationRoots } from 'bun:test';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+const retainedInvocationOwners: SessionSettingsOwner[] = [];
+closeInvocationRoots(async () => {
+  for (const owner of retainedInvocationOwners.splice(0)) await owner.dispose();
+});
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -30,7 +36,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -127,7 +133,19 @@ export function makeChatSession(
   historyService.addAll(rows);
   vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(0);
 
+  const invocationOwner = new SessionSettingsOwner(
+    runtimeSetup.settingsService,
+  );
+  invocationOwner.bindTelemetry(runtimeSetup.config);
+  retainedInvocationOwners.push(invocationOwner);
   const view = createAgentRuntimeContext({
+    prepareProviderInvocation: (name, parameters, signal) =>
+      invocationOwner.prepareProviderInvocation(
+        runtimeState.runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
     state: runtimeState,
     history: historyService,
     settings: {
@@ -140,10 +158,11 @@ export function makeChatSession(
         target: null,
       },
     },
-    provider: createProviderAdapterFromManager(
-      runtimeSetup.config.getProviderManager(),
+    provider: createProviderAdapterFromManager(runtimeSetup.providerManager),
+    telemetry: createTelemetryAdapter(
+      runtimeSetup.config,
+      invocationOwner.telemetry,
     ),
-    telemetry: createTelemetryAdapterFromConfig(runtimeSetup.config),
     tools: createToolRegistryViewFromRegistry(),
     providerRuntime: providerRuntimeSnapshot,
   });
@@ -249,7 +268,19 @@ export function makeChatForEnforceContextWindow(
   vi.spyOn(historyService, 'applyDensityResult').mockResolvedValue(undefined);
   vi.spyOn(historyService, 'estimateTokensForContents').mockResolvedValue(0);
 
+  const invocationOwner = new SessionSettingsOwner(
+    runtimeSetup.settingsService,
+  );
+  invocationOwner.bindTelemetry(runtimeSetup.config);
+  retainedInvocationOwners.push(invocationOwner);
   const view = createAgentRuntimeContext({
+    prepareProviderInvocation: (name, parameters, signal) =>
+      invocationOwner.prepareProviderInvocation(
+        runtimeState.runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
     state: runtimeState,
     history: historyService,
     settings: {
@@ -262,10 +293,11 @@ export function makeChatForEnforceContextWindow(
         target: null,
       },
     },
-    provider: createProviderAdapterFromManager(
-      runtimeSetup.config.getProviderManager(),
+    provider: createProviderAdapterFromManager(runtimeSetup.providerManager),
+    telemetry: createTelemetryAdapter(
+      runtimeSetup.config,
+      invocationOwner.telemetry,
     ),
-    telemetry: createTelemetryAdapterFromConfig(runtimeSetup.config),
     tools: createToolRegistryViewFromRegistry(),
     providerRuntime: providerRuntimeSnapshot,
   });

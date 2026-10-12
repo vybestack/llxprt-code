@@ -3,6 +3,8 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { SettingsService as HandoffSettingsService } from '@vybestack/llxprt-code-settings';
 
 import {
   describe,
@@ -13,13 +15,14 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
+import { assembleAgentActivationBootstrap } from '@vybestack/llxprt-code-agents';
+import { handoffCliConfig } from './test-utils/bootstrap-config.js';
 import { main } from './cli.js';
 import type { LoadedSettings } from './config/settings.js';
 import { loadSettings } from './config/settings.js';
 import { loadCliConfig } from './config/config.js';
 import { parseArguments } from './config/cliArgParser.js';
-import type { Config } from '@vybestack/llxprt-code-core';
-import { OutputFormat } from '@vybestack/llxprt-code-core';
+import { Config, OutputFormat } from '@vybestack/llxprt-code-core';
 import { dynamicSettingsRegistry } from './utils/dynamicSettings.js';
 import {
   shouldRelaunchForMemory,
@@ -199,7 +202,50 @@ describe('cli sandbox integration', () => {
     } as unknown as LoadedSettings);
 
     const mockConfig = buildSandboxConfig();
-    loadCliConfigMock.mockResolvedValue(mockConfig);
+    const providerOwner = sandboxProviderOwner();
+    loadCliConfigMock.mockImplementation(
+      handoffCliConfig(
+        mockConfig,
+        (store, owner) => {
+          const activationOwner = assembleAgentActivationBootstrap(
+            mockConfig,
+            store,
+            providerOwner,
+            null,
+            () => undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            owner,
+          );
+          return {
+            providerFileLifecycle: activationOwner.providerFileLifecycle,
+            messageBus: activationOwner.messageBus,
+            workspaceDefinitions: activationOwner.workspaceDefinitions,
+            workspaceTrust: activationOwner.workspaceTrust,
+            trustCleanup: activationOwner.trustCleanup,
+            workspaceMemory: activationOwner.workspaceMemory,
+            workspaceMemoryOwnership: activationOwner.workspaceMemoryOwnership,
+            workspaceFilesystem: activationOwner.workspaceFilesystem,
+            sessionClient: activationOwner.sessionClient,
+            takeMediaOwner:
+              activationOwner.takeMediaOwner.bind(activationOwner),
+            settingsOwnerOwnership: activationOwner.settingsOwnerOwnership,
+            takeSettingsOwner:
+              activationOwner.takeSettingsOwner.bind(activationOwner),
+            takeSessionClient:
+              activationOwner.takeSessionClient.bind(activationOwner),
+            preflight: vi.fn(async () => ({
+              authFailed: false,
+              infoMessages: [],
+            })),
+            dispose: () => activationOwner.dispose(),
+          };
+        },
+        providerOwner,
+      ),
+    );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce(
       buildArgv('test prompt'),
     );
@@ -221,8 +267,10 @@ describe('cli sandbox integration', () => {
 
     try {
       await main();
-    } catch {
-      // Expected from process.exit mock
+    } catch (error) {
+      if (!(error instanceof Error && error.message === 'PROCESS_EXIT')) {
+        throw error;
+      }
     } finally {
       Object.defineProperty(process.stdin, 'isTTY', {
         value: originalIsTTY,
@@ -242,6 +290,7 @@ describe('cli sandbox integration', () => {
       computeSandboxMemoryArgs(false, undefined, customMaxHeap),
       expect.anything(),
       expect.anything(),
+      expect.any(Function),
     );
 
     exitSpy.mockRestore();
@@ -259,7 +308,51 @@ describe('cli sandbox integration', () => {
     // block the hop: nested suppression is decided solely by
     // loadSandboxConfig, so getSandbox() staying defined must start_sandbox.
     process.env.SANDBOX = 'some-ci-value';
-    loadCliConfigMock.mockResolvedValue(buildSandboxConfig());
+    const mockConfig = buildSandboxConfig();
+    const providerOwner = sandboxProviderOwner();
+    loadCliConfigMock.mockImplementation(
+      handoffCliConfig(
+        mockConfig,
+        (store, owner) => {
+          const activationOwner = assembleAgentActivationBootstrap(
+            mockConfig,
+            store,
+            providerOwner,
+            null,
+            () => undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            owner,
+          );
+          return {
+            providerFileLifecycle: activationOwner.providerFileLifecycle,
+            messageBus: activationOwner.messageBus,
+            workspaceDefinitions: activationOwner.workspaceDefinitions,
+            workspaceTrust: activationOwner.workspaceTrust,
+            trustCleanup: activationOwner.trustCleanup,
+            workspaceMemory: activationOwner.workspaceMemory,
+            workspaceMemoryOwnership: activationOwner.workspaceMemoryOwnership,
+            workspaceFilesystem: activationOwner.workspaceFilesystem,
+            sessionClient: activationOwner.sessionClient,
+            takeMediaOwner:
+              activationOwner.takeMediaOwner.bind(activationOwner),
+            settingsOwnerOwnership: activationOwner.settingsOwnerOwnership,
+            takeSettingsOwner:
+              activationOwner.takeSettingsOwner.bind(activationOwner),
+            takeSessionClient:
+              activationOwner.takeSessionClient.bind(activationOwner),
+            preflight: vi.fn(async () => ({
+              authFailed: false,
+              infoMessages: [],
+            })),
+            dispose: () => activationOwner.dispose(),
+          };
+        },
+        providerOwner,
+      ),
+    );
     (parseArguments as Mock<typeof parseArguments>).mockResolvedValueOnce(
       buildArgv('test prompt'),
     );
@@ -281,8 +374,10 @@ describe('cli sandbox integration', () => {
 
     try {
       await main();
-    } catch {
-      // Expected from process.exit mock
+    } catch (error) {
+      if (!(error instanceof Error && error.message === 'PROCESS_EXIT')) {
+        throw error;
+      }
     } finally {
       Object.defineProperty(process.stdin, 'isTTY', {
         value: originalIsTTY,
@@ -299,23 +394,38 @@ describe('cli sandbox integration', () => {
   });
 });
 
+function sandboxProviderOwner(): ProviderManager {
+  const manager = new ProviderManager({
+    settingsService: new HandoffSettingsService(),
+  });
+  manager.registerProvider({
+    name: 'gemini',
+    getDefaultModel: () => 'gemini-model',
+    getModels: async () => [],
+    async *generateChatCompletion() {
+      yield { speaker: 'ai', blocks: [] };
+    },
+  });
+  manager.setActiveProvider('gemini');
+  return manager;
+}
+
 function buildSandboxConfig(): Config {
   const fn = vi.fn;
-  return {
+  const config = new Config({
+    sessionId: crypto.randomUUID(),
+    cwd: process.cwd(),
+    targetDir: process.cwd(),
+    debugMode: false,
+    model: 'sandbox-model',
+  });
+  return Object.assign(config, {
     initialize: fn().mockResolvedValue(undefined),
-    refreshAuth: fn().mockResolvedValue(undefined),
-    getAgentClientFactory: fn(() => undefined),
-    setAgentClientFactory: fn(),
     getToolSchedulerFactory: fn(() => undefined),
     setToolSchedulerFactory: fn(),
     getTaskToolRegistration: fn(() => undefined),
     setTaskToolRegistration: fn(),
     getProvider: fn(() => undefined),
-    getProviderManager: fn(() => ({
-      getActiveProvider: fn().mockReturnValue(null),
-      getActiveProviderName: fn().mockReturnValue(undefined),
-      hasActiveProvider: fn(() => true),
-    })),
     getConversationLoggingEnabled: fn(() => false),
     getMcpServers: fn(() => ({})),
     getDebugMode: fn(() => false),
@@ -335,14 +445,13 @@ function buildSandboxConfig(): Config {
     getZedIntegrationEnabled: fn(() => false),
     getTrustedFolder: fn(() => true),
     getScreenReader: fn(() => false),
-    storage: {},
     getProjectTempDir: fn(() => '/tmp/project-temp'),
     getContinueSessionRef: fn(() => null),
-    getWorkspaceContext: fn(() => ({ getDirectories: () => ['/tmp/project'] })),
+
     setTerminalBackground: fn(),
     getTerminalBackground: fn(() => undefined),
     getPolicyEngine: fn(() => null),
-  } as unknown as Config;
+  });
 }
 
 function buildArgv(prompt?: string) {

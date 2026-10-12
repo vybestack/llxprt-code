@@ -35,9 +35,12 @@ import {
 const original = { ...(await import('@vybestack/llxprt-code-settings')) };
 void vi.mock('@vybestack/llxprt-code-settings', () => ({
   ...original,
-  Storage: {
-    ...original.Storage,
-    getGlobalConfigDir: vi.fn(() => '/tmp/llxprt-test-config'),
+  // Subclass so every static Storage path helper (spreading a class drops its
+  // non-enumerable statics) stays available to Config construction.
+  Storage: class TestStorage extends original.Storage {
+    static override getGlobalConfigDir(): string {
+      return '/tmp/llxprt-test-config';
+    }
   },
 }));
 

@@ -13,6 +13,7 @@ import {
 } from '../services/history/IContent.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
 import { MediaAdmissionService } from '../storage/media-admission-service.js';
+import { stageRecordedMedia } from '../storage/recorded-media-transfer.js';
 import {
   collectMediaReferences,
   verifyHistoryMedia,
@@ -351,8 +352,38 @@ export async function importSessionMediaPackage<T>(
     contentIds: validated.objects.map((object) => object.contentId),
   };
   const stagedMedia = await mediaStore.stageObjectFiles(validated.blobs);
+  let durableMedia: Awaited<ReturnType<typeof stageRecordedMedia>>;
+  try {
+    durableMedia = await stageRecordedMedia(mediaStore, validated.references);
+  } catch (error) {
+    await stagedMedia.rollback();
+    throw error;
+  }
   const reservations: ImportReservation[] = [];
   let published: PublishedImportedSession | undefined;
+  const rollbackAll = async (error: unknown): Promise<never> => {
+    try {
+      await durableMedia.rollback();
+    } catch (cleanupError) {
+      return rollbackImport(
+        new AggregateError(
+          [error, cleanupError],
+          'Imported media cleanup failed',
+        ),
+        published,
+        stagedMedia,
+        mediaStore,
+        reservations,
+      );
+    }
+    return rollbackImport(
+      error,
+      published,
+      stagedMedia,
+      mediaStore,
+      reservations,
+    );
+  };
   try {
     for (const [index, reference] of validated.references.entries()) {
       const ownerId = `session-package-import:${importedSessionId}:${index}`;
@@ -374,26 +405,16 @@ export async function importSessionMediaPackage<T>(
     );
     assertImportReservationsReleased(releaseFailures);
   } catch (error) {
-    return rollbackImport(
-      error,
-      published,
-      stagedMedia,
-      mediaStore,
-      reservations,
-    );
+    return rollbackAll(error);
   }
   let result: T | ImportedSessionMediaPackage;
   try {
     result = activate === undefined ? imported : await activate(imported);
   } catch (error) {
-    return rollbackImport(
-      error,
-      published,
-      stagedMedia,
-      mediaStore,
-      reservations,
-    );
+    return rollbackAll(error);
   }
   stagedMedia.commit();
+  durableMedia.commit();
+  await durableMedia.finalize();
   return result;
 }

@@ -3,27 +3,28 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { installTestCatalogOwners } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const createTestCatalogOwner = installTestCatalogOwners();
 
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createTestOAuthBinding } from './test-support/index.js';
+
+import { unsupportedApprovalPolicy } from './test-support/approval-policy.js';
+
 import { waitFor } from '../../../test-utils/src/wait-for.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
-import type { Config } from './test-support/mcpClientTestSupport.js';
-import { PromptRegistry } from './test-support/mcpClientTestSupport.js';
-import { ResourceRegistry } from './test-support/mcpClientTestSupport.js';
-import { WorkspaceContext } from './test-support/mcpClientTestSupport.js';
+import type { Config as BaseConfig } from './test-support/mcpClientTestSupport.js';
+
 import {
+  buildToolGovernance,
   ToolRegistry,
   type IToolRegistryHost,
 } from '@vybestack/llxprt-code-tools';
+import type { MCPServerConfig } from '../config/index.js';
 import { McpClientManager } from './mcp-client-manager.js';
-import {
-  getMCPServerStatus,
-  MCPServerStatus,
-  updateMCPServerStatus,
-} from './mcp-client.js';
+import { MCPServerStatus } from './mcp-client.js';
 
 const SERVER_NAME = 'fixture-server';
 
@@ -38,8 +39,6 @@ describe('McpClientManager fake discovery lifecycle', () => {
   });
 
   afterEach(() => {
-    updateMCPServerStatus(SERVER_NAME, MCPServerStatus.DISCONNECTED);
-    updateMCPServerStatus('other-server', MCPServerStatus.DISCONNECTED);
     delete process.env.LLXPRT_FAKE_MCP;
     fs.rmSync(workspacePath, { recursive: true, force: true });
     vi.restoreAllMocks();
@@ -48,24 +47,27 @@ describe('McpClientManager fake discovery lifecycle', () => {
   function createManager(
     fixture: unknown,
     serverNames: readonly string[] = [SERVER_NAME],
+    serverConfig: MCPServerConfig = { command: 'unused' },
   ): {
     manager: McpClientManager;
     toolRegistry: ToolRegistry;
   } {
     fs.writeFileSync(fixturePath, JSON.stringify(fixture));
-    const promptRegistry = new PromptRegistry();
-    const resourceRegistry = new ResourceRegistry();
+    const catalog = createTestCatalogOwner();
+    const promptRegistry = catalog.promptPublication;
+    const resourceRegistry = catalog.resourcePublication;
+    const configPrompts = promptRegistry;
+    const configResources = resourceRegistry;
     const config = {
       isTrustedFolder: () => true,
       getMcpServers: () =>
         Object.fromEntries(
-          serverNames.map((serverName) => [serverName, { command: 'unused' }]),
+          serverNames.map((serverName) => [serverName, serverConfig]),
         ),
       getMcpServerCommand: () => undefined,
-      getPromptRegistry: () => promptRegistry,
-      getResourceRegistry: () => resourceRegistry,
+
       getDebugMode: () => false,
-      getWorkspaceContext: () => new WorkspaceContext(workspacePath),
+
       getAllowedMcpServers: () => undefined,
       getBlockedMcpServers: () => undefined,
       getExtensions: () => [],
@@ -76,13 +78,68 @@ describe('McpClientManager fake discovery lifecycle', () => {
       {
         requestConfirmation: async () => false,
       },
-      new SettingsService(),
+      () => ({
+        hideTaskAsync: false,
+        lazyMcp: false,
+        eagerServers: [],
+        governance: buildToolGovernance({
+          getEphemeralSettings: () => ({}),
+          getExcludeTools: () => [],
+        }),
+      }),
     );
     return {
-      manager: new McpClientManager('0.0.1', toolRegistry, config),
+      manager: new McpClientManager(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
+        '0.0.1',
+        toolRegistry,
+        configPrompts,
+        configResources,
+        config,
+        config.refreshMcpContext,
+      ),
       toolRegistry,
     };
   }
+
+  it('isolates same-name same-URL status and subscriptions through shipped fake discovery', async () => {
+    const fixture = {
+      servers: { [SERVER_NAME]: { tools: [{ name: 'shared' }] } },
+    };
+    const url = 'http://same.invalid/mcp';
+    const { manager: a } = createManager(fixture, [SERVER_NAME], {
+      url,
+      oauth: { enabled: true },
+    });
+    const { manager: b } = createManager(fixture, [SERVER_NAME], {
+      url,
+      oauth: { enabled: false },
+    });
+    const bEvents: MCPServerStatus[] = [];
+    const release = b.subscribeStatus((_name, status) => {
+      bEvents.push(status);
+    });
+    try {
+      await a.startConfiguredMcpServers();
+      expect(bEvents).toStrictEqual([]);
+      await b.startConfiguredMcpServers();
+      expect(bEvents).toContain(MCPServerStatus.CONNECTING);
+      expect(bEvents).toContain(MCPServerStatus.CONNECTED);
+      const baseline = [...bEvents];
+      await a.stop();
+      expect(bEvents).toStrictEqual(baseline);
+      expect(b.getServerStatus(SERVER_NAME)).toBe(MCPServerStatus.CONNECTED);
+      expect(b.getServerStates().get(SERVER_NAME)?.requiresOAuth).toBe(false);
+      expect(a.getServerStates().get(SERVER_NAME)?.requiresOAuth).toBe(true);
+      release();
+      await b.stop();
+      expect(bEvents).toStrictEqual(baseline);
+    } finally {
+      release();
+      await Promise.all([a.stop(), b.stop()]);
+    }
+  });
 
   it('does not retain a client when its server is absent from the fixture', async () => {
     const { manager } = createManager({ servers: {} });
@@ -91,7 +148,9 @@ describe('McpClientManager fake discovery lifecycle', () => {
 
     expect(manager.getClient(SERVER_NAME)).toBeUndefined();
     expect(manager.getMcpServerCount()).toBe(0);
-    expect(getMCPServerStatus(SERVER_NAME)).toBe(MCPServerStatus.DISCONNECTED);
+    expect(manager.getServerStatus(SERVER_NAME)).toBe(
+      MCPServerStatus.DISCONNECTED,
+    );
   });
 
   it('does not retain a client when the fixture declares discovery failure', async () => {
@@ -105,7 +164,9 @@ describe('McpClientManager fake discovery lifecycle', () => {
     expect(manager.getDiscoveryFailures().get(SERVER_NAME)).toBe(
       'fixture discovery failed',
     );
-    expect(getMCPServerStatus(SERVER_NAME)).toBe(MCPServerStatus.DISCONNECTED);
+    expect(manager.getServerStatus(SERVER_NAME)).toBe(
+      MCPServerStatus.DISCONNECTED,
+    );
   });
 
   it('rejects malformed fixture data without retaining a partially created client', async () => {
@@ -161,7 +222,9 @@ describe('McpClientManager fake discovery lifecycle', () => {
     });
     const discovery = manager.startConfiguredMcpServers();
     await waitFor(() =>
-      expect(getMCPServerStatus(SERVER_NAME)).toBe(MCPServerStatus.CONNECTING),
+      expect(manager.getServerStatus(SERVER_NAME)).toBe(
+        MCPServerStatus.CONNECTING,
+      ),
     );
     const started = Date.now();
 
@@ -170,7 +233,9 @@ describe('McpClientManager fake discovery lifecycle', () => {
 
     expect(Date.now() - started).toBeLessThan(1_000);
     expect(manager.getClient(SERVER_NAME)).toBeUndefined();
-    expect(getMCPServerStatus(SERVER_NAME)).toBe(MCPServerStatus.DISCONNECTED);
+    expect(manager.getServerStatus(SERVER_NAME)).toBe(
+      MCPServerStatus.DISCONNECTED,
+    );
   });
 
   it('publishes disconnected status immediately when fake discovery is revoked', async () => {
@@ -180,11 +245,15 @@ describe('McpClientManager fake discovery lifecycle', () => {
       },
     });
     await manager.startConfiguredMcpServers();
-    expect(getMCPServerStatus(SERVER_NAME)).toBe(MCPServerStatus.CONNECTED);
+    expect(manager.getServerStatus(SERVER_NAME)).toBe(
+      MCPServerStatus.CONNECTED,
+    );
 
     await manager.onFolderTrustRevoked();
 
-    expect(getMCPServerStatus(SERVER_NAME)).toBe(MCPServerStatus.DISCONNECTED);
+    expect(manager.getServerStatus(SERVER_NAME)).toBe(
+      MCPServerStatus.DISCONNECTED,
+    );
   });
 
   it('removes a client and partial artifacts when fake publication throws', async () => {
@@ -206,6 +275,10 @@ describe('McpClientManager fake discovery lifecycle', () => {
     expect(manager.getDiscoveryFailures().get(SERVER_NAME)).toContain(
       'registry publication failed',
     );
-    expect(getMCPServerStatus(SERVER_NAME)).toBe(MCPServerStatus.DISCONNECTED);
+    expect(manager.getServerStatus(SERVER_NAME)).toBe(
+      MCPServerStatus.DISCONNECTED,
+    );
   });
 });
+
+type Config = BaseConfig & { refreshMcpContext(): Promise<void> };

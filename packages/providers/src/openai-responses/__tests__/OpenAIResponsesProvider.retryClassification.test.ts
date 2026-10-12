@@ -1,3 +1,7 @@
+import {
+  captureResponsesTestRequest,
+  type ResponsesTestDeps,
+} from '../responses-request.test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -23,10 +27,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  executeOpenAIResponsesRequest,
-  type ResponsesExecutorDeps,
-} from '../openAIResponsesExecutor.js';
+import { executeOpenAIResponsesRequest } from '../openAIResponsesExecutor.js';
 import { OpenAIResponsesProviderBase } from '../OpenAIResponsesProviderBase.js';
 import { shouldRetryError } from '../../retryDelayPolicy.js';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
@@ -216,8 +217,9 @@ function buildNormalizedOptions(
   });
   const config = createRuntimeConfigStub(settings, {});
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
+
     providerName: 'openai-responses',
     ephemeralsSnapshot: ephemerals,
     fallbackRuntimeId: 'test-runtime',
@@ -249,21 +251,21 @@ function buildNormalizedOptions(
   return { ...base, ...optionOverrides };
 }
 
-function buildDeps(provider: TestableResponsesProvider): ResponsesExecutorDeps {
+function buildDeps(provider: TestableResponsesProvider): ResponsesTestDeps {
   return {
     providerName: 'openai-responses',
     logger: {
       debug: () => undefined,
-    } as unknown as ResponsesExecutorDeps['logger'],
-    getProviderBaseURL: () => 'https://api.openai.com/v1',
-    getCustomHeaders: () => undefined,
+    } as unknown as ResponsesTestDeps['logger'],
+    requestBaseURL: 'https://api.openai.com/v1',
+    requestHeaders: undefined,
     isCodexMode: () => false,
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => 'test-token',
     generateSyntheticCallId: () => 'call_synthetic_test',
     shouldRetryOnError: (error) => provider.retryDecision(error),
-    getDefaultModel: () => 'gpt-5',
-    getGlobalConfig: () => undefined,
+    defaultModel: 'gpt-5',
+
     getUnallowedModelParameters: () => new Set<string>(),
   };
 }
@@ -314,7 +316,10 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 6, retrywait: 0 },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps(provider)),
+        buildDeps(provider),
+      ),
     );
 
     expect(error).toBeInstanceOf(Error);
@@ -339,7 +344,10 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 6, retrywait: 0 },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps(provider)),
+        buildDeps(provider),
+      ),
     );
 
     expect(error).toBeInstanceOf(Error);
@@ -359,7 +367,10 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 6, retrywait: 0 },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps(provider)),
+        buildDeps(provider),
+      ),
     );
 
     expect(error).toBeInstanceOf(Error);
@@ -372,7 +383,10 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { messages, error } = await drain(
-      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps(provider)),
+        buildDeps(provider),
+      ),
     );
 
     expect(error).toBeUndefined();
@@ -387,7 +401,10 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 2, retrywait },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps(provider)),
+        buildDeps(provider),
+      ),
     );
 
     expect(error).toBeUndefined();
@@ -406,7 +423,10 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps(provider)),
+        buildDeps(provider),
+      ),
     );
 
     expect(error).toBeUndefined();
@@ -419,7 +439,10 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps(provider)),
+        buildDeps(provider),
+      ),
     );
 
     expect(error).toBeUndefined();
@@ -433,7 +456,10 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps(provider)),
+        buildDeps(provider),
+      ),
     );
 
     expect(error).toBeUndefined();
@@ -456,7 +482,10 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps(provider)),
+        buildDeps(provider),
+      ),
     );
 
     expect(error).toBeInstanceOf(Error);
@@ -474,7 +503,10 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps(provider)),
+        buildDeps(provider),
+      ),
     );
 
     expect(error).toBeInstanceOf(Error);
@@ -490,7 +522,10 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { error } = await drain(
-      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps(provider)),
+        buildDeps(provider),
+      ),
     );
 
     expect(error).toBeInstanceOf(Error);
@@ -520,7 +555,10 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 6, retrywait: 0 },
     });
     const { messages, error } = await drain(
-      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps(provider)),
+        buildDeps(provider),
+      ),
     );
 
     expect(messages).toHaveLength(0);
@@ -552,7 +590,10 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 6, retrywait: 0 },
     });
     const { messages, error } = await drain(
-      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps(provider)),
+        buildDeps(provider),
+      ),
     );
 
     expect(messages).toHaveLength(0);
@@ -600,7 +641,10 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
     });
 
     const { messages, error } = await drain(
-      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps(provider)),
+        buildDeps(provider),
+      ),
     );
 
     expect(messages).toHaveLength(0);
@@ -625,10 +669,16 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
     });
 
     const sseOutcome = await drain(
-      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps(provider)),
+        buildDeps(provider),
+      ),
     );
     const httpOutcome = await drain(
-      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps(provider)),
+        buildDeps(provider),
+      ),
     );
 
     expect(fetchMock.calls.count).toBe(2);
@@ -651,7 +701,10 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { messages, error } = await drain(
-      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps(provider)),
+        buildDeps(provider),
+      ),
     );
 
     expect(error).toBeUndefined();
@@ -665,7 +718,10 @@ describe('OpenAI Responses retry classification @issue:3140', () => {
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { messages, error } = await drain(
-      executeOpenAIResponsesRequest(options, buildDeps(provider)),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps(provider)),
+        buildDeps(provider),
+      ),
     );
 
     expect(error).toBeUndefined();

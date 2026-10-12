@@ -16,7 +16,7 @@ import {
   registerSyncCleanup,
   runBestEffortSyncCleanup,
   runExitCleanup,
-} from './cleanup';
+} from './cleanup.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -383,7 +383,7 @@ describe('cleanup-state module owns the reset state', () => {
 
     // Import the state module's reset — must clear state owned by cleanup.ts
     const { __resetCleanupStateForTesting: resetFromState } = await import(
-      './cleanup-state'
+      './cleanup-state.js'
     );
     resetFromState();
 
@@ -408,7 +408,7 @@ describe('cleanup-state module owns the reset state', () => {
     expect(count).toBe(1);
 
     const { __resetCleanupStateForTesting: resetFromState } = await import(
-      './cleanup-state'
+      './cleanup-state.js'
     );
     resetFromState();
 

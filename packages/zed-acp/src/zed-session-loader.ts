@@ -157,7 +157,7 @@ export async function* readAgentHistoryForReplay(
  * (FINDING C3).
  */
 function chatsDirFor(config: Config): string {
-  return config.storage.getProjectChatsDir();
+  return config.projectChatsDir;
 }
 
 /**

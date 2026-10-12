@@ -13,10 +13,9 @@ import { CommandKind } from './types.js';
 import { type CommandArgumentSchema } from './schema/types.js';
 import type { MCPServerConfig } from '@vybestack/llxprt-code-core';
 import { getErrorMessage } from '@vybestack/llxprt-code-core';
-import { mcpServerRequiresOAuth } from '@vybestack/llxprt-code-mcp';
-import { appEvents, AppEvent } from '../../utils/events.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
-import type { RuntimeMcpServices, RuntimeMcpServers } from './mcpDisplay.js';
+import type { RuntimeMcpServers } from './mcpDisplay.js';
 
 export const mcpAuthSchema: CommandArgumentSchema = [
   {
@@ -34,7 +33,12 @@ export const mcpAuthSchema: CommandArgumentSchema = [
         return [];
       }
 
-      const mcpServers: RuntimeMcpServers = config.getMcpServers() ?? {};
+      const mcpServers: RuntimeMcpServers = Object.fromEntries(
+        (ctx.services.agent?.mcp.listServers() ?? []).map((server) => [
+          server.name,
+          server.config,
+        ]),
+      );
       return Object.keys(mcpServers).map((name) => ({
         value: name,
         description: 'Configured MCP server',
@@ -43,9 +47,10 @@ export const mcpAuthSchema: CommandArgumentSchema = [
   },
 ];
 
-export function listOAuthServers(
+export async function listOAuthServers(
+  agent: Agent | null,
   mcpServers: RuntimeMcpServers,
-): MessageActionReturn {
+): Promise<MessageActionReturn> {
   const oauthServersFromConfig = Object.entries(mcpServers)
     .filter(
       ([_name, server]: [string, MCPServerConfig | undefined]) =>
@@ -53,9 +58,15 @@ export function listOAuthServers(
     )
     .map(([name, _server]) => name);
 
-  const discoveredOAuthServers = Array.from(
-    mcpServerRequiresOAuth.keys(),
-  ).filter((name) => mcpServers[name] !== undefined);
+  const discoveredOAuthServers =
+    agent === null
+      ? []
+      : (await agent.mcp.details()).servers
+          .filter(
+            (server) =>
+              server.requiresAuth && mcpServers[server.name] !== undefined,
+          )
+          .map((server) => server.name);
 
   const allOAuthServers = [
     ...new Set([...oauthServersFromConfig, ...discoveredOAuthServers]),
@@ -79,14 +90,10 @@ export function listOAuthServers(
 export async function performMcpOAuth(
   context: CommandContext,
   serverName: string,
-  server: MCPServerConfig,
-  runtimeConfig: RuntimeMcpServices,
 ): Promise<MessageActionReturn> {
   const displayListener = (message: string) => {
     context.ui.addItem({ type: 'info', text: message });
   };
-
-  appEvents.on(AppEvent.OauthDisplayMessage, displayListener);
 
   try {
     context.ui.addItem(
@@ -97,17 +104,9 @@ export async function performMcpOAuth(
       Date.now(),
     );
 
-    const { MCPOAuthProvider } = await import('@vybestack/llxprt-code-mcp');
-
-    const oauthConfig = server.oauth ?? { enabled: false };
-
-    const mcpServerUrl = server.httpUrl ?? server.url;
-    await MCPOAuthProvider.authenticate(
-      serverName,
-      oauthConfig,
-      mcpServerUrl,
-      appEvents,
-    );
+    const agent = context.services.agent;
+    if (!agent) throw new Error('Agent is not available.');
+    await agent.mcp.authenticate(serverName, displayListener);
 
     context.ui.addItem(
       {
@@ -116,20 +115,6 @@ export async function performMcpOAuth(
       },
       Date.now(),
     );
-
-    const mcpClientManager = runtimeConfig.getMcpClientManager();
-    if (mcpClientManager !== undefined) {
-      context.ui.addItem(
-        {
-          type: 'info',
-          text: `Re-discovering tools from '${serverName}'...`,
-        },
-        Date.now(),
-      );
-      await mcpClientManager.restartServer(serverName);
-    }
-    const agentClient = runtimeConfig.getAgentClient();
-    await agentClient.setTools();
 
     context.ui.reloadCommands();
 
@@ -144,8 +129,6 @@ export async function performMcpOAuth(
       messageType: 'error',
       content: `Failed to authenticate with MCP server '${serverName}': ${getErrorMessage(error)}`,
     };
-  } finally {
-    appEvents.removeListener(AppEvent.OauthDisplayMessage, displayListener);
   }
 }
 

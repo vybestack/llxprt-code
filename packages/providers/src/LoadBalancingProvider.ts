@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { ProviderMediaFileAdapter } from '@vybestack/llxprt-code-core/runtime/provider-media-file-adapter.js';
 import type {
   IProvider,
   GenerateChatOptions,
@@ -13,7 +14,18 @@ import type { IModel } from './IModel.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { ProviderManager } from './ProviderManager.js';
-import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
+import {
+  captureLoadBalancerParameters,
+  selectAdmittedMemberParameters,
+} from './loadBalancing/admittedMemberParameters.js';
+import {
+  currentLoadBalancerModel,
+  defaultLoadBalancerModel,
+  emitLoadBalancerSelection,
+  selectedLoadBalancerBaseUrl,
+} from './loadBalancing/selectionPresentation.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { LoadBalancerFailoverError } from './errors.js';
@@ -39,8 +51,18 @@ import { BackendMetricsCollector } from './loadBalancing/backendMetrics.js';
 import { extractFailoverSettings as extractFailoverSettingsFromEphemeral } from './loadBalancing/failoverSettings.js';
 import { isTimeoutError } from './loadBalancing/streamTimeout.js';
 import { buildExtendedStats } from './loadBalancing/statsBuilder.js';
-import { buildRoundRobinResolvedOptions as buildRoundRobinResolvedOptionsExternal } from './loadBalancing/resolvedOptionsBuilder.js';
-import { resolveMemberAuthentication } from './loadBalancing/memberAuthentication.js';
+import {
+  buildRoundRobinResolvedOptions as buildRoundRobinResolvedOptionsExternal,
+  normalizeLoadBalancerOptions,
+} from './loadBalancing/resolvedOptionsBuilder.js';
+import {
+  assertMemberAuthCurrent,
+  resolveMemberAuthentication,
+} from './loadBalancing/memberAuthentication.js';
+import {
+  createAdmittedMemberDispatchGuard,
+  resolveAdmittedMemberDelegate,
+} from './loadBalancing/admittedMemberCredential.js';
 import {
   getRequestSignal,
   rethrowIfAborted,
@@ -75,6 +97,7 @@ import {
 } from './loadBalancing/preparedPromptOptions.js';
 import { getTargetContextLimit } from './loadBalancing/targetContextLimit.js';
 import {
+  loadBalancerModels,
   getEffectiveLoadBalancerContextLimit,
   resolveSubProfileModel,
 } from './loadBalancing/subProfileHelpers.js';
@@ -82,7 +105,6 @@ import type { TokenAccountingDiagnostics } from './loadBalancing/tokenAccounting
 import { validateLoadBalancerConfig } from './loadBalancing/configValidation.js';
 import { FailoverState } from './loadBalancing/failoverState.js';
 import {
-  isResolvedSubProfile,
   type BackendMetrics,
   type CompressionCallback,
   type CircuitBreakerState,
@@ -103,7 +125,6 @@ export type {
   LoadBalancingProviderConfig,
   ResolvedSubProfile,
 } from './loadBalancing/loadBalancerTypes.js';
-
 export { isResolvedSubProfile } from './loadBalancing/loadBalancerTypes.js';
 export type { TokenAccountingDiagnostics } from './loadBalancing/tokenAccountingDiagnostics.js';
 export { isLoadBalancerProfileFormat } from './loadBalancing/loadBalancerProfileFormat.js';
@@ -117,10 +138,18 @@ interface PreparedLoadBalancerTarget {
 /**
  * Load balancing provider that distributes requests across multiple sub-profiles
  */
-export class LoadBalancingProvider implements IProvider {
+export class LoadBalancingProvider
+  extends ProviderMediaFileAdapter
+  implements IProvider
+{
   readonly name = 'load-balancer';
   readonly transportAttemptOwnership = 'provider' as const;
   private roundRobinIndex = 0;
+  private readonly selectionRevision = Symbol('load-balancer-selection');
+  private readonly assertAdmittedMemberDispatch: ReturnType<
+    typeof createAdmittedMemberDispatchGuard
+  >;
+  private readonly memberIdentities = new WeakMap<object, symbol>();
   private readonly logger = new DebugLogger('llxprt:providers:load-balancer');
   private stats: Map<string, number> = new Map();
   private lastSelected: string | null = null;
@@ -142,6 +171,7 @@ export class LoadBalancingProvider implements IProvider {
     private readonly config: LoadBalancingProviderConfig,
     private readonly providerManager: ProviderManager,
   ) {
+    super();
     // Validate required dependencies
     // Widen to unknown for defensive runtime check (DI frameworks may pass null/undefined)
     const providerManagerRuntime: unknown = providerManager;
@@ -155,7 +185,14 @@ export class LoadBalancingProvider implements IProvider {
     }
 
     // Validate configuration
-    this.validateConfig(config);
+    validateLoadBalancerConfig(config);
+    this.assertAdmittedMemberDispatch = createAdmittedMemberDispatchGuard(
+      this,
+      providerManager,
+      this.selectionRevision,
+    );
+    for (const member of config.subProfiles)
+      this.memberIdentities.set(member, Symbol('load-balancer-member'));
 
     this.circuitBreaker = new CircuitBreakerManager(
       this.circuitBreakerStates,
@@ -166,13 +203,15 @@ export class LoadBalancingProvider implements IProvider {
     this.metricsCollector = new BackendMetricsCollector(this.backendMetrics);
   }
 
-  /**
-   * Validate the load balancing configuration
-   * @plan PLAN-20251211issue486c - Updated to handle ResolvedSubProfile
-   */
-  private validateConfig(config: LoadBalancingProviderConfig): void {
-    validateLoadBalancerConfig(config);
+  admitModelParameters(settings: SettingsService): AdmittedModelParameters {
+    return captureLoadBalancerParameters(
+      this.config,
+      settings,
+      this.selectionRevision,
+      this.memberIdentities,
+    );
   }
+
   selectNextSubProfile(): ResolvedSubProfile | LoadBalancerSubProfile {
     const subProfile = this.config.subProfiles[this.roundRobinIndex];
     this.roundRobinIndex =
@@ -200,6 +239,7 @@ export class LoadBalancingProvider implements IProvider {
     return projectLoadBalancerPromptEnvelope({
       config: this.config,
       providerManager: this.providerManager,
+      bindDelegateProvider: (provider) => this.bindDelegateProvider(provider),
       failoverState: this.failoverState,
       roundRobinIndex: this.roundRobinIndex,
       circuitBreaker: this.circuitBreaker,
@@ -208,23 +248,18 @@ export class LoadBalancingProvider implements IProvider {
       // predicate closes over the threshold instead of re-extracting it
       // per member.
       tpmThreshold: this.extractFailoverSettings().tpmThreshold,
-      buildDelegateResolvedOptions: (subProfile, delegateOptions) =>
-        this.buildRoundRobinResolvedOptions(subProfile, delegateOptions),
+      buildDelegateResolvedOptions: (subProfile, delegateOptions, selected) =>
+        this.buildRoundRobinResolvedOptions(
+          subProfile,
+          delegateOptions,
+          selected,
+        ),
       options,
     });
   }
 
-  async getModels(): Promise<IModel[]> {
-    const contextWindow = this.getEffectiveContextLimit();
-    return [
-      {
-        id: this.config.profileName,
-        name: this.config.profileName,
-        provider: this.name,
-        supportedToolFormats: [],
-        ...(contextWindow !== undefined && { contextWindow }),
-      },
-    ];
+  getModels(): Promise<IModel[]> {
+    return Promise.resolve(loadBalancerModels(this.config, this.name));
   }
 
   getContextLimit(): number | undefined {
@@ -245,6 +280,9 @@ export class LoadBalancingProvider implements IProvider {
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
     options: GenerateChatOptions,
     delegateProvider: IProvider,
+    selectedSubProfile:
+      | ResolvedSubProfile
+      | LoadBalancerSubProfile = subProfile,
   ): Promise<EstimationResult> {
     const model = resolveSubProfileModel(subProfile);
     const resolvedOptions = this.buildRoundRobinResolvedOptions(
@@ -252,6 +290,7 @@ export class LoadBalancingProvider implements IProvider {
         ? await resolveMemberAuthentication(subProfile, this.logger)
         : subProfile,
       options,
+      selectedSubProfile,
     );
     const result = await estimatePreparedPrompt(
       subProfile,
@@ -273,6 +312,7 @@ export class LoadBalancingProvider implements IProvider {
     result: EstimationResult,
     contextLimit: number,
     delegateProvider: IProvider,
+    selectedSubProfile: ResolvedSubProfile | LoadBalancerSubProfile,
   ): Promise<GenerateChatOptions | undefined> {
     if (this.compressionCallback === null) return undefined;
     this.logger.debug(
@@ -297,6 +337,7 @@ export class LoadBalancingProvider implements IProvider {
       subProfile,
       compressedOptions,
       delegateProvider,
+      selectedSubProfile,
     );
     if (compressedResult.tokens <= contextLimit) {
       return optionsWithPromptProjection(compressedOptions, compressedResult);
@@ -313,20 +354,16 @@ export class LoadBalancingProvider implements IProvider {
     options: GenerateChatOptions,
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
   ): Promise<PreparedLoadBalancerTarget> {
+    this.assertAdmittedMemberDispatch(options, subProfile);
     const authenticatedSubProfile =
       this.config.strategy === 'failover'
         ? subProfile
         : await resolveMemberAuthentication(subProfile, this.logger);
     const sharedLimit = this.getEffectiveContextLimit();
     const contextLimit = getTargetContextLimit(subProfile, sharedLimit);
-    const delegateProvider = this.providerManager.getProviderByName(
-      subProfile.providerName,
+    const delegateProvider = this.bindDelegateProvider(
+      resolveAdmittedMemberDelegate(options, subProfile, this.providerManager),
     );
-    if (!delegateProvider) {
-      const errorMsg = `Provider "${subProfile.providerName}" not found for sub-profile "${subProfile.name}"`;
-      this.logger.error(() => errorMsg);
-      throw new Error(errorMsg);
-    }
     // Re-render the caller-assembled system prompt for the model this router
     // selected, so the rendered model matches resolved.model (issue #3157).
     // Runs before estimation/compression so the LB accounts for the prompt it
@@ -340,24 +377,24 @@ export class LoadBalancingProvider implements IProvider {
       authenticatedSubProfile,
       targetOptions,
       delegateProvider,
+      subProfile,
     );
-    if (contextLimit === undefined || result.tokens <= contextLimit) {
+    if (contextLimit === undefined || result.tokens <= contextLimit)
       return {
         options: optionsWithPromptProjection(targetOptions, result),
         delegateProvider,
         authenticatedSubProfile,
       };
-    }
     const compressed = await this.compressForContextLimit(
       targetOptions,
       authenticatedSubProfile,
       result,
       contextLimit,
       delegateProvider,
+      subProfile,
     );
-    if (compressed !== undefined) {
+    if (compressed !== undefined)
       return { options: compressed, delegateProvider, authenticatedSubProfile };
-    }
 
     throw new LoadBalancerContextLimitError({
       profileName: this.config.profileName,
@@ -380,11 +417,10 @@ export class LoadBalancingProvider implements IProvider {
       };
     }
     if (optionsOrContent.requestRows !== undefined) return optionsOrContent;
+    const options = normalizeLoadBalancerOptions(optionsOrContent);
     return {
-      ...optionsOrContent,
-      contents: replayableContents(
-        await collectContents(optionsOrContent.contents),
-      ),
+      ...options,
+      contents: replayableContents(await collectContents(options.contents)),
     };
   }
 
@@ -445,8 +481,15 @@ export class LoadBalancingProvider implements IProvider {
     const resolvedOptions = this.buildRoundRobinResolvedOptions(
       preparedTarget.authenticatedSubProfile,
       preparedTarget.options,
+      subProfile,
     );
     requireTransportAttempt(resolvedOptions);
+    await assertMemberAuthCurrent(
+      subProfile,
+      preparedTarget.authenticatedSubProfile,
+      this.logger,
+    );
+    this.assertAdmittedMemberDispatch(options, subProfile);
 
     const { lifecycleObserver, attemptCtx } = this.startBackendAttempt(
       resolvedOptions,
@@ -473,10 +516,18 @@ export class LoadBalancingProvider implements IProvider {
   private buildRoundRobinResolvedOptions(
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
     options: GenerateChatOptions,
+    selectedSubProfile:
+      | ResolvedSubProfile
+      | LoadBalancerSubProfile = subProfile,
   ): GenerateChatOptions {
     return buildRoundRobinResolvedOptionsExternal(subProfile, options, {
       lbProfileEphemeralSettings: this.config.lbProfileEphemeralSettings,
       lbProfileModelParams: this.config.lbProfileModelParams,
+      memberParameters: selectAdmittedMemberParameters(
+        this.selectionRevision,
+        this.memberIdentities.get(selectedSubProfile),
+        options.modelParameters,
+      ),
       logger: this.logger,
       providerName: this.name,
       getEffectiveContextLimit: () =>
@@ -503,13 +554,7 @@ export class LoadBalancingProvider implements IProvider {
    * the request is delegated to a concrete sub-profile.
    */
   getDefaultModel(): string {
-    const firstSubProfile = this.config.subProfiles[0];
-
-    if (isResolvedSubProfile(firstSubProfile)) {
-      return firstSubProfile.model;
-    }
-
-    return firstSubProfile.modelId ?? '';
+    return defaultLoadBalancerModel(this.config);
   }
 
   /**
@@ -519,15 +564,7 @@ export class LoadBalancingProvider implements IProvider {
    * sub-profile model.
    */
   getCurrentModel(): string {
-    if (this.lastSelected !== null) {
-      const selected = this.config.subProfiles.find(
-        (candidate) => candidate.name === this.lastSelected,
-      );
-      if (selected !== undefined) {
-        return resolveSubProfileModel(selected);
-      }
-    }
-    return this.getDefaultModel();
+    return currentLoadBalancerModel(this.config, this.lastSelected);
   }
 
   /**
@@ -543,7 +580,7 @@ export class LoadBalancingProvider implements IProvider {
     const selectionChanged = this.lastSelected !== subProfileName;
     this.lastSelected = subProfileName;
     if (selectionChanged) {
-      this.emitSelectionChanged(subProfileName);
+      emitLoadBalancerSelection(this.config, subProfileName, this.logger);
     }
   }
 
@@ -557,32 +594,6 @@ export class LoadBalancingProvider implements IProvider {
     this.markActiveSelection(subProfileName);
     this.stats.set(subProfileName, (this.stats.get(subProfileName) ?? 0) + 1);
     this.totalRequests++;
-  }
-
-  /**
-   * Notify the rest of the app that the active sub-profile changed so the
-   * status footer can recompute the load-balancer identity
-   * (`lb:<lb>:<sub>:<model>`). This emits a dedicated
-   * LoadBalancerSelectionChanged event (NOT ModelChanged): a sub-profile
-   * rotation is a UI-refresh trigger, not an actual model switch, so it must
-   * not be conflated with real model changes by other subscribers.
-   */
-  private emitSelectionChanged(subProfileName: string): void {
-    try {
-      const subProfile = this.config.subProfiles.find(
-        (candidate) => candidate.name === subProfileName,
-      );
-      const model = subProfile ? resolveSubProfileModel(subProfile) : null;
-      coreEvents.emitLoadBalancerSelectionChanged({
-        profileName: this.config.profileName,
-        subProfileName,
-        model,
-      });
-    } catch (error) {
-      this.logger.debug(
-        () => `Failed to emit load-balancer selection trigger: ${error}`,
-      );
-    }
   }
 
   /**
@@ -625,11 +636,7 @@ export class LoadBalancingProvider implements IProvider {
    * between Anthropic-compatible endpoints (e.g. z.ai and native Anthropic).
    */
   getLastSelectedBaseUrl(): string | undefined {
-    if (!this.lastSelected) return undefined;
-    const subProfile = this.config.subProfiles.find(
-      (candidate) => candidate.name === this.lastSelected,
-    );
-    return subProfile?.baseURL;
+    return selectedLoadBalancerBaseUrl(this.config, this.lastSelected);
   }
 
   resetStats(): void {
@@ -942,7 +949,11 @@ export class LoadBalancingProvider implements IProvider {
         circuitBreaker: this.circuitBreaker,
         markActiveSelection: (name) => this.markActiveSelection(name),
         buildResolvedOptions: (sp, opt) =>
-          this.buildRoundRobinResolvedOptions(sp, opt),
+          this.buildRoundRobinResolvedOptions(sp, opt, subProfile),
+        assertDispatch: async (authenticated) => {
+          await assertMemberAuthCurrent(subProfile, authenticated, this.logger);
+          this.assertAdmittedMemberDispatch(options, subProfile);
+        },
         getMetricsHooks: () => this.getMetricsHooks(),
         incrementStats: (name) => this.incrementStats(name),
       },

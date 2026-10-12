@@ -2,6 +2,7 @@
 import { vi, expect, describe, it, type Mock } from 'bun:test';
 import { spawn } from 'node:child_process';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
+import type { DebugLogger } from '@vybestack/llxprt-code-telemetry/debug/DebugLogger.js';
 import {
   HookEventName,
   HookType,
@@ -18,11 +19,11 @@ import {
 let hookRunner: HookRunner;
 let mockSpawn: MockChildProcessWithoutNullStreams;
 let spawner: Mock<typeof spawn>;
-let mockDebugLogger: { warn: (...args: unknown[]) => void };
+let mockDebugLogger: Pick<DebugLogger, 'warn'>;
 export function configureRunnerTests(
   runner: HookRunner,
   child: MockChildProcessWithoutNullStreams,
-  logger: { warn: (...args: unknown[]) => void },
+  logger: Pick<DebugLogger, 'warn'>,
   spawnFunction: Mock<typeof spawn>,
 ): void {
   hookRunner = runner;
@@ -87,42 +88,52 @@ export const onStderrData = (data: string, delay = 10): void => {
   );
 };
 
-export const configureTimeoutProcess = (): {
-  readonly wasKilled: () => boolean;
-} => {
+const configureProcessGroup = (
+  ignoreTerm: boolean,
+  signals: string[] = [],
+): { readonly wasKilled: () => boolean } => {
   let closeCallback: ((code: number) => void) | undefined;
-  let killWasCalled = false;
+  let exitCallback: ((code: number) => void) | undefined;
+  let alive = true;
+  let killed = false;
+  Object.assign(mockSpawn, { pid: 424242 });
   mockSpawn.mockProcessOn.mockImplementation(
     (event: string, callback: (code: number) => void) => {
       if (event === 'close') closeCallback = callback;
+      if (event === 'exit') exitCallback = callback;
     },
   );
-  mockSpawn.kill = vi.fn().mockImplementation((_signal: string) => {
-    killWasCalled = true;
-    const callback = closeCallback;
-    if (callback) setTimeout(() => callback(128), 5);
-    return true;
-  });
-  return { wasKilled: () => killWasCalled };
-};
-
-export const configureSigkillEscalation = (signals: string[]): void => {
-  let closeCallback: ((code: number) => void) | undefined;
-  mockSpawn.mockProcessOn.mockImplementation(
-    (event: string, callback: (code: number) => void) => {
-      if (event === 'close') closeCallback = callback;
-    },
-  );
-  mockSpawn.kill = vi.fn().mockImplementation((signal: string) => {
+  vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+    if (pid !== -424242)
+      throw new Error('Unexpected hook process group target');
+    if (signal === 0) {
+      if (!alive)
+        throw Object.assign(new Error('group gone'), { code: 'ESRCH' });
+      return true;
+    }
+    if (signal !== 'SIGTERM' && signal !== 'SIGKILL')
+      throw new Error('Unexpected fixture signal');
+    killed = true;
     signals.push(signal);
     Object.assign(mockSpawn, { killed: true });
-    const callback = closeCallback;
-    if (signal === 'SIGKILL' && callback) {
-      Object.assign(mockSpawn, { exitCode: null, signalCode: 'SIGKILL' });
-      queueMicrotask(() => callback(137));
+    if (signal === 'SIGKILL' || !ignoreTerm) {
+      alive = false;
+      queueMicrotask(() => {
+        exitCallback?.(137);
+        closeCallback?.(137);
+      });
     }
     return true;
   });
+  return { wasKilled: () => killed };
+};
+
+export const configureTimeoutProcess = (): {
+  readonly wasKilled: () => boolean;
+} => configureProcessGroup(false);
+
+export const configureSigkillEscalation = (signals: string[]): void => {
+  configureProcessGroup(true, signals);
 };
 
 export const expandedProjectCommand = (): string =>
@@ -295,7 +306,7 @@ export async function escalatesSigkill(): Promise<void> {
     expect(mockSpawn.killed).toBe(true);
 
     // Advance timers to trigger SIGKILL escalation (5000ms after SIGTERM)
-    vi.advanceTimersByTime(5000);
+    await advanceTimersByTimeAsync(5000);
     expect(signals).toStrictEqual(['SIGTERM', 'SIGKILL']);
 
     const result = await resultPromise;
@@ -511,7 +522,7 @@ export function registerExecuteHookTests(): void {
         expect(result.success).toBe(false);
         expect(timeoutProcess.wasKilled()).toBe(true);
         expect(result.error?.message).toContain('timed out');
-        expect(mockSpawn.kill).toHaveBeenCalledWith('SIGTERM');
+        expect(process.kill).toHaveBeenCalledWith(-424242, 'SIGTERM');
       });
       it(
         'should escalate to SIGKILL when the process ignores SIGTERM',

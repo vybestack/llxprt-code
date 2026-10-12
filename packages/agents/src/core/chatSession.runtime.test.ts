@@ -1,3 +1,5 @@
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
 /**
  * @license
@@ -5,6 +7,10 @@ import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/cu
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import { BeforeToolSelectionHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
+import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
+const modelTools = installModelToolFixture();
 import {
   afterAll,
   describe,
@@ -37,7 +43,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import {
@@ -119,7 +125,7 @@ function registerStubProvider(
   });
 }
 
-function buildView(history: HistoryService, runtimeConfig: Config = config) {
+function buildView(history: HistoryService) {
   return createAgentRuntimeContext({
     state: createAgentRuntimeState({
       runtimeId: 'runtime-test',
@@ -135,41 +141,41 @@ function buildView(history: HistoryService, runtimeConfig: Config = config) {
       telemetry: { enabled: true, target: null },
       'reasoning.includeInContext': true,
     },
-    provider: createProviderAdapterFromManager(config.getProviderManager()),
-    telemetry: createTelemetryAdapterFromConfig(config),
-    tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
-    providerRuntime: { ...providerRuntime, config: runtimeConfig },
+    provider: createProviderAdapterFromManager(manager),
+    telemetry: createTelemetryAdapter(
+      config,
+      createSessionSettingsFixture(config).settingsOwner.telemetry,
+    ),
+    tools: createToolRegistryViewFromRegistry(modelTools()),
+    providerRuntime: { ...providerRuntime },
   });
 }
 
-function createHookConfig(withModelHooks: boolean): Config {
-  const hookConfig = Object.create(config) as Config;
-  Object.defineProperties(hookConfig, {
-    getEnableHooks: { value: () => true },
-    getHookSystem: {
-      value: () => {
-        const system = {
-          initialize: async () => undefined,
-          getRegistry: () => ({
-            getHooksForEvent: () => (withModelHooks ? [{}] : []),
-          }),
-          fireBeforeToolSelectionEvent: async () => ({
-            applyToolChoiceModifications: () => ({
-              toolChoice: { mode: 'auto', allowedToolNames: ['read_file'] },
-            }),
-          }),
-        };
-        return withModelHooks
-          ? withSnapshotModelEvents({
-              ...system,
-              fireBeforeModelEvent: async () => new BeforeModelHookOutput({}),
-              fireAfterModelEvent: async () => new AfterModelHookOutput({}),
-            })
-          : system;
-      },
-    },
+function createHookOwner(withModelHooks: boolean): HookExecutionOwner {
+  const owner: HookExecutionOwner = {
+    sessionId: () => config.getSessionId(),
+    transcriptPath: () => undefined,
+    beforeToolSelection: async () =>
+      new BeforeToolSelectionHookOutput({
+        hookSpecificOutput: {
+          toolChoice: { mode: 'auto', allowedToolNames: ['read_file'] },
+        },
+      }),
+  };
+  if (!withModelHooks) return owner;
+  const modelHooks = withSnapshotModelEvents({
+    fireBeforeModelEvent: async () => new BeforeModelHookOutput({}),
+    fireAfterModelEvent: async () => new AfterModelHookOutput({}),
   });
-  return hookConfig;
+  return {
+    ...owner,
+    beforeModel: async () => new BeforeModelHookOutput({}),
+    afterModel: async () => new AfterModelHookOutput({}),
+    beforeModelSnapshot: (request, signal) =>
+      modelHooks.fireBeforeModelSnapshotEvent(request, signal),
+    afterModelSnapshot: (request, response, signal) =>
+      modelHooks.fireAfterModelSnapshotEvent(request, response, signal),
+  };
 }
 
 async function verifyRuntime1(): Promise<GenerateChatOptions> {
@@ -234,10 +240,12 @@ async function verifyRuntime1(): Promise<GenerateChatOptions> {
 
   const options = calls[0];
   expect(options).toBeDefined();
-  expect(options.runtime).toBeDefined();
-  expect(options.runtime?.settingsService).toBe(settingsService);
-
-  expect(options.config).toBe(config);
+  expect(options).not.toHaveProperty('runtime');
+  expect(options.invocation).toBeDefined();
+  expect(options).not.toHaveProperty('config');
+  expect(options.invocation?.getProviderOverrides('stub')).toMatchObject(
+    settingsService.getProviderSettings('stub'),
+  );
   expect(options.tools).toBeDefined();
   expect(options.tools?.length).toBe(tools.length);
 
@@ -313,13 +321,13 @@ async function verifyRuntime2(): Promise<
     { name: 'run_shell_command', parametersJsonSchema: {} },
   ];
   const historyService = new HistoryService();
-  const hookConfig = createHookConfig(false);
-  const view = buildView(historyService, hookConfig);
+  const hookOwner = createHookOwner(false);
+  const view = buildView(historyService);
 
   const chat = new ChatSession(view, {} as unknown as ContentGenerator, {}, []);
 
   const response = await chat.sendMessage(
-    { message: 'Use tools', config: { tools } },
+    { message: 'Use tools', config: { tools }, hookOwner },
     'prompt-hook-selection',
   );
 
@@ -378,8 +386,8 @@ async function verifyRuntime3(): Promise<
     { name: 'read_file', parametersJsonSchema: {} },
     { name: 'run_shell_command', parametersJsonSchema: {} },
   ];
-  const hookConfig = createHookConfig(true);
-  const view = buildView(new HistoryService(), hookConfig);
+  const hookOwner = createHookOwner(true);
+  const view = buildView(new HistoryService());
 
   const chat = new ChatSession(
     view,
@@ -389,7 +397,7 @@ async function verifyRuntime3(): Promise<
   );
 
   const response = await chat.generateDirectMessage(
-    { message: 'Use direct response' },
+    { message: 'Use direct response', hookOwner },
     'prompt-direct-hook-selection',
   );
 
@@ -423,11 +431,11 @@ describe('ChatSession runtime context', () => {
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    config.setProviderManager(manager);
+    configureProviderRuntimeFactories(config, manager);
   });
 
   it('passes runtime context and tools to provider generateChatCompletion', async () => {
-    expect((await verifyRuntime1()).runtime?.config).toBe(config);
+    expect(await verifyRuntime1()).not.toHaveProperty('runtime');
   });
   it('filters hook-disallowed provider function calls from non-stream responses and history', async () => {
     expect(getToolCalls(await verifyRuntime2())).toStrictEqual([

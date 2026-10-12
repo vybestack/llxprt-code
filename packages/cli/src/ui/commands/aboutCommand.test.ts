@@ -19,12 +19,6 @@ import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import * as versionUtils from '../../utils/version.js';
 import { MessageType } from '../types.js';
-import {
-  MockFileSystem,
-  setFileSystem,
-  resetProviderManager,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import { USER_SETTINGS_PATH } from '../../config/settings.js';
 
 import type { IdeClient } from '@vybestack/llxprt-code-ide-integration';
 import { assertDefined } from '../../__tests__/assertions.js';
@@ -33,10 +27,6 @@ const runtimeMocks = {
   getRuntimeApiMock: vi.fn(),
 };
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: runtimeMocks.getRuntimeApiMock,
-}));
-
 void vi.mock('../../utils/version.js', () => ({
   getCliVersion: vi.fn(),
 }));
@@ -44,7 +34,6 @@ void vi.mock('../../utils/version.js', () => ({
 describe('aboutCommand', () => {
   const getRuntimeApiMock = runtimeMocks.getRuntimeApiMock;
   let mockContext: CommandContext;
-  let mockFileSystem: MockFileSystem;
   const originalPlatform = process.platform;
   const originalEnv = { ...process.env };
 
@@ -58,18 +47,12 @@ describe('aboutCommand', () => {
         ephemeralSettings: {},
       }),
       getActiveProviderName: () => '',
-      getCliProviderManager: () => ({
-        getActiveProvider: () => undefined,
-      }),
+      getActiveProviderDetails: () => undefined,
       getEphemeralSetting: () => undefined,
     });
 
-    mockFileSystem = new MockFileSystem();
-    setFileSystem(mockFileSystem);
-
-    // Set up mock settings file with controlled content
-    mockFileSystem.setMockFile(USER_SETTINGS_PATH, JSON.stringify({}));
     mockContext = createMockCommandContext({
+      runtimeApi: getRuntimeApiMock(),
       services: {
         config: {
           getModel: vi.fn(),
@@ -108,7 +91,6 @@ describe('aboutCommand', () => {
     process.env = originalEnv;
     vi.clearAllMocks();
     getRuntimeApiMock.mockReset();
-    resetProviderManager();
   });
 
   it('should have the correct name and description', () => {

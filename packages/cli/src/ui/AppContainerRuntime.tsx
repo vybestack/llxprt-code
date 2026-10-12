@@ -80,6 +80,7 @@ export interface AppContainerRuntimeProps {
   appDispatch: React.Dispatch<AppAction>;
   /** @plan:PLAN-20260211-SESSIONRECORDING.P26 */
   recordingIntegration?: RecordingIntegration;
+  recordingOwner?: 'agent' | 'raw';
   /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
   initialRecordingService?: SessionRecordingService;
   /** @plan:PLAN-20260214-SESSIONBROWSER.P23 */
@@ -128,8 +129,7 @@ function useUnconfiguredGuidance(
   dialogStore: DialogStore,
 ): void {
   useUnconfiguredProviderGuidance({
-    hasActiveProvider:
-      props.uiRuntime.model.getProviderManager()?.hasActiveProvider() ?? false,
+    hasActiveProvider: props.agent.hasActiveProvider(),
     addItem: turnStore.commands.addItem,
     store: dialogStore,
   });
@@ -157,6 +157,7 @@ function useAppDialogsRuntime(
     appDispatch: props.appDispatch,
     handleNewMessage: bootstrap.handleNewMessage,
     recordingIntegration: bootstrap.recordingIntegration,
+    recordingOwner: bootstrap.recordingOwner,
     recordingIntegrationRef: bootstrap.recordingIntegrationRef,
     runtime: bootstrap.runtime,
     suppressStartupWelcome: props.suppressStartupWelcome,
@@ -181,12 +182,12 @@ function useAppInputRuntime(
     slashCommandRuntime: props.slashCommandRuntime,
     agent: props.agent,
     settings: props.settings,
-    runtime: bootstrap.runtime,
     subagentManager: props.uiRuntime.app.getSubagentManager(),
     turnStore,
     recordingIntegrationRef: bootstrap.recordingIntegrationRef,
     recordingSwapCallbacks: bootstrap.recordingSwapCallbacks,
     recordingIntegration: props.recordingIntegration,
+    recordingOwner: bootstrap.recordingOwner,
     runtimeMessageBus: props.runtimeMessageBus,
     setIdePromptAnswered: bootstrap.setIdePromptAnswered,
     setLlxprtMdFileCount: bootstrap.setLlxprtMdFileCount,
@@ -359,6 +360,8 @@ export const AppContainerRuntime = (props: AppContainerRuntimeProps) => {
       recordingSwapCallbacks={bootstrap.recordingSwapCallbacks}
       scrollbackPager={bootstrap.scrollbackPager}
       scrollbackRestartNotice={bootstrap.scrollbackRestartNotice}
+      recordingOwner={bootstrap.recordingOwner}
+      agent={props.agent}
     />
   );
 };
@@ -369,7 +372,9 @@ interface AppRuntimeViewProps extends DefaultAppLayoutProps {
   terminalStore: TerminalStore;
   turnStore: TurnStore;
   settingsStore: SettingsProfileStore;
-  recordingSwapCallbacks: RecordingSwapCallbacks;
+  recordingSwapCallbacks?: RecordingSwapCallbacks;
+  recordingOwner?: 'agent' | 'raw';
+  agent: Agent;
 }
 
 function AppRuntimeView({
@@ -379,6 +384,8 @@ function AppRuntimeView({
   turnStore,
   settingsStore,
   recordingSwapCallbacks,
+  recordingOwner,
+  agent,
   ...layoutProps
 }: AppRuntimeViewProps): React.ReactNode {
   return (
@@ -386,8 +393,11 @@ function AppRuntimeView({
       <TurnProvider store={turnStore}>
         <ToolResultExpansionProvider
           getTranscriptFilePath={() =>
-            recordingSwapCallbacks.getCurrentRecording()?.getFilePath() ??
-            undefined
+            getInteractiveTranscriptPath(
+              recordingOwner,
+              agent,
+              recordingSwapCallbacks,
+            )
           }
         >
           <SettingsProfileProvider store={settingsStore}>
@@ -401,4 +411,15 @@ function AppRuntimeView({
       </TurnProvider>
     </TerminalProvider>
   );
+}
+
+export function getInteractiveTranscriptPath(
+  recordingOwner: 'agent' | 'raw' | undefined,
+  agent: Agent,
+  recordingSwapCallbacks?: RecordingSwapCallbacks,
+): string | undefined {
+  return recordingOwner === 'agent'
+    ? agent.session.getRecording().path
+    : (recordingSwapCallbacks?.getCurrentRecording()?.getFilePath() ??
+        undefined);
 }

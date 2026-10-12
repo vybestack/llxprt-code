@@ -9,16 +9,12 @@ export {
   McpClient,
   MCPServerStatus,
   MCPDiscoveryState,
-  getAllMCPServerStatuses,
-  getMCPServerStatus,
-  updateMCPServerStatus,
-  addMCPStatusChangeListener,
-  removeMCPStatusChangeListener,
   createTransport,
-  mcpServerRequiresOAuth,
   populateMcpServerCommand,
   hasNetworkTransport,
   MCP_DEFAULT_TIMEOUT_MSEC,
 } from './mcp-client.js';
 export type { DiscoveredMCPPrompt } from './mcp-client.js';
 export { DiscoveredMCPTool, generateMcpToolName } from './mcp-tool.js';
+
+export type { McpServerRuntimeState, McpStatusListener } from './mcp-status.js';

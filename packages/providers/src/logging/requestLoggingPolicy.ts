@@ -1,6 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { GenerateChatOptions } from '../IProvider.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 
@@ -13,16 +13,13 @@ export interface RequestLoggingPolicy {
 
 export function requestLoggingPolicy(
   options: GenerateChatOptions,
-  config: Config,
+  diagnostics: ProviderRequestDiagnostics,
 ): RequestLoggingPolicy {
   const source = readsRequestRowsAtTransport(options);
   return Object.freeze({
     strictPreSend: source,
     strictDurableResponse: source,
-    strictTelemetry:
-      source &&
-      config.getTelemetryLogApiBodiesEnabled() &&
-      config.getTelemetryLogPromptsEnabled(),
+    strictTelemetry: source && diagnostics.requestBodyLoggingEnabled,
     signal: getRequestSignal(options),
   });
 }

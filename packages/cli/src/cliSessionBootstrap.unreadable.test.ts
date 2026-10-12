@@ -20,7 +20,8 @@ import {
   readSessionHeader,
   type SessionRecordingServiceConfig,
 } from '@vybestack/llxprt-code-core';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { ParsedCliArgs } from './cliBootstrap.js';
+import { LiveProviderConfig } from './__tests__/liveProviderConfig.js';
 import {
   buildNewRecordingService,
   createOrResumeRecording,
@@ -109,8 +110,8 @@ async function writeCorruptSession(
 function configFor(
   root: string,
   overrides: { continueSession?: boolean | string; provider?: string } = {},
-): Config {
-  return new Config({
+): LiveProviderConfig {
+  return new LiveProviderConfig({
     cwd: root,
     targetDir: root,
     debugMode: false,
@@ -124,49 +125,55 @@ function configFor(
     ...(overrides.continueSession === undefined
       ? {}
       : { continueSession: overrides.continueSession }),
-    settingsService: new SettingsService(),
   });
 }
 
-/**
- * A real Config whose chats directory is the test's temp dir (never the user's
- * global temp) and whose agent client records what the CLI restores into it.
- */
+/** A real Config whose chats directory is the test's temp dir (never the user's global temp). */
 class StartupConfig extends Config {
-  readonly restored: unknown[][] = [];
-
   constructor(
     private readonly chatsRoot: string,
     params: ConstructorParameters<typeof Config>[0],
-    restoreError?: Error,
   ) {
     super(params);
-    // Resume restores through the history service's boot adoption: the fake
-    // reads the streamed rows and publishes only when the restore succeeds.
-    const historyService = {
-      adoptResumeBoot: async (
-        _recording: unknown,
-        boot: ResumeCursorBoot,
-        publish: () => void,
-      ) => {
-        const rows: unknown[] = [];
-        for await (const row of boot.streamRows()) rows.push(row);
-        this.restored.push(rows);
-        if (restoreError) throw restoreError;
-        publish();
-        return [];
-      },
-    };
-    this.agentClient = {
-      hasChatInitialized: () => true,
-      getHistoryService: () => historyService,
-      resetChat: async () => {},
-    } as unknown as AgentClientContract;
   }
 
   override getProjectTempDir(): string {
     return this.chatsRoot;
   }
+}
+
+/**
+ * The session client the CLI hands recording bootstrap: the agent client that
+ * records what the CLI restores into it, and the workspace directories.
+ */
+function sessionClientFor(root: string, restoreError?: Error) {
+  const restored: unknown[][] = [];
+  // Resume restores through the history service's boot adoption: the fake
+  // reads the streamed rows and publishes only when the restore succeeds.
+  const historyService = {
+    adoptResumeBoot: async (
+      _recording: unknown,
+      boot: ResumeCursorBoot,
+      publish: () => void,
+    ) => {
+      const rows: unknown[] = [];
+      for await (const row of boot.streamRows()) rows.push(row);
+      restored.push(rows);
+      if (restoreError) throw restoreError;
+      publish();
+      return [];
+    },
+  };
+  const agentClient = {
+    hasChatInitialized: () => true,
+    getHistoryService: () => historyService,
+    resetChat: async () => {},
+  } as unknown as AgentClientContract;
+  const client = {
+    getAgentClient: () => agentClient,
+    workspaceDirectories: () => [root],
+  };
+  return { client, restored };
 }
 
 describe('startup recording with unreadable and no-provider sessions (issue #3732)', () => {
@@ -197,6 +204,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       configFor(root, { continueSession, provider: 'test-provider' }),
       projectHash,
       chatsDir,
+      sessionClientFor(root).client,
     );
     resolved.push(entry);
     warnings = entry.startupWarnings;
@@ -209,27 +217,28 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
     restoreError?: Error,
   ): Promise<{
     setup: Awaited<ReturnType<typeof setupSessionRecording>>;
-    config: StartupConfig;
+    restored: unknown[][];
   }> {
-    const config = new StartupConfig(
-      root,
-      {
-        cwd: root,
-        targetDir: root,
-        debugMode: false,
-        question: undefined,
-        userMemory: '',
-        sessionId: 'fresh-session',
-        model: 'test-model',
-        provider: 'test-provider',
-        continueSession,
-        settingsService: new SettingsService(),
-      },
-      restoreError,
+    const config = new StartupConfig(root, {
+      cwd: root,
+      targetDir: root,
+      debugMode: false,
+      question: undefined,
+      userMemory: '',
+      sessionId: 'fresh-session',
+      model: 'test-model',
+      provider: 'test-provider',
+      continueSession,
+    });
+    const { client, restored } = sessionClientFor(root, restoreError);
+    const setup = await setupSessionRecording(
+      config,
+      {} as ParsedCliArgs,
+      null,
+      client,
     );
-    const setup = await setupSessionRecording(config, null);
     resolved.push(setup);
-    return { setup, config };
+    return { setup, restored };
   }
 
   /**
@@ -237,7 +246,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
    * provider/model and the switch is recorded as history.
    */
   function loadProfile(
-    live: Config,
+    live: LiveProviderConfig,
     recording: SessionRecordingService,
     provider: string,
     model: string,
@@ -264,6 +273,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       noProviderConfig,
       projectHash,
       chatsDir,
+      sessionClientFor(root).client,
     );
     let header: Awaited<ReturnType<typeof readSessionHeader>>;
     try {
@@ -294,6 +304,7 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       liveConfig,
       projectHash,
       chatsDir,
+      sessionClientFor(root).client,
     );
     try {
       liveConfig.setProvider('anthropic');
@@ -319,11 +330,11 @@ describe('startup recording with unreadable and no-provider sessions (issue #373
       '2026-10-08T00:00:00Z',
     );
 
-    const { setup, config } = await startupViaSetup(true);
+    const { setup, restored } = await startupViaSetup(true);
 
     expect({
       resumedSessionId: setup.resumedSessionId,
-      restoredCount: config.restored.length,
+      restoredCount: restored.length,
       warningCount: setup.startupWarnings.length,
       namesFile: setup.startupWarnings[0]?.includes(corruptPath),
       namesReason: setup.startupWarnings[0]?.includes(CORRUPT_REASON),

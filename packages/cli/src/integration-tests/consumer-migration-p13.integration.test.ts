@@ -1,8 +1,24 @@
+import {
+  createContentGeneratorConfig,
+  createContentGenerator,
+} from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import {
+  initializeTestSessionRoot,
+  type CliTestSessionRoot,
+} from './test-utils.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import {
+  configureProviderRuntimeFactories,
+  NodeFileSystem,
+  createProviderManager,
+} from '@vybestack/llxprt-code-providers/composition.js';
+
+import { providerSwitchInputs } from '../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
 
 /**
  * Phase 13 Consumer Migration Integration Tests
@@ -33,7 +49,6 @@ import {
   ProviderManager,
   ProviderContentGenerator,
   type IProvider,
-  type IProviderManager,
 } from '@vybestack/llxprt-code-providers';
 import type {
   RuntimeProviderManager,
@@ -41,30 +56,22 @@ import type {
 } from '@vybestack/llxprt-code-core/runtime/contracts/index.js';
 import {
   Config,
-  MessageBus,
   createProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
-  createProviderManager,
-  resetProviderManager,
-} from '@vybestack/llxprt-code-providers/composition.js';
-import {
-  setCliRuntimeContext,
-  registerCliProviderInfrastructure,
-  resetCliProviderInfrastructure,
   switchActiveProvider,
   getActiveProviderName,
   listProviders,
-  getActiveProviderStatus,
-  getCliProviderManager,
+  readProviderStatus,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import {
   createTempDirectory,
   cleanupTempDirectory,
   initializeTestConfig,
 } from './test-utils.js';
-import { resetCliRuntimeRegistryForTesting } from '@vybestack/llxprt-code-providers/runtime/runtimeRegistry.js';
+import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
+import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
 
 // ─────────────────────────────────────────────────────────────────
 // Requirement 1: CLI provider manager creation
@@ -93,14 +100,9 @@ describe('CLI provider manager creation uses concrete providers', () => {
       model: 'test-model',
     });
     await initializeTestConfig(config);
-    resetProviderManager();
-    resetCliRuntimeRegistryForTesting();
   });
 
   afterEach(async () => {
-    resetCliProviderInfrastructure();
-    resetProviderManager();
-    resetCliRuntimeRegistryForTesting();
     await cleanupTempDirectory(tempDir);
   });
 
@@ -115,6 +117,7 @@ describe('CLI provider manager creation uses concrete providers', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new NodeFileSystem(),
       allowBrowserEnvironment: true,
     });
 
@@ -164,6 +167,7 @@ describe('CLI provider manager creation uses concrete providers', () => {
           config: cfg,
         });
         const { manager } = createProviderManager(rt, {
+          fileSystem: new NodeFileSystem(),
           allowBrowserEnvironment: true,
           config: cfg,
         });
@@ -199,45 +203,27 @@ describe('CLI provider manager creation uses concrete providers', () => {
     );
   });
 
-  /**
-   * @plan:PLAN-20260603-ISSUE1584.P13
-   * @requirement:REQ-API-001
-   *
-   * The CLI runtime infrastructure path (setCliRuntimeContext +
-   * registerCliProviderInfrastructure) produces a working provider
-   * manager reachable through getCliProviderManager.
-   */
-  it('CLI runtime infrastructure path yields a reachable provider manager', () => {
-    const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({ settingsService });
-    const { manager, oauthManager } = createProviderManager(runtime, {
-      allowBrowserEnvironment: true,
-    });
-
-    // Register a test provider
-    const testProvider = createTestProvider(
-      'test-cli-provider',
-      'test-default-model',
-    );
-    manager.registerProvider(testProvider);
-
-    const runtimeMessageBus = new MessageBus(
-      config.getPolicyEngine(),
-      config.getDebugMode(),
-    );
-
-    setCliRuntimeContext(settingsService, config, {
+  it('CLI foreground assembly exposes the provider manager on its Config', () => {
+    const assembled = assembleCliProviderRuntime({
+      settingsService: new SettingsService(),
+      config,
       runtimeId: 'p13-consumer-test',
     });
-    registerCliProviderInfrastructure(manager, oauthManager, {
-      messageBus: runtimeMessageBus,
-      runtimeId: 'p13-consumer-test',
-    });
-
-    // getCliProviderManager must return the same manager
-    const retrievedManager = getCliProviderManager();
-    expect(retrievedManager).toBeDefined();
-    expect(retrievedManager.listProviders()).toContain('test-cli-provider');
+    try {
+      const testProvider = createTestProvider(
+        'test-cli-provider',
+        'test-default-model',
+      );
+      assembled.providerManager.registerProvider(testProvider);
+      expect(assembled.providerManager.listProviders()).toContain(
+        'test-cli-provider',
+      );
+      expect(assembled.runtime.providerFileLifecycle).toBe(
+        assembled.registration.providerFileLifecycle,
+      );
+    } finally {
+      assembled.registration.dispose();
+    }
   });
 
   /**
@@ -251,6 +237,7 @@ describe('CLI provider manager creation uses concrete providers', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new NodeFileSystem(),
       allowBrowserEnvironment: true,
     });
 
@@ -279,17 +266,16 @@ describe('CLI provider manager creation uses concrete providers', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new NodeFileSystem(),
       allowBrowserEnvironment: true,
     });
 
     // ProviderContentGenerator must be constructable using the
     // concrete ProviderManager from the providers package
-    const generator = new ProviderContentGenerator(
-      manager as unknown as IProviderManager,
-      { model: 'test-model' },
-    );
+    const generator = new ProviderContentGenerator();
     expect(generator).toBeDefined();
     expect(typeof generator.countTokens).toBe('function');
+    expect(manager.listProviders().length).toBeGreaterThan(0);
   });
 
   /**
@@ -305,6 +291,7 @@ describe('CLI provider manager creation uses concrete providers', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new NodeFileSystem(),
       allowBrowserEnvironment: true,
     });
 
@@ -346,6 +333,7 @@ describe('CLI provider manager creation uses concrete providers', () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new NodeFileSystem(),
       allowBrowserEnvironment: true,
     });
 
@@ -360,18 +348,13 @@ describe('CLI provider manager creation uses concrete providers', () => {
     // This is exactly what CLI wiring would do, but we test it here to
     // prove the injection path works end-to-end.
     const factory: RuntimeContentGeneratorFactory = {
-      createContentGenerator(runtimeManager: RuntimeProviderManager) {
-        const providerManager = runtimeManager as unknown as IProviderManager;
-        return new ProviderContentGenerator(providerManager, {
-          model: 'factory-model',
-        });
+      createContentGenerator() {
+        return new ProviderContentGenerator();
       },
     };
 
     // The factory should produce a generator via the same path core uses
-    const generator = factory.createContentGenerator(
-      manager as unknown as RuntimeProviderManager,
-    );
+    const generator = factory.createContentGenerator();
     expect(generator).toBeDefined();
 
     // ProviderContentGenerator has the methods core's code would call
@@ -395,8 +378,11 @@ describe('CLI provider manager creation uses concrete providers', () => {
 describe('Provider switching reachable through CLI/runtime flow', () => {
   let tempDir: string;
   let config: Config;
-  let providerManager: ProviderManager;
+  let sessionRoot: CliTestSessionRoot;
+  let providerManager: RuntimeProviderManager;
   let settingsService: SettingsService;
+  let registration: CliRuntimeRegistrationHandle;
+  let sessionClient: Pick<Agent['sessionClient'], 'refreshAuth'>;
 
   beforeEach(async () => {
     tempDir = await createTempDirectory();
@@ -407,48 +393,31 @@ describe('Provider switching reachable through CLI/runtime flow', () => {
       cwd: tempDir,
       model: 'test-model',
     });
-    await initializeTestConfig(config);
-    resetProviderManager();
-    resetCliRuntimeRegistryForTesting();
-
-    settingsService = config.getSettingsService();
-    const runtime = createProviderRuntimeContext({
+    settingsService = new SettingsService();
+    const assembled = assembleCliProviderRuntime({
       settingsService,
       config,
+      runtimeId: 'p13-switch-test',
       metadata: { source: 'p13-switch-test' },
     });
-    const runtimeMessageBus = new MessageBus(
-      config.getPolicyEngine(),
-      config.getDebugMode(),
-    );
-    const result = createProviderManager(runtime, {
-      allowBrowserEnvironment: true,
+    providerManager = assembled.providerManager;
+    registration = assembled.registration;
+    sessionRoot = await initializeTestSessionRoot(
       config,
-      runtimeMessageBus,
-    });
-    providerManager = result.manager;
-    const { oauthManager } = result;
+      providerManager,
+      settingsService,
+    );
+    sessionClient = sessionRoot.agent.sessionClient;
 
     // Register test providers
     const providerA = createTestProvider('provider-a', 'model-a');
     const providerB = createTestProvider('provider-b', 'model-b');
     providerManager.registerProvider(providerA);
     providerManager.registerProvider(providerB);
-
-    setCliRuntimeContext(settingsService, config, {
-      runtimeId: 'p13-switch-test',
-      metadata: { source: 'p13-switch-test' },
-    });
-    registerCliProviderInfrastructure(providerManager, oauthManager, {
-      messageBus: runtimeMessageBus,
-      runtimeId: 'p13-switch-test',
-    });
   });
 
   afterEach(async () => {
-    resetCliProviderInfrastructure();
-    resetProviderManager();
-    resetCliRuntimeRegistryForTesting();
+    registration.dispose();
     await cleanupTempDirectory(tempDir);
   });
 
@@ -460,13 +429,23 @@ describe('Provider switching reachable through CLI/runtime flow', () => {
    * successfully changes the active provider.
    */
   it('switchActiveProvider changes active provider through CLI runtime path', async () => {
-    providerManager.setActiveProvider('provider-a');
-    expect(getActiveProviderName()).toBe('provider-a');
+    await providerManager.setActiveProvider('provider-a');
+    expect(
+      getActiveProviderName(sessionRoot.settingsOwner, providerManager),
+    ).toBe('provider-a');
 
-    const result = await switchActiveProvider('provider-b');
+    const result = await switchActiveProvider(
+      'provider-b',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
     expect(result.changed).toBe(true);
     expect(result.nextProvider).toBe('provider-b');
-    expect(getActiveProviderName()).toBe('provider-b');
+    expect(
+      getActiveProviderName(sessionRoot.settingsOwner, providerManager),
+    ).toBe('provider-b');
   });
 
   /**
@@ -477,7 +456,7 @@ describe('Provider switching reachable through CLI/runtime flow', () => {
    * registered providers.
    */
   it('listProviders returns registered providers through CLI runtime path', () => {
-    const providers = listProviders();
+    const providers = listProviders(providerManager);
     expect(providers).toContain('provider-a');
     expect(providers).toContain('provider-b');
   });
@@ -486,14 +465,24 @@ describe('Provider switching reachable through CLI/runtime flow', () => {
    * @plan:PLAN-20260603-ISSUE1584.P13
    * @requirement:REQ-API-001
    *
-   * getActiveProviderStatus provides status info through the CLI
+   * providerStatus provides status info through the CLI
    * runtime path after switching.
    */
-  it('getActiveProviderStatus reflects current provider after switch', async () => {
-    providerManager.setActiveProvider('provider-a');
+  it('providerStatus reflects current provider after switch', async () => {
+    await providerManager.setActiveProvider('provider-a');
 
-    await switchActiveProvider('provider-b');
-    const status = getActiveProviderStatus();
+    await switchActiveProvider(
+      'provider-b',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
+    const status = readProviderStatus(
+      settingsService,
+      providerManager,
+      sessionRoot.agent.getModel(),
+    );
     expect(status.providerName).toBe('provider-b');
   });
 
@@ -504,9 +493,15 @@ describe('Provider switching reachable through CLI/runtime flow', () => {
    * Switching to the same provider is idempotent through the CLI path.
    */
   it('switchActiveProvider is idempotent when switching to same provider', async () => {
-    providerManager.setActiveProvider('provider-a');
+    await providerManager.setActiveProvider('provider-a');
 
-    const result = await switchActiveProvider('provider-a');
+    const result = await switchActiveProvider(
+      'provider-a',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
     expect(result.changed).toBe(false);
   });
 });
@@ -547,10 +542,11 @@ describe('Provider-backed content generator path reachable through runtime', () 
    * must include the providerManager so that content generation can be
    * routed through providers.
    */
-  it('ContentGeneratorConfig carries providerManager after wiring', async () => {
+  it('ContentGeneratorConfig constructs through the wired factory without manager data', async () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new NodeFileSystem(),
       allowBrowserEnvironment: true,
     });
 
@@ -566,18 +562,36 @@ describe('Provider-backed content generator path reachable through runtime', () 
       model: 'test-model',
     });
 
-    // Wire the provider manager to config. initializeContentGeneratorConfig
-    // now requires the agent factories, which initializeTestConfig attaches.
-    await initializeTestConfig(config);
-    config.setProviderManager(manager);
-    await config.initializeContentGeneratorConfig();
+    // Initialize the explicit Agent owner on this manager.
+    const owner = await initializeTestSessionRoot(
+      config,
+      manager,
+      settingsService,
+    );
+    const selectedFactories = configureProviderRuntimeFactories(
+      config,
+      manager,
+    );
+    manager.setActiveProvider('test-provider');
+    await owner.agent.sessionClient.refreshAuth();
 
-    const contentGenConfig = config.getContentGeneratorConfig();
+    const contentGenConfig = {
+      ...createContentGeneratorConfig({ model: owner.agent.getModel() }),
+      contentGeneratorFactory: selectedFactories.contentGeneratorFactory,
+    };
     expect(contentGenConfig).toBeDefined();
-    // After wiring, providerManager must be on the config
+    const { createContentGenerator } = await import(
+      '@vybestack/llxprt-code-core/core/contentGenerator.js'
+    );
+    const generator = await createContentGenerator(contentGenConfig, config);
     expect(
-      (contentGenConfig as Record<string, unknown>).providerManager,
-    ).toBeDefined();
+      await generator.countTokens({
+        contents: [
+          { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
+        ],
+      }),
+    ).toStrictEqual({ totalTokens: 2 });
+    expect(contentGenConfig).not.toHaveProperty('providerManager');
   });
 
   /**
@@ -592,6 +606,7 @@ describe('Provider-backed content generator path reachable through runtime', () 
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new NodeFileSystem(),
       allowBrowserEnvironment: true,
     });
 
@@ -599,16 +614,7 @@ describe('Provider-backed content generator path reachable through runtime', () 
     manager.registerProvider(testProvider);
 
     // Simulate a factory that creates a content generator (like CLI wiring does)
-    const fakeContentGenerator = {
-      generateContent: async () => ({ totalTokens: 0 }),
-      async *generateContentStream() {
-        yield { totalTokens: 0 };
-      },
-      countTokens: async () => ({ totalTokens: 42 }),
-      embedContent: async () => {
-        throw new Error('Not supported');
-      },
-    };
+    const fakeContentGenerator = new ProviderContentGenerator();
 
     const factory = {
       createContentGenerator: () => fakeContentGenerator,
@@ -622,13 +628,24 @@ describe('Provider-backed content generator path reachable through runtime', () 
       model: 'test-model',
     });
 
-    // initializeContentGeneratorConfig needs the agent factories attached.
-    await initializeTestConfig(config);
-    config.setProviderManager(manager);
-    await config.initializeContentGeneratorConfig();
+    // Initialize the explicit Agent owner before refreshing generation.
+    const owner = await initializeTestSessionRoot(
+      config,
+      manager,
+      settingsService,
+    );
+    const selectedFactories = configureProviderRuntimeFactories(
+      config,
+      manager,
+    );
+    manager.setActiveProvider('test-provider');
+    await owner.agent.sessionClient.refreshAuth();
 
-    const contentGenConfig = config.getContentGeneratorConfig();
-    expect(contentGenConfig!.model).toBe('test-model');
+    const contentGenConfig = {
+      ...createContentGeneratorConfig({ model: owner.agent.getModel() }),
+      contentGeneratorFactory: selectedFactories.contentGeneratorFactory,
+    };
+    expect(contentGenConfig.model).toBe('test-model');
     // Inject the factory into the config
     const injectedConfig = {
       ...contentGenConfig,
@@ -642,7 +659,7 @@ describe('Provider-backed content generator path reachable through runtime', () 
     ).toBe('function');
 
     // Verify the factory can produce a generator
-    const generator = factory.createContentGenerator();
+    const generator = await createContentGenerator(injectedConfig, config);
     expect(generator).toBeDefined();
     expect(typeof generator.countTokens).toBe('function');
   });
@@ -656,7 +673,7 @@ describe('Provider-backed content generator path reachable through runtime', () 
    * injection path is mandatory and the old direct-construction path
    * no longer exists.
    */
-  it('createContentGenerator requires factory when providerManager is wired', async () => {
+  it('createContentGenerator rejects missing factory despite a wired provider registry', async () => {
     const { createContentGenerator } = await import(
       '@vybestack/llxprt-code-core/core/contentGenerator.js'
     );
@@ -664,6 +681,7 @@ describe('Provider-backed content generator path reachable through runtime', () 
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({ settingsService });
     const { manager } = createProviderManager(runtime, {
+      fileSystem: new NodeFileSystem(),
       allowBrowserEnvironment: true,
     });
 
@@ -681,11 +699,10 @@ describe('Provider-backed content generator path reachable through runtime', () 
     // ContentGeneratorConfig with providerManager but no factory should throw
     const contentConfig = {
       model: 'test-model',
-      providerManager: manager,
     };
 
     await expect(createContentGenerator(contentConfig, config)).rejects.toThrow(
-      /factory is required/i,
+      'No provider runtime is composed for this Config. Compose the providers package (see packages/providers/src/composition) before creating a content generator.',
     );
   });
 });

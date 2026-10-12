@@ -1,3 +1,6 @@
+import { afterEach as closePolicyFixtures } from 'bun:test';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -39,6 +42,8 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 // Test helpers
 // ---------------------------------------------------------------------------
 
+const policyRoots: SessionSettingsOwner[] = [];
+
 function findSettingSpec(key: string): SettingSpec | undefined {
   return SETTINGS_REGISTRY.find((s) => s.key === key);
 }
@@ -67,7 +72,17 @@ function buildRuntimeContext(
     }
   }
 
+  const settingsOwner = new SessionSettingsOwner(settingsService);
+  policyRoots.push(settingsOwner);
   return createAgentRuntimeContext({
+    readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
+    prepareProviderInvocation: (name, parameters, signal) =>
+      settingsOwner.prepareProviderInvocation(
+        runtimeState.runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
     state: runtimeState,
     settings: {
       compressionThreshold: 0.85,
@@ -99,11 +114,10 @@ function buildRuntimeContext(
       listToolNames: vi.fn(() => []),
       getToolMetadata: vi.fn(() => undefined),
     },
-    providerRuntime: {
-      runtimeId: 'test-runtime',
+    providerRuntime: createProviderRuntimeContext({
       settingsService,
-      config: {} as never,
-    },
+      runtimeId: runtimeState.runtimeId,
+    }),
   });
 }
 
@@ -112,6 +126,10 @@ function buildRuntimeContext(
 // ---------------------------------------------------------------------------
 
 describe('COMPRESSION_STRATEGIES @plan PLAN-20260211-HIGHDENSITY.P16', () => {
+  closePolicyFixtures(async () => {
+    for (const owner of policyRoots.splice(0)) await owner.dispose();
+  });
+
   /** @requirement REQ-HD-004.1 */
   it("COMPRESSION_STRATEGIES includes 'high-density'", () => {
     expect(
@@ -132,6 +150,10 @@ describe('COMPRESSION_STRATEGIES @plan PLAN-20260211-HIGHDENSITY.P16', () => {
 // ---------------------------------------------------------------------------
 
 describe('Factory @plan PLAN-20260211-HIGHDENSITY.P16', () => {
+  closePolicyFixtures(async () => {
+    for (const owner of policyRoots.splice(0)) await owner.dispose();
+  });
+
   /** @requirement REQ-HD-004.2 */
   it("getCompressionStrategy('high-density') returns HighDensityStrategy", () => {
     const strategy = getCompressionStrategy('high-density');
@@ -165,6 +187,10 @@ describe('Factory @plan PLAN-20260211-HIGHDENSITY.P16', () => {
 // ---------------------------------------------------------------------------
 
 describe('Settings Enum @plan PLAN-20260211-HIGHDENSITY.P16', () => {
+  closePolicyFixtures(async () => {
+    for (const owner of policyRoots.splice(0)) await owner.dispose();
+  });
+
   /** @requirement REQ-HD-004.4 */
   it("compression.strategy setting includes 'high-density' in enumValues", () => {
     const spec = findSettingSpec('compression.strategy');
@@ -187,6 +213,10 @@ describe('Settings Enum @plan PLAN-20260211-HIGHDENSITY.P16', () => {
 // ---------------------------------------------------------------------------
 
 describe('Settings Registry Specs @plan PLAN-20260211-HIGHDENSITY.P16', () => {
+  closePolicyFixtures(async () => {
+    for (const owner of policyRoots.splice(0)) await owner.dispose();
+  });
+
   /** @requirement REQ-HD-009.1 */
   it('compression.density.readWritePruning setting exists with correct spec', () => {
     const spec = findSettingSpec('compression.density.readWritePruning');
@@ -233,6 +263,10 @@ describe('Settings Registry Specs @plan PLAN-20260211-HIGHDENSITY.P16', () => {
 // ---------------------------------------------------------------------------
 
 describe('Runtime Accessors @plan PLAN-20260211-HIGHDENSITY.P16', () => {
+  closePolicyFixtures(async () => {
+    for (const owner of policyRoots.splice(0)) await owner.dispose();
+  });
+
   /** @requirement REQ-HD-009.5 */
   it('densityReadWritePruning returns configured value', () => {
     const ctx = buildRuntimeContext({
@@ -289,6 +323,10 @@ describe('Runtime Accessors @plan PLAN-20260211-HIGHDENSITY.P16', () => {
 // ---------------------------------------------------------------------------
 
 describe('Threshold Precedence @plan PLAN-20260211-HIGHDENSITY.P16', () => {
+  closePolicyFixtures(async () => {
+    for (const owner of policyRoots.splice(0)) await owner.dispose();
+  });
+
   /** @requirement REQ-HD-009.5 */
   it('live settings service value overrides snapshot setting', () => {
     const ctx = buildRuntimeContext(
@@ -325,6 +363,10 @@ describe('Threshold Precedence @plan PLAN-20260211-HIGHDENSITY.P16', () => {
 // ---------------------------------------------------------------------------
 
 describe('Property-based tests @plan PLAN-20260211-HIGHDENSITY.P16', () => {
+  closePolicyFixtures(async () => {
+    for (const owner of policyRoots.splice(0)) await owner.dispose();
+  });
+
   it("all density settings have 'cli-behavior' category", () => {
     fc.assert(
       fc.property(

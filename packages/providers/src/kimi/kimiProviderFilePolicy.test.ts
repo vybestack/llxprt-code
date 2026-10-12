@@ -51,6 +51,7 @@ describe('Kimi provider Files request policy', () => {
         { fileUpload: true },
         declaredMediaTransportCapabilities('kimi'),
         client,
+        '/workspace/a',
       );
 
     expect(resolve).toThrow('non-empty credential');
@@ -69,6 +70,7 @@ describe('Kimi provider Files request policy', () => {
         { fileUpload: true },
         declaredMediaTransportCapabilities('kimi'),
         client,
+        '   ',
       );
 
     expect(resolve).toThrow('non-empty target directory');
@@ -81,6 +83,7 @@ describe('Kimi provider Files request policy', () => {
       { fileUpload: true },
       declaredMediaTransportCapabilities('kimi'),
       kimiClient(),
+      '/Users/alice/private/customer-project',
     );
     const second = resolveKimiProviderFileRequestPolicy(
       workspaceOptions(
@@ -91,6 +94,7 @@ describe('Kimi provider Files request policy', () => {
       { fileUpload: true },
       declaredMediaTransportCapabilities('kimi'),
       kimiClient(),
+      '/Users/alice/private/customer-project',
     );
 
     expect(first?.scopeId).toBe(second?.scopeId);
@@ -105,6 +109,7 @@ describe('Kimi provider Files request policy', () => {
       { fileUpload: true },
       declaredMediaTransportCapabilities('kimi'),
       kimiClient('credential-a'),
+      '/workspace/a',
     );
     const moved = resolveKimiProviderFileRequestPolicy(
       workspaceOptions('/workspace/b'),
@@ -112,6 +117,7 @@ describe('Kimi provider Files request policy', () => {
       { fileUpload: true },
       declaredMediaTransportCapabilities('kimi'),
       kimiClient('credential-a'),
+      '/workspace/b',
     );
     const otherCredential = resolveKimiProviderFileRequestPolicy(
       workspaceOptions('/workspace/a'),
@@ -119,6 +125,7 @@ describe('Kimi provider Files request policy', () => {
       { fileUpload: true },
       declaredMediaTransportCapabilities('kimi'),
       kimiClient('credential-b'),
+      '/workspace/a',
     );
 
     expect(first?.scopeId).not.toBe(moved?.scopeId);

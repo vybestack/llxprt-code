@@ -13,6 +13,7 @@ import {
   createTestOAuthManager,
   createBucketFailoverHandler,
 } from './test-utils.js';
+import { OAuthManager } from '../../oauth-manager.js';
 
 const PROVIDER = 'anthropic';
 const REAUTH_FAILED = 'reauth-failed' as const;
@@ -189,9 +190,17 @@ describe('Multi-bucket behavioral scenarios', () => {
     const provider = createTestProvider(PROVIDER, {
       refreshTokenResult: null,
     });
-    const manager = createTestOAuthManager(tokenStore, {
-      providers: [provider],
+    const manager = new OAuthManager(tokenStore, undefined, {
+      readSessionAuthPolicy: () => ({
+        profileName: null,
+        noBrowser: false,
+        authOnly: false,
+        interactiveTimeoutMs: undefined,
+        bucketPrompt: false,
+        bucketDelay: 0,
+      }),
     });
+    manager.registerProvider(provider);
     manager.setSessionBucket(PROVIDER, 'bucket-a');
 
     const authenticateSpy = vi.fn(
@@ -213,7 +222,18 @@ describe('Multi-bucket behavioral scenarios', () => {
 
     await handler.tryFailover();
 
-    expect(authenticateSpy).toHaveBeenCalledTimes(1);
+    // The foreground reauth targets the first untried candidate, then the
+    // remaining expired buckets are prepared so a later failover needs no
+    // further foreground reauth.
+    const authenticatedBuckets = authenticateSpy.mock.calls.map(
+      ([, bucket]) => bucket,
+    );
+    expect(authenticatedBuckets[0]).toBe('bucket-b');
+    expect([...authenticatedBuckets].sort()).toStrictEqual([
+      'bucket-a',
+      'bucket-b',
+      'bucket-c',
+    ]);
   });
 
   it('MB-07: Foreground reauth succeeds', async () => {

@@ -231,7 +231,7 @@ export class FileLogExporter extends FileExporter implements LogRecordExporter {
     try {
       for (const log of logs) {
         this.artifactReceiver.accept(log.attributes);
-        this.writeToFile(this.serialize(log));
+        this.writeToFile(this.serialize({ ...log, body: log.body }));
       }
       resultCallback({
         code: ExportResultCode.SUCCESS,

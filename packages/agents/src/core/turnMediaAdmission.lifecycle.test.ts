@@ -1,3 +1,8 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { afterEach as closeInvocationRoots } from 'bun:test';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+const retainedInvocationOwners: SessionSettingsOwner[] = [];
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -14,7 +19,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
@@ -30,9 +35,7 @@ import type {
   IProvider,
 } from '@vybestack/llxprt-code-providers/IProvider.js';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
-import { resetCliRuntimeRegistryForTesting } from '@vybestack/llxprt-code-providers/runtime/runtimeRegistry.js';
 import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
-
 const INPUT_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
 const OUTPUT_JPEG =
@@ -256,16 +259,7 @@ async function createFixture(
       throw new Error('semantic purge persistence failed');
     };
   }
-  const setup = createChatSessionRuntime({
-    provider,
-    ...(recording === undefined
-      ? {}
-      : {
-          configOverrides: {
-            getSessionRecordingService: () => recording,
-          },
-        }),
-  });
+  const setup = createChatSessionRuntime({ provider });
   if (recording !== undefined) {
     setup.settingsService.set('media.semantic-purge', 'remove');
   }
@@ -277,7 +271,21 @@ async function createFixture(
     quotaBytes: 1024 * 1024,
   });
   const history = new HistoryService();
+  const invocationOwner = new SessionSettingsOwner(setup.settingsService);
+  retainedInvocationOwners.push(invocationOwner);
   const runtime = createAgentRuntimeContext({
+    prepareProviderInvocation: (name, parameters, signal) =>
+      invocationOwner.prepareProviderInvocation(
+        createAgentRuntimeState({
+          runtimeId: `turn-media-${behavior}`,
+          provider: provider.name,
+          model: 'turn-media-model',
+          sessionId: `turn-media-${behavior}`,
+        }).runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
     state: createAgentRuntimeState({
       runtimeId: `turn-media-${behavior}`,
       provider: provider.name,
@@ -292,10 +300,16 @@ async function createFixture(
       telemetry: { enabled: false, target: null },
       'media.semantic-purge': recording === undefined ? 'off' : 'remove',
     },
-    provider: createProviderAdapterFromManager(
-      setup.config.getProviderManager(),
+    provider: createProviderAdapterFromManager(setup.providerManager),
+    telemetry: createTelemetryAdapter(
+      setup.config,
+      RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'isolated-adapter-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
     ),
-    telemetry: createTelemetryAdapterFromConfig(setup.config),
     tools: createToolRegistryViewFromRegistry(),
     providerRuntime: { ...setup.runtime, config: setup.config },
     mediaStore: store,
@@ -584,6 +598,8 @@ function registerMediaCase10(directory: () => string): void {
       const fixture = await createFixture(directory(), 'success', {
         purgeFailure: true,
       });
+      const recording = fixture.recording;
+      if (recording === undefined) throw new Error('Missing recording');
       await fixture.chat.setHistory([
         inlineMediaContent(OUTPUT_JPEG, 'image/jpeg'),
       ]);
@@ -598,11 +614,21 @@ function registerMediaCase10(directory: () => string): void {
         fixture.chat.sendMessage(
           { message: [inlineMediaContent(INPUT_PNG, 'image/png')] },
           'purge-failure',
+          {
+            transcriptPath: () => recording.getFilePath() ?? undefined,
+            persistSemanticMediaPurge: async (candidate, frontier) => {
+              await recording.recordSemanticMediaPurgeRows(
+                candidate.streamRows(),
+                frontier,
+                { requireLiveFold: true },
+              );
+            },
+          },
         ),
       ).rejects.toThrow('semantic purge persistence failed');
 
       await assertReleasedToBaseline(fixture, baselineOwners, retainedIds);
-      await fixture.recording?.dispose();
+      await recording.dispose();
     });
   });
 }
@@ -751,12 +777,16 @@ function registerMediaCase14(directory: () => string): void {
 }
 
 describe('turn media admission terminal lifecycle', () => {
+  closeInvocationRoots(async () => {
+    for (const owner of retainedInvocationOwners.splice(0))
+      await owner.dispose();
+  });
+
   let directory = '';
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'llxprt-turn-media-lifecycle-'));
   });
   afterEach(async () => {
-    resetCliRuntimeRegistryForTesting();
     await rm(directory, { recursive: true, force: true });
   });
   registerMediaCase0(() => directory);

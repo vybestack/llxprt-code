@@ -6,16 +6,10 @@
 
 import { beforeEach, describe, expect, it, vi, type Mock } from 'bun:test';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core';
+import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
 import type { AutoPromptRuntime } from './autoPromptGenerator.js';
 
-const runWithScopeMock = vi.fn();
 const createDetachedAutoPromptClientMock = vi.fn();
-
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeBridge: () => ({
-    runWithScope: runWithScopeMock,
-  }),
-}));
 
 void vi.mock('../../runtime/autoPromptDetachedClient.js', () => ({
   createDetachedAutoPromptClient: createDetachedAutoPromptClientMock,
@@ -24,34 +18,27 @@ void vi.mock('../../runtime/autoPromptDetachedClient.js', () => ({
 const { generateAutoPrompt } = await import('./autoPromptGenerator.js');
 
 function makeClient(text = 'generated prompt'): AgentClientContract {
-  return {
-    generateDirectMessage: vi.fn(async () => ({
-      content: {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text }],
-      },
-    })),
-    clearTools: vi.fn(),
-    dispose: vi.fn(),
-  } as unknown as AgentClientContract;
+  const client = createUiSessionOwner().agentClient;
+  vi.spyOn(client, 'generateDirectMessage').mockImplementation(async () => ({
+    content: { speaker: 'ai', blocks: [{ type: 'text', text }] },
+  }));
+  vi.spyOn(client, 'dispose');
+  return client;
 }
 
 function makeRuntime(
-  provider: string | undefined,
+  provider: string,
   client: AgentClientContract | null | undefined,
 ): AutoPromptRuntime {
   return {
+    sessionClient: createUiSessionOwner().sessionClient,
     getProvider: () => provider,
-    getAgentClient: () => client,
-  } as AutoPromptRuntime;
+    agentClient: client,
+  };
 }
 
 describe('generateAutoPrompt', () => {
   beforeEach(() => {
-    runWithScopeMock.mockReset();
-    runWithScopeMock.mockImplementation((callback: () => unknown) =>
-      callback(),
-    );
     createDetachedAutoPromptClientMock.mockReset();
   });
 
@@ -64,6 +51,7 @@ describe('generateAutoPrompt', () => {
       generateAutoPrompt(
         makeRuntime('gemini', liveClient),
         'Review Python code',
+        { model: 'auto-prompt-test' },
       ),
     ).resolves.toBe('expanded system prompt');
 
@@ -83,14 +71,15 @@ describe('generateAutoPrompt', () => {
     expect(detachedClient.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('uses runtime scope and live client for non-Gemini providers with an initialized client', async () => {
+  it('uses the live client for non-Gemini providers with an initialized client', async () => {
     const client = makeClient('anthropic prompt');
 
     await expect(
-      generateAutoPrompt(makeRuntime('anthropic', client), 'Write tests'),
+      generateAutoPrompt(makeRuntime('anthropic', client), 'Write tests', {
+        model: 'auto-prompt-test',
+      }),
     ).resolves.toBe('anthropic prompt');
 
-    expect(runWithScopeMock).toHaveBeenCalledTimes(1);
     expect(createDetachedAutoPromptClientMock).not.toHaveBeenCalled();
     expect(client.generateDirectMessage).toHaveBeenCalledTimes(1);
     expect(client.generateDirectMessage).toHaveBeenCalledWith(
@@ -113,12 +102,15 @@ describe('generateAutoPrompt', () => {
     const runtime = makeRuntime('gemini', liveClient);
     createDetachedAutoPromptClientMock.mockReturnValue(detachedClient);
 
-    await expect(generateAutoPrompt(runtime, 'Plan migration')).resolves.toBe(
-      'gemini prompt',
-    );
+    await expect(
+      generateAutoPrompt(runtime, 'Plan migration', {
+        model: 'auto-prompt-test',
+      }),
+    ).resolves.toBe('gemini prompt');
 
-    expect(runWithScopeMock).not.toHaveBeenCalled();
-    expect(createDetachedAutoPromptClientMock).toHaveBeenCalledWith(runtime);
+    expect(createDetachedAutoPromptClientMock).toHaveBeenCalledWith(runtime, {
+      model: 'auto-prompt-test',
+    });
     expect(liveClient.generateDirectMessage).not.toHaveBeenCalled();
     expect(detachedClient.generateDirectMessage).toHaveBeenCalledTimes(1);
     expect(detachedClient.dispose).toHaveBeenCalledTimes(1);
@@ -129,12 +121,15 @@ describe('generateAutoPrompt', () => {
     const runtime = makeRuntime('anthropic', null);
     createDetachedAutoPromptClientMock.mockReturnValue(detachedClient);
 
-    await expect(generateAutoPrompt(runtime, 'No live client')).resolves.toBe(
-      'fallback prompt',
-    );
+    await expect(
+      generateAutoPrompt(runtime, 'No live client', {
+        model: 'auto-prompt-test',
+      }),
+    ).resolves.toBe('fallback prompt');
 
-    expect(runWithScopeMock).not.toHaveBeenCalled();
-    expect(createDetachedAutoPromptClientMock).toHaveBeenCalledWith(runtime);
+    expect(createDetachedAutoPromptClientMock).toHaveBeenCalledWith(runtime, {
+      model: 'auto-prompt-test',
+    });
     expect(detachedClient.generateDirectMessage).toHaveBeenCalledTimes(1);
     expect(detachedClient.dispose).toHaveBeenCalledTimes(1);
   });
@@ -145,46 +140,23 @@ describe('generateAutoPrompt', () => {
     createDetachedAutoPromptClientMock.mockReturnValue(detachedClient);
 
     await expect(
-      generateAutoPrompt(runtime, 'Undefined live client'),
+      generateAutoPrompt(runtime, 'Undefined live client', {
+        model: 'auto-prompt-test',
+      }),
     ).resolves.toBe('undefined fallback prompt');
 
-    expect(runWithScopeMock).not.toHaveBeenCalled();
-    expect(createDetachedAutoPromptClientMock).toHaveBeenCalledWith(runtime);
+    expect(createDetachedAutoPromptClientMock).toHaveBeenCalledWith(runtime, {
+      model: 'auto-prompt-test',
+    });
     expect(detachedClient.generateDirectMessage).toHaveBeenCalledTimes(1);
     expect(detachedClient.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to a direct request when runtime scope is unavailable', async () => {
-    runWithScopeMock.mockImplementation(() => {
-      throw new Error('scope unavailable');
-    });
-    const client = makeClient('fallback success');
-
-    await expect(
-      generateAutoPrompt(makeRuntime('anthropic', client), 'Fallback'),
-    ).resolves.toBe('fallback success');
-
-    expect(runWithScopeMock).toHaveBeenCalledTimes(1);
-    expect(client.generateDirectMessage).toHaveBeenCalledTimes(1);
-  });
-
-  it('falls back to a direct request when runtime scope rejects asynchronously', async () => {
-    runWithScopeMock.mockImplementation(() =>
-      Promise.reject(new Error('scope rejected')),
-    );
-    const client = makeClient('async fallback success');
-
-    await expect(
-      generateAutoPrompt(makeRuntime('anthropic', client), 'Async reject'),
-    ).resolves.toBe('async fallback success');
-
-    expect(runWithScopeMock).toHaveBeenCalledTimes(1);
-    expect(client.generateDirectMessage).toHaveBeenCalledTimes(1);
-  });
-
   it('throws when the model returns an empty response', async () => {
     await expect(
-      generateAutoPrompt(makeRuntime('anthropic', makeClient('  ')), 'Empty'),
+      generateAutoPrompt(makeRuntime('anthropic', makeClient('  ')), 'Empty', {
+        model: 'auto-prompt-test',
+      }),
     ).rejects.toThrow('Model returned empty response');
   });
 
@@ -192,7 +164,9 @@ describe('generateAutoPrompt', () => {
     createDetachedAutoPromptClientMock.mockReturnValue(undefined);
 
     await expect(
-      generateAutoPrompt(makeRuntime('gemini', null), 'No clients'),
+      generateAutoPrompt(makeRuntime('gemini', null), 'No clients', {
+        model: 'auto-prompt-test',
+      }),
     ).rejects.toThrow('Unable to access the AI client');
   });
 
@@ -202,7 +176,9 @@ describe('generateAutoPrompt', () => {
     });
 
     await expect(
-      generateAutoPrompt(makeRuntime('gemini', null), 'Factory failure'),
+      generateAutoPrompt(makeRuntime('gemini', null), 'Factory failure', {
+        model: 'auto-prompt-test',
+      }),
     ).rejects.toThrow('factory exploded');
   });
 
@@ -216,7 +192,9 @@ describe('generateAutoPrompt', () => {
     createDetachedAutoPromptClientMock.mockReturnValue(detachedClient);
 
     await expect(
-      generateAutoPrompt(makeRuntime('gemini', makeClient()), 'Failure'),
+      generateAutoPrompt(makeRuntime('gemini', makeClient()), 'Failure', {
+        model: 'auto-prompt-test',
+      }),
     ).rejects.toThrow('network failed');
 
     expect(detachedClient.dispose).toHaveBeenCalledTimes(1);

@@ -1,3 +1,6 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { CoreToolRegistryHostAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreToolRegistryHostAdapter.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -6,9 +9,8 @@
  * @requirement REQ-3329-05
  */
 
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { describe, expect, it, vi } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
@@ -115,41 +117,39 @@ function createHarness(): SchedulerHarness {
   policyEngine.setApprovalMode(ApprovalMode.YOLO);
   const messageBus = new MessageBus(policyEngine, false);
   const messageBusAdapter = new CoreMessageBusAdapter(messageBus);
-  const toolRegistry = new ToolRegistry(
-    {
-      getEphemeralSettings: () => ({}),
-      getCoreTools: () => [],
-      getExcludeTools: () => [],
+  const config = new Config({
+    sessionId: 'seen-call-id-cap-test',
+    model: 'test-model',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    debugMode: false,
+    approvalMode: ApprovalMode.YOLO,
+    initialSettings: {
+      'tool-output-max-tokens': 50000,
+      'tool-output-max-items': 50,
     },
+  });
+  const root = createSessionSettingsFixture(config);
+  const toolRegistry = new ToolRegistry(
+    new CoreToolRegistryHostAdapter(config),
     messageBusAdapter,
-    new SettingsService(),
+    () => root.settingsOwner.readRegistryPolicy(config.getExcludeTools() ?? []),
   );
   const tool = new CountingTool(messageBusAdapter);
   toolRegistry.registerTool(tool);
 
-  const config = {
-    getSessionId: () => 'seen-call-id-cap-test',
-    getUsageStatisticsEnabled: () => false,
-    getDebugMode: () => false,
-    isInteractive: () => false,
-    getApprovalMode: () => ApprovalMode.YOLO,
-    getEphemeralSettings: () => ({
-      'tool-output-max-tokens': 50_000,
-      'tool-output-max-items': 50,
-    }),
-    getAllowedTools: () => [],
-    getContentGeneratorConfig: () => ({ model: 'test-model' }),
-    getToolRegistry: () => toolRegistry,
-    getMessageBus: () => messageBus,
-    getEnableHooks: () => false,
-    getHookSystem: () => null,
-    getPolicyEngine: () => policyEngine,
-    getModel: () => 'test-model',
-  } as unknown as Config;
-
   return {
     tool,
     scheduler: new CoreToolScheduler({
+      telemetry: RootTelemetry.prepare({
+        enabled: false,
+        sessionId: 'isolated-caller-fixture',
+        maxBytes: 1024,
+        maxFiles: 1,
+      }),
+      readExecutionPolicy: () => root.settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        root.settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
       config,
       messageBus,
       toolRegistry,

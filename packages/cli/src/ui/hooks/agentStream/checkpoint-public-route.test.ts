@@ -29,7 +29,7 @@ describe('checkpoint public disk route after eager preparation removal', () => {
     for (const active of [false, true]) {
       it(`invokes the exported durable writer for ${size} rows, active=${active}`, async () => {
         await withCheckpoint(size, active, async (fixture, dir) => {
-          const agent = fixture.config.getAgentClient();
+          const agent = fixture.client;
           const cold = agent.streamHistory();
           expect(fixture.decoded()).toBe(0);
           await cold.return();

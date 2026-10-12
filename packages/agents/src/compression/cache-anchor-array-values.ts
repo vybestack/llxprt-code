@@ -10,6 +10,7 @@ async function publishValues(
   top: number,
   model: string,
   signal?: AbortSignal,
+  origin?: object,
 ): Promise<void> {
   try {
     const previous = await history.openDumpSnapshot();
@@ -24,6 +25,7 @@ async function publishValues(
         {
           signal,
           publishTokens: true,
+          origin,
         },
       );
     } finally {
@@ -40,6 +42,7 @@ export function publishCompressionArrayValues(
   top: number,
   model: string,
   signal?: AbortSignal,
+  origin?: object,
 ): Promise<void> {
   let candidate: HistoryDensityRows | undefined;
   try {
@@ -62,5 +65,5 @@ export function publishCompressionArrayValues(
     }
     return Promise.reject(error);
   }
-  return publishValues(history, candidate, top, model, signal);
+  return publishValues(history, candidate, top, model, signal, origin);
 }

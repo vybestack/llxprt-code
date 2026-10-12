@@ -1,3 +1,5 @@
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+const fixtureOwners = installRuntimeTestOwners();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -16,8 +18,9 @@ import type {
   ResolvedSubProfile,
 } from './loadBalancerTypes.js';
 
-import { createProviderKeyStorage } from '../runtime/runtimeSettings.js';
+import { createProviderKeyStorage } from '../runtime/index.js';
 import { trackedRequestRows } from '../__tests__/requestRowsTestSupport.js';
+import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 import {
   isAsyncIterableContents,
   replayableContents,
@@ -33,6 +36,7 @@ function createProjectionFixture(
   member: ResolvedSubProfile;
   options: GenerateChatOptions;
   projections: GenerateChatOptions[];
+  delegateRequests: () => number;
 } {
   const settings = new SettingsService();
   settings.setCurrentProfileName('ambient-profile');
@@ -44,11 +48,13 @@ function createProjectionFixture(
     runtimeId: 'projection-test',
   };
   const manager = new ProviderManager({
+    sessionSettings: fixtureOwners.adopt(config, settings).settingsOwner,
     settingsService: settings,
     config,
     runtime,
   });
   const projections: GenerateChatOptions[] = [];
+  let delegateRequests = 0;
   const delegate: IProvider = {
     name: 'projection-probe',
     getModels: async () => [],
@@ -75,6 +81,7 @@ function createProjectionFixture(
     async *generateChatCompletion(
       optionsOrStream: GenerateChatOptions | AsyncIterable<IContent>,
     ): AsyncGenerator<IContent> {
+      delegateRequests++;
       if (isAsyncIterableContents(optionsOrStream))
         throw new Error('expected delegate options');
       const options = optionsOrStream;
@@ -124,14 +131,16 @@ function createProjectionFixture(
     lb,
     member,
     projections,
-    options: {
-      contents: replayableContents([]),
+    delegateRequests: () => delegateRequests,
+    options: streamCallOptions({
+      providerName: 'load-balancer',
+      contents: [],
       settings,
       config,
       runtime,
       metadata: { profileId: 'ambient-profile' },
       resolved: { authToken: 'parent-key' },
-    },
+    }),
   };
 }
 
@@ -201,24 +210,21 @@ describe('load balancer projection credentials', () => {
     },
   );
 
-  it('carries the projection credential through round-robin transport despite rotation', async () => {
-    const { lb, options, projections } = createProjectionFixture(
-      'round-robin',
-      true,
-    );
+  it('rejects a credential rotated during projection before dispatch', async () => {
+    const { lb, options, projections, delegateRequests } =
+      createProjectionFixture('round-robin', true);
     try {
       storedKeys.set('member-key', 'projection-credential');
-      expect(await consume(lb, options)).toStrictEqual([
-        { speaker: 'ai', blocks: [{ type: 'text', text: 'done' }] },
-      ]);
+      await expect(consume(lb, options)).rejects.toThrow('credentials changed');
       expect(projections.length).toStrictEqual(1);
+      expect(delegateRequests()).toBe(0);
     } finally {
       storedKeys.clear();
     }
   });
 
-  it('retains the attempt credential for the compressed projection', async () => {
-    const { lb, member, options, projections } =
+  it('rejects credentials rotated during compression before dispatch', async () => {
+    const { lb, member, options, projections, delegateRequests } =
       createProjectionFixture('round-robin');
     try {
       storedKeys.set('member-key', 'before-compression');
@@ -226,15 +232,18 @@ describe('load balancer projection credentials', () => {
         storedKeys.set('member-key', 'after-compression');
         return trackedRequestRows([]);
       });
-      await consume(lb, {
-        ...options,
-        contents: replayableContents([
-          {
-            speaker: 'human',
-            blocks: [{ type: 'text', text: 'long prompt '.repeat(1000) }],
-          },
-        ]),
-      });
+      await expect(
+        consume(lb, {
+          ...options,
+          contents: replayableContents([
+            {
+              speaker: 'human',
+              blocks: [{ type: 'text', text: 'long prompt '.repeat(1000) }],
+            },
+          ]),
+        }),
+      ).rejects.toThrow('credentials changed');
+      expect(delegateRequests()).toBe(0);
 
       expect(
         projections.map((projection) => ({

@@ -8,7 +8,7 @@ import type {
   PromptEnvelopeProjection,
   UnsupportedMediaEntry,
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { ResponsesRequest } from './responses-request.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 import { finishMediaRequest } from '../utils/request-media-resolution.js';
@@ -64,7 +64,7 @@ async function* countedRows(
  * that row's id and observed usage are retained, never the history.
  */
 async function selectRowsStateful(
-  options: NormalizedGenerateChatOptions,
+  request: ResponsesRequest,
   deps: ResponsesExecutorDeps,
   ephemerals: Record<string, unknown>,
   rows: ProviderRequestRows,
@@ -75,7 +75,7 @@ async function selectRowsStateful(
   historyDangling?: HistoryDangling;
 }> {
   const plan = resolveResponsesStatefulPlan(
-    options,
+    request,
     ephemerals,
     deps,
     mode.forceStateless,
@@ -88,7 +88,7 @@ async function selectRowsStateful(
     };
   let hit: StatefulParentHit | undefined;
   let index = 0;
-  for await (const row of countedRows(rows, getRequestSignal(options))) {
+  for await (const row of countedRows(rows, getRequestSignal(request))) {
     hit = parentHitOf(row, index++, plan) ?? hit;
   }
   // The array route patches synthetic outputs before choosing the parent, so
@@ -97,8 +97,8 @@ async function selectRowsStateful(
     hit === undefined
       ? undefined
       : await findDanglingCalls(
-          () => countedRows(rows, getRequestSignal(options)),
-          getRequestSignal(options),
+          () => countedRows(rows, getRequestSignal(request)),
+          getRequestSignal(request),
         );
   const syntheticRows =
     hit !== undefined && calls?.lastCallRow === hit.index
@@ -155,13 +155,13 @@ function statefulAccounting(
 }
 
 export function assertDiskTextShape(
-  options: NormalizedGenerateChatOptions,
+  request: ResponsesRequest,
   deps: ResponsesExecutorDeps,
 ): Readonly<Record<string, unknown>> {
   return resolveResponsesRequestShape(
-    options,
+    request,
     [],
-    resolveInvocationEphemerals(options),
+    resolveInvocationEphemerals(request),
     deps,
     false,
   ).requestOverrides;
@@ -169,13 +169,13 @@ export function assertDiskTextShape(
 
 /** A source token's stateful decision must still hold when it is sent. */
 export function assertPreparedStatefulUnchanged(
-  options: NormalizedGenerateChatOptions,
+  request: ResponsesRequest,
   deps: ResponsesExecutorDeps,
   prepared: PreparedResponsesRequestContext,
 ): void {
   const plan = resolveResponsesStatefulPlan(
-    options,
-    resolveInvocationEphemerals(options),
+    request,
+    resolveInvocationEphemerals(request),
     deps,
     false,
     false,
@@ -187,30 +187,30 @@ export function assertPreparedStatefulUnchanged(
 }
 
 export async function buildDiskTextResponsesContext(
-  options: NormalizedGenerateChatOptions,
+  request: ResponsesRequest,
   deps: ResponsesExecutorDeps,
   mode: RebuildMode = { forceStateless: false, forceParentless: false },
 ): Promise<PreparedResponsesRequestContext> {
-  requireAssembledSystemInstruction(options.systemInstruction);
-  const overrides = assertDiskTextShape(options, deps);
-  const rows = options.requestRows;
-  if (rows === undefined || options.contentCount !== rows.count)
+  requireAssembledSystemInstruction(request.systemInstruction);
+  const overrides = assertDiskTextShape(request, deps);
+  const rows = request.requestRows;
+  if (rows === undefined || request.contentCount !== rows.count)
     throw new Error(
       'Explicit Responses disk text selection identity/count is required',
     );
-  const ephemerals = resolveInvocationEphemerals(options);
-  const signal = getRequestSignal(options);
+  const ephemerals = resolveInvocationEphemerals(request);
+  const signal = getRequestSignal(request);
   const reasoningIdTime =
-    mode.reasoningIdTime ?? readRequestReasoningIdTime(options) ?? Date.now();
+    mode.reasoningIdTime ?? readRequestReasoningIdTime(request) ?? Date.now();
   const { stateful, skipRows, historyDangling } = await selectRowsStateful(
-    options,
+    request,
     deps,
     ephemerals,
     rows,
     mode,
   );
   const prepared = await buildRequestContext(
-    options,
+    request,
     [],
     ephemerals,
     deps,
@@ -225,7 +225,11 @@ export async function buildDiskTextResponsesContext(
       tools: prepared.request.tools,
       contents: resolveRowsMedia(
         countedRows(rows, signal, skipRows),
-        options.runtime,
+        {
+          requestId: request.mediaRequestId,
+          aggregateBudgetBytes: request.mediaBudgetBytes,
+          resolver: request.mediaResolver,
+        },
         prepared.mediaRequest,
         signal,
       ),
@@ -235,8 +239,7 @@ export async function buildDiskTextResponsesContext(
         : {}),
       ...statefulAccounting(rows, stateful, signal, skipRows),
       context: responsesInputContext(
-        options,
-        ephemerals,
+        request,
         deps,
         stateful.parentId !== undefined,
         reasoningIdTime,
@@ -252,7 +255,7 @@ export async function buildDiskTextResponsesContext(
       sourcePrompt: prompt,
       statefulEnabled: stateful.enabled,
       rebuildFromRows: (rebuild) =>
-        buildDiskTextResponsesContext(options, deps, {
+        buildDiskTextResponsesContext(request, deps, {
           ...rebuild,
           reasoningIdTime,
         }),

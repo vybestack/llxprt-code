@@ -5,9 +5,8 @@
  */
 
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { AnthropicConversationConversionOptions as AnthropicMessageConversionOptions } from '../anthropic/AnthropicMessageNormalizer.js';
 import { buildOpenAIDumpStream } from '../openai/openAIDumpStream.js';
@@ -18,43 +17,20 @@ import {
   type ReasoningMessageOptions,
 } from '../openai/OpenAIRequestBuilder.js';
 
-interface MinimalSettings {
-  get?: (key: string) => unknown;
-}
-
-function asMinimalSettings(value: unknown): MinimalSettings | undefined {
-  if (
-    typeof value === 'object' &&
-    value !== null &&
-    'get' in value &&
-    typeof (value as { get?: unknown }).get === 'function'
-  ) {
-    return value as MinimalSettings;
-  }
-  return undefined;
-}
-
-function createSettings(overrides?: unknown): SettingsService {
-  const minimal = asMinimalSettings(overrides);
-  return {
-    get: (key: string) => minimal?.get?.(key),
-  } as SettingsService;
-}
-
-function createOptions(settings?: unknown): ReasoningMessageOptions {
-  return {
-    settings: createSettings(settings),
-  };
+function createOptions(
+  policy: Readonly<Record<string, unknown>> = {},
+): ReasoningMessageOptions {
+  return { invocation: { ephemerals: policy } };
 }
 
 export function buildOpenAIDumpMessages(
   history: IContent[],
-  settings?: unknown,
-  config?: ToolOutputSettingsProvider,
+  policy?: Readonly<Record<string, unknown>>,
+  config?: OutputLimitConfig,
 ): unknown[] {
   return buildMessagesWithReasoning(
     history,
-    createOptions(settings),
+    createOptions(policy),
     'openai',
     config,
   );
@@ -62,35 +38,33 @@ export function buildOpenAIDumpMessages(
 
 export function buildAnthropicDumpMessages(
   history: IContent[],
-  settings?: unknown,
-  config?: ToolOutputSettingsProvider,
+  policy?: Readonly<Record<string, unknown>>,
+  config?: OutputLimitConfig,
   model?: string,
   baseURL?: string,
 ): unknown[] {
   return convertToAnthropicMessages(
     history,
-    createAnthropicOptions(settings, config, model, baseURL),
+    createAnthropicOptions(policy, config, model, baseURL),
   );
 }
 
 function createAnthropicOptions(
-  settings?: unknown,
-  config?: ToolOutputSettingsProvider,
+  policy?: Readonly<Record<string, unknown>>,
+  config?: OutputLimitConfig,
   model?: string,
   baseURL?: string,
 ): AnthropicMessageConversionOptions {
   return {
     isOAuth: false,
     stripFromContext:
-      (asMinimalSettings(settings)?.get?.('reasoning.stripFromContext') as
+      (policy?.['reasoning.stripFromContext'] as
         | 'all'
         | 'allButLast'
         | 'none'
         | undefined) ?? 'none',
     includeInContext:
-      (asMinimalSettings(settings)?.get?.('reasoning.includeInContext') as
-        | boolean
-        | undefined) ?? false,
+      (policy?.['reasoning.includeInContext'] as boolean | undefined) ?? false,
     reasoningEnabled: true,
     config,
     currentModel: model,
@@ -131,8 +105,8 @@ function withModel(
 export function buildProviderDumpBody(params: {
   providerName: string;
   history: IContent[];
-  settings?: unknown;
-  config?: ToolOutputSettingsProvider;
+  policy?: Readonly<Record<string, unknown>>;
+  config?: OutputLimitConfig;
   model?: string;
   baseURL?: string;
 }): Record<string, unknown> {
@@ -141,7 +115,7 @@ export function buildProviderDumpBody(params: {
       {
         messages: buildOpenAIDumpMessages(
           params.history,
-          params.settings,
+          params.policy,
           params.config,
         ),
       },
@@ -153,7 +127,7 @@ export function buildProviderDumpBody(params: {
       {
         messages: buildAnthropicDumpMessages(
           params.history,
-          params.settings,
+          params.policy,
           params.config,
           params.model,
           params.baseURL,
@@ -173,8 +147,8 @@ export function buildProviderDumpBody(params: {
 export function buildProviderDumpBodyStream(params: {
   providerName: string;
   history: HistoryDumpSource;
-  settings?: unknown;
-  config?: ToolOutputSettingsProvider;
+  policy?: Readonly<Record<string, unknown>>;
+  config?: OutputLimitConfig;
   model?: string;
   baseURL?: string;
 }): Record<string, unknown> {
@@ -183,7 +157,7 @@ export function buildProviderDumpBodyStream(params: {
       {
         messages: buildOpenAIDumpStream(
           params.history,
-          createOptions(params.settings),
+          createOptions(params.policy),
           params.config,
         ),
       },
@@ -196,7 +170,7 @@ export function buildProviderDumpBodyStream(params: {
         messages: buildAnthropicDumpStream(
           params.history,
           createAnthropicOptions(
-            params.settings,
+            params.policy,
             params.config,
             params.model,
             params.baseURL,

@@ -1,3 +1,4 @@
+import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -11,6 +12,8 @@
  * @issue #1750 — Stream retry boundary
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { StreamProcessor } from './StreamProcessor.js';
 import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
@@ -252,12 +255,12 @@ function facadeCallback0(): void {
   const mockHistoryService = new HistoryService();
 
   const mockProviderRuntimeBuilder = () => ({
-    config: {
+    config: createRuntimeConfigStub(new SettingsService(), {
       getEnableHooks: () => false,
       getHookSystem: () => null,
       getUserMemory: () => undefined,
-    },
-    settingsService: {},
+    }),
+    settingsService: new SettingsService(),
     metadata: {},
   });
 
@@ -290,7 +293,7 @@ function facadeCallback1(): void {
   const tools: ToolDeclaration[] = [];
   const baseRuntimeContext = {
     config: configInstance,
-    settingsService: {},
+    settingsService: new SettingsService(),
     runtimeId: 'test-runtime',
     metadata: { source: 'test' },
   };
@@ -693,6 +696,7 @@ async function facadeCallback9(): Promise<void> {
   const processor = Object.create(StreamProcessor.prototype) as StreamProcessor;
   Object.assign(processor, {
     runtimeContext: {
+      ...createSessionPolicyFixture(),
       state: {
         model: 'test-model',
         baseUrl: 'https://test.example.com',
@@ -741,6 +745,7 @@ async function facadeCallback11(): Promise<void> {
 
 function retryRuntimeContext(): Record<string, unknown> {
   return {
+    ...createSessionPolicyFixture(),
     state: {
       model: 'test-model',
       baseUrl: 'https://test.example.com',

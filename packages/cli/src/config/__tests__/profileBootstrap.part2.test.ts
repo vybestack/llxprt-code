@@ -4,12 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { parseInlineProfile } from '../profileBootstrap.js';
-
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  registerCliProviderInfrastructure: vi.fn(),
-}));
 
 describe('parseInlineProfile() @plan:PLAN-20251118-ISSUE533.P07', () => {
   /**

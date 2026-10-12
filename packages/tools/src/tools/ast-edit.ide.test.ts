@@ -4,12 +4,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { physicalFiles } from '../__tests__/helpers/physical-files.js';
+
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { ASTEditTool } from './ast-edit.js';
-import { createDefaultToolHost } from './edit-utils.js';
+import { createRealToolHost } from '../__tests__/helpers/create-real-tool-host.js';
 import type {
   IToolHost,
   IIdeService,
@@ -47,7 +49,11 @@ describe('ASTEditTool IDE diff integration', () => {
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ast-edit-ide-'));
     host = {
-      ...createDefaultToolHost(),
+      ...physicalFiles,
+      ...createRealToolHost(process.cwd(), {
+        respectGitIgnore: true,
+        respectLlxprtIgnore: true,
+      }),
       getTargetDir: () => tmpDir,
       getWorkspaceRoots: () => [tmpDir],
       // Manual approval so shouldConfirmExecute produces confirmation details.

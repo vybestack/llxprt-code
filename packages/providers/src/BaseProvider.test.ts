@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { resolveRuntimeAuthToken } from './utils/authToken.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import {
   describe,
   it,
@@ -80,7 +82,8 @@ function createOptionsWithRuntime(
   config?: Config,
 ) {
   const settings = settingsService ?? testSettingsService;
-  const runtimeConfig = config ?? createRuntimeConfigStub(settings);
+  const runtimeConfig =
+    config ?? createRuntimeConfigStub(settings, { getModel: () => '' });
   const runtime = createProviderRuntimeContext({
     runtimeId: `base-provider.${Math.random().toString(36).slice(2, 10)}`,
     settingsService: settings,
@@ -89,15 +92,14 @@ function createOptionsWithRuntime(
 
   return {
     contents,
-    settings,
-    config: runtimeConfig,
-    runtime,
+    invocation: captureProviderInvocation(runtime, 'test'),
   };
 }
 
 // Concrete implementation of BaseProvider for testing
 class TestProvider extends BaseProvider {
   lastOptions?: NormalizedGenerateChatOptions;
+  observedTokens: string[] = [];
 
   constructor(
     config: BaseProviderConfig,
@@ -137,6 +139,7 @@ class TestProvider extends BaseProvider {
   ): AsyncIterableIterator<IContent> {
     this.lastOptions = options;
     const token = await this.getAuthToken();
+    this.observedTokens.push(token);
     yield {
       speaker: 'ai',
       blocks: [
@@ -363,7 +366,10 @@ describe('BaseProvider', () => {
 
       expect(provider.lastOptions?.contents).toStrictEqual(messages);
       expect(provider.lastOptions?.tools).toBeUndefined();
-      expect(provider.lastOptions?.settings).toBe(defaultSettings);
+      expect(provider.lastOptions?.resolved.model).toBe(
+        provider.getDefaultModel(),
+      );
+      expect(provider.lastOptions).not.toHaveProperty('settings');
     });
 
     it('passes explicit options including settings and config to implementation', async () => {
@@ -374,22 +380,24 @@ describe('BaseProvider', () => {
       const provider = new TestProvider(config);
       const customSettings = new SettingsService();
       customSettings.set('auth-key', 'custom-auth-xyz');
-      const fakeConfig = {
-        getUserMemory: () => 'test-memory',
-        getModel: () => 'test-model',
-      } as unknown as Config;
+      provider.setRuntimeSettingsService(customSettings);
 
       const options = {
         contents: [userMessage('options signature test')],
-        settings: customSettings,
-        config: fakeConfig,
+        invocation: captureProviderInvocation(
+          { settingsService: customSettings, runtimeId: 'req-123' },
+          'test',
+        ),
         metadata: { requestId: 'req-123' },
       } satisfies Parameters<TestProvider['generateChatCompletion']>[0];
 
       const result = await provider.generateChatCompletion(options).next();
 
-      expect(provider.lastOptions?.settings).toBe(customSettings);
-      expect(provider.lastOptions?.config).toBe(fakeConfig);
+      expect(provider.lastOptions?.invocation.getEphemeral('auth-key')).toBe(
+        'custom-auth-xyz',
+      );
+      expect(provider.lastOptions).not.toHaveProperty('settings');
+      expect(provider.lastOptions).not.toHaveProperty('config');
       expect(provider.lastOptions?.metadata).toMatchObject({
         requestId: 'req-123',
       });
@@ -398,9 +406,8 @@ describe('BaseProvider', () => {
 
     it('falls back when provider settings are unavailable', async () => {
       const settings = testSettingsService;
-      vi.spyOn(settings, 'getProviderSettings').mockReturnValue(
-        undefined as never,
-      );
+      settings.setProviderSetting('test', 'model', undefined);
+      settings.setProviderSetting('test', 'base-url', undefined);
       const provider = new TestProvider({
         name: 'test',
         baseURL: 'https://config.example.test',
@@ -533,11 +540,15 @@ describe('BaseProvider', () => {
         config: runtimeConfig,
         runtime,
       } as const;
-      await provider.generateChatCompletion(options).next();
-      await provider.generateChatCompletion(options).next();
-
-      // Then: OAuth should be called once and cached for the second call
+      const first = await provider.generateChatCompletion(options).next();
+      const second = await provider.generateChatCompletion(options).next();
+      expect(getContentText(first.value)).toContain('oauth-toke');
+      expect(getContentText(second.value)).toContain('oauth-toke');
       expect(mockOAuthManager.getToken).toHaveBeenCalledTimes(2);
+
+      expect(
+        await resolveRuntimeAuthToken(provider.lastOptions?.resolved.authToken),
+      ).toBe('oauth-token');
     });
 
     it('should re-resolve auth after cache expires', async () => {
@@ -588,6 +599,10 @@ describe('BaseProvider', () => {
         .generateChatCompletion(createOptionsWithRuntime([userMessage('')]))
         .next();
 
+      expect(provider.observedTokens).toStrictEqual([
+        'oauth-token',
+        'oauth-token-2',
+      ]);
       expect(mockOAuthManager.getToken).toHaveBeenCalledTimes(2);
 
       // Restore Date.now
@@ -775,14 +790,11 @@ describe('BaseProvider', () => {
 
       const provider = new TestProvider(config);
 
-      // Should succeed with empty token when OAuth is unavailable
       const response = await provider
         .generateChatCompletion(createOptionsWithRuntime([userMessage('')]))
         .next();
-
-      expect(getContentText(response.value as IContent)).toContain(
-        'Response using token:',
-      );
+      expect(getContentText(response.value)).toContain('Response using token:');
+      expect(provider.observedTokens).toStrictEqual(['']);
     });
 
     it('should handle missing OAuth provider gracefully', async () => {
@@ -828,7 +840,9 @@ describe('BaseProvider', () => {
           authResolver: { resolveAuthentication: typeof mockResolveAuth };
         }
       ).authResolver = {
-        resolveAuthentication: mockResolveAuth,
+        resolveAuthenticationResult: async (input: unknown) => ({
+          token: await mockResolveAuth(input),
+        }),
       };
 
       await provider.isAuthenticated();

@@ -1,8 +1,15 @@
+import type { Agent } from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import {
+  providerSwitchInputs,
+  overrideInputs,
+  modelParamInputs,
+} from '../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
 
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
@@ -17,29 +24,25 @@
  */
 import { restoreGlobals, setGlobal } from '@vybestack/llxprt-code-test-utils';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import {
   Config,
-  createProviderRuntimeContext,
-  MessageBus,
+  type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
 import {
   createTempDirectory,
   cleanupTempDirectory,
-  initializeTestConfig,
+  initializeTestSessionRoot,
+  type CliTestSessionRoot,
 } from './test-utils.js';
-import { createProviderManager } from '@vybestack/llxprt-code-providers/composition.js';
 import {
-  setCliRuntimeContext,
   switchActiveProvider,
   setActiveModelParam,
   getActiveModelParams,
-  registerCliProviderInfrastructure,
-  resetCliProviderInfrastructure,
 } from '@vybestack/llxprt-code-providers/runtime.js';
-import { resetDefaultCliRuntimeIdForTesting } from '@vybestack/llxprt-code-providers/runtime/runtimeRegistry.js';
+import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
+import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
 import { setProviderApiKey } from '@vybestack/llxprt-code-providers/runtime/providerConfigUtils.js';
 
 /**
@@ -52,8 +55,11 @@ import { setProviderApiKey } from '@vybestack/llxprt-code-providers/runtime/prov
 describe('Runtime Provider Switching Integration', () => {
   let tempDir: string;
   let config: Config;
-  let providerManager: ProviderManager;
+  let sessionRoot: CliTestSessionRoot;
+  let providerManager: RuntimeProviderManager;
   let settingsService: SettingsService;
+  let registration: CliRuntimeRegistrationHandle;
+  let sessionClient: Pick<Agent['sessionClient'], 'refreshAuth'>;
 
   beforeEach(async () => {
     tempDir = await createTempDirectory();
@@ -65,38 +71,37 @@ describe('Runtime Provider Switching Integration', () => {
       cwd: tempDir,
       model: 'test-model',
     });
-    await initializeTestConfig(config);
-
-    settingsService = config.getSettingsService();
-    const runtime = createProviderRuntimeContext({
+    settingsService = new SettingsService();
+    const assembled = assembleCliProviderRuntime({
       settingsService,
       config,
+      runtimeId: 'provider-switch-test',
       metadata: { source: 'provider-switch-test' },
     });
-    const runtimeMessageBus = new MessageBus(
-      config.getPolicyEngine(),
-      config.getDebugMode(),
-    );
-    const { manager, oauthManager } = createProviderManager(runtime, {
-      allowBrowserEnvironment: true,
+    providerManager = assembled.providerManager;
+    registration = assembled.registration;
+    sessionRoot = await initializeTestSessionRoot(
       config,
-      runtimeMessageBus,
-    });
-    providerManager = manager;
-    setCliRuntimeContext(settingsService, config, {
-      runtimeId: 'provider-switch-test',
-      metadata: { source: 'provider-switch-test' },
-    });
-    registerCliProviderInfrastructure(providerManager, oauthManager, {
-      messageBus: runtimeMessageBus,
-      runtimeId: 'provider-switch-test',
-    });
+      providerManager,
+      settingsService,
+    );
+    sessionClient = sessionRoot.agent.sessionClient;
   });
 
   afterEach(async () => {
-    resetCliProviderInfrastructure();
-    resetDefaultCliRuntimeIdForTesting();
+    registration.dispose();
     await cleanupTempDirectory(tempDir);
+  });
+
+  it('binds a provider-file lifecycle to the exact foreground Config', () => {
+    expect(registration.config).toBe(config);
+    expect(registration.config).toBe(config);
+    expect(
+      registration.providerFileLifecycle.retainsScope(
+        'session',
+        registration.runtimeId,
+      ),
+    ).toBe(false);
   });
 
   it('clears previous provider API key and auth state', async () => {
@@ -105,29 +110,51 @@ describe('Runtime Provider Switching Integration', () => {
     providerManager.registerProvider(providerA);
     providerManager.registerProvider(providerB);
 
-    providerManager.setActiveProvider('providerA');
-    const setResult = await setProviderApiKey('key-for-provider-a');
+    await providerManager.setActiveProvider('providerA');
+    const setResult = await setProviderApiKey(
+      'key-for-provider-a',
+      ...(await overrideInputs(sessionRoot)),
+      providerManager.getActiveProvider(),
+    );
     expect(setResult.success).toBe(true);
-    expect(
-      config.getSettingsService().getProviderSettings('providerA')['auth-key'],
-    ).toBe('key-for-provider-a');
-    expect(config.getEphemeralSetting('auth-key')).toBe('key-for-provider-a');
+    expect(settingsService.getProviderSettings('providerA')['auth-key']).toBe(
+      'key-for-provider-a',
+    );
+    expect(sessionRoot.agent.getEphemeralSetting('auth-key')).toBe(
+      'key-for-provider-a',
+    );
 
-    await switchActiveProvider('providerB');
+    await switchActiveProvider(
+      'providerB',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
     expect(
-      config.getSettingsService().getProviderSettings('providerA')['auth-key'],
+      settingsService.getProviderSettings('providerA')['auth-key'],
     ).toBeUndefined();
-    expect(config.getEphemeralSetting('auth-key')).toBeUndefined();
+    expect(sessionRoot.agent.getEphemeralSetting('auth-key')).toBeUndefined();
 
-    const resultB = await setProviderApiKey('key-for-provider-b');
+    const resultB = await setProviderApiKey(
+      'key-for-provider-b',
+      ...(await overrideInputs(sessionRoot)),
+      providerManager.getActiveProvider(),
+    );
     expect(resultB.success).toBe(true);
-    expect(
-      config.getSettingsService().getProviderSettings('providerB')['auth-key'],
-    ).toBe('key-for-provider-b');
+    expect(settingsService.getProviderSettings('providerB')['auth-key']).toBe(
+      'key-for-provider-b',
+    );
 
-    await switchActiveProvider('providerA');
+    await switchActiveProvider(
+      'providerA',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
     expect(
-      config.getSettingsService().getProviderSettings('providerB')['auth-key'],
+      settingsService.getProviderSettings('providerB')['auth-key'],
     ).toBeUndefined();
   });
 
@@ -137,28 +164,62 @@ describe('Runtime Provider Switching Integration', () => {
     providerManager.registerProvider(providerA);
     providerManager.registerProvider(providerB);
 
-    providerManager.setActiveProvider('providerA');
-    setActiveModelParam('temperature', 0.7);
-    setActiveModelParam('top_p', 0.9);
-    expect(getActiveModelParams()).toStrictEqual({
+    await providerManager.setActiveProvider('providerA');
+    setActiveModelParam(
+      'temperature',
+      0.7,
+      ...modelParamInputs(sessionRoot, providerManager),
+    );
+    setActiveModelParam(
+      'top_p',
+      0.9,
+      ...modelParamInputs(sessionRoot, providerManager),
+    );
+    expect(
+      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+    ).toStrictEqual({
       temperature: 0.7,
       top_p: 0.9,
     });
 
-    await switchActiveProvider('providerB');
+    await switchActiveProvider(
+      'providerB',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
     expect(
-      config.getSettingsService().getProviderSettings('providerA').temperature,
+      settingsService.getProviderSettings('providerA').temperature,
     ).toBeUndefined();
-    expect(getActiveModelParams()).toStrictEqual({});
-
-    setActiveModelParam('temperature', 0.3);
-    expect(getActiveModelParams()).toStrictEqual({ temperature: 0.3 });
-
-    await switchActiveProvider('providerA');
     expect(
-      config.getSettingsService().getProviderSettings('providerB').temperature,
+      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+    ).toStrictEqual({});
+
+    setActiveModelParam(
+      'temperature',
+      0.3,
+      ...modelParamInputs(sessionRoot, providerManager),
+    );
+    expect(
+      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+    ).toStrictEqual({
+      temperature: 0.3,
+    });
+
+    await switchActiveProvider(
+      'providerA',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
+    expect(
+      settingsService.getProviderSettings('providerB').temperature,
     ).toBeUndefined();
-    expect(getActiveModelParams()).toStrictEqual({});
+    expect(
+      getActiveModelParams(...modelParamInputs(sessionRoot, providerManager)),
+    ).toStrictEqual({});
   });
 
   it('clears gemini provider settings when switching active provider', async () => {
@@ -168,14 +229,22 @@ describe('Runtime Provider Switching Integration', () => {
     providerManager.registerProvider(geminiProvider as never);
     providerManager.registerProvider(otherProvider);
 
-    providerManager.setActiveProvider('gemini');
-    config
-      .getSettingsService()
-      .setProviderSetting('gemini', 'base-url', 'https://gemini.server-tools');
+    await providerManager.setActiveProvider('gemini');
+    settingsService.setProviderSetting(
+      'gemini',
+      'base-url',
+      'https://gemini.server-tools',
+    );
 
-    await switchActiveProvider('other');
+    await switchActiveProvider(
+      'other',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
     expect(
-      config.getSettingsService().getProviderSettings('gemini')['base-url'],
+      settingsService.getProviderSettings('gemini')['base-url'],
     ).toBeUndefined();
   });
 
@@ -183,10 +252,16 @@ describe('Runtime Provider Switching Integration', () => {
     const providerA = createMockProvider('providerA');
     providerManager.registerProvider(providerA);
 
-    providerManager.setActiveProvider('providerA');
+    await providerManager.setActiveProvider('providerA');
     providerA.clearState = vi.fn(providerA.clearState);
 
-    const result = await switchActiveProvider('providerA');
+    const result = await switchActiveProvider(
+      'providerA',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
     expect(result.changed).toBe(false);
     expect(providerA.clearState).not.toHaveBeenCalled();
   });
@@ -201,12 +276,18 @@ describe('Runtime Provider Switching Integration', () => {
     const otherProvider = createMockProvider('other');
     providerManager.registerProvider(otherProvider as never);
 
-    providerManager.setActiveProvider('other');
-    await switchActiveProvider('openai');
+    await providerManager.setActiveProvider('other');
+    await switchActiveProvider(
+      'openai',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
 
     const openaiSettings = settingsService.getProviderSettings('openai');
     expect(openaiSettings.model).toBe('gpt-5.5');
-    expect(config.getModel()).toBe('gpt-5.5');
+    expect(sessionRoot.settingsOwner.readSelectedModel()).toBe('gpt-5.5');
   });
 
   it('clears legacy base URL and resets model when switching back to provider', async () => {
@@ -217,24 +298,41 @@ describe('Runtime Provider Switching Integration', () => {
     providerManager.registerProvider(providerA);
     providerManager.registerProvider(providerB);
 
-    providerManager.setActiveProvider('providerA');
+    await providerManager.setActiveProvider('providerA');
     settingsService.setProviderSetting(
       'providerA',
       'base-url',
       'https://legacy.example/v1',
     );
     settingsService.setProviderSetting('providerA', 'model', 'legacy-model');
-    config.setEphemeralSetting('base-url', 'https://legacy.example/v1');
-    config.setModel('legacy-model');
+    sessionRoot.agent.setEphemeralSetting(
+      'base-url',
+      'https://legacy.example/v1',
+    );
+    sessionRoot.settingsOwner.chooseModel('legacy-model');
 
-    await switchActiveProvider('providerB');
-    await switchActiveProvider('providerA');
+    await switchActiveProvider(
+      'providerB',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
+    await switchActiveProvider(
+      'providerA',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
 
     const refreshedSettings = settingsService.getProviderSettings('providerA');
     expect(refreshedSettings['base-url']).toBeUndefined();
     expect(refreshedSettings.model).toBe('providerA-default');
-    expect(config.getModel()).toBe('providerA-default');
-    expect(config.getEphemeralSetting('base-url')).toBeUndefined();
+    expect(sessionRoot.settingsOwner.readSelectedModel()).toBe(
+      'providerA-default',
+    );
+    expect(sessionRoot.agent.getEphemeralSetting('base-url')).toBeUndefined();
   });
 
   it('does not call getModels during provider switch', async () => {
@@ -244,9 +342,15 @@ describe('Runtime Provider Switching Integration', () => {
 
     providerManager.registerProvider(providerA);
     providerManager.registerProvider(providerB);
-    providerManager.setActiveProvider('providerA');
+    await providerManager.setActiveProvider('providerA');
 
-    const result = await switchActiveProvider('providerB');
+    const result = await switchActiveProvider(
+      'providerB',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
 
     expect(result.changed).toBe(true);
     expect(result.nextProvider).toBe('providerB');
@@ -261,22 +365,32 @@ describe('Runtime Provider Switching Integration', () => {
 
     providerManager.registerProvider(providerA);
     providerManager.registerProvider(providerB);
-    providerManager.setActiveProvider('providerA');
+    await providerManager.setActiveProvider('providerA');
 
-    await switchActiveProvider('providerB');
+    await switchActiveProvider(
+      'providerB',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
 
-    expect(config.getModel()).toBe('custom-default-model');
+    expect(sessionRoot.settingsOwner.readSelectedModel()).toBe(
+      'custom-default-model',
+    );
   });
 });
 
 describe('First provider selection from no active provider (#2481)', () => {
   let tempDir: string;
   let config: Config;
-  let providerManager: ProviderManager;
+  let sessionRoot: CliTestSessionRoot;
+  let providerManager: RuntimeProviderManager;
   let settingsService: SettingsService;
+  let registration: CliRuntimeRegistrationHandle;
+  let sessionClient: Pick<Agent['sessionClient'], 'refreshAuth'>;
 
   beforeEach(async () => {
-    resetDefaultCliRuntimeIdForTesting();
     tempDir = await createTempDirectory();
 
     config = new Config({
@@ -286,40 +400,28 @@ describe('First provider selection from no active provider (#2481)', () => {
       cwd: tempDir,
       model: 'test-model',
     });
-    await initializeTestConfig(config);
-
-    settingsService = config.getSettingsService();
-    const runtime = createProviderRuntimeContext({
+    settingsService = new SettingsService();
+    const assembled = assembleCliProviderRuntime({
       settingsService,
       config,
+      runtimeId: 'first-select-test',
       metadata: { source: 'first-select-test' },
     });
-    const runtimeMessageBus = new MessageBus(
-      config.getPolicyEngine(),
-      config.getDebugMode(),
-    );
-    const { manager, oauthManager } = createProviderManager(runtime, {
-      allowBrowserEnvironment: true,
+    providerManager = assembled.providerManager;
+    registration = assembled.registration;
+    sessionRoot = await initializeTestSessionRoot(
       config,
-      runtimeMessageBus,
-    });
-    providerManager = manager;
-    setCliRuntimeContext(settingsService, config, {
-      runtimeId: 'first-select-test',
-      metadata: { source: 'first-select-test' },
-    });
-    registerCliProviderInfrastructure(providerManager, oauthManager, {
-      messageBus: runtimeMessageBus,
-      runtimeId: 'first-select-test',
-    });
+      providerManager,
+      settingsService,
+    );
+    sessionClient = sessionRoot.agent.sessionClient;
 
     providerManager.registerProvider(createMockProvider('openai'));
     providerManager.registerProvider(createMockProvider('anthropic'));
   });
 
   afterEach(async () => {
-    resetCliProviderInfrastructure();
-    resetDefaultCliRuntimeIdForTesting();
+    registration.dispose();
     await cleanupTempDirectory(tempDir);
   });
 
@@ -331,7 +433,13 @@ describe('First provider selection from no active provider (#2481)', () => {
   it('transitions from no active provider to an explicit selection', async () => {
     expect(providerManager.hasActiveProvider()).toBe(false);
 
-    const result = await switchActiveProvider('openai');
+    const result = await switchActiveProvider(
+      'openai',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
 
     expect(result.changed).toBe(true);
     expect(result.previousProvider).toBeNull();
@@ -347,7 +455,13 @@ describe('First provider selection from no active provider (#2481)', () => {
     setGlobal('fetch', fetchMock);
 
     try {
-      await switchActiveProvider('anthropic');
+      await switchActiveProvider(
+        'anthropic',
+        {},
+        ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+          sessionClient.refreshAuth(),
+        )),
+      );
       expect(fetchMock).not.toHaveBeenCalled();
     } finally {
       restoreGlobals();
@@ -355,10 +469,22 @@ describe('First provider selection from no active provider (#2481)', () => {
   });
 
   it('permits a subsequent switch to another explicit provider', async () => {
-    await switchActiveProvider('openai');
+    await switchActiveProvider(
+      'openai',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
     expect(providerManager.getActiveProviderName()).toBe('openai');
 
-    const result = await switchActiveProvider('anthropic');
+    const result = await switchActiveProvider(
+      'anthropic',
+      {},
+      ...(await providerSwitchInputs(sessionRoot, providerManager, () =>
+        sessionClient.refreshAuth(),
+      )),
+    );
     expect(result.changed).toBe(true);
     expect(result.previousProvider).toBe('openai');
     expect(result.nextProvider).toBe('anthropic');

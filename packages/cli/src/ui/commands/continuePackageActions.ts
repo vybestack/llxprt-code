@@ -4,17 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  describeUnreadableRecording,
-  exportSessionMediaPackage,
-  matchUnreadableRecordings,
-  SessionDiscovery,
-  validateSessionMediaPackage,
-  withRecordingFailureReport,
-} from '@vybestack/llxprt-code-core';
-import { basename } from 'node:path';
+import { validateSessionMediaPackage } from '@vybestack/llxprt-code-core';
 import type { CommandContext, SlashCommandActionReturn } from './types.js';
-import { warnUnreadableRecordings } from '../utils/warnUnreadableRecordings.js';
 
 type PackageAction =
   | { readonly kind: 'import'; readonly packageDirectory: string }
@@ -85,53 +76,11 @@ async function exportPackage(
   ctx: CommandContext,
   action: Extract<PackageAction, { kind: 'export' }>,
 ): Promise<SlashCommandActionReturn> {
-  const config = ctx.services.config;
-  if (config === null) throw new Error('Session configuration is unavailable');
-  const chatsDir = config.storage.getProjectChatsDir();
-  const projectHash = basename(config.storage.getProjectTempDir());
-  const mediaStore = config.getLocalMediaStore();
-  const { targets, unreadableRecordings } =
-    await SessionDiscovery.listContinueTargetsDetailed(
-      chatsDir,
-      projectHash,
-      mediaStore,
-    );
-  warnUnreadableRecordings('/continue export', unreadableRecordings);
-  const resolved = SessionDiscovery.resolveContinueRef(
-    action.sessionRef,
-    targets,
-  );
-  if ('error' in resolved) {
-    const named = matchUnreadableRecordings(
-      action.sessionRef,
-      resolved.error,
-      unreadableRecordings,
-    );
-    throw new Error(
-      named.length === 0
-        ? resolved.error
-        : `${resolved.error} (unreadable recording skipped: ${named.map(describeUnreadableRecording).join('; ')})`,
-    );
-  }
-  const source =
-    resolved.target.kind === 'session'
-      ? resolved.target.session
-      : resolved.target.source;
-  const activeRecording = config.getSessionRecordingService?.();
-  if (activeRecording?.getSessionId() === source.sessionId) {
-    if (ctx.recordingIntegration !== undefined) {
-      await withRecordingFailureReport(
-        ctx.recordingIntegration.flushAtTurnBoundary(),
-      );
-    }
-    await activeRecording.flush();
-  }
-  await exportSessionMediaPackage(
-    source.filePath,
-    projectHash,
-    mediaStore,
-    action.destination,
-  );
+  if (ctx.services.config === null)
+    throw new Error('Session configuration is unavailable');
+  const agent = ctx.services.agent;
+  if (agent === null) throw new Error('Session agent is unavailable');
+  await agent.session.exportSession(action.sessionRef, action.destination);
   return {
     type: 'message',
     messageType: 'info',

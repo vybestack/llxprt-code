@@ -38,10 +38,11 @@ export async function readTransportRows(
 /** Reads the transport rows and resolves their media. */
 export async function openTransportRowsMedia(
   options: NormalizedGenerateChatOptions,
+  media: Parameters<typeof resolveRequestMedia>[0],
 ): Promise<ResolvedMediaRequest> {
   const history = await readTransportRows(options);
   const mediaRequest = await resolveRequestMedia(
-    options.runtime,
+    media,
     history,
     getRequestSignal(options),
   );

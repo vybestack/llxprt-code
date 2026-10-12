@@ -8,9 +8,14 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createSessionSettingsFixture } from '../../../agents/src/api/__tests__/helpers/session-settings-fixture.js';
+import { createConfigParams } from '../../../agents/src/core/chatSession-runtime-helpers.js';
 import { ChatSession } from '../../../agents/src/core/chatSession.js';
 import { accountingRow } from '../../../core/src/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { createMockCommandContext } from './mockCommandContext.js';
@@ -49,8 +54,15 @@ export class PublicCursorHistory extends HistoryService {
 }
 
 export function publicChat(history: HistoryService): ChatSession {
-  const { config, runtime } = createChatSessionRuntime();
+  const settingsService = new SettingsService();
+  const config = new Config(createConfigParams(settingsService));
+  const { runtime, providerManager } = createChatSessionRuntime({
+    settingsService,
+  });
+  const settings = createSessionSettingsFixture(config, settingsService);
   const context = createAgentRuntimeContext({
+    prepareProviderInvocation: (name, parameters, signal) =>
+      captureProviderInvocation(runtime, name, parameters, signal),
     state: createAgentRuntimeState({
       runtimeId: 'public-cursor',
       provider: 'test-provider',
@@ -59,8 +71,8 @@ export function publicChat(history: HistoryService): ChatSession {
     }),
     history,
     settings: {},
-    provider: createProviderAdapterFromManager(config.getProviderManager()),
-    telemetry: createTelemetryAdapterFromConfig(config),
+    provider: createProviderAdapterFromManager(providerManager),
+    telemetry: createTelemetryAdapter(config, settings.settingsOwner.telemetry),
     tools: createToolRegistryViewFromRegistry(undefined),
     providerRuntime: runtime,
   });
@@ -87,13 +99,14 @@ export function publicCommandContext(
   return createMockCommandContext({
     signal,
     services: {
-      config: {
-        getAgentClient: () => ({
+      config: {},
+      agent: {
+        agentClient: {
           hasChatInitialized: () => true,
           getChat: () => chat,
           getHistory: (_curated?: false, historySignal?: AbortSignal) =>
             chat.streamHistory(historySignal),
-        }),
+        },
       },
     },
   });

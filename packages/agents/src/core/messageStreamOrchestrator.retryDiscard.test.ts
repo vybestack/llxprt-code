@@ -196,6 +196,7 @@ function buildHarness(options: BuildOptions): Harness {
     loopDetector: createLoopDetector(),
     todoContinuationService: createTodoContinuationDeps(),
     ideContextTracker: {
+      isEnabled: () => false,
       getContextParts: vi.fn().mockReturnValue({
         contextParts: [],
         newIdeContext: undefined,

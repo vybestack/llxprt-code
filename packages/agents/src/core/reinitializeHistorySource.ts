@@ -1,10 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { DeferredHistorySourceOptions } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { ChatSession } from './chatSession.js';
-import { prepareDeferredHistorySource } from './deferredHistorySource.js';
+import {
+  prepareDeferredHistorySource,
+  type DeferredHistoryDeps,
+} from './deferredHistorySource.js';
 import {
   releaseDeferredArray,
   type RetainedHistoryAdmission,
@@ -23,7 +25,7 @@ interface ReinitializePublication {
 
 export async function transferReinitializedHistory(
   chat: ChatSession,
-  config: Config,
+  deps: DeferredHistoryDeps,
   runtime: AgentRuntimeState,
   options: DeferredHistorySourceOptions,
   publication: ReinitializePublication,
@@ -33,7 +35,7 @@ export async function transferReinitializedHistory(
   options.signal?.throwIfAborted();
   const candidate = await prepareDeferredHistorySource(
     chat.streamHistory(options.signal),
-    config,
+    deps,
     runtime,
     undefined,
     options,

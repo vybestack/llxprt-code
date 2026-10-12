@@ -1,4 +1,7 @@
 /// <reference lib="esnext.array" />
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -8,6 +11,8 @@
  * Sibling to chatSession.thinking-toolcalls.test.ts (split to avoid file-level
  * max-lines/no-console disable).
  */
+import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
+const modelTools = installModelToolFixture();
 
 import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { afterAll, describe, it, expect, vi, beforeEach } from 'bun:test';
@@ -27,7 +32,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import type {
@@ -79,7 +84,7 @@ describe('Issue #1150 REPRO: thinking/tool-call round-trip and history persisten
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    config.setProviderManager(manager);
+    configureProviderRuntimeFactories(config, manager);
   });
 
   it(
@@ -253,6 +258,8 @@ function createThinkingChat(
     sessionId: config.getSessionId(),
   });
   const view = createAgentRuntimeContext({
+    prepareProviderInvocation: (name, parameters, signal) =>
+      captureProviderInvocation(providerRuntime, name, parameters, signal),
     state: runtimeState,
     history: historyService,
     settings: {
@@ -261,9 +268,12 @@ function createThinkingChat(
       preserveThreshold: 0.2,
       telemetry: { enabled: true, target: null },
     },
-    provider: createProviderAdapterFromManager(config.getProviderManager()),
-    telemetry: createTelemetryAdapterFromConfig(config),
-    tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+    provider: createProviderAdapterFromManager(manager),
+    telemetry: createTelemetryAdapter(
+      config,
+      createSessionSettingsFixture(config).settingsOwner.telemetry,
+    ),
+    tools: createToolRegistryViewFromRegistry(modelTools()),
     providerRuntime: { ...providerRuntime },
   });
   return new ChatSession(view, {} as unknown as ContentGenerator, {}, []);

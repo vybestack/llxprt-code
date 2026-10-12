@@ -15,34 +15,25 @@ import {
   type ToolCall,
   type EditorType,
   type LiveOutputUpdate,
-  type MessageBus,
   accumulateLiveOutput,
 } from '@vybestack/llxprt-code-core';
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 
 import type { HistoryItemWithoutId } from '../types.js';
 import { ToolCallStatus } from '../types.js';
-import type { StreamRuntime } from '../cliUiRuntime.js';
-// @plan:ISSUE-2376 — scheduler construction lives in the runtime layer, out of
-// cli/src/ui. This hook is a pure renderer that consumes the narrow handle and
-// registers its React display callbacks via SchedulerRefs.
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import {
   type InteractiveSchedulerHandle,
   type PendingScheduleRequests,
   type SchedulerRefs,
   normalizeRequest,
   useScheduler,
-  useExternalSchedulerRegistration,
+  useChildToolDisplay,
 } from '../../runtime/interactiveToolScheduler.js';
 
-/**
- * The scheduler + session slice of the #2384 CliUiRuntime this hook needs.
- * Scheduler construction itself lives in the runtime layer
- * (interactiveToolScheduler.ts); this hook only forwards the runtime access.
- *
- * @plan:ISSUE-2376
- */
-type ReactToolSchedulerRuntime = Pick<StreamRuntime, 'scheduler' | 'session'>;
+type ReactToolSchedulerRuntime = {
+  readonly agent: Agent;
+};
 
 export type ScheduleFn = (
   request: ToolCallRequestInfo | ToolCallRequestInfo[],
@@ -486,7 +477,6 @@ export function useReactToolScheduler(
   getPreferredEditor: () => EditorType | undefined,
   onEditorClose: () => void,
   onEditorOpen: () => void = () => {},
-  runtimeMessageBus?: MessageBus,
 ): ReactToolSchedulerResult {
   const [toolCallsByScheduler, setToolCallsByScheduler] = useState<
     Map<symbol, TrackedToolCall[]>
@@ -513,19 +503,13 @@ export function useReactToolScheduler(
   });
 
   const scheduler = useScheduler(
-    runtime,
+    runtime.agent,
     mainSchedulerId,
     refs,
-    runtimeMessageBus,
     pendingScheduleRequests,
   );
 
-  useExternalSchedulerRegistration(
-    runtime,
-    refs,
-    runtimeMessageBus,
-    setExternalSchedulerRegistered,
-  );
+  useChildToolDisplay(runtime.agent, refs, setExternalSchedulerRegistered);
 
   const schedule = useScheduleFn(scheduler, pendingScheduleRequests);
   const markToolsAsDisplayCleared = useMarkToolsAsDisplayCleared(

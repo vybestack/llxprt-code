@@ -79,6 +79,10 @@ describe('doesToolInvocationMatch', () => {
       setApprovalMode: () => {},
       isInteractive: () => false,
       hasFeatureFlag: () => false,
+      runSearch: <T>(
+        _directories: readonly string[],
+        operation: () => Promise<T>,
+      ): Promise<T> => operation(),
       getFileService: () => ({
         shouldGitIgnoreFile: () => false,
         shouldLlxprtIgnoreFile: () => false,

@@ -1,3 +1,7 @@
+import {
+  captureResponsesTestRequest,
+  type ResponsesTestDeps,
+} from './responses-request.test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -21,10 +25,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  executeOpenAIResponsesRequest,
-  type ResponsesExecutorDeps,
-} from './openAIResponsesExecutor.js';
+import { executeOpenAIResponsesRequest } from './openAIResponsesExecutor.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { IModel } from '../IModel.js';
@@ -121,8 +122,9 @@ function buildNormalizedOptions(
   });
   const config = createRuntimeConfigStub(settings, {});
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
+
     providerName: 'openai-responses',
     ephemeralsSnapshot: ephemerals,
     fallbackRuntimeId: 'test-runtime',
@@ -152,21 +154,21 @@ function buildNormalizedOptions(
 }
 
 function buildDeps(
-  overrides: Partial<ResponsesExecutorDeps> = {},
-): ResponsesExecutorDeps {
+  overrides: Partial<ResponsesTestDeps> = {},
+): ResponsesTestDeps {
   return {
     providerName: 'openai-responses',
     logger: {
       debug: () => undefined,
-    } as unknown as ResponsesExecutorDeps['logger'],
-    getProviderBaseURL: () => 'https://api.openai.com/v1',
-    getCustomHeaders: () => undefined,
+    } as unknown as ResponsesTestDeps['logger'],
+    requestBaseURL: 'https://api.openai.com/v1',
+    requestHeaders: undefined,
     isCodexMode: () => false,
     getCodexAccountId: async () => 'codex-account',
     resolveAuthTokenForPrompt: async () => '',
     shouldRetryOnError: () => true,
-    getDefaultModel: () => 'gpt-5',
-    getGlobalConfig: () => undefined,
+    defaultModel: 'gpt-5',
+
     getUnallowedModelParameters: () => new Set<string>(),
     ...overrides,
   };
@@ -188,7 +190,7 @@ function isNormalizedOptions(
   );
 }
 
-function createExecutorProvider(deps: ResponsesExecutorDeps): IProvider {
+function createExecutorProvider(deps: ResponsesTestDeps): IProvider {
   return {
     name: 'openai-responses',
     async *generateChatCompletion(
@@ -198,7 +200,10 @@ function createExecutorProvider(deps: ResponsesExecutorDeps): IProvider {
         throw new Error('test provider requires normalized options');
       }
       yield* executeOpenAIResponsesRequest(
-        { ...options, contents: await collectContents(options.contents) },
+        captureResponsesTestRequest(
+          { ...options, contents: await collectContents(options.contents) },
+          deps,
+        ),
         deps,
       );
     },
@@ -246,7 +251,10 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC1/AC2', () =>
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { messages, error } = await drainWithPossibleRejection(
-      executeOpenAIResponsesRequest(options, buildDeps()),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps()),
+        buildDeps(),
+      ),
     );
 
     expect(messages).toHaveLength(1);
@@ -265,7 +273,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC1/AC2', () =>
     });
     const messages: IContent[] = [];
     for await (const chunk of executeOpenAIResponsesRequest(
-      options,
+      captureResponsesTestRequest(options, buildDeps()),
       buildDeps(),
     )) {
       messages.push(chunk);
@@ -322,7 +330,10 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC3', () => {
     );
     const options = buildNormalizedOptions();
     const { error } = await drainWithPossibleRejection(
-      executeOpenAIResponsesRequest(options, buildDeps()),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps()),
+        buildDeps(),
+      ),
     );
 
     expect(error).toBeInstanceOf(Error);
@@ -344,7 +355,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC3', () => {
     const options = buildNormalizedOptions();
     const messages: IContent[] = [];
     for await (const chunk of executeOpenAIResponsesRequest(
-      options,
+      captureResponsesTestRequest(options, buildDeps()),
       buildDeps(),
     )) {
       messages.push(chunk);
@@ -418,7 +429,10 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC4 terminal', 
       );
       const options = buildNormalizedOptions();
       const { messages, error } = await drainWithPossibleRejection(
-        executeOpenAIResponsesRequest(options, buildDeps()),
+        executeOpenAIResponsesRequest(
+          captureResponsesTestRequest(options, buildDeps()),
+          buildDeps(),
+        ),
       );
 
       expect(error).toBeUndefined();
@@ -444,7 +458,10 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC4 boundaries'
         }),
     );
     const single = await drainWithPossibleRejection(
-      executeOpenAIResponsesRequest(buildNormalizedOptions(), buildDeps()),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(buildNormalizedOptions(), buildDeps()),
+        buildDeps(),
+      ),
     );
     fetchMock.restore();
     fetchMock = undefined;
@@ -454,7 +471,10 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC4 boundaries'
       async () => new Response(encodeSse([fixture.event, CREATED_EVENT])),
     );
     const split = await drainWithPossibleRejection(
-      executeOpenAIResponsesRequest(buildNormalizedOptions(), buildDeps()),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(buildNormalizedOptions(), buildDeps()),
+        buildDeps(),
+      ),
     );
 
     // Both packings must succeed and carry the same terminal metadata,
@@ -486,7 +506,10 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC4 boundaries'
     );
     const options = buildNormalizedOptions();
     const { error } = await drainWithPossibleRejection(
-      executeOpenAIResponsesRequest(options, buildDeps()),
+      executeOpenAIResponsesRequest(
+        captureResponsesTestRequest(options, buildDeps()),
+        buildDeps(),
+      ),
     );
 
     expect(error).toBeInstanceOf(Error);

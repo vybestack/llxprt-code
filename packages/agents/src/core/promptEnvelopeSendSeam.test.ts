@@ -45,10 +45,11 @@ async function awaitsProjectionCleanupBeforeEstimationFailure(): Promise<void> {
   };
   const runtime = createChatSessionRuntime({ provider });
 
-  const error = await prepareAtSendSeam(provider, {
-    contents: [],
-    config: runtime.config,
-  }).catch((reason: unknown) => reason);
+  const error = await prepareAtSendSeam(
+    provider,
+    { contents: [] },
+    runtime.tokenizerFactory,
+  ).catch((reason: unknown) => reason);
 
   expect(error).toBeInstanceOf(Error);
   expect(cleanupEvents).toStrictEqual(['released']);

@@ -1,9 +1,17 @@
 /// <reference lib="esnext.array" />
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
+const modelTools = installModelToolFixture();
 
 /**
  * History/tool-call behaviors for ChatSession runtime context.
@@ -29,7 +37,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
@@ -56,7 +64,7 @@ function setupHistoryRuntime(): void {
 
   manager = new TestRuntimeProviderManager(providerRuntime);
   manager.setConfig(config);
-  config.setProviderManager(manager);
+  configureProviderRuntimeFactories(config, manager);
 }
 
 function createHistoryChat(
@@ -76,6 +84,8 @@ function createHistoryChat(
     sessionId: options.sessionId ?? config.getSessionId(),
   });
   const view = createAgentRuntimeContext({
+    prepareProviderInvocation: (name, parameters, signal) =>
+      captureProviderInvocation(providerRuntime, name, parameters, signal),
     state,
     history: historyService,
     settings: options.settings ?? {
@@ -85,9 +95,12 @@ function createHistoryChat(
       telemetry: { enabled: true, target: null },
       'reasoning.includeInContext': true,
     },
-    provider: createProviderAdapterFromManager(config.getProviderManager()),
-    telemetry: createTelemetryAdapterFromConfig(config),
-    tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+    provider: createProviderAdapterFromManager(manager),
+    telemetry: createTelemetryAdapter(
+      config,
+      createSessionSettingsFixture(config).settingsOwner.telemetry,
+    ),
+    tools: createToolRegistryViewFromRegistry(modelTools()),
     providerRuntime: { ...providerRuntime },
   });
   return new ChatSession(view, {} as unknown as ContentGenerator, {}, []);

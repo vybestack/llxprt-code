@@ -1,8 +1,17 @@
+import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import { fixtureToolSelection } from './subagentOrchestrator-test-helpers.js';
+
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
 
 /**
  * Behavioral tests proving the foreground session's live `dumpcontext` mode is
@@ -15,22 +24,19 @@
  * runtime activation seams to keep LB provider activation deterministic.
  */
 
-import { afterEach, describe, expect, it, vi } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import * as runtimeModule from '@vybestack/llxprt-code-providers/runtime.js';
+
 import * as profileApplicationModule from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
 import type { SubAgentScope } from '../subagent.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import { createRuntimeBundle } from './subagentOrchestrator-test-helpers.js';
-
-// handle.activate() uses a persistent enterWith that leaks the AsyncLocalStorage
-// store across tests; reset between every test so each launch starts from a
-// clean runtime identity.
 
 const subagentConfig: SubagentConfig = {
   name: 'helper',
@@ -67,16 +73,6 @@ const memberProfile: Profile = {
   ephemeralSettings: { 'auth-key': 'member-key' },
 };
 
-const loadBalancerActivation = {
-  providerName: 'load-balancer',
-  modelName: 'load-balancer',
-  infoMessages: [],
-  warnings: [],
-  providerChanged: true,
-  didFallback: false,
-  requestedProvider: 'load-balancer',
-};
-
 function loadBalancerScope(): SubAgentScope {
   return {
     runtimeContext: createRuntimeBundle('lb').runtimeContext,
@@ -84,21 +80,15 @@ function loadBalancerScope(): SubAgentScope {
   } as unknown as SubAgentScope;
 }
 
-import { makeRecordingInputs } from './subagent-journal-fixture.js';
-
-function makeConfigWithSettings(settings: SettingsService): Config {
-  return {
-    ...makeRecordingInputs(),
-    getSessionId: () => 'primary-session',
-    getProvider: () => 'gemini',
-    getContentGeneratorConfig: () => undefined,
-    getModel: () => 'gemini-1.5-flash',
-    getToolRegistry: () => undefined,
-    getSettingsService: () => settings,
-    getEphemeralSetting: (key: string) => settings.get(key),
-    setEphemeralSetting: (key: string, value: unknown) =>
-      settings.set(key, value),
-  } as unknown as Config;
+function makeForegroundConfig(): Config {
+  return new Config({
+    sessionId: 'primary-session',
+    provider: 'gemini',
+    model: 'gemini-1.5-flash',
+    cwd: process.cwd(),
+    targetDir: process.cwd(),
+    debugMode: false,
+  });
 }
 
 async function launchSubagent(
@@ -107,10 +97,11 @@ async function launchSubagent(
 ): Promise<{
   isolatedSettings: SettingsService;
   dispose: () => Promise<void>;
+  childRuntimeId: string;
 }> {
   const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
   const loadProfile = vi.fn().mockResolvedValue(profile);
-  const runtimeLoader = vi.fn().mockResolvedValue(createRuntimeBundle('sess'));
+  const runtimeLoader = vi.fn(async () => createRuntimeBundle('sess'));
   const scope = {
     runtimeContext: createRuntimeBundle('sess').runtimeContext,
     getAgentId: () => 'helper-1',
@@ -119,10 +110,24 @@ async function launchSubagent(
     .fn<typeof SubAgentScope.create>()
     .mockResolvedValue(scope);
 
+  const foregroundRoot1 = makeForegroundConfig();
+  const foregroundSettings1 = createSessionSettingsFixture(
+    foregroundRoot1,
+    foregroundSettings,
+  );
   const orchestrator = new SubagentOrchestrator({
+    workspaceTrust: foregroundSettings1.workspaceTrust,
+    createChildSettings: () =>
+      foregroundSettings1.settingsOwner.createChildStore(),
+    readRunPolicy: () =>
+      foregroundSettings1.settingsOwner.readSubagentRunPolicy(),
+    toolRegistry: fixtureToolSelection(),
+    workspacePaths: fixturePaths(),
+    readMcpInstructions: () => undefined,
+    instructions: emptyInstructionReads,
     subagentManager: { loadSubagent } as unknown as SubagentManager,
     profileManager: { loadProfile } as unknown as ProfileManager,
-    foregroundConfig: makeConfigWithSettings(foregroundSettings),
+    foregroundConfig: foregroundRoot1,
     scopeFactory,
     runtimeLoader,
     messageBus: new MessageBus(),
@@ -132,16 +137,31 @@ async function launchSubagent(
   const isolatedSettings = runtimeLoader.mock.calls[0][0].profile
     .providerRuntime.settingsService as SettingsService;
 
-  return { isolatedSettings, dispose: result.dispose };
-}
-
-function resetRuntime(): void {
-  runtimeModule.resetRuntimeScopeForTesting();
-  runtimeModule.resetCliRuntimeRegistryForTesting();
+  return {
+    isolatedSettings,
+    dispose: result.dispose,
+    childRuntimeId:
+      runtimeLoader.mock.calls[0][0].profile.providerRuntime.runtimeId,
+  };
 }
 
 describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () => {
-  afterEach(resetRuntime);
+  it('loads a child under its own explicit runtime without borrowing foreground secrets', async () => {
+    const foreground = new SettingsService();
+    foreground.set('auth-key', 'foreground-secret');
+    const { childRuntimeId, isolatedSettings, dispose } =
+      await launchSubagent(foreground);
+    try {
+      expect(childRuntimeId).not.toBe('primary-session');
+      expect(childRuntimeId).toContain('helper');
+      expect(isolatedSettings.get('auth-key')).toBe('subagent-key');
+      expect(
+        JSON.stringify(isolatedSettings.getAllGlobalSettings()),
+      ).not.toContain('foreground-secret');
+    } finally {
+      await dispose();
+    }
+  });
 
   it('inherits the foreground on mode in the isolated settings service', async () => {
     const foreground = new SettingsService();
@@ -192,7 +212,6 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
 });
 
 describe('SubagentOrchestrator — live dumpcontext inheritance (#3151)', () => {
-  afterEach(resetRuntime);
   it('observes live foreground on -> off -> error changes on later reads', async () => {
     const foreground = new SettingsService();
     foreground.setSessionScoped('dumpcontext', 'on');
@@ -252,7 +271,6 @@ describe('SubagentOrchestrator — live dumpcontext inheritance (#3151)', () => 
 });
 
 describe('SubagentOrchestrator — dumpcontext isolation (#3151)', () => {
-  afterEach(resetRuntime);
   it('does not inherit unrelated foreground ephemerals into the isolated service', async () => {
     const foreground = new SettingsService();
     foreground.setSessionScoped('dumpcontext', 'on');
@@ -289,16 +307,15 @@ describe('SubagentOrchestrator — dumpcontext isolation (#3151)', () => {
 });
 
 describe('SubagentOrchestrator — load-balancer dumpcontext inheritance (#3151)', () => {
-  afterEach(resetRuntime);
   it('inherits the foreground dumpcontext for a load-balancer subagent', async () => {
     // Launch a genuine load-balancer profile through SubagentOrchestrator.launch
     // so the private createRuntimeBundle load-balancer branch is exercised end
     // to end. The real LB provider/client activation (which intermittently
     // hangs on agent client initialisation) is avoided deterministically by
-    // spying on the createIsolatedRuntimeContext and applyProfileWithGuards
-    // seams. The mocked isolated handle retains the production settingsService
-    // passed by the orchestrator, so the runtime loader receives and exposes
-    // the service constructed by production code.
+    // spying on the createIsolatedRuntimeContext seam and observing
+    // applyProfileCascade. The mocked isolated handle retains the production
+    // settingsService passed by the orchestrator, so the runtime loader
+    // receives and exposes the service constructed by production code.
     const foreground = new SettingsService();
     foreground.setSessionScoped('dumpcontext', 'on');
 
@@ -318,6 +335,7 @@ describe('SubagentOrchestrator — load-balancer dumpcontext inheritance (#3151)
       .mockResolvedValue(loadBalancerScope());
 
     let capturedSettings: SettingsService | undefined;
+    const createIsolatedRuntime = runtimeModule.createIsolatedRuntimeContext;
     const isolatedSpy = vi
       .spyOn(runtimeModule, 'createIsolatedRuntimeContext')
       .mockImplementation(
@@ -325,32 +343,36 @@ describe('SubagentOrchestrator — load-balancer dumpcontext inheritance (#3151)
           options: Parameters<
             typeof runtimeModule.createIsolatedRuntimeContext
           >[0],
+          settingsService: SettingsService,
         ) => {
-          const settingsService = options.config.getSettingsService();
           capturedSettings = settingsService;
-          return {
-            runtimeId: options.runtimeId ?? 'lb-isolated',
-            metadata: options.metadata ?? { source: 'test' },
-            settingsService,
-            config: options.config,
-            providerManager: {},
-            oauthManager: {},
-            activate: vi.fn().mockResolvedValue(undefined),
-            cleanup: vi.fn().mockResolvedValue(undefined),
-          } as unknown as ReturnType<
-            typeof runtimeModule.createIsolatedRuntimeContext
-          >;
+          return createIsolatedRuntime(options, settingsService);
         },
       );
-    const applyProfileSpy = vi
-      .spyOn(profileApplicationModule, 'applyProfileWithGuards')
-      .mockResolvedValue(loadBalancerActivation);
+    const applyProfileSpy = vi.spyOn(
+      profileApplicationModule,
+      'applyProfileCascade',
+    );
 
     try {
+      const foregroundRoot2 = makeForegroundConfig();
+      const foregroundSettings2 = createSessionSettingsFixture(
+        foregroundRoot2,
+        foreground,
+      );
       const orchestrator = new SubagentOrchestrator({
+        workspaceTrust: foregroundSettings2.workspaceTrust,
+        createChildSettings: () =>
+          foregroundSettings2.settingsOwner.createChildStore(),
+        readRunPolicy: () =>
+          foregroundSettings2.settingsOwner.readSubagentRunPolicy(),
+        toolRegistry: fixtureToolSelection(),
+        workspacePaths: fixturePaths(),
+        readMcpInstructions: () => undefined,
+        instructions: emptyInstructionReads,
         subagentManager: { loadSubagent } as unknown as SubagentManager,
         profileManager: { loadProfile } as unknown as ProfileManager,
-        foregroundConfig: makeConfigWithSettings(foreground),
+        foregroundConfig: foregroundRoot2,
         scopeFactory,
         runtimeLoader,
         messageBus: new MessageBus(),
@@ -360,10 +382,10 @@ describe('SubagentOrchestrator — load-balancer dumpcontext inheritance (#3151)
         name: subagentConfig.name,
       });
 
-      // The LB activation seam was selected/called (applyProfileWithGuards)
-      // rather than the ordinary executeProviderActivation path.
       expect(applyProfileSpy).toHaveBeenCalledTimes(1);
-      expect(applyProfileSpy.mock.calls[0][0]).toBe(loadBalancerProfile);
+      expect(applyProfileSpy.mock.calls[0][0]).toStrictEqual(
+        loadBalancerProfile,
+      );
 
       // The runtime loader receives the foreground on mode through the
       // production-constructed isolated settings service.

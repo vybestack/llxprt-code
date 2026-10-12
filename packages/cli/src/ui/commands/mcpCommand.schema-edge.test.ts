@@ -3,15 +3,12 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { unsupportedApprovalPolicy } from '../../../../mcp/src/client/test-support/approval-policy.js';
 
-import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
+import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { mcpCommand } from './mcpCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import {
-  MCPServerStatus,
-  getMCPServerStatus,
-  DiscoveredMCPTool,
-} from '@vybestack/llxprt-code-mcp';
+import { MCPServerStatus, DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 import type { MessageActionReturn } from './types.js';
 import type {
   Agent,
@@ -25,8 +22,6 @@ void vi.mock('open', () => ({ default: vi.fn() }));
 const actual = { ...(await import('@vybestack/llxprt-code-mcp')) };
 void vi.mock('@vybestack/llxprt-code-mcp', () => ({
   ...actual,
-  getMCPServerStatus: vi.fn(),
-  mcpServerRequiresOAuth: new Map<string, boolean>(),
   MCPOAuthProvider: { authenticate: vi.fn() },
   MCPOAuthTokenStorage: {
     getToken: vi.fn(),
@@ -54,9 +49,10 @@ const createMockMCPTool = (
   description?: string,
 ) =>
   new DiscoveredMCPTool(
+    unsupportedApprovalPolicy(),
     { callTool: vi.fn(), tool: vi.fn() } as unknown as ConstructorParameters<
       typeof DiscoveredMCPTool
-    >[0],
+    >[1],
     serverName,
     serverToolName,
     description === undefined || description === ''
@@ -82,58 +78,66 @@ function projectToolToInfo(tool: DiscoveredMCPTool): ToolInfo {
   };
 }
 
-function createMockAgent(tools: DiscoveredMCPTool[] = []): Agent {
-  const toolsByServer = new Map<string, ToolInfo[]>();
-  for (const tool of tools) {
-    const bucket = toolsByServer.get(tool.serverName) ?? [];
-    bucket.push(projectToolToInfo(tool));
-    toolsByServer.set(tool.serverName, bucket);
-  }
-  const servers: McpServerDetail[] = [...toolsByServer.keys()].map((name) => ({
-    name,
-    authenticated: false,
-    requiresAuth: false,
-    oauthStatus: 'not-required' as const,
-    sessionAuthenticated: false,
-    tools: toolsByServer.get(name) ?? [],
-  }));
-  const detailStatus: McpDetailStatus = { servers, blockedServers: [] };
-  return {
-    mcp: {
-      details: vi.fn().mockResolvedValue(detailStatus),
-      refresh: vi.fn().mockResolvedValue(undefined),
-      status: vi.fn(),
-      listServers: vi.fn().mockReturnValue([]),
-      toolsByServer: vi.fn().mockReturnValue({}),
-      auth: vi.fn(),
-      discoveryState: vi.fn().mockReturnValue('ready'),
-      authenticate: vi.fn(),
-    },
-    tools: {
-      list: vi.fn().mockReturnValue([]),
-      get: vi.fn(),
-      setEnabled: vi.fn(),
-      onConfirmationRequest: vi.fn(),
-      respondToConfirmation: vi.fn(),
-      onToolUpdate: vi.fn(),
-      setEditorCallbacks: vi.fn(),
-      keys: {} as never,
-    },
-  } as unknown as Agent;
-}
-
 describe('mcpCommand', () => {
   let mockConfig: {
     getMcpServers: ReturnType<typeof vi.fn>;
     getBlockedMcpServers: ReturnType<typeof vi.fn>;
   };
 
+  const readServerStatus = vi.fn<(name: string) => MCPServerStatus>();
+
+  function createMockAgent(tools: DiscoveredMCPTool[] = []): Agent {
+    const toolsByServer = new Map<string, ToolInfo[]>();
+    for (const tool of tools) {
+      const bucket = toolsByServer.get(tool.serverName) ?? [];
+      bucket.push(projectToolToInfo(tool));
+      toolsByServer.set(tool.serverName, bucket);
+    }
+    const servers: McpServerDetail[] = [...toolsByServer.keys()].map(
+      (name) => ({
+        name,
+        authenticated: false,
+        requiresAuth: false,
+        oauthStatus: 'not-required' as const,
+        sessionAuthenticated: false,
+        tools: toolsByServer.get(name) ?? [],
+      }),
+    );
+    const detailStatus: McpDetailStatus = { servers, blockedServers: [] };
+    return {
+      mcp: {
+        details: vi.fn().mockResolvedValue(detailStatus),
+        refresh: vi.fn().mockResolvedValue(undefined),
+        status: vi.fn(),
+        listBlockedServers: () => detailStatus.blockedServers,
+        listServers: () =>
+          Object.keys(mockConfig.getMcpServers()).map((name) => ({
+            name,
+            status: readServerStatus(name),
+            config: mockConfig.getMcpServers()[name],
+          })),
+        toolsByServer: vi.fn().mockReturnValue({}),
+        auth: vi.fn(),
+        discoveryState: vi.fn().mockReturnValue('ready'),
+        authenticate: vi.fn(),
+      },
+      tools: {
+        list: vi.fn().mockReturnValue([]),
+        get: vi.fn(),
+        setEnabled: vi.fn(),
+        onConfirmationRequest: vi.fn(),
+        respondToConfirmation: vi.fn(),
+        onToolUpdate: vi.fn(),
+        setEditorCallbacks: vi.fn(),
+        keys: {} as never,
+      },
+    } as unknown as Agent;
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.SANDBOX;
-    (getMCPServerStatus as Mock<typeof getMCPServerStatus>).mockReturnValue(
-      MCPServerStatus.CONNECTED,
-    );
+    readServerStatus.mockReturnValue(MCPServerStatus.CONNECTED);
     mockConfig = {
       getMcpServers: vi.fn().mockReturnValue({}),
       getBlockedMcpServers: vi.fn().mockReturnValue([]),
@@ -150,10 +154,11 @@ describe('mcpCommand', () => {
       });
 
       const tool1 = new DiscoveredMCPTool(
+        unsupportedApprovalPolicy(),
         {
           callTool: vi.fn(),
           tool: vi.fn(),
-        } as unknown as ConstructorParameters<typeof DiscoveredMCPTool>[0],
+        } as unknown as ConstructorParameters<typeof DiscoveredMCPTool>[1],
         'server1',
         'tool1',
         'This is tool 1 description',
@@ -168,10 +173,11 @@ describe('mcpCommand', () => {
       );
 
       const tool2 = new DiscoveredMCPTool(
+        unsupportedApprovalPolicy(),
         {
           callTool: vi.fn(),
           tool: vi.fn(),
-        } as unknown as ConstructorParameters<typeof DiscoveredMCPTool>[0],
+        } as unknown as ConstructorParameters<typeof DiscoveredMCPTool>[1],
         'server1',
         'tool2',
         'This is tool 2 description',
@@ -218,10 +224,11 @@ describe('mcpCommand', () => {
       // exercising the no-parameter-schema path (createMockMCPTool always
       // supplies an object schema, which would not).
       const toolWithoutSchema = new DiscoveredMCPTool(
+        unsupportedApprovalPolicy(),
         {
           callTool: vi.fn(),
           tool: vi.fn(),
-        } as unknown as ConstructorParameters<typeof DiscoveredMCPTool>[0],
+        } as unknown as ConstructorParameters<typeof DiscoveredMCPTool>[1],
         'server1',
         'tool1',
         'Tool without schema',

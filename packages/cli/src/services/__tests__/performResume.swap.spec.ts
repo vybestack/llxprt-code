@@ -17,7 +17,7 @@ import { collectRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-import { HistoryService } from '../../../../core/src/services/history/HistoryService.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { RecordingIntegration } from '@vybestack/llxprt-code-core';
 import {
   performResume,

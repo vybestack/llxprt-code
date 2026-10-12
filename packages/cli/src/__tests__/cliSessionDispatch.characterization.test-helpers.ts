@@ -6,6 +6,10 @@
 import { vi } from 'bun:test';
 import { __setWriteToStderrForTesting } from '../session/errorReporting.js';
 import { __setRenderForTesting } from '../session/interactiveUI.js';
+import { createUiSessionOwner } from './uiSessionOwner.js';
+import { createMinimalConfig } from './dispatch-settings-fixture.js';
+
+export { createMinimalConfig };
 
 // ---------------------------------------------------------------------------
 // Safe-seam dependency mocks for heavyweight externals.
@@ -23,7 +27,7 @@ export const dispatchTrace: string[] = [];
 void vi.mock('../cliAgentBootstrap.js', () => ({
   createForegroundAgent: vi.fn(async () => {
     dispatchTrace.push('createForegroundAgent');
-    return { fake: true } as unknown;
+    return { fake: true, workspace: createUiSessionOwner().workspace };
   }),
 }));
 
@@ -119,30 +123,6 @@ export function findStartupWarningsProp(node: unknown): unknown[] | undefined {
 // heavyweight runtime objects.
 // ---------------------------------------------------------------------------
 
-export function createMinimalConfig(options: {
-  interactive: boolean;
-  question?: string;
-  outputFormat?: string;
-}): unknown {
-  return {
-    isInteractive: () => options.interactive,
-    getQuestion: () => options.question ?? '',
-    getOutputFormat: () => options.outputFormat ?? 'text',
-    getProvider: () => undefined,
-    getProviderManager: () => undefined,
-    getModel: () => undefined,
-    getProjectRoot: () => '/tmp/test-project',
-    getTerminalBackground: () => '#000000',
-    getDebugMode: () => false,
-    getScreenReader: () => false,
-    getSessionId: () => 'test-session',
-    refreshAuth: vi.fn(async () => {}),
-    setEphemeralSetting: vi.fn(),
-    getEphemeralSetting: vi.fn(() => undefined),
-    getTelemetrySettings: () => ({ perf: { enabled: false, memory: false } }),
-  };
-}
-
 export function createMinimalSettings(options?: {
   hideWindowTitle?: boolean;
   enableMouseEvents?: boolean;
@@ -169,19 +149,9 @@ export function createMinimalSettings(options?: {
 // returning an empty output object ({} — no systemMessage/additionalContext).
 // Without it the runner throws before reaching runNonInteractive and the
 // dispatch-branch traces would never record the runner.
-/** The resolved-recording argument dispatch receives when nothing was resumed. */
-export function emptyRecording(startupWarnings: string[] = []): never {
-  return {
-    recordingIntegration: undefined,
-    resumedBoot: undefined,
-    recordingService: undefined,
-    startupWarnings,
-    resumedLockHandle: null,
-  } as never;
-}
-
 export function createFakeAgent(): unknown {
   return {
+    workspace: createUiSessionOwner().workspace,
     getMessageBus: () => ({}) as never,
     hooks: {
       triggerSessionStart: vi.fn(async () => ({})),

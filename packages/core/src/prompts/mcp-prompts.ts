@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Config } from '../config/config.js';
+import type { WorkspacePromptSelection } from '../services/workspace-mcp-catalog-owner.js';
 import { type DiscoveredMCPPrompt } from '@vybestack/llxprt-code-mcp';
 
 export function getMCPServerPrompts(
-  config: Config,
+  selection: WorkspacePromptSelection,
   serverName: string,
 ): DiscoveredMCPPrompt[] {
-  return config.getPromptRegistry().getPromptsByServer(serverName);
+  return selection.listPrompts(serverName);
 }

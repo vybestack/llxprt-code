@@ -11,7 +11,6 @@
  */
 
 import {
-  flushRuntimeAuthScope,
   type OAuthToken,
   type OAuthTokenRequestMetadata,
 } from '@vybestack/llxprt-code-auth';
@@ -651,10 +650,10 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
       );
 
       // @fix issue1658
-      // After a successful foreground reauth, eagerly authenticate any
-      // remaining unauthenticated buckets so subsequent failovers do not
-      // trigger additional mid-turn browser prompts. Best-effort: a failure
-      // here must not block the already-successful primary reauth.
+      // Prepare the remaining buckets now so later failovers do not trigger
+      // additional mid-turn browser prompts. Best-effort: a failure here must
+      // not block the already-successful primary reauth.
+      if (isAborted(signal)) return true;
       try {
         await this.ensureBucketsAuthenticated();
       } catch (eagerAuthError) {
@@ -801,14 +800,5 @@ export class BucketFailoverHandlerImpl implements BucketFailoverHandler {
 
   getAuthRetryTimeoutMs(): number {
     return this.configuredAuthRetryTimeoutMs;
-  }
-
-  /**
-   * Invalidate the auth cache for a runtime, forcing fresh keychain reads.
-   * Called at turn boundaries and after auth errors.
-   */
-  invalidateAuthCache(runtimeId: string): void {
-    flushRuntimeAuthScope(runtimeId);
-    logger.debug('Auth cache invalidated for runtime', { runtimeId });
   }
 }

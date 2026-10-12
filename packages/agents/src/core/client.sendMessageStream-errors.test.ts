@@ -277,16 +277,13 @@ const observeEscalatesToContextWindowEnforcement = async ({
   client['chat'] = mockChat as ChatSession;
 
   const initialRequest = [{ type: 'text', text: 'Hi' }];
+  const signal = new AbortController().signal;
   // A rejected compression must not crash the stream; the retry still runs.
   const events = await fromAsync(
-    client.sendMessageStream(
-      initialRequest,
-      new AbortController().signal,
-      promptId,
-    ),
+    client.sendMessageStream(initialRequest, signal, promptId),
   );
 
-  return { mockChat, promptId, events };
+  return { mockChat, promptId, signal, events };
 };
 
 const observeStopRecursingAfterOneRetryWhen413ErrorsAreRepeatedlyReceived =
@@ -321,11 +318,7 @@ const observeStopRecursingAfterOneRetryWhen413ErrorsAreRepeatedlyReceived =
     const stream = client.sendMessageStream(initialRequest, signal, promptId);
     const events = await fromAsync(stream);
 
-    // Assert: 1 ModelInfo + exactly 2 Error events (original + 1 retry), no infinite loop
-
-    // turn.run should be called exactly twice
-
-    // The guarded retry must not compress a second time (REQ-3251-3)
+    // The discarded initial 413 is absent; the repeated 413 remains terminal.
 
     const typeObservation = events[0]?.type;
     const stopRecursingAfterOneRetryWhen413ErrorsAreRepeatedlyReceivedObservation2 =
@@ -399,7 +392,7 @@ const verifyCompressionEscalation = async ({
   label,
   result,
 }: (typeof compressionEscalationCases)[number]) => {
-  const { mockChat, promptId, events } =
+  const { mockChat, promptId, signal, events } =
     await observeEscalatesToContextWindowEnforcement({
       label,
       result,
@@ -409,7 +402,8 @@ const verifyCompressionEscalation = async ({
   expect(mockTurnRunFn).toHaveBeenNthCalledWith(
     2,
     [{ speaker: 'human', blocks: [{ type: 'text', text: 'Hi' }] }],
-    expect.any(Object),
+    signal,
+    undefined,
   );
   expect(events).toContainEqual({
     type: AgentEventType.Content,
@@ -601,12 +595,9 @@ async function testMediaRetry(): Promise<void> {
       filename: 'chart.png',
     },
   ];
+  const signal = new AbortController().signal;
   const events = await fromAsync(
-    client.sendMessageStream(
-      initialRequest,
-      new AbortController().signal,
-      promptId,
-    ),
+    client.sendMessageStream(initialRequest, signal, promptId),
   );
 
   expect(mockTurnRunFn).toHaveBeenCalledTimes(2);
@@ -623,7 +614,8 @@ async function testMediaRetry(): Promise<void> {
         ],
       },
     ],
-    expect.any(Object),
+    signal,
+    undefined,
   );
   expect(mockChat.performCompression).not.toHaveBeenCalled();
   expect(mockChat.enforceContextWindow).not.toHaveBeenCalled();
@@ -773,7 +765,7 @@ async function testOneRetryOnly(): Promise<void> {
     stopRecursingAfterOneRetryWhen413ErrorsAreRepeatedlyReceivedObservation2,
   } =
     await observeStopRecursingAfterOneRetryWhen413ErrorsAreRepeatedlyReceived();
-  expect(events.length).toBe(3);
+  expect(events.length).toBe(2);
   expect(typeObservation).toBe(AgentEventType.ModelInfo);
   expect(
     stopRecursingAfterOneRetryWhen413ErrorsAreRepeatedlyReceivedObservation2,

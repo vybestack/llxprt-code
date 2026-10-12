@@ -1,12 +1,13 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { DeferredHistorySourceOptions } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
   admitDeferredHistorySource,
+  bindDeferredHistoryTokenizer,
   prepareDeferredHistorySource,
+  type DeferredHistoryDeps,
 } from './deferredHistorySource.js';
 import {
   releaseDeferredArray,
@@ -21,7 +22,7 @@ export async function replaceDeferredClientSource(
 ): Promise<void> {
   const admitted = await prepareDeferredHistorySource(
     source,
-    replacement.config,
+    replacement.deps,
     replacement.runtime,
     replacement.existing,
     options,
@@ -36,23 +37,31 @@ export async function replaceDeferredClientSource(
   );
 }
 
-import type { AgentChatContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
+
+/** The live chat's array replacement, which carries the publishing origin. */
+interface ChatHistoryReplacement {
+  setHistory(
+    history: readonly IContent[],
+    historyOrigin?: object,
+  ): Promise<void>;
+}
 
 export function replaceClientArrayHistory(
   history: readonly IContent[],
-  chat: AgentChatContract | undefined,
+  chat: ChatHistoryReplacement | undefined,
   admissions: RetainedHistoryAdmissions,
   prior: RetainedHistoryAdmission | undefined,
   replaceDeferred: (history: readonly IContent[]) => Promise<void>,
   publish: () => void,
   stripThoughts: boolean,
+  historyOrigin?: object,
 ): Promise<void> {
   const rows = stripThoughts
     ? historyWithoutThoughtSignatures(history)
     : history;
   if (chat === undefined) return replaceDeferred(rows);
   return publishClientArrayHistory(
-    chat.setHistory(rows),
+    chat.setHistory(rows, historyOrigin),
     admissions,
     prior,
     publish,
@@ -88,7 +97,7 @@ export function historyWithoutThoughtSignatures(
 }
 
 interface Replacement {
-  readonly config: Config;
+  readonly deps: DeferredHistoryDeps;
   readonly runtime: AgentRuntimeState;
   readonly existing?: HistoryService;
   readonly admissions: RetainedHistoryAdmissions;
@@ -103,7 +112,7 @@ export async function replaceClientHistorySource(
   initialized: boolean,
   replacement: Replacement,
 ): Promise<void> {
-  const { existing, config, runtime } = replacement;
+  const { existing, deps, runtime } = replacement;
   const journal =
     initialized && existing !== undefined
       ? existing
@@ -113,8 +122,7 @@ export async function replaceClientHistorySource(
         });
   const detached = journal !== existing;
   if (detached) {
-    const factory = config.getTokenizerFactory();
-    if (factory) journal.setTokenizerFactory(factory);
+    bindDeferredHistoryTokenizer(journal, deps);
     journal.setActiveTokenizationTarget(runtime.model, runtime.provider);
   }
   let release: () => Promise<void>;
@@ -122,7 +130,7 @@ export async function replaceClientHistorySource(
     release = await admitDeferredHistorySource(
       journal,
       source,
-      config.getLocalMediaStore(),
+      deps.mediaStore,
       options,
       runtime.model,
     );

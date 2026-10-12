@@ -5,7 +5,6 @@
  */
 
 import {
-  ideContext,
   type IdeContext,
   type File,
 } from '@vybestack/llxprt-code-ide-integration';
@@ -19,11 +18,15 @@ import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 export class IdeContextTracker {
   private lastSentIdeContext: IdeContext | undefined;
   private forceFullIdeContext = true;
+  private readEnabled: () => boolean = () => false;
 
   private readonly logger: DebugLogger;
-  private readonly config: Config;
+  private readonly config: Pick<Config, 'getDebugMode'>;
 
-  constructor(config: Config) {
+  constructor(
+    config: Pick<Config, 'getDebugMode'>,
+    private readContext: () => IdeContext | undefined = () => undefined,
+  ) {
     this.config = config;
     this.logger = new DebugLogger('llxprt:core:ideContextTracker');
   }
@@ -31,6 +34,19 @@ export class IdeContextTracker {
   /**
    * Forces the next call to getContextParts to return a full context snapshot.
    */
+  bindContext(
+    read: () => IdeContext | undefined,
+    enabled: () => boolean,
+  ): void {
+    this.readContext = read;
+    this.readEnabled = enabled;
+    this.resetContext();
+  }
+
+  isEnabled(): boolean {
+    return this.readEnabled();
+  }
+
   resetContext(): void {
     this.forceFullIdeContext = true;
   }
@@ -57,7 +73,7 @@ export class IdeContextTracker {
     contextParts: string[];
     newIdeContext: IdeContext | undefined;
   } {
-    const currentIdeContext = ideContext.getIdeContext();
+    const currentIdeContext = this.readContext();
     if (!currentIdeContext) {
       return { contextParts: [], newIdeContext: undefined };
     }
@@ -115,7 +131,7 @@ export class IdeContextTracker {
     contextParts: string[];
     newIdeContext: IdeContext | undefined;
   } {
-    const currentIdeContext = ideContext.getIdeContext();
+    const currentIdeContext = this.readContext();
     if (!currentIdeContext || !this.lastSentIdeContext) {
       return { contextParts: [], newIdeContext: currentIdeContext };
     }

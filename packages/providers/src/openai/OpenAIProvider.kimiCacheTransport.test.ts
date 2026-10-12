@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
+import { bindProviderFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderFiles.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -16,13 +18,9 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createOpenAIAliasProvider } from '../composition/aliasProviderFactory.js';
 import type { ProviderAliasEntry } from '../composition/providerAliases.js';
 import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
+import { ProviderFileLifecycle } from '../providerFilePolicy.js';
 import { OpenAIProvider } from './OpenAIProvider.js';
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
-import {
-  resetCliRuntimeRegistryForTesting,
-  runtimeRegistry,
-  upsertRuntimeEntry,
-} from '../runtime/runtimeRegistry.js';
 
 function inputUrl(input: string | URL | Request): string {
   if (typeof input === 'string') return input;
@@ -90,15 +88,27 @@ async function send(
   settings: SettingsService,
   contents: IContent[],
   runtimeId: string,
+  lifecycle = new ProviderFileLifecycle({
+    maxFiles: 100,
+    maxBytes: 512 * 1024 * 1024,
+  }),
 ): Promise<IContent[]> {
-  if (!runtimeRegistry.has(runtimeId)) upsertRuntimeEntry(runtimeId, {});
   const output: IContent[] = [];
-  const iterator = provider.generateChatCompletion(
+  const iterator = bindProviderFiles(
+    provider,
+    undefined,
+    lifecycle,
+    '/workspace/test',
+  ).generateChatCompletion(
     streamCallOptions({
       providerName: 'kimi',
       settings,
       contents,
-      runtimeId,
+      runtime: {
+        settingsService: settings,
+        runtimeId,
+        providerFileLifecycle: lifecycle,
+      },
       configOverrides: { getTargetDir: () => '/workspace/test' },
       systemInstruction: 'stable system prompt',
       ephemerals: { streaming: 'disabled' },
@@ -144,7 +154,6 @@ const originalFetch = globalThis.fetch;
 describe('OpenAIProvider', () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
-    resetCliRuntimeRegistryForTesting();
   });
 
   /**
@@ -177,6 +186,125 @@ describe('OpenAIProvider', () => {
 
 function registerProviderBehavior1(): void {
   describe('provider fixture 1', () => {
+    it('rejects an opted-in file request without an owner lifecycle before transport', async () => {
+      let requests = 0;
+      globalThis.fetch = Object.assign(
+        async () => {
+          requests += 1;
+          return new Response('unexpected transport', { status: 500 });
+        },
+        { preconnect: originalFetch.preconnect },
+      );
+      const settings = new SettingsService();
+      settings.set('provider-files', 'session');
+      settings.set('kimi.experimental-video', true);
+      const options = streamCallOptions({
+        providerName: 'kimi',
+        settings,
+        contents: mediaHistory(false),
+        runtimeId: 'unbound-file-owner',
+        resolved: {
+          model: 'kimi-k3',
+          baseURL: 'https://api.kimi.test/v1',
+          authToken: 'test-key',
+        },
+      });
+      const consume = async (): Promise<void> => {
+        for await (const content of createKimiProvider().generateChatCompletion(
+          options,
+        )) {
+          void content;
+        }
+      };
+      await expect(consume()).rejects.toThrow(
+        'require an owner-bound lifecycle',
+      );
+      expect(requests).toBe(0);
+    });
+
+    it('uses each request owner lifecycle for same-label files without a runtime registry', async () => {
+      let fileCount = 0;
+      globalThis.fetch = routedFetch([
+        {
+          match: '/files',
+          respond: () => {
+            fileCount += 1;
+            if (fileCount === 1) {
+              return new Response('transient upload failure', { status: 429 });
+            }
+            return Response.json({
+              id: `owner-file-${fileCount}`,
+              object: 'file',
+              bytes: 5,
+              created_at: 1,
+              filename: 'clip.mp4',
+              purpose: 'video',
+              status: 'processed',
+            });
+          },
+        },
+        {
+          match: '/chat/completions',
+          respond: () =>
+            Response.json({
+              id: 'owner-chat',
+              object: 'chat.completion',
+              created: 1,
+              model: 'kimi-k3',
+              choices: [
+                {
+                  index: 0,
+                  message: { role: 'assistant', content: 'ok' },
+                  finish_reason: 'stop',
+                },
+              ],
+            }),
+        },
+      ]);
+      const settings = new SettingsService();
+      settings.set('provider-files', 'session');
+      settings.set('kimi.experimental-video', true);
+      const lifecycles = [
+        new ProviderFileLifecycle({ maxFiles: 10, maxBytes: 1024 }),
+        new ProviderFileLifecycle({ maxFiles: 10, maxBytes: 1024 }),
+      ];
+      const provider = createKimiProvider();
+      const sendOwned = async (
+        lifecycle: ProviderFileLifecycle,
+      ): Promise<void> => {
+        const options = streamCallOptions({
+          providerName: 'kimi',
+          settings,
+          contents: mediaHistory(false),
+          runtime: {
+            settingsService: settings,
+            runtimeId: 'same-label',
+            providerFileLifecycle: lifecycle,
+          },
+          resolved: {
+            model: 'kimi-k3',
+            baseURL: 'https://api.kimi.test/v1',
+            authToken: 'test-key',
+          },
+          ephemerals: { streaming: 'disabled' },
+        });
+        for await (const content of bindProviderFiles(
+          provider,
+          undefined,
+          lifecycle,
+          '/workspace/test',
+        ).generateChatCompletion(options)) {
+          void content;
+        }
+      };
+      await expect(sendOwned(lifecycles[0])).rejects.toThrow('429');
+      await Promise.all(lifecycles.map(sendOwned));
+      expect(
+        lifecycles.map((lifecycle) => lifecycle.snapshot().retainedFiles),
+      ).toStrictEqual([1, 1]);
+      expect(fileCount).toBe(3);
+    });
+
     it('fails before chat submission when an explicitly enabled upload rejects', async () => {
       let chatSubmissions = 0;
       globalThis.fetch = routedFetch([
@@ -222,11 +350,21 @@ function registerProviderBehavior2(): void {
         ...exact,
         { speaker: 'human', blocks: [{ type: 'text', text: 'next turn' }] },
       ];
+      const lifecycle = new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 512 * 1024 * 1024,
+      });
       const outputs = [
-        await send(provider, settings, exact, 'runtime-a'),
-        await send(provider, settings, exact, 'runtime-a'),
-        await send(provider, settings, appended, 'runtime-a'),
-        await send(provider, settings, mediaHistory(false), 'runtime-a'),
+        await send(provider, settings, exact, 'runtime-a', lifecycle),
+        await send(provider, settings, exact, 'runtime-a', lifecycle),
+        await send(provider, settings, appended, 'runtime-a', lifecycle),
+        await send(
+          provider,
+          settings,
+          mediaHistory(false),
+          'runtime-a',
+          lifecycle,
+        ),
         await send(provider, settings, mediaHistory(false), 'runtime-b'),
       ];
 
@@ -330,10 +468,14 @@ function registerProviderBehavior3(): void {
         },
       ];
 
-      await send(provider, settings, contents, 'runtime-files');
+      const lifecycle = new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 512 * 1024 * 1024,
+      });
+      await send(provider, settings, contents, 'runtime-files', lifecycle);
       const requestsBeforeOptIn = [...requestedUrls];
       settings.set('provider-files', 'workspace');
-      await send(provider, settings, contents, 'runtime-files');
+      await send(provider, settings, contents, 'runtime-files', lifecycle);
 
       const chatRequests = recorded.filter((body) =>
         body.includes('"messages"'),
@@ -376,7 +518,10 @@ function registerProviderBehavior4(): void {
         },
       ];
       const runtimeId = 'runtime-projection';
-      upsertRuntimeEntry(runtimeId, {});
+      const lifecycle = new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 512 * 1024 * 1024,
+      });
       const options = streamCallOptions({
         providerName: 'kimi',
         settings,
@@ -384,6 +529,7 @@ function registerProviderBehavior4(): void {
         runtime: {
           settingsService: settings,
           runtimeId,
+          providerFileLifecycle: lifecycle,
           providerFileBindings: {
             bind: async (_contentId, reference) => {
               boundFileIds.push(reference.fileId);
@@ -405,7 +551,22 @@ function registerProviderBehavior4(): void {
         },
       });
 
-      const projection = await provider.projectPromptEnvelope(options);
+      const projection = await bindProviderFiles(
+        provider,
+        {
+          bind: async (_contentId, reference) => {
+            boundFileIds.push(reference.fileId);
+          },
+          unbind: async (_contentId, reference) => {
+            const retained = boundFileIds.filter(
+              (fileId) => fileId !== reference.fileId,
+            );
+            boundFileIds.splice(0, boundFileIds.length, ...retained);
+          },
+        },
+        lifecycle,
+        '/workspace/test',
+      ).projectPromptEnvelope(options);
       for await (const content of provider.generateChatCompletion({
         ...options,
         promptEnvelopeTransportToken: projection.transportToken,
@@ -426,8 +587,11 @@ function registerProviderBehavior5(): void {
   describe('provider fixture 5', () => {
     it('propagates provider-file maintenance failures without switching transport', async () => {
       const runtimeId = 'runtime-maintenance-failure';
-      const entry = upsertRuntimeEntry(runtimeId, {});
-      const retained = await entry.providerFileLifecycle.retain({
+      const lifecycle = new ProviderFileLifecycle({
+        maxFiles: 100,
+        maxBytes: 512 * 1024 * 1024,
+      });
+      const retained = await lifecycle.retain({
         cacheKey: 'failed-cleanup-content',
         fileId: 'failed-cleanup-file',
         bytes: 3,
@@ -449,7 +613,7 @@ function registerProviderBehavior5(): void {
         },
       });
       await retained.lease.release();
-      await entry.providerFileLifecycle.cleanupScope('session', runtimeId);
+      await lifecycle.cleanupScope('session', runtimeId);
       globalThis.fetch = Object.assign(
         async () => {
           throw new Error('transport must not run after maintenance failure');
@@ -476,6 +640,7 @@ function registerProviderBehavior5(): void {
           },
         ],
         runtimeId,
+        lifecycle,
       );
 
       await expect(request).rejects.toThrow('failed-cleanup-file');
@@ -603,9 +768,11 @@ function registerProviderBehavior7(): void {
 
         const error = await (async (): Promise<unknown> => {
           try {
-            for await (const content of provider.generateChatCompletion(
-              options,
-            )) {
+            for await (const content of bindProviderMedia(
+              provider,
+              resolver,
+              reference.normalizedBase64Length,
+            ).generateChatCompletion(options)) {
               void content;
             }
             return undefined;

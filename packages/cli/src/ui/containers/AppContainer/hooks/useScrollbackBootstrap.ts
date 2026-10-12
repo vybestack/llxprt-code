@@ -38,7 +38,6 @@ import {
   SCROLLBACK_PURGE_DEBOUNCE_MS,
 } from '../../../../constants/scrollbackLimits.js';
 import type { LoadedSettings } from '../../../../config/settings.js';
-import type { RecordingSwapCallbacks } from '../../../../services/performResume.js';
 import { MessageType, type HistoryItemWithoutId } from '../../../types.js';
 
 const SCROLLBACK_UNAVAILABLE_NOTICE = 'scrollback unavailable: no journal';
@@ -52,9 +51,18 @@ export interface ScrollbackPagerBinding {
   readonly viewport: ScrollbackViewportReporter;
 }
 
+/**
+ * What the pager needs from the active recording owner: the journal path.
+ * The raw recorder exposes it through its swap callbacks; the Agent owner
+ * exposes it through `agent.session.getRecording()`.
+ */
+export interface JournalPathSource {
+  getCurrentRecording(): { getFilePath(): string | null } | null;
+}
+
 export interface UseScrollbackBootstrapOptions {
   readonly settings: LoadedSettings;
-  readonly recordingSwapCallbacks: RecordingSwapCallbacks;
+  readonly recordingSwapCallbacks: JournalPathSource;
   readonly addItem: (item: HistoryItemWithoutId, timestamp?: number) => number;
 }
 
@@ -108,7 +116,7 @@ type ScrollbackBootOutcome =
  */
 function resolveBootOutcome(
   settings: LoadedSettings,
-  recordingSwapCallbacks: RecordingSwapCallbacks,
+  recordingSwapCallbacks: JournalPathSource,
   enabled: boolean,
 ): ScrollbackBootOutcome {
   if (!enabled) {

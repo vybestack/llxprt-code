@@ -20,15 +20,11 @@ const mockRuntime = {
   clearActiveModelParam: vi.fn(),
 };
 
-void vi.mock('../../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => mockRuntime,
-}));
-
 describe('setCommand - load balancer settings', () => {
   let context: CommandContext;
 
   beforeEach(() => {
-    context = createMockCommandContext();
+    context = createMockCommandContext({ runtimeApi: mockRuntime });
     vi.clearAllMocks();
   });
 

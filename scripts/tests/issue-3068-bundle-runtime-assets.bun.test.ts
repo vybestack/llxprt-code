@@ -24,6 +24,7 @@
  * to run in normal CI.
  */
 
+import { createBundleBuildFixture } from './bundle-build-fixture.js';
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import {
@@ -45,7 +46,9 @@ import { stageCliBundleAssets } from '../copy_bundle_assets.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = resolve(__filename, '..', '..', '..');
-const bundleDir = join(repoRoot, 'packages', 'cli', 'bundle');
+const buildFixture = createBundleBuildFixture(repoRoot);
+const buildRoot = buildFixture.root;
+const bundleDir = join(buildRoot, 'packages', 'cli', 'bundle');
 const bundlePath = join(bundleDir, 'llxprt.js');
 
 /** Lists regular file names directly inside a directory. */
@@ -93,7 +96,7 @@ function buildRealBundle(): void {
     process.execPath,
     ['scripts/bun-build.config.ts', '--cli-only'],
     {
-      cwd: repoRoot,
+      cwd: buildRoot,
       encoding: 'utf8',
       timeout: 120_000,
       env: { ...process.env, CI: 'true' },
@@ -148,9 +151,7 @@ describe('issue #3068: CLI bundle ships its runtime assets', () => {
   }, 260_000);
 
   afterAll(() => {
-    // The bundle is a gitignored publish artifact; remove it so a stale build
-    // can never satisfy a future run or interfere with the launch smoke.
-    rmSync(bundleDir, { recursive: true, force: true });
+    buildFixture.dispose();
   });
 
   it('stages every required asset at its required bundle path', () => {

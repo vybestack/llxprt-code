@@ -35,10 +35,22 @@ describe('SessionPersistenceService', () => {
     });
 
     it('should create unique timestamps for different instances', async () => {
-      const service1 = new SessionPersistenceService(storage, 'session1');
+      const service1 = new SessionPersistenceService(
+        {
+          projectRoot: storage.getProjectRoot(),
+          chatsDir: storage.getProjectChatsDir(),
+        },
+        'session1',
+      );
       // Small delay to ensure different timestamp
       await new Promise((resolve) => setTimeout(resolve, 10));
-      const service2 = new SessionPersistenceService(storage, 'session2');
+      const service2 = new SessionPersistenceService(
+        {
+          projectRoot: storage.getProjectRoot(),
+          chatsDir: storage.getProjectChatsDir(),
+        },
+        'session2',
+      );
 
       expect(service1.getSessionFilePath()).not.toBe(
         service2.getSessionFilePath(),

@@ -16,14 +16,11 @@ const existingThinkingBlock: ThinkingBlock = {
 };
 
 describe('prepareTurnForQuery', () => {
-  it('runs new-turn handler steps in reset -> invalidate -> ensure order', async () => {
+  it('runs new-turn handler steps in reset -> ensure order', async () => {
     const callOrder: string[] = [];
     const handler = {
       reset: vi.fn(() => {
         callOrder.push('reset');
-      }),
-      invalidateAuthCache: vi.fn((runtimeId: string) => {
-        callOrder.push(`invalidate:${runtimeId}`);
       }),
       ensureBucketsAuthenticated: vi.fn(async () => {
         callOrder.push('ensure');
@@ -58,7 +55,6 @@ describe('prepareTurnForQuery', () => {
       'startNewPrompt',
       'setThought',
       'reset',
-      'invalidate:runtime-1739',
       'ensure',
     ]);
     expect(thinkingBlocksRef.current).toStrictEqual([]);
@@ -70,9 +66,6 @@ describe('prepareTurnForQuery', () => {
     const handler = {
       reset: vi.fn(() => {
         callOrder.push('reset');
-      }),
-      invalidateAuthCache: vi.fn((runtimeId: string) => {
-        callOrder.push(`invalidate:${runtimeId}`);
       }),
       ensureBucketsAuthenticated: vi.fn(async () => {
         callOrder.push('ensure');
@@ -104,7 +97,6 @@ describe('prepareTurnForQuery', () => {
 
     expect(callOrder).toStrictEqual(['resetSession', 'ensure']);
     expect(handler.reset).not.toHaveBeenCalled();
-    expect(handler.invalidateAuthCache).not.toHaveBeenCalled();
     expect(startNewPrompt).not.toHaveBeenCalled();
     expect(setThought).not.toHaveBeenCalled();
     expect(thinkingBlocksRef.current).toStrictEqual([existingThinkingBlock]);
@@ -115,9 +107,6 @@ describe('prepareTurnForQuery', () => {
     const handler = {
       reset: vi.fn(() => {
         callOrder.push('reset');
-      }),
-      invalidateAuthCache: vi.fn((runtimeId: string) => {
-        callOrder.push(`invalidate:${runtimeId}`);
       }),
       ensureBucketsAuthenticated: vi.fn(async () => {
         callOrder.push('ensure');
@@ -146,10 +135,6 @@ describe('prepareTurnForQuery', () => {
       } as { current: ThinkingBlock[] },
     );
 
-    expect(callOrder).toStrictEqual([
-      'reset',
-      'invalidate:bound-runtime',
-      'ensure',
-    ]);
+    expect(callOrder).toStrictEqual(['reset', 'ensure']);
   });
 });

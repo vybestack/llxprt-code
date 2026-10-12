@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, type Mock } from 'bun:test';
 
 type StreamMock = Mock<(...args: never[]) => unknown>;
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { SubAgentScope } from '../subagent.js';
 import {
   ContextState,
@@ -50,7 +51,7 @@ async function runInteractiveBestEffort(
   completedCalls: ReturnType<typeof makeCompletedCalls>;
 }> {
   const promptConfig: PromptConfig = { systemPrompt: 'Execute task.' };
-  const { config } = await createMockConfig();
+  const { config, mcpRuntime, settingsService } = await createMockConfig();
   const runConfig: RunConfig = { ...defaultRunConfig, max_turns: 1 };
   const recordCompletedToolCalls = vi.fn(() => {
     throw new Error('history write failed');
@@ -61,6 +62,7 @@ async function runInteractiveBestEffort(
   );
 
   const runtimeBundle = createStatelessRuntimeBundle({
+    settings: settingsService,
     toolsView: {
       listToolNames: () => ['external_tool'],
       getToolMetadata: () => ({
@@ -70,7 +72,10 @@ async function runInteractiveBestEffort(
       }),
     },
   });
-  const { overrides } = createRuntimeOverrides({ runtimeBundle });
+  const { overrides } = createRuntimeOverrides(
+    mcpRuntime.workspaceFilesystem.paths,
+    { settings: settingsService, runtimeBundle },
+  );
 
   const scope = await SubAgentScope.create(
     'interactive-best-effort-agent',
@@ -125,10 +130,15 @@ function registerDisposeActive(
   getMockSendMessageStream: () => StreamMock,
 ): void {
   it('should abort active operations when dispose is called', async () => {
-    const { config } = await createMockConfig();
+    const { config, mcpRuntime, settingsService } = await createMockConfig();
 
-    const runtimeBundle = createStatelessRuntimeBundle();
-    const { overrides } = createRuntimeOverrides({ runtimeBundle });
+    const runtimeBundle = createStatelessRuntimeBundle({
+      settings: settingsService,
+    });
+    const { overrides } = createRuntimeOverrides(
+      mcpRuntime.workspaceFilesystem.paths,
+      { settings: settingsService, runtimeBundle },
+    );
 
     const scope = await SubAgentScope.create(
       'test-agent',
@@ -157,7 +167,7 @@ function registerDisposeParentListener(
   getMockSendMessageStream: () => StreamMock,
 ): void {
   it('should clean up parent abort signal listener when dispose is called', async () => {
-    const { config } = await createMockConfig();
+    const { config, mcpRuntime, settingsService } = await createMockConfig();
 
     const parentAbortController = new AbortController();
     const removeEventListenerSpy = vi.spyOn(
@@ -165,8 +175,13 @@ function registerDisposeParentListener(
       'removeEventListener',
     );
 
-    const runtimeBundle = createStatelessRuntimeBundle();
-    const { overrides } = createRuntimeOverrides({ runtimeBundle });
+    const runtimeBundle = createStatelessRuntimeBundle({
+      settings: settingsService,
+    });
+    const { overrides } = createRuntimeOverrides(
+      mcpRuntime.workspaceFilesystem.paths,
+      { settings: settingsService, runtimeBundle },
+    );
 
     const scope = await SubAgentScope.create(
       'test-agent',
@@ -194,10 +209,15 @@ function registerDisposeParentListener(
 
 function registerDisposeMultiple(): void {
   it('should be safe to call dispose multiple times', async () => {
-    const { config } = await createMockConfig();
+    const { config, mcpRuntime, settingsService } = await createMockConfig();
 
-    const runtimeBundle = createStatelessRuntimeBundle();
-    const { overrides } = createRuntimeOverrides({ runtimeBundle });
+    const runtimeBundle = createStatelessRuntimeBundle({
+      settings: settingsService,
+    });
+    const { overrides } = createRuntimeOverrides(
+      mcpRuntime.workspaceFilesystem.paths,
+      { settings: settingsService, runtimeBundle },
+    );
 
     const scope = await SubAgentScope.create(
       'test-agent',
@@ -223,10 +243,15 @@ function registerDisposeAbortReference(
   getMockSendMessageStream: () => StreamMock,
 ): void {
   it('should nullify active abort controller reference', async () => {
-    const { config } = await createMockConfig();
+    const { config, mcpRuntime, settingsService } = await createMockConfig();
 
-    const runtimeBundle = createStatelessRuntimeBundle();
-    const { overrides } = createRuntimeOverrides({ runtimeBundle });
+    const runtimeBundle = createStatelessRuntimeBundle({
+      settings: settingsService,
+    });
+    const { overrides } = createRuntimeOverrides(
+      mcpRuntime.workspaceFilesystem.paths,
+      { settings: settingsService, runtimeBundle },
+    );
 
     const scope = await SubAgentScope.create(
       'test-agent',
@@ -266,14 +291,15 @@ function registerDisposeStalledRun(
 async function verifyDisposeUnblocksStalledRun(
   getMockSendMessageStream: () => StreamMock,
 ): Promise<unknown> {
-  const { config } = await createMockConfig();
+  const { config, mcpRuntime, settingsOwner, settingsService } =
+    await createMockConfig();
   // Install fake timers after config creation so config/auth setup runs on
   // real timers; fake timers freeze Date.now/performance.now/hrtime and
   // stop Bun's per-test timeout from firing.
   vi.useFakeTimers();
   // Keep the idle watchdog from firing during the test window so only dispose
   // can unblock the stalled stream consumption.
-  config.setEphemeralSetting('stream-idle-timeout-ms', 60_000);
+  settingsOwner.writeUserParameter('stream-idle-timeout-ms', 60_000);
 
   const getCapturedSignal = installStalledDisposeStream(
     getMockSendMessageStream,
@@ -284,8 +310,13 @@ async function verifyDisposeUnblocksStalledRun(
   let runPromise: Promise<void> | undefined;
   let runRejection: Promise<unknown> | undefined;
   try {
-    const runtimeBundle = createStatelessRuntimeBundle();
-    const { overrides } = createRuntimeOverrides({ runtimeBundle });
+    const runtimeBundle = createStatelessRuntimeBundle({
+      settings: settingsService,
+    });
+    const { overrides } = createRuntimeOverrides(
+      mcpRuntime.workspaceFilesystem.paths,
+      { settings: settingsService, runtimeBundle },
+    );
 
     scope = await SubAgentScope.create(
       'test-agent',
@@ -345,8 +376,11 @@ function mockFailingCompletedToolPersistence(
   (
     ChatSession as unknown as Mock<(...args: never[]) => unknown>
   ).mockImplementationOnce(
-    () =>
+    (runtime: AgentRuntimeContext) =>
       ({
+        getStreamTimeoutPolicy: () => runtime.readStreamTimeoutPolicy(),
+        shouldShowCitations: () => runtime.showCitations(),
+        getResolvedBaseUrl: () => undefined,
         sendMessageStream: getMockSendMessageStream(),
         recordCompletedToolCalls,
         getHistory: vi.fn().mockReturnValue([]),

@@ -184,7 +184,10 @@ describe('issue 3199 media memory lifecycle', () => {
         blocks: [{ type: 'text', text: 'queued before failure' }],
       });
       const persistence = new SessionPersistenceService(
-        new Storage(directory),
+        {
+          projectRoot: directory,
+          chatsDir: new Storage(directory).getProjectChatsDir(),
+        },
         'initialization-probe',
         { mediaStore: store },
       );

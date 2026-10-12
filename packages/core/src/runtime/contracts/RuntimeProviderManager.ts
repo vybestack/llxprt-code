@@ -15,6 +15,8 @@
  * @pseudocode component-boundaries.md C-CB-05, lines 50-54
  */
 
+import type { ProviderRetryOperations } from './ProviderRetryOperations.js';
+import type { RuntimeTokenizerFactory } from './RuntimeTokenizerFactory.js';
 import type { RuntimeProvider } from './RuntimeProvider.js';
 import type { RuntimeModel } from './RuntimeModel.js';
 import type { Config } from '../../config/config.js';
@@ -49,6 +51,15 @@ export interface RuntimeSessionTokenUsage {
  * @pseudocode component-boundaries.md C-CB-05, lines 50-54
  */
 export interface RuntimeProviderManager {
+  getTokenizerFactory?(): RuntimeTokenizerFactory | undefined;
+  setTokenizerFactory?(factory: RuntimeTokenizerFactory | undefined): void;
+  dispose?(): void;
+  setRetryOperationsFactory?: (
+    factory: (
+      providerName: string,
+      profileId?: string,
+    ) => ProviderRetryOperations,
+  ) => void;
   getActiveProvider(): RuntimeProvider | undefined;
   getActiveProviderName(): string | undefined;
   setActiveProvider(name: string): void | Promise<void>;
@@ -57,6 +68,7 @@ export interface RuntimeProviderManager {
   listProviders(): string[];
   getProviderByName(name: string): RuntimeProvider | undefined;
   registerProvider(provider: RuntimeProvider): void;
+  checkpointProviderRegistry(): () => void;
   prepareStatelessProviderInvocation?(runtimeContext?: unknown): unknown;
   getProviderMetrics(): RuntimeProviderMetrics;
   getSessionTokenUsage(): RuntimeSessionTokenUsage;

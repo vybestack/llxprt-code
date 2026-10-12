@@ -23,7 +23,6 @@ import {
 import { ToolErrorType } from '../../types/tool-error.js';
 import { makeRelative, shortenPath } from '../../utils/paths.js';
 import type {
-  Diagnostic,
   IToolHost,
   IIdeService,
   ILspService,
@@ -57,13 +56,6 @@ import {
   type AstValidationSummary,
   type CandidateMapping,
 } from './validation-categorizer.js';
-
-function normalizeSeverity(severity: unknown): string {
-  if (typeof severity !== 'number') {
-    return String(severity ?? 'error');
-  }
-  return severity === 1 ? 'error' : String(severity);
-}
 
 export class ASTEditToolInvocation
   implements ToolInvocation<ASTEditToolParams, ToolResult>
@@ -630,97 +622,12 @@ export class ASTEditToolInvocation
     if (!hasLspCap(this.host)) {
       return undefined;
     }
-    const lspHost = this.host;
-    const rawClient = lspHost.getLspServiceClient();
-    if (
-      typeof rawClient !== 'object' ||
-      rawClient === null ||
-      (rawClient as { isAlive?: () => boolean }).isAlive?.() !== true
-    ) {
-      return undefined;
-    }
-    const client = rawClient as {
-      isAlive?: () => boolean;
-      getDiagnostics?: (filePath: string) => unknown[];
-    };
+    const host = this.host;
     return {
-      getDiagnostics: (filePath: string) => {
-        const diagnostics = client.getDiagnostics?.(filePath) ?? [];
-        return diagnostics.map((diagnostic) => {
-          const value = diagnostic as {
-            message?: string;
-            severity?: unknown;
-            range?: { start?: { line?: number; character?: number } };
-          };
-          return {
-            message: String(value.message ?? ''),
-            severity: normalizeSeverity(value.severity),
-            line:
-              value.range?.start?.line !== undefined
-                ? value.range.start.line + 1
-                : undefined,
-            column:
-              value.range?.start?.character !== undefined
-                ? value.range.start.character + 1
-                : undefined,
-          };
-        });
-      },
-      waitForDiagnostics: async (filePath: string, timeout?: number) => {
-        const checker = client as {
-          checkFile?: (
-            filePath: string,
-            signal?: AbortSignal,
-          ) => Promise<unknown[]>;
-        };
-        if (checker.checkFile) {
-          const controller = new AbortController();
-          const timeoutId =
-            timeout !== undefined && timeout !== 0
-              ? setTimeout(() => controller.abort(), timeout)
-              : undefined;
-          try {
-            return (await checker.checkFile(filePath, controller.signal)).map(
-              (diagnostic) => this.normalizeLegacyDiagnostic(diagnostic),
-            );
-          } finally {
-            if (timeoutId) clearTimeout(timeoutId);
-          }
-        }
-        return this.getEffectiveLspService()!.getDiagnostics(filePath);
-      },
-      getLspConfig: () => lspHost.getLspConfig?.(),
-    };
-  }
-
-  private normalizeLegacyDiagnostic(diagnostic: unknown): Diagnostic {
-    const value = diagnostic as {
-      message?: string;
-      severity?: unknown;
-      line?: number;
-      column?: number;
-      code?: unknown;
-      source?: string;
-      range?: { start?: { line?: number; character?: number } };
-    };
-    return {
-      message: String(value.message ?? ''),
-      severity: normalizeSeverity(value.severity),
-      line:
-        value.line ??
-        (value.range?.start?.line !== undefined
-          ? value.range.start.line + 1
-          : undefined),
-      column:
-        value.column ??
-        (value.range?.start?.character !== undefined
-          ? value.range.start.character + 1
-          : undefined),
-      code:
-        typeof value.code === 'string' || typeof value.code === 'number'
-          ? value.code
-          : undefined,
-      source: value.source,
+      getDiagnostics: () => [],
+      waitForDiagnostics: (file, timeout) =>
+        host.checkFileDiagnostics(file, timeout),
+      getLspConfig: () => host.getLspConfig?.(),
     };
   }
 

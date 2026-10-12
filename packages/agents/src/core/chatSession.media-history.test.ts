@@ -14,33 +14,28 @@ import {
   it,
   vi,
 } from 'bun:test';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ChatSession } from './chatSession.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
-import {
-  createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
-  createToolRegistryViewFromRegistry,
-} from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
-import type {
-  GenerateChatOptions,
-  IProvider,
-} from '@vybestack/llxprt-code-providers/IProvider.js';
-import {
-  requireRuntimeEntry,
-  resetCliRuntimeRegistryForTesting,
-  upsertRuntimeEntry,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeRegistry.js';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
+import {
+  mediaHistory,
+  mediaHistoryShape,
+  prefixedMediaHistory,
+} from './chatSession.media-history-fixtures.js';
+import {
+  closeMediaHistoryHarness,
+  createChat,
+  createPurgeChat,
+  findReferenceMedia,
+  harnessDirectory,
+  harnessLifecycle,
+  openMediaHistoryHarness,
+  rawRows,
+  sendOwned,
+  streamOwned,
+} from './chatSession.media-history-harness.js';
 const priorTokenLimits = {
   ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
 };
@@ -49,39 +44,6 @@ void vi.mock('@vybestack/llxprt-code-core/core/tokenLimits.js', () => ({
   tokenLimit: (model: string, userLimit?: number) =>
     userLimit ?? priorTokenLimits.tokenLimit(model),
 }));
-const PNG_BASE64 =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
-
-function mediaHistory(data = PNG_BASE64): IContent[] {
-  return [
-    {
-      speaker: 'human',
-      blocks: [
-        {
-          type: 'media',
-          mimeType: 'image/png',
-          encoding: 'base64',
-          data,
-        },
-        {
-          type: 'media',
-          mimeType: 'image/png',
-          encoding: 'url',
-          data: 'https://example.test/image.png',
-        },
-      ],
-    },
-  ];
-}
-
-function mediaHistoryShape(history: readonly IContent[]): readonly string[] {
-  return history.flatMap((content) =>
-    content.blocks.map((block) =>
-      block.type === 'media' ? block.encoding : block.type,
-    ),
-  );
-}
-
 function mediaEncodings(history: readonly IContent[]): readonly string[] {
   return history.flatMap((content) =>
     content.blocks.flatMap((block) =>
@@ -90,231 +52,19 @@ function mediaEncodings(history: readonly IContent[]): readonly string[] {
   );
 }
 
-function prefixedMediaHistory(): IContent[] {
-  return [
-    {
-      speaker: 'human',
-      blocks: [
-        { type: 'text', text: 'stable prefix' },
-        {
-          type: 'media',
-          mimeType: 'image/png',
-          encoding: 'base64',
-          data: PNG_BASE64,
-        },
-        {
-          type: 'media',
-          mimeType: 'image/png',
-          encoding: 'url',
-          data: 'https://example.test/image.png',
-        },
-      ],
-    },
-  ];
-}
-
-let directory = '';
-
-type PurgeChatOptions = {
-  readonly mode: 'off' | 'remove';
-  readonly providerName: string;
-  readonly explicitCacheBreakpoints?: boolean;
-  readonly cacheWriteTokens?: number;
-  readonly fail?: boolean;
-  readonly beforeComplete?: (requestIndex: number) => Promise<void>;
-};
-
-function createPurgeProvider(
-  options: PurgeChatOptions,
-  requests: IContent[][],
-): IProvider {
-  return {
-    name: options.providerName,
-    getDefaultModel: () => 'media-history-model',
-    getMediaTransportCapabilities: () => ({
-      durableStoredContinuation: false,
-      transportScopedContinuation: false,
-      statelessFullReplay: true,
-      explicitCacheBreakpoints: options.explicitCacheBreakpoints ?? false,
-      automaticPrefixCaching: false,
-      cacheAffinityKey: false,
-      providerFileReferences: false,
-      remoteFileRetention: 'none',
-      zeroDataRetention: 'not-applicable',
-      streamingRequestBody: false,
-    }),
-    getModels: () => Promise.resolve([]),
-    generateChatCompletion(
-      request: GenerateChatOptions | AsyncIterable<IContent>,
-    ): AsyncIterableIterator<IContent> {
-      const stream =
-        Symbol.asyncIterator in request ? request : request.contents;
-      return (async function* (): AsyncIterableIterator<IContent> {
-        const rows: IContent[] = [];
-        for await (const content of stream) {
-          rows.push(content);
-        }
-        const requestIndex = requests.length;
-        requests.push([...rows]);
-        await options.beforeComplete?.(requestIndex);
-        if (options.fail === true) throw new Error('provider failed');
-        const preparedBoundary = rows.find(
-          (content) =>
-            content.metadata?.semanticMediaPurgeBoundary !== undefined,
-        )?.metadata?.semanticMediaPurgeBoundary;
-        const cacheWriteTokens = options.cacheWriteTokens ?? 0;
-        yield {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'completed' }],
-          metadata: {
-            usage: {
-              promptTokens: 10,
-              completionTokens: 2,
-              totalTokens: 12,
-              cache_creation_input_tokens: cacheWriteTokens,
-            },
-            ...(cacheWriteTokens > 0 && preparedBoundary !== undefined
-              ? {
-                  semanticMediaPurgeCacheWriteEvidence: {
-                    boundaryId: preparedBoundary.boundaryId,
-                    preparation: 'added' as const,
-                  },
-                }
-              : {}),
-          },
-        };
-      })();
-    },
-  };
-}
-
-async function createPurgeChat(options: PurgeChatOptions): Promise<{
-  readonly chat: ChatSession;
-  readonly recording: SessionRecordingService;
-  readonly requests: readonly IContent[][];
-}> {
-  const requests: IContent[][] = [];
-  const provider = createPurgeProvider(options, requests);
-  const recording = new SessionRecordingService({
-    sessionId: `purge-${options.providerName}`,
-    projectHash: 'purge-project',
-    chatsDir: join(directory, `chats-${options.providerName}`),
-    workspaceDirs: [],
-    provider: options.providerName,
-    model: 'media-history-model',
-  });
-  const setup = createChatSessionRuntime({
-    provider,
-    configOverrides: {
-      getSessionRecordingService: () => recording,
-    },
-  });
-  setup.settingsService.set('media.semantic-purge', options.mode);
-  setup.settingsService.set('prompt-caching', '5m');
-  const history = new HistoryService();
-  const store = new LocalMediaStore({
-    rootDirectory: join(directory, `media-${options.providerName}`),
-    quotaBytes: 1024 * 1024,
-  });
-  const runtime = createAgentRuntimeContext({
-    state: createAgentRuntimeState({
-      runtimeId: `purge-${options.providerName}`,
-      provider: options.providerName,
-      model: 'media-history-model',
-      sessionId: `purge-${options.providerName}`,
-    }),
-    history,
-    settings: {
-      compressionThreshold: 0.8,
-      contextLimit: 100_000,
-      preserveThreshold: 0.2,
-      telemetry: { enabled: false, target: null },
-      'media.semantic-purge': options.mode,
-    },
-    provider: createProviderAdapterFromManager(
-      setup.config.getProviderManager(),
-    ),
-    telemetry: createTelemetryAdapterFromConfig(setup.config),
-    tools: createToolRegistryViewFromRegistry(),
-    providerRuntime: { ...setup.runtime, config: setup.config },
-    mediaStore: store,
-    mediaAdmission: new MediaAdmissionService(store),
-  });
-  const contentGenerator = {
-    generateContent: vi.fn(),
-    generateContentStream: vi.fn(),
-    countTokens: vi.fn().mockReturnValue(1),
-    embedContent: vi.fn(),
-  };
-  return {
-    chat: new ChatSession(runtime, contentGenerator, {}, []),
-    recording,
-    requests,
-  };
-}
-
-function createChat(): ChatSession {
-  const provider: IProvider = {
-    name: 'media-history-provider',
-    getDefaultModel: () => 'media-history-model',
-    getModels: () => Promise.resolve([]),
-    async *generateChatCompletion(): AsyncIterableIterator<IContent> {
-      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'unused' }] };
-    },
-  };
-  const setup = createChatSessionRuntime({ provider });
-  const history = new HistoryService();
-  const store = new LocalMediaStore({
-    rootDirectory: join(directory, 'media'),
-    quotaBytes: 1024 * 1024,
-  });
-  const state = createAgentRuntimeState({
-    runtimeId: 'media-history-runtime',
-    provider: provider.name,
-    model: 'test-model',
-    sessionId: 'media-history-session',
-  });
-  const runtime = createAgentRuntimeContext({
-    state,
-    history,
-    settings: {
-      compressionThreshold: 0.8,
-      contextLimit: 100_000,
-      preserveThreshold: 0.2,
-      telemetry: { enabled: false, target: null },
-    },
-    provider: createProviderAdapterFromManager(
-      setup.config.getProviderManager(),
-    ),
-    telemetry: createTelemetryAdapterFromConfig(setup.config),
-    tools: createToolRegistryViewFromRegistry(),
-    providerRuntime: { ...setup.runtime, config: setup.config },
-    mediaStore: store,
-    mediaAdmission: new MediaAdmissionService(store),
-  });
-  const contentGenerator = {
-    generateContent: vi.fn(),
-    generateContentStream: vi.fn(),
-    countTokens: vi.fn().mockReturnValue(1),
-    embedContent: vi.fn(),
-  };
-  return new ChatSession(runtime, contentGenerator, {}, []);
-}
-
 describe('ChatSession media history boundaries', () => {
-  beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'llxprt-chat-media-history-'));
-  });
-  afterEach(async () => {
-    resetCliRuntimeRegistryForTesting();
-    await rm(directory, { recursive: true, force: true });
-  });
+  beforeEach(openMediaHistoryHarness);
+  afterEach(closeMediaHistoryHarness);
   afterAll(() => {
     void vi.mock(
       '@vybestack/llxprt-code-core/core/tokenLimits.js',
       () => priorTokenLimits,
     );
   });
+  it(
+    'rebinds prepared chat history without recreating media admission and retires the old graph separately',
+    testMediaHistory17,
+  );
   it(
     'migrates inline local media before setHistory retains it and leaves URLs unchanged',
     testMediaHistory1,
@@ -330,6 +80,14 @@ describe('ChatSession media history boundaries', () => {
   it(
     'leaves retained history unchanged when setHistory admission fails',
     testMediaHistory4,
+  );
+  it(
+    'commits semantic media purge to the adopted live history after rebinding',
+    testMediaHistory18,
+  );
+  it(
+    'rejects an ownerless semantic purge without changing durable history',
+    testMediaHistory19,
   );
   it(
     'sends the purge candidate through the real chat send path and commits after provider success',
@@ -399,11 +157,7 @@ async function testMediaHistory2(): Promise<void> {
   const deletionBlocked = new Promise<void>((resolve) => {
     finishDeletion = resolve;
   });
-  const lifecycle = upsertRuntimeEntry(
-    'media-history-runtime',
-    {},
-  ).providerFileLifecycle;
-  const retained = await lifecycle.retain({
+  const retained = await harnessLifecycle().retain({
     cacheKey: 'chat-clear-provider-file',
     fileId: 'provider-file-for-chat-clear',
     bytes: 1,
@@ -438,7 +192,7 @@ async function testMediaHistory2(): Promise<void> {
   finishDeletion();
   await clearing;
   expect(
-    requireRuntimeEntry('media-history-runtime').providerFileLifecycle.acquire({
+    harnessLifecycle().acquire({
       cacheKey: 'chat-clear-provider-file',
       identity: {
         provider: 'test-provider',
@@ -456,11 +210,7 @@ async function testMediaHistory3(): Promise<void> {
   await chat.setHistory([
     { speaker: 'human', blocks: [{ type: 'text', text: 'retained' }] },
   ]);
-  const lifecycle = upsertRuntimeEntry(
-    'media-history-runtime',
-    {},
-  ).providerFileLifecycle;
-  const retained = await lifecycle.retain({
+  const retained = await harnessLifecycle().retain({
     cacheKey: 'chat-clear-provider-file-failure',
     fileId: 'provider-file-for-chat-clear-failure',
     bytes: 1,
@@ -512,7 +262,7 @@ async function testMediaHistory5(): Promise<void> {
   });
   await fixture.chat.setHistory(mediaHistory());
 
-  await fixture.chat.sendMessage({ message: 'next' }, 'purge-success');
+  await sendOwned(fixture, 'next', 'purge-success');
   await fixture.recording.flush();
 
   const firstRequestBlocks = fixture.requests[0]?.[0]?.blocks;
@@ -560,7 +310,7 @@ async function testMediaHistory7(): Promise<void> {
   });
   await fixture.chat.setHistory(mediaHistory());
 
-  await fixture.chat.sendMessage({ message: 'next' }, 'capability-cache-proof');
+  await sendOwned(fixture, 'next', 'capability-cache-proof');
 
   expect(
     fixture.requests[0]?.[0]?.blocks.map((block) =>
@@ -584,10 +334,7 @@ async function testMediaHistory8(): Promise<void> {
   });
   await fixture.chat.setHistory(mediaHistory());
 
-  await fixture.chat.sendMessage(
-    { message: 'next' },
-    'capability-no-cache-proof',
-  );
+  await sendOwned(fixture, 'next', 'capability-no-cache-proof');
 
   expect(
     fixture.requests[0]?.[0]?.blocks.map((block) =>
@@ -611,8 +358,9 @@ async function testMediaHistory9(): Promise<void> {
   });
   await fixture.chat.setHistory(mediaHistory());
 
-  const stream = await fixture.chat.sendMessageStream(
-    { message: 'next' },
+  const stream = await streamOwned(
+    fixture,
+    'next',
     'purge-stream-request-history',
   );
   for await (const _event of stream) {
@@ -636,7 +384,7 @@ async function testMediaHistory10(): Promise<void> {
   });
   await fixture.chat.setHistory(mediaHistory());
 
-  await fixture.chat.sendMessage({ message: 'next' }, 'purge-no-cache-write');
+  await sendOwned(fixture, 'next', 'purge-no-cache-write');
 
   expect(
     (await collectHistoryFixture(fixture.chat.getHistory()))[0]?.blocks.map(
@@ -655,7 +403,7 @@ async function testMediaHistory11(): Promise<void> {
   });
   await fixture.chat.setHistory(prefixedMediaHistory());
 
-  await fixture.chat.sendMessage({ message: 'next' }, 'purge-cache-write');
+  await sendOwned(fixture, 'next', 'purge-cache-write');
 
   expect(
     (await collectHistoryFixture(fixture.chat.getHistory()))[0]?.blocks,
@@ -680,9 +428,9 @@ async function testMediaHistory12(): Promise<void> {
   });
   await fixture.chat.setHistory(mediaHistory());
 
-  await expect(
-    fixture.chat.sendMessage({ message: 'next' }, 'purge-error'),
-  ).rejects.toThrow('provider failed');
+  await expect(sendOwned(fixture, 'next', 'purge-error')).rejects.toThrow(
+    'provider failed',
+  );
 
   expect(
     (await collectHistoryFixture(fixture.chat.getHistory()))[0]?.blocks.map(
@@ -703,7 +451,7 @@ async function testMediaHistory13(): Promise<void> {
   });
 
   await expect(
-    fixture.chat.sendMessage({ message: 'next' }, 'turn-commit-failure'),
+    sendOwned(fixture, 'next', 'turn-commit-failure'),
   ).rejects.toThrow('turn history commit failed');
 
   expect(
@@ -722,8 +470,9 @@ async function testMediaHistory14(): Promise<void> {
     throw new Error('stream turn history commit failed');
   });
 
-  const stream = await fixture.chat.sendMessageStream(
-    { message: 'next' },
+  const stream = await streamOwned(
+    fixture,
+    'next',
     'stream-turn-commit-failure',
   );
   const consumeStream = async (): Promise<void> => {
@@ -752,7 +501,7 @@ async function testMediaHistory15(): Promise<void> {
   };
 
   await expect(
-    fixture.chat.sendMessage({ message: 'next' }, 'purge-commit-failure'),
+    sendOwned(fixture, 'next', 'purge-commit-failure'),
   ).rejects.toThrow('purge persistence failed');
 
   expect(
@@ -781,12 +530,9 @@ async function testMediaHistory16(): Promise<void> {
   });
   await fixture.chat.setHistory(mediaHistory());
 
-  const first = fixture.chat.sendMessage({ message: 'first' }, 'purge-first');
+  const first = sendOwned(fixture, 'first', 'purge-first');
   await firstStarted;
-  const second = fixture.chat.sendMessage(
-    { message: 'second' },
-    'purge-second',
-  );
+  const second = sendOwned(fixture, 'second', 'purge-second');
   releaseFirst();
   await Promise.all([first, second]);
 
@@ -802,5 +548,142 @@ async function testMediaHistory16(): Promise<void> {
   expect(
     mediaEncodings(await collectHistoryFixture(fixture.chat.getHistory())),
   ).toStrictEqual([]);
+  await fixture.recording.dispose();
+}
+
+async function testMediaHistory17(): Promise<void> {
+  const oldChat = createChat();
+  await oldChat.setHistory(mediaHistory());
+  const live = oldChat.getHistoryService();
+  const candidate = createChat(async (request, bindings) => {
+    const media = await findReferenceMedia(request.contents);
+    if (media !== undefined) {
+      if (!bindings) throw new Error('Missing history binding');
+      await bindings.bind(media.contentId, {
+        provider: 'media-history-provider',
+        baseURL: 'https://media.test',
+        credentialHash: 'test',
+        fileId: 'adopted-file',
+        byteLength: media.byteLength,
+        scope: 'session',
+        scopeId: 'media-history-runtime',
+        createdAt: 1,
+        expiresAt: 1000,
+        deletion: 'delete',
+        zeroDataRetention: 'incompatible-while-retained',
+        deletionState: 'active',
+      });
+    }
+  });
+  await candidate.setHistory(
+    structuredClone(await collectHistoryFixture(oldChat.getHistory())),
+  );
+  const detached = candidate.getHistoryService();
+  const oldBinding = oldChat.prepareHistoryRebind(detached);
+  const newBinding = candidate.prepareHistoryRebind(live, oldChat);
+  const adopt = await live.prepareProfileAdoption(detached);
+  const before = await rawRows(live);
+  const staged = await rawRows(detached);
+  expect(await collectHistoryFixture(oldChat.getHistory())).toStrictEqual(
+    before,
+  );
+  oldBinding();
+  adopt();
+  newBinding();
+  await oldChat.clearHistory();
+  expect(await collectHistoryFixture(candidate.getHistory())).toStrictEqual(
+    staged,
+  );
+  await candidate.verifyHistoryMedia(
+    await collectHistoryFixture(candidate.getHistory()),
+  );
+  await candidate.sendMessage(
+    { message: 'continued after adoption' },
+    'adopted-send',
+  );
+  expect(JSON.stringify(await rawRows(live))).toContain(
+    'continued after adoption',
+  );
+  expect(JSON.stringify(await rawRows(live))).toContain('adopted-file');
+  for await (const _event of await candidate.sendMessageStream(
+    { message: 'stream after adoption' },
+    'adopted-stream',
+  )) {
+    expect(_event).toBeDefined();
+  }
+  expect(JSON.stringify(await rawRows(live))).toContain(
+    'stream after adoption',
+  );
+  const beforeDirect = await rawRows(live);
+  const direct = await candidate.generateDirectMessage(
+    { message: 'direct after adoption' },
+    'adopted-direct',
+  );
+  expect(direct.content.blocks.length).toBeGreaterThan(0);
+  expect(await rawRows(live)).toStrictEqual(beforeDirect);
+  // The journal facade keeps each service's rows where they were written, so
+  // adoption cannot empty the detached service. What must hold is that none of
+  // the post-adoption traffic reached it.
+  expect(await rawRows(detached)).toStrictEqual(staged);
+  await live.waitForTokenUpdates();
+  expect(live.getTotalTokens()).toBeGreaterThan(0);
+  const store = new LocalMediaStore({
+    rootDirectory: join(harnessDirectory(), 'media'),
+    quotaBytes: 1024 * 1024,
+  });
+  const retained = (await rawRows(live))[0].blocks[0];
+  if (retained.type !== 'media' || retained.encoding !== 'reference')
+    throw new Error('Expected retained reference');
+  expect(await store.hasReservations(retained.contentId)).toBe(true);
+  await candidate.clearHistory();
+  await live.waitForOwnershipSettlement();
+  expect(await rawRows(live)).toStrictEqual([]);
+  expect(await store.hasReservations(retained.contentId)).toBe(false);
+}
+
+async function testMediaHistory18(): Promise<void> {
+  const fixture = await createPurgeChat({
+    mode: 'remove',
+    providerName: 'adopted-purge',
+  });
+  await fixture.chat.setHistory(mediaHistory());
+  const detached = fixture.chat.getHistoryService();
+  const staged = await rawRows(detached);
+  // The journal facade adopts only a candidate whose journal matches the live
+  // one, so the live service is seeded with the same rows before adoption.
+  const live = new HistoryService();
+  await live.addBatch(structuredClone(staged), 'media-history-model');
+  const rebind = fixture.chat.prepareHistoryRebind(live);
+  const adopt = await live.prepareProfileAdoption(detached);
+  adopt();
+  rebind();
+  await sendOwned(fixture, 'purge adopted media', 'adopted-purge');
+  await fixture.recording.flush();
+  const liveRows = await rawRows(live);
+  expect(mediaEncodings(liveRows)).toStrictEqual(['url']);
+  expect(JSON.stringify(liveRows)).toContain('purge adopted media');
+  // The purge must land on the adopted history, not on the detached service.
+  expect(await rawRows(detached)).toStrictEqual(staged);
+  await fixture.chat.clearHistory();
+  await fixture.recording.dispose();
+}
+
+async function testMediaHistory19(): Promise<void> {
+  const fixture = await createPurgeChat({
+    mode: 'remove',
+    providerName: 'unbound-purge',
+  });
+  await fixture.chat.setHistory(mediaHistory());
+
+  await expect(
+    fixture.chat.sendMessage({ message: 'next' }, 'unbound-purge'),
+  ).rejects.toThrow(
+    'Semantic media purge requires an active session recording',
+  );
+
+  expect(
+    mediaHistoryShape(await collectHistoryFixture(fixture.chat.getHistory())),
+  ).toStrictEqual(['reference', 'url']);
+  expect(fixture.requests).toHaveLength(1);
   await fixture.recording.dispose();
 }

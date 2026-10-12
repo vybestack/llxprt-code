@@ -301,7 +301,7 @@ export const EXTENSION_SETTINGS_SCHEMA = {
         requiresRestart: true,
         default: true,
         description:
-          'Enable just-in-time context memory loading via ContextManager instead of eager loading at startup.',
+          'Enable just-in-time loading of workspace instruction files.',
         showInDialog: false,
       },
       skills: {

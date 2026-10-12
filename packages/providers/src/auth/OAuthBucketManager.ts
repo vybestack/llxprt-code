@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { BucketFailoverHandler } from '@vybestack/llxprt-code-core/config/configTypes.js';
+import { BucketFailoverHandlerImpl } from './BucketFailoverHandlerImpl.js';
+import type { BucketFailoverOAuthManagerLike } from './types.js';
 import type { TokenStore, OAuthTokenRequestMetadata } from './types.js';
 
 /**
@@ -23,6 +26,61 @@ export interface BucketStatus {
 export class OAuthBucketManager {
   private readonly tokenStore: TokenStore;
   private readonly sessionBuckets: Map<string, string>;
+  private failoverHandlers = new Map<string, BucketFailoverHandler>();
+
+  ensureFailoverHandler(
+    provider: string,
+    buckets: string[],
+    facade: BucketFailoverOAuthManagerLike,
+    metadata?: OAuthTokenRequestMetadata,
+  ): BucketFailoverHandler | undefined {
+    const scope = this.getSessionBucketScopeKey(provider, metadata);
+    if (buckets.length <= 1) {
+      if (this.failoverHandlers.delete(scope))
+        this.clearSessionBucket(provider, metadata);
+      return undefined;
+    }
+    const current = this.failoverHandlers.get(scope);
+    const existing = current?.getBuckets() ?? [];
+    if (
+      current &&
+      existing.length === buckets.length &&
+      existing.every((bucket, index) => bucket === buckets[index])
+    )
+      return current;
+    const handler = new BucketFailoverHandlerImpl(
+      buckets,
+      provider,
+      facade,
+      metadata,
+    );
+    this.failoverHandlers.set(scope, handler);
+    return handler;
+  }
+
+  readFailoverHandler(
+    provider: string,
+    metadata?: OAuthTokenRequestMetadata,
+  ): BucketFailoverHandler | undefined {
+    return this.failoverHandlers.get(
+      this.getSessionBucketScopeKey(provider, metadata),
+    );
+  }
+
+  clearFailoverHandlers(): void {
+    this.failoverHandlers.clear();
+  }
+
+  checkpointFailoverHandlers(): () => void {
+    const handlers = new Map(this.failoverHandlers);
+    const sessionBuckets = new Map(this.sessionBuckets);
+    return () => {
+      this.failoverHandlers = new Map(handlers);
+      this.sessionBuckets.clear();
+      for (const [scope, bucket] of sessionBuckets)
+        this.sessionBuckets.set(scope, bucket);
+    };
+  }
 
   constructor(tokenStore: TokenStore) {
     this.tokenStore = tokenStore;

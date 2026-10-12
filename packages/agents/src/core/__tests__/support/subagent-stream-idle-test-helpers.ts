@@ -11,18 +11,22 @@ import type {
   RunConfig,
   SubAgentRuntimeOverrides,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { createToolRegistryViewFromRegistry } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config.js';
+import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 import { initializeTestConfig } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { ToolRegistry } from '@vybestack/llxprt-code-tools/tools/tool-registry.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { createSessionSettingsFixture } from '../../../api/__tests__/helpers/session-settings-fixture.js';
 
 const mockMessageBus = {} as MessageBus;
 const localDefaultModelConfig: ModelConfig = {
@@ -35,7 +39,14 @@ const localDefaultRunConfig: RunConfig = {
   max_turns: 10,
 };
 
-function createRuntimeBundle(config: Config): AgentRuntimeLoaderResult {
+function createRuntimeBundle(
+  config: Config,
+  settingsService: SettingsService,
+): AgentRuntimeLoaderResult {
+  const { settingsOwner } = createSessionSettingsFixture(
+    config,
+    settingsService,
+  );
   const history = {
     clear: vi.fn(),
     add: vi.fn(),
@@ -46,63 +57,66 @@ function createRuntimeBundle(config: Config): AgentRuntimeLoaderResult {
     findUnmatchedToolCalls: vi.fn(() => []),
     generateTurnKey: vi.fn(() => `turn-${Date.now()}`),
   } as unknown as HistoryService;
-
-  const runtimeContext = {
-    state: {
-      runtimeId: config.getSessionId(),
-      provider: config.getProvider(),
-      model: config.getModel(),
-      sessionId: config.getSessionId(),
-      proxyUrl: undefined,
-      modelParams: {},
-    },
+  const state = createAgentRuntimeState({
+    runtimeId: config.getSessionId(),
+    sessionId: config.getSessionId(),
+    provider: 'stub',
+    model: config.getModel(),
+    modelParams: {},
+  });
+  const provider = {
+    getActiveProvider: vi.fn(() => ({
+      name: 'stub',
+      isDefault: true,
+      getModels: async () => [],
+      generateChatCompletion: vi.fn(async function* () {}),
+      getDefaultModel: () => config.getModel(),
+    })),
+    setActiveProvider: vi.fn(),
+  };
+  const telemetry = {
+    logApiRequest: vi.fn(),
+    logApiResponse: vi.fn(),
+    logApiError: vi.fn(),
+  };
+  const toolRegistry = new ToolRegistry(config, mockMessageBus, () =>
+    settingsOwner.readRegistryPolicy([]),
+  );
+  const runtimeContext = createAgentRuntimeContext({
+    state,
     history,
-    ephemerals: {
-      compressionThreshold: () => 0.8,
-      contextLimit: () => 60_000,
-      preserveThreshold: () => 0.2,
-      toolFormatOverride: () => undefined,
-    },
-    telemetry: {
-      logApiRequest: vi.fn(),
-      logApiResponse: vi.fn(),
-      logApiError: vi.fn(),
-    },
-    provider: {
-      getActiveProvider: vi.fn(
-        () =>
-          ({
-            name: config.getProvider(),
-            generateChatCompletion: vi.fn(async function* () {}),
-            getDefaultModel: () => config.getModel(),
-          }) as unknown as IProvider,
-      ),
-      setActiveProvider: vi.fn(),
-    },
-    tools: {
-      listToolNames: () => [],
-      getToolMetadata: () => undefined,
-    },
-    providerRuntime: {
-      runtimeId: config.getSessionId(),
-      metadata: {},
-      settingsService: config.getSettingsService(),
+    provider,
+    telemetry,
+    settings: settingsOwner.readRuntimePolicy(),
+    readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
+    providerRuntime: createProviderRuntimeContext({
+      runtimeId: state.runtimeId,
+      settingsService,
       config,
-    } as unknown as ProviderRuntimeContext,
-  } as unknown as AgentRuntimeContext;
-
+    }),
+    prepareProviderInvocation: (name, parameters, signal) =>
+      settingsOwner.prepareProviderInvocation(
+        state.runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
+    tools: createToolRegistryViewFromRegistry(toolRegistry),
+  });
   return {
     runtimeContext,
     history,
-    providerAdapter: runtimeContext.provider,
-    telemetryAdapter: runtimeContext.telemetry,
+    providerAdapter: provider,
+    telemetryAdapter: telemetry,
+    telemetryRoot: RootTelemetry.prepare({
+      enabled: false,
+      sessionId: 'subagent-stream-idle-fixture',
+      maxBytes: 1024,
+      maxFiles: 1,
+    }),
     toolsView: runtimeContext.tools,
     contentGenerator: {} as ContentGenerator,
-    toolRegistry: new ToolRegistry(
-      config,
-      mockMessageBus,
-      new SettingsService(),
-    ),
+    toolRegistry,
   };
 }
 
@@ -111,7 +125,11 @@ export async function createIdleScope(
   agentName: string,
   systemPrompt: string,
   maxTimeMinutes = localDefaultRunConfig.max_time_minutes,
-): Promise<{ config: Config; scope: SubAgentScope }> {
+): Promise<{
+  config: Config;
+  scope: SubAgentScope;
+  runtimeBundle: AgentRuntimeLoaderResult;
+}> {
   const settingsService = new SettingsService();
   const configParams: ConfigParameters = {
     sessionId: 'test-session',
@@ -119,18 +137,22 @@ export async function createIdleScope(
     targetDir: '.',
     debugMode: false,
     cwd: process.cwd(),
-    settingsService,
+    initialSettings: settingsService.getAllGlobalSettings(),
   };
   const config = new Config(configParams);
-  config.setEphemeralSetting('stream-idle-timeout-ms', timeoutMs);
-  await initializeTestConfig(config);
+  settingsService.set('stream-idle-timeout-ms', timeoutMs);
+  const mcpRuntime = await initializeTestConfig(config);
 
+  const runtimeBundle = createRuntimeBundle(config, settingsService);
   const overrides: SubAgentRuntimeOverrides = {
-    runtimeBundle: createRuntimeBundle(config),
+    instructions: mcpRuntime.workspaceMemory.operations,
+    workspacePaths: mcpRuntime.workspaceFilesystem.paths,
+    readMcpInstructions: () => undefined,
+    runtimeBundle,
     toolRegistry: new ToolRegistry(
       config,
       mockMessageBus,
-      new SettingsService(),
+      assembleTaskSchemaPolicy(new SettingsService()),
     ),
   };
   const scope = await SubAgentScope.create(
@@ -143,5 +165,5 @@ export async function createIdleScope(
     undefined,
     overrides,
   );
-  return { config, scope };
+  return { config, scope, runtimeBundle };
 }

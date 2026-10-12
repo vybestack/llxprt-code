@@ -17,15 +17,11 @@ const mockRuntime = {
   clearActiveModelParam: vi.fn(),
 };
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => mockRuntime,
-}));
-
 describe('setCommand user-agent ephemeral', () => {
   let context: CommandContext;
 
   beforeEach(() => {
-    context = createMockCommandContext();
+    context = createMockCommandContext({ runtimeApi: mockRuntime });
     vi.clearAllMocks();
   });
 

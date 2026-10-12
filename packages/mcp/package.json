@@ -31,6 +31,14 @@
       "bun": "./src/host/hostServices.ts",
       "import": "./dist/mcp/src/host/hostServices.js"
     },
+    "./test-support/oauth.js": {
+      "types": "./src/client/test-support/oauth.ts",
+      "bun": "./src/client/test-support/oauth.ts"
+    },
+    "./test-support/approval-policy.js": {
+      "types": "./src/client/test-support/approval-policy.ts",
+      "bun": "./src/client/test-support/approval-policy.ts"
+    },
     "./auth/mcp-auth-factory.js": {
       "types": "./dist/mcp/src/auth/mcp-auth-factory.d.ts",
       "bun": "./src/auth/mcp-auth-factory.ts",

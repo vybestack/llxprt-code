@@ -1,3 +1,5 @@
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+const fixtureOwners = installRuntimeTestOwners();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -158,7 +160,11 @@ async function consumeStream(
 function makeProviderManager(): ProviderManager {
   const settingsService = new SettingsService();
   const config = createRuntimeConfigStub(settingsService);
-  return new ProviderManager({ settingsService, config });
+  return new ProviderManager({
+    sessionSettings: fixtureOwners.adopt(config, settingsService).settingsOwner,
+    settingsService,
+    config,
+  });
 }
 
 describe('LoadBalancingProvider issue #2849: LB reliability for transient 429 [part 1]', () => {

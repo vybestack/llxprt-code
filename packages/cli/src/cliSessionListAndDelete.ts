@@ -19,7 +19,7 @@ import {
   type ProjectStorageSource,
   type SessionStorageLocation,
 } from './sessionStorageLocation.js';
-import { runExitCleanup } from './utils/cleanup.js';
+import { registerCleanup, runExitCleanup } from './utils/cleanup.js';
 import { drainStdio } from './utils/drainStdio.js';
 
 /** Format a single recorded-session summary line for --list-sessions output. */
@@ -124,11 +124,13 @@ export async function runSessionListOrDelete(
 export async function exitAfterSessionListOrDelete(
   argv: ParsedCliArgs,
   config: ProjectStorageSource,
+  disposeConfig: () => Promise<void>,
 ): Promise<void> {
   const exitCode = await runSessionListOrDelete(argv, config);
   if (exitCode === null) {
     return;
   }
+  registerCleanup(disposeConfig);
   await runExitCleanup();
   await drainStdio();
   process.exit(exitCode);

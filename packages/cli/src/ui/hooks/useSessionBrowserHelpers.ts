@@ -11,10 +11,7 @@ import {
   SessionLockManager,
   deleteSession,
 } from '@vybestack/llxprt-code-core';
-import type {
-  ContinueTarget,
-  SessionSummary,
-} from '@vybestack/llxprt-code-core';
+import type { ContinueTarget } from '@vybestack/llxprt-code-core';
 import type { Key } from './useKeypress.js';
 import type {
   EnrichedSessionSummary,
@@ -23,6 +20,12 @@ import type {
   UseSessionBrowserResult,
 } from './useSessionBrowser.js';
 import { useSessionKeypressHandler } from './useSessionBrowserKeypress.js';
+import { buildEnrichedSession } from './sessionBrowserTarget.js';
+import {
+  deleteOwnerBrowserTarget,
+  listOwnerBrowserListing,
+  ownerBrowserSessionId,
+} from '../utils/ownerSessionUi.js';
 import { warnUnreadableRecordings } from '../utils/warnUnreadableRecordings.js';
 
 const PAGE_SIZE = 20;
@@ -442,20 +445,29 @@ function useSessionLoader(props: UseSessionBrowserProps, deps: LoaderDeps) {
   return useCallback(async () => {
     const currentGen = beginSessionLoad(deps);
     try {
-      const detailed = await SessionDiscovery.listContinueTargetsDetailed(
-        props.chatsDir,
-        props.projectHash,
-        props.mediaStore,
-      );
+      const detailed = props.ownerAgent
+        ? await listOwnerBrowserListing(props.ownerAgent)
+        : await SessionDiscovery.listContinueTargetsDetailed(
+            props.chatsDir,
+            props.projectHash,
+            props.mediaStore,
+          );
       if (currentGen !== deps.generationRef.current) return;
+      const currentSessionId = props.ownerAgent
+        ? ownerBrowserSessionId(
+            props.ownerAgent,
+            detailed.targets,
+            props.currentSessionId,
+          )
+        : props.currentSessionId;
       warnUnreadableRecordings(
         'Session browser',
         detailed.unreadableRecordings,
       );
       const filtered = await filterContinueTargets(
-        detailed.targets,
+        [...detailed.targets],
         currentGen,
-        props.currentSessionId,
+        currentSessionId,
         processSession,
         detailed.skippedCount,
       );
@@ -475,6 +487,7 @@ function useSessionLoader(props: UseSessionBrowserProps, deps: LoaderDeps) {
     props.chatsDir,
     props.currentSessionId,
     props.mediaStore,
+    props.ownerAgent,
     props.projectHash,
   ]);
 }
@@ -578,31 +591,6 @@ function useSessionProcessor(
   );
 }
 
-function getTargetKey(target: ContinueTarget): string {
-  return target.kind === 'session'
-    ? `session:${target.session.sessionId}`
-    : `checkpoint:${target.checkpointId}`;
-}
-
-function buildEnrichedSession(
-  target: ContinueTarget,
-  source: SessionSummary,
-  locked: boolean,
-  cached: { text: string | null; state: PreviewState } | undefined,
-): EnrichedSessionSummary {
-  return {
-    ...source,
-    target,
-    targetKey: getTargetKey(target),
-    ...(target.kind === 'checkpoint'
-      ? { checkpointName: target.checkpointName }
-      : {}),
-    isLocked: locked,
-    previewState: cached ? cached.state : 'loading',
-    firstUserMessage: cached?.text ?? undefined,
-  };
-}
-
 function useResumeExecutor(
   props: UseSessionBrowserProps,
   setters: BrowserSetters,
@@ -660,7 +648,9 @@ async function executeDeleteSession(
 ): Promise<void> {
   deps.selectedTargetKeyRef.current = session.targetKey;
   try {
-    if (session.target.kind === 'checkpoint') {
+    if (props.ownerAgent) {
+      await deleteOwnerBrowserTarget(props.ownerAgent, session.target);
+    } else if (session.target.kind === 'checkpoint') {
       await deleteCheckpointTarget(session.target, props);
     } else {
       const locked = await SessionLockManager.isLocked(

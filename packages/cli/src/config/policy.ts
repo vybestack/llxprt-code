@@ -48,7 +48,7 @@ export async function createPolicyEngineConfig(
 }
 
 export function createPolicyUpdater(
-  policyEngine: PolicyEngine,
+  policyEngine: Pick<PolicyEngine, 'addRule'>,
   messageBus: MessageBus,
 ) {
   return createCorePolicyUpdater(policyEngine, messageBus);

@@ -6,8 +6,6 @@
 
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { ensureDir } from '../utils/paths.js';
-import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '../utils/debugLogger.js';
 import { delay } from '../utils/delay.js';
 
@@ -80,7 +78,7 @@ export class Logger {
 
   constructor(
     sessionId: string,
-    private readonly storage: Storage,
+    private readonly projectTempDir: string,
   ) {
     this.sessionId = sessionId;
   }
@@ -745,8 +743,7 @@ export class Logger {
   }
 
   private async _doInitialize(): Promise<void> {
-    ensureDir(Storage.getGlobalLogDir());
-    const llxprtDir = this.storage.getProjectTempDir();
+    const llxprtDir = this.projectTempDir;
     this.logFilePath = path.join(llxprtDir, LOG_FILE_NAME);
 
     try {

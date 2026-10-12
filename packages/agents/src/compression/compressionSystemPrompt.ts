@@ -24,13 +24,15 @@
  */
 
 import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
-import type { PromptSettingsReader } from '@vybestack/llxprt-code-core/core/prompts.js';
+import type { PromptPolicy } from '@vybestack/llxprt-code-core/core/prompts.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
+import { assertAdmittedRoute } from '../core/admittedRouteSecurity.js';
 
 type CompressionInteractionMode =
   | 'interactive'
@@ -147,7 +149,7 @@ export async function buildCompressionSystemInstruction(
     provider: string;
     interactionMode: CompressionInteractionMode;
   },
-  settings?: PromptSettingsReader,
+  policy?: PromptPolicy,
 ): Promise<string> {
   const interactionMode = options.interactionMode;
   const provider = requireCompressionProvider(options.provider);
@@ -156,7 +158,7 @@ export async function buildCompressionSystemInstruction(
     coreMemory: '',
     model,
     provider,
-    settings,
+    policy,
     tools: undefined,
     includeSubagentDelegation: false,
     interactionMode,
@@ -179,7 +181,7 @@ export async function buildCompressionSystemInstruction(
  */
 export async function buildCompressionChatOptions(params: {
   requestRows: ProviderRequestSelection;
-  providerRuntime: ProviderRuntimeContext;
+  providerRuntime: ProviderRequestCollaborators;
   resolvedConfig: Config | undefined;
   fallbackConfig: Config | undefined;
   resolvedOptions: RuntimeGenerateChatOptions['resolved'] | undefined;
@@ -188,6 +190,7 @@ export async function buildCompressionChatOptions(params: {
   source: string;
   runtimeState: AgentRuntimeState;
   provider: IProvider;
+  modelParameters?: AdmittedModelParameters;
 }): Promise<RuntimeGenerateChatOptions> {
   const config = params.resolvedConfig ?? params.fallbackConfig;
 
@@ -208,6 +211,9 @@ export async function buildCompressionChatOptions(params: {
         { provider: providerName, interactionMode },
       );
 
+  assertAdmittedRoute(params.modelParameters?.route);
+  if (params.invocation === undefined)
+    throw new Error('Compression requires a prepared provider invocation');
   return {
     // The request is the neutral selection (issue #854); `contents` is its
     // repeatable reader view so estimation and transport each get a fresh pass.
@@ -217,12 +223,9 @@ export async function buildCompressionChatOptions(params: {
     },
     requestRows: params.requestRows,
     contentCount: params.requestRows.count,
+    modelParameters: params.modelParameters,
     tools: undefined,
-    config: config ?? params.providerRuntime.config,
-    runtime: params.providerRuntime,
     invocation: params.invocation,
-    settings: params.providerRuntime
-      .settingsService as RuntimeGenerateChatOptions['settings'],
     resolved: params.resolvedOptions,
     systemInstruction,
     metadata: {

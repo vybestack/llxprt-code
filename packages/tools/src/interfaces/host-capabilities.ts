@@ -17,19 +17,7 @@
  */
 
 import type { IToolHost } from './IToolHost.js';
-import type { LspConfig } from './ILspService.js';
-
-/**
- * Optional workspace-context capability.
- *
- * Some hosts expose a richer `getWorkspaceContext` accessor (returning
- * a directory list). `getWorkspaceRoots` and `getTargetDir` are already
- * required on `IToolHost`, so only `getWorkspaceContext` is genuinely
- * optional here.
- */
-export interface HostWorkspaceContextCap {
-  getWorkspaceContext(): { getDirectories?(): string[] };
-}
+import type { Diagnostic, LspConfig } from './ILspService.js';
 
 /**
  * Optional IDE integration capability.
@@ -45,24 +33,14 @@ export interface HostIdeCap {
 /**
  * Optional LSP integration capability.
  *
- * Hosts with a running LSP expose `getLspServiceClient` (required for
- * building a useful diagnostics adapter) and optionally `getLspConfig`.
+ * Hosts expose a bound diagnostic operation and optional declarative filtering settings.
  */
 export interface HostLspCap {
-  getLspServiceClient(): unknown;
+  checkFileDiagnostics(
+    filePath: string,
+    timeout: number,
+  ): Promise<Diagnostic[]>;
   getLspConfig?(): LspConfig | undefined;
-}
-
-/**
- * Type guard: does the host expose the optional workspace-context capability?
- */
-export function hasWorkspaceContextCap(
-  host: IToolHost,
-): host is IToolHost & HostWorkspaceContextCap {
-  return (
-    typeof (host as Partial<HostWorkspaceContextCap>).getWorkspaceContext ===
-    'function'
-  );
 }
 
 /**
@@ -78,10 +56,11 @@ export function hasIdeCap(host: IToolHost): host is IToolHost & HostIdeCap {
 /**
  * Type guard: does the host expose the optional LSP capability?
  *
- * Requires `getLspServiceClient`; `getLspConfig` remains optional.
+ * Requires `checkFileDiagnostics`; `getLspConfig` remains optional.
  */
 export function hasLspCap(host: IToolHost): host is IToolHost & HostLspCap {
   return (
-    typeof (host as Partial<HostLspCap>).getLspServiceClient === 'function'
+    'checkFileDiagnostics' in host &&
+    typeof host.checkFileDiagnostics === 'function'
   );
 }

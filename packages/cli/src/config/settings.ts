@@ -468,7 +468,7 @@ function shouldLoadEnvVar(
   isProjectEnvFile: boolean,
   isUserGlobal: boolean,
 ): boolean {
-  if (!Object.hasOwn(parsedEnv, key)) {
+  if (!Object.prototype.hasOwnProperty.call(parsedEnv, key)) {
     return false;
   }
   // A sandbox launcher control is never accepted from a repo-controlled env
@@ -481,7 +481,7 @@ function shouldLoadEnvVar(
     return false;
   }
   // Load variable only if it's not already set in the environment.
-  return !Object.hasOwn(process.env, key);
+  return !Object.prototype.hasOwnProperty.call(process.env, key);
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

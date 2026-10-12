@@ -1,3 +1,4 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -17,7 +18,7 @@ import {
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -77,7 +78,6 @@ describe('ChatSession Context Limit Enforcement', () => {
           if (key === 'context-limit') return 190000;
           return undefined;
         }),
-        getProviderManager: vi.fn().mockReturnValue(providerManager),
       },
     });
 
@@ -135,10 +135,16 @@ describe('ChatSession Context Limit Enforcement', () => {
           target: null,
         },
       },
-      provider: createProviderAdapterFromManager(
-        mockConfig.getProviderManager(),
+      provider: createProviderAdapterFromManager(runtimeSetup.providerManager),
+      telemetry: createTelemetryAdapter(
+        mockConfig,
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-adapter-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
       ),
-      telemetry: createTelemetryAdapterFromConfig(mockConfig),
       tools: createToolRegistryViewFromRegistry(),
       providerRuntime: providerRuntimeSnapshot,
     });
@@ -190,10 +196,16 @@ describe('ChatSession Context Limit Enforcement', () => {
           target: null,
         },
       },
-      provider: createProviderAdapterFromManager(
-        mockConfig.getProviderManager(),
+      provider: createProviderAdapterFromManager(runtimeSetup.providerManager),
+      telemetry: createTelemetryAdapter(
+        mockConfig,
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-adapter-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
       ),
-      telemetry: createTelemetryAdapterFromConfig(mockConfig),
       tools: createToolRegistryViewFromRegistry(),
       providerRuntime: providerRuntimeSnapshot,
     });
@@ -247,10 +259,8 @@ describe('ChatSession Context Limit Enforcement', () => {
           target: null,
         },
       },
-      provider: createProviderAdapterFromManager(
-        configWithoutLimit.getProviderManager?.(),
-      ),
-      telemetry: createTelemetryAdapterFromConfig(configWithoutLimit as Config),
+      provider: createProviderAdapterFromManager(runtimeSetup.providerManager),
+      telemetry: createTelemetryAdapter(configWithoutLimit as Config),
       tools: createToolRegistryViewFromRegistry(
         configWithoutLimit.getToolRegistry?.(),
       ),

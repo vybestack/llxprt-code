@@ -48,12 +48,19 @@ const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
 
 function createHost(targetDir: string): IToolHost {
   return {
+    readTextFile: (filePath) => fsPromises.readFile(filePath, 'utf8'),
+    writeTextFile: (filePath, content) =>
+      fsPromises.writeFile(filePath, content),
     getTargetDir: () => targetDir,
     getWorkspaceRoots: () => [targetDir],
     getApprovalMode: () => 'auto',
     setApprovalMode: () => {},
     isInteractive: () => false,
-    hasFeatureFlag: () => false,
+
+    runSearch: <T>(
+      _directories: readonly string[],
+      operation: () => Promise<T>,
+    ): Promise<T> => operation(),
     getFileService: () => ({
       shouldGitIgnoreFile: () => false,
       shouldLlxprtIgnoreFile: () => false,
@@ -70,7 +77,7 @@ function createHost(targetDir: string): IToolHost {
     getLlxprtIgnoreFilePath: () => null,
     recordFileRead: () => {},
     getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({}),
+    readExecutionPolicy: () => ({}),
     getDebugMode: () => false,
   };
 }
@@ -380,14 +387,12 @@ describe('host filesystem-service paths (issue #3205)', () => {
   ): IToolHost {
     return {
       ...createHost(targetDir),
-      getFileSystemService: () => ({
-        readTextFile: (filePath: string) => {
-          writeFileSync(canaryPath, 'host-read-invoked');
-          return fsPromises.readFile(filePath, 'utf-8');
-        },
-        writeTextFile: (filePath: string, content: string) =>
-          fsPromises.writeFile(filePath, content),
-      }),
+      readTextFile: (filePath: string) => {
+        writeFileSync(canaryPath, 'host-read-invoked');
+        return fsPromises.readFile(filePath, 'utf-8');
+      },
+      writeTextFile: (filePath: string, content: string) =>
+        fsPromises.writeFile(filePath, content),
     };
   }
 
@@ -751,11 +756,9 @@ describe('host divergent-content size policy (item E)', () => {
   ): IToolHost {
     return {
       ...createHost(targetDir),
-      getFileSystemService: () => ({
-        readTextFile: async () => hostContent,
-        writeTextFile: async (filePath: string, content: string) =>
-          fsPromises.writeFile(filePath, content),
-      }),
+      readTextFile: async () => hostContent,
+      writeTextFile: async (filePath: string, content: string) =>
+        fsPromises.writeFile(filePath, content),
     };
   }
 

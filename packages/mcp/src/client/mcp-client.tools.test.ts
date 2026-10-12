@@ -3,6 +3,9 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createTestOAuthBinding } from './test-support/index.js';
+
+import { unsupportedApprovalPolicy } from './test-support/approval-policy.js';
 
 import { automock } from '../../../test-utils/src/automock.js';
 import { waitFor } from '../../../test-utils/src/wait-for.js';
@@ -28,13 +31,11 @@ import {
   ResourceListChangedNotificationSchema,
   ToolListChangedNotificationSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { McpClient, populateMcpServerCommand } from './mcp-client.js';
+import { McpClient } from './mcp-client.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
-import { registerMcpHostServices } from '../host/hostServices.js';
 
 // Exercises the real host seam instead of mocking a module (#3305).
 const mockEmitFeedback = vi.fn();
-registerMcpHostServices({ emitFeedback: mockEmitFeedback });
 
 const realStdioModule = {
   ...(await import('@modelcontextprotocol/sdk/client/stdio.js')),
@@ -133,6 +134,8 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn(),
       } as unknown as ToolRegistry;
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         { command: 'test-command' },
         toolRegistry,
@@ -142,6 +145,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        mockEmitFeedback,
       );
       await client.connect();
       mockedClient.listTools.mockImplementation((_request, options) => {
@@ -190,6 +195,8 @@ describe('mcp-client', () => {
       );
 
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         { command: 'test-command' },
         {} as ToolRegistry,
@@ -199,6 +206,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        mockEmitFeedback,
       );
 
       await client.connect();
@@ -227,6 +236,8 @@ describe('mcp-client', () => {
       );
 
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         { command: 'test-command' },
         {} as ToolRegistry,
@@ -236,6 +247,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        mockEmitFeedback,
       );
 
       await client.connect();
@@ -264,6 +277,8 @@ describe('mcp-client', () => {
       );
 
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         { command: 'test-command' },
         {} as ToolRegistry,
@@ -273,6 +288,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        mockEmitFeedback,
       );
 
       await client.connect();
@@ -323,6 +340,8 @@ describe('mcp-client', () => {
 
       // Initialize client with onToolsUpdated callback
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         { command: 'test-command' },
         mockedToolRegistry,
@@ -333,6 +352,7 @@ describe('mcp-client', () => {
         false,
         '0.0.1',
         onToolsUpdatedSpy,
+        mockEmitFeedback,
       );
 
       // 1. Connect (sets up listener)
@@ -394,6 +414,8 @@ describe('mcp-client', () => {
       } as unknown as ToolRegistry;
 
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         { command: 'test-command' },
         mockedToolRegistry,
@@ -403,6 +425,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        mockEmitFeedback,
       );
 
       await client.connect();
@@ -465,6 +489,8 @@ describe('mcp-client', () => {
       const onToolsUpdatedSpy = vi.fn().mockResolvedValue(undefined);
 
       const clientA = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'server-A',
         { command: 'cmd-a' },
         mockedToolRegistry,
@@ -475,9 +501,12 @@ describe('mcp-client', () => {
         false,
         '0.0.1',
         onToolsUpdatedSpy,
+        mockEmitFeedback,
       );
 
       const clientB = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'server-B',
         { command: 'cmd-b' },
         mockedToolRegistry,
@@ -488,6 +517,7 @@ describe('mcp-client', () => {
         false,
         '0.0.1',
         onToolsUpdatedSpy,
+        mockEmitFeedback,
       );
 
       await clientA.connect();
@@ -549,8 +579,9 @@ describe('mcp-client', () => {
       } as unknown as ToolRegistry;
 
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
-        // Set a short timeout
         { command: 'test-command', timeout: 100 },
         mockedToolRegistry,
         {} as PromptRegistry,
@@ -559,6 +590,8 @@ describe('mcp-client', () => {
         createTrustedConfig(),
         false,
         '0.0.1',
+        undefined,
+        mockEmitFeedback,
       );
 
       await client.connect();
@@ -615,6 +648,8 @@ describe('mcp-client', () => {
       const onToolsUpdatedSpy = vi.fn().mockResolvedValue(undefined);
 
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         { command: 'test-command' },
         mockedToolRegistry,
@@ -625,6 +660,7 @@ describe('mcp-client', () => {
         false,
         '0.0.1',
         onToolsUpdatedSpy,
+        mockEmitFeedback,
       );
 
       await client.connect();
@@ -669,6 +705,8 @@ describe('mcp-client', () => {
           getMessageBus: vi.fn().mockReturnValue(undefined),
         } as unknown as ToolRegistry;
         const client = new McpClient(
+          createTestOAuthBinding(),
+          unsupportedApprovalPolicy(),
           'test-server',
           { command: 'test-command', timeout: 100 },
           toolRegistry,
@@ -679,6 +717,7 @@ describe('mcp-client', () => {
           false,
           '0.0.1',
           vi.fn().mockRejectedValue(new Error('context refresh failed')),
+          mockEmitFeedback,
         );
         await client.connect();
         const notificationCallback =
@@ -738,6 +777,8 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         { command: 'test-command' },
         toolRegistry,
@@ -748,6 +789,7 @@ describe('mcp-client', () => {
         false,
         '0.0.1',
         vi.fn().mockReturnValueOnce(updatePending),
+        mockEmitFeedback,
       );
       await client.connect();
       const notificationCallback =
@@ -804,6 +846,8 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         { command: 'test-command' },
         toolRegistry,
@@ -813,6 +857,8 @@ describe('mcp-client', () => {
         { isTrustedFolder: () => trusted } as Config,
         false,
         '0.0.1',
+        undefined,
+        mockEmitFeedback,
       );
       await client.connect();
       const notificationCallback =
@@ -854,6 +900,8 @@ describe('mcp-client', () => {
         getMessageBus: vi.fn().mockReturnValue(undefined),
       } as unknown as ToolRegistry;
       const client = new McpClient(
+        createTestOAuthBinding(),
+        unsupportedApprovalPolicy(),
         'test-server',
         { command: 'test-command' },
         toolRegistry,
@@ -866,6 +914,7 @@ describe('mcp-client', () => {
         vi.fn().mockImplementation(async () => {
           trusted = false;
         }),
+        mockEmitFeedback,
       );
       await client.connect();
       const notificationCallback =
@@ -876,30 +925,6 @@ describe('mcp-client', () => {
       expect(toolRegistry.registerTool).toHaveBeenCalledOnce();
       expect(toolRegistry.removeMcpToolsByServer).toHaveBeenCalledTimes(2);
       expect(mockEmitFeedback).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('appendMcpServerCommand', () => {
-    it('should do nothing if no MCP servers or command are configured', () => {
-      const out = populateMcpServerCommand({}, undefined);
-      expect(out).toStrictEqual({});
-    });
-
-    it('should discover tools via mcpServerCommand', () => {
-      const commandString = 'command --arg1 value1';
-      const out = populateMcpServerCommand({}, commandString);
-      expect(out).toStrictEqual({
-        mcp: {
-          command: 'command',
-          args: ['--arg1', 'value1'],
-        },
-      });
-    });
-
-    it('should handle error if mcpServerCommand parsing fails', () => {
-      expect(() => populateMcpServerCommand({}, 'derp && herp')).toThrowError(
-        /failed to parse mcpServerCommand/,
-      );
     });
   });
 });

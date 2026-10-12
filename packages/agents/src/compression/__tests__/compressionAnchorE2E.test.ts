@@ -1,4 +1,5 @@
 import { curatedHistoryForTest } from '@vybestack/llxprt-code-test-utils/core/curated-history-fixture.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -98,6 +99,10 @@ function buildHandler(opts: {
 
   const provider = createCaptureProvider(capturedRequests);
   const providerResult = {
+    invocation: captureProviderInvocation(
+      testProviderRuntime as never,
+      provider.name,
+    ),
     provider,
     runtime: testProviderRuntime as never,
   };

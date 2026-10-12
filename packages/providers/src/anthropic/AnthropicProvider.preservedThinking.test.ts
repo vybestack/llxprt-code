@@ -9,6 +9,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
 import { buildAnthropicRequestHeaders } from './AnthropicApiExecution.js';
@@ -59,7 +60,7 @@ async function buildRequest(model: string, enabled: boolean) {
     isOAuth: true,
     placement: 'context-prefix',
     providerName: 'anthropic',
-    config: options.config,
+    config: parseOutputLimits(options.invocation.ephemerals),
     getMaxTokensForModel: () => 128000,
     unprefixToolName: (name) => name,
     providerConfig: undefined,

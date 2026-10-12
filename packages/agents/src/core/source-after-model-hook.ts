@@ -1,10 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { HookSystem } from '@vybestack/llxprt-code-core/hooks/hookSystem.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { HookLLMResponse } from '@vybestack/llxprt-code-core/hooks/hookTranslator.js';
-import {
-  AfterModelHookOutput,
-  HookEventName,
-} from '@vybestack/llxprt-code-core/hooks/types.js';
+import { AfterModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 
@@ -16,7 +13,7 @@ export interface SourceAfterModelRequest {
 }
 
 export interface SourceAfterModelInput {
-  readonly system: HookSystem;
+  readonly owner: HookExecutionOwner;
   readonly request: SourceAfterModelRequest | undefined;
   readonly model: string;
   readonly response: Omit<HookLLMResponse, 'version'>;
@@ -38,14 +35,8 @@ export async function fireSourceAfterModelHook(
   if (request === undefined)
     throw new Error('AfterModel requires a request payload or source request');
   request.signal?.throwIfAborted();
-  // No registered hook means no request context is opened for this chunk.
-  if (
-    input.system.getRegistry().getHooksForEvent(HookEventName.AfterModel)
-      .length === 0
-  )
-    return undefined;
   const tools = request.tools;
-  const hook = await input.system.fireAfterModelSnapshotEvent(
+  const hook = await input.owner.afterModelSnapshot?.(
     {
       model: input.model,
       contents: request.rows(),
@@ -54,6 +45,8 @@ export async function fireSourceAfterModelHook(
     input.response,
     request.signal,
   );
+  // The owner yields nothing when hooks are disabled or none is registered.
+  if (hook === undefined) return undefined;
   try {
     // Matches the eager route: outputs of commands that succeeded still apply
     // when a sibling command failed.

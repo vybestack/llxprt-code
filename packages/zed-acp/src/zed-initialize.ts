@@ -3,19 +3,29 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { AgentProfileApplication } from '@vybestack/llxprt-code-agents';
 
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { ProfileDefinitionReads } from '@vybestack/llxprt-code-core';
 import * as acp from '@agentclientprotocol/sdk';
-import { loadProfileByName } from '@vybestack/llxprt-code-providers/runtime.js';
 import { getCliVersion } from './utils/version.js';
 import { parseZedAuthMethodId } from './zed-helpers.js';
 
+export function requireZedProfileDefinitions(
+  profiles: Pick<ProfileDefinitionReads, 'listProfiles'> | undefined,
+): Pick<ProfileDefinitionReads, 'listProfiles'> {
+  if (profiles === undefined)
+    throw new Error('ACP requires explicit workspace profile definitions');
+  return profiles;
+}
+
 export async function initializeZedAgent(
-  config: Config,
+  profiles: Pick<ProfileDefinitionReads, 'listProfiles'> | undefined,
 ): Promise<acp.InitializeResponse> {
   let profileNames: string[];
   try {
-    profileNames = await getAvailableProfileNames(config);
+    profileNames = await getAvailableProfileNames(
+      requireZedProfileDefinitions(profiles),
+    );
   } catch (error) {
     throw new Error(
       `Failed to initialize Zed agent: ${error instanceof Error ? error.message : String(error)}`,
@@ -49,13 +59,16 @@ export async function initializeZedAgent(
 }
 
 export async function authenticateZedAgent(
-  config: Config,
+  profiles: Pick<ProfileDefinitionReads, 'listProfiles'> | undefined,
   methodId: string,
+  profileApplication: AgentProfileApplication,
 ): Promise<void> {
   try {
-    const profileNames = await getAvailableProfileNames(config);
+    const profileNames = await getAvailableProfileNames(
+      requireZedProfileDefinitions(profiles),
+    );
     const profileName = parseZedAuthMethodId(methodId, profileNames);
-    await loadProfileByName(profileName);
+    await profileApplication.load(profileName);
   } catch (error) {
     throw new Error(
       `Failed to authenticate with profile "${methodId}": ${error instanceof Error ? error.message : String(error)}`,
@@ -64,6 +77,8 @@ export async function authenticateZedAgent(
   }
 }
 
-async function getAvailableProfileNames(config: Config): Promise<string[]> {
-  return (await config.getProfileManager()?.listProfiles()) ?? [];
+async function getAvailableProfileNames(
+  profiles: Pick<ProfileDefinitionReads, 'listProfiles'>,
+): Promise<string[]> {
+  return profiles.listProfiles();
 }

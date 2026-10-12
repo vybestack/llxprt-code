@@ -87,6 +87,44 @@ export function persistenceRequestLowerBound(
   );
 }
 
+export function enforcePendingPersistenceBytes(
+  bytes: number,
+  maxBytes: number,
+  pendingBytes: number,
+): void {
+  if (bytes > maxBytes - pendingBytes)
+    throw new Error(
+      `Session persistence queue byte limit exceeded: ${pendingBytes} + ${bytes} > ${maxBytes}`,
+    );
+}
+
+export async function collectPersistenceCleanupFailure(
+  failures: unknown[],
+  cleanup: () => Promise<void>,
+): Promise<boolean> {
+  try {
+    await cleanup();
+    return true;
+  } catch (error: unknown) {
+    failures.push(error);
+    return false;
+  }
+}
+
+export function preflightPersistenceRequest(
+  history: readonly IContent[],
+  metadata: PersistedSession['metadata'] | undefined,
+  uiHistory: readonly PersistedUIHistoryItem[] | undefined,
+  maxQueueBytes: number,
+  pendingBytes: number,
+): void {
+  const lowerBound = persistenceRequestLowerBound(history, metadata, uiHistory);
+  if (lowerBound > maxQueueBytes - pendingBytes)
+    throw new Error(
+      `Session persistence queue byte limit exceeded: ${pendingBytes} + at least ${lowerBound} > ${maxQueueBytes}`,
+    );
+}
+
 export async function backupCorruptedSession(
   chatsDir: string,
   prefix: string,
@@ -108,4 +146,36 @@ export async function backupCorruptedSession(
   } catch (backupError) {
     logger.error('Failed to backup corrupted session:', backupError);
   }
+}
+export function pendingPersistenceAccounting(
+  serialized: string,
+  accountedBytes: number,
+  maxQueueBytes: number,
+  pendingBytes: number,
+): { serializedBytes: number; accountingDelta: number } {
+  const serializedBytes = Buffer.byteLength(serialized, 'utf8');
+  const accountingDelta = serializedBytes - accountedBytes;
+  enforcePendingPersistenceBytes(accountingDelta, maxQueueBytes, pendingBytes);
+  return { serializedBytes, accountingDelta };
+}
+
+export function savedPersistenceSummary(
+  path: string,
+  history: readonly IContent[],
+  state: {
+    readonly generation: number;
+    readonly metadata: PersistedSession['metadata'] | undefined;
+  },
+): {
+  path: string;
+  historyLength: number;
+  generation: number;
+  metadata: PersistedSession['metadata'] | undefined;
+} {
+  return {
+    path,
+    historyLength: history.length,
+    generation: state.generation,
+    metadata: state.metadata,
+  };
 }

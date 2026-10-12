@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { NodeFileSystem } from './IFileSystem.js';
 
 /**
  * Behavioral coverage for issue #2758 AC6/AC7: alias construction dispatches
@@ -16,7 +17,7 @@
  */
 
 import { assertInstanceOf } from '@vybestack/llxprt-code-test-utils';
-import { afterEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
 import { OAuthManager, createTokenStore } from '../auth/index.js';
@@ -27,8 +28,6 @@ import {
 import {
   createProviderManager,
   refreshAliasProviders,
-  registerProviderManagerSingleton,
-  resetProviderManager,
 } from './providerManagerInstance.js';
 import {
   createBuiltinProviderContributionRegistry,
@@ -472,10 +471,6 @@ describe('registerAliasProviders registry dispatch', () => {
 });
 
 describe('refreshAliasProviders registry reuse', () => {
-  afterEach(() => {
-    resetProviderManager();
-  });
-
   it('re-registers contributed aliases through the registry createProviderManager was given', async () => {
     // Each factory call stamps an incrementing generation into the model id, so
     // a second generation after refresh proves the plugin factory ran again
@@ -506,27 +501,91 @@ describe('refreshAliasProviders registry reuse', () => {
       }),
     });
 
-    const { manager, oauthManager } = createProviderManager(
+    const { manager } = createProviderManager(
       {
         settingsService: new SettingsService(),
         runtimeId: 'issue2758-refresh-test',
       } as never,
       {
+        fileSystem: new NodeFileSystem(),
         providerContributions: contributions,
         activateConfiguredProvider: false,
       },
     );
-    registerProviderManagerSingleton(manager, oauthManager);
 
     expect(
       await modelIds(registeredProvider(manager, 'refresh-alias')),
     ).toStrictEqual(['refresh-alias-gen1']);
 
-    refreshAliasProviders();
+    refreshAliasProviders(manager);
 
     expect(
       await modelIds(registeredProvider(manager, 'refresh-alias')),
     ).toStrictEqual(['refresh-alias-gen2']);
+  });
+
+  it('keeps same-label managers responsible for their own alias refresh', async () => {
+    const createContributions = async (pluginId: string) => {
+      let generation = 0;
+      return registryFor({
+        [pluginId]: pluginModule(pluginId, {
+          aliasName: 'shared-alias',
+          factory: (entry) => {
+            generation += 1;
+            const id = `${pluginId}:${entry.alias}:${generation}`;
+            return {
+              name: entry.alias,
+              getModels: () =>
+                Promise.resolve([
+                  {
+                    id,
+                    name: id,
+                    provider: entry.alias,
+                    supportedToolFormats: ['openai'],
+                  },
+                ]),
+              getServerTools: () => [],
+              invokeServerTool: () =>
+                Promise.reject(new Error('no server tools in this test')),
+            } as unknown as IProvider;
+          },
+        }),
+      });
+    };
+
+    const a = createProviderManager(
+      { settingsService: new SettingsService(), runtimeId: 'shared' } as never,
+      {
+        fileSystem: new NodeFileSystem(),
+        providerContributions: await createContributions('plugin-a'),
+      },
+    ).manager;
+    const b = createProviderManager(
+      { settingsService: new SettingsService(), runtimeId: 'shared' } as never,
+      {
+        fileSystem: new NodeFileSystem(),
+        providerContributions: await createContributions('plugin-b'),
+      },
+    ).manager;
+
+    a.refreshAliases();
+    expect(await modelIds(registeredProvider(a, 'shared-alias'))).toStrictEqual(
+      ['plugin-a:shared-alias:2'],
+    );
+    expect(await modelIds(registeredProvider(b, 'shared-alias'))).toStrictEqual(
+      ['plugin-b:shared-alias:1'],
+    );
+
+    b.refreshAliases();
+    expect(await modelIds(registeredProvider(b, 'shared-alias'))).toStrictEqual(
+      ['plugin-b:shared-alias:2'],
+    );
+  });
+
+  it('rejects alias refresh without an initialized owner', () => {
+    expect(() => makeManager().refreshAliases()).toThrow(
+      'Alias refresh requires an initialized provider manager.',
+    );
   });
 });
 

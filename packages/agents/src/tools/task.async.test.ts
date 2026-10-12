@@ -1,8 +1,10 @@
+import { createTaskPolicyFixture } from './__tests__/task-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { TaskLaunchOwner } from '../session/task-launch-owner.js';
 
 /**
  * TaskTool async mode tests.
@@ -34,11 +36,13 @@ describe('TaskTool', () => {
   });
 
   describe('async mode', () => {
-    it('returns error when async=true but AsyncTaskManager not available', async () => {
+    it('returns error when async=true but no Agent owner is bound', async () => {
       const tool = new TaskTool(config, {
+        ...createTaskPolicyFixture({}),
+        readMcpInstructions: () => undefined,
         messageBus: new MessageBus(),
         orchestratorFactory: () => ({}) as SubagentOrchestrator,
-        // No getAsyncTaskManager provided
+        // No TaskLaunchOwner is bound
       });
       const params: TaskToolParams = {
         subagent_name: 'helper',
@@ -51,7 +55,7 @@ describe('TaskTool', () => {
 
       expect(result.error).toBeDefined();
       expect(result.error?.type).toBe(ToolErrorType.EXECUTION_FAILED);
-      expect(result.llmContent).toContain('AsyncTaskManager');
+      expect(result.llmContent).toContain('Agent');
     });
 
     it('returns error when async=true and at task limit', async () => {
@@ -63,10 +67,13 @@ describe('TaskTool', () => {
         tryReserveAsyncSlot: () => null,
       };
       const tool = new TaskTool(config, {
+        ...createTaskPolicyFixture({}),
+        readMcpInstructions: () => undefined,
         messageBus: new MessageBus(),
         orchestratorFactory: () => ({}) as SubagentOrchestrator,
-        getAsyncTaskManager: () =>
+        taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
+        ),
       });
       const params: TaskToolParams = {
         subagent_name: 'helper',
@@ -105,11 +112,14 @@ describe('TaskTool', () => {
         dispose: vi.fn().mockResolvedValue(undefined),
       });
       const tool = new TaskTool(config, {
+        ...createTaskPolicyFixture({}),
+        readMcpInstructions: () => undefined,
         messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
-        getAsyncTaskManager: () =>
+        taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
+        ),
       });
       const params: TaskToolParams = {
         subagent_name: 'helper',
@@ -154,11 +164,14 @@ describe('TaskTool', () => {
         dispose: vi.fn().mockResolvedValue(undefined),
       });
       const tool = new TaskTool(config, {
+        ...createTaskPolicyFixture({}),
+        readMcpInstructions: () => undefined,
         messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
-        getAsyncTaskManager: () =>
+        taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
+        ),
         isInteractiveEnvironment: () => false,
       });
       const params: TaskToolParams = {
@@ -203,10 +216,12 @@ describe('TaskTool', () => {
         dispose: vi.fn().mockResolvedValue(undefined),
       });
       const tool = new TaskTool(config, {
+        ...createTaskPolicyFixture({}),
+        readMcpInstructions: () => undefined,
         messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
-        getAsyncTaskManager: () => realAsyncTaskManager,
+        taskLaunchOwner: new TaskLaunchOwner(realAsyncTaskManager),
         isInteractiveEnvironment: () => false,
       });
       const params: TaskToolParams = {
@@ -228,58 +243,6 @@ describe('TaskTool', () => {
       // Cancel via the real AsyncTaskManager → the launch signal aborts.
       realAsyncTaskManager.cancelTask('async-cancel-agent');
 
-      expect(launchSignal!.aborted).toBe(true);
-    });
-
-    it('relays the foreground signal abort into the async abort controller', async () => {
-      // Fix (b): when the foreground signal passed to executeAsync aborts,
-      // the async abort controller's signal must also abort so the subagent
-      // stops.
-      const realAsyncTaskManager = new AsyncTaskManager();
-      const launchMock = vi.fn().mockResolvedValue({
-        agentId: 'async-relay-agent',
-        scope: {
-          runNonInteractive: vi.fn().mockImplementation(
-            () =>
-              new Promise<void>(() => {
-                // never resolves
-              }),
-          ),
-          output: {
-            terminate_reason: SubagentTerminateMode.GOAL,
-            emitted_vars: {},
-          },
-        },
-        dispose: vi.fn().mockResolvedValue(undefined),
-      });
-      const tool = new TaskTool(config, {
-        messageBus: new MessageBus(),
-        orchestratorFactory: () =>
-          ({ launch: launchMock }) as unknown as SubagentOrchestrator,
-        getAsyncTaskManager: () => realAsyncTaskManager,
-        isInteractiveEnvironment: () => false,
-      });
-      const params: TaskToolParams = {
-        subagent_name: 'helper',
-        goal_prompt: 'Relay work',
-        async: true,
-      };
-
-      const foregroundController = new AbortController();
-      const invocation = tool.build(params);
-      await invocation.execute(foregroundController.signal);
-
-      const launchSignal = launchMock.mock.calls[0]?.[1] as
-        | AbortSignal
-        | undefined;
-      expect(launchSignal).toBeInstanceOf(AbortSignal);
-      expect(launchSignal!.aborted).toBe(false);
-
-      // Abort the FOREGROUND signal (ESC) → the launch signal must also abort.
-      foregroundController.abort();
-
-      // Give the once-listener a tick to fire.
-      await new Promise((resolve) => setTimeout(resolve, 10));
       expect(launchSignal!.aborted).toBe(true);
     });
 
@@ -321,10 +284,12 @@ describe('TaskTool', () => {
           },
         );
       const tool = new TaskTool(config, {
+        ...createTaskPolicyFixture({}),
+        readMcpInstructions: () => undefined,
         messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
-        getAsyncTaskManager: () => realAsyncTaskManager,
+        taskLaunchOwner: new TaskLaunchOwner(realAsyncTaskManager),
         isInteractiveEnvironment: () => false,
       });
       const params: TaskToolParams = {
@@ -351,14 +316,10 @@ describe('TaskTool', () => {
       resolveLaunch?.();
       await executePromise;
 
-      // The task that registered after the gated launch carries the SAME
-      // (already-aborted) controller the relay aborted, so it is registered in
-      // an aborted state rather than as a live, unstoppable background task.
-      const registered = realAsyncTaskManager.getTask(
-        'async-launch-abort-agent',
-      );
-      expect(registered).toBeDefined();
-      expect(registered!.abortController?.signal.aborted).toBe(true);
+      expect(
+        realAsyncTaskManager.getTask('async-launch-abort-agent'),
+      ).toBeUndefined();
+      expect(realAsyncTaskManager.canLaunchAsync().allowed).toBe(true);
     });
 
     it('returns immediately with launch status when async=true (does not block)', async () => {
@@ -384,11 +345,14 @@ describe('TaskTool', () => {
         dispose: vi.fn().mockResolvedValue(undefined),
       });
       const tool = new TaskTool(config, {
+        ...createTaskPolicyFixture({}),
+        readMcpInstructions: () => undefined,
         messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
-        getAsyncTaskManager: () =>
+        taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
+        ),
       });
       const params: TaskToolParams = {
         subagent_name: 'helper',
@@ -443,11 +407,14 @@ describe('TaskTool', () => {
         dispose: vi.fn().mockResolvedValue(undefined),
       });
       const tool = new TaskTool(config, {
+        ...createTaskPolicyFixture({}),
+        readMcpInstructions: () => undefined,
         messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
-        getAsyncTaskManager: () =>
+        taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
+        ),
         isInteractiveEnvironment: () => false,
       });
       const params: TaskToolParams = {
@@ -493,11 +460,14 @@ describe('TaskTool', () => {
         dispose: vi.fn().mockResolvedValue(undefined),
       });
       const tool = new TaskTool(config, {
+        ...createTaskPolicyFixture({}),
+        readMcpInstructions: () => undefined,
         messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
-        getAsyncTaskManager: () =>
+        taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
+        ),
         isInteractiveEnvironment: () => false,
       });
       const params: TaskToolParams = {
@@ -565,11 +535,17 @@ describe('TaskTool', () => {
         }),
       } as unknown as Config;
       const tool = new TaskTool(configWithSettings, {
+        ...createTaskPolicyFixture({
+          'task-default-timeout-seconds': 60,
+          'task-max-timeout-seconds': 120,
+        }),
+        readMcpInstructions: () => undefined,
         messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
-        getAsyncTaskManager: () =>
+        taskLaunchOwner: new TaskLaunchOwner(
           mockAsyncTaskManager as unknown as AsyncTaskManager,
+        ),
         isInteractiveEnvironment: () => false,
       });
       const params: TaskToolParams = {
@@ -632,10 +608,12 @@ describe('TaskTool', () => {
         dispose: vi.fn().mockResolvedValue(undefined),
       });
       const tool = new TaskTool(config, {
+        ...createTaskPolicyFixture({}),
+        readMcpInstructions: () => undefined,
         messageBus: new MessageBus(),
         orchestratorFactory: () =>
           ({ launch: launchMock }) as unknown as SubagentOrchestrator,
-        getAsyncTaskManager: () => realAsyncTaskManager,
+        taskLaunchOwner: new TaskLaunchOwner(realAsyncTaskManager),
         isInteractiveEnvironment: () => false,
       });
       const params: TaskToolParams = {

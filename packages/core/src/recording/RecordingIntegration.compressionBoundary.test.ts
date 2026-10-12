@@ -347,6 +347,21 @@ describe('RecordingIntegration duplicate content guard @issue:3132', () => {
     'does not re-record earlier content when the same HistoryService is re-subscribed',
     testRecordingCompressionBoundary10,
   );
+
+  it(
+    'does not append resumed content again when a rebuild reassigns turn IDs',
+    testRecordingCompressionBoundary11,
+  );
+
+  it(
+    'does not re-record seeded disk history when live history is empty at subscribe time',
+    testRecordingCompressionBoundary12,
+  );
+
+  it(
+    'does not re-record an unstamped disk snapshot when its history is rebuilt',
+    testRecordingCompressionBoundary13,
+  );
 });
 
 async function testRecordingCompressionBoundary01(): Promise<void> {
@@ -580,4 +595,148 @@ async function testRecordingCompressionBoundary10(): Promise<void> {
     'before-resubscribe',
     'after-resubscribe',
   ]);
+}
+
+interface ResumedSession {
+  readonly recording: SessionRecordingService;
+  readonly integration: RecordingIntegration;
+  readonly history: HistoryService;
+}
+
+/**
+ * Closes the harness session, then resumes the same recording file the way a
+ * resumed session does: the journal is seeded from disk rather than from a
+ * live history array.
+ */
+async function resumeHarnessSession(
+  sessionPath: string,
+): Promise<{ resumed: ResumedSession; replayed: ReplayOkResult }> {
+  await harness.integration.dispose();
+  await harness.recordingService.dispose();
+
+  const replayed = await replaySession(sessionPath, PROJECT_HASH);
+  assertReplayOk(replayed);
+  const recording = new SessionRecordingService(makeConfig(harness.chatsDir));
+  recording.initializeForResume(sessionPath, replayed.lastSeq);
+  const integration = new RecordingIntegration(recording);
+  const history = new HistoryService({ recording });
+  await integration.subscribeToJournal(history);
+  return { resumed: { recording, integration, history }, replayed };
+}
+
+async function closeResumedSession(resumed: ResumedSession): Promise<void> {
+  await resumed.integration.dispose();
+  await resumed.recording.dispose();
+  resumed.history.dispose();
+}
+
+async function liveTexts(history: HistoryService): Promise<string[]> {
+  let texts: string[] = [];
+  await collectRowsForAssertions(
+    history.streamRawHistory(),
+    (contentsForAssertions) => {
+      texts = textsOf(contentsForAssertions);
+    },
+  );
+  return texts;
+}
+
+async function testRecordingCompressionBoundary11(): Promise<void> {
+  harness.historyService.add({
+    ...textContent('resumed message'),
+    metadata: { turnId: 'original-turn-id' },
+  });
+  await harness.integration.flushAtTurnBoundary();
+  let original: IContent | undefined;
+  await collectRowsForAssertions(
+    harness.historyService.streamRawHistory(),
+    (contentsForAssertions) => {
+      expect(contentsForAssertions).toHaveLength(1);
+      original = contentsForAssertions[0];
+    },
+  );
+  if (original === undefined) throw new Error('Expected the recorded row');
+
+  // The rebuild hands the same payload back under a different turn ID.
+  await harness.historyService.replaceAll([
+    {
+      ...original,
+      metadata: {
+        turnId: 'replacement-turn-id',
+        chronology: original.metadata?.chronology,
+      },
+    },
+  ]);
+
+  const events = await flushAndReadEvents();
+  expect(textsOf(recordedContents(events))).toStrictEqual(['resumed message']);
+  expect(await liveTexts(harness.historyService)).toStrictEqual([
+    'resumed message',
+  ]);
+}
+
+async function testRecordingCompressionBoundary12(): Promise<void> {
+  harness.historyService.add({
+    ...textContent('disk-only resumed message'),
+    metadata: { turnId: 'disk-turn' },
+  });
+  await harness.integration.flushAtTurnBoundary();
+  const sessionPath = harness.recordingService.getFilePath();
+  expect(sessionPath).not.toBeNull();
+
+  const { resumed, replayed } = await resumeHarnessSession(sessionPath ?? '');
+  try {
+    // No row was added through this service: the journal holds the disk
+    // history on its own, so the rebuild below has nothing new to record.
+    expect(await liveTexts(resumed.history)).toStrictEqual([
+      'disk-only resumed message',
+    ]);
+    const diskRow = replayed.history[0];
+    await resumed.history.replaceAll([
+      {
+        ...diskRow,
+        metadata: {
+          turnId: 'rebuilt-turn',
+          chronology: diskRow.metadata?.chronology,
+        },
+      },
+    ]);
+    await resumed.integration.flushAtTurnBoundary();
+
+    const events = await readEvents(sessionPath ?? '');
+    expect(textsOf(recordedContents(events))).toStrictEqual([
+      'disk-only resumed message',
+    ]);
+  } finally {
+    await closeResumedSession(resumed);
+  }
+}
+
+async function testRecordingCompressionBoundary13(): Promise<void> {
+  const snapshot = textContent('unstamped disk snapshot');
+  harness.recordingService.recordContent(snapshot);
+  await harness.recordingService.flush();
+  const sessionPath = harness.recordingService.getFilePath();
+  expect(sessionPath).not.toBeNull();
+
+  const { resumed, replayed } = await resumeHarnessSession(sessionPath ?? '');
+  try {
+    // Rebuilding with the unstamped disk snapshot must not add it to the
+    // history again, while a genuinely new message with identical text is
+    // still recorded. A journal rebuild that has to stamp the snapshot
+    // rewrites it inside one committed replace transaction, so the resolved
+    // (replayed) history is what shows whether a duplicate exists.
+    await resumed.history.replaceAll([replayed.history[0]]);
+    resumed.history.add(textContent('unstamped disk snapshot'));
+    await resumed.integration.flushAtTurnBoundary();
+
+    const replay = await replaySession(sessionPath ?? '', PROJECT_HASH);
+    assertReplayOk(replay);
+    expect(textsOf(replay.history)).toStrictEqual([
+      'unstamped disk snapshot',
+      'unstamped disk snapshot',
+    ]);
+  } finally {
+    await closeResumedSession(resumed);
+  }
 }

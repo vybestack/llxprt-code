@@ -11,7 +11,6 @@ export { BaseTokenStorage } from './base-token-storage.js';
 export { FileTokenStorage } from './file-token-storage.js';
 export {
   KeychainTokenStorage,
-  setKeytarLoader,
-  resetKeytarLoader,
+  type KeytarLoader,
 } from './keychain-token-storage.js';
 export { HybridTokenStorage } from './hybrid-token-storage.js';

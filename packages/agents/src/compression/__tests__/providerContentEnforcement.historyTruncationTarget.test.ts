@@ -1,3 +1,4 @@
+import { createHistoryRuntimeFixture } from '../../core/__tests__/history-runtime-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -28,7 +29,7 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import { CompressionHandler } from '../CompressionHandler.js';
 import { enforceProviderSourceForTest } from './support/enforce-provider-source.js';
@@ -48,24 +49,16 @@ function buildRuntimeContext(
     model: MODEL,
     sessionId: 'test-session',
   });
-  return createAgentRuntimeContext({
+  return createHistoryRuntimeFixture({
     state,
     history: historyService,
-    settings: {
+    policy: {
       compressionThreshold: COMPRESSION_THRESHOLD,
       contextLimit: CONTEXT_LIMIT,
       preserveThreshold: 0.2,
       telemetry: { enabled: false, target: null },
       'reasoning.includeInContext': true,
     },
-    provider: {} as never,
-    telemetry: {} as never,
-    tools: {} as never,
-    providerRuntime: {
-      runtimeId: 'test-runtime',
-      settingsService: { get: vi.fn(() => undefined) } as never,
-      config: {} as never,
-    } as never,
   });
 }
 

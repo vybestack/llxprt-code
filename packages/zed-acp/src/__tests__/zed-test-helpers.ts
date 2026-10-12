@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { installZedFilesystemFixture } from './zed-filesystem-fixture.js';
+import { projectZedSessionSettings } from '../zed-session-ports.js';
+const fixtureFilesystem = installZedFilesystemFixture();
+
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { vi, type Mock } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
 import type { AgentEvent, Agent } from '@vybestack/llxprt-code-agents';
@@ -30,7 +36,12 @@ export function buildScriptedAgent(
   confirmations: ConfirmationCapture[];
 } {
   const confirmations: ConfirmationCapture[] = [];
+  const settingsOwner = new SessionSettingsOwner(new SettingsService());
   const agent = {
+    getModel: () => 'scripted-agent-model',
+    getEphemeralSetting: (key: string) => settingsOwner.readNamedParameter(key),
+    setEphemeralSetting: (key: string, value: unknown) =>
+      settingsOwner.writeUserParameter(key, value),
     async *stream(_input: unknown, _opts?: unknown): AsyncIterable<AgentEvent> {
       for (const e of nextEvents()) {
         yield e;
@@ -38,7 +49,11 @@ export function buildScriptedAgent(
     },
     getApprovalMode: (): ApprovalMode => 'default' as ApprovalMode,
     setApprovalMode: vi.fn(),
-    dispose: vi.fn().mockResolvedValue(undefined),
+    session: {
+      getRecordingTitle: () => undefined,
+      recordRecordingTitle: async () => undefined,
+    },
+    dispose: vi.fn(async () => settingsOwner.dispose()),
     tools: {
       get: (name: string) =>
         Object.hasOwn(toolKinds, name) ? { kind: toolKinds[name] } : undefined,
@@ -81,7 +96,12 @@ export function buildBlockingScriptedAgent(
   confirmations: ConfirmationCapture[];
 } {
   const confirmations: ConfirmationCapture[] = [];
+  const settingsOwner = new SessionSettingsOwner(new SettingsService());
   const agent = {
+    getModel: () => 'scripted-agent-model',
+    getEphemeralSetting: (key: string) => settingsOwner.readNamedParameter(key),
+    setEphemeralSetting: (key: string, value: unknown) =>
+      settingsOwner.writeUserParameter(key, value),
     async *stream(_input: unknown, opts?: unknown): AsyncIterable<AgentEvent> {
       for (const e of nextEvents()) {
         yield e;
@@ -100,7 +120,11 @@ export function buildBlockingScriptedAgent(
     },
     getApprovalMode: (): ApprovalMode => 'default' as ApprovalMode,
     setApprovalMode: vi.fn(),
-    dispose: vi.fn().mockResolvedValue(undefined),
+    session: {
+      getRecordingTitle: () => undefined,
+      recordRecordingTitle: async () => undefined,
+    },
+    dispose: vi.fn(async () => settingsOwner.dispose()),
     tools: {
       get: (name: string) =>
         Object.hasOwn(toolKinds, name) ? { kind: toolKinds[name] } : undefined,
@@ -538,21 +562,18 @@ export function buildMinimalConfig(): Config {
     getDebugMode: () => false,
     getApprovalMode: () => 'default' as ApprovalMode,
     setApprovalMode: () => {},
-    getTargetDir: () => '/project',
-    getProjectRoot: () => '/project',
-    getFileService: () => ({ shouldIgnoreFile: () => false }),
+    getTargetDir: () => process.cwd(),
+    getProjectRoot: () => process.cwd(),
     getFileFilteringOptions: () => ({
       respectGitIgnore: true,
       respectLlxprtIgnore: true,
     }),
     getEnableRecursiveFileSearch: () => false,
-    getFileSystemService: () => ({ readTextFile: async () => '' }),
     getMaxSessionTurns: () => 50,
     // usage_update path (issue #1607): sendUsageUpdate resolves the context
     // window via resolveEffectiveContextLimit(model, userLimit, providerLimit).
     getModel: () => 'test-model',
     getContentGeneratorConfig: () => undefined,
-    getSessionRecordingService: () => undefined,
   } as unknown as Config;
 }
 
@@ -564,7 +585,12 @@ export function createSession(
   return new Session(
     'test-session-id',
     agent,
-    config,
+    projectZedSessionSettings(
+      config,
+      agent,
+      fixtureFilesystem().files,
+      fixtureFilesystem().ignore,
+    ),
     connection as unknown as acp.AgentSideConnection,
   );
 }

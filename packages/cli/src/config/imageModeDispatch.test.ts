@@ -168,13 +168,7 @@ function makeConfigWithRunner(
     readonly inputPaths?: readonly string[];
   }) => Promise<unknown>,
 ): unknown {
-  // Mirror the REAL Config surface: capability exposed via a typed getter,
-  // NOT a mutable property. Tests that construct a config exposing only a
-  // property (without the getter) must fail so the wiring defect is caught.
-  return {
-    getTargetDir: () => '/workspace',
-    getRunImageOperation: () => runner,
-  };
+  return runner;
 }
 
 describe('resolveDirectImageMode (real parser/dispatch seam)', () => {
@@ -394,10 +388,9 @@ describe('runDirectImageModeAndExit', () => {
   });
 
   it('returns FATAL_CONFIG_ERROR when no image runner is configured (capability-specific)', async () => {
-    const config = { getTargetDir: () => '/workspace' };
     const code = await runDirectImageModeAndExit(
       makeArgs({ imageOutput: 'cat.png', imagePrompt: 'draw a cat' }),
-      config as never,
+      undefined,
     );
     expect(code).toBe(ExitCodes.FATAL_CONFIG_ERROR);
     const err = stderrChunks.join('');
@@ -417,17 +410,11 @@ describe('runDirectImageModeAndExit', () => {
     expect(code).toBe(ExitCodes.FATAL_INPUT_ERROR);
   });
 
-  it('rejects a config that exposes runImageOperation as a property instead of the getter (wiring guard)', async () => {
-    // A config with ONLY a property (no getRunImageOperation getter) must be
-    // treated as unavailable so the unsafe property cast can never regress.
+  it('reports unavailable when no image operation is admitted', async () => {
     const runner = vi.fn();
-    const config = {
-      getTargetDir: () => '/workspace',
-      runImageOperation: runner,
-    };
     const code = await runDirectImageModeAndExit(
       makeArgs({ imageOutput: 'cat.png', imagePrompt: 'draw a cat' }),
-      config as never,
+      undefined,
     );
     expect(code).toBe(ExitCodes.FATAL_CONFIG_ERROR);
     expect(runner).not.toHaveBeenCalled();

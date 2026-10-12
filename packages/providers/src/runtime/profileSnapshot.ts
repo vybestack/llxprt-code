@@ -7,7 +7,7 @@
 import { type ModelProfileInfoPayload } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
-import { ProfileManager } from '@vybestack/llxprt-code-settings';
+import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings/profiles/types.js';
 import {
   getProfilePersistableKeys,
@@ -19,14 +19,10 @@ import type {
   LoadBalancerProfile,
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
-import {
-  getCliRuntimeServices,
-  maybeGetCliOAuthManager,
-  getActiveModelName,
-  getActiveModelParams,
-  _internal as runtimeAccessorsInternal,
-} from './runtimeAccessors.js';
-import { applyProfileWithGuards } from './profileApplication.js';
+import { extractModelParams } from './providerModelParameters.js';
+import type { OAuthManager } from '../auth/oauth-manager.js';
+import type { ProfileOAuthWork } from '../auth/types.js';
+import type { ProfileApplicationResult } from './profileApplication.js';
 import type { LoadBalancingProviderConfig } from '../loadBalancing/loadBalancerTypes.js';
 import {
   getProfileEphemeralSettings,
@@ -51,46 +47,22 @@ type LoadBalancerProfileWithDetails = LoadBalancerProfile & {
   loadBalancerProfileDetails?: LoadBalancerProfileDetail[];
 };
 
-const logger = new DebugLogger('llxprt:runtime:settings');
-const {
-  resolveActiveProviderName,
-  getProviderSettingsSnapshot,
-  extractModelParams,
-} = runtimeAccessorsInternal;
+function logger(): DebugLogger {
+  return new DebugLogger('llxprt:runtime:settings');
+}
 
-type CliRuntimeConfig = ReturnType<typeof getCliRuntimeServices>['config'];
-type CliOAuthManager = NonNullable<ReturnType<typeof maybeGetCliOAuthManager>>;
-
-type RuntimeSnapshotConfig = Omit<
-  CliRuntimeConfig,
-  | 'getProvider'
-  | 'getModel'
-  | 'getBucketFailoverHandler'
-  | 'setBucketFailoverHandler'
-> & {
-  getProvider?: () => string | null | undefined;
-  getModel?: () => string | null | undefined;
-  getBucketFailoverHandler?: () =>
-    | { getBuckets?: () => string[] | null | undefined }
-    | null
-    | undefined;
-  setBucketFailoverHandler?: (handler: undefined) => void;
-};
-
-type RuntimeSnapshotProviderManager = Omit<
-  ReturnType<typeof getCliRuntimeServices>['providerManager'],
-  'getActiveProviderName' | 'getProviderByName'
-> & {
-  getActiveProviderName?: () => string | null | undefined;
-  getProviderByName?: (
-    providerName: string,
-  ) => { getDefaultModel?: () => string | null | undefined } | null | undefined;
-};
+export interface ProfileSnapshotData {
+  readonly providerName: string;
+  readonly modelName: string;
+  readonly providerSettings: Record<string, unknown>;
+  readonly ephemeralSettings: Record<string, unknown>;
+  readonly loadBalancerConfig?: Readonly<LoadBalancingProviderConfig>;
+}
 
 export const PROFILE_EPHEMERAL_KEYS: readonly string[] =
   getProfilePersistableKeys();
 
-const SENSITIVE_MODEL_PARAM_KEYS = new Set([
+const SENSITIVE_MODEL_PARAM_KEYS: readonly string[] = Object.freeze([
   'auth-key',
   'authKey',
   'auth-keyfile',
@@ -178,19 +150,8 @@ function isSkippableProfileKey(
  * 'load-balancer' is not a registered provider at load time (issue #2479).
  */
 function buildLoadBalancerProfileSnapshot(
-  snapshotProviderManager: RuntimeSnapshotProviderManager,
+  lbConfig: Readonly<LoadBalancingProviderConfig> | undefined,
 ): LoadBalancerProfile {
-  const provider = snapshotProviderManager.getProviderByName?.(
-    'load-balancer',
-  ) as
-    | { getLoadBalancerConfig?: () => Readonly<LoadBalancingProviderConfig> }
-    | null
-    | undefined;
-  const lbConfig =
-    typeof provider?.getLoadBalancerConfig === 'function'
-      ? provider.getLoadBalancerConfig()
-      : null;
-
   const memberNames = lbConfig?.subProfiles.map((sub) => sub.name) ?? [];
 
   if (!lbConfig || memberNames.length === 0) {
@@ -229,33 +190,16 @@ function buildLoadBalancerProfileSnapshot(
   };
 }
 
-export function buildRuntimeProfileSnapshot(): Profile {
-  const { config, settingsService, providerManager } = getCliRuntimeServices();
-  const snapshotConfig = config as RuntimeSnapshotConfig;
-  const snapshotProviderManager =
-    providerManager as RuntimeSnapshotProviderManager;
-  // #2534 C3/Domain-5: resolveActiveProviderName IS the one resolution
-  // (settings store → manager cache). The former manager/config.getProvider
-  // probe tails read the same two sources a second time; 'openai' is the
-  // documented snapshot default when nothing resolves.
-  const providerName = resolveActiveProviderName() ?? 'openai';
-
+export function buildRuntimeProfileSnapshot(
+  input: ProfileSnapshotData,
+): Profile {
+  const { providerName, modelName, providerSettings, ephemeralSettings } =
+    input;
   if (providerName === 'load-balancer') {
-    return buildLoadBalancerProfileSnapshot(snapshotProviderManager);
+    return structuredClone(
+      buildLoadBalancerProfileSnapshot(input.loadBalancerConfig),
+    );
   }
-  const providerSettings = getProviderSettingsSnapshot(
-    settingsService,
-    providerName,
-  );
-  const currentModel =
-    (providerSettings.model as string | undefined) ??
-    snapshotConfig.getModel?.() ??
-    snapshotProviderManager
-      .getProviderByName?.(providerName)
-      ?.getDefaultModel?.() ??
-    'unknown';
-
-  const ephemeralSettings = config.getEphemeralSettings();
   const snapshot: Record<string, unknown> = {};
   const ephemeralRecord = ephemeralSettings;
   const hasAuthKeyfile =
@@ -297,9 +241,11 @@ export function buildRuntimeProfileSnapshot(): Profile {
   return {
     version: 1,
     provider: providerName,
-    model: currentModel,
-    modelParams,
-    ephemeralSettings: snapshot as Profile['ephemeralSettings'],
+    model: modelName,
+    modelParams: structuredClone(modelParams),
+    ephemeralSettings: structuredClone(
+      snapshot,
+    ) as Profile['ephemeralSettings'],
   };
 }
 
@@ -346,11 +292,6 @@ function hasBucketSetChanged(
   );
 }
 
-function getFailoverBuckets(config: RuntimeSnapshotConfig): string[] {
-  const handler = config.getBucketFailoverHandler?.();
-  return handler?.getBuckets?.() ?? [];
-}
-
 function getOAuthBuckets(authConfig: ProfileAuthConfig | undefined): string[] {
   return authConfig?.type === 'oauth' && Array.isArray(authConfig.buckets)
     ? authConfig.buckets
@@ -374,30 +315,13 @@ function setCurrentProfileName(
   settingsService.set('currentProfile', profileName ?? null);
 }
 
-function scheduleProactiveRenewals(
-  oauthManager: CliOAuthManager,
-  profile: Profile,
-): void {
-  void oauthManager
-    .configureProactiveRenewalsForProfile(profile)
-    .catch((error) => {
-      logger.debug(
-        () =>
-          `[cli-runtime] Failed to configure proactive OAuth renewals: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-      );
-    });
-}
-
 function clearProfileFailoverOnBucketChanges(
-  oauthManager: CliOAuthManager,
-  config: RuntimeSnapshotConfig,
+  oauthManager: OAuthManager,
   profile: Profile,
 ): void {
   const authConfig = getProfileAuthConfig(profile);
   const newBuckets = getOAuthBuckets(authConfig);
-  const existingBuckets = getFailoverBuckets(config);
+  const existingBuckets = oauthManager.readFailoverBuckets(profile.provider);
   const bucketsChanged = hasBucketSetChanged(existingBuckets, newBuckets);
 
   if (
@@ -407,35 +331,35 @@ function clearProfileFailoverOnBucketChanges(
     return;
   }
 
-  logger.debug(
+  logger().debug(
     () =>
       `[issue1467] Profile buckets changed for ${profile.provider}: ` +
       `[${existingBuckets.join(', ')}] → [${newBuckets.join(', ')}]. ` +
       'Clearing session bucket and failover handler.',
   );
   oauthManager.clearSessionBucket(profile.provider);
-  config.setBucketFailoverHandler?.(undefined);
+  oauthManager.clearRetryHandlers();
 }
 
-function wireStandardProfileFailover(
-  oauthManager: CliOAuthManager,
+async function wireStandardProfileFailover(
+  work: ProfileOAuthWork,
   profile: Profile,
-): void {
+  profileName: string | undefined,
+  signal: AbortSignal,
+): Promise<void> {
   const authConfig = getProfileAuthConfig(profile);
   if (!hasMultiBucketOAuth(authConfig)) {
     return;
   }
 
   const bucketCount = getOAuthBuckets(authConfig).length;
-  void oauthManager.getOAuthToken(profile.provider).catch((error) => {
-    logger.debug(
-      () =>
-        `[issue1151] Failed to proactively wire failover handler: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-    );
+  await work.getToken({
+    providerName: profile.provider,
+    profileName,
+    buckets: getOAuthBuckets(authConfig),
+    signal,
   });
-  logger.debug(
+  logger().debug(
     () =>
       `[issue1151] Proactively wired failover handler for ${profile.provider} with ${bucketCount} buckets`,
   );
@@ -443,12 +367,12 @@ function wireStandardProfileFailover(
 
 async function loadSubProfileOrNull(
   profileName: string,
-  manager: ProfileManager,
+  manager: Pick<ProfileManager, 'loadProfile'>,
 ): Promise<Profile | null> {
   try {
     return await manager.loadProfile(profileName);
   } catch (error) {
-    logger.debug(
+    logger().debug(
       () =>
         `[issue1250] Failed to load sub-profile '${profileName}': ${
           error instanceof Error ? error.message : String(error)
@@ -458,12 +382,14 @@ async function loadSubProfileOrNull(
   }
 }
 
-function wireLoadBalancerSubProfile(
-  oauthManager: CliOAuthManager,
+async function wireLoadBalancerSubProfile(
+  oauthManager: OAuthManager,
+  work: ProfileOAuthWork,
   subProfileName: string,
   subProfile: Profile,
   existingBuckets: string[],
-): boolean {
+  signal: AbortSignal,
+): Promise<boolean> {
   const subProfileAuth = getProfileAuthConfig(subProfile);
   if (!hasMultiBucketOAuth(subProfileAuth)) {
     return false;
@@ -474,7 +400,7 @@ function wireLoadBalancerSubProfile(
   const subBucketsChanged = hasBucketSetChanged(existingBuckets, subNewBuckets);
 
   if (subBucketsChanged) {
-    logger.debug(
+    logger().debug(
       () =>
         `[issue1467] Sub-profile '${subProfileName}' buckets changed for ${subProfile.provider}: ` +
         `[${existingBuckets.join(', ')}] → [${subNewBuckets.join(', ')}]. ` +
@@ -483,15 +409,13 @@ function wireLoadBalancerSubProfile(
     oauthManager.clearSessionBucket(subProfile.provider);
   }
 
-  void oauthManager.getOAuthToken(subProfile.provider).catch((error) => {
-    logger.debug(
-      () =>
-        `[issue1250] Failed to proactively wire failover handler for sub-profile '${subProfileName}': ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-    );
+  await work.getToken({
+    providerName: subProfile.provider,
+    profileName: subProfileName,
+    buckets: subNewBuckets,
+    signal,
   });
-  logger.debug(
+  logger().debug(
     () =>
       `[issue1250] Proactively wired failover handler for sub-profile '${subProfileName}' (${subProfile.provider}) with ${subBucketCount} buckets`,
   );
@@ -499,51 +423,56 @@ function wireLoadBalancerSubProfile(
   return subBucketsChanged;
 }
 
-async function wireLoadBalancerFailover(
-  oauthManager: CliOAuthManager,
-  config: RuntimeSnapshotConfig,
+async function prepareLoadBalancerFailover(
+  oauthManager: OAuthManager,
+  work: ProfileOAuthWork,
   profile: LoadBalancerProfile,
-): Promise<void> {
+  manager: Pick<ProfileManager, 'loadProfile'>,
+  signal: AbortSignal,
+): Promise<() => Promise<void>> {
   const subProfileNames: string[] = Array.isArray(profile.profiles)
     ? profile.profiles
     : [];
-  logger.debug(
+  logger().debug(
     () =>
       `[issue1250] LoadBalancer profile detected with ${subProfileNames.length} sub-profile(s)`,
   );
 
-  const existingBuckets = getFailoverBuckets(config);
-  const manager = new ProfileManager();
-  let shouldClearHandler = false;
-
-  for (const subProfileName of subProfileNames) {
-    const subProfile = await loadSubProfileOrNull(subProfileName, manager);
-    if (!subProfile) {
-      continue;
-    }
-    shouldClearHandler =
-      wireLoadBalancerSubProfile(
-        oauthManager,
-        subProfileName,
-        subProfile,
-        existingBuckets,
-      ) || shouldClearHandler;
+  const existingBuckets = oauthManager.readFailoverBuckets(profile.provider);
+  const subProfiles: Array<{ name: string; profile: Profile }> = [];
+  for (const name of subProfileNames) {
+    const subProfile = await loadSubProfileOrNull(name, manager);
+    if (subProfile) subProfiles.push({ name, profile: subProfile });
   }
-
-  if (!shouldClearHandler) {
-    return;
-  }
-
-  logger.debug(
-    () =>
-      '[issue1467] Clearing failover handler after LB sub-profile bucket changes',
-  );
-  config.setBucketFailoverHandler?.(undefined);
+  return async () => {
+    const results = await Promise.allSettled(
+      subProfiles.map((subProfile) =>
+        wireLoadBalancerSubProfile(
+          oauthManager,
+          work,
+          subProfile.name,
+          subProfile.profile,
+          existingBuckets,
+          signal,
+        ),
+      ),
+    );
+    const shouldClearHandler = results.some(
+      (result) => result.status === 'fulfilled' && result.value,
+    );
+    if (shouldClearHandler && !signal.aborted)
+      oauthManager.clearRetryHandlers();
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'Profile OAuth warmup failed');
+  };
 }
 
 function buildProfileLoadResult(
   profileName: string | undefined,
-  applicationResult: Awaited<ReturnType<typeof applyProfileWithGuards>>,
+  applicationResult: ProfileApplicationResult,
 ): ProfileLoadResult {
   return {
     profileName,
@@ -590,45 +519,78 @@ export function buildModelProfileInfoPayload(
   };
 }
 
-export async function applyProfileSnapshot(
+export async function finishProfileApplication(
   profile: Profile,
-  options: ProfileLoadOptions = {},
-): Promise<ProfileLoadResult> {
-  const { settingsService, config } = getCliRuntimeServices();
-  const applicationResult = await applyProfileWithGuards(profile, options);
-
+  options: ProfileLoadOptions,
+  applicationResult: ProfileApplicationResult,
+  settingsService: SettingsService,
+  oauthManager: OAuthManager | null,
+  profileManager: Pick<ProfileManager, 'loadProfile'>,
+  signal: AbortSignal = new AbortController().signal,
+): Promise<{
+  result: ProfileLoadResult;
+  commit: () => Promise<void>;
+  publish: () => void;
+  cancelAndJoin: () => Promise<void>;
+}> {
+  const work = oauthManager?.createProfileOAuthWork(signal);
+  const commitRenewals = work
+    ? await work.prepareRenewals(profile, (name) =>
+        profileManager.loadProfile(name),
+      )
+    : () => {};
+  const commitLoadBalancerFailover =
+    oauthManager !== null && work && isLoadBalancerProfile(profile)
+      ? await prepareLoadBalancerFailover(
+          oauthManager,
+          work,
+          profile,
+          profileManager,
+          signal,
+        )
+      : () => {};
   setCurrentProfileName(settingsService, options.profileName);
-
-  const oauthManager = maybeGetCliOAuthManager();
-  if (oauthManager != null) {
-    scheduleProactiveRenewals(oauthManager, profile);
-    clearProfileFailoverOnBucketChanges(oauthManager, config, profile);
-    wireStandardProfileFailover(oauthManager, profile);
-    if (isLoadBalancerProfile(profile)) {
-      await wireLoadBalancerFailover(oauthManager, config, profile);
-    }
-  }
-
   const result = buildProfileLoadResult(options.profileName, applicationResult);
-
-  coreEvents.emitModelProfileChanged(
-    buildModelProfileInfoPayload({
-      model: result.modelName,
-      providerName: result.providerName,
-      profileName: result.profileName,
-    }),
-  );
-
-  return result;
+  return {
+    result,
+    cancelAndJoin: () => work?.cancelAndJoin() ?? Promise.resolve(),
+    commit: async () => {
+      commitRenewals();
+      if (oauthManager !== null && work) {
+        clearProfileFailoverOnBucketChanges(oauthManager, profile);
+        const results = await Promise.allSettled([
+          wireStandardProfileFailover(
+            work,
+            profile,
+            options.profileName,
+            signal,
+          ),
+          commitLoadBalancerFailover(),
+        ]);
+        const failures = results.flatMap((result) =>
+          result.status === 'rejected' ? [result.reason] : [],
+        );
+        if (failures.length > 0)
+          throw new AggregateError(failures, 'Profile OAuth commit failed');
+      }
+    },
+    publish: () =>
+      coreEvents.emitModelProfileChanged(
+        buildModelProfileInfoPayload({
+          model: result.modelName,
+          providerName: result.providerName,
+          profileName: result.profileName,
+        }),
+      ),
+  };
 }
 
 export async function saveProfileSnapshot(
   profileName: string,
-  additionalConfig?: Partial<Profile>,
+  snapshot: Profile,
+  additionalConfig: Partial<Profile> | undefined,
+  manager: Pick<ProfileManager, 'saveProfile'>,
 ): Promise<Profile> {
-  const manager = new ProfileManager();
-  const snapshot = buildRuntimeProfileSnapshot();
-
   let finalProfile: Profile = snapshot;
   if (additionalConfig) {
     finalProfile = { ...snapshot, ...additionalConfig } as Profile;
@@ -662,38 +624,27 @@ export async function saveProfileSnapshot(
 export async function saveLoadBalancerProfile(
   profileName: string,
   profile: LoadBalancerProfile,
+  manager: Pick<ProfileManager, 'saveProfile'>,
 ): Promise<void> {
-  const manager = new ProfileManager();
-  await manager.saveLoadBalancerProfile(profileName, profile);
+  await manager.saveProfile(profileName, profile);
 }
 
-export async function loadProfileByName(
+export async function deleteProfileByName(
   profileName: string,
-): Promise<ProfileLoadResult> {
-  const manager = new ProfileManager();
-  const profile = await manager.loadProfile(profileName);
-  return applyProfileSnapshot(profile, { profileName });
-}
-
-export async function deleteProfileByName(profileName: string): Promise<void> {
-  const manager = new ProfileManager();
+  settingsService: Pick<
+    SettingsService,
+    'getCurrentProfileName' | 'setCurrentProfileName'
+  >,
+  manager: Pick<ProfileManager, 'deleteProfile'>,
+): Promise<void> {
   await manager.deleteProfile(profileName);
-  const { settingsService } = getCliRuntimeServices();
-  const currentProfile =
-    typeof settingsService.getCurrentProfileName === 'function'
-      ? settingsService.getCurrentProfileName()
-      : (settingsService.get('currentProfile') as string | null);
-  if (currentProfile === profileName) {
-    if (typeof settingsService.setCurrentProfileName === 'function') {
-      settingsService.setCurrentProfileName(null);
-    } else {
-      settingsService.set('currentProfile', null);
-    }
+  if (settingsService.getCurrentProfileName() === profileName) {
+    settingsService.setCurrentProfileName(null);
   }
 }
 async function resolveLoadBalancerProfileDetail(
   memberName: string,
-  manager: ProfileManager,
+  manager: Pick<ProfileManager, 'loadProfile'>,
 ): Promise<LoadBalancerProfileDetail> {
   try {
     const memberProfile = await manager.loadProfile(memberName);
@@ -726,7 +677,7 @@ async function resolveLoadBalancerProfileDetail(
 
 async function addLoadBalancerProfileDetails(
   profile: LoadBalancerProfile,
-  manager: ProfileManager,
+  manager: Pick<ProfileManager, 'loadProfile'>,
 ): Promise<LoadBalancerProfileWithDetails> {
   const details = await Promise.all(
     profile.profiles.map((memberName) =>
@@ -740,57 +691,20 @@ async function addLoadBalancerProfileDetails(
   };
 }
 
-export async function listSavedProfiles(): Promise<string[]> {
-  const manager = new ProfileManager();
+export async function listSavedProfiles(
+  manager: Pick<ProfileManager, 'listProfiles'>,
+): Promise<string[]> {
   return manager.listProfiles();
 }
 
-export async function getProfileByName(profileName: string): Promise<Profile> {
-  const manager = new ProfileManager();
+export async function getProfileByName(
+  profileName: string,
+  manager: Pick<ProfileManager, 'loadProfile'>,
+): Promise<Profile> {
   const profile = await manager.loadProfile(profileName);
   if (!isLoadBalancerProfile(profile)) {
     return profile;
   }
 
   return addLoadBalancerProfileDetails(profile, manager);
-}
-
-export function getActiveProfileName(): string | null {
-  const { settingsService } = getCliRuntimeServices();
-  if (typeof settingsService.getCurrentProfileName === 'function') {
-    return settingsService.getCurrentProfileName();
-  }
-  return (settingsService.get('currentProfile') as string | null) ?? null;
-}
-
-export function setDefaultProfileName(profileName: string | null): void {
-  const { settingsService } = getCliRuntimeServices();
-  settingsService.set('defaultProfile', profileName ?? undefined);
-}
-
-export function getRuntimeDiagnosticsSnapshot(): RuntimeDiagnosticsSnapshot {
-  const { config } = getCliRuntimeServices();
-  const snapshotConfig = config as RuntimeSnapshotConfig;
-
-  // #2534 C3/Domain-5: single active-provider resolution (store → manager
-  // cache); the former manager probe tail read the same cache twice.
-  const providerName = resolveActiveProviderName();
-  const modelValue = getActiveModelName();
-  const modelName =
-    modelValue && modelValue.trim() !== ''
-      ? modelValue
-      : (snapshotConfig.getModel?.() ?? null);
-
-  const profileName = getActiveProfileName();
-
-  const modelParams = getActiveModelParams();
-  const ephemeralSettings = config.getEphemeralSettings();
-
-  return {
-    providerName,
-    modelName,
-    profileName,
-    modelParams,
-    ephemeralSettings,
-  };
 }

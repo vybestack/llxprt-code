@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { configureCommandOptions } from '../command-configuration.js';
 import type { CommandModule } from 'yargs';
 import { loadSettings, SettingScope } from '../../config/settings.js';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
@@ -37,19 +38,21 @@ export const disableCommand: CommandModule = {
   command: 'disable <name> [--scope]',
   describe: 'Disables a skill.',
   builder: (yargs) =>
-    yargs
-      .positional('name', {
-        describe: 'The name of the skill to disable.',
-        type: 'string',
-        demandOption: true,
-      })
-      .option('scope', {
-        alias: 's',
-        describe: 'The scope to disable the skill in (user or workspace).',
-        type: 'string',
-        default: 'workspace',
-        choices: ['user', 'workspace'],
-      }),
+    configureCommandOptions(yargs, (configuration) =>
+      configuration
+        .positional('name', {
+          describe: 'The name of the skill to disable.',
+          type: 'string',
+          demandOption: true,
+        })
+        .option('scope', {
+          alias: 's',
+          describe: 'The scope to disable the skill in (user or workspace).',
+          type: 'string',
+          default: 'workspace',
+          choices: ['user', 'workspace'],
+        }),
+    ),
   handler: async (argv) => {
     const scope =
       argv['scope'] === 'workspace'

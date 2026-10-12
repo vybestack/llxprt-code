@@ -18,12 +18,10 @@
 import { createSessionSchedulerRegistry } from '@vybestack/llxprt-code-core';
 import type { SchedulerHandle } from '@vybestack/llxprt-code-core/session/sessionExecutionServices.js';
 import type { SchedulerPurpose } from '@vybestack/llxprt-code-core/session/sessionSchedulerRegistry.js';
-import type {
-  Config,
-  SchedulerCallbacks,
-} from '@vybestack/llxprt-code-core/config/config.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SchedulerCallbacks } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
+import type { ToolLookup } from '@vybestack/llxprt-code-tools';
 
 export interface SchedulerRegistryDelegateOptions {
   /** The Config recorded on the scheduler's setCallbacks payload. */
@@ -31,11 +29,11 @@ export interface SchedulerRegistryDelegateOptions {
   /** Fallback MessageBus when an acquisition supplies none. */
   messageBus: MessageBus;
   /** Fallback tool registry when an acquisition supplies none. */
-  toolRegistry: ToolRegistry;
+  toolRegistry: ToolLookup;
   createScheduler(options: {
     interactiveMode?: boolean;
     messageBus?: MessageBus;
-    toolRegistry?: ToolRegistry;
+    toolRegistry?: ToolLookup;
   }): Promise<SchedulerHandle>;
 }
 
@@ -47,7 +45,7 @@ export interface SchedulerRegistryDelegate {
     options?: { interactiveMode?: boolean },
     dependencies?: {
       messageBus?: MessageBus;
-      toolRegistry?: ToolRegistry;
+      toolRegistry?: ToolLookup;
     },
   ): Promise<SchedulerHandle>;
   disposeScheduler(

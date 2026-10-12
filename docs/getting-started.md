@@ -216,19 +216,19 @@ Or set it as your default:
 
 ## Essential Commands
 
-| Command                      | Description                     |
-| ---------------------------- | ------------------------------- |
-| `/help`                      | Show all available commands     |
-| `/provider`                  | Switch AI provider              |
-| `/model`                     | Change the AI model             |
-| `/auth <provider> enable`    | Set up OAuth authentication     |
-| `/key save <name> <key>`     | Save an API key to your keyring |
-| `/key load <name>`           | Load a saved API key            |
-| `/profile save model <name>` | Save your current configuration |
-| `/profile load <name>`       | Load a saved profile            |
-| `/stats quota`               | Check your current quota usage  |
-| `/clear`                     | Clear conversation history      |
-| `/quit` or `Ctrl+C`          | Exit LLxprt Code                |
+| Command                      | Description                                                   |
+| ---------------------------- | ------------------------------------------------------------- |
+| `/help`                      | Show all available commands                                   |
+| `/provider`                  | Switch AI provider                                            |
+| `/model`                     | Change the AI model                                           |
+| `/auth <provider> enable`    | Set up OAuth authentication                                   |
+| `/key save <name> <key>`     | Save an API key to your keyring                               |
+| `/key load <name>`           | Load a saved API key                                          |
+| `/profile save model <name>` | Save your current configuration                               |
+| `/profile load <name>`       | Load a saved profile                                          |
+| `/stats quota`               | Check your current quota usage                                |
+| `/clear`                     | Start a new session; keep the previous conversation resumable |
+| `/quit` or `Ctrl+C`          | Exit LLxprt Code                                              |
 
 ## Tips for Better Results
 

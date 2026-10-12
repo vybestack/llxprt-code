@@ -6,6 +6,7 @@
 
 // ChatSession — thin coordinator that wires up the decomposed modules.
 
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import { createTokenUsageLogger } from './TokenUsageLogger.js';
 import type {
   ModelGenerationSettings,
@@ -57,10 +58,15 @@ export interface ChatSessionConfig extends ModelGenerationSettings {
  * @requirement:REQ-005.5c
  */
 export interface SendMessageParams {
+  modelParameters?: AdmittedModelParameters;
   message: AgentMessageInput;
   config?: ChatSessionConfig;
+  hookOwner?: AgentChatRecordingExecution['hookOwner'];
+  recordingExecution?: AgentChatRecordingExecution;
 }
 import type { CompletedToolCall } from './coreToolScheduler.js';
+import { installHistoryDensityTracking } from './chatHistoryDensity.js';
+import { createHistoryProviderFileBindingStore } from '@vybestack/llxprt-code-core/services/history/provider-file-binding.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
@@ -72,10 +78,8 @@ import type {
   AgentRuntimeProviderAdapter,
   ToolRegistryView,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import { cleanupProviderFilesForSession } from '@vybestack/llxprt-code-providers';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
-import { PreCompressTrigger } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import {
   admitSessionHistory,
@@ -89,10 +93,20 @@ import { ConversationManager } from './ConversationManager.js';
 import { TurnProcessor } from './TurnProcessor.js';
 import { StreamProcessor } from './StreamProcessor.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import { PreCompressTrigger } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
-import { createSemanticMediaPurgeSession } from './chatSessionMediaLifecycle.js';
+import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import {
+  createSemanticMediaPurgeSession,
+  requiresObservedSemanticPurgeCacheWrite,
+} from './chatSessionMediaLifecycle.js';
 import type { TokenUsageLogger } from './TokenUsageLogger.js';
-import { ANTHROPIC_DEFAULT_BASE_URL } from '@vybestack/llxprt-code-providers';
+import {
+  cleanupChatSessionProviderFiles,
+  initialProviderBaseUrl,
+  resolveProviderBaseUrl,
+} from './chatSessionProviderRuntime.js';
 import {
   convertPartListUnionToIContent,
   validateHistory,
@@ -120,7 +134,7 @@ import type { CompressionAttemptContext } from '../compression/compressionContex
 import { CompressionProfileNotFoundError } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { PerformCompressionResult } from './turn.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { resolveModelForSystemPrompt } from './systemPromptModel.js';
+import { resolveSystemPromptForTurn } from './systemPromptModel.js';
 
 /**
  * Assembles the complete system prompt for a turn, given the freshly-resolved
@@ -205,7 +219,7 @@ export class AgentExecutionBlockedError extends Error {
 export class ChatSession {
   private logger = new DebugLogger('llxprt:gemini:chat');
   private readonly runtimeState: AgentRuntimeState;
-  private readonly historyService: HistoryService;
+  private historyService: HistoryService;
   private readonly generationConfig: ChatSessionConfig;
 
   // Composed modules
@@ -215,7 +229,7 @@ export class ChatSession {
   private readonly streamProcessor: StreamProcessor;
   private readonly directMessageProcessor: DirectMessageProcessor;
   private readonly tokenUsageLogger: TokenUsageLogger;
-  private readonly semanticMediaPurge: SemanticMediaPurgeSession;
+  private semanticMediaPurge: SemanticMediaPurgeSession;
   private readonly compressionLoadBalancerRoundRobinIndexes = new Map<
     string,
     number
@@ -226,10 +240,11 @@ export class ChatSession {
   private setHistoryAdmission?: SessionHistoryAdmission;
   private retainedHistoryAdmissions: readonly SessionHistoryAdmission[] = [];
   private historyAdmissionSequence = 0;
+  private removeDensityWrapper?: () => void;
 
   constructor(
-    private readonly runtimeContext: AgentRuntimeContext,
-    contentGenerator: ContentGenerator,
+    private runtimeContext: AgentRuntimeContext,
+    _contentGenerator: ContentGenerator,
     generationConfig: ChatSessionConfig = {},
     initialHistory: readonly IContent[] = [],
     triggerCompressionHook: typeof triggerPreCompressHook = triggerPreCompressHook,
@@ -247,7 +262,6 @@ export class ChatSession {
     if (systemPromptAssembler !== undefined) {
       this.generationConfig.systemPromptAssembler = systemPromptAssembler;
     }
-    void contentGenerator;
 
     // Wire density-dirty tracking on historyService.add
     this._installDensityWrapper();
@@ -255,35 +269,31 @@ export class ChatSession {
     validateHistory(initialHistory);
 
     const model = this.runtimeState.model;
-    this.logger.debug('ChatSession initialized:', {
-      model,
-      initialHistoryLength: initialHistory.length,
-      hasHistoryService: true,
-      hasRuntimeState: true,
-    });
+    this.logInitialization(initialHistory.length);
 
     // Create composed modules
     const providerResolver = (ctx: string) =>
       this.resolveProviderForRuntime(ctx);
     const providerRuntimeBuilder = (s: string, m?: Record<string, unknown>) =>
       this.buildProviderRuntime(s, m);
-    const resolveBaseUrl = (p: IProvider) => this.resolveProviderBaseUrl(p);
+    const resolveBaseUrl = (p: IProvider) =>
+      resolveProviderBaseUrl(p, this.runtimeState.baseUrl);
 
     this.compressionHandler = new CompressionHandler(
       this.runtimeContext,
       this.historyService,
       this.generationConfig,
       this.resolveCompressionProvider.bind(this),
-      async (context: CompressionAttemptContext) => {
-        const config = this.runtimeContext.providerRuntime.config;
-        if (config) {
-          await triggerCompressionHook(
-            config,
-            context.trigger === 'auto'
-              ? PreCompressTrigger.Auto
-              : PreCompressTrigger.Manual,
-          );
-        }
+      async (
+        context: CompressionAttemptContext,
+        owner?: HookExecutionOwner,
+      ) => {
+        await triggerCompressionHook(
+          context.trigger === 'auto'
+            ? PreCompressTrigger.Auto
+            : PreCompressTrigger.Manual,
+          owner,
+        );
       },
     );
 
@@ -294,11 +304,10 @@ export class ChatSession {
     // streaming turns from native Anthropic are stamped with an explicit
     // endpoint. Load balancer endpoints are resolved per-request in
     // resolveProviderBaseUrl (see TurnProcessor._commitSendResult).
-    const initialBaseUrl =
-      this.runtimeState.baseUrl ??
-      (this.runtimeState.provider === 'anthropic'
-        ? ANTHROPIC_DEFAULT_BASE_URL
-        : undefined);
+    const initialBaseUrl = initialProviderBaseUrl(
+      this.runtimeState.provider,
+      this.runtimeState.baseUrl,
+    );
 
     this.conversationManager = new ConversationManager(
       this.historyService,
@@ -318,15 +327,74 @@ export class ChatSession {
       this.generationConfig,
     );
 
-    const { turnProcessor, directMessageProcessor } =
-      this._buildMessageProcessors(
-        this.runtimeContext,
-        providerResolver,
-        providerRuntimeBuilder,
-        resolveBaseUrl,
-      );
-    this.turnProcessor = turnProcessor;
-    this.directMessageProcessor = directMessageProcessor;
+    this.turnProcessor = new TurnProcessor(
+      this.runtimeContext,
+      this.compressionHandler,
+      providerResolver,
+      providerRuntimeBuilder,
+      this.generationConfig,
+      this.historyService,
+      this.streamProcessor,
+      resolveBaseUrl,
+    );
+    this.directMessageProcessor = new DirectMessageProcessor(
+      this.runtimeContext,
+      providerResolver,
+      providerRuntimeBuilder,
+      this.generationConfig,
+      this.historyService,
+    );
+  }
+
+  private logInitialization(initialHistoryLength: number): void {
+    this.logger.debug('ChatSession initialized:', {
+      model: this.runtimeState.model,
+      initialHistoryLength,
+      hasHistoryService: true,
+      hasRuntimeState: true,
+    });
+  }
+
+  takeHistoryAdmissions(): readonly SessionHistoryAdmission[] {
+    const admissions = this.retainedHistoryAdmissions;
+    this.retainedHistoryAdmissions = [];
+    this.setHistoryAdmission = undefined;
+    return admissions;
+  }
+
+  prepareHistoryRebind(
+    history: HistoryService,
+    previousChat?: Pick<ChatSession, 'takeHistoryAdmissions'>,
+  ): () => void {
+    const runtimeContext: AgentRuntimeContext = Object.freeze({
+      ...this.runtimeContext,
+      history,
+      providerRuntime: Object.freeze({
+        ...this.runtimeContext.providerRuntime,
+        providerFileBindings: createHistoryProviderFileBindingStore(history),
+      }),
+    });
+    const semanticMediaPurge = createSemanticMediaPurgeSession(
+      runtimeContext,
+      history,
+    );
+    return () => {
+      this.retainedHistoryAdmissions = [
+        ...this.retainedHistoryAdmissions,
+        ...(previousChat?.takeHistoryAdmissions() ?? []),
+      ];
+      this.removeDensityWrapper?.();
+      this.removeDensityWrapper = undefined;
+      this.runtimeContext = runtimeContext;
+      this.historyService = history;
+      this.compressionHandler.rebindHistory(runtimeContext);
+      this.conversationManager.rebindHistory(runtimeContext);
+      this.streamProcessor.rebindHistory(runtimeContext);
+      this.turnProcessor.rebindHistory(runtimeContext);
+      this.directMessageProcessor.rebindHistory(runtimeContext);
+      this.semanticMediaPurge = semanticMediaPurge;
+      this._installDensityWrapper();
+    };
   }
 
   private _createSemanticMediaPurgeSession(): SemanticMediaPurgeSession {
@@ -336,55 +404,16 @@ export class ChatSession {
     );
   }
 
-  private _buildMessageProcessors(
-    view: AgentRuntimeContext,
-    providerResolver: (ctx: string) => IProvider,
-    providerRuntimeBuilder: (
-      s: string,
-      m?: Record<string, unknown>,
-    ) => ProviderRuntimeContext,
-    resolveBaseUrl: (p: IProvider) => string | undefined,
-  ): {
-    turnProcessor: TurnProcessor;
-    directMessageProcessor: DirectMessageProcessor;
-  } {
-    const turnProcessor = new TurnProcessor(
-      view,
-      this.compressionHandler,
-      providerResolver,
-      providerRuntimeBuilder,
-      this.generationConfig,
-      this.historyService,
-      this.streamProcessor,
-      resolveBaseUrl,
-    );
-
-    const directMessageProcessor = new DirectMessageProcessor(
-      view,
-      providerResolver,
-      providerRuntimeBuilder,
-      this.generationConfig,
-      this.historyService,
-    );
-
-    return { turnProcessor, directMessageProcessor };
-  }
-
   // ── Density wrapper ──────────────────────────────────────────────
 
   private static readonly DENSITY_WRAPPED = Symbol('densityWrapped');
 
   private _installDensityWrapper(): void {
-    if (typeof this.historyService.add !== 'function') return;
-    const hs = this.historyService as unknown as Record<symbol, unknown>;
-    if (hs[ChatSession.DENSITY_WRAPPED] === true) return;
-    const originalAdd = this.historyService.add.bind(this.historyService);
-    this.historyService.add = (...args: Parameters<typeof originalAdd>) => {
-      const result = originalAdd(...args);
-      this.compressionHandler.markDensityDirty();
-      return result;
-    };
-    hs[ChatSession.DENSITY_WRAPPED] = true;
+    this.removeDensityWrapper = installHistoryDensityTracking(
+      this.historyService,
+      () => this.compressionHandler.markDensityDirty(),
+      ChatSession.DENSITY_WRAPPED,
+    );
   }
 
   // ── Provider resolution (stays on coordinator) ───────────────────
@@ -507,7 +536,9 @@ export class ChatSession {
 
   private getCompressionProfileResolverContext(): CompressionProfileResolverContext {
     return {
+      profileDefinitions: this.runtimeContext.profileDefinitions,
       providerRuntime: this.runtimeContext.providerRuntime,
+      prepareProviderInvocation: this.runtimeContext.prepareProviderInvocation,
       runtimeState: this.runtimeState,
       resolveExplicitCompressionProvider:
         this.resolveExplicitCompressionProvider.bind(this),
@@ -528,32 +559,10 @@ export class ChatSession {
     );
   }
 
-  private resolveProviderBaseUrl(provider: IProvider): string | undefined {
-    // Load balancers: use the last-selected sub-profile's base URL so that
-    // turns are stamped with the actual endpoint that generated them. This
-    // enables cross-endpoint thinking-block stripping when a load balancer
-    // rotates between Anthropic-compatible endpoints (e.g. z.ai and native
-    // Anthropic).
-    const lbProvider = provider as unknown as {
-      getLastSelectedBaseUrl?: () => string | undefined;
-    };
-    if (typeof lbProvider.getLastSelectedBaseUrl === 'function') {
-      const lbBaseUrl = lbProvider.getLastSelectedBaseUrl();
-      if (lbBaseUrl) return lbBaseUrl;
-    }
-    // Native Anthropic without an explicit base URL defaults to
-    // api.anthropic.com. Stamping turns with this default ensures they are
-    // distinguishable from z.ai turns and can be stripped when switching.
-    if (provider.name === 'anthropic') {
-      return this.runtimeState.baseUrl ?? ANTHROPIC_DEFAULT_BASE_URL;
-    }
-    return this.runtimeState.baseUrl;
-  }
-
   private buildProviderRuntime(
     source: string,
     metadata: Record<string, unknown> = {},
-  ): ProviderRuntimeContext {
+  ): ProviderRequestCollaborators {
     const baseRuntime = this.runtimeContext.providerRuntime;
     const runtimeId = baseRuntime.runtimeId ?? this.runtimeState.runtimeId;
 
@@ -570,35 +579,12 @@ export class ChatSession {
 
   // ── Public API — thin delegation ─────────────────────────────────
 
-  private _requiresObservedSemanticPurgeCacheWrite(
-    provider: IProvider,
-  ): boolean {
-    const promptCaching =
-      this.runtimeContext.providerRuntime.settingsService.get('prompt-caching');
-    const validPromptCachingValues = new Set<unknown>([
-      undefined,
-      'off',
-      '5m',
-      '1h',
-      '24h',
-    ]);
-    if (!validPromptCachingValues.has(promptCaching)) {
-      throw new Error(
-        `Invalid prompt-caching setting for semantic media purge: ${String(promptCaching)}`,
-      );
-    }
-    return (
-      provider.getMediaTransportCapabilities?.().explicitCacheBreakpoints ===
-        true &&
-      promptCaching !== undefined &&
-      promptCaching !== 'off'
-    );
-  }
-
   private _beginSemanticMediaPurge(
+    execution?: AgentChatRecordingExecution,
     signal?: AbortSignal,
   ): ReturnType<SemanticMediaPurgeSession['begin']> {
-    if (!this.semanticMediaPurge.isEnabled()) return Promise.resolve(undefined);
+    const purge = this.semanticMediaPurge;
+    if (!purge.isEnabled()) return Promise.resolve(undefined);
     const active = this.runtimeContext.provider.getActiveProvider();
     const desiredName = this.runtimeState.provider;
     const provider =
@@ -610,8 +596,9 @@ export class ChatSession {
         `Provider '${desiredName}' is unavailable for semantic media purge`,
       );
     }
-    return this.semanticMediaPurge.begin(
-      this._requiresObservedSemanticPurgeCacheWrite(provider),
+    return purge.begin(
+      requiresObservedSemanticPurgeCacheWrite(this.runtimeContext, provider),
+      execution?.persistSemanticMediaPurge,
       signal,
     );
   }
@@ -626,25 +613,21 @@ export class ChatSession {
    * transmit it even after a later turn overwrites the shared copy. No-op
    * (returns undefined) when no assembler was injected.
    */
-  private async _resolveSystemPromptForTurn(): Promise<string | undefined> {
-    if (!this.systemPromptAssembler) {
-      return undefined;
-    }
-    const config = this.runtimeContext.providerRuntime.config;
-    const model = config
-      ? resolveModelForSystemPrompt(config)
-      : this.runtimeState.model;
-    const systemInstruction = await this.systemPromptAssembler.assemble({
-      provider: this.runtimeState.provider,
+  private async _resolveSystemPromptForTurn(
+    model: string,
+  ): Promise<string | undefined> {
+    const published: { instruction?: string } = {};
+    await resolveSystemPromptForTurn(
+      this.systemPromptAssembler,
+      this.runtimeState.provider,
       model,
-    });
-    this.generationConfig.systemInstruction = systemInstruction;
-    const tokens = await this.historyService.estimateTokensForText(
-      systemInstruction,
-      model,
+      this.historyService,
+      (instruction) => {
+        published.instruction = instruction;
+        this.generationConfig.systemInstruction = instruction;
+      },
     );
-    this.historyService.setBaseTokenOffset(tokens);
-    return systemInstruction;
+    return published.instruction;
   }
 
   /**
@@ -668,6 +651,7 @@ export class ChatSession {
   private async _withResolvedSystemPrompt<T>(
     params: SendMessageParams,
     send: (turnParams: SendMessageParams) => Promise<T>,
+    parameters: AdmittedModelParameters | undefined,
   ): Promise<T> {
     // Only the RESOLUTION is serialized, never the send. Concurrent sends are
     // intended behavior (see chatSession.runtime.timeout.test.ts: "two
@@ -678,7 +662,9 @@ export class ChatSession {
     // (generationConfig.systemInstruction + base token offset) atomic, so two
     // turns cannot resolve interleaved and produce a torn prompt.
     const resolved = this.systemPromptTurnChain.then(() =>
-      this._resolveSystemPromptForTurn(),
+      this._resolveSystemPromptForTurn(
+        parameters?.route?.model ?? this.runtimeState.model,
+      ),
     );
     // Keep the chain alive after a failed resolution; a rejection must not
     // permanently wedge every later send.
@@ -697,31 +683,61 @@ export class ChatSession {
   async sendMessage(
     params: SendMessageParams,
     prompt_id: string,
+    execution:
+      | AgentChatRecordingExecution
+      | undefined = params.recordingExecution,
   ): Promise<ModelOutput> {
-    return this._withResolvedSystemPrompt(params, (turnParams) =>
-      this.turnProcessor.sendMessage(turnParams, prompt_id, () =>
-        this._beginSemanticMediaPurge(params.config?.abortSignal),
-      ),
+    return this._withResolvedSystemPrompt(
+      params,
+      (turnParams) =>
+        this.turnProcessor.sendMessage(
+          { ...turnParams, recordingExecution: execution },
+          prompt_id,
+          () =>
+            this._beginSemanticMediaPurge(
+              execution,
+              params.config?.abortSignal,
+            ),
+        ),
+      params.modelParameters,
     );
   }
 
   async sendMessageStream(
     params: SendMessageParams,
     prompt_id: string,
+    execution?: AgentChatRecordingExecution,
   ): Promise<AsyncGenerator<StreamEvent>> {
-    return this._withResolvedSystemPrompt(params, (turnParams) =>
-      this.turnProcessor.sendMessageStream(turnParams, prompt_id, () =>
-        this._beginSemanticMediaPurge(params.config?.abortSignal),
-      ),
+    return this._withResolvedSystemPrompt(
+      params,
+      (turnParams) =>
+        this.turnProcessor.sendMessageStream(
+          { ...turnParams, recordingExecution: execution },
+          prompt_id,
+          () =>
+            this._beginSemanticMediaPurge(
+              execution,
+              params.config?.abortSignal,
+            ),
+        ),
+      params.modelParameters,
     );
   }
 
   async generateDirectMessage(
     params: SendMessageParams,
     prompt_id: string,
+    execution?: AgentChatRecordingExecution,
   ): Promise<ModelOutput> {
-    return this._withResolvedSystemPrompt(params, (turnParams) =>
-      this.directMessageProcessor.generateDirectMessage(turnParams, prompt_id),
+    return this._withResolvedSystemPrompt(
+      params,
+      (turnParams) =>
+        this.directMessageProcessor.generateDirectMessage(
+          turnParams,
+          prompt_id,
+          execution,
+        ),
+      params.modelParameters,
     );
   }
 
@@ -797,7 +813,10 @@ export class ChatSession {
   }
 
   async clearHistory(): Promise<void> {
-    await cleanupProviderFilesForSession(this.runtimeState.runtimeId);
+    await cleanupChatSessionProviderFiles(
+      this.runtimeContext.providerRuntime.providerFileLifecycle,
+      this.runtimeState.runtimeId,
+    );
     const releaseFailures = await this.releaseSessionHistoryAdmissions(
       this.retainedHistoryAdmissions,
     );
@@ -832,10 +851,16 @@ export class ChatSession {
     await this.runtimeContext.mediaAdmission?.verifyHistory(history);
   }
 
-  async setHistory(history: readonly IContent[]): Promise<void> {
+  async setHistory(
+    history: readonly IContent[],
+    historyOrigin?: object,
+  ): Promise<void> {
     const ownership = this.beginSetHistoryAdmission(history);
     try {
-      await this.conversationManager.setHistory(ownership?.rows ?? history);
+      await this.conversationManager.setHistory(
+        ownership?.rows ?? history,
+        historyOrigin,
+      );
     } catch (error: unknown) {
       if (ownership === undefined) throw error;
       const cleanupFailures = await this.releaseSessionHistoryAdmissions([
@@ -872,7 +897,7 @@ export class ChatSession {
 
   async performCompression(
     prompt_id: string,
-    options?: { bypassCooldown?: boolean; trigger?: 'manual' | 'auto' },
+    options?: Parameters<CompressionHandler['performCompression']>[1],
   ): Promise<PerformCompressionResult> {
     return this.compressionHandler.performCompression(prompt_id, options);
   }
@@ -999,10 +1024,19 @@ export class ChatSession {
   async enforceContextWindow(
     pendingTokens: number,
     promptId: string,
+    transcriptPathProvider?: () => string | undefined,
+    historyOrigin?: object,
+    hookOwner?: AgentChatRecordingExecution['hookOwner'],
+    modelParameters?: AdmittedModelParameters,
   ): Promise<void> {
     return this.compressionHandler.enforceContextWindow(
       pendingTokens,
       promptId,
+      undefined,
+      transcriptPathProvider,
+      historyOrigin,
+      hookOwner,
+      modelParameters,
     );
   }
 
@@ -1036,7 +1070,7 @@ export class ChatSession {
       const provider = this.resolveProviderForRuntime(
         'ChatSession.getResolvedBaseUrl',
       );
-      return this.resolveProviderBaseUrl(provider);
+      return resolveProviderBaseUrl(provider, this.runtimeState.baseUrl);
     } catch {
       return undefined;
     }
@@ -1046,6 +1080,14 @@ export class ChatSession {
    * Returns the Config instance from the provider runtime.
    * Used by Turn and other consumers to access ephemeral settings.
    */
+  getStreamTimeoutPolicy() {
+    return this.runtimeContext.readStreamTimeoutPolicy();
+  }
+
+  shouldShowCitations(): boolean {
+    return this.runtimeContext.showCitations();
+  }
+
   getConfig(): Config | undefined {
     return this.runtimeContext.providerRuntime.config;
   }

@@ -15,7 +15,7 @@ import {
   getProjectCoreMemoryFilePath,
 } from '@vybestack/llxprt-code-tools';
 import { Storage } from '@vybestack/llxprt-code-settings';
-import type { FileDiscoveryService } from '../services/fileDiscoveryService.js';
+import type { WorkspaceIgnoreOperations } from '../services/workspace-filesystem-owner.js';
 import { processImports } from './memoryImportProcessor.js';
 import type { FileFilteringOptions } from '../config/constants.js';
 import { DEFAULT_MEMORY_FILE_FILTERING_OPTIONS } from '../config/constants.js';
@@ -79,11 +79,12 @@ async function getLlxprtMdFilePathsInternal(
   includeDirectoriesToReadLlxprt: readonly string[],
   userHomePath: string,
   debugMode: boolean,
-  fileService: FileDiscoveryService,
+  fileService: Pick<WorkspaceIgnoreOperations, 'shouldIgnoreFile'>,
   folderTrust: boolean,
   fileFilteringOptions: FileFilteringOptions,
   maxDirs: number,
   maxDepth?: number,
+  filenames: readonly string[] = getAllLlxprtMdFilenames(),
 ): Promise<string[]> {
   const dirs = new Set<string>([
     ...includeDirectoriesToReadLlxprt,
@@ -107,6 +108,7 @@ async function getLlxprtMdFilePathsInternal(
         fileFilteringOptions,
         maxDirs,
         maxDepth,
+        filenames,
       ),
     );
 
@@ -188,7 +190,7 @@ async function findGlobalAndWorkspacePaths(
   dir: string,
   userHomePath: string,
   debugMode: boolean,
-  fileService: FileDiscoveryService,
+  fileService: Pick<WorkspaceIgnoreOperations, 'shouldIgnoreFile'>,
   folderTrust: boolean,
   fileFilteringOptions: FileFilteringOptions,
   maxDirs: number,
@@ -269,14 +271,15 @@ async function getLlxprtMdFilePathsInternalForEachDir(
   dir: string,
   userHomePath: string,
   debugMode: boolean,
-  fileService: FileDiscoveryService,
+  fileService: Pick<WorkspaceIgnoreOperations, 'shouldIgnoreFile'>,
   folderTrust: boolean,
   fileFilteringOptions: FileFilteringOptions,
   maxDirs: number,
   maxDepth?: number,
+  filenames: readonly string[] = getAllLlxprtMdFilenames(),
 ): Promise<string[]> {
   const allPaths = new Set<string>();
-  const llxprtMdFilenames = getAllLlxprtMdFilenames();
+  const llxprtMdFilenames = filenames;
 
   for (const llxprtMdFilename of llxprtMdFilenames) {
     const pathSet = await findGlobalAndWorkspacePaths(
@@ -395,9 +398,10 @@ export interface MemoryLoadResult {
 
 export async function loadGlobalMemory(
   debugMode: boolean = false,
+  filenames: readonly string[] = getAllLlxprtMdFilenames(),
+  globalMemoryDir: string = Storage.getGlobalMemoryDir(),
 ): Promise<MemoryLoadResult> {
-  const globalMemoryDir = Storage.getGlobalMemoryDir();
-  const llxprtMdFilenames = getAllLlxprtMdFilenames();
+  const llxprtMdFilenames = filenames;
 
   const accessChecks = llxprtMdFilenames.map(async (filename) => {
     const globalPath = path.join(globalMemoryDir, filename);
@@ -439,11 +443,12 @@ async function findUpwardLlxprtFiles(
   startDir: string,
   stopDir: string,
   debugMode: boolean,
+  filenames: readonly string[] = getAllLlxprtMdFilenames(),
 ): Promise<string[]> {
   const upwardPaths: string[] = [];
   let currentDir = path.resolve(startDir);
   const resolvedStopDir = path.resolve(stopDir);
-  const llxprtMdFilenames = getAllLlxprtMdFilenames();
+  const llxprtMdFilenames = filenames;
   // legacy-exclusion (migration-only contract): stop walking at ~/.llxprt so a
   // surviving legacy global file is never resurrected as workspace memory.
   const legacyGlobalLlxprtDir = path.resolve(path.join(homedir(), LLXPRT_DIR));
@@ -525,6 +530,7 @@ export async function loadEnvironmentMemory(
   trustedRoots: string[],
   extensionLoader: ExtensionLoader,
   debugMode: boolean = false,
+  filenames: readonly string[] = getAllLlxprtMdFilenames(),
 ): Promise<MemoryLoadResult> {
   const allPaths = new Set<string>();
 
@@ -536,7 +542,12 @@ export async function loadEnvironmentMemory(
         `Loading environment memory for trusted root: ${resolvedRoot} (Stopping exactly here)`,
       );
     }
-    return findUpwardLlxprtFiles(resolvedRoot, resolvedRoot, debugMode);
+    return findUpwardLlxprtFiles(
+      resolvedRoot,
+      resolvedRoot,
+      debugMode,
+      filenames,
+    );
   });
 
   const pathArrays = await Promise.all(traversalPromises);
@@ -643,14 +654,51 @@ export async function loadServerHierarchicalMemory(
   currentWorkingDirectory: string,
   includeDirectoriesToReadLlxprt: readonly string[],
   debugMode: boolean,
-  fileService: FileDiscoveryService,
+  fileService: Pick<WorkspaceIgnoreOperations, 'shouldIgnoreFile'>,
   extensions: LlxprtExtension[],
   folderTrust: boolean,
   importFormat: 'flat' | 'tree' = 'tree',
   fileFilteringOptions?: FileFilteringOptions,
   maxDirs: number = 200,
   maxDepth?: number,
+  filenames: readonly string[] = getAllLlxprtMdFilenames(),
 ): Promise<LoadServerHierarchicalMemoryResponse> {
+  const { contentsWithPaths, filePaths } = await discoverHierarchicalMemory(
+    currentWorkingDirectory,
+    includeDirectoriesToReadLlxprt,
+    debugMode,
+    fileService,
+    extensions,
+    folderTrust,
+    importFormat,
+    fileFilteringOptions,
+    maxDirs,
+    maxDepth,
+    filenames,
+  );
+  return {
+    memoryContent: concatenateInstructions(
+      contentsWithPaths,
+      currentWorkingDirectory,
+    ),
+    fileCount: contentsWithPaths.length,
+    filePaths,
+  };
+}
+
+async function discoverHierarchicalMemory(
+  currentWorkingDirectory: string,
+  includeDirectoriesToReadLlxprt: readonly string[],
+  debugMode: boolean,
+  fileService: Pick<WorkspaceIgnoreOperations, 'shouldIgnoreFile'>,
+  extensions: LlxprtExtension[],
+  folderTrust: boolean,
+  importFormat: 'flat' | 'tree' = 'tree',
+  fileFilteringOptions?: FileFilteringOptions,
+  maxDirs: number = 200,
+  maxDepth?: number,
+  filenames: readonly string[] = getAllLlxprtMdFilenames(),
+): Promise<{ contentsWithPaths: LlxprtFileContent[]; filePaths: string[] }> {
   if (debugMode)
     logger.debug(
       `Loading server hierarchical memory for CWD: ${currentWorkingDirectory} (importFormat: ${importFormat})`,
@@ -669,6 +717,7 @@ export async function loadServerHierarchicalMemory(
     fileFilteringOptions ?? DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
     maxDirs,
     maxDepth,
+    filenames,
   );
 
   // Add extension file paths separately since they may be conditionally enabled.
@@ -678,34 +727,44 @@ export async function loadServerHierarchicalMemory(
       .flatMap((ext) => ext.contextFiles),
   );
 
-  if (filePaths.length === 0) {
-    if (debugMode)
-      logger.debug('No LLXPRT.md files found in hierarchy of the workspace.');
-    return { memoryContent: '', fileCount: 0, filePaths: [] };
-  }
   const contentsWithPaths = await readLlxprtMdFiles(
     filePaths,
     debugMode,
     importFormat,
   );
-  // Pass CWD for relative path display in concatenated content
-  const combinedInstructions = concatenateInstructions(
-    contentsWithPaths,
+  return { contentsWithPaths, filePaths };
+}
+export async function loadHierarchicalMemoryFiles(
+  currentWorkingDirectory: string,
+  includeDirectoriesToReadLlxprt: readonly string[],
+  debugMode: boolean,
+  fileService: Pick<WorkspaceIgnoreOperations, 'shouldIgnoreFile'>,
+  extensions: LlxprtExtension[],
+  folderTrust: boolean,
+  importFormat: 'flat' | 'tree' = 'tree',
+  fileFilteringOptions?: FileFilteringOptions,
+  maxDirs: number = 200,
+  maxDepth?: number,
+  filenames: readonly string[] = getAllLlxprtMdFilenames(),
+): Promise<MemoryLoadResult['files']> {
+  const { contentsWithPaths } = await discoverHierarchicalMemory(
     currentWorkingDirectory,
+    includeDirectoriesToReadLlxprt,
+    debugMode,
+    fileService,
+    extensions,
+    folderTrust,
+    importFormat,
+    fileFilteringOptions,
+    maxDirs,
+    maxDepth,
+    filenames,
   );
-  if (debugMode)
-    logger.debug(
-      `Combined instructions length: ${combinedInstructions.length}`,
-    );
-  if (debugMode && combinedInstructions.length > 0)
-    logger.debug(
-      `Combined instructions (snippet): ${combinedInstructions.substring(0, 500)}...`,
-    );
-  return {
-    memoryContent: combinedInstructions,
-    fileCount: contentsWithPaths.length,
-    filePaths,
-  };
+  return contentsWithPaths.flatMap((file) =>
+    typeof file.content === 'string'
+      ? [{ path: file.filePath, content: file.content }]
+      : [],
+  );
 }
 
 export async function loadJitSubdirectoryMemory(
@@ -714,6 +773,7 @@ export async function loadJitSubdirectoryMemory(
   alreadyLoadedPaths: Set<string>,
   debugMode: boolean = false,
   jitContextEnabled: boolean = true,
+  filenames: readonly string[] = getAllLlxprtMdFilenames(),
 ): Promise<MemoryLoadResult> {
   if (!jitContextEnabled) {
     if (debugMode) {
@@ -756,6 +816,7 @@ export async function loadJitSubdirectoryMemory(
     resolvedTarget,
     bestRoot,
     debugMode,
+    filenames,
   );
 
   // Filter out already loaded paths

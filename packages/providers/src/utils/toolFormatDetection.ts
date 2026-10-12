@@ -48,11 +48,6 @@ export const VALID_TOOL_FORMATS: ReadonlySet<string> = new Set<string>([
  * toolFormat overrides. Matches the subset of SettingsService used for
  * tool format resolution, allowing tests to supply lightweight stubs.
  */
-export interface ToolFormatSettings {
-  getProviderSettings(
-    providerName: string,
-  ): Record<string, unknown> | undefined;
-}
 
 /**
  * Get the tool format override from provider settings.
@@ -65,11 +60,9 @@ export interface ToolFormatSettings {
  */
 export function getToolFormatOverride(
   providerName: string,
-  settings: ToolFormatSettings,
+  toolFormatOverride: unknown,
   logger?: DebugLogger,
 ): ToolFormat | 'auto' | undefined {
-  const providerSettings = settings.getProviderSettings(providerName);
-  const toolFormatOverride = providerSettings?.toolFormat;
   if (typeof toolFormatOverride !== 'string') {
     return undefined;
   }
@@ -96,10 +89,14 @@ export function getToolFormatOverride(
 export function resolveToolFormat(
   modelName: string,
   providerName: string,
-  settings: ToolFormatSettings,
+  toolFormatOverride: unknown,
   logger?: DebugLogger,
 ): ToolFormat {
-  const override = getToolFormatOverride(providerName, settings, logger);
+  const override = getToolFormatOverride(
+    providerName,
+    toolFormatOverride,
+    logger,
+  );
 
   if (override !== undefined && override !== 'auto') {
     logger?.debug(

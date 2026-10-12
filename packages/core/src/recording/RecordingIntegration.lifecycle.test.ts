@@ -34,7 +34,7 @@ import {
   assertDefined,
   blockTextOrEmpty,
 } from '@vybestack/llxprt-code-test-utils';
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
@@ -49,6 +49,16 @@ import { SessionRecordingService } from './SessionRecordingService.js';
 import { type SessionRecordingServiceConfig } from './types.js';
 import { SessionPersistenceService } from '../storage/SessionPersistenceService.js';
 import { Storage } from '@vybestack/llxprt-code-settings';
+
+function persistencePaths(storage: Storage): {
+  readonly projectRoot: string;
+  readonly chatsDir: string;
+} {
+  return {
+    projectRoot: storage.getProjectRoot(),
+    chatsDir: storage.getProjectChatsDir(),
+  };
+}
 
 interface ControlledSave {
   readonly file: string;
@@ -96,6 +106,48 @@ class ControlledPersistenceService extends SessionPersistenceService {
 
   get pendingSaves(): number {
     return this.controlledSaves.length;
+  }
+}
+
+type JournalSavePhase = 'before-save' | 'after-save';
+
+/**
+ * Holds one journal save at the start or at the end of its snapshot write.
+ * Persistence only runs from `saveJournal` once history is journal-backed, so
+ * these are the phases an admitted batch can be caught in.
+ */
+class HeldJournalPersistenceService extends SessionPersistenceService {
+  private releasePhase: (() => void) | undefined;
+  private notifyEntered!: () => void;
+  readonly entered: Promise<void>;
+
+  constructor(
+    storage: Storage,
+    sessionId: string,
+    private readonly phase: JournalSavePhase,
+  ) {
+    super(persistencePaths(storage), sessionId);
+    this.entered = new Promise<void>((resolve) => {
+      this.notifyEntered = resolve;
+    });
+  }
+
+  private async hold(phase: JournalSavePhase): Promise<void> {
+    if (this.phase !== phase) return;
+    this.notifyEntered();
+    await new Promise<void>((resolve) => {
+      this.releasePhase = resolve;
+    });
+  }
+
+  override async saveJournal(file: string): Promise<void> {
+    await this.hold('before-save');
+    await super.saveJournal(file);
+    await this.hold('after-save');
+  }
+
+  release(): void {
+    this.releasePhase?.();
   }
 }
 
@@ -262,9 +314,24 @@ describe('RecordingIntegration lifecycle @plan:PLAN-20260211-SESSIONRECORDING.P1
       testRecordingLifecycle13,
     );
 
+    for (const phase of ['before-save', 'after-save'] as const) {
+      it(`joins an admitted batch through its held ${phase} before disposing`, () =>
+        testRecordingLifecycleHeldBatch(phase));
+    }
+
+    it(
+      'joins a rejected batch publication before disposing',
+      testRecordingLifecycleRejectedBatch,
+    );
+
     it(
       'dispose prevents future event recording while keeping prior events',
       testRecordingLifecycle14,
+    );
+
+    it(
+      'detaches the journal even if the external detachment fails',
+      testRecordingLifecycleDetachFailure,
     );
 
     it('dispose is idempotent', testRecordingLifecycle15);
@@ -332,7 +399,7 @@ async function testRecordingLifecycle06(): Promise<void> {
   await integration.dispose();
   const storage = new Storage(tempDir);
   const persistence = new SessionPersistenceService(
-    storage,
+    persistencePaths(storage),
     'recording-integration-persistence',
     { maxQueueBytes: 1024 * 1024 },
   );
@@ -362,7 +429,10 @@ async function testRecordingLifecycle06(): Promise<void> {
 async function testRecordingLifecycle07(): Promise<void> {
   await integration.dispose();
   const storage = new Storage(path.join(tempDir, 'batch-success'));
-  const persistence = new SessionPersistenceService(storage, 'batch-success');
+  const persistence = new SessionPersistenceService(
+    persistencePaths(storage),
+    'batch-success',
+  );
   integration = new RecordingIntegration(recordingService, persistence);
   await integration.subscribeToJournal(historyService);
 
@@ -407,7 +477,7 @@ async function testRecordingLifecycle08(): Promise<void> {
   await integration.dispose();
   const storage = new Storage(path.join(tempDir, 'batch-listener-failure'));
   const persistence = new SessionPersistenceService(
-    storage,
+    persistencePaths(storage),
     'batch-listener-failure',
   );
   integration = new RecordingIntegration(recordingService, persistence);
@@ -445,7 +515,7 @@ async function testRecordingLifecycle09(): Promise<void> {
   await fs.mkdir(projectTemp, { recursive: true });
   await fs.writeFile(path.join(projectTemp, 'chats'), 'not a directory');
   const persistence = new SessionPersistenceService(
-    storage,
+    persistencePaths(storage),
     'recording-integration-failure',
     { maxQueueBytes: 1024 * 1024 },
   );
@@ -485,7 +555,7 @@ async function testRecordingLifecycle10(): Promise<void> {
     }
   }
   const persistence = new SchedulingFailure(
-    new Storage(path.join(tempDir, 'synchronous-failure')),
+    persistencePaths(new Storage(path.join(tempDir, 'synchronous-failure'))),
     'synchronous-failure',
   );
   integration = new RecordingIntegration(recordingService, persistence);
@@ -516,7 +586,7 @@ async function testRecordingLifecycle11(): Promise<void> {
   await fs.mkdir(projectTemp, { recursive: true });
   await fs.writeFile(path.join(projectTemp, 'chats'), 'not a directory');
   const persistence = new SessionPersistenceService(
-    storage,
+    persistencePaths(storage),
     'transient-failure',
   );
   integration = new RecordingIntegration(recordingService, persistence);
@@ -535,7 +605,7 @@ async function testRecordingLifecycle11(): Promise<void> {
 async function testRecordingLifecycle12(): Promise<void> {
   await integration.dispose();
   const persistence = new ControlledPersistenceService(
-    new Storage(path.join(tempDir, 'generation-order')),
+    persistencePaths(new Storage(path.join(tempDir, 'generation-order'))),
     'generation-order',
   );
   integration = new RecordingIntegration(recordingService, persistence);
@@ -560,7 +630,7 @@ async function testRecordingLifecycle12(): Promise<void> {
 async function testRecordingLifecycle13(): Promise<void> {
   await integration.dispose();
   const persistence = new ControlledPersistenceService(
-    new Storage(path.join(tempDir, 'dispose-failure')),
+    persistencePaths(new Storage(path.join(tempDir, 'dispose-failure'))),
     'dispose-failure',
   );
   integration = new RecordingIntegration(recordingService, persistence);
@@ -572,10 +642,12 @@ async function testRecordingLifecycle13(): Promise<void> {
     async () => undefined,
   );
   const pending = await persistence.waitForSave(0);
+  const inFlightDisposal = integration.dispose();
   const disposal = withRecordingFailureReport(
-    integration.dispose(),
+    inFlightDisposal,
     async () => undefined,
   );
+  expect(integration.dispose()).toBe(inFlightDisposal);
   const outcomes = Promise.allSettled([boundary, disposal]);
   pending.reject(new Error('queued save failed'));
   const results = await outcomes;
@@ -586,6 +658,74 @@ async function testRecordingLifecycle13(): Promise<void> {
     'Session persistence generation 1 failed: queued save failed',
   );
   await expect(integration.dispose()).resolves.toBeUndefined();
+}
+
+async function testRecordingLifecycleHeldBatch(
+  phase: JournalSavePhase,
+): Promise<void> {
+  await integration.dispose();
+  const persistence = new HeldJournalPersistenceService(
+    new Storage(path.join(tempDir, `held-${phase}`)),
+    `held-${phase}`,
+    phase,
+  );
+  integration = new RecordingIntegration(recordingService, persistence);
+  await integration.subscribeToJournal(historyService);
+
+  await historyService.addBatch([
+    textContent(`held ${phase} batch publication`),
+  ]);
+  const boundary = integration.flushAtTurnBoundary();
+  await persistence.entered;
+  let settled = false;
+  const disposal = integration.dispose().then(() => {
+    settled = true;
+  });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  const settledBeforeRelease = settled;
+  persistence.release();
+  await boundary;
+  await disposal;
+  await recordingService.flush();
+
+  expect(settledBeforeRelease).toBe(false);
+  expect(
+    (await readRecordedEvents(recordingService)).some(
+      (event) => event.type === 'content',
+    ),
+  ).toBe(true);
+}
+
+async function testRecordingLifecycleRejectedBatch(): Promise<void> {
+  await integration.dispose();
+  const persistence = new SessionPersistenceService(
+    persistencePaths(new Storage(path.join(tempDir, 'held-rollback'))),
+    'held-rollback',
+  );
+  integration = new RecordingIntegration(recordingService, persistence);
+  await integration.subscribeToJournal(historyService);
+  historyService.on('contentBatchAdded', () => {
+    throw new Error('publication rejected');
+  });
+
+  const publicationFailure = await historyService
+    .addBatch([textContent('held rollback batch publication')])
+    .then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+  await integration.dispose();
+  await recordingService.flush();
+
+  expect(publicationFailure).toBeInstanceOf(Error);
+  expect(errorMessages(publicationFailure)).toContain('publication rejected');
+  // The journal writes the batch rows ahead of publication and rolls them
+  // back, so the resolved history is what must be empty.
+  const file = recordingService.getFilePath();
+  if (file === null) throw new Error('Journal missing');
+  const replay = await replaySession(file, PROJECT_HASH);
+  assertReplayOk(replay);
+  expect(replay.history).toStrictEqual([]);
 }
 
 async function testRecordingLifecycle14(): Promise<void> {
@@ -644,6 +784,27 @@ async function testRecordingLifecycle18(): Promise<void> {
   await integration.subscribeToJournal(historyService);
   historyService.add(textContent('same-instance'));
 
+  const events = await flushAndRead(integration, recordingService);
+  expect(events.filter((event) => event.type === 'content')).toHaveLength(1);
+}
+
+async function testRecordingLifecycleDetachFailure(): Promise<void> {
+  await integration.subscribeToJournal(historyService);
+  historyService.add(textContent('before-unsubscribe'));
+  await integration.flushAtTurnBoundary();
+  const detach = historyService.detachJournal.bind(historyService);
+  vi.spyOn(historyService, 'detachJournal').mockImplementationOnce(
+    async (recorder) => {
+      await detach(recorder);
+      throw new Error('journal detach failed');
+    },
+  );
+
+  expect(() => integration.unsubscribeFromHistory()).not.toThrow();
+  const failure = await captureFailure(integration.dispose());
+  historyService.add(textContent('after-unsubscribe'));
+
+  expect(errorMessages(failure)).toContain('journal detach failed');
   const events = await flushAndRead(integration, recordingService);
   expect(events.filter((event) => event.type === 'content')).toHaveLength(1);
 }

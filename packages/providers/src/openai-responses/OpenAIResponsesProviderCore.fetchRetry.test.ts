@@ -34,9 +34,7 @@ data: {"type":"response.completed","response":{"id":"resp_retry","status":"compl
         ),
       );
 
-    const provider = new OpenAIResponsesProvider('test-key', undefined, {
-      getEphemeralSettings: () => ({}),
-    });
+    const provider = new OpenAIResponsesProvider('test-key', undefined, {});
 
     const generator = provider.generateChatCompletion(
       streamCallOptions({
@@ -79,9 +77,7 @@ describe('OpenAIResponsesProvider connection-phase abort', () => {
     abortError.name = 'AbortError';
     fetchMock.mockRejectedValue(abortError);
 
-    const provider = new OpenAIResponsesProvider('test-key', undefined, {
-      getEphemeralSettings: () => ({}),
-    });
+    const provider = new OpenAIResponsesProvider('test-key', undefined, {});
 
     const generator = provider.generateChatCompletion(
       streamCallOptions({

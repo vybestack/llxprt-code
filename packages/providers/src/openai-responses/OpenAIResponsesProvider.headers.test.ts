@@ -73,9 +73,6 @@ describe('OpenAIResponsesProvider custom headers', () => {
       customHeaders: {
         'X-Provider-Header': 'provider-value',
       },
-      getEphemeralSettings: () => ({
-        'custom-headers': customHeaders,
-      }),
     });
 
     const generator = provider.generateChatCompletion(

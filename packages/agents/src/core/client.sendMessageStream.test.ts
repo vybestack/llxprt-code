@@ -29,7 +29,7 @@ import { AgentClient } from './client.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ChatSession } from './chatSession.js';
 import { AgentEventType, Turn } from './turn.js';
-import { ideContext } from '@vybestack/llxprt-code-ide-integration';
+import { createClientIdeFixture } from './__tests__/client-ide-fixture.js';
 import { TodoReminderService } from '@vybestack/llxprt-code-core/services/todo-reminder-service.js';
 import {
   fromAsync,
@@ -143,17 +143,6 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/index.js', () => ({
 void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
   retryWithBackoff: vi.fn((apiCall) => apiCall()),
 }));
-const actual3 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
-void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
-  ...actual3,
-  ideContext: {
-    ...actual3.ideContext,
-    getIdeContext: vi.fn(),
-    subscribeToIdeContext: vi.fn(),
-    setIdeContext: vi.fn(),
-    clearIdeContext: vi.fn(),
-  },
-}));
 void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   uiTelemetryService: {
     setLastPromptTokenCount: vi.fn(),
@@ -205,6 +194,7 @@ function findHumanTextBlock(
 }
 
 let client: AgentClient;
+let ide: Awaited<ReturnType<typeof createClientIdeFixture>>;
 
 async function setupSendMessageStreamClient(): Promise<void> {
   todoStoreWritePausedMock.mockClear();
@@ -222,6 +212,7 @@ async function setupSendMessageStreamClient(): Promise<void> {
     { useInjectedConfig: true },
   );
   client = ctx.client;
+  ide = await createClientIdeFixture(client);
 
   mockTodoStoreConstructor.mockImplementation(() => ({
     readTodos: todoStoreReadMock,
@@ -283,6 +274,7 @@ describe('Agent Client (client.ts)', () => {
     beforeEach(setupSendMessageStreamClient);
     afterEach(async () => {
       await client.dispose();
+      await ide.dispose();
       vi.restoreAllMocks();
     });
 
@@ -329,7 +321,7 @@ describe('Agent Client (client.ts)', () => {
         })();
       });
 
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+      ide.setEnabled(false);
       useZeroTokenChat();
 
       const stream = client.sendMessageStream(
@@ -354,6 +346,7 @@ describe('Agent Client (client.ts): paused continuation', () => {
     beforeEach(setupSendMessageStreamClient);
     afterEach(async () => {
       await client.dispose();
+      await ide.dispose();
       vi.restoreAllMocks();
     });
 
@@ -384,7 +377,7 @@ describe('Agent Client (client.ts): paused continuation', () => {
         })();
       });
 
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+      ide.setEnabled(false);
       useZeroTokenChat();
 
       const stream = client.sendMessageStream(
@@ -407,6 +400,7 @@ describe('Agent Client (client.ts): new prompt', () => {
     beforeEach(setupSendMessageStreamClient);
     afterEach(async () => {
       await client.dispose();
+      await ide.dispose();
       vi.restoreAllMocks();
     });
 
@@ -425,7 +419,7 @@ describe('Agent Client (client.ts): new prompt', () => {
         })(),
       );
 
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+      ide.setEnabled(false);
       useZeroTokenChat();
 
       const stream = client.sendMessageStream(
@@ -445,6 +439,7 @@ describe('Agent Client (client.ts): todo_pause', () => {
     beforeEach(setupSendMessageStreamClient);
     afterEach(async () => {
       await client.dispose();
+      await ide.dispose();
       vi.restoreAllMocks();
     });
 
@@ -497,7 +492,7 @@ describe('Agent Client (client.ts): todo_pause', () => {
         })(),
       );
 
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(false);
+      ide.setEnabled(false);
       useZeroTokenChat();
 
       const stream = client.sendMessageStream(
@@ -519,14 +514,13 @@ describe('Agent Client (client.ts): IDE context', () => {
     beforeEach(setupSendMessageStreamClient);
     afterEach(async () => {
       await client.dispose();
+      await ide.dispose();
       vi.restoreAllMocks();
     });
 
     it('should add context if ideMode is enabled and there are open files but no active file', async () => {
       // Arrange
-      (
-        ideContext.getIdeContext as Mock<typeof ideContext.getIdeContext>
-      ).mockReturnValue({
+      await ide.update({
         workspaceState: {
           openFiles: [
             {
@@ -541,7 +535,7 @@ describe('Agent Client (client.ts): IDE context', () => {
         },
       });
 
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
+      ide.setEnabled(true);
 
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Hello' };
@@ -594,6 +588,7 @@ describe('Agent Client (client.ts): stream return', () => {
     beforeEach(setupSendMessageStreamClient);
     afterEach(async () => {
       await client.dispose();
+      await ide.dispose();
       vi.restoreAllMocks();
     });
 
@@ -668,6 +663,7 @@ describe('Agent Client (client.ts): session limit', () => {
     beforeEach(setupSendMessageStreamClient);
     afterEach(async () => {
       await client.dispose();
+      await ide.dispose();
       vi.restoreAllMocks();
     });
 
@@ -677,7 +673,7 @@ describe('Agent Client (client.ts): session limit', () => {
       vi.spyOn(client['config'], 'getMaxSessionTurns').mockReturnValue(
         MAX_SESSION_TURNS,
       );
-      vi.spyOn(client['config'], 'getIdeMode').mockReturnValue(true);
+      ide.setEnabled(true);
 
       const mockStream = (async function* () {
         yield { type: 'content', value: 'Hello' };

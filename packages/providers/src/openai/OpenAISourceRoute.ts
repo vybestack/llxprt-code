@@ -55,13 +55,14 @@ export async function withResponsesRows(
 export async function resolveChatMediaRequest(
   options: NormalizedGenerateChatOptions,
   prepared: PreparedOpenAIPromptEnvelope | undefined,
+  media: Parameters<typeof resolveRequestMedia>[0],
 ): Promise<ResolvedMediaRequest> {
   if (prepared?.protocol === 'openai-chat') return prepared.mediaRequest;
   if (readsRequestRowsAtTransport(options)) {
-    return openTransportRowsMedia(options);
+    return openTransportRowsMedia(options, media);
   }
   return resolveRequestMedia(
-    options.runtime,
+    media,
     options.contents,
     options.invocation.signal,
   );

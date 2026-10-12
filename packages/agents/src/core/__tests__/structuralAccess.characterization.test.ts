@@ -1,8 +1,10 @@
+import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
 
 /**
  * @plan:PLAN-20260707-AGENTNEUTRAL.P14
@@ -21,63 +23,26 @@
  * or Google-shaped internals. Asserts ONLY on observable outcomes.
  */
 
-import { observeHistorySynchronouslyForTest as testHistory } from '@vybestack/llxprt-code-test-utils/core/synchronous-history-test-observation.js';
 import { collectRowsForAssertions as withRows } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import * as fc from 'fast-check';
-import { makeRuntimeContext } from './helpers/structural-access-test-fixtures.js';
 import { ConversationManager } from '../ConversationManager.js';
-import {
-  extractResponseTextFromBlocks,
-  analyzeBlocksOutcome,
-  recordHistoryWithUsage,
-} from '../streamValidationHelpers.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
   IContent,
-  ContentBlock,
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ModelOutput } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { CompressionHandler } from '../../compression/CompressionHandler.js';
 
 // ---------------------------------------------------------------------------
 // Runtime context factory
 // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// Helper: extract observable text from committed history
-// ---------------------------------------------------------------------------
-
-function humanText(text: string): IContent {
-  return { speaker: 'human', blocks: [{ type: 'text', text }] };
-}
-
-function getRecordedHistoryText(history: HistoryService): string {
-  const all = testHistory(history);
-  return all
-    .filter((c) => c.speaker === 'ai')
-    .flatMap((c) => c.blocks)
-    .filter((b) => b.type === 'text')
-    .map((b) => (b as { text: string }).text)
-    .join('');
-}
-
-function getRecordedThinkingBlocks(
-  history: HistoryService,
-): Array<{ thought: string; signature?: string }> {
-  return testHistory(history)
-    .filter((c) => c.speaker === 'ai')
-    .flatMap((c) => c.blocks)
-    .filter((b) => b.type === 'thinking')
-    .map((b) => {
-      const tb = b as { thought: string; signature?: string };
-      return { thought: tb.thought, signature: tb.signature };
-    });
-}
-
+import {
+  makeRuntimeContext,
+  humanText,
+  getRecordedHistoryText,
+  getRecordedThinkingBlocks,
+} from './structural-history-fixture.js';
 // ---------------------------------------------------------------------------
 // REQ-005.1: ConversationManager text consolidation (BR-7) + thought filtering (BR-5)
 // ---------------------------------------------------------------------------
@@ -373,16 +338,18 @@ void vi.mock('@vybestack/llxprt-code-core/utils/retry.js', () => ({
 
 import { generateJson } from '../clientLlmUtilities.js';
 import type { BaseLLMClient } from '../baseLlmClient.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 
 function makeConfig(): Config {
-  return {
-    getUserMemory: () => '',
-    getCoreMemory: () => '',
-    getMcpInstructions: () => undefined,
-    getSettingsService: () => ({ get: () => 'test-provider' }),
-    isInteractive: () => true,
-  } as unknown as Config;
+  return new Config({
+    sessionId: 'structural-access',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    debugMode: false,
+    model: 'test-model',
+    provider: 'test-provider',
+    initialSettings: { activeProvider: 'test-provider' },
+  });
 }
 
 function makeBaseLlmClient(result: unknown): BaseLLMClient {
@@ -398,7 +365,6 @@ describe('REQ-005.2: clientLlmUtilities next_speaker detection', () => {
   const abortSignal = new AbortController().signal;
 
   it('returns parsed next_speaker decision from JSON response', async () => {
-    const config = makeConfig();
     const baseLlmClient = makeBaseLlmClient({
       reasoning: 'user asked a question',
       next_speaker: 'user',
@@ -412,7 +378,8 @@ describe('REQ-005.2: clientLlmUtilities next_speaker detection', () => {
     ];
 
     const result = await generateJson(
-      config,
+      makeConfig(),
+      () => undefined,
       {} as never,
       baseLlmClient,
       contents,
@@ -421,6 +388,10 @@ describe('REQ-005.2: clientLlmUtilities next_speaker detection', () => {
       'test-model',
       {},
       'session-1',
+      undefined,
+      [],
+      emptyInstructionReads,
+      fixturePromptPolicy(makeConfig()),
     );
 
     expect(result).toStrictEqual({
@@ -430,7 +401,6 @@ describe('REQ-005.2: clientLlmUtilities next_speaker detection', () => {
   });
 
   it('converts plain-text "model" fallback when next_speaker text is present', async () => {
-    const config = makeConfig();
     const baseLlmClient = makeBaseLlmClient('model');
 
     const contents: IContent[] = [
@@ -441,7 +411,8 @@ describe('REQ-005.2: clientLlmUtilities next_speaker detection', () => {
     ];
 
     const result = await generateJson(
-      config,
+      makeConfig(),
+      () => undefined,
       {} as never,
       baseLlmClient,
       contents,
@@ -450,6 +421,10 @@ describe('REQ-005.2: clientLlmUtilities next_speaker detection', () => {
       'test-model',
       {},
       'session-1',
+      undefined,
+      [],
+      emptyInstructionReads,
+      fixturePromptPolicy(makeConfig()),
     );
 
     expect(result).toStrictEqual({
@@ -459,7 +434,6 @@ describe('REQ-005.2: clientLlmUtilities next_speaker detection', () => {
   });
 
   it('does NOT apply fallback when next_speaker text is absent', async () => {
-    const config = makeConfig();
     // Return a plain text "user" — the fallback check will NOT trigger
     // because there's no "next_speaker" keyword in the prompt text.
     const baseLlmClient = makeBaseLlmClient('user');
@@ -472,7 +446,8 @@ describe('REQ-005.2: clientLlmUtilities next_speaker detection', () => {
     ];
 
     const result = await generateJson(
-      config,
+      makeConfig(),
+      () => undefined,
       {} as never,
       baseLlmClient,
       contents,
@@ -481,6 +456,10 @@ describe('REQ-005.2: clientLlmUtilities next_speaker detection', () => {
       'test-model',
       {},
       'session-1',
+      undefined,
+      [],
+      emptyInstructionReads,
+      fixturePromptPolicy(makeConfig()),
     );
 
     // The raw string is returned as-is (no next_speaker conversion)
@@ -488,7 +467,6 @@ describe('REQ-005.2: clientLlmUtilities next_speaker detection', () => {
   });
 
   it('returns JSON object as-is when no fallback is needed', async () => {
-    const config = makeConfig();
     const baseLlmClient = makeBaseLlmClient({ key: 'value' });
 
     const contents: IContent[] = [
@@ -499,7 +477,8 @@ describe('REQ-005.2: clientLlmUtilities next_speaker detection', () => {
     ];
 
     const result = await generateJson(
-      config,
+      makeConfig(),
+      () => undefined,
       {} as never,
       baseLlmClient,
       contents,
@@ -508,6 +487,10 @@ describe('REQ-005.2: clientLlmUtilities next_speaker detection', () => {
       'test-model',
       {},
       'session-1',
+      undefined,
+      [],
+      emptyInstructionReads,
+      fixturePromptPolicy(makeConfig()),
     );
 
     expect(result).toStrictEqual({ key: 'value' });
@@ -526,7 +509,6 @@ describe('REQ-005.2: next_speaker fallback detection (property)', () => {
 
     await fc.assert(
       fc.asyncProperty(speakerArb, async (speaker: string) => {
-        const config = makeConfig();
         const baseLlmClient = makeBaseLlmClient(speaker);
 
         const contents: IContent[] = [
@@ -537,7 +519,8 @@ describe('REQ-005.2: next_speaker fallback detection (property)', () => {
         ];
 
         const result = await generateJson(
-          config,
+          makeConfig(),
+          () => undefined,
           {} as never,
           baseLlmClient,
           contents,
@@ -546,6 +529,10 @@ describe('REQ-005.2: next_speaker fallback detection (property)', () => {
           'test-model',
           {},
           'session-1',
+          undefined,
+          [],
+          emptyInstructionReads,
+          fixturePromptPolicy(makeConfig()),
         );
 
         expect(result).toStrictEqual({
@@ -555,396 +542,13 @@ describe('REQ-005.2: next_speaker fallback detection (property)', () => {
       }),
     );
   });
-
-  // ---------------------------------------------------------------------------
-  // REQ-005.3: streamValidationHelpers accumulation
-  // (imports DebugLogger and CompressionHandler type — declared at top of file)
-  // ---------------------------------------------------------------------------
-
-  function makeCompressionHandlerStub(
-    lastPromptTokenCount: number | null,
-  ): CompressionHandler {
-    return {
-      lastPromptTokenCount,
-    } as unknown as CompressionHandler;
-  }
-
-  describe('REQ-005.3: extractResponseTextFromBlocks', () => {
-    it('extracts visible text from text blocks', () => {
-      const blocks: ContentBlock[] = [
-        { type: 'text', text: 'Hello ' },
-        { type: 'text', text: 'World' },
-      ];
-      expect(extractResponseTextFromBlocks(blocks)).toBe('Hello World');
-    });
-
-    it('excludes thinking blocks from text extraction', () => {
-      const blocks: ContentBlock[] = [
-        {
-          type: 'thinking',
-          thought: 'internal reasoning',
-          isHidden: true,
-          sourceField: 'thought',
-        },
-        { type: 'text', text: 'visible answer' },
-      ];
-      expect(extractResponseTextFromBlocks(blocks)).toBe('visible answer');
-    });
-
-    it('excludes tool call blocks from text extraction', () => {
-      const blocks: ContentBlock[] = [
-        { type: 'text', text: 'Calling tool' },
-        { type: 'tool_call', id: '1', name: 'search', parameters: {} },
-      ];
-      expect(extractResponseTextFromBlocks(blocks)).toBe('Calling tool');
-    });
-
-    it('returns empty string for empty blocks', () => {
-      expect(extractResponseTextFromBlocks([])).toBe('');
-    });
-
-    it('skips empty text blocks', () => {
-      const blocks: ContentBlock[] = [
-        { type: 'text', text: '' },
-        { type: 'text', text: 'non-empty' },
-      ];
-      expect(extractResponseTextFromBlocks(blocks)).toBe('non-empty');
-    });
-  });
-
-  describe('REQ-005.3: analyzeBlocksOutcome', () => {
-    it('detects visible text in blocks', () => {
-      const blocks: ContentBlock[] = [{ type: 'text', text: 'hello' }];
-      const outcome = analyzeBlocksOutcome(blocks, false);
-      expect(outcome.hasVisibleText).toBe(true);
-      expect(outcome.isActionable).toBe(true);
-    });
-
-    it('detects tool calls in blocks', () => {
-      const blocks: ContentBlock[] = [
-        { type: 'tool_call', id: '1', name: 'tool', parameters: {} },
-      ];
-      const outcome = analyzeBlocksOutcome(blocks, false);
-      expect(outcome.hasToolCalls).toBe(true);
-      expect(outcome.isActionable).toBe(true);
-    });
-
-    it('detects thinking blocks when includeThoughts=true', () => {
-      const blocks: ContentBlock[] = [
-        {
-          type: 'thinking',
-          thought: 'hmm',
-          isHidden: true,
-          sourceField: 'thought',
-        },
-      ];
-      const outcome = analyzeBlocksOutcome(blocks, true);
-      expect(outcome.hasThinking).toBe(true);
-    });
-
-    it('does NOT detect thinking blocks when includeThoughts=false', () => {
-      const blocks: ContentBlock[] = [
-        {
-          type: 'thinking',
-          thought: 'hmm',
-          isHidden: true,
-          sourceField: 'thought',
-        },
-      ];
-      const outcome = analyzeBlocksOutcome(blocks, false);
-      expect(outcome.hasThinking).toBe(false);
-    });
-
-    it('empty blocks yield no outcome flags', () => {
-      const outcome = analyzeBlocksOutcome([], false);
-      expect(outcome.hasVisibleText).toBe(false);
-      expect(outcome.hasThinking).toBe(false);
-      expect(outcome.hasToolCalls).toBe(false);
-      expect(outcome.isActionable).toBe(false);
-    });
-  });
-
-  describe('REQ-005.3: recordHistoryWithUsage accumulation', () => {
-    let historyService: HistoryService;
-    let logger: DebugLogger;
-
-    beforeEach(() => {
-      historyService = new HistoryService();
-      logger = new DebugLogger('p14-req0053');
-    });
-
-    async function recordAcc(
-      hs: HistoryService,
-      ctx: AgentRuntimeContext,
-      blocks: ContentBlock[],
-      finishReason: string | undefined,
-      usage?: UsageStats,
-    ): Promise<void> {
-      const mgr = new ConversationManager(hs, ctx);
-      const compHandler = makeCompressionHandlerStub(null);
-      const acc: ModelOutput = {
-        content: {
-          speaker: 'ai',
-          blocks,
-        },
-      };
-      if (finishReason !== undefined) {
-        acc.finishReason = finishReason;
-      }
-      if (usage) {
-        acc.usage = usage;
-      }
-      const userInput: IContent = {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'hi' }],
-      };
-      await recordHistoryWithUsage(
-        logger,
-        mgr,
-        hs,
-        compHandler,
-        ctx,
-        userInput,
-        acc,
-      );
-    }
-
-    it('records accumulated text blocks to history', async () => {
-      const ctx = makeRuntimeContext(true);
-      await recordAcc(
-        historyService,
-        ctx,
-        [{ type: 'text', text: 'Hello World' }],
-        'stop',
-      );
-
-      const recordedText = getRecordedHistoryText(historyService);
-      expect(recordedText).toBe('Hello World');
-    });
-
-    it('records usage metadata on the AI entry', async () => {
-      const ctx = makeRuntimeContext(true);
-      await recordAcc(
-        historyService,
-        ctx,
-        [{ type: 'text', text: 'answer' }],
-        'stop',
-        { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
-      );
-
-      await withRows(historyService.streamRawHistory(), (rows) => {
-        const aiEntries = rows.filter((c) => c.speaker === 'ai');
-        expect(aiEntries.length).toBeGreaterThan(0);
-        expect(aiEntries[0].metadata?.usage?.totalTokens).toBe(15);
-      });
-    });
-
-    it('filters thinking blocks from history when includeThoughts=false', async () => {
-      const ctx = makeRuntimeContext(false);
-      await recordAcc(
-        historyService,
-        ctx,
-        [
-          {
-            type: 'thinking',
-            thought: 'hidden',
-            isHidden: true,
-            sourceField: 'thought',
-          },
-          { type: 'text', text: 'visible' },
-        ],
-        'stop',
-      );
-
-      const thinkingBlocks = getRecordedThinkingBlocks(historyService);
-      expect(thinkingBlocks).toHaveLength(0);
-      expect(getRecordedHistoryText(historyService)).toBe('visible');
-    });
-
-    it('syncs prompt token count to history service when usage provided', async () => {
-      const ctx = makeRuntimeContext(true);
-      const promptTokens = 42;
-      await recordAcc(
-        historyService,
-        ctx,
-        [{ type: 'text', text: 'answer' }],
-        'stop',
-        { promptTokens, completionTokens: 5, totalTokens: 47 },
-      );
-
-      // syncTotalTokens is an observable side-effect; the history service
-      // stores it. Verify via the getTotalTokens method.
-      const totalTokens = historyService.getTotalTokens();
-      expect(totalTokens).toBe(promptTokens);
-    });
-
-    it('records AFC history atomically without duplicating the current user', async () => {
-      const ctx = makeRuntimeContext(true);
-      const mgr = new ConversationManager(historyService, ctx);
-      const prior: IContent = {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'prior' }],
-      };
-      historyService.add(prior, 'test-model');
-      const currentUser: IContent = {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'current' }],
-      };
-      const acc: ModelOutput = {
-        content: {
-          speaker: 'ai',
-          blocks: [{ type: 'text', text: 'final' }],
-        },
-        afcHistory: [
-          currentUser,
-          {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'intermediate' }],
-          },
-        ],
-      };
-
-      await recordHistoryWithUsage(
-        logger,
-        mgr,
-        historyService,
-        makeCompressionHandlerStub(null),
-        ctx,
-        currentUser,
-        acc,
-      );
-
-      await withRows(historyService.streamRawHistory(), (rows) => {
-        expect(
-          rows.map((content) => ({
-            speaker: content.speaker,
-            text: content.blocks
-              .filter((block) => block.type === 'text')
-              .map((block) => block.text)
-              .join(''),
-          })),
-        ).toStrictEqual([
-          { speaker: 'human', text: 'prior' },
-          { speaker: 'human', text: 'current' },
-          { speaker: 'ai', text: 'intermediate' },
-          { speaker: 'ai', text: 'final' },
-        ]);
-      });
-    });
-
-    it('does not replay an existing prefix from full AFC history', async () => {
-      const ctx = makeRuntimeContext(true);
-      const mgr = new ConversationManager(historyService, ctx);
-      const priorHuman: IContent = {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'prior question' }],
-      };
-      const priorAi: IContent = {
-        speaker: 'ai',
-        blocks: [{ type: 'text', text: 'prior answer' }],
-      };
-      historyService.add(
-        { ...priorHuman, metadata: { turnId: 'stored-human-turn' } },
-        'test-model',
-      );
-      historyService.add(
-        {
-          ...priorAi,
-          metadata: { turnId: 'stored-ai-turn', model: 'test-model' },
-        },
-        'test-model',
-      );
-      const currentUser: IContent = {
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'current question' }],
-      };
-
-      await recordHistoryWithUsage(
-        logger,
-        mgr,
-        historyService,
-        makeCompressionHandlerStub(null),
-        ctx,
-        currentUser,
-        {
-          content: {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'final answer' }],
-          },
-          afcHistory: [
-            { ...priorHuman, metadata: { turnId: 'provider-human-turn' } },
-            { ...priorAi, metadata: { turnId: 'provider-ai-turn' } },
-            currentUser,
-            {
-              speaker: 'ai',
-              blocks: [{ type: 'text', text: 'intermediate' }],
-            },
-          ],
-        },
-      );
-
-      await withRows(historyService.streamRawHistory(), (rows) => {
-        expect(
-          rows.map((content) =>
-            content.blocks
-              .filter((block) => block.type === 'text')
-              .map((block) => block.text)
-              .join(''),
-          ),
-        ).toStrictEqual([
-          'prior question',
-          'prior answer',
-          'current question',
-          'intermediate',
-          'final answer',
-        ]);
-      });
-    });
-  });
-
-  // ---------------------------------------------------------------------------
-  // REQ-005.3 PROPERTY TESTS
-  // ---------------------------------------------------------------------------
-
-  describe('REQ-005.3: extractResponseTextFromBlocks + analyzeBlocksOutcome (property)', () => {
-    it('text extraction yields concatenation of all text blocks (property)', () => {
-      const textArb = fc.string({ minLength: 1 }).filter((s) => s.length > 0);
-      const blocksArb = fc.array(textArb, { minLength: 1, maxLength: 8 });
-
-      fc.assert(
-        fc.property(blocksArb, (texts: string[]) => {
-          const blocks: ContentBlock[] = texts.map((t) => ({
-            type: 'text' as const,
-            text: t,
-          }));
-          const extracted = extractResponseTextFromBlocks(blocks);
-          expect(extracted).toBe(texts.join('').trim());
-        }),
-      );
-    });
-
-    it('hasToolCalls is true iff at least one tool_call block exists (property)', () => {
-      const arb = fc.array(
-        fc.constantFrom(
-          { type: 'text' as const, text: 'a' },
-          { type: 'tool_call' as const, id: '1', name: 't', parameters: {} },
-          {
-            type: 'thinking' as const,
-            thought: 'x',
-            isHidden: true,
-            sourceField: 'thought',
-          },
-        ),
-        { maxLength: 10 },
-      );
-
-      fc.assert(
-        fc.property(arb, (blocks: ContentBlock[]) => {
-          const outcome = analyzeBlocksOutcome(blocks, false);
-          const expectedToolCalls = blocks.some((b) => b.type === 'tool_call');
-          expect(outcome.hasToolCalls).toBe(expectedToolCalls);
-        }),
-      );
-    });
-  });
 });
+
+function fixturePromptPolicy(config: Config) {
+  const policy =
+    createSessionSettingsFixture(config).settingsOwner.readRuntimePolicy()
+      .promptPolicy;
+  if (policy === undefined)
+    throw new Error('Fixture settings owner did not provide prompt policy');
+  return policy;
+}

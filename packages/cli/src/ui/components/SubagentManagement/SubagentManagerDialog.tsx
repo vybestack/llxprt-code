@@ -1,9 +1,11 @@
+import type { AutoPromptRuntime } from '../../utils/autoPromptGenerator.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type React from 'react';
 import { useState, useCallback, useEffect } from 'react';
 import { Box, Text } from 'ink';
@@ -12,8 +14,11 @@ import { useSettingsProfileStore } from '../../stores/settings/SettingsContext.j
 import { useStoreSelector } from '../../stores/useStoreSelector.js';
 import { useAppCommandData } from '../../contexts/AppCommandsContext.js';
 import type { CommandContext } from '../../commands/types.js';
-import type { SubagentManager } from '@vybestack/llxprt-code-core';
-import type { ProfileManager } from '@vybestack/llxprt-code-settings';
+import type {
+  SubagentDefinitionReads,
+  SubagentDefinitionWrites,
+  ProfileDefinitionReads,
+} from '@vybestack/llxprt-code-core';
 import {
   SubagentView,
   type SubagentManagerDialogProps,
@@ -30,8 +35,10 @@ import { SubagentMainMenu } from './SubagentMainMenu.js';
 import { getBorderStyle } from '../../contexts/UnicodeRenderingContext.js';
 
 function useDataLoader(
-  subagentManager: SubagentManager | undefined,
-  profileManager: ProfileManager | undefined,
+  subagentManager:
+    | (SubagentDefinitionReads & SubagentDefinitionWrites)
+    | undefined,
+  profileManager: Pick<ProfileDefinitionReads, 'listProfiles'> | undefined,
   initialSubagentName: string | undefined,
   initialView: SubagentView,
   setState: React.Dispatch<React.SetStateAction<SubagentManagerState>>,
@@ -173,7 +180,9 @@ function useSelectHandlers(
 }
 
 function useSaveHandler(
-  subagentManager: SubagentManager | undefined,
+  subagentManager:
+    | (SubagentDefinitionReads & SubagentDefinitionWrites)
+    | undefined,
   state: SubagentManagerState,
   setPendingProfile: (p: string | undefined) => void,
   setState: React.Dispatch<React.SetStateAction<SubagentManagerState>>,
@@ -211,7 +220,9 @@ function useSaveHandler(
 }
 
 function useCreateHandler(
-  subagentManager: SubagentManager | undefined,
+  subagentManager:
+    | (SubagentDefinitionReads & SubagentDefinitionWrites)
+    | undefined,
   runtimeCommandContext: CommandContext | undefined,
   onClose: () => void,
 ) {
@@ -234,7 +245,11 @@ function useCreateHandler(
         const { generateAutoPrompt } = await import(
           '../../utils/autoPromptGenerator.js'
         );
-        finalPrompt = await generateAutoPrompt(config, systemPrompt);
+        finalPrompt = await generateAutoPrompt(
+          requireAutoPromptAgent(runtimeCommandContext?.services.agent),
+          systemPrompt,
+          config.getContentGeneratorConfig(),
+        );
       }
       await subagentManager.saveSubagent(name, profile, finalPrompt);
       onClose();
@@ -244,7 +259,9 @@ function useCreateHandler(
 }
 
 function useProfileAttachHandler(
-  subagentManager: SubagentManager | undefined,
+  subagentManager:
+    | (SubagentDefinitionReads & SubagentDefinitionWrites)
+    | undefined,
   state: SubagentManagerState,
   setPendingProfile: (p: string | undefined) => void,
   setState: React.Dispatch<React.SetStateAction<SubagentManagerState>>,
@@ -293,7 +310,9 @@ function useProfileAttachHandler(
 }
 
 function useDeleteConfirmHandler(
-  subagentManager: SubagentManager | undefined,
+  subagentManager:
+    | (SubagentDefinitionReads & SubagentDefinitionWrites)
+    | undefined,
   state: SubagentManagerState,
   setState: React.Dispatch<React.SetStateAction<SubagentManagerState>>,
   loadData: () => Promise<void>,
@@ -685,3 +704,19 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
     />
   );
 };
+
+function requireAutoPromptAgent(
+  agent: Agent | null | undefined,
+): AutoPromptRuntime {
+  if (!agent) throw new Error('Session agent is unavailable');
+  return {
+    getProvider: () => agent.getProvider(),
+    get agentClient() {
+      return agent.agentClient;
+    },
+    sessionClient: {
+      createDetachedAgentClient: (id) =>
+        agent.sessionClient.createDetachedAgentClient(id),
+    },
+  };
+}

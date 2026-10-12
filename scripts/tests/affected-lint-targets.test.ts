@@ -332,10 +332,12 @@ describe('affected-lint-targets selector — deterministic output', () => {
 describe('affected-lint-targets selector — data graph reuse', () => {
   it('uses the same checked-in graph as affected-test-shards', () => {
     // The lint selector must not duplicate the graph; it loads the same data.
-    const data = JSON.parse(readFileSync(DATA_PATH, 'utf8')) as {
-      importEdges: Record<string, readonly string[]>;
-    };
-    expect(data.importEdges['providers']).toContain('telemetry');
+    const data: import('../check-affected-test-shards.ts').GraphData =
+      JSON.parse(readFileSync(DATA_PATH, 'utf8'));
+    expect(data.importEdges.providers).toContain('settings');
+    expect(data.testOnlyEdges.providers).not.toContain('settings');
+    expect(data.testOnlyEdges.providers).toContain('policy');
+    expect(data.importEdges.providers).not.toContain('policy');
   });
 });
 

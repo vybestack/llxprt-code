@@ -10,7 +10,7 @@
  * so the neutral request-conversion dispatcher stays provider-id-only.
  */
 
-import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   convertHistoryToGeminiFormat,
@@ -26,7 +26,7 @@ export function isGeminiCompatibleProvider(providerName: string): boolean {
 export function buildGeminiDumpContents(
   history: IContent[],
   model?: string,
-  config?: ToolOutputSettingsProvider,
+  config?: OutputLimitConfig,
 ): unknown[] {
   return convertHistoryToGeminiFormat(history, model, config);
 }
@@ -34,7 +34,7 @@ export function buildGeminiDumpContents(
 export async function* buildGeminiDumpContentsStream(
   source: HistoryDumpSource,
   model?: string,
-  config?: ToolOutputSettingsProvider,
+  config?: OutputLimitConfig,
 ): AsyncIterable<unknown> {
   for await (const row of source.rows())
     yield* convertGeminiRow(row, model, config);

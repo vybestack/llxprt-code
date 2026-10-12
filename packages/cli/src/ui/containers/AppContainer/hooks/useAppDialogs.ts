@@ -21,6 +21,10 @@ import { useProviderDialog } from '../../../hooks/useProviderDialog.js';
 import { useLoadProfileDialog } from '../../../hooks/useLoadProfileDialog.js';
 import { useCreateProfileDialog } from '../../../hooks/useCreateProfileDialog.js';
 import { useProfileManagement } from '../../../hooks/useProfileManagement.js';
+import {
+  dialogProviderSwitchRecorder,
+  type ProviderSwitchRecorder,
+} from '../../../utils/recordActiveProviderSwitch.js';
 import { useToolsDialog } from '../../../hooks/useToolsDialog.js';
 import { useWorkspaceMigration } from '../../../hooks/useWorkspaceMigration.js';
 import { useDisplayPreferences } from './useDisplayPreferences.js';
@@ -72,7 +76,8 @@ export interface AppDialogsParams {
   appDispatch: React.Dispatch<AppAction>;
   handleNewMessage: (message: ConsoleMessageItem) => void;
   recordingIntegration?: RecordingIntegration;
-  recordingIntegrationRef: React.MutableRefObject<RecordingIntegration | null>;
+  recordingOwner?: 'agent' | 'raw';
+  recordingIntegrationRef?: React.MutableRefObject<RecordingIntegration | null>;
   runtime: ReturnType<typeof useRuntimeApi>;
   suppressStartupWelcome?: boolean;
   /** IDE nudge visibility + identity from bootstrap; open state lives in DialogStore. */
@@ -121,7 +126,10 @@ function useDialogsCore(
   }, [config, settingsStore]);
   const displayPrefs = useDisplayPreferences(p.terminalStore, settingsStore);
   const workspace = useWorkspaceMigration(settings, dialogs);
-  useIdeContextBridge({ setIdeContextState: st.setIdeContextState });
+  useIdeContextBridge({
+    ide: config,
+    setIdeContextState: st.setIdeContextState,
+  });
   const errorCount = useMemo(
     () =>
       consoleMessages
@@ -194,6 +202,8 @@ function useDialogsAuthProviders(
     addMessage,
     dialogs,
     recordingIntegration,
+    recordingOwner: p.recordingOwner,
+    agent: p.agent,
   });
   useModelRuntimeSync({
     config,
@@ -327,16 +337,26 @@ function useDialogHistoryMessage(turnStore: TurnStore) {
 function useDialogsProfiles(p: AppDialogsParams) {
   const { config, agent, dialogs } = p;
   const addMessage = useDialogHistoryMessage(p.turnStore);
+  const { recordingOwner, recordingIntegrationRef } = p;
+  const recorder = useMemo<ProviderSwitchRecorder>(
+    () =>
+      dialogProviderSwitchRecorder(
+        recordingOwner,
+        (event) => agent.session.recordRecordingEvent(event),
+        recordingIntegrationRef,
+      ),
+    [agent, recordingOwner, recordingIntegrationRef],
+  );
   const loadProfile = useLoadProfileDialog({
     addMessage,
     dialogs,
-    recordingIntegrationRef: p.recordingIntegrationRef,
+    recorder,
   });
   const createProfile = useCreateProfileDialog({ dialogs });
   const profileMgmt = useProfileManagement({
     addMessage,
     dialogs,
-    recordingIntegrationRef: p.recordingIntegrationRef,
+    recorder,
   });
   const toolsRaw = useToolsDialog({
     addMessage,

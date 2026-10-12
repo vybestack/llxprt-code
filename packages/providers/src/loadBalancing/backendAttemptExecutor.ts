@@ -39,6 +39,9 @@ import { resolveMemberAuthentication } from './memberAuthentication.js';
 export interface BackendAttemptDeps {
   readonly logger: DebugLogger;
   readonly circuitBreaker: CircuitBreakerManager;
+  assertDispatch(
+    authenticated: ResolvedSubProfile | LoadBalancerSubProfile,
+  ): Promise<void>;
   markActiveSelection(name: string): void;
   buildResolvedOptions(
     subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
@@ -183,6 +186,7 @@ export async function* executeBackendAttempt(
     delegateProvider,
     deps,
   );
+  await deps.assertDispatch(prepared.subProfile);
   // Facts snapshot must read the resolved options: the retry context
   // record is attached (and shared) through the delegate metadata chain.
   attemptCtx = startBackendAttempt(prepared.resolvedOptions);

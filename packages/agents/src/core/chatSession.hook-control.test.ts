@@ -1,31 +1,44 @@
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { ChatSession, StreamEventType } from './chatSession.js';
-import type { HookSystem } from '@vybestack/llxprt-code-core/hooks/HookSystem.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import {
   BeforeModelHookOutput,
   AfterModelHookOutput,
+  BeforeToolSelectionHookOutput,
 } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import { AgentEventType } from './turn.js';
 import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { withSnapshotModelEvents } from './__tests__/support/snapshot-hook-system.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 
 describe('ChatSession hook execution control', () => {
-  let mockHookSystem: HookSystem;
+  let mockHookSystem: {
+    fireBeforeModelEvent: ReturnType<
+      typeof vi.fn<NonNullable<HookExecutionOwner['beforeModel']>>
+    >;
+    fireAfterModelEvent: ReturnType<
+      typeof vi.fn<NonNullable<HookExecutionOwner['afterModel']>>
+    >;
+    fireBeforeToolSelectionEvent: ReturnType<
+      typeof vi.fn<NonNullable<HookExecutionOwner['beforeToolSelection']>>
+    >;
+  };
+  let hookOwner: HookExecutionOwner;
   let mockProvider: IProvider;
   let chat: ChatSession;
   let mockContentGenerator: {
@@ -36,15 +49,34 @@ describe('ChatSession hook execution control', () => {
   };
 
   beforeEach(() => {
-    mockHookSystem = withSnapshotModelEvents({
-      trigger: vi.fn(),
-      initialize: vi.fn().mockResolvedValue(undefined),
-      getRegistry: () => ({ getHooksForEvent: () => [{}] }),
-      isInitialized: vi.fn().mockReturnValue(true),
-      fireBeforeModelEvent: vi.fn().mockResolvedValue(undefined),
-      fireAfterModelEvent: vi.fn().mockResolvedValue(undefined),
-      fireBeforeToolSelectionEvent: vi.fn().mockResolvedValue(undefined),
-    } as never) as unknown as HookSystem;
+    mockHookSystem = {
+      fireBeforeModelEvent: vi
+        .fn<NonNullable<HookExecutionOwner['beforeModel']>>()
+        .mockResolvedValue(undefined),
+      fireAfterModelEvent: vi
+        .fn<NonNullable<HookExecutionOwner['afterModel']>>()
+        .mockResolvedValue(undefined),
+      fireBeforeToolSelectionEvent: vi
+        .fn<NonNullable<HookExecutionOwner['beforeToolSelection']>>()
+        .mockResolvedValue(undefined),
+    };
+    const snapshotEvents = withSnapshotModelEvents({
+      fireBeforeModelEvent: (request) =>
+        mockHookSystem.fireBeforeModelEvent(request),
+      fireAfterModelEvent: (request, response) =>
+        mockHookSystem.fireAfterModelEvent(request, response),
+    });
+    hookOwner = {
+      sessionId: () => 'explicit-chat-hook',
+      transcriptPath: () => undefined,
+      beforeModel: mockHookSystem.fireBeforeModelEvent,
+      afterModel: mockHookSystem.fireAfterModelEvent,
+      beforeModelSnapshot: (request, signal) =>
+        snapshotEvents.fireBeforeModelSnapshotEvent(request, signal),
+      afterModelSnapshot: (request, response, signal) =>
+        snapshotEvents.fireAfterModelSnapshotEvent(request, response, signal),
+      beforeToolSelection: mockHookSystem.fireBeforeToolSelectionEvent,
+    };
 
     mockProvider = {
       name: 'test-provider',
@@ -66,15 +98,12 @@ describe('ChatSession hook execution control', () => {
       provider: mockProvider,
       providerManager,
       configOverrides: {
-        getHookSystem: vi.fn(() => mockHookSystem),
-        getEnableHooks: vi.fn(() => true),
         getModel: vi.fn().mockReturnValue('test-model'),
         setModel: vi.fn(),
         getQuotaErrorOccurred: vi.fn().mockReturnValue(false),
         setQuotaErrorOccurred: vi.fn(),
         getEphemeralSettings: vi.fn().mockReturnValue({}),
         getEphemeralSetting: vi.fn(),
-        getProviderManager: vi.fn().mockReturnValue(providerManager),
       },
     });
 
@@ -96,7 +125,7 @@ describe('ChatSession hook execution control', () => {
 
     // Create runtime state and context
     const runtimeState = createAgentRuntimeState({
-      runtimeId: runtimeSetup.runtime.runtimeId,
+      runtimeId: runtimeSetup.runtime.runtimeId ?? 'hook-runtime',
       provider: runtimeSetup.provider.name,
       model: 'test-model',
       sessionId: 'test-session',
@@ -104,6 +133,10 @@ describe('ChatSession hook execution control', () => {
 
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
+      ...createSessionPolicyFixture(
+        runtimeSetup.settingsService,
+        providerRuntimeSnapshot.runtimeId ?? 'hook-runtime',
+      ),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -115,10 +148,16 @@ describe('ChatSession hook execution control', () => {
           target: null,
         },
       },
-      provider: createProviderAdapterFromManager(
-        mockConfig.getProviderManager(),
+      provider: createProviderAdapterFromManager(runtimeSetup.providerManager),
+      telemetry: createTelemetryAdapter(
+        mockConfig,
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: 'isolated-adapter-fixture',
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
       ),
-      telemetry: createTelemetryAdapterFromConfig(mockConfig),
       tools: createToolRegistryViewFromRegistry(),
       providerRuntime: providerRuntimeSnapshot,
     });
@@ -149,7 +188,7 @@ describe('ChatSession hook execution control', () => {
 
         const events: Array<{ type: string; reason?: string }> = [];
         const stream = await chat.sendMessageStream(
-          { message: 'test message' },
+          { message: 'test message', hookOwner },
           'test-prompt',
         );
 
@@ -206,7 +245,7 @@ describe('ChatSession hook execution control', () => {
           value?: unknown;
         }> = [];
         const stream = await chat.sendMessageStream(
-          { message: 'test message' },
+          { message: 'test message', hookOwner },
           'test-prompt',
         );
 
@@ -254,7 +293,7 @@ describe('ChatSession hook execution control', () => {
 
         const events: Array<{ type: string; reason?: string }> = [];
         const stream = await chat.sendMessageStream(
-          { message: 'test message' },
+          { message: 'test message', hookOwner },
           'test-prompt',
         );
 
@@ -303,7 +342,7 @@ describe('ChatSession hook execution control', () => {
           value?: unknown;
         }> = [];
         const stream = await chat.sendMessageStream(
-          { message: 'test message' },
+          { message: 'test message', hookOwner },
           'test-prompt',
         );
 
@@ -326,11 +365,13 @@ describe('ChatSession hook execution control', () => {
   });
 
   it('emits a neutral blocked chunk carrying the reason when BeforeModel blocks (no tool calls leak)', async () => {
-    mockHookSystem.fireBeforeToolSelectionEvent.mockResolvedValueOnce({
-      applyToolChoiceModifications: () => ({
-        toolChoice: { mode: 'auto', allowedToolNames: ['read_file'] },
+    mockHookSystem.fireBeforeToolSelectionEvent.mockResolvedValueOnce(
+      new BeforeToolSelectionHookOutput({
+        hookSpecificOutput: {
+          toolChoice: { mode: 'auto', allowedToolNames: ['read_file'] },
+        },
       }),
-    });
+    );
     const beforeModelOutput = new BeforeModelHookOutput({
       decision: 'block',
       reason: 'BeforeModel blocked execution',
@@ -356,7 +397,7 @@ describe('ChatSession hook execution control', () => {
 
     const events = [];
     const stream = await chatWithTools.sendMessageStream(
-      { message: 'test message' },
+      { message: 'test message', hookOwner },
       'test-prompt',
     );
     for await (const event of stream) {
@@ -366,7 +407,13 @@ describe('ChatSession hook execution control', () => {
     // No tool-call request events fire when the BeforeModel hook blocks
     // before the provider is ever called.
     expect(
-      events.some((event) => event.type === AgentEventType.ToolCallRequest),
+      events.some(
+        (event) =>
+          event.type === StreamEventType.CHUNK &&
+          event.value.content.blocks.some(
+            (block) => block.type === 'tool_call',
+          ),
+      ),
     ).toBe(false);
     const chunk = events.find((event) => event.type === StreamEventType.CHUNK);
     // The streaming BeforeModel blocking path yields a neutral ModelOutput
@@ -390,7 +437,7 @@ describe('ChatSession hook execution control', () => {
 
       const events: Array<{ type: string }> = [];
       const stream = await chat.sendMessageStream(
-        { message: 'test message' },
+        { message: 'test message', hookOwner },
         'test-prompt',
       );
 

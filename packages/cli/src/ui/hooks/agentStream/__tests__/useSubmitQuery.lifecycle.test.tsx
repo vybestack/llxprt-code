@@ -23,6 +23,8 @@ import { act } from 'react';
 import { renderHook, waitFor } from '../../../../__tests__/render.js';
 import { useSubmitQuery, type UseSubmitQueryDeps } from '../useSubmitQuery.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
+import { withRecordingLifetimeFixture } from '../../../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
+import { readFile } from 'node:fs/promises';
 import { type RecordingIntegration } from '@vybestack/llxprt-code-core';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { createStreamRuntimeForTest } from './streamRuntimeTestHelper.js';
@@ -127,6 +129,40 @@ describe('useSubmitQuery — operation lifecycle integration (AC-3, AC-4)', () =
   afterEach(async () => {
     await harness.cleanup();
   });
+  it('completes a submitted turn and flushes only its Agent owner recording', async () => {
+    await withRecordingLifetimeFixture(async ({ agent }) => {
+      await agent.setHistory([
+        { speaker: 'human', blocks: [{ type: 'text', text: 'start' }] },
+      ]);
+      await agent.session.setRecording({ enabled: true });
+      const path = agent.session.getRecording().path;
+      if (!path) throw new Error('No recording path');
+      const deps = createLifecycleDeps({
+        runStreamRef: {
+          current: async () => {
+            for await (const _event of agent.stream('owner-submitted-turn')) {
+              // Complete the public stream.
+            }
+          },
+        } as never,
+      });
+      const rawFlush = vi.fn();
+      const hookDeps = {
+        ...buildLifecycleHookDeps(deps, harness.registry),
+        agent,
+        recordingOwner: 'agent' as const,
+        recordingIntegration: { flushAtTurnBoundary: rawFlush } as never,
+      };
+      const { result, unmount } = renderHook(() => useSubmitQuery(hookDeps));
+      await act(async () => {
+        await result.current.submitQuery('owner-submitted-turn');
+      });
+      expect(await readFile(path, 'utf8')).toContain('owner-submitted-turn');
+      expect(agent.session.getRecording().enabled).toBe(true);
+      expect(rawFlush).not.toHaveBeenCalled();
+      unmount();
+    });
+  }, 30000);
 
   it('writes one record with status "completed" when a turn succeeds', async () => {
     const deps = createLifecycleDeps({

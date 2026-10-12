@@ -10,6 +10,7 @@
  * attempts, not SDK-internal ones).
  */
 
+import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { describe, it, expect } from 'bun:test';
 import { resolveModelCallParams } from './vercelRequestParams.js';
 import type {
@@ -21,8 +22,11 @@ function makeOptions(
   ephemerals: Record<string, unknown>,
 ): NormalizedGenerateChatOptions {
   return {
-    invocation: { modelParams: {}, ephemerals },
-    settings: { get: () => undefined },
+    invocation: createRuntimeInvocationContext({
+      runtimeId: 'params-test',
+      providerName: 'openaivercel',
+      ephemeralsSnapshot: ephemerals,
+    }),
   } as unknown as NormalizedGenerateChatOptions;
 }
 

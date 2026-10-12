@@ -133,8 +133,9 @@ async function captureRequestBody(
   });
 
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
+
     providerName: provider.name,
     ephemeralsSnapshot: ephemerals,
     userMemory,

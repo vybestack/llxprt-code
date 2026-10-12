@@ -110,13 +110,7 @@ describe('OpenAIProvider model params and custom headers', () => {
     settingsService.setProviderSetting('openai', 'top_p', 0.9);
     settingsService.setProviderSetting('openai', 'streaming', 'disabled');
 
-    const provider = new OpenAIProvider('test-key', undefined, {
-      getEphemeralSettings: () => ({
-        streaming: 'disabled',
-        temperature: 0.6,
-        top_p: 0.9,
-      }),
-    });
+    const provider = new OpenAIProvider('test-key', undefined, {});
 
     provider.setRuntimeSettingsService(settingsService);
 
@@ -195,10 +189,6 @@ describe('OpenAIProvider custom headers', () => {
     settingsService.setProviderSetting('openai', 'streaming', 'enabled');
 
     const provider = new OpenAIProvider('test-key', undefined, {
-      getEphemeralSettings: () => ({
-        streaming: 'enabled',
-        'custom-headers': customHeaders,
-      }),
       customHeaders: {
         'X-Provider-Header': 'provider-value',
       },
@@ -293,14 +283,7 @@ describe('OpenAIProvider socket transport', () => {
     const provider = new OpenAIProvider(
       'test-key',
       'http://localhost:1234/v1/',
-      {
-        getEphemeralSettings: () => ({
-          streaming: 'enabled',
-          'socket-timeout': 120000,
-          'socket-keepalive': true,
-          'socket-nodelay': true,
-        }),
-      },
+      {},
     );
 
     provider.setRuntimeSettingsService(settingsService);

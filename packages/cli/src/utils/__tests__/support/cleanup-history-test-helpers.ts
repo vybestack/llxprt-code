@@ -21,9 +21,11 @@ import {
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
   buildAgent,
   internalConfig,
+  internalSettingsOwner,
 } from '../../../../../agents/src/api/__tests__/helpers/agentHarness.js';
 
 export const cleanupBounds = { rows: 440, serializedBytes: 8 * 1024 * 1024 };
@@ -141,6 +143,10 @@ export function mediaObjectPath(
 
 export interface CleanupFixture {
   readonly config: Config;
+  readonly client: AgentClientContract;
+  readonly readActiveHistory: (
+    signal?: AbortSignal,
+  ) => AsyncGenerator<IContent, void, unknown>;
   readonly history: CleanupHistory;
   readonly reader: RowOwnership;
   readonly decoded: () => number;
@@ -182,10 +188,15 @@ export async function withCleanupHistory<T>(
           throw new Error('Missing cleanup history');
         const { agent, cleanup } = await buildAgent('plain-text.jsonl');
         const config = internalConfig(agent);
-        config.setTokenizerFactory(accountingFactory((text) => text.length));
-        config.setEphemeralSetting('context-limit', 100_000_000);
-        await config.getLocalMediaStore().admit(mediaInput);
-        const client = config.getAgentClient();
+        const client = agent.agentClient;
+        service.setTokenizerFactory(accountingFactory((text) => text.length));
+        internalSettingsOwner(agent).writeSessionOverride(
+          'context-limit',
+          100_000_000,
+        );
+        if (client.mediaStore === undefined)
+          throw new Error('Agent client has no media store');
+        await client.mediaStore.admit(mediaInput);
         client.storeHistoryServiceForReuse(service);
         try {
           if (active) await client.startChat([]);
@@ -193,6 +204,8 @@ export async function withCleanupHistory<T>(
           const before = counters.snapshot().rowsDecoded;
           return await action({
             config,
+            client,
+            readActiveHistory: (signal) => client.streamHistory(signal),
             history: service,
             reader,
             decoded: () => counters.snapshot().rowsDecoded - before,

@@ -1,3 +1,4 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -17,7 +18,7 @@
  * ChatSession still uses Config directly.
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { afterEach, describe, it, expect, vi } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
 import {
   Config,
@@ -28,13 +29,10 @@ import {
   type AgentRuntimeState,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
-import type {
-  AgentRuntimeContext,
-  ReadonlySettingsSnapshot,
-} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
@@ -45,13 +43,30 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * Test helper: Create minimal Config for testing
  */
-function createTestConfig(): Config {
+const roots: Array<{ config: Config; settingsOwner: SessionSettingsOwner }> =
+  [];
+
+function createTestConfig(options: Partial<ConfigParameters> = {}) {
   const config = new Config({
     sessionId: 'test-session-id',
     targetDir: '/tmp/test-dir',
-  } as unknown as ConfigParameters);
-  // Note: We don't set provider/model/auth here because runtime state should override them
-  return config;
+    cwd: '/tmp/test-dir',
+    debugMode: false,
+    model: 'declared-model',
+    ...options,
+  });
+  const settingsService = new SettingsService();
+  for (const [key, value] of Object.entries({
+    'compression-threshold': 0.8,
+    'context-limit': 60000,
+    'compression-preserve-threshold': 0.2,
+  }))
+    settingsService.set(key, value);
+  const settingsOwner = new SessionSettingsOwner(settingsService);
+  settingsOwner.bindTelemetry(config);
+  const root = { config, settingsService, settingsOwner };
+  roots.push(root);
+  return root;
 }
 
 /**
@@ -75,40 +90,33 @@ function createTestRuntimeState(
  */
 function createTestRuntimeContext(
   runtimeState: AgentRuntimeState,
-  config?: Config,
+  root: ReturnType<typeof createTestConfig>,
   historyService?: HistoryService,
 ): AgentRuntimeContext {
-  const settings: ReadonlySettingsSnapshot = {
-    compressionThreshold: 0.8,
-    contextLimit: 60000,
-    preserveThreshold: 0.2,
-    telemetry: {
-      enabled: true,
-      target: null,
-    },
-  };
-
   const providerRuntime = createProviderRuntimeContext({
-    settingsService: config?.getSettingsService() ?? new SettingsService(),
-    config,
+    settingsService: root.settingsService,
+    config: root.config,
     runtimeId: runtimeState.runtimeId,
     metadata: { source: 'chatSession.runtimeState.test' },
   });
-
   return createAgentRuntimeContext({
     state: runtimeState,
-    settings,
-    provider: createProviderAdapterFromManager(config?.getProviderManager()),
-    telemetry: config
-      ? createTelemetryAdapterFromConfig(config)
-      : {
-          logApiRequest: () => {},
-          logApiResponse: () => {},
-          logApiError: () => {},
-        },
-    tools: createToolRegistryViewFromRegistry(config?.getToolRegistry()),
+    settings: root.settingsOwner.readRuntimePolicy(),
+    provider: createProviderAdapterFromManager(undefined),
+    telemetry: createTelemetryAdapter(
+      root.config,
+      root.settingsOwner.telemetry,
+    ),
+    tools: createToolRegistryViewFromRegistry(undefined),
     history: historyService,
-    providerRuntime: { ...providerRuntime },
+    providerRuntime,
+    prepareProviderInvocation: (name, parameters, signal) =>
+      root.settingsOwner.prepareProviderInvocation(
+        runtimeState.runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
   });
 }
 
@@ -150,6 +158,13 @@ function createMockHistoryService(): HistoryService {
 }
 
 describe('ChatSession - Runtime State Integration', () => {
+  afterEach(async () => {
+    for (const root of roots.splice(0)) {
+      await root.settingsOwner.dispose();
+      await root.config.dispose();
+    }
+  });
+
   /**
    * @plan PLAN-20251027-STATELESS5.P09
    * @requirement REQ-STAT5-004.1
@@ -220,7 +235,7 @@ describe('ChatSession - Runtime State Integration', () => {
     );
 
     it(
-      'should only use Config for ephemeral settings (tools, user memory, etc)',
+      'keeps session parameters outside immutable Config construction data',
       facadeCallback11,
     );
   });
@@ -232,10 +247,10 @@ function facadeCallback0(): void {
   // @pseudocode gemini-runtime.md lines 204-220
 
   const runtimeState = createTestRuntimeState();
-  const config = createTestConfig();
+  const root = createTestConfig();
   const contentGenerator = createMockContentGenerator();
   const historyService = createMockHistoryService();
-  const view = createTestRuntimeContext(runtimeState, config, historyService);
+  const view = createTestRuntimeContext(runtimeState, root, historyService);
 
   // Phase 6: Use AgentRuntimeContext constructor
   expect(() => {
@@ -250,12 +265,11 @@ async function facadeCallback2(): Promise<void> {
   const runtimeState = createTestRuntimeState({
     provider: 'gemini', // Runtime state says gemini
   });
-  const config = createTestConfig();
-  config.setProvider('openai'); // Config says openai (wrong!)
+  const root = createTestConfig({ provider: 'openai' }); // Config says openai (wrong!)
 
   const contentGenerator = createMockContentGenerator();
   const historyService = createMockHistoryService();
-  const view = createTestRuntimeContext(runtimeState, config, historyService);
+  const view = createTestRuntimeContext(runtimeState, root, historyService);
 
   const chat = new ChatSession(
     view,
@@ -276,12 +290,11 @@ async function facadeCallback3(): Promise<void> {
   const runtimeState = createTestRuntimeState({
     model: 'gemini-2.0-flash', // Runtime state model
   });
-  const config = createTestConfig();
-  config.setModel('gemini-1.5-pro'); // Config model (wrong!)
+  const root = createTestConfig({ model: 'gemini-1.5-pro' }); // Config model (wrong!)
 
   const contentGenerator = createMockContentGenerator();
   const historyService = createMockHistoryService();
-  const view = createTestRuntimeContext(runtimeState, config, historyService);
+  const view = createTestRuntimeContext(runtimeState, root, historyService);
 
   const chat = new ChatSession(
     view,
@@ -302,11 +315,11 @@ async function facadeCallback4(): Promise<void> {
   const runtimeState = createTestRuntimeState({
     model: 'runtime-model',
   });
-  const config = createTestConfig();
+  const root = createTestConfig();
 
   const contentGenerator = createMockContentGenerator();
   const historyService = createMockHistoryService();
-  const view = createTestRuntimeContext(runtimeState, config, historyService);
+  const view = createTestRuntimeContext(runtimeState, root, historyService);
 
   const chat = new ChatSession(
     view,
@@ -327,12 +340,12 @@ async function facadeCallback5(): Promise<void> {
   const runtimeState = createTestRuntimeState({
     baseUrl: 'https://runtime.api.example.com', // Runtime state base URL
   });
-  const config = createTestConfig();
+  const root = createTestConfig();
   // Config has different base URL (via constructor defaults)
 
   const contentGenerator = createMockContentGenerator();
   const historyService = createMockHistoryService();
-  const view = createTestRuntimeContext(runtimeState, config, historyService);
+  const view = createTestRuntimeContext(runtimeState, root, historyService);
 
   const chat = new ChatSession(
     view,
@@ -352,10 +365,10 @@ async function facadeCallback6(): Promise<void> {
   // @pseudocode gemini-runtime.md lines 189-196
 
   const runtimeState = createTestRuntimeState();
-  const config = createTestConfig();
+  const root = createTestConfig();
   const contentGenerator = createMockContentGenerator();
   const historyService = createMockHistoryService();
-  const view = createTestRuntimeContext(runtimeState, config, historyService);
+  const view = createTestRuntimeContext(runtimeState, root, historyService);
 
   const chat = new ChatSession(
     view,
@@ -374,10 +387,10 @@ function facadeCallback8(): void {
   // @pseudocode gemini-runtime.md lines 197-217
 
   const runtimeState = createTestRuntimeState();
-  const config = createTestConfig();
+  const root = createTestConfig();
   const contentGenerator = createMockContentGenerator();
   const historyService = createMockHistoryService();
-  const view = createTestRuntimeContext(runtimeState, config, historyService);
+  const view = createTestRuntimeContext(runtimeState, root, historyService);
   const chat = new ChatSession(
     view,
     contentGenerator,
@@ -395,13 +408,11 @@ function facadeCallback9(): void {
     provider: 'gemini',
     model: 'gemini-2.0-flash',
   });
-  const config = createTestConfig();
-  config.setProvider('openai'); // Wrong!
-  config.setModel('gpt-4'); // Wrong!
+  const root = createTestConfig({ provider: 'openai', model: 'gpt-4' }); // Config is wrong!
 
   const contentGenerator = createMockContentGenerator();
   const historyService = createMockHistoryService();
-  const view = createTestRuntimeContext(runtimeState, config, historyService);
+  const view = createTestRuntimeContext(runtimeState, root, historyService);
   const chat = new ChatSession(
     view,
     contentGenerator,
@@ -420,12 +431,12 @@ function facadeCallback10(): void {
   // @requirement REQ-STAT5-004.1
 
   const runtimeState = createTestRuntimeState();
-  const config = createTestConfig();
+  const root = createTestConfig();
   const contentGenerator = createMockContentGenerator();
   const historyService = createMockHistoryService();
-  const view = createTestRuntimeContext(runtimeState, config, historyService);
+  const view = createTestRuntimeContext(runtimeState, root, historyService);
 
-  const getProviderSpy = vi.spyOn(config, 'getProvider');
+  const getProviderSpy = vi.spyOn(root.config, 'getProvider');
 
   new ChatSession(view, contentGenerator, { systemInstruction: 'test' }, []);
 
@@ -441,20 +452,15 @@ function facadeCallback11(): void {
   // @pseudocode gemini-runtime.md lines 166-174
 
   const runtimeState = createTestRuntimeState();
-  const config = createTestConfig();
+  const root = createTestConfig();
   const contentGenerator = createMockContentGenerator();
   const historyService = createMockHistoryService();
-  const view = createTestRuntimeContext(runtimeState, config, historyService);
+  const view = createTestRuntimeContext(runtimeState, root, historyService);
 
-  const _getToolRegistrySpy = vi.spyOn(config, 'getToolRegistry');
-  const _getUserMemorySpy = vi.spyOn(config, 'getUserMemory');
+  root.settingsOwner.writeUserParameter('temperature', 0.4);
 
   new ChatSession(view, contentGenerator, { systemInstruction: 'test' }, []);
 
-  // ChatSession CAN call these Config methods (ephemeral settings)
-  // This tests that we maintain backward compatibility for non-migrated settings
-  // These calls are OK in Phase 5
-  expect(true).toBe(true); // This test documents acceptable Config usage
-  void _getToolRegistrySpy;
-  void _getUserMemorySpy;
+  expect(root.config.getInitialSettings()).not.toHaveProperty('temperature');
+  expect(root.settingsOwner.readNamedParameter('temperature')).toBe(0.4);
 }

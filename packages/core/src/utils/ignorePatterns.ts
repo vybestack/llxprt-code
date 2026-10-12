@@ -5,7 +5,6 @@
  */
 
 import path from 'path';
-import type { Config } from '../config/config.js';
 import { getCurrentLlxprtMdFilename } from '@vybestack/llxprt-code-tools';
 
 /**
@@ -129,7 +128,7 @@ export interface ExcludeOptions {
  * file exclusion patterns for different tools and use cases.
  */
 export class FileExclusions {
-  constructor(private config?: Config) {}
+  constructor(private readonly customPatterns: readonly string[] = []) {}
 
   /**
    * Gets core ignore patterns for basic file operations like glob.
@@ -208,10 +207,7 @@ export class FileExclusions {
    * Config test doubles may not implement getCustomExcludes at runtime.
    */
   private getConfigCustomExcludes(): string[] {
-    const config = this.config as
-      | { getCustomExcludes?: () => string[] }
-      | undefined;
-    return config?.getCustomExcludes?.() ?? [];
+    return [...this.customPatterns];
   }
 
   /**

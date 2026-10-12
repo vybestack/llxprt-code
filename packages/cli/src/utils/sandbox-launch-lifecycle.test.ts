@@ -297,7 +297,9 @@ describe('#3450 private dependency storage lifecycle on a failed launch', () => 
     const cliConfig = configWithIncludeDirectories([missingRoot]);
 
     await expect(
-      runContainerSandbox(CONFIG, [], cliConfig),
+      runContainerSandbox(CONFIG, [], cliConfig, undefined, () =>
+        cliConfig.getConfiguredIncludeDirectories(),
+      ),
     ).rejects.toThrowError(missingRoot);
     expect(engine.snapshot().invocations).toStrictEqual([]);
     expect(leakedRunRoots()).toStrictEqual([]);
@@ -309,7 +311,9 @@ describe('#3450 private dependency storage lifecycle on a failed launch', () => 
     const cliConfig = configWithIncludeDirectories([nestedRoot]);
 
     await expect(
-      runContainerSandbox(CONFIG, [], cliConfig),
+      runContainerSandbox(CONFIG, [], cliConfig, undefined, () =>
+        cliConfig.getConfiguredIncludeDirectories(),
+      ),
     ).rejects.toThrowError('overlap');
     expect(engine.snapshot().invocations).toStrictEqual([]);
     expect(leakedRunRoots()).toStrictEqual([]);
@@ -322,7 +326,9 @@ describe('#3450 private dependency storage lifecycle on a failed launch', () => 
       const cliConfig = configWithIncludeDirectories([fileRoot]);
 
       await expect(
-        runContainerSandbox(CONFIG, [], cliConfig),
+        runContainerSandbox(CONFIG, [], cliConfig, undefined, () =>
+          cliConfig.getConfiguredIncludeDirectories(),
+        ),
       ).rejects.toThrowError('mountable directory');
       expect(engine.snapshot().invocations).toStrictEqual([]);
       expect(leakedRunRoots()).toStrictEqual([]);

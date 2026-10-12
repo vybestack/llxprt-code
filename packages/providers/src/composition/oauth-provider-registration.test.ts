@@ -4,11 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import {
   registerStandardOAuthProviders,
   isOAuthProviderRegistered,
-  resetRegisteredProviders,
 } from './oauth-provider-registration.js';
 import { OAuthManager, createTokenStore } from '../auth/index.js';
 import type { OAuthManager as OAuthManagerType } from '../auth/index.js';
@@ -19,10 +18,6 @@ function createFreshManager(): OAuthManagerType {
 }
 
 describe('registerStandardOAuthProviders', () => {
-  beforeEach(() => {
-    resetRegisteredProviders();
-  });
-
   it('registers claudecode and codex on a fresh manager (@issue:2274 A4)', () => {
     const oauthManager = createFreshManager();
 

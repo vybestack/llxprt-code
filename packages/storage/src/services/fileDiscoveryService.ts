@@ -29,6 +29,7 @@ export class FileDiscoveryService {
   private gitIgnoreFilter: GitIgnoreFilter | null = null;
   private llxprtIgnoreFilter: GitIgnoreFilter;
   private projectRoot: string;
+  private llxprtPatterns: string[] = [];
 
   constructor(projectRoot: string) {
     const absoluteRoot = path.resolve(projectRoot);
@@ -43,6 +44,7 @@ export class FileDiscoveryService {
       path.join(this.projectRoot, LLXPRT_IGNORE_FILE_NAME),
     );
 
+    this.llxprtPatterns = llxprtPatterns;
     if (resolvedGitRoot) {
       // GitIgnoreParser lazily discovers .gitignore patterns on isIgnored()
       this.gitIgnoreFilter = new GitIgnoreParser(resolvedGitRoot);
@@ -108,6 +110,7 @@ export class FileDiscoveryService {
    * Checks if a single file should be llxprt-ignored
    */
   shouldLlxprtIgnoreFile(filePath: string): boolean {
+    this.refreshLlxprtPatterns();
     const absolutePath = this.resolveAbsolutePath(filePath);
     return this.llxprtIgnoreFilter.isIgnored(absolutePath);
   }
@@ -139,6 +142,7 @@ export class FileDiscoveryService {
     filePath: string,
     options: FilterFilesOptions,
   ): boolean {
+    this.refreshLlxprtPatterns();
     const { respectGitIgnore = true, respectLlxprtIgnore = true } = options;
 
     if (!respectGitIgnore && !respectLlxprtIgnore) {
@@ -190,7 +194,22 @@ export class FileDiscoveryService {
    * Returns loaded patterns from .llxprtignore
    */
   getLlxprtIgnorePatterns(): string[] {
+    this.refreshLlxprtPatterns();
     return this.llxprtIgnoreFilter.getPatterns();
+  }
+
+  private refreshLlxprtPatterns(): void {
+    const patterns = this.readIgnorePatterns(
+      path.join(this.projectRoot, LLXPRT_IGNORE_FILE_NAME),
+    );
+    if (patterns.join('\n') !== this.llxprtPatterns.join('\n')) {
+      this.llxprtPatterns = patterns;
+      this.llxprtIgnoreFilter = new GitIgnoreParser(
+        this.projectRoot,
+        patterns,
+        { loadGitSources: false },
+      );
+    }
   }
 
   private resolveAbsolutePath(filePath: string): string {

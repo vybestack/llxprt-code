@@ -3,12 +3,13 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createSchedulerPolicyFixture } from './__tests__/scheduler-policy-fixture.js';
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from 'bun:test';
 import type { ToolCall, WaitingToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
@@ -16,13 +17,7 @@ import { type ToolConfirmationPayload } from '@vybestack/llxprt-code-tools';
 import { MockModifiableTool } from '@vybestack/llxprt-code-test-utils/core/tools.js';
 import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
-import {
-  createMockMessageBus,
-  createMockPolicyEngine,
-  waitForStatus,
-  DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
-  DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
-} from './__tests__/coreToolScheduler-test-helpers.js';
+import { waitForStatus } from './__tests__/coreToolScheduler-test-helpers.js';
 
 describe('CoreToolScheduler with payload', () => {
   it('should update args and diff and execute tool when payload is provided', async () => {
@@ -45,32 +40,38 @@ describe('CoreToolScheduler with payload', () => {
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
-    const mockPolicyEngine = createMockPolicyEngine();
-    mockPolicyEngine.evaluate = vi
-      .fn()
-      .mockReturnValue(PolicyDecision.ASK_USER);
+    let policyDecision = PolicyDecision.ALLOW;
+    policyDecision = PolicyDecision.ASK_USER;
 
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      isInteractive: () => true,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => mockToolRegistry,
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getEnableHooks: () => false,
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      getModel: () => 'gemini-2.5-pro',
-    } as unknown as Config;
+    const {
+      config: mockConfig,
+      settingsOwner,
+      messageBus: runtimeMessageBus,
+    } = createSchedulerPolicyFixture(
+      {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        isInteractive: () => true,
+        getApprovalMode: () => ApprovalMode.DEFAULT,
+
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+        getEnableHooks: () => false,
+        getModel: () => 'gemini-2.5-pro',
+      },
+      policyDecision,
+    );
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
       config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
+      messageBus: runtimeMessageBus,
       toolRegistry: mockToolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
@@ -97,6 +98,8 @@ describe('CoreToolScheduler with payload', () => {
 
     expect(confirmationDetails).toBeDefined();
     const payload: ToolConfirmationPayload = { newContent: 'final version' };
+    if (!('onConfirm' in confirmationDetails))
+      throw new Error('Missing scheduler confirmation callback');
     await confirmationDetails.onConfirm(
       ToolConfirmationOutcome.ProceedOnce,
       payload,
@@ -135,6 +138,7 @@ describe('CoreToolScheduler with payload', () => {
           title: 'Confirm Shell Command',
           command: String(params['command'] ?? ''),
           rootCommand: 'npm',
+          rootCommands: ['npm'],
           onConfirm: originalOnConfirm,
         }),
       execute: (params) => executeFn(params),
@@ -157,47 +161,42 @@ describe('CoreToolScheduler with payload', () => {
     const onAllToolCallsComplete = vi.fn();
     const onToolCallsUpdate = vi.fn();
 
-    const mockPolicyEngine = createMockPolicyEngine();
-    mockPolicyEngine.evaluate = vi
-      .fn()
-      .mockReturnValue(PolicyDecision.ASK_USER);
+    let policyDecision = PolicyDecision.ALLOW;
+    policyDecision = PolicyDecision.ASK_USER;
 
-    const mockConfig = {
-      getSessionId: () => 'test-session-id',
-      getUsageStatisticsEnabled: () => true,
-      getDebugMode: () => false,
-      isInteractive: () => true,
-      getApprovalMode: () => ApprovalMode.DEFAULT,
-      getEphemeralSettings: () => ({}),
-      getAllowedTools: () => [],
-      getContentGeneratorConfig: () => ({
-        model: 'test-model',
-      }),
-      getToolRegistry: () => toolRegistry,
-      getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
-      getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
-      getModel: () => 'gemini-2.5-pro',
-      getShellExecutionConfig: () => ({
-        terminalWidth: 80,
-        terminalHeight: 24,
-      }),
-      getTerminalWidth: vi.fn(() => 80),
-      getTerminalHeight: vi.fn(() => 24),
-      storage: {
-        getProjectTempDir: () => '/tmp',
+    const {
+      config: mockConfig,
+      settingsOwner,
+      messageBus: runtimeMessageBus,
+    } = createSchedulerPolicyFixture(
+      {
+        getSessionId: () => 'test-session-id',
+        getUsageStatisticsEnabled: () => true,
+        getDebugMode: () => false,
+        isInteractive: () => true,
+        getApprovalMode: () => ApprovalMode.DEFAULT,
+
+        getAllowedTools: () => [],
+        getContentGeneratorConfig: () => ({
+          model: 'test-model',
+        }),
+        getModel: () => 'gemini-2.5-pro',
+        getShellExecutionConfig: () => ({
+          terminalWidth: 80,
+          terminalHeight: 24,
+        }),
       },
-      getTruncateToolOutputThreshold: () =>
-        DEFAULT_TRUNCATE_TOOL_OUTPUT_THRESHOLD,
-      getTruncateToolOutputLines: () => DEFAULT_TRUNCATE_TOOL_OUTPUT_LINES,
-      getUseSmartEdit: () => false,
-      getUseModelRouter: () => false,
-      getAgentClient: () => null,
-    } as unknown as Config;
+      policyDecision,
+    );
 
     const scheduler = new CoreToolScheduler({
+      telemetry: settingsOwner.telemetry,
+      readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+      getToolGovernance: () =>
+        settingsOwner.readToolGovernance(mockConfig.getExcludeTools() ?? []),
       config: mockConfig,
-      messageBus: mockConfig.getMessageBus(),
-      toolRegistry: mockConfig.getToolRegistry(),
+      messageBus: runtimeMessageBus,
+      toolRegistry,
       onAllToolCallsComplete,
       onToolCallsUpdate,
       getPreferredEditor: () => 'vscode',
@@ -226,6 +225,8 @@ describe('CoreToolScheduler with payload', () => {
       editedCommand: 'npm install',
     };
 
+    if (!('onConfirm' in awaitingCall.confirmationDetails))
+      throw new Error('Missing live confirmation callback');
     await awaitingCall.confirmationDetails.onConfirm(
       ToolConfirmationOutcome.SuggestEdit,
       payload,

@@ -1,4 +1,5 @@
 /// <reference lib="esnext.array" />
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -28,16 +29,13 @@
  *   BEFORE the provider call, so the LB guard callback is never invoked.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { afterEach, describe, it, expect, beforeEach, vi } from 'bun:test';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
-import {
-  createChatSessionRuntime,
-  createRuntimeConfigStub,
-} from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   LoadBalancerContextLimitError,
@@ -143,7 +141,6 @@ const tokenizerFactory: RuntimeTokenizerFactory = {
  * normalization works) whose tokenizer factory defers to the projection's
  * legacyEstimate.
  */
-const seamConfig = createChatSessionRuntime({}).config;
 
 interface DelegateTransport {
   payloads: IContent[][];
@@ -224,15 +221,26 @@ function createResolvedSubProfile(providerName: string): ResolvedSubProfile {
   };
 }
 
+const ownedReleases: Array<() => void | Promise<void>> = [];
+
 function createLoadBalancer(options: {
   contextLimit: number;
   delegate: IProvider;
 }): LoadBalancingProvider {
   const settingsService = new SettingsService();
+  const config = createRuntimeConfigStub(settingsService);
+  const settingsOwner = new SessionSettingsOwner(settingsService);
+  settingsOwner.bindTelemetry(config);
   const providerManager = new ProviderManager({
     settingsService,
-    config: createRuntimeConfigStub(settingsService),
+    config,
+    sessionSettings: settingsOwner,
   });
+  ownedReleases.push(
+    () => providerManager.dispose(),
+    () => settingsOwner.dispose(),
+    () => config.dispose(),
+  );
   providerManager.setTokenizerFactory(tokenizerFactory);
   providerManager.registerProvider(options.delegate);
   return new LoadBalancingProvider(
@@ -306,6 +314,20 @@ function createEnforcementSession(options: {
 }
 
 describe('LB guard projection parity through real pre-send enforcement (issue #3507)', () => {
+  afterEach(async () => {
+    const releases = ownedReleases.splice(0);
+    const results = await Promise.allSettled(
+      releases.map(async (release) => release()),
+    );
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(
+        failures,
+        'Load balancer fixture cleanup failed',
+      );
+  });
   beforeEach(facadeCallback0);
 
   it(
@@ -370,7 +392,6 @@ async function facadeCallback1(): Promise<void> {
   const projection = await lb.projectPromptEnvelope({
     contents: toStream(contents),
     tools: TOOLSET,
-    config: seamConfig,
   });
   expect(projection).toBeDefined();
   const envelopeTokens = await projection!.legacyEstimate();
@@ -505,7 +526,7 @@ async function facadeCallback3(): Promise<void> {
   const estimateCandidate = async (candidate: IContent[]): Promise<number> => {
     const prepared = await prepareAtSendSeam(
       lb as unknown as Parameters<typeof prepareAtSendSeam>[0],
-      { contents: toStream(candidate), tools: TOOLSET, config: seamConfig },
+      { contents: toStream(candidate), tools: TOOLSET },
     );
     try {
       return (

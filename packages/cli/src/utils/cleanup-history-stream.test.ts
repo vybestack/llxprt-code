@@ -17,11 +17,16 @@ for (const size of [512, 8192]) {
         await withCleanupHistory(size, active, async (fixture) => {
           const { config, history, reader, store, reference, orphan, root } =
             fixture;
-          const tokensBefore = config
-            .getAgentClient()
+          const tokensBefore = fixture.client
             .getHistoryService()
             ?.getTotalTokens();
-          const result = await cleanupExpiredSessions(config, {}, root);
+          const result = await cleanupExpiredSessions(
+            config,
+            {},
+            root,
+            undefined,
+            fixture.readActiveHistory,
+          );
           recordCleanupOwners(size, active, 'settled', fixture);
           expect({
             failed: result.failed,
@@ -36,9 +41,9 @@ for (const size of [512, 8192]) {
           expect(history.closed).toBe(1);
           expect(reader.within(cleanupBounds)).toBe(true);
           expect(reader.snapshot().liveRows).toBe(0);
-          expect(
-            config.getAgentClient().getHistoryService()?.getTotalTokens(),
-          ).toBe(tokensBefore);
+          expect(fixture.client.getHistoryService()?.getTotalTokens()).toBe(
+            tokensBefore,
+          );
           expect(
             await readFile(mediaObjectPath(store, reference.originalContentId)),
           ).toStrictEqual(Buffer.from([1, 2, 3, 4]));
@@ -48,7 +53,7 @@ for (const size of [512, 8192]) {
           await expect(
             stat(mediaObjectPath(store, orphan.contentId)),
           ).rejects.toMatchObject({ code: 'ENOENT' });
-          const cursor = config.getAgentClient().streamHistory();
+          const cursor = fixture.client.streamHistory();
           expect((await cursor.next()).done).toBe(false);
           await cursor.return();
           expect({
@@ -65,6 +70,8 @@ for (const size of [512, 8192]) {
             fixture.config,
             {},
             fixture.root,
+            undefined,
+            fixture.readActiveHistory,
           );
           recordCleanupOwners(size, active, 'source-fault', fixture);
           expect({
@@ -107,6 +114,8 @@ describe('CLI cleanup oversized valid rows', () => {
             fixture.config,
             {},
             fixture.root,
+            undefined,
+            fixture.readActiveHistory,
           );
           recordCleanupOwners(1, active, 'valid-nine-MiB', fixture);
           expect(result.failed).toBe(0);

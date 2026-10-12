@@ -3,13 +3,12 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { describe, expect, it, vi } from 'bun:test';
-import * as telemetryLoggers from '@vybestack/llxprt-code-core/telemetry/loggers.js';
+import { describe, expect, it } from 'bun:test';
+import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import type { ConversationRequestEvent } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
 import {
   logConversationRequestEntry,
@@ -17,7 +16,7 @@ import {
 } from './conversationLogger.js';
 
 async function logToolCases(
-  config: Config,
+  config: ProviderRequestDiagnostics,
   ctx: ConversationLogContext,
 ): Promise<void> {
   await logConversationRequestEntry(
@@ -83,20 +82,33 @@ describe('conversation request tool persistence', () => {
     const dir = await mkdtemp(join(tmpdir(), 'issue3694-logger-'));
     resetConversationFileWriterForTesting();
     const events: ConversationRequestEvent[] = [];
-    const sink = vi
-      .spyOn(telemetryLoggers, 'logConversationRequest')
-      .mockImplementation(async (_config, event): Promise<void> => {
-        events.push(event);
-      });
     try {
-      const config = new Config({
-        cwd: dir,
-        targetDir: dir,
-        debugMode: false,
-        sessionId: 'logger-test',
-        model: 'test-model',
-        telemetry: { enabled: false, conversationLogPath: dir },
-      });
+      const config: ProviderRequestDiagnostics = {
+        conversationLoggingEnabled: true,
+        conversationLogPath: dir,
+        requestBodyLoggingEnabled: false,
+        assertRequestArtifactExporter: () => undefined,
+        acknowledgeTerminalTelemetry: async (build) => {
+          build();
+          return () => undefined;
+        },
+        redaction: {
+          redactApiKeys: false,
+          redactCredentials: false,
+          redactFilePaths: false,
+          redactUrls: false,
+          redactEmails: false,
+          redactPersonalInfo: false,
+        },
+        recordApiError: () => undefined,
+        recordApiRequest: () => undefined,
+        recordApiResponse: () => undefined,
+        recordTokenUsage: () => undefined,
+        recordConversationRequest: (event) => {
+          events.push(event);
+        },
+        recordConversationResponse: () => undefined,
+      };
       const ctx = {
         providerName: 'test',
         conversationId: 'conversation',
@@ -139,7 +151,6 @@ describe('conversation request tool persistence', () => {
         expect(artifact.row_count).toBe(0);
       }
     } finally {
-      sink.mockRestore();
       resetConversationFileWriterForTesting();
       await rm(dir, { recursive: true, force: true });
     }

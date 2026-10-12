@@ -3,6 +3,13 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { ToolLookup } from '@vybestack/llxprt-code-tools';
+
+import {
+  fixtureHookDefinitions,
+  fixtureHookRuntime,
+} from '../../../core/src/hooks/__tests__/hook-runtime-fixture.js';
+import { createSchedulerPolicyFixture } from './__tests__/scheduler-policy-fixture.js';
 
 /**
  * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P21
@@ -34,7 +41,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ToolCall, SuccessfulToolCall } from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import {
@@ -48,11 +55,10 @@ import {
   triggerBeforeToolHook,
   triggerAfterToolHook,
 } from '@vybestack/llxprt-code-core/core/coreToolHookTriggers.js';
-import { HookSystem } from '@vybestack/llxprt-code-core/hooks/hookSystem.js';
-import type {
-  HookDefinition,
-  HookType,
-} from '@vybestack/llxprt-code-core/hooks/types.js';
+import { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import { HookType } from '@vybestack/llxprt-code-core/hooks/types.js';
+import type { HookDefinition } from '@vybestack/llxprt-code-core/hooks/types.js';
 
 /**
  * A tool that tracks whether it was executed
@@ -110,6 +116,8 @@ class TrackingTool extends BaseDeclarativeTool<
 /**
  * Create mock message bus for testing
  */
+const hookRoots: SessionHookOwner[] = [];
+
 function createMockMessageBus() {
   return {
     subscribe: vi.fn().mockReturnValue(() => {}),
@@ -124,12 +132,6 @@ function createMockMessageBus() {
 /**
  * Create mock policy engine that allows everything
  */
-function createMockPolicyEngine() {
-  return {
-    evaluate: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
-    checkDecision: vi.fn().mockReturnValue(PolicyDecision.ALLOW),
-  };
-}
 
 /**
  * Create a config with hooks enabled and a specific hook configured
@@ -139,12 +141,15 @@ function createConfigWithHook(options: {
   command: string;
   matcher?: string;
   timeout?: number;
-}): Config {
+}): ReturnType<typeof createSchedulerPolicyFixture> & {
+  toolRegistry: ToolLookup;
+  execution: HookExecutionOwner;
+} {
   const hookDef: HookDefinition = {
     matcher: options.matcher,
     hooks: [
       {
-        type: 'command' as HookType.Command,
+        type: HookType.Command,
         command: options.command,
         timeout: options.timeout ?? 5000,
       },
@@ -154,8 +159,6 @@ function createConfigWithHook(options: {
   const hooks: Record<string, HookDefinition[]> = {
     [options.event]: [hookDef],
   };
-
-  let hookSystem: HookSystem | undefined;
 
   const mockMessageBus = createMockMessageBus();
   const trackingTool = new TrackingTool(mockMessageBus);
@@ -175,53 +178,79 @@ function createConfigWithHook(options: {
 
   const testCwd = process.cwd();
 
-  const config = {
-    getSessionId: () => 'test-session-' + Date.now(),
-    getUsageStatisticsEnabled: () => true,
-    getDebugMode: () => false,
-    getApprovalMode: () => ApprovalMode.DEFAULT,
-    getEphemeralSettings: () => ({}),
-    getAllowedTools: () => [],
-    getContentGeneratorConfig: () => ({ model: 'test-model' }),
-    getToolRegistry: () => mockToolRegistry,
-    getMessageBus: vi.fn().mockReturnValue(mockMessageBus),
-    getPolicyEngine: vi.fn().mockReturnValue(createMockPolicyEngine()),
-    getEnableHooks: () => true,
-    getHooks: () => hooks,
-    getWorkingDir: () => testCwd,
-    getTargetDir: () => testCwd,
-    getExtensions: () => [],
-    getDisabledHooks: () => [],
-    getModel: () => 'test-model',
-    getSessionRecordingService: () => undefined,
-    isInteractive: () => true,
-    isTrustedFolder: () => true,
-    getProjectHooks: () => null,
-    getSanitizationConfig: () => ({
-      enableEnvironmentVariableRedaction: false,
-      allowedEnvironmentVariables: [],
-      blockedEnvironmentVariables: [],
-    }),
-    getHookSystem() {
-      hookSystem ??= new HookSystem(config);
-      return hookSystem;
-    },
-  } as unknown as Config;
+  const {
+    config: config,
+    policyOwner,
+    settingsOwner,
+    messageBus: runtimeMessageBus,
+  } = createSchedulerPolicyFixture(
+    {
+      getSessionId: () => 'test-session-' + Date.now(),
+      getUsageStatisticsEnabled: () => true,
+      getDebugMode: () => false,
+      getApprovalMode: () => ApprovalMode.DEFAULT,
 
-  return config;
+      getAllowedTools: () => [],
+      getContentGeneratorConfig: () => ({ model: 'test-model' }),
+      getEnableHooks: () => true,
+      getHooks: () => hooks,
+      getWorkingDir: () => testCwd,
+      getTargetDir: () => testCwd,
+      getExtensions: () => [],
+      getDisabledHooks: () => [],
+      getModel: () => 'test-model',
+      isInteractive: () => true,
+      initialWorkspaceTrust: true,
+      getProjectHooks: () => undefined,
+      getSanitizationConfig: () => ({
+        enableEnvironmentVariableRedaction: false,
+        allowedEnvironmentVariables: [],
+        blockedEnvironmentVariables: [],
+      }),
+    },
+    PolicyDecision.ALLOW,
+  );
+
+  const root = new SessionHookOwner(
+    fixtureHookDefinitions(config),
+    fixtureHookRuntime(config),
+    true,
+    runtimeMessageBus,
+  );
+  hookRoots.push(root);
+  return {
+    execution: root.execution({
+      sessionId: () => config.getSessionId(),
+      transcriptPath: () => undefined,
+    }),
+    config,
+    policyOwner,
+    settingsOwner,
+    messageBus: runtimeMessageBus,
+    toolRegistry: mockToolRegistry,
+  };
 }
 
 /**
  * Create scheduler for testing
  */
-function createTestScheduler(config: Config) {
+function createTestScheduler({
+  config,
+  settingsOwner,
+  messageBus: runtimeMessageBus,
+  toolRegistry,
+}: ReturnType<typeof createConfigWithHook>) {
   const onAllToolCallsComplete = vi.fn();
   const onToolCallsUpdate = vi.fn();
 
   const scheduler = new CoreToolScheduler({
+    telemetry: settingsOwner.telemetry,
+    readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+    getToolGovernance: () =>
+      settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
     config,
-    messageBus: config.getMessageBus(),
-    toolRegistry: config.getToolRegistry(),
+    messageBus: runtimeMessageBus,
+    toolRegistry,
     onAllToolCallsComplete,
     onToolCallsUpdate,
     getPreferredEditor: () => 'vscode',
@@ -232,6 +261,16 @@ function createTestScheduler(config: Config) {
 }
 
 describe('Hook Caller Application', () => {
+  afterEach(async () => {
+    const results = await Promise.allSettled(
+      hookRoots.splice(0).map((root) => root.dispose()),
+    );
+    const failures = results.flatMap((result) =>
+      result.status === 'rejected' ? [result.reason] : [],
+    );
+    if (failures.length > 0)
+      throw new AggregateError(failures, 'Hook fixture cleanup failed');
+  });
   const hookFixtureDirectories: string[] = [];
 
   function createHookCommand(source: string): string {
@@ -275,9 +314,14 @@ describe('Hook Caller Application', () => {
         ),
       });
 
-      const hookResult = await triggerBeforeToolHook(config, 'tracking_tool', {
-        path: '/etc/passwd',
-      });
+      const hookResult = await triggerBeforeToolHook(
+        'tracking_tool',
+        {
+          path: '/etc/passwd',
+        },
+        undefined,
+        config.execution,
+      );
       expect(hookResult?.isBlockingDecision()).toBe(true);
       expect(hookResult?.getEffectiveReason()).toContain(
         'Tool blocked by policy',
@@ -297,6 +341,7 @@ describe('Hook Caller Application', () => {
           },
         ],
         new AbortController().signal,
+        config.execution,
       );
 
       // Assert: Tool should NOT have been executed
@@ -330,9 +375,14 @@ describe('Hook Caller Application', () => {
         ),
       });
 
-      const hookResult = await triggerBeforeToolHook(config, 'tracking_tool', {
-        path: '/etc/passwd',
-      });
+      const hookResult = await triggerBeforeToolHook(
+        'tracking_tool',
+        {
+          path: '/etc/passwd',
+        },
+        undefined,
+        config.execution,
+      );
       expect(hookResult?.getModifiedToolInput()).toStrictEqual({
         path: '/safe/sanitized/path',
       });
@@ -351,6 +401,7 @@ describe('Hook Caller Application', () => {
           },
         ],
         new AbortController().signal,
+        config.execution,
       );
 
       // Assert: Tool should have been called with MODIFIED args
@@ -380,13 +431,14 @@ describe('Hook Caller Application', () => {
       });
 
       const hookResult = await triggerAfterToolHook(
-        config,
         'tracking_tool',
         { path: '/test/file' },
         {
           llmContent: 'Executed with args: {"path":"/test/file"}',
           returnDisplay: 'Tool executed',
         },
+        undefined,
+        config.execution,
       );
       expect(hookResult?.systemMessage).toContain(
         'Security scan: file contents verified safe',
@@ -406,6 +458,7 @@ describe('Hook Caller Application', () => {
           },
         ],
         new AbortController().signal,
+        config.execution,
       );
 
       // Assert: Result should include the systemMessage
@@ -442,13 +495,14 @@ describe('Hook Caller Application', () => {
       });
 
       const hookResult = await triggerAfterToolHook(
-        config,
         'tracking_tool',
         { path: '/test/file' },
         {
           llmContent: 'Executed with args: {"path":"/test/file"}',
           returnDisplay: 'Tool executed',
         },
+        undefined,
+        config.execution,
       );
       expect(hookResult?.suppressOutput).toBe(true);
 
@@ -466,6 +520,7 @@ describe('Hook Caller Application', () => {
           },
         ],
         new AbortController().signal,
+        config.execution,
       );
 
       // Assert: Result should have suppressDisplay set

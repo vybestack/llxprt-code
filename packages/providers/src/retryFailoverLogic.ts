@@ -1,13 +1,12 @@
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  BucketFailoverHandler,
-  FailoverContext,
-} from '@vybestack/llxprt-code-core/config/config.js';
+import type { FailoverContext } from '@vybestack/llxprt-code-core/config/config.js';
+import type { GenerateChatOptions } from './IProvider.js';
 import { raceWithAbort } from './utils/abortSignal.js';
 import { resetRetryErrorCounters } from './retryErrorClassification.js';
 import { resolveFailoverReason } from './retryDelayPolicy.js';
@@ -51,7 +50,9 @@ export function shouldFailoverNow(
   state: FailoverState,
   maxAttempts: number,
   error: unknown,
-  bucketFailoverHandler: BucketFailoverHandler | undefined,
+  bucketFailoverHandler:
+    | Pick<GenerateChatOptions, 'tryBucketFailover' | 'readFailoverBuckets'>
+    | undefined,
   failoverThreshold: number,
 ): boolean {
   if (state.attempt >= maxAttempts) return false;
@@ -95,14 +96,17 @@ export function flagsFromFailure(failure: RetryFailure): FailoverFlags {
  * consecutive error counts and the failover threshold.
  */
 export function shouldAttemptFailover(
-  bucketFailoverHandler: BucketFailoverHandler | undefined,
+  bucketFailoverHandler:
+    | Pick<GenerateChatOptions, 'tryBucketFailover' | 'readFailoverBuckets'>
+    | undefined,
   flags: FailoverFlags,
   state: FailoverState,
   failoverThreshold: number,
 ): boolean {
-  if (bucketFailoverHandler === undefined) {
+  if (bucketFailoverHandler?.tryBucketFailover === undefined) {
     return false;
   }
+  if (bucketFailoverHandler.readFailoverBuckets?.().length === 0) return false;
   if (flags.is429 && state.consecutive429s > failoverThreshold) {
     return true;
   }
@@ -133,7 +137,7 @@ export async function attemptBucketFailover(
   isNetworkError: boolean,
   is5xxServerError: boolean,
   state: FailoverState,
-  bucketFailoverHandler: BucketFailoverHandler,
+  bucketFailoverHandler: ProviderRetryOperations,
   authRetryTimeoutMs: number,
   signal: AbortSignal | undefined,
   logger: DebugLogger,
@@ -158,7 +162,7 @@ export async function attemptBucketFailover(
   let failoverResult: boolean;
   try {
     failoverResult = await raceWithAbort(
-      bucketFailoverHandler.tryFailover(failoverContext),
+      bucketFailoverHandler.tryBucketFailover!(failoverContext),
       signal,
     );
   } catch (failoverError) {

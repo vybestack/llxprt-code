@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type OpenAI from 'openai';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
@@ -25,6 +26,7 @@ import {
 import {
   finishMediaRequest,
   resolveRequestMedia,
+  captureRequestMediaInput,
 } from '../utils/request-media-resolution.js';
 
 export interface OpenAIMediaSupport {
@@ -156,7 +158,7 @@ export async function prepareOwnedOpenAIChatRequest(
   const requestContext = await prepareRequest(
     options,
     defaultModel,
-    options.config,
+    undefined,
     logger,
     providerName,
     mediaTransportCapabilities,
@@ -171,15 +173,23 @@ export async function prepareOwnedOpenAIChatRequest(
 export async function prepareOpenAIChatProjection(
   options: NormalizedGenerateChatOptions,
   deps: ChatProjectionPreparationDeps,
+  mediaResolver?: RequestMediaResolutionService,
+  mediaBudgetBytes?: number,
 ): Promise<PreparedOpenAIChatProjection> {
   const support = deps.readMediaSupport();
   const needsClient =
     support?.fileUpload === true || support?.videoSupport === true;
   const sourceRoute = readsRequestRowsAtTransport(options);
+  const media = captureRequestMediaInput(
+    options.metadata['logicalRequestId'],
+    options.invocation.runtimeId,
+    mediaBudgetBytes,
+    mediaResolver,
+  );
   const mediaRequest = sourceRoute
-    ? await openTransportRowsMedia(options)
+    ? await openTransportRowsMedia(options, media)
     : await resolveRequestMedia(
-        options.runtime,
+        media,
         options.contents,
         options.invocation.signal,
       );
@@ -206,7 +216,7 @@ export async function prepareOpenAIChatProjection(
     const requestContext = await prepareRequest(
       preparedOptions,
       deps.defaultModel,
-      preparedOptions.config,
+      undefined,
       deps.logger,
       deps.providerName,
       deps.mediaTransportCapabilities,

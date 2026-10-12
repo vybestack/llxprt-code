@@ -1,3 +1,5 @@
+import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+const fixtureOwners = installRuntimeTestOwners();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -819,6 +821,7 @@ function registerProjectionCase18(): void {
       providerManager.registerProvider(delegate.provider);
 
       const projection = await projectNextSubProfilePromptEnvelope({
+        bindDelegateProvider: (provider) => provider,
         config: {
           profileName: 'unit-lb',
           strategy: 'round-robin',
@@ -853,6 +856,7 @@ function registerProjectionCase19(): void {
       failoverState.setIfOwner(owner, 2);
 
       const projection = await projectNextSubProfilePromptEnvelope({
+        bindDelegateProvider: (provider) => provider,
         config: {
           profileName: 'unit-lb',
           strategy: 'failover',
@@ -878,7 +882,12 @@ describe('LoadBalancingProvider.projectPromptEnvelope (issue #3507, AC1)', () =>
   beforeEach(() => {
     const settingsService = new SettingsService();
     const config: Config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({ settingsService, config });
+    providerManager = new ProviderManager({
+      sessionSettings: fixtureOwners.adopt(config, settingsService)
+        .settingsOwner,
+      settingsService,
+      config,
+    });
   });
 
   registerProjectionCase01();

@@ -14,6 +14,7 @@ import {
   markWelcomeCompleted,
 } from '../../config/welcomeConfig.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+import { useOAuthControl } from '../contexts/OAuthControlContext.js';
 
 const debug = new DebugLogger('llxprt:ui:useWelcomeOnboarding');
 
@@ -84,8 +85,7 @@ function useProviderLoader(
   const [availableProviders, setAvailableProviders] = useState<string[]>([]);
 
   useEffect(() => {
-    const providerManager = runtime.getCliProviderManager();
-    const providers = providerManager.listProviders();
+    const providers = runtime.listProviders();
     setAvailableProviders(providers);
     debug.log(`Loaded ${providers.length} providers: ${providers.join(', ')}`);
   }, [runtime]);
@@ -302,9 +302,8 @@ function useProfileSave(runtime: ReturnType<typeof useRuntimeApi>) {
   return useCallback(
     async (name: string) => {
       try {
-        const providerManager = runtime.getCliProviderManager();
         debug.log(
-          `[saveProfile] START name=${name}, active provider: ${providerManager.getActiveProviderName()}`,
+          `[saveProfile] START name=${name}, active provider: ${runtime.providerStatus().providerName}`,
         );
 
         // Check if profile already exists
@@ -335,7 +334,7 @@ function useProfileSave(runtime: ReturnType<typeof useRuntimeApi>) {
           `[saveProfile] Load result: ${JSON.stringify(loadResult, null, 2)}`,
         );
         debug.log(
-          `[saveProfile] After load - active provider: ${providerManager.getActiveProviderName()}`,
+          `[saveProfile] After load - active provider: ${runtime.providerStatus().providerName}`,
         );
       } catch (error) {
         debug.log(`[saveProfile] Failed: ${error}`);
@@ -350,6 +349,7 @@ function useTriggerAuth(
   runtime: ReturnType<typeof useRuntimeApi>,
   agent: Agent,
 ) {
+  const oauthControl = useOAuthControl();
   return useCallback(
     async (
       provider: string,
@@ -357,16 +357,15 @@ function useTriggerAuth(
       apiKey?: string,
     ): Promise<void> => {
       debug.log(`[triggerAuth] START provider=${provider} method=${method}`);
-      const providerManager = runtime.getCliProviderManager();
 
       debug.log(
-        `[triggerAuth] Before auth - current active: ${providerManager.getActiveProviderName()}`,
+        `[triggerAuth] Before auth - current active: ${runtime.providerStatus().providerName}`,
       );
 
       // Authenticate FIRST before switching provider (prevents double OAuth)
       if (method === 'oauth') {
         debug.log(`[triggerAuth] Starting OAuth for ${provider}`);
-        await runtime.getCliOAuthManager().authenticate(provider, undefined, {
+        await oauthControl.authenticate(provider, undefined, {
           signalAuthCompletion: true,
         });
         debug.log(`[triggerAuth] OAuth complete for ${provider}`);
@@ -379,7 +378,7 @@ function useTriggerAuth(
         autoOAuth: false,
       });
       debug.log(
-        `[triggerAuth] After provider switch - changed: ${switchResult.changed}, now active: ${providerManager.getActiveProviderName()}`,
+        `[triggerAuth] After provider switch - changed: ${switchResult.changed}, now active: ${runtime.providerStatus().providerName}`,
       );
 
       // For API key method, set the key after switching provider
@@ -397,10 +396,10 @@ function useTriggerAuth(
       }
 
       debug.log(
-        `[triggerAuth] END - active provider: ${providerManager.getActiveProviderName()}`,
+        `[triggerAuth] END - active provider: ${runtime.providerStatus().providerName}`,
       );
     },
-    [runtime, agent],
+    [runtime, agent, oauthControl],
   );
 }
 

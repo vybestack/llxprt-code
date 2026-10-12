@@ -19,7 +19,7 @@
  * @requirement:G7
  *
  * Boundary seam between the SubagentOrchestrator and the ephemeral child
- * session journal, plus the journal-aware launch teardown composition. Lives
+ * session journal. Lives
  * outside the orchestrator file so the over-cap orchestrator is not grown by
  * the wiring.
  *
@@ -31,10 +31,6 @@ import {
   createChildSessionJournal,
   type ChildSessionJournal,
 } from '@vybestack/llxprt-code-core/recording/childJournal.js';
-import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime.js';
-import { AggregateDisposeError } from '../api/disposeErrors.js';
-import type { SubAgentScope } from './subagent.js';
 
 /** Recording inputs the journal needs from the foreground config. */
 interface RecordingInputs {
@@ -43,11 +39,14 @@ interface RecordingInputs {
   readonly workspaceDirs: readonly string[];
 }
 
-function resolveRecordingInputs(config: Config): RecordingInputs {
+function resolveRecordingInputs(
+  config: Config,
+  workspaceDirs: readonly string[],
+): RecordingInputs {
   return {
-    projectHash: basename(config.storage.getProjectTempDir()),
-    chatsDir: config.storage.getProjectChatsDir(),
-    workspaceDirs: [...config.getWorkspaceContext().getDirectories()],
+    projectHash: basename(config.projectTempDir),
+    chatsDir: config.projectChatsDir,
+    workspaceDirs: [...workspaceDirs],
   };
 }
 
@@ -58,12 +57,14 @@ function resolveRecordingInputs(config: Config): RecordingInputs {
  */
 export async function openChildSessionJournal(params: {
   readonly config: Config;
+  /** Workspace roots from the orchestrator's WorkspacePathOperations. */
+  readonly workspaceDirs: readonly string[];
   readonly childSessionId: string;
   readonly parentSessionId: string;
   readonly provider: string;
   readonly model: string;
 }): Promise<ChildSessionJournal> {
-  const inputs = resolveRecordingInputs(params.config);
+  const inputs = resolveRecordingInputs(params.config, params.workspaceDirs);
   return createChildSessionJournal({
     sessionId: params.childSessionId,
     parentSessionId: params.parentSessionId,
@@ -73,104 +74,4 @@ export async function openChildSessionJournal(params: {
     provider: params.provider,
     model: params.model,
   });
-}
-
-/** Inputs for {@link buildScopeTeardown}. */
-export interface ScopeTeardownParams {
-  readonly scope: SubAgentScope;
-  readonly runtimeResult: AgentRuntimeLoaderResult;
-  readonly isolatedHandle: IsolatedRuntimeContextHandle;
-  readonly childJournal: ChildSessionJournal;
-}
-
-/**
- * Compose the teardown for a launched subagent: scope dispose, history
- * dispose, isolated-runtime cleanup, and finally the child journal so the
- * facade can flush through the recorder before the file and lock are removed.
- */
-export function buildScopeTeardown(
-  params: ScopeTeardownParams,
-): () => Promise<void> {
-  return async () => {
-    const history = firstDefinedHistory(
-      params.runtimeResult.history,
-      params.scope.runtimeContext.history,
-    );
-    await runCleanupSteps([
-      () => {
-        if (typeof params.scope.dispose === 'function') {
-          params.scope.dispose();
-        }
-      },
-      () => disposeHistoryLike(history),
-      () => params.isolatedHandle.cleanup(),
-      () => params.childJournal.dispose(),
-    ]);
-  };
-}
-
-/**
- * Teardown for a launch that failed before a scope existed: dispose the
- * runtime history, clean the isolated runtime, then remove the journal.
- */
-export function teardownRuntimeArtifacts(
-  runtimeResult: AgentRuntimeLoaderResult,
-  isolatedHandle: IsolatedRuntimeContextHandle,
-  childJournal: ChildSessionJournal,
-): Promise<void> {
-  return runCleanupSteps([
-    () => disposeHistoryLike(runtimeResult.history),
-    () => isolatedHandle.cleanup(),
-    () => childJournal.dispose(),
-  ]);
-}
-
-async function runCleanupSteps(
-  steps: ReadonlyArray<() => unknown | Promise<unknown>>,
-): Promise<void> {
-  const errors: unknown[] = [];
-  for (const step of steps) {
-    try {
-      await step();
-    } catch (error) {
-      errors.push(error);
-    }
-  }
-  if (errors.length > 0) {
-    throw new AggregateDisposeError(errors);
-  }
-}
-
-/**
- * Boundary-validation helper: disposes (or clears) a history-like object that
- * may be `undefined`/`null` at runtime. Typed `unknown` so the guards are
- * genuinely necessary (no lint suppression directive needed).
- */
-function disposeHistoryLike(history: unknown): void {
-  if (history === undefined || history === null) {
-    return;
-  }
-  const disposable = (history as { dispose?: () => void }).dispose;
-  if (typeof disposable === 'function') {
-    disposable.call(history);
-    return;
-  }
-  const clearable = history as {
-    clear?: () => void;
-    removeAllListeners?: () => void;
-  };
-  if (typeof clearable.clear === 'function') {
-    clearable.clear();
-    if (typeof clearable.removeAllListeners === 'function') {
-      clearable.removeAllListeners();
-    }
-  }
-}
-
-/**
- * Boundary-validation helper: picks the first defined history source without
- * tripping `no-unnecessary-condition` (both args are statically required).
- */
-function firstDefinedHistory(primary: unknown, fallback: unknown): unknown {
-  return primary ?? fallback;
 }

@@ -3,7 +3,7 @@ import type {
   ResponsesExecutorDeps,
   RequestContext,
 } from './openAIResponsesExecutor.js';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
+import type { ResponsesRequest } from './responses-request.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SyntheticToolResponseHandler } from '../openai/syntheticToolResponses.js';
 import { resolveResponsesRequestShape } from './openAIResponsesRequestState.js';
@@ -20,7 +20,7 @@ import { applyStatefulConversation } from './openAIResponsesStateful.js';
  * source is never drained twice.
  */
 export async function resolveRequestContents(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
 ): Promise<IContent[]> {
   const requestContents = options.requestContents;
   return requestContents === undefined
@@ -36,7 +36,7 @@ export async function resolveRequestContents(
  * (input, stateful chaining) onto the SAME request object the lease owns.
  */
 export function createRequestContentsFiller(
-  options: NormalizedGenerateChatOptions,
+  options: ResponsesRequest,
   deps: ResponsesExecutorDeps,
   invocationEphemerals: Record<string, unknown>,
   context: RequestContext,
@@ -61,7 +61,11 @@ export function createRequestContentsFiller(
       // shell's so the request-scoped lease still drops when the transport
       // call settles.
       const mediaRequest = await resolveRequestMedia(
-        options.runtime,
+        {
+          requestId: options.mediaRequestId,
+          aggregateBudgetBytes: options.mediaBudgetBytes,
+          resolver: options.mediaResolver,
+        },
         shape.stateful.content,
         getRequestSignal(options),
       );
@@ -69,7 +73,6 @@ export function createRequestContentsFiller(
       context.request.input = buildInput(
         options,
         mediaRequest.withContents((contents) => contents),
-        invocationEphemerals,
         deps,
         shape.stateful.parentId !== undefined,
       );

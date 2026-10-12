@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { captureResponsesRequest } from './responses-request.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
@@ -92,18 +93,14 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     return {
       providerName: this.name,
       logger: this.logger,
-      getProviderBaseURL: (options) => this.resolveEffectiveBaseURL(options),
-      getCustomHeaders: (options) => this.getCustomHeaders(options),
       isCodexMode: () => this.isCodexMode(),
       getCodexAccountId: () => this.getCodexAccountId(),
       resolveAuthTokenForPrompt: () => this.getAuthTokenForPrompt(),
       shouldRetryOnError: (error) => this.shouldRetryOnError(error),
-      getDefaultModel: () => this.getDefaultModel(),
       getMediaTransportCapabilities: (isCodex) =>
         isCodex
           ? declaredMediaTransportCapabilities('codex')
           : this.getMediaTransportCapabilities(),
-      getGlobalConfig: () => this.globalConfig,
       getUnallowedModelParameters: this.getUnallowedModelParameters,
       getWebSocketTransport: () => this.resolveWebSocketTransport(),
       // Codex statefulness is only valid over the WebSocket transport, so the
@@ -218,6 +215,20 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     return true;
   }
 
+  private captureRequest(
+    options: NormalizedGenerateChatOptions,
+  ): ReturnType<typeof captureResponsesRequest> {
+    return captureResponsesRequest(
+      options,
+      this.name,
+      this.resolveEffectiveBaseURL(options) ?? 'https://api.openai.com/v1',
+      this.getCustomHeaders(options),
+      this.getDefaultModel(),
+      this.requestMediaResolver,
+      this.requestMediaBudgetBytes,
+    );
+  }
+
   protected override async releaseUnstartedOptions(
     options: NormalizedGenerateChatOptions,
   ): Promise<void> {
@@ -238,8 +249,9 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
   protected override async *generateChatCompletionWithOptions(
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
+    const request = this.captureRequest(options);
     if (readsRequestRowsAtTransport(options)) {
-      assertDiskTextShape(options, this.buildExecutorDeps());
+      assertDiskTextShape(request, this.buildExecutorDeps());
       if (options.promptEnvelopeTransportToken === undefined)
         throw new Error(
           'Explicit Responses disk text send requires a prepared projection token',
@@ -256,7 +268,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       readsRequestRowsAtTransport(options)
     )
       assertPreparedStatefulUnchanged(
-        options,
+        request,
         this.buildExecutorDeps(),
         preparedRequestContext,
       );
@@ -272,7 +284,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       this.preparedPromptEnvelopes.delete(options.promptEnvelopeTransportToken);
     }
     yield* executeOpenAIResponsesRequest(
-      options,
+      request,
       this.buildExecutorDeps(),
       preparedRequestContext,
     );
@@ -289,7 +301,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     const normalized = await this.normalizeOptionsForProjection(options);
     if (readsRequestRowsAtTransport(normalized)) {
       const prepared = await buildDiskTextResponsesContext(
-        normalized,
+        this.captureRequest(normalized),
         this.buildExecutorDeps(),
       );
       const token = Object.freeze({});
@@ -308,12 +320,13 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       }
     }
     const requestContents = normalized.requestContents;
+    const request = this.captureRequest(normalized);
     let prepared:
       | Awaited<ReturnType<typeof buildResponsesRequestContextForProjection>>
       | undefined;
     try {
       const requestContext = await buildResponsesRequestContextForProjection(
-        normalized,
+        request,
         this.buildExecutorDeps(),
       );
       prepared = requestContext;
@@ -321,7 +334,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
         requestContents?.dispose(),
       );
       const transportToken = Object.freeze({});
-      const pdfEnabled = isResponsesPdfEnabled(normalized);
+      const pdfEnabled = isResponsesPdfEnabled(request);
       const projection = projectOpenAIResponsesPromptEnvelope(
         requestContext.request,
         {

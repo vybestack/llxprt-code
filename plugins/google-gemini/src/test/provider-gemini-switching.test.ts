@@ -4,13 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import { createProviderManager } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
-import type {
-  IProvider,
-  IModel,
-} from '@vybestack/llxprt-code-providers/composition/index.js';
-import type { Config } from '@vybestack/llxprt-code-core';
+import type { IProvider, IModel } from '@vybestack/llxprt-code-providers';
+import { NodeFileSystem } from '@vybestack/llxprt-code-providers/composition.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
@@ -19,6 +16,7 @@ function createManager() {
   const runtime = createProviderRuntimeContext({ settingsService });
   const { manager } = createProviderManager(runtime, {
     allowBrowserEnvironment: true,
+    fileSystem: new NodeFileSystem(),
   });
   return manager;
 }
@@ -55,72 +53,42 @@ function createMockProvider(): IProvider {
 }
 
 describe('Provider-Gemini Switching', () => {
-  it('uses Gemini when no provider is active', async () => {
+  it('keeps provider selection empty until a provider is explicitly activated', () => {
     const manager = createManager();
-
     manager.clearActiveProvider();
-
-    expect(manager.hasActiveProvider()).toBe(false);
-
     manager.registerProvider(createMockProvider());
     expect(manager.hasActiveProvider()).toBe(false);
-
-    const config = {
-      refreshAuth: vi.fn().mockResolvedValue(undefined),
-      getAgentClient: vi.fn().mockReturnValue(null),
-      getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
-    } as unknown as Config;
-
-    await config.refreshAuth('gemini-api-key');
-    expect(config.refreshAuth).toHaveBeenCalledWith('gemini-api-key');
   });
-
-  it('respects active provider configuration when set', async () => {
+  it('uses the explicitly selected provider for generation', async () => {
     const manager = createManager();
-    const provider = createMockProvider();
-
-    manager.registerProvider(provider);
-    manager.setActiveProvider('test-provider');
-    expect(manager.hasActiveProvider()).toBe(true);
-
-    const mockAgentClient = {
-      chat: {
-        contentGenerator: null,
-      },
-    };
-
-    const config = {
-      refreshAuth: vi.fn().mockResolvedValue(undefined),
-      getAgentClient: vi.fn().mockReturnValue(mockAgentClient),
-      getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
-    } as unknown as Config;
-
-    await config.refreshAuth('gemini-api-key');
-    expect(config.refreshAuth).toHaveBeenCalledWith('gemini-api-key');
-    expect(mockAgentClient.chat.contentGenerator).toBeNull();
-  });
-
-  it('falls back to Gemini when clearing the active provider', async () => {
-    const manager = createManager();
-
     manager.registerProvider(createMockProvider());
     manager.setActiveProvider('test-provider');
-    expect(manager.hasActiveProvider()).toBe(true);
-
+    const provider = manager.getActiveProvider();
+    if (!provider) throw new Error('Expected selected provider');
+    const result = [];
+    for await (const content of provider.generateChatCompletion({
+      contents: [],
+      resolved: { model: 'model-1' },
+    }))
+      result.push(content);
+    expect(
+      result
+        .flatMap((content) => content.blocks)
+        .filter((block) => block.type === 'text'),
+    ).toHaveLength(1);
+    expect(manager.getActiveProviderName()).toBe('test-provider');
+  });
+  it('clears the selected provider without retiring registered providers', async () => {
+    const manager = createManager();
+    manager.registerProvider(createMockProvider());
+    manager.setActiveProvider('test-provider');
     manager.clearActiveProvider();
     expect(manager.hasActiveProvider()).toBe(false);
-
-    const config = {
-      refreshAuth: vi.fn().mockResolvedValue(undefined),
-      getAgentClient: vi.fn().mockReturnValue({
-        chat: {
-          contentGenerator: null,
-        },
-      }),
-      getModel: vi.fn().mockReturnValue('gemini-2.5-flash'),
-    } as unknown as Config;
-
-    await config.refreshAuth('gemini-api-key');
-    expect(config.refreshAuth).toHaveBeenCalled();
+    manager.setActiveProvider('test-provider');
+    const provider = manager.getActiveProvider();
+    if (!provider) throw new Error('Expected selected provider');
+    expect((await provider.getModels()).map((model) => model.id)).toStrictEqual(
+      ['model-1', 'model-2'],
+    );
   });
 });

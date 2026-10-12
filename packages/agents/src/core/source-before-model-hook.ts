@@ -1,10 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { RuntimeProviderToolset } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import { HookEventName } from '@vybestack/llxprt-code-core/hooks/types.js';
 import {
   pendingAwareRequestSelection,
   type PendingAwareRequestSelection,
@@ -14,7 +13,7 @@ import { fireBeforeModelSnapshotHook } from './beforeModelHookFire.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 export interface SourceBeforeModelInput {
-  readonly config: AgentRuntimeContext['providerRuntime']['config'];
+  readonly owner: HookExecutionOwner | undefined;
   readonly snapshot: ProviderRequestSnapshot;
   readonly pending: IContent | IContent[];
   readonly model: string;
@@ -27,25 +26,19 @@ export interface SourceBeforeModelInput {
 export async function sourceBeforeModelHook(
   input: SourceBeforeModelInput,
 ): Promise<PendingAwareRequestSelection> {
-  const system =
-    input.config?.getEnableHooks() === true
-      ? input.config.getHookSystem()
-      : undefined;
-  if (
-    system === undefined ||
-    system.getRegistry().getHooksForEvent(HookEventName.BeforeModel).length ===
-      0
-  )
-    return pendingAwareRequestSelection(
+  const unmodified = (): PendingAwareRequestSelection =>
+    pendingAwareRequestSelection(
       input.snapshot,
       sourcePendingMembership(input.snapshot),
     );
+  if (input.owner?.beforeModelSnapshot === undefined) return unmodified();
+  let snapshotKept = false;
   try {
     const pending = Array.isArray(input.pending)
       ? input.pending
       : [input.pending];
     const boundary = await fireBeforeModelSnapshotHook({
-      configForHooks: input.config,
+      owner: input.owner,
       requestContents: input.snapshot,
       rawPending: {
         count: pending.length,
@@ -62,6 +55,10 @@ export async function sourceBeforeModelHook(
       signal: input.signal,
       log: input.log,
     });
+    if (boundary === undefined) {
+      snapshotKept = true;
+      return unmodified();
+    }
     return pendingAwareRequestSelection(
       {
         count: boundary.contents.count,
@@ -76,6 +73,6 @@ export async function sourceBeforeModelHook(
           }),
     );
   } finally {
-    input.snapshot.close();
+    if (!snapshotKept) input.snapshot.close();
   }
 }

@@ -18,7 +18,6 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 import { SettingScope } from '../../config/settings.js';
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import {
   profileSaveSchema,
   profileLoadSchema,
@@ -53,7 +52,7 @@ const saveCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   schema: profileSaveSchema,
   action: async (
-    _context: CommandContext,
+    context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
     const trimmedArgs = args.trim();
@@ -71,11 +70,15 @@ const saveCommand: SlashCommand = {
     const profileType = parts[0];
 
     if (profileType === 'model') {
-      return saveModelProfile(parts);
+      return saveModelProfile(
+        parts,
+        context.runtimeApi,
+        context.services.agent,
+      );
     }
 
     if (profileType === 'loadbalancer') {
-      return saveLoadBalancerProfile(parts);
+      return saveLoadBalancerProfile(parts, context.runtimeApi);
     }
 
     return {
@@ -123,19 +126,18 @@ const loadCommand: SlashCommand = {
       return nameError;
     }
 
+    const agent = context.services.agent;
+    if (!agent) {
+      return {
+        type: 'message',
+        messageType: 'error',
+        content: 'Agent unavailable. Restart before loading a profile.',
+      };
+    }
     try {
-      const runtime = getRuntimeApi();
-      const statusBefore = runtime.getActiveProviderStatus();
-      const result = await runtime.loadProfileByName(profileName);
+      const previousProvider = agent.getProvider();
+      const result = await agent.profiles.load(profileName);
       const profileLoadResult = result as ProfileLoadResultView;
-      let switchWarning: string | undefined;
-      if (result.providerName) {
-        switchWarning = await switchProviderViaAgent(
-          context,
-          result.providerName,
-          profileLoadResult.modelName,
-        );
-      }
       const infoMessages = formatProfileMessages(
         profileLoadResult.infoMessages,
         '- ',
@@ -144,26 +146,22 @@ const loadCommand: SlashCommand = {
         profileLoadResult.warnings,
         '⚠ ',
       );
-      const switchWarningMessage =
-        switchWarning !== undefined
-          ? `
-${switchWarning}`
-          : '';
-
-      await applyLoadedProfileConfig(context, result);
-
-      logRuntimeProviderStatus(runtime);
-
+      await applyLoadedProfileConfig(context);
       let recordingFailureMessage = '';
-      recordProviderSwitch(context, result, profileLoadResult, (message) => {
-        recordingFailureMessage = `\n\u26A0 ${message}`;
-      });
-      schedulePaymentModeCheck(context, statusBefore.providerName ?? undefined);
+      await recordProviderSwitch(
+        context,
+        result,
+        profileLoadResult,
+        (message) => {
+          recordingFailureMessage = `\n\u26A0 ${message}`;
+        },
+      );
+      schedulePaymentModeCheck(context, previousProvider);
 
       return {
         type: 'message',
         messageType: 'info',
-        content: `Profile '${profileName}' loaded${infoMessages}${warningMessages}${switchWarningMessage}${recordingFailureMessage}`,
+        content: `Profile '${profileName}' loaded${infoMessages}${warningMessages}${recordingFailureMessage}`,
       };
     } catch (error) {
       logger.error(
@@ -176,73 +174,6 @@ ${switchWarning}`
 };
 
 /**
- * Switches the active provider through the agent facade after a profile load.
- * When the agent facade is unavailable (null), surfaces a user-visible warning
- * instead of silently skipping the switch — consistent with providerCommand's
- * null-agent error style (#2374 finding 7). Errors from the switch itself are
- * logged but never propagated — a provider-switch failure must not abort the
- * profile load (the config has already been applied).
- *
- * Returns a warning message string when the agent is null so the caller can
- * surface it to the user; returns undefined on success or when no switch was
- * requested.
- */
-async function switchProviderViaAgent(
-  context: CommandContext,
-  providerName: string,
-  modelName?: string,
-): Promise<string | undefined> {
-  const agent = context.services.agent;
-  if (!agent) {
-    // No agent facade — the provider config has been applied, but the runtime
-    // switch cannot run. Surface a user-visible warning instead of silently
-    // continuing (#2374 finding 7).
-    return `Provider '${providerName}' configured but the interactive Agent is unavailable — restart to activate it.`;
-  }
-  try {
-    const switchResult = await agent.setProvider(providerName, modelName);
-    logger.debug(
-      () => `[profile] provider switch invoked for '${providerName}'`,
-    );
-    // Surface infoMessages (base URL notices, fallback messages, auth info)
-    // from the switch result so the user sees what happened (#2374 CodeRabbit).
-    if (switchResult.infoMessages.length > 0) {
-      return switchResult.infoMessages.join('\n');
-    }
-  } catch (error) {
-    const errMsg = error instanceof Error ? error.message : String(error);
-    logger.error(
-      () => `[profile] failed to switch provider via agent facade: ${errMsg}`,
-    );
-    // Surface the failure to the user — returning undefined would hide the
-    // error and present "Profile loaded" as if the switch succeeded.
-    return `Provider '${providerName}' switch failed: ${errMsg}`;
-  }
-  return undefined;
-}
-
-/**
- * Logs the runtime provider status after a profile load, swallowing errors so
- * a status-read failure cannot abort the load flow.
- */
-function logRuntimeProviderStatus(
-  runtime: ReturnType<typeof getRuntimeApi>,
-): void {
-  try {
-    const status = runtime.getActiveProviderStatus();
-    logger.debug(
-      () =>
-        `[profile] runtime provider status after load: provider=${status.providerName}, model=${status.modelName}`,
-    );
-  } catch (error) {
-    logger.error(
-      () =>
-        `[profile] failed to read runtime provider status: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-}
-
-/**
  * Profile delete subcommand
  */
 const deleteCommand: SlashCommand = {
@@ -251,7 +182,7 @@ const deleteCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   schema: profileDeleteSchema,
   action: async (
-    _context: CommandContext,
+    context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
     const trimmedArgs = args.trim();
@@ -280,7 +211,7 @@ const deleteCommand: SlashCommand = {
     }
 
     try {
-      const runtime = getRuntimeApi();
+      const runtime = context.services.agent ?? context.runtimeApi;
       await runtime.deleteProfileByName(profileName);
 
       return {
@@ -348,7 +279,9 @@ const setDefaultCommand: SlashCommand = {
 
     try {
       if (profileName.toLowerCase() === 'none') {
-        getRuntimeApi().setDefaultProfileName(null);
+        (context.services.agent ?? context.runtimeApi).setDefaultProfileName(
+          null,
+        );
         context.services.settings.setValue(
           SettingScope.User,
           'defaultProfile',
@@ -362,7 +295,9 @@ const setDefaultCommand: SlashCommand = {
         };
       }
 
-      const profiles = await listProfiles();
+      const profiles = context.services.agent
+        ? await context.services.agent.workspace.profileDefinitions.listProfiles()
+        : await listProfiles(context.runtimeApi);
       if (!profiles.includes(profileName)) {
         return {
           type: 'message',
@@ -371,7 +306,9 @@ const setDefaultCommand: SlashCommand = {
         };
       }
 
-      getRuntimeApi().setDefaultProfileName(profileName);
+      (context.services.agent ?? context.runtimeApi).setDefaultProfileName(
+        profileName,
+      );
       context.services.settings.setValue(
         SettingScope.User,
         'defaultProfile',
@@ -437,7 +374,7 @@ const showCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   schema: profileShowSchema,
   action: async (
-    _context: CommandContext,
+    context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
     const trimmedArgs = args.trim();
@@ -461,7 +398,7 @@ const showCommand: SlashCommand = {
     }
 
     try {
-      const profiles = await listProfiles();
+      const profiles = await listProfiles(context.runtimeApi);
       if (!profiles.includes(profileName)) {
         return {
           type: 'message',
@@ -490,7 +427,7 @@ const editCommand: SlashCommand = {
   kind: CommandKind.BUILT_IN,
   schema: profileEditSchema,
   action: async (
-    _context: CommandContext,
+    context: CommandContext,
     args: string,
   ): Promise<MessageActionReturn | OpenDialogActionReturn> => {
     const trimmedArgs = args.trim();
@@ -514,7 +451,7 @@ const editCommand: SlashCommand = {
     }
 
     try {
-      const profiles = await listProfiles();
+      const profiles = await listProfiles(context.runtimeApi);
       if (!profiles.includes(profileName)) {
         return {
           type: 'message',

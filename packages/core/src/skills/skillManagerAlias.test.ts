@@ -86,7 +86,12 @@ describe('SkillManager - .agents/skills alias discovery', () => {
     vi.spyOn(service, 'resolveBuiltinSkillsDir').mockReturnValue(
       '/non-existent',
     );
-    await service.discoverSkills(storage);
+    await service.discoverSkills({
+      userSkillsDir: Storage.getUserSkillsDir(),
+      userAgentSkillsDir: Storage.getUserAgentSkillsDir(),
+      projectSkillsDir: storage.getProjectSkillsDir(),
+      projectAgentSkillsDir: storage.getProjectAgentSkillsDir(),
+    });
 
     // Assert
     const skill = service.getSkills().find((s) => s.name === 'agent-only');
@@ -120,7 +125,12 @@ describe('SkillManager - .agents/skills alias discovery', () => {
     vi.spyOn(service, 'resolveBuiltinSkillsDir').mockReturnValue(
       '/non-existent',
     );
-    await service.discoverSkills(storage);
+    await service.discoverSkills({
+      userSkillsDir: Storage.getUserSkillsDir(),
+      userAgentSkillsDir: Storage.getUserAgentSkillsDir(),
+      projectSkillsDir: storage.getProjectSkillsDir(),
+      projectAgentSkillsDir: storage.getProjectAgentSkillsDir(),
+    });
 
     // Assert
     const skill = service.getSkills().find((s) => s.name === 'proj-agent-only');
@@ -151,7 +161,12 @@ describe('SkillManager - .agents/skills alias discovery', () => {
     vi.spyOn(service, 'resolveBuiltinSkillsDir').mockReturnValue(
       '/non-existent',
     );
-    await service.discoverSkills(storage);
+    await service.discoverSkills({
+      userSkillsDir: Storage.getUserSkillsDir(),
+      userAgentSkillsDir: Storage.getUserAgentSkillsDir(),
+      projectSkillsDir: storage.getProjectSkillsDir(),
+      projectAgentSkillsDir: storage.getProjectAgentSkillsDir(),
+    });
 
     // Assert: the .agents/skills version wins within the user tier.
     const skill = service.getSkills().find((s) => s.name === 'shared');
@@ -196,7 +211,12 @@ describe('SkillManager - .agents/skills alias discovery', () => {
     vi.spyOn(service, 'resolveBuiltinSkillsDir').mockReturnValue(
       '/non-existent',
     );
-    await service.discoverSkills(storage);
+    await service.discoverSkills({
+      userSkillsDir: Storage.getUserSkillsDir(),
+      userAgentSkillsDir: Storage.getUserAgentSkillsDir(),
+      projectSkillsDir: storage.getProjectSkillsDir(),
+      projectAgentSkillsDir: storage.getProjectAgentSkillsDir(),
+    });
 
     // Assert: the project .agents/skills version wins within the project tier,
     // and the unrelated user skill is still discovered.
@@ -240,7 +260,12 @@ describe('SkillManager - .agents/skills alias discovery', () => {
     vi.spyOn(service, 'resolveBuiltinSkillsDir').mockReturnValue(
       '/non-existent',
     );
-    await service.discoverSkills(storage);
+    await service.discoverSkills({
+      userSkillsDir: Storage.getUserSkillsDir(),
+      userAgentSkillsDir: Storage.getUserAgentSkillsDir(),
+      projectSkillsDir: storage.getProjectSkillsDir(),
+      projectAgentSkillsDir: storage.getProjectAgentSkillsDir(),
+    });
 
     // Assert: project tier (even via .llxprt/skills) beats user tier.
     const skill = service.getSkills().find((s) => s.name === 'cross');
@@ -279,7 +304,12 @@ describe('SkillManager - .agents/skills alias discovery', () => {
     vi.spyOn(service, 'resolveBuiltinSkillsDir').mockReturnValue(
       '/non-existent',
     );
-    await service.discoverSkills(storage);
+    await service.discoverSkills({
+      userSkillsDir: Storage.getUserSkillsDir(),
+      userAgentSkillsDir: Storage.getUserAgentSkillsDir(),
+      projectSkillsDir: storage.getProjectSkillsDir(),
+      projectAgentSkillsDir: storage.getProjectAgentSkillsDir(),
+    });
 
     // Assert: project tier (even via .agents/skills) beats user tier.
     const skill = service.getSkills().find((s) => s.name === 'cross');

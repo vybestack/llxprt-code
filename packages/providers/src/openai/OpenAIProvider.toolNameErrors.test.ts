@@ -99,9 +99,7 @@ describe('OpenAIProvider Tool Name Handling', () => {
       );
       expect(providerWithBaseURL).toBeInstanceOf(OpenAIProvider);
 
-      const providerWithConfig = new OpenAIProvider('test-key', undefined, {
-        getEphemeralSettings: () => ({}),
-      });
+      const providerWithConfig = new OpenAIProvider('test-key', undefined, {});
       expect(providerWithConfig).toBeInstanceOf(OpenAIProvider);
     });
 
@@ -185,9 +183,7 @@ describe('OpenAIProvider Tool Name Handling', () => {
     it('should handle OAuth configuration scenarios', () => {
       // Test OAuth-related configurations
       expect(() => {
-        new OpenAIProvider('test-key', undefined, {
-          getEphemeralSettings: () => ({}),
-        });
+        new OpenAIProvider('test-key', undefined, {});
       }).not.toThrow();
 
       expect(() => {

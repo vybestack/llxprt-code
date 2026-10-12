@@ -3,14 +3,15 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
+
+import { installZedFilesystemFixture } from './__tests__/zed-filesystem-fixture.js';
+const fixtureFilesystem = installZedFilesystemFixture();
 
 import { describe, expect, it, vi } from 'bun:test';
 import type * as acp from '@agentclientprotocol/sdk';
-import {
-  DebugLogger,
-  MessageBus,
-  type Config,
-} from '@vybestack/llxprt-code-core';
+import { DebugLogger, MessageBus, Config } from '@vybestack/llxprt-code-core';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   ShellTool,
@@ -25,18 +26,20 @@ import {
 import { buildZedTerminalSetup } from './zed-terminal-setup.js';
 import { RecordingConnection } from './__tests__/zed-test-helpers.js';
 
-function configFixture(outputLimit?: number): Config {
-  // #2534 D2: ToolRegistry receives the settings service as a direct
-  // constructor argument via config.getSettingsService(), so the double
-  // provides a real (empty) settings service.
-  return {
-    getPolicyEngine: () => undefined,
-    getDebugMode: () => false,
-    getTargetDir: () => '/project',
-    getEphemeralSetting: (key: string) =>
-      key === 'shell-output-retention-max-bytes' ? outputLimit : undefined,
-    getSettingsService: () => new SettingsService(),
-  } as unknown as Config;
+function configFixture(): Config {
+  return new Config({
+    cwd: process.cwd(),
+    targetDir: process.cwd(),
+    sessionId: 'terminal-fixture',
+    debugMode: false,
+    model: 'terminal-model',
+  });
+}
+
+function settingsFixture(outputLimit?: number): SessionSettingsOwner {
+  const settings = new SettingsService();
+  settings.set('shell-output-retention-max-bytes', outputLimit);
+  return new SessionSettingsOwner(settings);
 }
 
 const messageBus = new MessageBus();
@@ -54,6 +57,9 @@ describe('buildZedTerminalSetup', () => {
       new RecordingConnection() as unknown as acp.AgentSideConnection,
       new DebugLogger('llxprt:zed-terminal-setup-test'),
       messageBus,
+      fixtureFilesystem().paths,
+      settingsFixture(),
+      new WorkspaceTrustLifecycle({ localTrust: true }),
     );
 
     expect(setup.registry.getTool(ShellTool.Name)).toBeUndefined();
@@ -72,6 +78,9 @@ describe('buildZedTerminalSetup', () => {
       new RecordingConnection() as unknown as acp.AgentSideConnection,
       new DebugLogger('llxprt:zed-terminal-setup-test'),
       messageBus,
+      fixtureFilesystem().paths,
+      settingsFixture(),
+      new WorkspaceTrustLifecycle({ localTrust: true }),
     );
 
     const tool = setup.registry.getTool(ShellTool.Name);
@@ -100,11 +109,14 @@ describe('buildZedTerminalSetup', () => {
     const connection = new RecordingConnection();
     const setup = buildZedTerminalSetup(
       'session-1',
-      configFixture(setting),
+      configFixture(),
       baseRegistry,
       connection as unknown as acp.AgentSideConnection,
       new DebugLogger('llxprt:zed-terminal-setup-test'),
       messageBus,
+      fixtureFilesystem().paths,
+      settingsFixture(setting),
+      new WorkspaceTrustLifecycle({ localTrust: true }),
     );
 
     await setup.terminals.executeShellCommand(

@@ -10,7 +10,6 @@ import { isNodeError } from '../utils/errors.js';
 import { exec } from 'node:child_process';
 import { simpleGit, type SimpleGit, CheckRepoActions } from 'simple-git';
 import { ensureDir } from '../utils/paths.js';
-import { Storage } from '@vybestack/llxprt-code-settings';
 import { debugLogger } from '../utils/debugLogger.js';
 
 /**
@@ -33,16 +32,16 @@ function isContainerSandboxEnv(): boolean {
 
 export class GitService {
   private projectRoot: string;
-  private storage: Storage;
+  private readonly historyDir: string;
 
-  constructor(projectRoot: string, storage: Storage) {
+  constructor(projectRoot: string, historyDir: string) {
     this.projectRoot = path.resolve(projectRoot);
-    this.storage = storage;
+    this.historyDir = historyDir;
   }
 
   private getHistoryDir(): string {
-    ensureDir(Storage.getGlobalDataDir());
-    return this.storage.getHistoryDir();
+    ensureDir(this.historyDir);
+    return this.historyDir;
   }
 
   async initialize(): Promise<void> {

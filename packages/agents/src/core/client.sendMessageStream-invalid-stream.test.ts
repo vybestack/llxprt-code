@@ -120,7 +120,8 @@ describe('AgentClient (client.ts) - sendMessageStream - InvalidStream continuati
           blocks: initialRequest,
         },
       ],
-      expect.any(Object),
+      signal,
+      undefined,
     );
 
     // Second call with "Please continue."
@@ -132,7 +133,8 @@ describe('AgentClient (client.ts) - sendMessageStream - InvalidStream continuati
           blocks: [{ type: 'text', text: 'System: Please continue.' }],
         },
       ],
-      expect.any(Object),
+      signal,
+      undefined,
     );
   });
 });

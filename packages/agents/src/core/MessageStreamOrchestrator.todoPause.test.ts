@@ -252,6 +252,7 @@ function makeDeps(
     } as unknown as LoopDetectionService,
     todoContinuationService,
     ideContextTracker: {
+      isEnabled: () => false,
       getContextParts: vi.fn().mockReturnValue({
         contextParts: [],
         newIdeContext: undefined,

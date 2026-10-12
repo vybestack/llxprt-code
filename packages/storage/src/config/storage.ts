@@ -49,8 +49,19 @@ function resolveSystemSettingsEnv(raw: string | undefined): string | undefined {
 export class Storage {
   private readonly targetDir: string;
 
-  constructor(targetDir: string) {
+  private readonly logRoot: string;
+  private readonly dataRoot: string;
+
+  constructor(
+    targetDir: string,
+    roots: { readonly logRoot: string; readonly dataRoot: string } = {
+      logRoot: Storage.getGlobalLogDir(),
+      dataRoot: Storage.getGlobalDataDir(),
+    },
+  ) {
     this.targetDir = targetDir;
+    this.logRoot = roots.logRoot;
+    this.dataRoot = roots.dataRoot;
   }
 
   /**
@@ -418,7 +429,7 @@ export class Storage {
 
   getProjectTempDir(): string {
     const hash = this.getFilePathHash(this.getProjectRoot());
-    const tempDir = Storage.getGlobalTempDir();
+    const tempDir = path.join(this.logRoot, TMP_DIR_NAME);
     return path.join(tempDir, hash);
   }
 
@@ -449,7 +460,7 @@ export class Storage {
 
   getHistoryDir(): string {
     const hash = this.getFilePathHash(this.getProjectRoot());
-    const historyDir = path.join(Storage.getGlobalDataDir(), 'history');
+    const historyDir = path.join(this.dataRoot, 'history');
     return path.join(historyDir, hash);
   }
 

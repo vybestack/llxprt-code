@@ -27,7 +27,7 @@ function textOf(content: IContent): string {
 }
 
 function controlledTokenizerFactory(): {
-  readonly factory: RuntimeTokenizerFactory;
+  readonly factory: Pick<RuntimeTokenizerFactory, 'getTokenizer'>;
   readonly waitUntilSecond: Promise<void>;
   readonly releaseSecond: () => void;
 } {
@@ -52,14 +52,6 @@ function controlledTokenizerFactory(): {
           return typeof value === 'string' ? value.length : 1;
         },
       }),
-      estimatePrompt: async (request) => ({
-        count: await request.legacyEstimate(),
-        method: 'exact',
-        family: 'controlled-test',
-        estimatorVersion: '1',
-        assetRevision: '1',
-        projectionRevision: request.projectionRevision,
-      }),
     },
     waitUntilSecond,
     releaseSecond: () => releaseSecond?.(),
@@ -72,14 +64,6 @@ async function batchCase1(): Promise<number | undefined> {
     getTokenizer: () => ({
       fallbackPolicy: 'deny',
       countTokens: async (): Promise<number> => 3,
-    }),
-    estimatePrompt: async (request) => ({
-      count: await request.legacyEstimate(),
-      method: 'exact',
-      family: 'batch-validation-test',
-      estimatorVersion: '1',
-      assetRevision: '1',
-      projectionRevision: request.projectionRevision,
     }),
   });
   const baseline = createUserMessage('baseline');
@@ -119,14 +103,6 @@ async function batchCase2(): Promise<unknown> {
         if (invocation === 2) throw new Error('second token estimate failed');
         return 3;
       },
-    }),
-    estimatePrompt: async (request) => ({
-      count: await request.legacyEstimate(),
-      method: 'exact',
-      family: 'failure-test',
-      estimatorVersion: '1',
-      assetRevision: '1',
-      projectionRevision: request.projectionRevision,
     }),
   });
   const first = createUserMessage('first');

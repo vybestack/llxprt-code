@@ -11,6 +11,11 @@
  */
 
 import { spawn } from 'node:child_process';
+import { createExitGuard } from '../services/shellExitGuard.js';
+import {
+  killProcessWithEscalation,
+  reapProcessGroup,
+} from '../services/shellProcessKill.js';
 import type { HookConfig } from './types.js';
 import {
   HookOutputOwner,
@@ -29,26 +34,17 @@ import type {
 } from './types.js';
 import { mergeHookLLMRequest } from './hookTranslator.js';
 import {
-  startHookInputStream,
   stopHookInputProcess,
   type HookModelRowsInput,
-  type HookInputStream,
 } from './hookModelInputStream.js';
 import { DebugLogger } from '../debug/index.js';
-import type { Config } from '../config/config.js';
+import type { HookProcessConfiguration } from './hook-configuration.js';
 import { sanitizeEnvironment } from '../services/environmentSanitization.js';
 import {
   escapeShellArg,
   getShellConfiguration,
   type ShellType,
 } from '../utils/shell-utils.js';
-
-interface HookProcessState {
-  stdout: string;
-  stderr: string;
-  timedOut: boolean;
-  inputStream?: HookInputStream;
-}
 
 const debugLogger = DebugLogger.getLogger('llxprt:core:hooks:runner');
 
@@ -103,11 +99,11 @@ function buildPowerShellExitCodeWrapper(encodedCommand: string): string {
  * Hook runner that executes command hooks
  */
 export class HookRunner {
-  private readonly config: Config;
-
-  constructor(config: Config) {
-    this.config = config;
-  }
+  constructor(
+    private readonly configuration: HookProcessConfiguration,
+    private readonly isTrustedFolder: () => boolean,
+    private readonly projectSignal: () => AbortSignal,
+  ) {}
 
   /**
    * Execute a single hook
@@ -116,6 +112,7 @@ export class HookRunner {
     hookConfig: HookConfig,
     eventName: HookEventName,
     input: HookInput,
+    signal?: AbortSignal,
   ): Promise<HookExecutionResult> {
     const startTime = Date.now();
 
@@ -125,6 +122,7 @@ export class HookRunner {
         eventName,
         input,
         startTime,
+        signal,
       );
     } catch (error) {
       const duration = Date.now() - startTime;
@@ -159,7 +157,7 @@ export class HookRunner {
       const { ConfigSource } = await import('./hookRegistry.js');
       if (
         hookConfig.source === ConfigSource.Project &&
-        !this.config.isTrustedFolder()
+        !this.isTrustedFolder()
       )
         throw new Error('Project hook blocked - folder not trusted');
       if (!hookConfig.command) throw new Error('Command hook missing command');
@@ -179,7 +177,7 @@ export class HookRunner {
         input,
         signal,
         timeout,
-        spawn: () => this.spawnHookProcess(hookConfig, input, true),
+        spawn: () => this.spawnHookProcess(hookConfig, input),
         killTimeout: (child, expired) =>
           this.setupKillTimeout(child, timeout, expired, true),
       },
@@ -194,9 +192,10 @@ export class HookRunner {
     hookConfigs: HookConfig[],
     eventName: HookEventName,
     input: HookInput,
+    signal?: AbortSignal,
   ): Promise<HookExecutionResult[]> {
     const promises = hookConfigs.map((config) =>
-      this.executeHook(config, eventName, input),
+      this.executeHook(config, eventName, input, signal),
     );
 
     return Promise.all(promises);
@@ -209,12 +208,18 @@ export class HookRunner {
     hookConfigs: HookConfig[],
     eventName: HookEventName,
     input: HookInput,
+    signal?: AbortSignal,
   ): Promise<HookExecutionResult[]> {
     const results: HookExecutionResult[] = [];
     let currentInput = input;
 
     for (const config of hookConfigs) {
-      const result = await this.executeHook(config, eventName, currentInput);
+      const result = await this.executeHook(
+        config,
+        eventName,
+        currentInput,
+        signal,
+      );
       results.push(result);
 
       // If the hook succeeded and has output, use it to modify the input for the next hook
@@ -336,14 +341,12 @@ export class HookRunner {
     eventName: HookEventName,
     input: HookInput,
     startTime: number,
-    source?: { input: HookModelRowsInput; signal?: AbortSignal },
+    signal?: AbortSignal,
   ): Promise<HookExecutionResult> {
+    signal?.throwIfAborted();
     // Secondary security check - block project hooks in untrusted folders
     const { ConfigSource } = await import('./hookRegistry.js');
-    if (
-      hookConfig.source === ConfigSource.Project &&
-      !this.config.isTrustedFolder()
-    ) {
+    if (hookConfig.source === ConfigSource.Project && !this.isTrustedFolder()) {
       const errorMessage = 'Project hook blocked - folder not trusted';
       debugLogger.warn(errorMessage);
       return {
@@ -355,6 +358,13 @@ export class HookRunner {
       };
     }
 
+    if (hookConfig.source === ConfigSource.Project) {
+      signal =
+        signal === undefined
+          ? this.projectSignal()
+          : AbortSignal.any([signal, this.projectSignal()]);
+      signal.throwIfAborted();
+    }
     const timeout = hookConfig.timeout ?? DEFAULT_HOOK_TIMEOUT;
 
     return this.runHookProcess(
@@ -363,7 +373,7 @@ export class HookRunner {
       input,
       startTime,
       timeout,
-      source,
+      signal,
     );
   }
 
@@ -373,116 +383,148 @@ export class HookRunner {
     input: HookInput,
     startTime: number,
     timeout: number,
-    source?: { input: HookModelRowsInput; signal?: AbortSignal },
+    signal?: AbortSignal,
   ): Promise<HookExecutionResult> {
-    return new Promise((resolve) => {
+    signal?.throwIfAborted();
+    return new Promise((resolve, reject) => {
       if (!hookConfig.command) {
         resolve(this.missingCommandResult(hookConfig, eventName, startTime));
         return;
       }
-
-      const state: HookProcessState = {
-        stdout: '',
-        stderr: '',
-        timedOut: false,
+      let stdout = '';
+      let stderr = '';
+      let timedOut = false;
+      let processError: Error | undefined;
+      let cancellationReason: Error | undefined;
+      let termination: Promise<void> | undefined;
+      const child = this.spawnHookProcess(hookConfig, input);
+      const exited = this.observeExit(child);
+      const terminate = (): void => {
+        termination ??= this.terminateProcess(child, exited);
+        void termination.catch(reject);
       };
-      const child = this.spawnHookProcess(
-        hookConfig,
-        input,
-        source !== undefined,
-      );
-      const timeoutControl = this.setupKillTimeout(
-        child,
-        timeout,
-        () => {
-          state.timedOut = true;
-          state.inputStream?.cancel(
-            new Error(`Hook timed out after ${timeout}ms`),
-            false,
-          );
-        },
-        source !== undefined,
-      );
-      if (source === undefined) this.writeToStdin(child, input);
+      const abort = (): void => {
+        cancellationReason =
+          signal?.reason instanceof Error
+            ? signal.reason
+            : new Error(String(signal?.reason));
+        terminate();
+      };
+      signal?.addEventListener('abort', abort, { once: true });
+      const timer = setTimeout(() => {
+        timedOut = true;
+        terminate();
+      }, timeout);
+      this.writeToStdin(child, input);
       child.stdout?.on('data', (data: Buffer) => {
-        state.stdout += data.toString();
+        stdout += data.toString();
       });
       child.stderr?.on('data', (data: Buffer) => {
-        state.stderr += data.toString();
+        stderr += data.toString();
       });
-      const complete = (exitCode: number | null, error?: Error): void => {
-        timeoutControl.clear();
-        if (error !== undefined) state.inputStream?.cancel(error);
-        void this.completeHookProcess(
+      child.on('error', (error) => {
+        processError = error;
+      });
+      child.on('close', (exitCode) => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', abort);
+        void this.completeProcess(
           hookConfig,
           eventName,
           startTime,
           timeout,
-          state,
-          exitCode,
-          error,
-        ).then(resolve);
-      };
-      child.on('close', (exitCode) => complete(exitCode));
-      child.on('error', (error) => complete(null, error));
-      if (source !== undefined)
-        state.inputStream = startHookInputStream(
-          child,
-          source.input,
-          source.signal,
-        );
+          {
+            stdout,
+            stderr,
+            timedOut,
+            processError,
+            cancellationReason,
+            exitCode,
+          },
+          termination,
+        ).then(resolve, reject);
+      });
     });
   }
 
-  private async completeHookProcess(
+  private async terminateProcess(
+    child: ReturnType<typeof spawn>,
+    exited: ReturnType<typeof createExitGuard>,
+  ): Promise<void> {
+    await killProcessWithEscalation(
+      child.pid,
+      process.platform === 'win32',
+      () => {
+        child.kill('SIGKILL');
+      },
+      exited,
+    );
+    if (
+      process.platform !== 'win32' &&
+      child.pid !== undefined &&
+      !(await reapProcessGroup(child.pid))
+    )
+      throw new Error(`Hook process group ${child.pid} survived termination`);
+  }
+
+  private observeExit(
+    child: ReturnType<typeof spawn>,
+  ): ReturnType<typeof createExitGuard> {
+    const exited = createExitGuard();
+    child.on('exit', () => exited.markExited());
+    return exited;
+  }
+
+  private async completeProcess(
     hookConfig: HookConfig,
     eventName: HookEventName,
     startTime: number,
     timeout: number,
-    state: HookProcessState,
-    exitCode: number | null,
-    error?: Error,
+    output: {
+      readonly stdout: string;
+      readonly stderr: string;
+      readonly timedOut: boolean;
+      readonly processError: Error | undefined;
+      readonly cancellationReason: Error | undefined;
+      readonly exitCode: number | null;
+    },
+    termination: Promise<void> | undefined,
   ): Promise<HookExecutionResult> {
-    const inputError = await state.inputStream?.close();
+    await termination;
+    const {
+      stdout,
+      stderr,
+      processError,
+      cancellationReason,
+      timedOut,
+      exitCode,
+    } = output;
+    const error = cancellationReason ?? processError;
+    if (error !== undefined)
+      return this.errorResult(
+        hookConfig,
+        eventName,
+        error,
+        stdout,
+        stderr,
+        startTime,
+      );
     const duration = Date.now() - startTime;
-    if (state.timedOut)
+    if (timedOut)
       return this.timeoutResult(
         hookConfig,
         eventName,
         timeout,
-        state.stdout,
-        state.stderr,
+        stdout,
+        stderr,
         duration,
       );
-    const failure = error ?? inputError;
-    if (failure !== undefined) {
-      const result = this.errorResult(
-        hookConfig,
-        eventName,
-        failure,
-        state.stdout,
-        state.stderr,
-        startTime,
-      );
-      if (exitCode !== null) {
-        const exited = this.buildExitResult(
-          hookConfig,
-          eventName,
-          exitCode,
-          state.stdout,
-          state.stderr,
-          duration,
-        );
-        return { ...result, exitCode: exited.exitCode, output: exited.output };
-      }
-      return result;
-    }
     return this.buildExitResult(
       hookConfig,
       eventName,
       exitCode,
-      state.stdout,
-      state.stderr,
+      stdout,
+      stderr,
       duration,
     );
   }
@@ -631,7 +673,6 @@ export class HookRunner {
   private spawnHookProcess(
     hookConfig: HookConfig,
     input: HookInput,
-    sourceInput = false,
   ): ReturnType<typeof spawn> {
     // SECURITY: Get platform-specific shell configuration
     const shellConfig = getShellConfiguration();
@@ -644,15 +685,11 @@ export class HookRunner {
     );
 
     // Set up environment variables
-    const sanitizationConfig = this.config.getSanitizationConfig();
+    const sanitizationConfig = this.configuration.sanitization;
     const env = {
       ...sanitizeEnvironment(
-        process.env,
-        sanitizationConfig ?? {
-          enableEnvironmentVariableRedaction: false,
-          allowedEnvironmentVariables: [],
-          blockedEnvironmentVariables: [],
-        },
+        this.configuration.environment,
+        sanitizationConfig,
       ),
       LLXPRT_PROJECT_DIR: input.cwd,
     };
@@ -672,8 +709,7 @@ export class HookRunner {
         env,
         cwd: input.cwd,
         stdio: ['pipe', 'pipe', 'pipe'],
-        detached:
-          sourceInput && process.platform !== 'win32' ? true : undefined,
+        detached: process.platform !== 'win32',
         shell: false, // CRITICAL: must be false to prevent injection
         // Prevents child from inheriting parent's console screen buffer on
         // Windows (sets CREATE_NO_WINDOW). PowerShell Console API writes

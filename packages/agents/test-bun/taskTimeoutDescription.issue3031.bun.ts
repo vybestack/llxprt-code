@@ -4,6 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
+import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const fixturePaths = installTestWorkspacePaths({
+  targetDir: process.cwd(),
+  isTrusted: () => true,
+});
+
 /**
  * Issue #3031 — `task` tool `timeout_seconds` parameter description.
  *
@@ -16,18 +23,20 @@
 
 import { describe, it, expect } from 'bun:test';
 import { TaskTool } from '../src/tools/task.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { installTaskSettingsFixtures } from './task-settings-fixture.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 
-function makeConfig(): Config {
-  return {
-    getSessionId: () => 'session-desc',
-    getEphemeralSettings: () => ({}),
-  } as unknown as Config;
-}
+const makeConfig = installTaskSettingsFixtures('session-desc');
 
 function getTimeoutDescription(): string {
-  const tool = new TaskTool(makeConfig(), { messageBus: new MessageBus() });
+  const fixture = makeConfig();
+  const tool = new TaskTool(fixture.config, {
+    ...fixture.policies,
+    workspacePaths: fixturePaths(),
+    readMcpInstructions: () => undefined,
+    instructions: emptyInstructionReads,
+    messageBus: new MessageBus(),
+  });
   const parameters = (
     tool.schema.parametersJsonSchema as { properties?: Record<string, unknown> }
   ).properties;

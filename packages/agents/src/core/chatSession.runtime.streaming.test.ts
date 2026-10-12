@@ -1,8 +1,16 @@
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import { BeforeToolSelectionHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
+const modelTools = installModelToolFixture();
 
 /**
  * Streaming and abort behaviors for ChatSession runtime context.
@@ -27,7 +35,7 @@ import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Age
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import {
@@ -61,14 +69,15 @@ describe('ChatSession runtime streaming and abort behavior', () => {
 
     manager = new TestRuntimeProviderManager(providerRuntime);
     manager.setConfig(config);
-    config.setProviderManager(manager);
+    configureProviderRuntimeFactories(config, manager);
   });
 
   it('applies BeforeToolSelection to request-scoped streaming tools', async () => {
     const calls: GenerateChatOptions[] = [];
     const generateChatCompletionMock = vi.fn(async function* (
-      options: GenerateChatOptions,
-    ) {
+      options: GenerateChatOptions | IContent[],
+    ): AsyncIterableIterator<IContent> {
+      if (Array.isArray(options)) throw new Error('Expected request options');
       calls.push(options);
       yield {
         speaker: 'ai',
@@ -82,37 +91,35 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       getModels: vi.fn(async () => []),
       getDefaultModel: () => 'stub-model',
       generateChatCompletion: generateChatCompletionMock,
-      getAuthToken: vi.fn(async () => 'stub-auth-token'),
     };
 
     const tools = [
       { name: 'read_file', parametersJsonSchema: {} },
       { name: 'run_shell_command', parametersJsonSchema: {} },
     ];
-    const hookConfig = config;
-    Object.defineProperties(hookConfig, {
-      getConversationLoggingEnabled: { value: () => false },
-      getEnableHooks: { value: () => true },
-      getHookSystem: {
-        value: () =>
-          withSnapshotModelEvents({
-            initialize: async () => undefined,
-            getRegistry: () => ({ getHooksForEvent: () => [{}] }),
-            isInitialized: () => true,
-
-            fireBeforeToolSelectionEvent: async () => ({
-              applyToolChoiceModifications: () => ({
-                toolChoice: { mode: 'auto', allowedToolNames: ['read_file'] },
-              }),
-            }),
-            fireBeforeModelEvent: async () => new BeforeModelHookOutput({}),
-            fireAfterModelEvent: async () => new AfterModelHookOutput({}),
-          }),
-      },
+    const modelHooks = withSnapshotModelEvents({
+      fireBeforeModelEvent: async () => new BeforeModelHookOutput({}),
+      fireAfterModelEvent: async () => new AfterModelHookOutput({}),
     });
+    const hookOwner: HookExecutionOwner = {
+      sessionId: () => config.getSessionId(),
+      transcriptPath: () => undefined,
+      beforeToolSelection: async () =>
+        new BeforeToolSelectionHookOutput({
+          hookSpecificOutput: {
+            toolChoice: { mode: 'auto', allowedToolNames: ['read_file'] },
+          },
+        }),
+      beforeModel: async () => new BeforeModelHookOutput({}),
+      afterModel: async () => new AfterModelHookOutput({}),
+      beforeModelSnapshot: (request, signal) =>
+        modelHooks.fireBeforeModelSnapshotEvent(request, signal),
+      afterModelSnapshot: (request, response, signal) =>
+        modelHooks.fireAfterModelSnapshotEvent(request, response, signal),
+    };
     const hookProviderRuntime = createProviderRuntimeContext({
       settingsService,
-      config: hookConfig,
+      config,
       runtimeId: 'test.runtime.hook-selection',
       metadata: { source: 'chatSession.runtime.streaming.test' },
     });
@@ -126,6 +133,14 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       sessionId: config.getSessionId(),
     });
     const view = createAgentRuntimeContext({
+      readRuntimeSettings: fixtureRuntimePolicyReader(config, settingsService),
+      prepareProviderInvocation: (name, parameters, signal) =>
+        captureProviderInvocation(
+          hookProviderRuntime,
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: new HistoryService(),
       settings: {
@@ -139,8 +154,11 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         'reasoning.includeInContext': true,
       },
       provider: createProviderAdapterFromManager(hookManager),
-      telemetry: createTelemetryAdapterFromConfig(hookConfig),
-      tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+      telemetry: createTelemetryAdapter(
+        config,
+        createSessionSettingsFixture(config).settingsOwner.telemetry,
+      ),
+      tools: createToolRegistryViewFromRegistry(modelTools()),
       providerRuntime: hookProviderRuntime,
     });
 
@@ -152,7 +170,11 @@ describe('ChatSession runtime streaming and abort behavior', () => {
     );
 
     const stream = await chat.sendMessageStream(
-      { message: 'stream with request-scoped tools', config: { tools } },
+      {
+        message: 'stream with request-scoped tools',
+        config: { tools },
+        hookOwner,
+      },
       'prompt-stream-hook-selection',
     );
     for await (const _event of stream) {
@@ -170,12 +192,13 @@ describe('ChatSession runtime streaming and abort behavior', () => {
 
     try {
       // Set explicit timeout via ephemeral setting
-      config.setEphemeralSetting('stream-idle-timeout-ms', testTimeoutMs);
+      settingsService.set('stream-idle-timeout-ms', testTimeoutMs);
 
       let capturedSignal: AbortSignal | undefined;
       const generateChatCompletionMock = vi.fn(async function* (
-        options: GenerateChatOptions,
-      ) {
+        options: GenerateChatOptions | IContent[],
+      ): AsyncIterableIterator<IContent> {
+        if (Array.isArray(options)) throw new Error('Expected request options');
         capturedSignal = options.invocation?.signal;
         yield {
           speaker: 'ai',
@@ -196,7 +219,6 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         getModels: vi.fn(async () => []),
         getDefaultModel: () => 'stub-model',
         generateChatCompletion: generateChatCompletionMock,
-        getAuthToken: vi.fn(async () => 'stub-auth-token'),
       };
 
       manager.registerProvider(provider);
@@ -209,6 +231,12 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       });
       const historyService = new HistoryService();
       const view = createAgentRuntimeContext({
+        readRuntimeSettings: fixtureRuntimePolicyReader(
+          config,
+          settingsService,
+        ),
+        prepareProviderInvocation: (name, parameters, signal) =>
+          captureProviderInvocation(providerRuntime, name, parameters, signal),
         state: runtimeState,
         history: historyService,
         settings: {
@@ -221,9 +249,12 @@ describe('ChatSession runtime streaming and abort behavior', () => {
           },
           'reasoning.includeInContext': true,
         },
-        provider: createProviderAdapterFromManager(config.getProviderManager()),
-        telemetry: createTelemetryAdapterFromConfig(config),
-        tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+        provider: createProviderAdapterFromManager(manager),
+        telemetry: createTelemetryAdapter(
+          config,
+          createSessionSettingsFixture(config).settingsOwner.telemetry,
+        ),
+        tools: createToolRegistryViewFromRegistry(modelTools()),
         providerRuntime: { ...providerRuntime },
       });
 
@@ -268,12 +299,13 @@ describe('ChatSession runtime streaming and abort behavior', () => {
 
     try {
       // Set explicit timeout via ephemeral setting
-      config.setEphemeralSetting('stream-idle-timeout-ms', testTimeoutMs);
+      settingsService.set('stream-idle-timeout-ms', testTimeoutMs);
 
       let capturedSignal: AbortSignal | undefined;
       const generateChatCompletionMock = vi.fn(async function* (
-        options: GenerateChatOptions,
-      ) {
+        options: GenerateChatOptions | IContent[],
+      ): AsyncIterableIterator<IContent> {
+        if (Array.isArray(options)) throw new Error('Expected request options');
         capturedSignal = options.invocation?.signal;
         yield {
           speaker: 'ai',
@@ -294,7 +326,6 @@ describe('ChatSession runtime streaming and abort behavior', () => {
         getModels: vi.fn(async () => []),
         getDefaultModel: () => 'stub-model',
         generateChatCompletion: generateChatCompletionMock,
-        getAuthToken: vi.fn(async () => 'stub-auth-token'),
       };
 
       manager.registerProvider(provider);
@@ -307,6 +338,12 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       });
       const historyService = new HistoryService();
       const view = createAgentRuntimeContext({
+        readRuntimeSettings: fixtureRuntimePolicyReader(
+          config,
+          settingsService,
+        ),
+        prepareProviderInvocation: (name, parameters, signal) =>
+          captureProviderInvocation(providerRuntime, name, parameters, signal),
         state: runtimeState,
         history: historyService,
         settings: {
@@ -319,9 +356,12 @@ describe('ChatSession runtime streaming and abort behavior', () => {
           },
           'reasoning.includeInContext': true,
         },
-        provider: createProviderAdapterFromManager(config.getProviderManager()),
-        telemetry: createTelemetryAdapterFromConfig(config),
-        tools: createToolRegistryViewFromRegistry(config.getToolRegistry()),
+        provider: createProviderAdapterFromManager(manager),
+        telemetry: createTelemetryAdapter(
+          config,
+          createSessionSettingsFixture(config).settingsOwner.telemetry,
+        ),
+        tools: createToolRegistryViewFromRegistry(modelTools()),
         providerRuntime: { ...providerRuntime },
       });
 
@@ -360,3 +400,14 @@ describe('ChatSession runtime streaming and abort behavior', () => {
     }
   });
 });
+
+function fixtureRuntimePolicyReader(
+  config: Config,
+  settingsService: SettingsService,
+) {
+  const { settingsOwner } = createSessionSettingsFixture(
+    config,
+    settingsService,
+  );
+  return () => settingsOwner.readRuntimePolicy();
+}

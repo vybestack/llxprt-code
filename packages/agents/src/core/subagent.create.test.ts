@@ -1,16 +1,20 @@
+import { createChatPolicyFixture } from './__tests__/session-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 
 /**
  * SubAgentScope create tests: toolConfig preservation, stateless runtime enforcement.
  */
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
-import type { Mock } from 'bun:test';
 import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
+import { MockTool } from '@vybestack/llxprt-code-test-utils/core/mock-tool.js';
+
+import { PolicyDecision } from '@vybestack/llxprt-code-core/policy/types.js';
 import { SubAgentScope } from './subagent.js';
 import {
   ContextState,
@@ -68,9 +72,13 @@ void vi.mock('@vybestack/llxprt-code-core/core/contentGenerator.js', () => ({
 void vi.mock('@vybestack/llxprt-code-core/utils/environmentContext.js', () =>
   automock(realEnvironmentContextModule),
 );
-void vi.mock('./nonInteractiveToolExecutor.js', () =>
-  automock(realNonInteractiveToolExecutorModule),
+const toolExecutorMock = vi.fn(
+  realNonInteractiveToolExecutorModule.executeToolCall,
 );
+void vi.mock('./nonInteractiveToolExecutor.js', () => ({
+  ...realNonInteractiveToolExecutorModule,
+  executeToolCall: toolExecutorMock,
+}));
 const actual4 = { ...(await import('@vybestack/llxprt-code-ide-integration')) };
 void vi.mock('@vybestack/llxprt-code-ide-integration', () => ({
   ...actual4,
@@ -101,13 +109,25 @@ import {
 } from './__tests__/subagent-test-helpers.js';
 
 describe('subagent.ts', () => {
-  let mockSendMessageStream: Mock;
+  let mockSendMessageStream: Mock<
+    (
+      ...args: Array<{
+        config?: {
+          tools?: Array<{
+            functionDeclarations?: Array<{ description?: string }>;
+          }>;
+        };
+      }>
+    ) => unknown
+  >;
   describe('create (Tool Validation)', () => {
     const promptConfig: PromptConfig = { systemPrompt: 'Test prompt' };
 
     it('should create a SubAgentScope successfully with minimal config', async () => {
-      const { config } = await createMockConfig();
-      const { overrides } = createRuntimeOverrides();
+      const { config, mcpRuntime } = await createMockConfig();
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+      );
       const scope = await SubAgentScope.create(
         'test-agent',
         config,
@@ -133,11 +153,11 @@ describe('subagent.ts', () => {
         }),
       };
 
-      const { config } = await createMockConfig({
+      const { config, mcpRuntime } = await createMockConfig({
         getTool: vi.fn().mockReturnValue(mockTool as never),
       });
       const runtimeBundle = createStatelessRuntimeBundle({
-        toolRegistry: config.getToolRegistry(),
+        toolRegistry: mcpRuntime.toolSelection,
         toolsView: {
           listToolNames: () => ['risky_tool'],
           getToolMetadata: () => ({
@@ -147,10 +167,13 @@ describe('subagent.ts', () => {
           }),
         },
       });
-      const { overrides } = createRuntimeOverrides({
-        runtimeBundle,
-        toolRegistry: config.getToolRegistry(),
-      });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        {
+          runtimeBundle,
+          toolRegistry: mcpRuntime.toolSelection,
+        },
+      );
 
       const toolConfig: ToolConfig = { tools: ['risky_tool'] };
 
@@ -176,11 +199,11 @@ describe('subagent.ts', () => {
           shouldConfirmExecute: vi.fn().mockResolvedValue(null),
         }),
       };
-      const { config } = await createMockConfig({
+      const { config, mcpRuntime } = await createMockConfig({
         getTool: vi.fn().mockReturnValue(mockTool as never),
       });
       const runtimeBundle = createStatelessRuntimeBundle({
-        toolRegistry: config.getToolRegistry(),
+        toolRegistry: mcpRuntime.toolSelection,
         toolsView: {
           listToolNames: () => ['safe_tool'],
           getToolMetadata: () => ({
@@ -190,10 +213,13 @@ describe('subagent.ts', () => {
           }),
         },
       });
-      const { overrides } = createRuntimeOverrides({
-        runtimeBundle,
-        toolRegistry: config.getToolRegistry(),
-      });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        {
+          runtimeBundle,
+          toolRegistry: mcpRuntime.toolSelection,
+        },
+      );
 
       const toolConfig: ToolConfig = { tools: ['safe_tool'] };
 
@@ -231,11 +257,11 @@ describe('subagent.ts', () => {
         build: vi.fn(),
       };
 
-      const { config } = await createMockConfig({
+      const { config, mcpRuntime } = await createMockConfig({
         getTool: vi.fn().mockReturnValue(mockToolWithParams),
       });
       const runtimeBundle = createStatelessRuntimeBundle({
-        toolRegistry: config.getToolRegistry(),
+        toolRegistry: mcpRuntime.toolSelection,
         toolsView: {
           listToolNames: () => ['tool_with_params'],
           getToolMetadata: () => ({
@@ -250,10 +276,13 @@ describe('subagent.ts', () => {
           }),
         },
       });
-      const { overrides } = createRuntimeOverrides({
-        runtimeBundle,
-        toolRegistry: config.getToolRegistry(),
-      });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        {
+          runtimeBundle,
+          toolRegistry: mcpRuntime.toolSelection,
+        },
+      );
 
       const toolConfig: ToolConfig = { tools: ['tool_with_params'] };
 
@@ -314,6 +343,7 @@ describe('subagent.ts', () => {
       ).mockImplementation(
         () =>
           ({
+            ...createChatPolicyFixture(),
             sendMessageStream: mockSendMessageStream,
             getHistory: vi.fn().mockReturnValue([]),
             getHistoryService: vi.fn().mockReturnValue({
@@ -328,7 +358,7 @@ describe('subagent.ts', () => {
     });
 
     it('does not access foreground Config tool registry when runtime bundle provided', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const runtimeToolsView: ToolRegistryView = {
         listToolNames: vi.fn(() => ['stateless.tool']),
         getToolMetadata: vi.fn(() => ({
@@ -344,9 +374,12 @@ describe('subagent.ts', () => {
       const runtimeBundle = createStatelessRuntimeBundle({
         toolsView: runtimeToolsView,
       });
-      const { overrides } = createRuntimeOverrides({ runtimeBundle });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        { runtimeBundle },
+      );
 
-      vi.spyOn(config, 'getToolRegistry').mockImplementation(() => {
+      vi.spyOn(mcpRuntime.toolSelection, 'getTool').mockImplementation(() => {
         throw new Error(
           'REGRESSION: foreground Config tool registry should not be used',
         );
@@ -387,7 +420,7 @@ describe('subagent.ts', () => {
 
     const observeBuildsToolDeclarationsFromRuntimeToolViewMetadata =
       async () => {
-        const { config } = await createMockConfig({
+        const { config, mcpRuntime } = await createMockConfig({
           getFunctionDeclarationsFiltered: vi.fn().mockReturnValue([
             {
               name: 'stateless.tool',
@@ -425,14 +458,16 @@ describe('subagent.ts', () => {
           defaultRunConfig,
           undefined,
           undefined,
-          createRuntimeOverrides({ runtimeBundle }).overrides,
+          createRuntimeOverrides(mcpRuntime.workspaceFilesystem.paths, {
+            runtimeBundle,
+          }).overrides,
         );
 
         await scope.runNonInteractive(new ContextState());
 
         const [messageParams] = mockSendMessageStream.mock.calls[0] ?? [];
 
-        const toolGroups = messageParams?.config?.tools ?? [];
+        const toolGroups = messageParams.config?.tools ?? [];
 
         const functionDeclarations = toolGroups;
 
@@ -446,7 +481,7 @@ describe('subagent.ts', () => {
       };
 
     it('prefers injected environment context loader over foreground Config', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
 
       (
         getEnvironmentContext as Mock<typeof getEnvironmentContext>
@@ -458,10 +493,13 @@ describe('subagent.ts', () => {
       const environmentLoader = vi.fn(async (_runtime: AgentRuntimeContext) => [
         { text: 'Runtime Env Context' },
       ]);
-      const { overrides } = createRuntimeOverrides({
-        runtimeBundle,
-        environmentLoader,
-      });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        {
+          runtimeBundle,
+          environmentLoader,
+        },
+      );
 
       mockSendMessageStream.mockImplementation(createMockStream(['stop']));
 
@@ -489,95 +527,119 @@ describe('subagent.ts', () => {
       );
     });
 
-    it('propagates tool whitelist into tool executor ephemerals', async () => {
-      const { ephemerals } =
-        await observePropagatesToolWhitelistIntoToolExecutorEphemerals();
-      expect(ephemerals['tools.allowed']).toStrictEqual(['read_file']);
-    });
-
-    const observePropagatesToolWhitelistIntoToolExecutorEphemerals =
-      async () => {
-        const { config, toolRegistry } = await createMockConfig({
-          getTool: vi.fn().mockImplementation((name: string) => {
-            if (name === 'read_file') {
-              return {
-                name: 'read_file',
-                displayName: 'Read File',
-                schema: {
-                  name: 'read_file',
-                  parameters: { type: 'object', properties: {} },
-                },
-                build: vi.fn(),
-              };
-            }
-            return undefined;
-          }),
+    it.each(['headless', 'interactive'])(
+      'enforces the child tool whitelist through the %s scheduler owner',
+      async (mode) => {
+        const effects: string[] = [];
+        const readTool = new MockTool({
+          name: 'read_file',
+          execute: async () => {
+            effects.push('read');
+            return {
+              llmContent: 'read completed',
+              returnDisplay: 'read completed',
+            };
+          },
         });
-        const toolConfig: ToolConfig = { tools: ['read_file'] };
-
-        mockSendMessageStream.mockImplementation(
-          createMockStream([
-            [
-              {
-                id: 'call1',
-                name: 'read_file',
-                args: { file_path: 'README.md' },
-              },
-            ],
-            'stop',
-          ]),
-        );
-
-        (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
-          ...createCompletedToolCallResponse({
-            callId: 'call1',
-            responseParts: [{ text: 'file content' }],
-            resultDisplay: 'ok',
-            agentId: 'subagent-1',
-          }),
-        } as Awaited<ReturnType<typeof executeToolCall>>);
-
+        const writeTool = new MockTool({
+          name: 'write_file',
+          execute: async () => {
+            effects.push('write');
+            return {
+              llmContent: 'write completed',
+              returnDisplay: 'write completed',
+            };
+          },
+        });
+        const { config, toolRegistry, mcpRuntime } = await createMockConfig({
+          getTool: (name) =>
+            [readTool, writeTool].find((tool) => tool.name === name),
+          getEnabledTools: () => [readTool, writeTool],
+          getAllTools: () => [readTool, writeTool],
+        });
+        mcpRuntime.policyOwner.session.confirmation.addRule({
+          toolName: '*',
+          decision: PolicyDecision.ALLOW,
+          priority: 100,
+        });
+        const messageBus = mcpRuntime.messageBus;
+        const completed: Array<Awaited<ReturnType<typeof executeToolCall>>> =
+          [];
+        toolExecutorMock.mockImplementation(async (...args) => {
+          const result =
+            await realNonInteractiveToolExecutorModule.executeToolCall(...args);
+          completed.push(result);
+          return result;
+        });
         const runtimeBundle = createStatelessRuntimeBundle({
           toolRegistry,
           toolsView: {
-            listToolNames: () => ['read_file'],
-            getToolMetadata: () => ({
-              name: 'read_file',
-              description: 'Reads a file',
+            listToolNames: () => ['read_file', 'write_file'],
+            getToolMetadata: (name) => ({
+              name,
+              description: name,
               parameterSchema: { type: 'object', properties: {} },
             }),
           },
         });
-        const { overrides } = createRuntimeOverrides({
-          runtimeBundle,
-          toolRegistry,
-        });
-
+        mockSendMessageStream.mockImplementation(
+          createMockStream([
+            [{ id: 'read', name: 'read_file', args: {} }],
+            [{ id: 'write', name: 'write_file', args: {} }],
+            'stop',
+          ]),
+        );
         const scope = await SubAgentScope.create(
-          'stateless-agent',
+          'whitelisted-child',
           config,
-          { systemPrompt: 'Tool whitelist' },
+          { systemPrompt: 'Only read.' },
           defaultModelConfig,
           defaultRunConfig,
-          toolConfig,
+          { tools: ['read_file'] },
           undefined,
-          overrides,
+          {
+            ...createRuntimeOverrides(mcpRuntime.workspaceFilesystem.paths, {
+              runtimeBundle,
+              toolRegistry,
+            }).overrides,
+            messageBus,
+          },
         );
-
-        await scope.runNonInteractive(new ContextState());
-
-        const [toolExecutorConfig] = (
-          executeToolCall as Mock<typeof executeToolCall>
-        ).mock.calls[0];
-        const ephemerals = toolExecutorConfig.getEphemeralSettings();
-
-        return { ephemerals };
-      };
+        try {
+          if (mode === 'interactive') {
+            await scope.runInteractive(new ContextState());
+          } else {
+            await scope.runNonInteractive(new ContextState());
+          }
+          expect(effects).toStrictEqual(['read']);
+          expect(scope.output.final_message).toContain('write_file');
+          const expectedCompletions =
+            mode === 'headless'
+              ? [
+                  ['read_file', 'success', undefined],
+                  ['write_file', 'error', 'tool_disabled'],
+                ]
+              : [];
+          expect(
+            completed.map((call) => [
+              call.request.name,
+              call.status,
+              call.response.errorType,
+            ]),
+          ).toStrictEqual(expectedCompletions);
+        } finally {
+          toolExecutorMock.mockReset();
+        }
+      },
+    );
 
     it('never passes foreground Config into executeToolCall', async () => {
-      const { config } = await createMockConfig();
+      const { config, mcpRuntime } = await createMockConfig();
       const runtimeBundle = createStatelessRuntimeBundle();
-      const { overrides } = createRuntimeOverrides({ runtimeBundle });
+      const { overrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        { runtimeBundle },
+      );
 
       const scope = await SubAgentScope.create(
         'stateless-agent',
@@ -600,7 +662,7 @@ describe('subagent.ts', () => {
       (executeToolCall as Mock<typeof executeToolCall>).mockResolvedValue({
         ...createCompletedToolCallResponse({
           callId: 'call-1',
-          responseParts: [{ text: 'ok' }],
+          responseParts: [{ type: 'text', text: 'ok' }],
           resultDisplay: 'ok',
         }),
       } as unknown as Awaited<ReturnType<typeof executeToolCall>>);

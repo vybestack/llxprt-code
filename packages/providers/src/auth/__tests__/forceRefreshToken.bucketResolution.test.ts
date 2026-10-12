@@ -21,11 +21,11 @@
  * explicit bucket is supplied.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, vi } from 'bun:test';
 import { TokenAccessCoordinator } from '../token-access-coordinator.js';
 import type { OAuthProvider, OAuthToken, TokenStore } from '../types.js';
 import type { OAuthTokenRequestMetadata } from '@vybestack/llxprt-code-core';
-import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 const realLlxprtCodeCoreModule = {
   ...(await import('@vybestack/llxprt-code-core')),
@@ -154,6 +154,7 @@ function makeCoordinator(opts?: {
   provider?: OAuthProvider;
   oauthEnabled?: boolean;
   initialTokens?: Map<string, OAuthToken>;
+  profileName?: string;
 }) {
   const tokenStore = createMockTokenStore(opts?.initialTokens);
   const provider = opts?.provider;
@@ -162,6 +163,8 @@ function makeCoordinator(opts?: {
   const bucketManager = createMockBucketManager();
   const facade = createMockFacade();
 
+  const settings = new SettingsService();
+  settings.setCurrentProfileName(opts?.profileName ?? null);
   const coordinator = new TokenAccessCoordinator(
     tokenStore,
     registry as never,
@@ -169,7 +172,7 @@ function makeCoordinator(opts?: {
     bucketManager as never,
     facade as never,
     undefined,
-    undefined,
+    () => settings.getCurrentProfileName(),
   );
 
   return {
@@ -205,23 +208,6 @@ function getMyProfileSessionBucket(
 }
 
 describe('TokenAccessCoordinator forceRefreshToken bucket resolution (issue #2131)', () => {
-  beforeEach(() => {
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: () => undefined,
-      getProviderManager: () => ({
-        getProviderByName: () => null,
-      }),
-      getRuntimeContext: () => ({
-        runtimeId: 'test-runtime',
-      }),
-      getCurrentProfileName: () => null,
-    });
-  });
-
-  afterEach(() => {
-    oauthRuntimeBridge.setAccessors(undefined);
-  });
-
   it('forceRefreshToken refreshes the active session bucket when no bucket is supplied (issue #2131)', async () => {
     const bucketAToken = makeToken(FAILED_TOKEN, 3600, 'refresh-bucket-a');
     const initialTokens = new Map([['anthropic::bucket-a', bucketAToken]]);
@@ -369,16 +355,6 @@ describe('TokenAccessCoordinator forceRefreshToken bucket resolution (issue #213
     // UNSCOPED session bucket is undefined. This is the exact gap in the
     // original issue2131 resolver, which only consulted the unscoped session
     // bucket and thus defaulted to the global default bucket.
-    oauthRuntimeBridge.setAccessors({
-      getEphemeralSetting: () => undefined,
-      getProviderManager: () => ({
-        getProviderByName: () => null,
-      }),
-      getRuntimeContext: () => ({
-        runtimeId: 'test-runtime',
-      }),
-      getCurrentProfileName: () => 'my-profile',
-    });
 
     const scopedBucketToken = makeToken(FAILED_TOKEN, 3600, 'refresh-bucket-b');
     // Token seeded ONLY under the scoped bucket; default and unscoped buckets
@@ -388,6 +364,7 @@ describe('TokenAccessCoordinator forceRefreshToken bucket resolution (issue #213
     const { coordinator, tokenStore, facade } = makeCoordinator({
       provider,
       initialTokens,
+      profileName: 'my-profile',
     });
 
     // The scoped session bucket only resolves when metadata carries the active

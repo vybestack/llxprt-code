@@ -18,6 +18,7 @@ import {
   afterAll,
   type Mock,
 } from 'bun:test';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { ChatSession } from './chatSession.js';
 import {
   createContentGenerator,
@@ -143,8 +144,11 @@ describe('subagent.ts', () => {
     (
       ChatSession as unknown as Mock<(...args: never[]) => unknown>
     ).mockImplementation(
-      () =>
+      (runtime: AgentRuntimeContext) =>
         ({
+          getStreamTimeoutPolicy: () => runtime.readStreamTimeoutPolicy(),
+          shouldShowCitations: () => runtime.showCitations(),
+          getResolvedBaseUrl: () => undefined,
           sendMessageStream: mockSendMessageStream,
           recordCompletedToolCalls: vi.fn(),
           getHistory: vi.fn().mockReturnValue([]),

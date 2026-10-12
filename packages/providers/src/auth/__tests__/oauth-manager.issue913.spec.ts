@@ -1,3 +1,4 @@
+import { readFixtureSessionAuthPolicy } from './session-auth-policy-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -17,7 +18,8 @@ import { OAuthManager } from '../oauth-manager.js';
 import type { OAuthProvider, TokenStore, OAuthToken } from '../types.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import { PolicyEngine } from '@vybestack/llxprt-code-core/policy/policy-engine.js';
-import { oauthRuntimeBridge } from '../runtime-accessor-bridge.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 
 type StdinSetRawMode = typeof process.stdin.setRawMode;
 type StdinWithOptionalSetRawMode = NodeJS.ReadStream & {
@@ -146,7 +148,7 @@ function createMockProvider(name: string): OAuthProvider {
 /**
  * Mock ephemeral settings
  */
-const mockEphemeralSettings = new Map<string, unknown>();
+const mockEphemeralSettings = new SettingsService();
 
 function setMockEphemeralSetting<T>(key: string, value: T): void {
   mockEphemeralSettings.set(key, value);
@@ -155,8 +157,6 @@ function setMockEphemeralSetting<T>(key: string, value: T): void {
 function clearMockEphemeralSettings(): void {
   mockEphemeralSettings.clear();
 }
-
-// Register runtime accessors via the bridge
 
 describe('Issue 913: OAuth Manager Prompt Mode', () => {
   let tokenStore: TokenStore;
@@ -167,15 +167,8 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
     vi.clearAllMocks();
     clearMockEphemeralSettings();
 
-    oauthRuntimeBridge.setAccessors({
+    const config = createRuntimeConfigStub(new SettingsService(), {
       getEphemeralSetting: (key: string) => mockEphemeralSettings.get(key),
-      getProviderManager: () => ({
-        getProviderByName: () => null,
-      }),
-      getRuntimeContext: () => ({
-        runtimeId: 'test-runtime',
-      }),
-      getCurrentProfileName: () => null,
     });
 
     tokenStore = createMockTokenStore();
@@ -186,6 +179,10 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
       requestBucketAuthConfirmation: vi.fn().mockResolvedValue(true),
     } as unknown as MessageBus;
     manager = new OAuthManager(tokenStore, undefined, {
+      config,
+      readSessionAuthPolicy: readFixtureSessionAuthPolicy(
+        mockEphemeralSettings,
+      ),
       messageBus: mockMessageBus,
     });
     mockProvider = createMockProvider('anthropic');
@@ -194,7 +191,6 @@ describe('Issue 913: OAuth Manager Prompt Mode', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-    oauthRuntimeBridge.setAccessors(undefined);
   });
 
   describe('Single-Bucket Prompt Support', () => {

@@ -4,28 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/**
- * #2534 review Finding 6 (#2300 edge): Config constructor seeding of the
- * activeProvider store is ownership-scoped. A Config-OWNED settings service
- * (created fresh by applySettingsService) may be seeded with the requested
- * provider + model; a SHARED/injected service is never mutated — even when
- * it merely lacks an activeProvider key, because absence of that key is not
- * proof of freshness for a service carrying other injected state.
- */
-
-import { describe, it, expect, afterEach, vi } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
 import { Config } from './config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import process from 'process';
-
-const actual = { ...(await import('fs')) };
-void vi.mock('fs', () => ({
-  ...actual,
-  existsSync: vi.fn(() => true),
-  readFileSync: vi.fn(() => '{}'),
-  writeFileSync: vi.fn(),
-  mkdirSync: vi.fn(),
-}));
+import { SessionSettingsOwner } from '../session/session-settings-owner.js';
+import process from 'node:process';
 
 function baseParams(): ConstructorParameters<typeof Config>[0] {
   return {
@@ -37,22 +20,20 @@ function baseParams(): ConstructorParameters<typeof Config>[0] {
   };
 }
 
-describe('Config activeProvider seeding ownership (#2534 review Finding 6)', () => {
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it('seeds activeProvider + model into a Config-owned (fresh) settings service', () => {
+describe('Explicit session provider seeding ownership', () => {
+  it('seeds activeProvider and model only through the fresh session owner', () => {
     const config = new Config({
       ...baseParams(),
       provider: 'openai',
     });
-    const owned = config.getSettingsService();
+    const owned = new SettingsService();
+    const owner = new SessionSettingsOwner(owned);
+    owner.initializeProviderSelection(config.getProvider(), config.getModel());
     expect(owned.get('activeProvider')).toBe('openai');
     expect(owned.getProviderSettings('openai').model).toBe('seed-model');
   });
 
-  it('never seeds a shared/injected service that lacks activeProvider but carries other state', () => {
+  it('never seeds a shared/injected service that lacks activeProvider but carries other state', async () => {
     // The #2300 edge: "no activeProvider key" used to be read as "fresh
     // service", so a shared service carrying profile/provider state still
     // got activeProvider + model seeded into it by construction.
@@ -63,10 +44,16 @@ describe('Config activeProvider seeding ownership (#2534 review Finding 6)', () 
     const config = new Config({
       ...baseParams(),
       provider: 'gemini',
-      settingsService: shared,
+      initialSettings: shared.getAllGlobalSettings(),
     });
 
-    expect(config.getSettingsService()).toBe(shared);
+    expect(config.getProvider()).toBe('gemini');
+    const owner = new SessionSettingsOwner(shared);
+    owner.assertSettingsIdentity(shared);
+    expect(() => owner.assertSettingsIdentity(new SettingsService())).toThrow(
+      'Session settings adoption requires the original store',
+    );
+    await owner.dispose();
     // Neither the provider nor the model was seeded.
     expect(shared.get('activeProvider')).toBeUndefined();
     expect(shared.getProviderSettings('gemini')).toStrictEqual({});
@@ -91,11 +78,11 @@ describe('Config activeProvider seeding ownership (#2534 review Finding 6)', () 
     const config = new Config({
       ...baseParams(),
       provider: 'anthropic',
-      settingsService: bootstrapOwned,
-      settingsServiceOwnership: 'delegated',
+      initialSettings: bootstrapOwned.getAllGlobalSettings(),
     });
 
-    expect(config.getSettingsService()).toBe(bootstrapOwned);
+    const owner = new SessionSettingsOwner(bootstrapOwned);
+    owner.initializeProviderSelection(config.getProvider(), config.getModel());
     expect(bootstrapOwned.get('activeProvider')).toBe('anthropic');
     expect(bootstrapOwned.getProviderSettings('anthropic').model).toBe(
       'seed-model',
@@ -110,11 +97,11 @@ describe('Config activeProvider seeding ownership (#2534 review Finding 6)', () 
     const config = new Config({
       ...baseParams(),
       provider: 'anthropic',
-      settingsService: bootstrapOwned,
-      settingsServiceOwnership: 'delegated',
+      initialSettings: bootstrapOwned.getAllGlobalSettings(),
     });
 
-    // Delegation authorizes mutation; it does not clobber resolved state.
+    const owner = new SessionSettingsOwner(bootstrapOwned);
+    owner.initializeProviderSelection(config.getProvider(), config.getModel());
     expect(bootstrapOwned.get('activeProvider')).toBe('openai');
     expect(bootstrapOwned.getProviderSettings('openai').model).toBe(
       'gpt-existing',
@@ -131,7 +118,7 @@ describe('Config activeProvider seeding ownership (#2534 review Finding 6)', () 
     const config = new Config({
       ...baseParams(),
       provider: 'openai',
-      settingsService: shared,
+      initialSettings: shared.getAllGlobalSettings(),
     });
 
     expect(shared.get('activeProvider')).toBe('anthropic');

@@ -9,6 +9,8 @@ import type {
   ToolChoice,
   ToolDeclaration,
 } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import { BeforeToolSelectionHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import { applyToolSelectionHook } from './streamRequestHelpers.js';
 import { TurnProcessor } from './TurnProcessor.js';
@@ -36,28 +38,23 @@ type ProcessorVariant = {
 
 const STUB_MODEL = 'stub-model';
 
-function createHookConfig(
+function createHookExecution(
   toolChoice: ToolChoice | undefined,
   firedRequest: { request?: V2ToolSelectionRequest },
-): {
-  getEnableHooks: () => boolean;
-  getHookSystem: () => object;
-} {
+): HookExecutionOwner {
   return {
-    getEnableHooks: () => true,
-    getHookSystem: () => ({
-      initialize: async () => undefined,
-      isInitialized: () => true,
-      fireBeforeToolSelectionEvent: async (request: V2ToolSelectionRequest) => {
-        firedRequest.request = request;
-        return {
-          applyToolChoiceModifications: () => ({
-            tools: [],
-            ...(toolChoice !== undefined ? { toolChoice } : {}),
-          }),
-        };
-      },
-    }),
+    sessionId: () => 'tool-selection',
+    transcriptPath: () => undefined,
+    beforeToolSelection: async (request) => {
+      firedRequest.request = {
+        ...request,
+        contents: request.contents,
+        tools: request.tools ?? [],
+      };
+      return new BeforeToolSelectionHookOutput({
+        hookSpecificOutput: { toolChoice },
+      });
+    },
   };
 }
 
@@ -80,15 +77,15 @@ function makeVariant(
       const processor = Object.create(ProcessorClass.prototype) as unknown as {
         runtimeContext: { state: { model: string } };
         _applyToolSelectionHook: (
-          configForHooks: unknown,
           tools: ToolDeclaration[],
+          owner: HookExecutionOwner,
         ) => Promise<{ tools: ToolDeclaration[] }>;
       };
       processor.runtimeContext = { state: { model: STUB_MODEL } };
       const firedRequest: { request?: V2ToolSelectionRequest } = {};
       const result = await processor._applyToolSelectionHook(
-        createHookConfig(toolChoice, firedRequest),
         toolsFromConfig,
+        createHookExecution(toolChoice, firedRequest),
       );
       return { tools: result.tools, firedRequest: firedRequest.request };
     },
@@ -111,9 +108,9 @@ const streamVariant: ProcessorVariant = {
   applyToolSelectionHook: async (toolChoice, toolsFromConfig) => {
     const firedRequest: { request?: V2ToolSelectionRequest } = {};
     const result = await applyToolSelectionHook(
-      createHookConfig(toolChoice, firedRequest) as never,
       toolsFromConfig,
       STUB_MODEL,
+      createHookExecution(toolChoice, firedRequest),
     );
     return {
       tools: result.tools ?? [],

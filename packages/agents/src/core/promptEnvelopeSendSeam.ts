@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
+import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 /**
  * Prompt-envelope estimation at the final per-attempt send seam (issue #2817).
  *
@@ -14,19 +16,12 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type {
-  RuntimeGenerateChatOptions,
-  RuntimeProviderToolset,
-} from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
-import {
-  extractSystemInstructionText,
-  resolveUserMemory,
-} from './streamRequestHelpers.js';
+import { extractSystemInstructionText } from './streamRequestHelpers.js';
 
 export type { PromptEnvelopeEstimate };
 
@@ -57,8 +52,8 @@ export interface PreparedPromptEnvelopeSend {
 export function buildProviderChatOptions(
   requestContents: Iterable<IContent> | AsyncIterable<IContent>,
   tools: ToolDeclaration[] | undefined,
-  runtimeContext: ProviderRuntimeContext,
-  invocation: RuntimeGenerateChatOptions['invocation'],
+  metadata: Readonly<Record<string, unknown>> | undefined,
+  invocation: RuntimeInvocationContext,
   requestContext: Record<string, unknown> | undefined,
   systemInstruction: unknown,
   systemPromptAssembler?: RuntimeGenerateChatOptions['systemPromptAssembler'],
@@ -73,17 +68,12 @@ export function buildProviderChatOptions(
         }
       },
     },
-    tools: tools as RuntimeProviderToolset | undefined,
-    config: runtimeContext.config,
-    runtime: runtimeContext,
+    tools,
     invocation,
-    settings:
-      runtimeContext.settingsService as RuntimeGenerateChatOptions['settings'],
     metadata: {
-      ...runtimeContext.metadata,
+      ...metadata,
       _retryRequestContext: requestContext,
     },
-    userMemory: resolveUserMemory(runtimeContext.config),
     systemInstruction: extractSystemInstructionText(systemInstruction),
     ...(systemPromptAssembler !== undefined && { systemPromptAssembler }),
   };
@@ -103,6 +93,10 @@ export function buildProviderChatOptions(
 export async function prepareAtSendSeam(
   provider: RuntimeProvider,
   options: RuntimeGenerateChatOptions,
+  tokenizerFactory?: Pick<
+    RuntimeTokenizerFactory,
+    'estimatePrompt' | 'claimsModel' | 'getEstimatorFamily'
+  >,
 ): Promise<PreparedPromptEnvelopeSend> {
   if (typeof provider.projectPromptEnvelope !== 'function') {
     return { estimate: null, options };
@@ -112,12 +106,6 @@ export async function prepareAtSendSeam(
     return { estimate: null, options };
   }
   try {
-    const config = options.config ?? options.runtime?.config;
-    const getTokenizerFactory = config?.getTokenizerFactory;
-    const tokenizerFactory =
-      typeof getTokenizerFactory === 'function'
-        ? getTokenizerFactory.call(config)
-        : undefined;
     if (tokenizerFactory === undefined) {
       throw new Error(
         'Prompt-envelope projection requires the configured runtime prompt estimator factory',

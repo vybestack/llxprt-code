@@ -1,3 +1,4 @@
+import { buildToolGovernance } from '@vybestack/llxprt-code-tools';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -18,9 +19,8 @@ import type {
   AgentRuntimeContext,
   AgentRuntimeContextFactoryOptions,
   AgentRuntimeProviderAdapter,
+  ReadonlySettingsSnapshot,
 } from './AgentRuntimeContext.js';
-import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
-import type { RuntimeSettingsState } from './providerRuntimeContext.js';
 import {
   resolveEffectiveContextLimit,
   resolveProviderReportedLimit,
@@ -31,20 +31,20 @@ import {
   validateSetting,
 } from '@vybestack/llxprt-code-settings';
 
-const EPHEMERAL_DEFAULTS = {
+const EPHEMERAL_DEFAULTS = Object.freeze({
   compressionThreshold: 0.85,
   preserveThreshold: 0.4,
   topPreserveThreshold: 0.2,
   /** @plan PLAN-20251202-THINKING.P03b @requirement REQ-THINK-006 */
-  reasoning: {
+  reasoning: Object.freeze({
     enabled: true, // REQ-THINK-006.1
     includeInContext: true, // REQ-THINK-006.2
     includeInResponse: true, // REQ-THINK-006.3
     format: 'field' as const, // REQ-THINK-006.4
     stripFromContext: 'none' as const, // REQ-THINK-006.5
     fieldName: 'reasoning_content' as const, // issue #2488
-  },
-} as const;
+  }),
+} as const);
 
 /**
  * Widened view of factory options used at the external boundary so the
@@ -91,20 +91,12 @@ function validateRequiredOptions(options: BoundaryFactoryOptions): void {
  */
 function createGetLiveSetting(
   options: AgentRuntimeContextFactoryOptions,
-): <T>(key: string, snapshotValue: T | undefined) => T | undefined {
-  return <T>(key: string, snapshotValue: T | undefined): T | undefined => {
-    const providerRuntime = options.providerRuntime as
-      | { settingsService?: RuntimeSettingsState | null }
-      | undefined;
-    const settingsService = providerRuntime?.settingsService;
-    if (settingsService !== undefined && settingsService !== null) {
-      const liveValue = settingsService.get(key) as T | undefined;
-      if (liveValue !== undefined) {
-        return liveValue;
-      }
-    }
-    return snapshotValue;
-  };
+): <K extends keyof ReadonlySettingsSnapshot>(
+  key: K,
+  snapshotValue: ReadonlySettingsSnapshot[K],
+) => ReadonlySettingsSnapshot[K] {
+  return (key, snapshotValue) =>
+    options.readRuntimeSettings?.()[key] ?? snapshotValue;
 }
 
 /**
@@ -131,7 +123,7 @@ function resolveSemanticMediaPurgeSetting(
   getLiveSetting: ReturnType<typeof createGetLiveSetting>,
   options: AgentRuntimeContextFactoryOptions,
 ): 'off' | 'remove' | 'summary' {
-  const value = getLiveSetting<unknown>(
+  const value = getLiveSetting(
     'media.semantic-purge',
     options.settings['media.semantic-purge'],
   );
@@ -160,8 +152,8 @@ function buildCompressionEphemerals(
 ) {
   return {
     compressionThreshold: (): number => {
-      const liveThreshold = getLiveSetting<number>(
-        'compression-threshold',
+      const liveThreshold = getLiveSetting(
+        'compressionThreshold',
         options.settings.compressionThreshold,
       );
       const normalized =
@@ -171,8 +163,8 @@ function buildCompressionEphemerals(
       return normalized ?? EPHEMERAL_DEFAULTS.compressionThreshold;
     },
     contextLimit: (): number => {
-      const liveLimit = getLiveSetting<number>(
-        'context-limit',
+      const liveLimit = getLiveSetting(
+        'contextLimit',
         options.settings.contextLimit,
       );
       const providerContextLimit = resolveProviderContextLimit(
@@ -185,32 +177,33 @@ function buildCompressionEphemerals(
       );
     },
     preserveThreshold: (): number =>
-      options.settings.preserveThreshold ??
+      getLiveSetting('preserveThreshold', options.settings.preserveThreshold) ??
       EPHEMERAL_DEFAULTS.preserveThreshold,
     topPreserveThreshold: (): number =>
-      options.settings.topPreserveThreshold ??
-      EPHEMERAL_DEFAULTS.topPreserveThreshold,
+      getLiveSetting(
+        'topPreserveThreshold',
+        options.settings.topPreserveThreshold,
+      ) ?? EPHEMERAL_DEFAULTS.topPreserveThreshold,
     toolFormatOverride: (): string | undefined =>
-      options.settings.toolFormatOverride,
+      getLiveSetting('toolFormatOverride', options.settings.toolFormatOverride),
     /** @plan PLAN-20260211-COMPRESSION.P12 */
     compressionStrategy: (): string => {
-      const live = getLiveSetting<string>(
-        'compression.strategy',
+      const live = getLiveSetting(
+        'compressionStrategy',
         options.settings.compressionStrategy,
       );
-      return (
-        live ?? (getSettingSpec('compression.strategy')?.default as string)
-      );
+      const fallback = getSettingSpec('compression.strategy')?.default;
+      if (live !== undefined) return live;
+      if (typeof fallback !== 'string')
+        throw new Error('Missing compression strategy default');
+      return fallback;
     },
     /** @plan PLAN-20260211-COMPRESSION.P12 */
     compressionProfile: (): string | undefined =>
-      getLiveSetting<string>(
-        'compression.profile',
-        options.settings.compressionProfile,
-      ),
+      getLiveSetting('compressionProfile', options.settings.compressionProfile),
     ...buildDensityEphemerals(getLiveSetting, options),
     compressionVerification: (): boolean => {
-      const value = getLiveSetting<boolean>(
+      const value = getLiveSetting(
         'compressionVerification',
         options.settings.compressionVerification,
       );
@@ -238,42 +231,42 @@ function buildDensityEphemerals(
      * @pseudocode settings-factory.md lines 90-121
      */
     densityReadWritePruning: (): boolean => {
-      const value = getLiveSetting<boolean>(
+      const value = getLiveSetting(
         'compression.density.readWritePruning',
         options.settings['compression.density.readWritePruning'],
       );
       return typeof value === 'boolean' ? value : true;
     },
     densityFileDedupe: (): boolean => {
-      const value = getLiveSetting<boolean>(
+      const value = getLiveSetting(
         'compression.density.fileDedupe',
         options.settings['compression.density.fileDedupe'],
       );
       return typeof value === 'boolean' ? value : true;
     },
     densityRecencyPruning: (): boolean => {
-      const value = getLiveSetting<boolean>(
+      const value = getLiveSetting(
         'compression.density.recencyPruning',
         options.settings['compression.density.recencyPruning'],
       );
       return typeof value === 'boolean' ? value : false;
     },
     densityRecencyRetention: (): number => {
-      const value = getLiveSetting<number>(
+      const value = getLiveSetting(
         'compression.density.recencyRetention',
         options.settings['compression.density.recencyRetention'],
       );
       return typeof value === 'number' && value >= 1 ? value : 3;
     },
     densityCompressHeadroom: (): number => {
-      const value = getLiveSetting<number>(
+      const value = getLiveSetting(
         'compression.density.compressHeadroom',
         options.settings['compression.density.compressHeadroom'],
       );
       return typeof value === 'number' && value > 0 && value <= 1 ? value : 0.6;
     },
     densityOptimizeThreshold: (): number | undefined => {
-      const value = getLiveSetting<number>(
+      const value = getLiveSetting(
         'compression.density.optimizeThreshold',
         options.settings['compression.density.optimizeThreshold'],
       );
@@ -352,6 +345,17 @@ function buildReasoningEphemerals(
   };
 }
 
+function freezeProviderRuntime(
+  providerRuntime: AgentRuntimeContextFactoryOptions['providerRuntime'],
+) {
+  return Object.freeze({
+    ...providerRuntime,
+    metadata: providerRuntime.metadata
+      ? Object.freeze({ ...providerRuntime.metadata })
+      : undefined,
+  });
+}
+
 export function createAgentRuntimeContext(
   options: AgentRuntimeContextFactoryOptions,
 ): AgentRuntimeContext {
@@ -369,21 +373,59 @@ export function createAgentRuntimeContext(
     reasoning: buildReasoningEphemerals(getLiveSetting, options),
   };
 
-  const providerRuntime = Object.freeze({
-    ...options.providerRuntime,
-    metadata: options.providerRuntime.metadata
-      ? Object.freeze({ ...options.providerRuntime.metadata })
-      : undefined,
-  }) as ProviderRuntimeContext;
+  const providerRuntime = freezeProviderRuntime(options.providerRuntime);
 
   const context: AgentRuntimeContext = {
+    readPromptPolicy: () =>
+      options.readRuntimeSettings?.().promptPolicy ??
+      options.settings.promptPolicy ??
+      {},
+    readCompletionBudgetSetting: () =>
+      options.readRuntimeSettings?.().maxOutputTokens ??
+      options.settings.maxOutputTokens,
+    readPromptCachingPolicy: () =>
+      options.readRuntimeSettings?.().promptCaching ??
+      options.settings.promptCaching,
+    readToolExecutionPolicy: () => {
+      const policy =
+        options.readRuntimeSettings?.().toolExecutionPolicy ??
+        options.settings.toolExecutionPolicy;
+      if (policy === undefined)
+        throw new Error('Runtime requires explicit tool execution policy');
+      return policy;
+    },
+    readToolGovernance: () => {
+      const policy =
+        options.readRuntimeSettings?.().tools ?? options.settings.tools;
+      return buildToolGovernance({
+        getEphemeralSettings: () => ({
+          'tools.allowed': policy?.allowed,
+          'tools.disabled': policy?.disabled,
+        }),
+      });
+    },
+    readStreamTimeoutPolicy: () =>
+      options.readRuntimeSettings?.().streamTimeoutPolicy ??
+      options.settings.streamTimeoutPolicy ??
+      {},
+    showCitations: () =>
+      options.readRuntimeSettings?.().showCitations ??
+      options.settings.showCitations ??
+      false,
+    tokenUsageLoggingEnabled:
+      options.readRuntimeSettings?.().tokenUsageLoggingEnabled ??
+      options.settings.tokenUsageLoggingEnabled ??
+      true,
+    prepareProviderInvocation: options.prepareProviderInvocation,
     state: options.state,
     history,
     ephemerals,
     telemetry: options.telemetry,
+    requestDiagnostics: options.requestDiagnostics,
     provider: options.provider,
     tools: options.tools,
     providerRuntime,
+    promptEstimator: options.promptEstimator,
     ...(options.mediaStore === undefined
       ? {}
       : { mediaStore: options.mediaStore }),

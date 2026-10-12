@@ -29,7 +29,12 @@ import { vi } from 'bun:test';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import type * as acp from '@agentclientprotocol/sdk';
-import type { Config, IContent } from '@vybestack/llxprt-code-core';
+import { Config, type IContent } from '@vybestack/llxprt-code-core';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { installZedDefinitionFixture } from './__tests__/definition-fixture.js';
+import { createConnectionProviderManager } from './__tests__/connection-provider-fixture.js';
+import { unusedProfileApplication } from './test-profile-application.js';
 import type { Agent, AgentMessage } from '@vybestack/llxprt-code-agents';
 import type { ChatSessionFileLister } from './zed-session-loader.js';
 
@@ -43,6 +48,8 @@ import type { ZedAgent } from './zedIntegration.js';
  * resourceNotFound test deterministic. The RE-ATTACH probe (hasRecordedSessionFile)
  * uses the INJECTED lister below instead, so this path value is irrelevant to it.
  */
+const definitionFixture = installZedDefinitionFixture();
+
 const NONEXISTENT_CHATS_PARENT = path.join(
   os.tmpdir(),
   'llxprt-zed-loadsession-tests-nonexistent',
@@ -73,19 +80,10 @@ export function recordedFilesLister(
 
 export const mockFromConfig = vi.fn();
 
-const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
+export const actual = { ...(await import('@vybestack/llxprt-code-agents')) };
 void vi.mock('@vybestack/llxprt-code-agents', () => ({
   ...actual,
   fromConfig: (...args: unknown[]) => mockFromConfig(...args),
-}));
-
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  registerAgentRuntimeFactories: vi.fn(),
-  resetAgentRuntimeFactories: vi.fn(),
-  clearActiveModelParam: vi.fn(),
-  getActiveModelParams: vi.fn(),
-  loadProfileByName: vi.fn(),
-  setCliRuntimeContext: vi.fn(),
 }));
 
 interface StubAgentHandle {
@@ -126,10 +124,15 @@ export function buildStubAgent(options: {
       throw options.recordingError;
     }
   });
-  const dispose = vi.fn(async () => undefined);
+  const settingsOwner = new SessionSettingsOwner(new SettingsService());
+  const dispose = vi.fn(async () => settingsOwner.dispose());
   const getHistory = vi.fn(async () => options.liveHistory ?? []);
   const streamText = options.streamText;
   const agent = {
+    getModel: () => 'test-model',
+    getEphemeralSetting: (key: string) => settingsOwner.readNamedParameter(key),
+    setEphemeralSetting: (key: string, value: unknown) =>
+      settingsOwner.writeUserParameter(key, value),
     getApprovalMode: () => 'default',
     setApprovalMode: vi.fn(),
     dispose,
@@ -143,7 +146,12 @@ export function buildStubAgent(options: {
       }
       yield { type: 'done', reason: 'stop' };
     },
-    session: { resume, setRecording },
+    session: {
+      resume,
+      setRecording,
+      getRecordingTitle: () => undefined,
+      recordRecordingTitle: async () => undefined,
+    },
     tools: { respondToConfirmation: vi.fn() },
   } as unknown as Agent;
   return { agent, resume, setRecording, dispose, getHistory };
@@ -155,32 +163,15 @@ export function modelMessage(text: string): AgentMessage {
 }
 
 export function buildBaseConfig(): Config {
-  return {
-    getFileSystemService: () => ({
-      readTextFile: vi.fn(async () => 'base'),
-      writeTextFile: vi.fn(async () => undefined),
-    }),
-    getProviderManager: () => ({ id: 'base' }),
-    setProviderManager: vi.fn(),
-    getProfileManager: () => undefined,
-    getEphemeralSetting: () => undefined,
-    getDebugMode: () => false,
-    getTargetDir: () => '/project',
-    getProjectRoot: () => '/project',
-    getMaxSessionTurns: () => 50,
-    // No recording service in loadSession tests — the session lifecycle under
-    // test does not depend on session recording (only the re-attach/resume
-    // probes and session-info hydration paths are exercised here).
-    getSessionRecordingService: () => undefined,
-    // The re-attach + corrupt-vs-missing probes derive the chats dir from
-    // storage.getProjectChatsDir(); point it at a dir that never exists so the
-    // disk-resume probe's REAL readdir hits ENOENT (falling back to the plain
-    // mapping) while the injected re-attach lister decides the re-attach branch.
-    storage: {
-      getProjectTempDir: () => NONEXISTENT_CHATS_PARENT,
-      getProjectChatsDir: () => path.join(NONEXISTENT_CHATS_PARENT, 'chats'),
-    },
-  } as unknown as Config;
+  return new Config({
+    sessionId: 'base',
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    storageRoot: NONEXISTENT_CHATS_PARENT,
+    model: 'test-model',
+    debugMode: false,
+    maxSessionTurns: 50,
+  });
 }
 
 /** Typed InitializeRequest for a client that advertises no capabilities. */
@@ -188,20 +179,34 @@ export function buildInitializeRequest(): acp.InitializeRequest {
   return { protocolVersion: 1, clientCapabilities: {} };
 }
 
+export async function makeUninitializedZedAgent(
+  connection: RecordingConnection,
+  sessionFileLister?: ChatSessionFileLister,
+): Promise<ZedAgent> {
+  const mod = await import('./zedIntegration.js');
+  const config = buildBaseConfig();
+  const settingsService = new SettingsService();
+  return new mod.ZedAgent(
+    config,
+    connection as unknown as acp.AgentSideConnection,
+    unusedProfileApplication,
+    createConnectionProviderManager(config, settingsService),
+    () => new SettingsService({ sessionSource: settingsService }),
+    sessionFileLister,
+    definitionFixture(),
+  );
+}
+
 /**
  * Constructs a ZedAgent over the RecordingConnection with typed stub args (no
- * `as never`, F14) and initializes it. Shared by every orchestration test,
- * including the initialize()-advertises-loadSession assertion (F15) so the
- * makeZedAgent setup is not duplicated.
+ * `as never`, F14) and initializes it. Shared by every orchestration test.
  */
 export async function makeZedAgent(
   connection: RecordingConnection,
   sessionFileLister?: ChatSessionFileLister,
 ): Promise<ZedAgent> {
-  const mod = await import('./zedIntegration.js');
-  const zedAgent = new mod.ZedAgent(
-    buildBaseConfig(),
-    connection as unknown as acp.AgentSideConnection,
+  const zedAgent = await makeUninitializedZedAgent(
+    connection,
     sessionFileLister,
   );
   await zedAgent.initialize(buildInitializeRequest());

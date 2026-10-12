@@ -44,7 +44,7 @@ describe('createProviderCallOptions', () => {
 
     expect(options.invocation).toBeDefined();
     expect(options.invocation.runtimeId).toMatch(/^openai\.runtime\./);
-    expect(options.invocation.settings).toBe(settings);
+    expect(Object.keys(options.invocation)).not.toContain('settings');
     expect(options.invocation.ephemerals['global-setting']).toBe('enabled');
     expect(options.invocation.ephemerals.openai).toMatchObject({
       temperature: 0.42,
@@ -63,7 +63,7 @@ describe('createProviderCallOptions', () => {
       runtimeId: 'custom-runtime',
     });
 
-    expect(options.runtime.runtimeId).toBe('custom-runtime');
+    expect(options.invocation.runtimeId).toBe('custom-runtime');
     expect(options.metadata).toMatchObject({
       source: 'test-utils#createProviderCallOptions',
       explicit: true,

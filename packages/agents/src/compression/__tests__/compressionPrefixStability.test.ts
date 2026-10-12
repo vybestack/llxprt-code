@@ -403,7 +403,13 @@ describe('A3: completion-budget trigger arithmetic (#3070 Defect A)', () => {
     const { settingsService } =
       densityFixture3_observeThrowsWhenALiveMaxOutputTokensSettingContextLimit();
     expect(() =>
-      getCompletionBudget({}, 'm', undefined, settingsService, 50_000),
+      getCompletionBudget(
+        {},
+        'm',
+        undefined,
+        settingsService.get('maxOutputTokens'),
+        50_000,
+      ),
     ).toThrow(InvalidContextBudgetError);
   });
 

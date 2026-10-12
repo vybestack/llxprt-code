@@ -14,12 +14,21 @@
  * limitations under the License.
  */
 
+import { getRequestSignal } from '../utils/abortSignal.js';
+import { prepareKimiProviderFiles } from './kimi-provider-file-preparation.js';
+import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { readInvocationPolicyRecord } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { captureResponsesRequest } from '../openai-responses/responses-request.js';
 /**
  * @plan PLAN-20250120-DEBUGLOGGING.P15
  * @requirement REQ-INT-001.1
  */
 
 import type OpenAI from 'openai';
+import {
+  logOpenAIChatTools,
+  logOpenAIRequestDiagnostics,
+} from './openai-request-diagnostics.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 
@@ -84,11 +93,12 @@ import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacemen
 import {
   finishMediaRequest,
   type MediaRequestOutcome,
+  resolveRequestMedia,
+  captureRequestMediaInput,
 } from '../utils/request-media-resolution.js';
 import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import { resolveRawTokenDeltaNotifier } from '../logging/attemptLifecycle.js';
 import type { ModelDefaultRule } from '../composition/providerAliases.js';
-import { processKimiMediaPrepass } from './OpenAIKimiMediaPrepass.js';
 import { createUnallowedModelParametersResolver as makeResolver } from '../openai-responses/unallowedModelParameters.js';
 
 import { buildContinuationMessages } from './OpenAIRequestBuilder.js';
@@ -129,6 +139,9 @@ interface DispatchResponseOptions {
 }
 
 export class OpenAIProvider extends BaseProvider implements IProvider {
+  protected requestProviderFileLifecycle?: object;
+  protected requestProviderFileBindings?: ProviderFileBindingStore;
+  protected requestWorkspaceDirectory?: string;
   private readonly textToolParser = new GemmaToolCallParser();
   private readonly toolCallPipeline = new ToolCallPipeline();
   private readonly preparedPromptEnvelopes = new OpenAIPromptEnvelopeStore();
@@ -192,58 +205,80 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     return {
       providerName: this.name,
       logger: new DebugLogger('llxprt:provider:openai'),
-      getProviderBaseURL: (options) => this.resolveEffectiveBaseURL(options),
-      getCustomHeaders: (options) => this.getCustomHeaders(options),
       isCodexMode: () => false,
       getCodexAccountId: async () => {
         throw new Error('Codex account ID not available for OpenAIProvider');
       },
       resolveAuthTokenForPrompt: async () => this.getAuthTokenForPrompt(),
       shouldRetryOnError: (error) => this.shouldRetryResponse(error),
-      getDefaultModel: () => this.getDefaultModel(),
       getMediaTransportCapabilities: () =>
         this.name === 'openai'
           ? declaredMediaTransportCapabilities('openai-responses')
           : this.getMediaTransportCapabilities(),
-      getGlobalConfig: () => undefined,
       getUnallowedModelParameters: this.getUnallowedModelParameters,
     };
   }
 
+  private captureRequestMedia(
+    options: NormalizedGenerateChatOptions,
+  ): Parameters<typeof resolveRequestMedia>[0] {
+    return captureRequestMediaInput(
+      options.metadata['logicalRequestId'],
+      options.invocation.runtimeId,
+      this.requestMediaBudgetBytes,
+      this.requestMediaResolver,
+    );
+  }
+
+  private captureResponsesRequest(
+    options: NormalizedGenerateChatOptions,
+  ): ReturnType<typeof captureResponsesRequest> {
+    return captureResponsesRequest(
+      options,
+      this.name,
+      this.resolveEffectiveBaseURL(options) ?? 'https://api.openai.com/v1',
+      this.getCustomHeaders(options),
+      this.getDefaultModel(),
+      this.requestMediaResolver,
+      this.requestMediaBudgetBytes,
+    );
+  }
+
   private resolveOpenAIResponsesEnabled(
-    settingsService = this.resolveSettingsService(),
+    policy = this.captureOwnerPolicy(),
   ): boolean | undefined {
-    const providerValue = settingsService.getProviderSettings(this.name)[
+    const providerValue = readInvocationPolicyRecord(policy[this.name])[
       'openaiResponsesEnabled'
     ];
     if (typeof providerValue === 'boolean') {
       return providerValue;
     }
 
-    const globalValue = settingsService.get('openaiResponsesEnabled');
+    const globalValue = policy['openaiResponsesEnabled'];
     if (typeof globalValue === 'boolean') {
       return globalValue;
     }
 
-    return this.providerConfig?.openaiResponsesEnabled;
+    const defaults = this.captureOwnerDefaults();
+    const configured = defaults['openaiResponsesEnabled'];
+    return typeof configured === 'boolean' ? configured : undefined;
   }
 
   private resolveTransport(
     model: string,
     baseURL: string | undefined,
-    settingsService = this.resolveSettingsService(),
+    policy = this.captureOwnerPolicy(),
   ): { useResponses: boolean } {
-    const providerSettings = settingsService.getProviderSettings(this.name);
+    const providerSettings = readInvocationPolicyRecord(policy[this.name]);
     const explicitMode = resolveExplicitTransportModeFromSources(
       providerSettings,
-      () => settingsService.get('responses-mode') as string | undefined,
+      () => policy['responses-mode'] as string | undefined,
     );
     return resolveOpenAITransport({
       model,
       baseURL,
       explicitMode,
-      openaiResponsesEnabled:
-        this.resolveOpenAIResponsesEnabled(settingsService),
+      openaiResponsesEnabled: this.resolveOpenAIResponsesEnabled(policy),
     });
   }
 
@@ -255,9 +290,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     options: NormalizedGenerateChatOptions,
   ): Promise<OpenAI> {
     const baseURL = options.resolved.baseURL ?? this.baseProviderConfig.baseURL;
-    const requiresAuth = options.settings.getProviderSettings(this.name)[
-      'requires-auth'
-    ];
+    const requiresAuth = options.invocation.getProviderOverrides<
+      Record<string, unknown>
+    >(this.name)?.['requires-auth'];
     const authExempt = requiresAuth === false || isLocalEndpoint(baseURL);
     let authToken = '';
     try {
@@ -281,7 +316,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
 
     const agentSettings = options.invocation.ephemerals;
-    const agents = createHttpAgents(agentSettings);
+    const agents = createHttpAgents({ ...agentSettings });
 
     // Apply invocation/provider header overrides at client construction time.
     // Some OpenAI-compatible gateways (e.g., Kimi For Coding) enforce allowlisting
@@ -320,8 +355,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       // Local endpoints often work without authentication
       const authToken = await this.getAuthToken();
       const baseURL = this.getBaseURL();
-      const agentSettings = this.providerConfig?.getEphemeralSettings?.() ?? {};
-      const agents = createHttpAgents(agentSettings);
+      const agentSettings = this.providerConfig?.readConnectionPolicy?.() ?? {};
+      const agents = createHttpAgents({ ...agentSettings });
       const client = instantiateClient(authToken, baseURL, agents);
 
       const modelsEndpoint = `${baseURL ?? 'https://api.openai.com/v1'}/models`;
@@ -409,7 +444,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     try {
       const nonOAuthToken = await this.authResolver.resolveAuthentication({
-        settingsService: this.resolveSettingsService(),
         includeOAuth: false,
       });
       if (typeof nonOAuthToken === 'string' && nonOAuthToken.trim() !== '') {
@@ -449,6 +483,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * @requirement:REQ-SP4-002
    * Generate chat completion with per-call client instantiation.
    */
+  private resolveAdmittedTransport(
+    options: NormalizedGenerateChatOptions,
+  ): ReturnType<OpenAIProvider['resolveTransport']> {
+    return this.resolveTransport(
+      options.resolved.model,
+      options.resolved.baseURL,
+      options.invocation.ephemerals,
+    );
+  }
+
   protected override async *generateChatCompletionWithOptions(
     callOptions: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
@@ -461,10 +505,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     // silently transported as an empty prompt.
     requireAssembledSystemInstruction(options.systemInstruction);
 
-    const model = options.resolved.model || this.getModel();
-    const baseURL = options.resolved.baseURL ?? this.baseProviderConfig.baseURL;
-
-    const decision = this.resolveTransport(model, baseURL);
+    const decision = this.resolveAdmittedTransport(options);
     const prepared = this.preparedPromptEnvelopes.get(
       options.promptEnvelopeTransportToken,
     );
@@ -489,7 +530,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         return;
       }
       yield* executeOpenAIResponsesRequest(
-        await withResponsesRows(options, prepared !== undefined),
+        this.captureResponsesRequest(
+          await withResponsesRows(options, prepared !== undefined),
+        ),
         this.buildResponsesExecutorDeps(),
         prepared?.requestContext,
       );
@@ -505,7 +548,11 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       return;
     }
 
-    const mediaRequest = await resolveChatMediaRequest(options, prepared);
+    const mediaRequest = await resolveChatMediaRequest(
+      options,
+      prepared,
+      this.captureRequestMedia(options),
+    );
     let outcome: MediaRequestOutcome = { status: 'succeeded' };
     try {
       const effectiveOptions = {
@@ -516,7 +563,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       const client = await this.getClient(effectiveOptions);
       const runtimeKey = resolveRuntimeKey(effectiveOptions);
       const logger = new DebugLogger('llxprt:provider:openai');
-      this.logChatTools(effectiveOptions, runtimeKey, logger);
+      logOpenAIChatTools(effectiveOptions, runtimeKey, logger);
 
       yield* this.generateChatCompletionImpl(
         effectiveOptions,
@@ -533,27 +580,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     }
   }
 
-  private logChatTools(
-    options: NormalizedGenerateChatOptions,
-    runtimeKey: string,
-    logger: DebugLogger,
-  ): void {
-    if (!logger.enabled) return;
-    const { tools } = options;
-    logger.debug(
-      () => '[OpenAIProvider] generateChatCompletion received tools:',
-      {
-        hasTools: !!tools,
-        toolsLength: tools?.length,
-        toolsType: typeof tools,
-        isArray: Array.isArray(tools),
-        firstToolName: tools?.[0]?.name,
-        toolsStructure: tools ? 'available' : 'undefined',
-        runtimeKey,
-      },
-    );
-  }
-
   /**
    * @plan:PLAN-20251023-STATELESS-HARDENING.P08
    * @requirement:REQ-SP4-003
@@ -561,8 +587,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    */
   override getModelParams(): Record<string, unknown> | undefined {
     try {
-      const settingsService = this.resolveSettingsService();
-      const providerSettings = settingsService.getProviderSettings(this.name);
+      const providerSettings = readInvocationPolicyRecord(
+        this.captureOwnerPolicy()[this.name],
+      );
 
       return extractOpenAIModelParams(providerSettings);
     } catch (error) {
@@ -582,47 +609,17 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
   private logRequestContext(
     options: NormalizedGenerateChatOptions,
-    requestContext: {
-      model: string;
-      detectedFormat: string;
-      formattedTools: unknown[] | undefined;
-      streamingEnabled: boolean;
-      requestBody: OpenAI.Chat.ChatCompletionCreateParams;
-      messagesWithSystem: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
-    },
+    requestContext: Awaited<ReturnType<typeof prepareRequest>>,
     baseURL: string | undefined,
     logger: DebugLogger,
   ): void {
-    if (!logger.enabled) return;
-    const { metadata } = options;
-    const resolved = options.resolved;
-    logger.debug(() => `[OpenAIProvider] Resolved request context`, {
-      provider: this.name,
-      model: requestContext.model,
-      resolvedModel: resolved.model,
-      resolvedBaseUrl: resolved.baseURL,
-      authTokenPresent: Boolean(resolved.authToken),
-      messageCount: options.contents.length,
-      toolCount: options.tools?.length ?? 0,
-      metadataKeys: Object.keys(metadata),
-    });
-    logger.debug(() => `[OpenAIProvider] Sending chat request`, {
-      model: requestContext.model,
-      baseURL: baseURL ?? this.getBaseURL(),
-      streamingEnabled: requestContext.streamingEnabled,
-      toolCount: requestContext.formattedTools?.length ?? 0,
-      hasAuthToken: Boolean(resolved.authToken),
-      messageCount: requestContext.messagesWithSystem.length,
-    });
-    if ('tools' in requestContext.requestBody) {
-      logger.debug(() => `[OpenAIProvider] Exact tools being sent to API:`, {
-        toolCount: requestContext.requestBody.tools?.length,
-        toolNames: requestContext.requestBody.tools?.map((t) =>
-          'function' in t ? t.function.name : undefined,
-        ),
-        firstTool: requestContext.requestBody.tools?.[0],
-      });
-    }
+    logOpenAIRequestDiagnostics(
+      this.name,
+      options,
+      requestContext,
+      () => baseURL ?? this.getBaseURL(),
+      logger,
+    );
   }
 
   private async *dispatchResponse(
@@ -672,7 +669,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Kimi-only media pre-pass (see {@link processKimiMediaPrepass}).
+   * Kimi-only media pre-pass (see {@link prepareKimiProviderFiles}).
    */
   private maybeProcessKimiMedia(
     options: NormalizedGenerateChatOptions,
@@ -680,13 +677,17 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     logger: DebugLogger,
     mediaRequest: ResolvedMediaRequest,
   ): Promise<NormalizedGenerateChatOptions> {
-    return processKimiMediaPrepass(options, client, logger, mediaRequest, {
-      providerName: this.name,
-      mediaSupport: readOpenAIMediaSupport(
-        this.providerConfig?.providerSpecific,
-      ),
-      capabilities: this.getMediaTransportCapabilities(),
-    });
+    return prepareKimiProviderFiles(
+      options,
+      client,
+      logger,
+      mediaRequest,
+      this.name,
+      this.getMediaTransportCapabilities(),
+      this.requestProviderFileBindings,
+      this.requestProviderFileLifecycle,
+      this.requestWorkspaceDirectory,
+    );
   }
 
   private async *generateChatCompletionImpl(
@@ -697,7 +698,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     mediaRequest: ResolvedMediaRequest,
     preparedRequestContext?: Awaited<ReturnType<typeof prepareRequest>>,
   ): AsyncGenerator<IContent, void, unknown> {
-    const abortSignal = options.metadata.abortSignal as AbortSignal | undefined;
+    const abortSignal = getRequestSignal(options);
     const ephemeralSettings = (
       options.invocation as { ephemerals?: Readonly<Record<string, unknown>> }
     ).ephemerals;
@@ -759,9 +760,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       getBaseURL: () => this.getBaseURL(),
     });
 
-    const reasoningFieldName = options.settings.get('reasoning.fieldName') as
-      | string
-      | undefined;
+    const reasoningFieldName = options.invocation.getEphemeral<string>(
+      'reasoning.fieldName',
+    );
 
     yield* this.dispatchResponse({
       response,
@@ -792,11 +793,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const useResponses = this.resolveTransport(
       normalized.resolved.model,
       normalized.resolved.baseURL ?? this.baseProviderConfig.baseURL,
-      normalized.settings,
+      normalized.invocation.ephemerals,
     ).useResponses;
     const projected = useResponses
       ? await withResponsesRows(normalized, false)
       : normalized;
+    const request = this.captureResponsesRequest(projected);
     return prepareOpenAIPromptProjection({
       normalized: projected,
       ...(readsRequestRowsAtTransport(normalized)
@@ -809,25 +811,32 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         : {}),
       useResponses,
       store: this.preparedPromptEnvelopes,
-      responsesPdfEnabled: isResponsesPdfEnabled(projected),
+      responsesPdfEnabled: isResponsesPdfEnabled(request),
       prepareResponses: () =>
         buildResponsesRequestContextForProjection(
-          projected,
+          request,
           this.buildResponsesExecutorDeps(),
         ),
       prepareChat: () =>
-        prepareOpenAIChatProjection(normalized, this.chatProjectionDeps()),
+        prepareOpenAIChatProjection(
+          normalized,
+          this.chatProjectionDeps(normalized),
+          this.requestMediaResolver,
+          this.requestMediaBudgetBytes,
+        ),
       collectUnsupported: (preparedOptions, supports) =>
         collectUnsupportedMedia(preparedOptions.contents, supports),
     });
   }
 
-  private chatProjectionDeps(): Parameters<
-    typeof prepareOpenAIChatProjection
-  >[1] {
+  private chatProjectionDeps(
+    normalized: NormalizedGenerateChatOptions,
+  ): Parameters<typeof prepareOpenAIChatProjection>[1] {
     return {
       readMediaSupport: () =>
-        readOpenAIMediaSupport(this.providerConfig?.providerSpecific),
+        readOpenAIMediaSupport(
+          normalized.invocation.providerDefaults.providerSpecific,
+        ),
       getClient: (clientOptions) => this.getClient(clientOptions),
       resolveAuthToken: (authOptions) =>
         this.resolveProjectionAuthToken(authOptions),
@@ -847,9 +856,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
   override getToolFormat(): string {
     const modelName = this.getModel() || this.getDefaultModel();
-    const settings = this.resolveSettingsService();
+    const settings = readInvocationPolicyRecord(
+      this.captureOwnerPolicy()[this.name],
+    );
     const logger = new DebugLogger('llxprt:provider:openai');
-    const format = resolveToolFormat(modelName, this.name, settings, logger);
+    const format = resolveToolFormat(
+      modelName,
+      this.name,
+      settings.toolFormat,
+      logger,
+    );
     logger.debug(() => `getToolFormat() called, returning: ${format}`, {
       provider: this.name,
       model: this.getModel(),

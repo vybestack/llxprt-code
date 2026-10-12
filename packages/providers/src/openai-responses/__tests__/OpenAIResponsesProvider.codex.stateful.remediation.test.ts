@@ -1,3 +1,4 @@
+import { captureResponsesTestRequest } from '../responses-request.test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -195,7 +196,10 @@ function registerCodexRemediationCase2(): void {
           ];
           await drainHarness(
             executeOpenAIResponsesRequest(
-              buildOptions(contents),
+              captureResponsesTestRequest(
+                buildOptions(contents),
+                buildDeps({ getWebSocketTransport: () => transport }),
+              ),
               buildDeps({ getWebSocketTransport: () => transport }),
             ),
           );
@@ -241,7 +245,10 @@ function registerCodexRemediationCase3(): void {
           };
           await drainHarness(
             executeOpenAIResponsesRequest(
-              buildOptions(contents, ephemerals),
+              captureResponsesTestRequest(
+                buildOptions(contents, ephemerals),
+                buildDeps({ getWebSocketTransport: () => transport }),
+              ),
               buildDeps({ getWebSocketTransport: () => transport }),
             ),
           );
@@ -285,7 +292,10 @@ function registerCodexRemediationCase4(): void {
           ];
           await drainHarness(
             executeOpenAIResponsesRequest(
-              buildOptions(contents),
+              captureResponsesTestRequest(
+                buildOptions(contents),
+                buildDeps({ getWebSocketTransport: () => transport }),
+              ),
               buildDeps({ getWebSocketTransport: () => transport }),
             ),
           );
@@ -333,7 +343,10 @@ function registerCodexRemediationCase5(): void {
           };
           await drainHarness(
             executeOpenAIResponsesRequest(
-              buildOptions(contents, ephemerals),
+              captureResponsesTestRequest(
+                buildOptions(contents, ephemerals),
+                buildDeps({ getWebSocketTransport: () => transport }),
+              ),
               buildDeps({ getWebSocketTransport: () => transport }),
             ),
           );
@@ -381,7 +394,10 @@ function registerCodexRemediationCase6(): void {
           };
           await drainHarness(
             executeOpenAIResponsesRequest(
-              buildOptions(contents, ephemerals),
+              captureResponsesTestRequest(
+                buildOptions(contents, ephemerals),
+                buildDeps({ getWebSocketTransport: () => transport }),
+              ),
               buildDeps({ getWebSocketTransport: () => transport }),
             ),
           );
@@ -414,7 +430,10 @@ function registerCodexRemediationCase7(): void {
           ];
           const messages = await drainHarness(
             executeOpenAIResponsesRequest(
-              buildOptions(contents, { 'responses-stateful': false }),
+              captureResponsesTestRequest(
+                buildOptions(contents, { 'responses-stateful': false }),
+                buildDeps({ getWebSocketTransport: () => transport }),
+              ),
               buildDeps({ getWebSocketTransport: () => transport }),
             ),
           );
@@ -475,7 +494,10 @@ function registerCodexRemediationCase8(): void {
           ];
           await drainHarness(
             executeOpenAIResponsesRequest(
-              buildOptions(contents),
+              captureResponsesTestRequest(
+                buildOptions(contents),
+                buildDeps({ getWebSocketTransport: () => transport }),
+              ),
               buildDeps({ getWebSocketTransport: () => transport }),
             ),
           );
@@ -531,7 +553,10 @@ function registerCodexRemediationCase9(): void {
           ];
           const turn1Output = await drainHarness(
             executeOpenAIResponsesRequest(
-              buildOptions(turn1Contents),
+              captureResponsesTestRequest(
+                buildOptions(turn1Contents),
+                buildDeps({ getWebSocketTransport: () => transport1 }),
+              ),
               buildDeps({ getWebSocketTransport: () => transport1 }),
             ),
           );
@@ -579,7 +604,10 @@ function registerCodexRemediationCase9(): void {
           try {
             await drainHarness(
               executeOpenAIResponsesRequest(
-                buildOptions(turn2Contents),
+                captureResponsesTestRequest(
+                  buildOptions(turn2Contents),
+                  buildDeps({ getWebSocketTransport: () => transport2 }),
+                ),
                 buildDeps({ getWebSocketTransport: () => transport2 }),
               ),
             );
@@ -631,8 +659,9 @@ function registerCodexRemediationCase10(): void {
         config: createRuntimeConfigStub(settings),
       });
       const invocation = createRuntimeInvocationContext({
-        runtime,
-        settings,
+        runtimeId: runtime.runtimeId,
+        runtimeMetadata: runtime.metadata,
+
         providerName: provider.name,
         ephemeralsSnapshot: { 'responses-stateful': false },
       });

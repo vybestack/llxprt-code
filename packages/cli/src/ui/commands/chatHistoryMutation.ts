@@ -6,6 +6,7 @@ import {
   MediaAdmissionService,
   HistoryMediaIndex,
   collectMediaReferences,
+  clientMediaStore,
   type IContent,
   type SessionRecordingService,
   type AgentClientContract,
@@ -189,11 +190,11 @@ export async function mutateChatHistory(
   recording: SessionRecordingService,
   turns?: number,
 ): Promise<MessageActionReturn | void> {
-  const client = context.services.config?.getAgentClient();
+  const client = context.services.agent?.agentClient;
   if (client === undefined) throw new Error('Chat client is unavailable');
   const media: SnapshotMedia = {
     references: new HistoryMediaIndex(),
-    store: context.services.config?.getLocalMediaStore(),
+    store: clientMediaStore(client),
     owner: `chat-mutation:${randomUUID()}`,
   };
   const rows = new HistoryDensityRows();

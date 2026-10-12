@@ -58,7 +58,7 @@ async function backpressure(size: number, active: boolean): Promise<number> {
       checkpointTool,
       dir,
       checkpointGit,
-      fixture.config.getAgentClient(),
+      fixture.client,
       checkpointUiHistory,
       () => {},
       sink.ops,

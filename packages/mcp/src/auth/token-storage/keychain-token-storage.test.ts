@@ -5,17 +5,11 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
-import {
-  KeychainTokenStorage,
-  setKeytarLoader,
-  resetKeytarLoader,
-} from './keychain-token-storage.js';
+import { KeychainTokenStorage } from './keychain-token-storage.js';
 import type { OAuthCredentials } from './types.js';
-import { registerMcpHostServices } from '../../host/hostServices.js';
 
 // Exercises the real host seam instead of mocking a module (#3305).
 const mockEmitFeedback = vi.fn();
-registerMcpHostServices({ emitFeedback: mockEmitFeedback });
 
 // Create mock keytar functions
 const mockKeytar = {
@@ -39,13 +33,14 @@ describe('KeychainTokenStorage', () => {
 
   beforeEach(async () => {
     vi.resetAllMocks();
-    // Inject the mock keytar via setKeytarLoader
-    setKeytarLoader(() => Promise.resolve(mockKeytar));
-    storage = new KeychainTokenStorage(mockServiceName);
+    storage = new KeychainTokenStorage(
+      mockServiceName,
+      mockEmitFeedback,
+      async () => mockKeytar,
+    );
   });
 
   afterEach(() => {
-    resetKeytarLoader();
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
@@ -59,6 +54,71 @@ describe('KeychainTokenStorage', () => {
     },
     updatedAt: Date.now(),
   };
+
+  it('keeps a delayed failing loader separate from another store and caches each result', async () => {
+    let resolveRelease!: () => void;
+    const release = {
+      promise: new Promise<void>((resolve) => {
+        resolveRelease = resolve;
+      }),
+      resolve: (): void => resolveRelease(),
+    };
+    const passwords = new Map<string, string>();
+    let failedLoads = 0;
+    let healthyLoads = 0;
+    const failed = new KeychainTokenStorage(
+      'shared-service',
+      undefined,
+      async () => {
+        failedLoads += 1;
+        await release.promise;
+        throw new Error("Cannot find module 'keytar'");
+      },
+    );
+    const healthy = new KeychainTokenStorage(
+      'shared-service',
+      undefined,
+      async () => {
+        healthyLoads += 1;
+        return {
+          default: {
+            getPassword: async (service: string, account: string) =>
+              passwords.get(`${service}/${account}`) ?? null,
+            setPassword: async (
+              service: string,
+              account: string,
+              password: string,
+            ): Promise<void> => {
+              passwords.set(`${service}/${account}`, password);
+            },
+            deletePassword: async (service: string, account: string) =>
+              passwords.delete(`${service}/${account}`),
+            findCredentials: async () => [],
+          },
+        };
+      },
+    );
+    const failedAvailability = failed.isAvailable();
+    try {
+      expect(await healthy.isAvailable()).toBe(true);
+      await healthy.setCredentials(validCredentials);
+      expect(
+        (await healthy.getCredentials(validCredentials.serverName))?.token,
+      ).toStrictEqual(validCredentials.token);
+    } finally {
+      release.resolve();
+      await failedAvailability;
+    }
+    expect(await failedAvailability).toBe(false);
+    await expect(
+      failed.getCredentials(validCredentials.serverName),
+    ).rejects.toThrow('Keychain is not available');
+    expect(await healthy.isAvailable()).toBe(true);
+    expect({ failedLoads, healthyLoads }).toStrictEqual({
+      failedLoads: 1,
+      healthyLoads: 1,
+    });
+  }, 30000);
 
   describe('checkKeychainAvailability', () => {
     it('should return true if keytar is available and functional', async () => {

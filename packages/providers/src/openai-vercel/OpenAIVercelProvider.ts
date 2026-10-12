@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import { readInvocationPolicyRecord } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 /**
  * @plan PLAN-20250218-STATELESSPROVIDER.P04
  * @requirement REQ-SP-001
@@ -71,6 +72,7 @@ import {
   finishMediaRequest,
   type MediaRequestOutcome,
   resolveRequestMedia,
+  captureRequestMediaInput,
 } from '../utils/request-media-resolution.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import {
@@ -179,13 +181,15 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     contents: IContent[],
     options?: { includeReasoningInContext?: boolean; resolvedModel?: string },
   ): ModelMessage[] {
-    const settings = this.resolveSettingsService();
+    const settings = readInvocationPolicyRecord(
+      this.captureOwnerPolicy()[this.name],
+    );
     const modelName =
       options?.resolvedModel ?? (this.getModel() || this.getDefaultModel());
     const toolFormat = resolveToolFormat(
       modelName,
       this.name,
-      settings,
+      settings.toolFormat,
       this.getLogger(),
     );
 
@@ -201,10 +205,16 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     options: NormalizedGenerateChatOptions,
   ): Promise<VercelMediaPreparation> {
     requireAssembledSystemInstruction(options.systemInstruction);
+    const media = captureRequestMediaInput(
+      options.metadata['logicalRequestId'],
+      options.invocation.runtimeId,
+      this.requestMediaBudgetBytes,
+      this.requestMediaResolver,
+    );
     const mediaRequest = readsRequestRowsAtTransport(options)
-      ? await openTransportRowsMedia(options)
+      ? await openTransportRowsMedia(options, media)
       : await resolveRequestMedia(
-          options.runtime,
+          media,
           options.contents,
           options.invocation.signal,
         );
@@ -227,9 +237,9 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
     return {
       baseURL: this.baseProviderConfig.baseURL,
       providerName: this.name,
-      requiresAuth: options.settings.getProviderSettings(this.name)[
-        'requires-auth'
-      ] as boolean | undefined,
+      requiresAuth: options.invocation.getProviderOverrides<
+        Record<string, unknown>
+      >(this.name)?.['requires-auth'] as boolean | undefined,
       customHeaders: this.getCustomHeaders(),
     };
   }
@@ -284,9 +294,9 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
       const aiTools = buildVercelTools(formattedTools);
       const params = resolveModelCallParams(effectiveOptions, this);
-      const rawFieldName = effectiveOptions.settings.get(
+      const rawFieldName = effectiveOptions.invocation.getEphemeral<string>(
         'reasoning.fieldName',
-      ) as string | undefined;
+      );
       const captureBuffer: CaptureBuffer = createCaptureBuffer(rawFieldName);
       const { model } = await createConfiguredModel(
         effectiveOptions,
@@ -471,9 +481,16 @@ export class OpenAIVercelProvider extends BaseProvider implements IProvider {
 
   override getToolFormat(): string {
     const modelName = this.getModel() || this.getDefaultModel();
-    const settings = this.resolveSettingsService();
+    const settings = readInvocationPolicyRecord(
+      this.captureOwnerPolicy()[this.name],
+    );
     const logger = new DebugLogger('llxprt:provider:openaivercel');
-    const format = resolveToolFormat(modelName, this.name, settings, logger);
+    const format = resolveToolFormat(
+      modelName,
+      this.name,
+      settings.toolFormat,
+      logger,
+    );
     logger.debug(() => `getToolFormat() called, returning: ${format}`, {
       provider: this.name,
       model: modelName,

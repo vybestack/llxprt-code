@@ -455,6 +455,11 @@ describe('check-affected-test-shards — validatePathObservers exact-path contra
 });
 
 describe('check-affected-test-shards — end-to-end subprocess (issue #3212)', () => {
+  it('keeps the checked-in graph aligned with the current source tree', () => {
+    const { status, stderr } = runChecker([]);
+    expect(status, stderr).toBe(0);
+  });
+
   it('rejects a pathPrefix missing its trailing slash via --data', () => {
     const dir = mkdtempSync(join(tmpdir(), 'checker-prefix-contract-'));
     try {

@@ -118,7 +118,7 @@ export async function saveCheckpoint(
     checkpointTool,
     dir,
     checkpointGit,
-    fixture.config.getAgentClient(),
+    fixture.client,
     checkpointUiHistory,
     () => {},
     ops,

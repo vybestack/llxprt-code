@@ -16,7 +16,6 @@ import {
   createMinimalConfig,
   createMinimalSettings,
   createFakeAgent,
-  emptyRecording,
   dispatchTrace,
   renderCalls,
   mockWriteToStderr,
@@ -96,7 +95,7 @@ function registerErrorOutputRest(): void {
       const stdoutWrite = vi
         .spyOn(process.stdout, 'write')
         .mockImplementation(() => true);
-      const config = createMinimalConfig({
+      const { config } = createMinimalConfig({
         interactive: false,
         outputFormat: OutputFormat.STREAM_JSON,
       });
@@ -124,7 +123,7 @@ function registerErrorOutputRest(): void {
       const stdoutWrite = vi
         .spyOn(process.stdout, 'write')
         .mockImplementation(() => true);
-      const config = createMinimalConfig({
+      const { config } = createMinimalConfig({
         interactive: false,
         outputFormat: OutputFormat.JSON,
       });
@@ -152,7 +151,7 @@ function registerErrorOutputRest(): void {
       const stdoutWrite = vi
         .spyOn(process.stdout, 'write')
         .mockImplementation(() => true);
-      const config = createMinimalConfig({
+      const { config } = createMinimalConfig({
         interactive: false,
         outputFormat: 'text',
       });
@@ -186,16 +185,18 @@ let stderrWriteSpy: ReturnType<typeof installStderrSpy>;
 
 /** Runs dispatch with the fixed recording/stdin arguments these cases share. */
 function runDispatch(
-  config: unknown,
+  { config, runtimeSettings }: ReturnType<typeof createMinimalConfig>,
   settings: unknown,
   recordingStartupWarnings: string[] = [],
 ) {
   return dispatchInteractiveOrNonInteractive({
+    runtimeSettings,
     config: config as never,
     agent: createFakeAgent() as never,
     settings: settings as never,
     workspaceRoot: '/tmp/test',
-    recording: emptyRecording(recordingStartupWarnings),
+    recordingOwner: 'agent',
+    recordingStartupWarnings,
     hasPipedInput: false,
     readStdinData: async () => '',
   });

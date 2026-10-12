@@ -10,10 +10,15 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createSchedulerPolicyFixture } from './__tests__/scheduler-policy-fixture.js';
+
 import { describe, it, expect, vi } from 'bun:test';
-import type { ToolCall, WaitingToolCall } from './coreToolScheduler.js';
+import type {
+  CompletedToolCall,
+  WaitingToolCall,
+} from './coreToolScheduler.js';
 import { CoreToolScheduler } from './coreToolScheduler.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+
 import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { ToolRegistry } from '@vybestack/llxprt-code-tools';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools/types/tool-confirmation-types.js';
@@ -22,8 +27,6 @@ import { HistoryService } from '@vybestack/llxprt-code-core/services/history/His
 import { ContentConverters } from '@vybestack/llxprt-code-core/services/history/ContentConverters.js';
 import type { ToolCallBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
-  createMockMessageBus,
-  createMockPolicyEngine,
   waitForStatus,
   MockEditTool,
 } from './__tests__/coreToolScheduler-test-helpers.js';
@@ -40,13 +43,13 @@ async function facadeCallback0(): Promise<void> {
   const onAllToolCallsComplete = vi.fn();
   const onToolCallsUpdate = vi.fn();
 
-  const mockPolicyEngine = createMockPolicyEngine();
-  mockPolicyEngine.evaluate = vi.fn().mockReturnValue(PolicyDecision.ASK_USER);
-
-  const mockConfig = editConfig(mockToolRegistry, mockPolicyEngine);
+  const fixture = createSchedulerPolicyFixture(
+    editConfig(),
+    PolicyDecision.ASK_USER,
+  );
 
   const scheduler = editScheduler(
-    mockConfig,
+    fixture,
     mockToolRegistry,
     onAllToolCallsComplete,
     onToolCallsUpdate,
@@ -70,10 +73,13 @@ async function facadeCallback0(): Promise<void> {
 
   // Cancel the edit
   const confirmationDetails = awaitingCall.confirmationDetails;
+  if (!('onConfirm' in confirmationDetails))
+    throw new Error('Expected live confirmation');
   await confirmationDetails.onConfirm(ToolConfirmationOutcome.Cancel);
 
   expect(onAllToolCallsComplete).toHaveBeenCalled();
-  const completedCalls = onAllToolCallsComplete.mock.calls[0][0] as ToolCall[];
+  const completedCalls = onAllToolCallsComplete.mock
+    .calls[0][0] as CompletedToolCall[];
 
   expect(completedCalls[0].status).toBe('cancelled');
 
@@ -138,38 +144,36 @@ function editRegistry(declarativeTool: MockEditTool): ToolRegistry {
   } as unknown as ToolRegistry;
 }
 
-function editConfig(
-  mockToolRegistry: ToolRegistry,
-  mockPolicyEngine: ReturnType<typeof createMockPolicyEngine>,
-): Config {
+function editConfig() {
   return {
     getSessionId: () => 'test-session-id',
     getUsageStatisticsEnabled: () => true,
     getDebugMode: () => false,
     isInteractive: () => true,
     getApprovalMode: () => ApprovalMode.DEFAULT,
-    getEphemeralSettings: () => ({}),
     getAllowedTools: () => [],
     getContentGeneratorConfig: () => ({
       model: 'test-model',
     }),
-    getToolRegistry: () => mockToolRegistry,
-    getMessageBus: vi.fn().mockReturnValue(createMockMessageBus()),
     getEnableHooks: () => false,
-    getPolicyEngine: vi.fn().mockReturnValue(mockPolicyEngine),
     getModel: () => 'gemini-2.5-pro',
-  } as unknown as Config;
+  };
 }
 
 function editScheduler(
-  mockConfig: Config,
+  fixture: ReturnType<typeof createSchedulerPolicyFixture>,
   mockToolRegistry: ToolRegistry,
   onAllToolCallsComplete: ReturnType<typeof vi.fn>,
   onToolCallsUpdate: ReturnType<typeof vi.fn>,
 ): CoreToolScheduler {
+  const { config, settingsOwner, messageBus } = fixture;
   return new CoreToolScheduler({
-    config: mockConfig,
-    messageBus: mockConfig.getMessageBus(),
+    telemetry: settingsOwner.telemetry,
+    readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
+    getToolGovernance: () =>
+      settingsOwner.readToolGovernance(config.getExcludeTools() ?? []),
+    config,
+    messageBus,
     toolRegistry: mockToolRegistry,
     onAllToolCallsComplete,
     onToolCallsUpdate,

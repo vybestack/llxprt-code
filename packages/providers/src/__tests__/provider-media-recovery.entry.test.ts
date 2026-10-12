@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
 import { assertDefined } from '@vybestack/llxprt-code-test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { chmod, mkdtemp, rm, unlink, writeFile } from 'node:fs/promises';
@@ -158,7 +159,10 @@ function callOptions(
   resolver: RequestMediaResolver,
   budget: number,
   signal?: AbortSignal,
-): ReturnType<typeof streamCallOptions> {
+): {
+  provider: IProvider;
+  options: ReturnType<typeof streamCallOptions>;
+} {
   const settings = new SettingsService();
   settings.setProviderSetting(provider.name, 'model', providerCase.model);
   settings.setProviderSetting(provider.name, 'streaming', 'disabled');
@@ -172,8 +176,8 @@ function callOptions(
     requestMediaBudgetBytes: budget,
   });
   const invocation = createRuntimeInvocationContext({
-    runtime,
-    settings,
+    runtimeId: runtime.runtimeId,
+    runtimeMetadata: runtime.metadata,
     providerName: provider.name,
     ephemeralsSnapshot: {
       streaming: 'disabled',
@@ -183,26 +187,31 @@ function callOptions(
     },
     ...(signal === undefined ? {} : { signal }),
   });
-  return streamCallOptions({
-    providerName: provider.name,
-    contents,
-    settings,
-    config,
-    runtime,
-    invocation,
-    resolved: {
-      model: providerCase.model,
-      baseURL: providerCase.baseURL,
-      authToken: 'test-key',
-    },
-  });
+  return {
+    provider: bindProviderMedia(provider, resolver, budget),
+    options: streamCallOptions({
+      providerName: provider.name,
+      contents,
+      settings,
+      config,
+      runtime,
+      invocation,
+      resolved: {
+        model: providerCase.model,
+        baseURL: providerCase.baseURL,
+        authToken: 'test-key',
+      },
+    }),
+  };
 }
 
 async function drain(
-  provider: IProvider,
-  options: ReturnType<typeof callOptions>,
+  _provider: IProvider,
+  prepared: ReturnType<typeof callOptions>,
 ): Promise<void> {
-  for await (const _content of provider.generateChatCompletion(options)) {
+  for await (const _content of prepared.provider.generateChatCompletion(
+    prepared.options,
+  )) {
     // Drain the real provider parser.
   }
 }

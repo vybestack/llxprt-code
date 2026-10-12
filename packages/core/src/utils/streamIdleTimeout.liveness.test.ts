@@ -6,6 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import {
+  type StreamTimeoutPolicy,
   type StreamLivenessEvent,
   resolveStreamIdleTimeoutMs,
   resolveStreamFirstResponseTimeoutMs,
@@ -23,25 +24,20 @@ import {
  * Builds a config whose getEphemeralSetting returns `value` exactly for `key`
  * and undefined otherwise.
  */
-function sourceConfigFor(
-  key: string,
-  value: unknown,
-): { getEphemeralSetting: (settingKey: string) => unknown } {
+function sourceConfigFor(key: string, value: unknown): StreamTimeoutPolicy {
   return {
-    getEphemeralSetting: (settingKey: string) =>
-      settingKey === key ? value : undefined,
+    [key]: value,
+    [STREAM_IDLE_TIMEOUT_SETTING_KEY]:
+      key === STREAM_IDLE_TIMEOUT_SETTING_KEY ? value : undefined,
+    [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]:
+      key === STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY ? value : undefined,
   };
 }
 
-/**
- * Builds a config whose getEphemeralSetting returns a fixed `value` for every
- * key.
- */
-function constantConfig(value: unknown): {
-  getEphemeralSetting: (settingKey: string) => unknown;
-} {
+function constantConfig(value: unknown): StreamTimeoutPolicy {
   return {
-    getEphemeralSetting: () => value,
+    [STREAM_IDLE_TIMEOUT_SETTING_KEY]: value,
+    [STREAM_FIRST_RESPONSE_TIMEOUT_SETTING_KEY]: value,
   };
 }
 

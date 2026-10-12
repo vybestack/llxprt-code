@@ -1,3 +1,7 @@
+import type {
+  RootTelemetry,
+  TelemetrySpan,
+} from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -9,7 +13,7 @@ import type { Config } from '../config/config.js';
 import {
   hasToolSchema,
   resolveToolDescription,
-  type ToolRegistry,
+  type ToolSelection,
 } from '@vybestack/llxprt-code-tools';
 import {
   logApiRequest,
@@ -33,7 +37,10 @@ import type {
  * Creates a mutable provider adapter backed by a RuntimeProviderManager instance.
  */
 export function createProviderAdapterFromManager(
-  manager?: RuntimeProviderManager,
+  manager?: Pick<
+    RuntimeProviderManager,
+    'getActiveProvider' | 'setActiveProvider' | 'getProviderByName'
+  >,
 ): AgentRuntimeProviderAdapter {
   if (!manager) {
     return {
@@ -72,34 +79,59 @@ export function createProviderAdapterFromManager(
   };
 }
 
-/**
- * Creates a telemetry adapter that bridges to legacy Config-backed loggers.
- */
-export function createTelemetryAdapterFromConfig(
-  config: Config,
+function normalizeAttemptIdentity(attemptId: string | undefined): string {
+  const trimmed = attemptId?.trim();
+  return trimmed === '' ? randomUUID() : (trimmed ?? randomUUID());
+}
+
+export function createTelemetryAdapter(
+  config: Pick<Config, 'getSessionId'>,
+  telemetry: RootTelemetry,
 ): AgentRuntimeTelemetryAdapter {
+  const spans = new Map<string, TelemetrySpan>();
+  const identity = (event: { promptId?: string; runtimeId?: string }): string =>
+    event.promptId ?? event.runtimeId ?? 'runtime';
   return {
     requestArtifactSchemaVersion: 3,
     logApiRequest: (event) => {
+      if (telemetry.isEnabled()) {
+        const key = identity(event);
+        spans.get(key)?.end();
+        spans.set(
+          key,
+          telemetry.spans.start('llxprt.api.request', {
+            attributes: {
+              model: event.model,
+              'session.id': config.getSessionId(),
+            },
+          }),
+        );
+      }
       if (event.requestArtifact !== undefined) {
         if (event.requestText !== undefined)
           throw new Error('API request cannot contain both text and artifact');
         return logBoundedRequestArtifact(
-          config,
+          telemetry,
+          config.getSessionId(),
           event.model,
-          event.promptId ?? event.runtimeId ?? 'runtime',
+          identity(event),
           event.requestArtifact,
           event.signal,
         );
       }
-      const legacy = new LegacyApiRequestEvent(
-        event.model,
-        event.promptId ?? event.runtimeId ?? 'runtime',
-        event.requestText,
+      return logApiRequest(
+        config,
+        new LegacyApiRequestEvent(
+          event.model,
+          identity(event),
+          event.requestText,
+        ),
+        telemetry,
       );
-      return logApiRequest(config, legacy);
     },
     logApiResponse: (event) => {
+      spans.get(identity(event))?.end();
+      spans.delete(identity(event));
       const usageForLegacy =
         event.usageMetadata ??
         (event.usage !== undefined
@@ -110,19 +142,14 @@ export function createTelemetryAdapterFromConfig(
             }
           : undefined);
       // Stable prompt identity matches logApiRequest's correlation key.
-      const promptId = event.promptId ?? event.runtimeId ?? 'runtime';
       // Trim whitespace so padded IDs normalize to their core value.
       // Empty/whitespace-only attemptId is treated as missing so the
       // aggregator cannot dedupe unrelated attempts under a blank key.
-      const trimmedAttemptId = event.attemptId?.trim();
-      const attemptId =
-        trimmedAttemptId !== undefined && trimmedAttemptId !== ''
-          ? trimmedAttemptId
-          : randomUUID();
+      const attemptId = normalizeAttemptIdentity(event.attemptId);
       const legacy = new LegacyApiResponseEvent(
         event.model,
         event.durationMs,
-        promptId,
+        identity(event),
         usageForLegacy,
         event.responseText,
         event.error,
@@ -130,39 +157,36 @@ export function createTelemetryAdapterFromConfig(
         attemptId,
       );
       legacy.provider = event.provider;
-      logApiResponse(config, legacy);
+      logApiResponse(config, legacy, telemetry);
     },
     logApiError: (event) => {
+      spans.get(identity(event))?.end();
+      spans.delete(identity(event));
       // Stable prompt identity matches logApiRequest's correlation key.
-      const promptId = event.promptId ?? event.runtimeId ?? 'runtime';
       // Trim whitespace so padded IDs normalize to their core value.
       // Empty/whitespace-only attemptId is treated as missing so the
       // aggregator cannot dedupe unrelated attempts under a blank key.
-      const trimmedAttemptId = event.attemptId?.trim();
-      const attemptId =
-        trimmedAttemptId !== undefined && trimmedAttemptId !== ''
-          ? trimmedAttemptId
-          : randomUUID();
+      const attemptId = normalizeAttemptIdentity(event.attemptId);
       const legacy = new LegacyApiErrorEvent(
         event.model,
         event.error,
         event.durationMs,
-        promptId,
+        identity(event),
         event.errorType,
         event.statusCode,
         attemptId,
       );
       legacy.provider = event.provider;
-      logApiError(config, legacy);
+      logApiError(config, legacy, telemetry);
     },
   };
 }
 
 /**
- * Creates a ToolRegistryView from an optional ToolRegistry.
+ * Creates a ToolRegistryView from an optional ToolSelection.
  */
 export function createToolRegistryViewFromRegistry(
-  registry?: ToolRegistry,
+  registry?: ToolSelection,
 ): ToolRegistryView {
   if (!registry) {
     return {
@@ -180,7 +204,7 @@ export function createToolRegistryViewFromRegistry(
       }
       const schema = hasToolSchema(tool) ? tool.schema : undefined;
       const description = resolveToolDescription(schema, tool.description);
-      const parameterSchema = schema?.parametersJsonSchema;
+      const parameterSchema = structuredClone(schema?.parametersJsonSchema);
 
       return {
         name: tool.name,

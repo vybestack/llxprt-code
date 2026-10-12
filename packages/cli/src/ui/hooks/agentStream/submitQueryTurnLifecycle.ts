@@ -322,6 +322,20 @@ async function executeStream(
   }
 }
 
+async function flushTurnRecording(cbd: SubmitQueryCallbackDeps): Promise<void> {
+  if (cbd.recordingOwner === 'agent') {
+    await cbd.agent.session.flushRecording();
+    return;
+  }
+  try {
+    await withRecordingFailureReport(
+      cbd.recordingIntegration?.flushAtTurnBoundary(),
+    );
+  } catch {
+    /* non-fatal */
+  }
+}
+
 /**
  * Runs the stream and finalises with the correct terminal status. On
  * cancellation, classifies granularly from live/terminal phase evidence.
@@ -373,13 +387,7 @@ async function streamAndFinalise(
       cbd.setIsResponding(false);
     }
     if (isCurrentTurn(cbd, turn.abortSignal)) {
-      try {
-        await withRecordingFailureReport(
-          cbd.recordingIntegration?.flushAtTurnBoundary(),
-        );
-      } catch {
-        /* non-fatal */
-      }
+      await flushTurnRecording(cbd);
     }
   }
 }

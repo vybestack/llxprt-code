@@ -6,6 +6,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -42,14 +44,24 @@ function createMessageBus() {
 
 export async function verifySourceLazyMcpCoherence(): Promise<void> {
   const messageBus = createMessageBus();
+  const settings = new SettingsService();
+  settings.set('mcp.lazy', true);
+  const settingsOwner = new SessionSettingsOwner(settings);
   const registry = new ToolRegistry(
     {
-      getEphemeralSettings: () => ({ 'mcp.lazy': true }),
+      getExcludeTools: () => [],
     },
     messageBus,
+    () => settingsOwner.readRegistryPolicy([]),
   );
   registry.registerTool(
     new DiscoveredMCPTool(
+      {
+        evaluate: () => 'ask_user',
+        approve: async () => {
+          throw new Error('Reusable approval unsupported');
+        },
+      },
       createCallableTool(),
       SERVER_NAME,
       'fixture-tool',
@@ -82,16 +94,13 @@ export async function verifySourceLazyMcpCoherence(): Promise<void> {
       'Source lazy-MCP synchronization left a stale activation tool',
     );
   }
+  settingsOwner.dispose();
 }
 
-export function verifyCompiledLazyMcpCoherence(
-  repoRoot: string,
-  timeoutMs = COMPILED_CHECK_TIMEOUT_MS,
-): void {
-  const syncModuleUrl = pathToFileURL(
-    resolve(repoRoot, 'packages/core/dist/src/config/mcp-lazy-tool-sync.js'),
-  ).href;
-  const program = `
+function compiledCheckProgram(syncModuleUrl: string): string {
+  return `
+    import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
     import { DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
     import {
       ACTIVATE_MCP_SERVER_TOOL_NAME,
@@ -101,11 +110,16 @@ export function verifyCompiledLazyMcpCoherence(
 
     const serverName = ${JSON.stringify(SERVER_NAME)};
     const messageBus = { async requestConfirmation() { return true; } };
+    const settings = new SettingsService();
+    settings.set('mcp.lazy', true);
+    const settingsOwner = new SessionSettingsOwner(settings);
     const registry = new ToolRegistry(
-      { getEphemeralSettings: () => ({ 'mcp.lazy': true }) },
+      { getExcludeTools: () => [] },
       messageBus,
+      () => settingsOwner.readRegistryPolicy([]),
     );
     registry.registerTool(new DiscoveredMCPTool(
+      { evaluate: () => 'ask_user', approve: async () => { throw new Error('Reusable approval unsupported'); } },
       { async tool() { return {}; }, async callTool() { return []; } },
       serverName,
       'fixture-tool',
@@ -129,7 +143,18 @@ export function verifyCompiledLazyMcpCoherence(
     if (registry.getTool(ACTIVATE_MCP_SERVER_TOOL_NAME) !== undefined) {
       throw new Error('Compiled lazy-MCP synchronization left a stale activation tool');
     }
+    settingsOwner.dispose();
   `;
+}
+
+export function verifyCompiledLazyMcpCoherence(
+  repoRoot: string,
+  timeoutMs = COMPILED_CHECK_TIMEOUT_MS,
+): void {
+  const syncModuleUrl = pathToFileURL(
+    resolve(repoRoot, 'packages/core/dist/src/config/mcp-lazy-tool-sync.js'),
+  ).href;
+  const program = compiledCheckProgram(syncModuleUrl);
 
   const result = spawnSync('node', ['--input-type=module', '--eval', program], {
     cwd: repoRoot,

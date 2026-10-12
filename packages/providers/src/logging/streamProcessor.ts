@@ -6,7 +6,7 @@
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { UsageStats } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import {
   extractChunkMetadata,
   hasTokenBearingOutput,
@@ -200,7 +200,7 @@ export function processLoggedStreamChunk(
 }
 
 export async function* processStreamWithRecorderGen(
-  config: Config | undefined,
+  config: ProviderRequestDiagnostics | undefined,
   stream: AsyncIterableIterator<IContent>,
   modelName: string,
   _promptId: string,
@@ -305,7 +305,7 @@ async function handleLoggedStreamError(
   modelName: string,
   acc: StreamAccumulatorState,
   recorder: AttemptRecorder,
-  config: Config,
+  config: ProviderRequestDiagnostics,
   ctx: StreamProcessContext,
   writeLog: ResponseLogWriter,
   policy: RequestLoggingPolicy | undefined,
@@ -387,7 +387,7 @@ function visibleResponseChunk(
 function recordLoggedStreamCompletion(
   acc: StreamAccumulatorState,
   duration: number,
-  config: Config | undefined,
+  config: ProviderRequestDiagnostics | undefined,
   recorder: AttemptRecorder,
   ctx: StreamProcessContext,
   modelName: string,
@@ -439,7 +439,7 @@ async function* captureLoggedResponse(
 }
 
 export async function* logResponseStreamWithRecorderGen(
-  config: Config,
+  config: ProviderRequestDiagnostics,
   stream: AsyncIterableIterator<IContent>,
   promptId: string,
   modelName: string,

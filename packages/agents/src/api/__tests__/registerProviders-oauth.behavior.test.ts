@@ -1,3 +1,4 @@
+import { createSessionSettingsFixture } from './helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -110,19 +111,27 @@ describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
 
   async function registerAndGet(providerName: string): Promise<ProviderLike> {
     const runtimeId = `issue2410-oauth-${Math.random().toString(36).slice(2)}`;
-    const handle = createIsolatedRuntimeContext({
-      runtimeId,
-      // The caller supplies the Config (issue #3222): providers no longer
-      // constructs one for isolated runtimes.
-      config: new Config({
+    const handle = (() => {
+      const capturedConfig1 = new Config({
         sessionId: runtimeId,
         targetDir: tmpConfigHome,
         cwd: tmpConfigHome,
         model: 'claude-opus-4-8',
         debugMode: false,
-      }),
-      metadata: { source: 'issue2410-test' },
-    });
+      });
+      const settingsRoot = createSessionSettingsFixture(capturedConfig1);
+      return createIsolatedRuntimeContext(
+        {
+          settingsOwner: settingsRoot.settingsOwner,
+          runtimeId,
+          // The caller supplies the Config (issue #3222): providers no longer
+          // constructs one for isolated runtimes.
+          config: capturedConfig1,
+          metadata: { source: 'issue2410-test' },
+        },
+        settingsRoot.settingsService,
+      );
+    })();
     handles.push(handle);
     await handle.activate();
 

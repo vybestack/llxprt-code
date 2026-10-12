@@ -309,7 +309,7 @@ describe('AnthropicProvider', () => {
         ];
 
         const generator = provider.generateChatCompletion(
-          buildCallOptions(messages),
+          buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
         );
 
         await generator.next();
@@ -357,7 +357,7 @@ describe('AnthropicProvider', () => {
         ];
 
         const generator = provider.generateChatCompletion(
-          buildCallOptions(messages),
+          buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
         );
 
         await generator.next();
@@ -412,7 +412,7 @@ describe('AnthropicProvider', () => {
         ];
 
         const generator1 = provider.generateChatCompletion(
-          buildCallOptions(messages),
+          buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
         );
         await generator1.next();
 
@@ -445,7 +445,9 @@ describe('AnthropicProvider', () => {
           withResponse: secondWithResponse,
         } as unknown as Promise<Anthropic.Message>);
 
-        const gen = provider.generateChatCompletion(buildCallOptions(messages));
+        const gen = provider.generateChatCompletion(
+          buildCallOptions(messages, { ...{}, resolved: { streaming: true } }),
+        );
 
         // Wait a bit to allow the throttling to trigger
         await gen.next();
@@ -499,12 +501,20 @@ describe('AnthropicProvider', () => {
           },
         ];
         await provider
-          .generateChatCompletion(buildCallOptions(messages))
+          .generateChatCompletion(
+            buildCallOptions(messages, {
+              ...{},
+              resolved: { streaming: true },
+            }),
+          )
           .next();
 
         const controller = new AbortController();
         const reason = new Error('request cancelled during throttle');
-        const baseOptions = buildCallOptions(messages);
+        const baseOptions = buildCallOptions(messages, {
+          ...{},
+          resolved: { streaming: true },
+        });
         const throttledCall = provider.generateChatCompletion({
           ...baseOptions,
           invocation: { ...baseOptions.invocation, signal: controller.signal },

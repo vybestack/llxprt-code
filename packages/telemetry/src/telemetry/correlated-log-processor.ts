@@ -3,19 +3,17 @@ import type { Context } from '@opentelemetry/api';
 import {
   BatchLogRecordProcessor,
   SimpleLogRecordProcessor,
+  type LogRecordExporter,
   type LogRecordProcessor,
   type SdkLogRecord,
 } from '@opentelemetry/sdk-logs';
-import {
-  type AcknowledgedLogExporter,
-  hasExportReceipt,
-} from './artifact-exporter.js';
+import { hasExportReceipt } from './artifact-exporter.js';
 
 /** A missing strict ACK must not block another request in the SDK's shared batch queue. */
 export class CorrelatedLogRecordProcessor implements LogRecordProcessor {
   private readonly eager: BatchLogRecordProcessor;
   private readonly strict: SimpleLogRecordProcessor;
-  constructor(exporter: AcknowledgedLogExporter) {
+  constructor(exporter: LogRecordExporter) {
     this.eager = new BatchLogRecordProcessor(exporter, {
       scheduledDelayMillis: 0,
       maxExportBatchSize: 1,

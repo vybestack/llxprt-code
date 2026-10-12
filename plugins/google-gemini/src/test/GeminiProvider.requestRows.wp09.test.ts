@@ -15,7 +15,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { GenerateChatOptions } from '@vybestack/llxprt-code-providers/IProvider.js';
-import type { IProviderConfig } from '@vybestack/llxprt-code-providers/types/IProviderConfig.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import {
   GeminiProvider,
@@ -74,18 +73,13 @@ const fakeClientFactory = (async () => ({
   },
 })) as unknown as CreateGeminiApiClient;
 
-class TestGeminiProvider extends GeminiProvider {
-  constructor(streaming: boolean) {
-    super('test-key', undefined, undefined, fakeClientFactory);
-    const current = (this as unknown as { providerConfig?: IProviderConfig })
-      .providerConfig;
-    (this as unknown as { providerConfig?: IProviderConfig }).providerConfig = {
-      ...(current ?? {}),
-      getEphemeralSettings: () => ({
-        streaming: streaming ? 'enabled' : 'disabled',
-      }),
-    };
-  }
+function createTestProvider(): GeminiProvider {
+  return new GeminiProvider(
+    'test-key',
+    undefined,
+    undefined,
+    fakeClientFactory,
+  );
 }
 
 interface RowProbe {
@@ -141,7 +135,10 @@ function arrayOptions(
     providerName: 'gemini',
     contents: replay(scenario.rows),
     tools: scenario.tools,
-    ephemerals: scenario.ephemerals,
+    ephemerals: {
+      streaming: scenario.streaming === false ? 'disabled' : 'enabled',
+      ...scenario.ephemerals,
+    },
   });
   if (signal === undefined) return base;
   return {
@@ -185,14 +182,14 @@ async function drain(
 
 async function sendArray(scenario: Scenario): Promise<string[]> {
   resetSdk();
-  const provider = new TestGeminiProvider(scenario.streaming !== false);
+  const provider = createTestProvider();
   await drain(provider.generateChatCompletion(arrayOptions(scenario)));
   return sdk.sent;
 }
 
 async function sendRows(scenario: Scenario): Promise<string[]> {
   resetSdk();
-  const provider = new TestGeminiProvider(scenario.streaming !== false);
+  const provider = createTestProvider();
   const probe = probeRows(scenario.rows);
   await drain(provider.generateChatCompletion(rowsOptions(scenario, probe)));
   expect(probe.opened()).toBe(1);
@@ -375,7 +372,7 @@ describe('Gemini transport-owned request rows body (WP09)', () => {
     const scenario: Scenario = {
       rows: [text('human', 'a'), text('human', 'b')],
     };
-    const provider = new TestGeminiProvider(true);
+    const provider = createTestProvider();
     const probe = probeRows(scenario.rows);
     const options = rowsOptions(scenario, probe);
     const wrong = { ...options, requestRows: { ...probe.selection, count: 3 } };
@@ -403,7 +400,7 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
   });
 
   it('holds exactly one SDK body lease during send and releases its arrays afterwards', async () => {
-    const provider = new TestGeminiProvider(true);
+    const provider = createTestProvider();
     const probe = probeRows(scenario.rows);
     const before = activeRequestBodyCount();
     await drain(provider.generateChatCompletion(rowsOptions(scenario, probe)));
@@ -414,7 +411,7 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
   });
 
   it('reads the rows again for a retried call and sends the same request', async () => {
-    const provider = new TestGeminiProvider(true);
+    const provider = createTestProvider();
     const probe = probeRows(scenario.rows);
     const before = activeRequestBodyCount();
     sdk.failure = new Error('transient transport failure');
@@ -432,7 +429,7 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
   });
 
   it('releases the body when the send fails', async () => {
-    const provider = new TestGeminiProvider(true);
+    const provider = createTestProvider();
     const before = activeRequestBodyCount();
     sdk.failure = new Error('transport exploded');
     await expect(
@@ -447,7 +444,7 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
   });
 
   it('releases the body when the consumer returns mid-stream', async () => {
-    const provider = new TestGeminiProvider(true);
+    const provider = createTestProvider();
     sdk.chunks = [
       { candidates: [{ content: { parts: [{ text: 'one' }] } }] },
       { candidates: [{ content: { parts: [{ text: 'two' }] } }] },
@@ -464,7 +461,7 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
   });
 
   it('releases the body when the request is aborted during the call', async () => {
-    const provider = new TestGeminiProvider(true);
+    const provider = createTestProvider();
     const controller = new AbortController();
     const before = activeRequestBodyCount();
     sdk.failure = new Error('aborted mid call');
@@ -480,7 +477,7 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
   });
 
   it('never opens the rows when cancelled before the first pull', async () => {
-    const provider = new TestGeminiProvider(true);
+    const provider = createTestProvider();
     const controller = new AbortController();
     controller.abort(new Error('cancelled early'));
     const probe = probeRows(scenario.rows);
@@ -498,7 +495,7 @@ describe('Gemini request rows preparation lifecycle (WP09)', () => {
   });
 
   it('closes the reader and sends nothing when cancelled after the first chunk', async () => {
-    const provider = new TestGeminiProvider(true);
+    const provider = createTestProvider();
     const controller = new AbortController();
     const probe = probeRows(scenario.rows, () => {
       controller.abort(new Error('cancelled after first chunk'));

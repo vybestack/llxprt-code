@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { retryOperationFixture } from './retry-operation-fixture.js';
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
@@ -46,20 +47,21 @@ describe('RetryOrchestrator failover transport budget', () => {
       failingProvider(() => transportCalls++),
       { maxAttempts: 3, initialDelayMs: 0 },
     );
-    const options: GenerateChatOptions = {
-      contents: replayableContents([]),
-      config: {
-        getBucketFailoverHandler: () => ({
-          getBuckets: () => ['bucket1', 'bucket2'],
-          getCurrentBucket: () => 'bucket1',
-          tryFailover: async () => {
-            failoverCalls++;
-            return true;
-          },
-          isEnabled: () => true,
-        }),
-      } as GenerateChatOptions['config'],
-    };
+    const options: GenerateChatOptions = retryOperationFixture(
+      {
+        contents: replayableContents([]),
+      },
+      undefined,
+      {
+        getBuckets: () => ['bucket1', 'bucket2'],
+        getCurrentBucket: () => 'bucket1',
+        tryFailover: async () => {
+          failoverCalls++;
+          return true;
+        },
+        isEnabled: () => true,
+      },
+    );
 
     await expect(
       consume(orchestrator.generateChatCompletion(options)),
@@ -119,10 +121,17 @@ describe('RetryOrchestrator failover transport budget', () => {
       { maxAttempts: 3, initialDelayMs: 0 },
     );
     const consumption = consume(
-      orchestrator.generateChatCompletion({
-        contents: replayableContents([]),
-        config: {
-          getBucketFailoverHandler: () => ({
+      orchestrator.generateChatCompletion(
+        retryOperationFixture(
+          {
+            contents: replayableContents([]),
+
+            invocation: {
+              signal: controller.signal,
+            } as GenerateChatOptions['invocation'],
+          },
+          undefined,
+          {
             getBuckets: () => ['bucket1', 'bucket2'],
             getCurrentBucket: () => 'bucket1',
             tryFailover: async () => {
@@ -131,12 +140,9 @@ describe('RetryOrchestrator failover transport budget', () => {
               return new Promise<boolean>(() => {});
             },
             isEnabled: () => true,
-          }),
-        } as GenerateChatOptions['config'],
-        invocation: {
-          signal: controller.signal,
-        } as GenerateChatOptions['invocation'],
-      }),
+          },
+        ),
+      ),
     );
 
     await started;

@@ -3,6 +3,8 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { RootTelemetry } from '../root-telemetry.js';
+let selectedTelemetry: RootTelemetry;
 
 /**
  * Behavioral tests proving ToolCallEvent preserves honest tool-call
@@ -23,7 +25,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { logToolCall } from '../loggers.js';
 import { ToolCallEvent } from './tool-events.js';
 import type { CompletedToolCallShape } from '../../internal/interfaces.js';
-import * as sdk from '../sdk.js';
 import * as uiTelemetry from '../uiTelemetry.js';
 import {
   setPerfPhaseObserver,
@@ -88,8 +89,16 @@ const mockConfig = {
 } as unknown as Parameters<typeof logToolCall>[0];
 
 describe('ToolCallEvent honest boundaries (P07 contract, finding B)', () => {
+  afterEach(async () => {
+    await selectedTelemetry.close();
+  });
   beforeEach(() => {
-    vi.spyOn(sdk, 'isTelemetrySdkInitialized').mockReturnValue(false);
+    selectedTelemetry = RootTelemetry.prepare({
+      enabled: false,
+      sessionId: 'local-observer-root',
+      maxBytes: 1048576,
+      maxFiles: 2,
+    });
     vi.spyOn(uiTelemetry.uiTelemetryService, 'addEvent').mockImplementation(
       () => undefined,
     );
@@ -121,6 +130,7 @@ describe('ToolCallEvent honest boundaries (P07 contract, finding B)', () => {
       new ToolCallEvent(
         makeCompletedCall({ callId: 'c1', startMs: 200, endMs: 350 }),
       ),
+      selectedTelemetry,
     );
 
     expect(toolCalls).toHaveLength(1);
@@ -163,6 +173,7 @@ describe('ToolCallEvent honest boundaries (P07 contract, finding B)', () => {
     logToolCall(
       mockConfig,
       new ToolCallEvent(makeCompletedCall({ callId: 'c2', durationMs: 250 })),
+      selectedTelemetry,
     );
 
     expect(toolCalls).toHaveLength(1);
@@ -210,6 +221,7 @@ describe('ToolCallEvent honest boundaries (P07 contract, finding B)', () => {
         new ToolCallEvent(
           makeCompletedCall({ callId: `stagger-${i}`, durationMs: dur }),
         ),
+        selectedTelemetry,
       );
     }
 
@@ -233,6 +245,7 @@ describe('ToolCallEvent honest boundaries (P07 contract, finding B)', () => {
       new ToolCallEvent(
         makeCompletedCall({ callId: 'explicit', startMs: 10, endMs: 60 }),
       ),
+      selectedTelemetry,
     );
     // Call without boundaries.
     logToolCall(
@@ -240,6 +253,7 @@ describe('ToolCallEvent honest boundaries (P07 contract, finding B)', () => {
       new ToolCallEvent(
         makeCompletedCall({ callId: 'implicit', durationMs: 90 }),
       ),
+      selectedTelemetry,
     );
 
     expect(toolCalls).toHaveLength(2);

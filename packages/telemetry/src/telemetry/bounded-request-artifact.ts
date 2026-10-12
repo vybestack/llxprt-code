@@ -1,15 +1,10 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import { logs, type LogAttributes } from '@opentelemetry/api-logs';
-import type { TelemetryConfig } from '../internal/interfaces.js';
+import type { LogAttributes } from '@opentelemetry/api-logs';
 import type { RequestArtifactDescriptor } from './request-artifact.js';
-import { SERVICE_NAME, EVENT_API_REQUEST } from './constants.js';
-import {
-  assertRequestArtifactExporter,
-  flushRequestArtifactTelemetry,
-  isTelemetrySdkInitialized,
-} from './sdk.js';
+import type { RootTelemetry } from './root-telemetry.js';
+import { EVENT_API_REQUEST } from './constants.js';
 import {
   requestTextChunks,
   requestTextDimensions,
@@ -50,10 +45,11 @@ function validate(artifact: RuntimeRequestArtifact): void {
 }
 
 async function abortPublication(
+  telemetry: RootTelemetry,
   attributes: LogAttributes,
   publicationId: string,
 ): Promise<void> {
-  await flushRequestArtifactTelemetry({
+  await telemetry.publishAcknowledged({
     body: `Telemetry event: ${EVENT_API_REQUEST}_abort`,
     attributes: {
       ...attributes,
@@ -65,6 +61,7 @@ async function abortPublication(
 }
 
 async function publish(
+  telemetry: RootTelemetry,
   attributes: LogAttributes,
   artifact: RuntimeRequestArtifact,
   cap: number,
@@ -75,7 +72,7 @@ async function publish(
   const publicationId = randomUUID();
   const emit = async (name: string, fields: LogAttributes): Promise<void> => {
     signal?.throwIfAborted();
-    await flushRequestArtifactTelemetry({
+    await telemetry.publishAcknowledged({
       body:
         name === EVENT_API_REQUEST
           ? `API request to ${model}.`
@@ -137,7 +134,7 @@ async function publish(
       content_complete: true,
     });
   } catch (error) {
-    if (started) await abortPublication(attributes, publicationId);
+    if (started) await abortPublication(telemetry, attributes, publicationId);
     throw error;
   } finally {
     await file.close();
@@ -145,7 +142,8 @@ async function publish(
 }
 
 export async function logBoundedRequestArtifact(
-  config: TelemetryConfig,
+  telemetry: RootTelemetry,
+  sessionId: string,
   model: string,
   promptId: string,
   artifact: RuntimeRequestArtifact,
@@ -153,30 +151,29 @@ export async function logBoundedRequestArtifact(
 ): Promise<void> {
   signal?.throwIfAborted();
   validate(artifact);
-  if (!isTelemetrySdkInitialized())
+  if (!telemetry.isEnabled())
     throw new Error(
       'Request artifact logging requires an active telemetry SDK',
     );
   const attributes: LogAttributes = {
-    'session.id': config.getSessionId(),
+    'session.id': sessionId,
     model,
     prompt_id: promptId,
     'event.name': EVENT_API_REQUEST,
     'event.timestamp': new Date().toISOString(),
     request_chars: artifact.source.content_chars,
   };
-  if (
-    !config.getTelemetryLogApiBodiesEnabled() ||
-    !config.getTelemetryLogPromptsEnabled()
-  ) {
-    logs
-      .getLogger(SERVICE_NAME)
-      .emit({ body: `API request to ${model}.`, attributes });
+  const privacy = telemetry.readPrivacySettings();
+  if (!privacy.logApiBodies || !privacy.logPrompts) {
+    telemetry.events.record(() => ({
+      body: `API request to ${model}.`,
+      attributes,
+    }));
     return;
   }
-  assertRequestArtifactExporter();
-  const cap = config.getTelemetryLogApiBodyMaxChars();
+  telemetry.assertRequestArtifactExporter();
+  const cap = privacy.maxChars;
   if (!Number.isSafeInteger(cap) || cap < 0)
     throw new Error('Invalid request artifact visible cap');
-  await publish(attributes, artifact, cap, model, signal);
+  await publish(telemetry, attributes, artifact, cap, model, signal);
 }

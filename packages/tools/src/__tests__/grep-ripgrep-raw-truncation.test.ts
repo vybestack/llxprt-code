@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { physicalFiles } from './helpers/physical-files.js';
+
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -53,7 +55,11 @@ function createToolHost(targetDir: string): IToolHost {
     getApprovalMode: () => 'auto',
     setApprovalMode: () => {},
     isInteractive: () => false,
-    hasFeatureFlag: () => false,
+
+    runSearch: <T>(
+      _directories: readonly string[],
+      operation: () => Promise<T>,
+    ): Promise<T> => operation(),
     getFileService: () => ({
       shouldGitIgnoreFile: () => false,
       shouldLlxprtIgnoreFile: () => false,
@@ -69,9 +75,9 @@ function createToolHost(targetDir: string): IToolHost {
     getFileFilteringRespectLlxprtIgnore: () => true,
     getLlxprtIgnoreFilePath: () => null,
     recordFileRead: () => {},
-    getFileSystemService: () => undefined,
+    ...physicalFiles,
     getLlxprtIgnorePatterns: () => [],
-    getEphemeralSettings: () => ({
+    readExecutionPolicy: () => ({
       'tool-output-max-items': 50,
       'tool-output-max-tokens': 50000,
       'tool-output-item-size-limit': 524288,
@@ -191,6 +197,7 @@ describe('Multi-root continuation despite verbose stderr (finding 3)', () => {
         dirs.push(dir);
       }
       const host: IToolHost = {
+        ...physicalFiles,
         ...createToolHost(tempDir),
         getWorkspaceRoots: () => dirs,
       };

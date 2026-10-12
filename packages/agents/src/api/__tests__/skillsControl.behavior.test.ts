@@ -10,7 +10,7 @@
  * BEHAVIORAL RED suite for the `agent.skills` sub-controller
  * (AgentSkillsControl). Drives through the PUBLIC ROOT via the buildAgent
  * harness over a real FakeProvider. The REAL SkillManager is reached through
- * Config.getSkillManager() with ZERO mocking.
+ * the explicit workspace skill owner with ZERO mocking.
  *
  * At GREEN: `agent.skills` is wired through AgentSkillsControl, so every
  * positive case exercises the real SkillManager through Config.

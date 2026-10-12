@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type {
@@ -29,6 +32,9 @@ export interface TurnSourceRequestInput {
   readonly semanticMediaPurge: SemanticMediaPurgeAttempt | undefined;
   readonly tools: RuntimeProviderToolset | undefined;
   readonly signal: AbortSignal | undefined;
+  readonly recordingExecution?: AgentChatRecordingExecution;
+  readonly hookOwner?: HookExecutionOwner;
+  readonly modelParameters?: AdmittedModelParameters;
   readonly log: (message: string) => void;
   readonly buildOptions: (
     contents: AsyncIterable<IContent>,
@@ -68,6 +74,9 @@ export async function sendTurnSource(
     tools: input.tools,
     log: input.log,
     signal: input.signal,
+    recordingExecution: input.recordingExecution,
+    hookOwner: input.hookOwner,
+    modelParameters: input.modelParameters,
     historyOverride: streamSemanticPurgeRequest(
       input.semanticMediaPurge,
       input.signal,

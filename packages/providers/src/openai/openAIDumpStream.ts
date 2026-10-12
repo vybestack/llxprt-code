@@ -5,7 +5,7 @@ import type {
   IContent,
   MediaBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ToolOutputSettingsProvider } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import { normalizeToOpenAIToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { removeThinkingFromContent } from '../reasoning/reasoningUtils.js';
 import { classifyMediaBlock } from '../utils/mediaUtils.js';
@@ -59,7 +59,7 @@ async function* imageParts(
 function convertRow(
   row: IContent,
   include: boolean,
-  config: ToolOutputSettingsProvider | undefined,
+  config: OutputLimitConfig | undefined,
   images: DumpScratch<MediaBlock>,
 ): OpenAI.Chat.ChatCompletionMessageParam[] {
   if (row.speaker === 'human') {
@@ -112,10 +112,12 @@ function validToolMessage(
 export async function* buildOpenAIDumpStream(
   source: HistoryDumpSource,
   options: ReasoningMessageOptions,
-  config?: ToolOutputSettingsProvider,
+  config?: OutputLimitConfig,
 ): AsyncIterable<unknown> {
-  const policy = options.settings.get('reasoning.stripFromContext') ?? 'none';
-  const include = options.settings.get('reasoning.includeInContext') === true;
+  const policy =
+    options.invocation.ephemerals['reasoning.stripFromContext'] ?? 'none';
+  const include =
+    options.invocation.ephemerals['reasoning.includeInContext'] === true;
   const facts = await inspectHistory(source);
   const images = new DumpScratch<MediaBlock>();
   let imageStart = 0;

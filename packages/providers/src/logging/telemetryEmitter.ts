@@ -9,13 +9,7 @@
  * the main wrapper file under the lint line budget.
  */
 
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import {
-  logTokenUsage,
-  logApiResponse,
-  logConversationResponse,
-  acknowledgeTerminalTelemetry,
-} from '@vybestack/llxprt-code-telemetry/telemetry/loggers.js';
+import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import {
   TokenUsageEvent,
   ApiResponseEvent,
@@ -42,7 +36,7 @@ export interface AttemptTelemetryMeta {
 
 /** Emit API response telemetry for local /stats tracking and SDK export. */
 export function emitMetricsTelemetry(
-  config: Config | undefined,
+  config: ProviderRequestDiagnostics | undefined,
   tokenCounts: ResponseTokenCounts,
   modelName: string,
   duration: number,
@@ -88,7 +82,7 @@ export function emitMetricsTelemetry(
     ).usage_metadata_present = attemptMeta.hasUsage;
   }
   event.provider_owned = true;
-  logApiResponse(config, event);
+  config.recordApiResponse(event);
 }
 
 export interface ResponseTelemetryContext {
@@ -100,7 +94,7 @@ export interface ResponseTelemetryContext {
 
 /** Emit token usage and API response telemetry events. */
 export function emitResponseTelemetry(
-  config: Config,
+  config: ProviderRequestDiagnostics,
   tokenCounts: ResponseTokenCounts,
   modelName: string | undefined,
   promptId: string,
@@ -117,8 +111,7 @@ export function emitResponseTelemetry(
     tokenCounts.thoughts_token_count +
     tokenCounts.tool_token_count;
 
-  logTokenUsage(
-    config,
+  config.recordTokenUsage(
     new TokenUsageEvent(
       ctx.providerName,
       ctx.conversationId,
@@ -169,12 +162,12 @@ export function emitResponseTelemetry(
     apiResponseEvent.error = String(error);
   }
   apiResponseEvent.provider_owned = true;
-  logApiResponse(config, apiResponseEvent);
+  config.recordApiResponse(apiResponseEvent);
 }
 
 /** Write conversation response event to telemetry and disk. */
 export async function writeConversationLog(
-  config: Config,
+  config: ProviderRequestDiagnostics,
   redactedContent: string,
   promptId: string,
   duration: number,
@@ -202,9 +195,7 @@ export async function writeConversationLog(
     error: error != null ? String(error) : undefined,
   };
   if (policy?.strictDurableResponse === true) {
-    const fileWriter = getConversationFileWriter(
-      config.getConversationLogPath(),
-    );
+    const fileWriter = getConversationFileWriter(config.conversationLogPath);
     await fileWriter.writeEntryAcknowledged({
       type: 'response',
       provider: ctx.providerName,
@@ -213,16 +204,16 @@ export async function writeConversationLog(
     });
     if (policy.strictTelemetry)
       return async (): Promise<void> => {
-        const accept = await acknowledgeTerminalTelemetry(
-          () => logConversationResponse(config, event),
+        const accept = await config.acknowledgeTerminalTelemetry(
+          () => config.recordConversationResponse(event),
           policy.signal,
         );
         accept();
       };
-    return () => logConversationResponse(config, event);
+    return () => config.recordConversationResponse(event);
   }
-  logConversationResponse(config, event);
-  const fileWriter = getConversationFileWriter(config.getConversationLogPath());
+  config.recordConversationResponse(event);
+  const fileWriter = getConversationFileWriter(config.conversationLogPath);
   await fileWriter.writeResponse(ctx.providerName, redactedContent, metadata);
   return undefined;
 }

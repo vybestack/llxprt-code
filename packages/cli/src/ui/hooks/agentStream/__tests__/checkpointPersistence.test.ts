@@ -95,9 +95,7 @@ function makeNonRestorableTool(): TrackedToolCall {
 function makeConfig(checkpointEnabled = true): Config {
   return {
     getCheckpointingEnabled: vi.fn(() => checkpointEnabled),
-    storage: {
-      getProjectTempCheckpointsDir: vi.fn(() => '/tmp/checkpoints'),
-    },
+    projectCheckpointsDir: '/tmp/checkpoints',
   } as unknown as Config;
 }
 
@@ -175,10 +173,6 @@ describe('checkpoint effect cancellation', () => {
   it('cancels the in-flight disk save on unmount and closes its source', async () => {
     await withCheckpoint(512, false, async (fixture, dir) => {
       fixture.history.pauseAt = 1;
-      vi.spyOn(
-        fixture.config.storage,
-        'getProjectTempCheckpointsDir',
-      ).mockReturnValue(dir);
       let finish: () => void = () => {};
       const finished = new Promise<void>((resolve) => {
         finish = resolve;
@@ -195,8 +189,8 @@ describe('checkpoint effect cancellation', () => {
           { getCheckpointingEnabled: () => true },
           checkpointGit,
           mockHistory,
-          fixture.config.getAgentClient(),
-          fixture.config.storage,
+          fixture.client,
+          dir,
           () => finish(),
           trackingFs().ops,
         ),
@@ -377,7 +371,7 @@ async function checkpointCase5(): Promise<void> {
         gitService as unknown as GitService,
         mockHistory,
         makeFakeAgent(agentClient),
-        config.storage,
+        config.projectCheckpointsDir,
         onDebugMessage,
         fsOps,
       ),
@@ -402,7 +396,7 @@ async function checkpointCase6(): Promise<void> {
         gitService as unknown as GitService,
         mockHistory,
         makeFakeAgent(makeAgentClient()),
-        config.storage,
+        config.projectCheckpointsDir,
         vi.fn(),
         fsOps,
       ),
@@ -427,7 +421,7 @@ async function checkpointCase7(): Promise<void> {
         gitService as unknown as GitService,
         mockHistory,
         makeFakeAgent(makeAgentClient()),
-        config.storage,
+        config.projectCheckpointsDir,
         vi.fn(),
         fsOps,
       ),
@@ -452,7 +446,7 @@ async function checkpointCase8(): Promise<void> {
         undefined, // no gitService
         mockHistory,
         makeFakeAgent(makeAgentClient()),
-        config.storage,
+        config.projectCheckpointsDir,
         onDebugMessage,
         fsOps,
       ),
@@ -485,7 +479,7 @@ async function checkpointCase9(): Promise<void> {
         gitService as unknown as GitService,
         mockHistory,
         makeFakeAgent(agentClient),
-        config.storage,
+        config.projectCheckpointsDir,
         onDebugMessage,
         fsOps,
       ),
@@ -515,7 +509,7 @@ async function checkpointCase10(): Promise<void> {
         gitService as unknown as GitService,
         mockHistory,
         makeFakeAgent(makeAgentClient()),
-        config.storage,
+        config.projectCheckpointsDir,
         onDebugMessage,
         fsOps,
       ),
@@ -552,7 +546,7 @@ async function checkpointCase11(): Promise<void> {
         gitService as unknown as GitService,
         mockHistory,
         makeFakeAgent(agentClient),
-        config.storage,
+        config.projectCheckpointsDir,
         onDebugMessage,
         fsOps,
       ),
@@ -570,9 +564,7 @@ async function checkpointCase11(): Promise<void> {
 async function checkpointCase12(): Promise<void> {
   const config = {
     getCheckpointingEnabled: vi.fn(() => true),
-    storage: {
-      getProjectTempCheckpointsDir: vi.fn(() => null),
-    },
+    projectCheckpointsDir: null,
   } as unknown as Config;
   const fsOps = makeFsOps();
 
@@ -584,7 +576,7 @@ async function checkpointCase12(): Promise<void> {
         makeGitService() as unknown as GitService,
         mockHistory,
         makeFakeAgent(makeAgentClient()),
-        config.storage,
+        config.projectCheckpointsDir,
         vi.fn(),
         fsOps,
       ),
@@ -612,7 +604,7 @@ async function checkpointCase13(): Promise<void> {
       gitService as unknown as GitService,
       mockHistory,
       makeFakeAgent(agentClient),
-      config.storage,
+      config.projectCheckpointsDir,
       onDebugMessage,
       fsOps,
     ),
@@ -650,7 +642,7 @@ async function checkpointCase14(): Promise<void> {
       gitService as unknown as GitService,
       mockHistory,
       makeFakeAgent(agentClient),
-      config.storage,
+      config.projectCheckpointsDir,
       onDebugMessage,
       fsOps,
     ),

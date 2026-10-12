@@ -7,13 +7,13 @@
 import * as fs from 'fs/promises';
 import type { Dirent } from 'fs';
 import * as path from 'path';
-import { glob } from 'glob';
 import {
   escapePath,
   unescapePath,
   SHELL_SPECIAL_CHARS,
+  type WorkspaceSearchOperations,
+  type WorkspaceIgnoreOperations,
 } from '@vybestack/llxprt-code-core';
-import type { FileDiscoveryService } from '@vybestack/llxprt-code-storage';
 import type { Suggestion } from '../components/SuggestionsDisplay.js';
 import type { ParsedAtPath } from './slashCompletionTypes.js';
 
@@ -56,7 +56,7 @@ function shouldIgnoreDotfile(entryName: string, searchPrefix: string): boolean {
  */
 function shouldIgnoreByDiscovery(
   entryPathFromRoot: string,
-  fileDiscovery: FileDiscoveryService | null,
+  fileDiscovery: Pick<WorkspaceIgnoreOperations, 'shouldIgnoreFile'> | null,
   filterOptions: {
     respectGitIgnore?: boolean;
     respectLlxprtIgnore?: boolean;
@@ -86,7 +86,7 @@ function createSuggestion(
 export async function findFilesRecursively(
   startDir: string,
   searchPrefix: string,
-  fileDiscovery: FileDiscoveryService | null,
+  fileDiscovery: Pick<WorkspaceIgnoreOperations, 'shouldIgnoreFile'> | null,
   filterOptions: {
     respectGitIgnore?: boolean;
     respectLlxprtIgnore?: boolean;
@@ -147,7 +147,7 @@ interface RecursiveEntryParams {
   lowerSearchPrefix: string;
   startDir: string;
   searchPrefix: string;
-  fileDiscovery: FileDiscoveryService | null;
+  fileDiscovery: Pick<WorkspaceIgnoreOperations, 'shouldIgnoreFile'> | null;
   filterOptions: {
     respectGitIgnore?: boolean;
     respectLlxprtIgnore?: boolean;
@@ -211,7 +211,7 @@ function shouldRecurseIntoEntry(
  */
 export async function findFilesWithGlob(
   searchPrefix: string,
-  fileDiscoveryService: FileDiscoveryService,
+  search: WorkspaceSearchOperations['search'],
   filterOptions: {
     respectGitIgnore?: boolean;
     respectLlxprtIgnore?: boolean;
@@ -220,17 +220,20 @@ export async function findFilesWithGlob(
   cwd: string,
   maxResults = 50,
 ): Promise<Suggestion[]> {
-  const globPattern = `**/${searchPrefix}*`;
-  const files = await glob(globPattern, {
-    cwd: searchDir,
-    dot: searchPrefix.startsWith('.'),
-    nocase: true,
+  const files = await search(searchDir, `**/${searchPrefix}*`, {
+    ...filterOptions,
+    maxResults,
   });
 
   const suggestions: Suggestion[] = files
     .filter(
       (file) =>
-        fileDiscoveryService.shouldIgnoreFile(file, filterOptions) !== true,
+        path
+          .basename(file)
+          .toLowerCase()
+          .startsWith(searchPrefix.toLowerCase()) &&
+        (searchPrefix.startsWith('.') ||
+          !file.split('/').some((part) => part.startsWith('.'))),
     )
     .map((file: string) => {
       const absolutePath = path.resolve(searchDir, file);

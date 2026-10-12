@@ -181,27 +181,13 @@ function makeRuntime(options: {
   } = options;
 
   return {
-    getActiveProviderStatus: () => ({ providerName, modelName }),
+    providerStatus: () => ({ providerName, modelName }),
     getActiveProfileName: () => profileName,
-    getCliProviderManager: () => {
-      if (providerManagerNull) {
-        return null;
-      }
-      return {
-        getProviderByName: (name: string) => {
-          if (name !== 'load-balancer' || providerMissing) {
-            return null;
-          }
-          return {
-            getStats: () => {
-              if (lbStatsThrows) {
-                throw new Error('stats unavailable');
-              }
-              return getStatsReturnsNull ? null : lbStats;
-            },
-          };
-        },
-      };
+    getLoadBalancerStats: () => {
+      if (providerManagerNull || providerMissing || getStatsReturnsNull)
+        return undefined;
+      if (lbStatsThrows) throw new Error('stats unavailable');
+      return lbStats ?? undefined;
     },
   };
 }

@@ -33,7 +33,8 @@ import type { RuntimeGenerateChatOptions } from '../../runtime/contracts/Runtime
 import type { PromptResolver } from '../../prompt-config/prompt-resolver.js';
 import type { PromptContext } from '../../prompt-config/types.js';
 import type { Config } from '../../config/config.js';
-import type { ProviderRuntimeContext } from '../../runtime/providerRuntimeContext.js';
+import type { ProviderRequestCollaborators } from '../../runtime/providerRuntimeContext.js';
+import type { AdmittedModelParameters } from '../../runtime/admittedModelParameters.js';
 
 // ---------------------------------------------------------------------------
 // Strategy trigger
@@ -128,7 +129,7 @@ export type CompressionStrategyName = (typeof COMPRESSION_STRATEGIES)[number];
  */
 export interface CompressionProviderResult {
   readonly provider: IProvider;
-  readonly runtime: ProviderRuntimeContext;
+  readonly runtime: ProviderRequestCollaborators;
   readonly config?: Config;
   readonly resolved?: RuntimeGenerateChatOptions['resolved'];
   readonly invocation?: RuntimeGenerateChatOptions['invocation'];
@@ -139,6 +140,7 @@ export interface CompressionProviderResult {
 // ---------------------------------------------------------------------------
 
 export interface CompressionContext {
+  readonly modelParameters?: AdmittedModelParameters;
   readonly history: readonly IContent[];
   readonly runtimeContext: AgentRuntimeContext;
   readonly runtimeState: AgentRuntimeState;

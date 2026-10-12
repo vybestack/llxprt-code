@@ -1,46 +1,79 @@
+import {
+  RootTelemetry,
+  logUserPrompt,
+  logSlashCommand,
+} from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { vi } from 'bun:test';
-import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
+import { Storage } from '@vybestack/llxprt-code-settings';
 import type {
+  WorkspacePromptSelection,
+  WorkspaceCheckpointOperations,
+  WorkspaceResourceSelection,
   AgentClientContract,
-  AsyncTaskManager,
   BucketFailoverHandler,
-  FileDiscoveryService,
   FileFilteringOptions,
-  FileSystemService,
-  HookSystem,
   IdeClient,
   MCPServerConfig,
-  MessageBus,
-  RuntimeProviderManager,
   SchedulerCallbacks,
-  SchedulerHandle,
-  SchedulerOptions,
-  SchedulerPurpose,
+  ToolSchedulerContract,
   ShellExecutionConfig,
   ShellReplacementMode,
-  SkillManager,
   TelemetrySettings,
-  ToolRegistry,
 } from '@vybestack/llxprt-code-core';
-import { LocalMediaStore } from '@vybestack/llxprt-code-core';
-import { SessionPersistenceService } from '@vybestack/llxprt-code-core/storage/SessionPersistenceService.js';
-import { MCPDiscoveryState } from '@vybestack/llxprt-code-mcp';
-import type { SettingsService, Storage } from '@vybestack/llxprt-code-settings';
+import {
+  coreEvents,
+  CoreEvent,
+  WorkspaceMcpCatalogOwner,
+  WorkspaceCheckpointOwner,
+  LocalMediaStore,
+} from '@vybestack/llxprt-code-core';
+
+import { afterEach, vi } from 'bun:test';
+import { installTestWorkspaceFilesystem } from '@vybestack/llxprt-code-test-utils/core/config.js';
+const createFilesystem = installTestWorkspaceFilesystem();
+let root: ReturnType<typeof createFilesystem> | undefined;
+afterEach(async () => {
+  root = undefined;
+  const pending = [...checkpointRoots];
+  checkpointRoots.clear();
+  await Promise.all(pending.map((owner) => owner.dispose()));
+});
+function fixtureRoot() {
+  root ??= createFilesystem({
+    targetDir: process.cwd(),
+    isTrusted: () => true,
+  });
+  return root;
+}
+function fixturePaths() {
+  return fixtureRoot().paths;
+}
+
+const checkpointRoots = new Set<WorkspaceCheckpointOwner>();
+
+function fixtureCheckpoints(source: object): WorkspaceCheckpointOperations {
+  const owner = new WorkspaceCheckpointOwner(
+    process.cwd(),
+    new Storage(process.cwd()).getHistoryDir(),
+    call(source, 'getCheckpointingEnabled', false),
+  );
+  checkpointRoots.add(owner);
+  return owner.operations;
+}
+
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { createFakeAgent } from './helpers/createFakeAgent.js';
+import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import type {
   RefreshMemoryResult,
   StreamRuntime,
   UiContentGeneratorConfig,
-  UiMcpClientManager,
-  UiPromptRegistry,
-  UiResourceRegistry,
-  UiWorkspaceContext,
 } from '../../../cliUiRuntime.js';
 
 export interface StreamRuntimeTestOverrides {
@@ -54,18 +87,35 @@ export interface StreamRuntimeTestOverrides {
   hooks?: Partial<StreamRuntime['hooks']>;
   mcp?: Partial<StreamRuntime['mcp']>;
   settings?: Partial<StreamRuntime['settings']>;
-  scheduler?: Partial<StreamRuntime['scheduler']>;
-  asyncTasks?: Partial<StreamRuntime['asyncTasks']>;
   events?: Partial<StreamRuntime['events']>;
   bucketFailover?: Partial<StreamRuntime['bucketFailover']>;
   checkpoint?: Partial<StreamRuntime['checkpoint']>;
   sessionLimits?: Partial<StreamRuntime['sessionLimits']>;
   interactive?: Partial<StreamRuntime['interactive']>;
   ephemeral?: Partial<StreamRuntime['ephemeral']>;
-  storage?: StreamRuntime['storage'];
+  projectTempDir?: string;
+  projectCheckpointsDir?: string;
+  historyFilePath?: string;
+  projectChatsDir?: string;
+  userCommandsDir?: string;
+  projectCommandsDir?: string;
 }
 
 type LegacyRuntimeSource = object;
+
+function hasPromptSelection(
+  source: object,
+): source is WorkspacePromptSelection {
+  return 'listPrompts' in source && typeof source.listPrompts === 'function';
+}
+
+function hasResourceSelection(
+  source: object,
+): source is Pick<WorkspaceResourceSelection, 'listResources'> {
+  return (
+    'listResources' in source && typeof source.listResources === 'function'
+  );
+}
 
 function getMember(source: LegacyRuntimeSource, name: string): unknown {
   return Reflect.get(source, name);
@@ -87,23 +137,9 @@ function delegateVoid(
   }
 }
 
-function makeSettingsService(): SettingsService {
-  return {
-    get: vi.fn(() => undefined),
-    getCurrentProfileName: vi.fn(() => null),
-  } as unknown as SettingsService;
-}
-
-function makeStorage(): Storage {
-  return {
-    getProjectTempCheckpointsDir: vi.fn(() => '/tmp/checkpoints'),
-    getProjectTempDir: vi.fn(() => '/tmp'),
-  } as unknown as Storage;
-}
-
 const reactToolSchedulerRuntimeCache = new WeakMap<
   LegacyRuntimeSource,
-  Pick<StreamRuntime, 'scheduler' | 'session'>
+  Pick<StreamRuntime, 'session'> & { agent: Agent }
 >();
 
 const DEFAULT_EMPTY_SOURCE: LegacyRuntimeSource = {};
@@ -114,85 +150,13 @@ function makeAgentClient(source: LegacyRuntimeSource): AgentClientContract {
   } as unknown as AgentClientContract);
 }
 
-function makeWorkspaceContext(source: LegacyRuntimeSource): UiWorkspaceContext {
-  return call(source, 'getWorkspaceContext', {
-    getDirectories: () => ['/tmp'],
-    addDirectory: () => undefined,
-    isPathWithinWorkspace: () => true,
-  });
-}
-
-function makePromptRegistry(source: LegacyRuntimeSource): UiPromptRegistry {
-  return call(source, 'getPromptRegistry', {
-    getPromptsByServer: () => [],
-    getAllPrompts: () => [],
-    getPrompt: () => undefined,
-    clear: () => undefined,
-  });
-}
-
-function makeResourceRegistry(source: LegacyRuntimeSource): UiResourceRegistry {
-  return call(source, 'getResourceRegistry', {
-    getAllResources: () => [],
-    findResourceByUri: () => undefined,
-  });
-}
-
-function makeMcpClientManager(
-  source: LegacyRuntimeSource,
-): UiMcpClientManager | undefined {
-  return call(source, 'getMcpClientManager', {
-    getDiscoveryState: () => MCPDiscoveryState.COMPLETED,
-    getMcpServerCount: () => 0,
-    restartServer: async () => undefined,
-  });
-}
-
-function makeStorageFromSource(
-  source: LegacyRuntimeSource,
-  override: StreamRuntime['storage'] | undefined,
-): Storage {
-  const maybeStorage = getMember(source, 'storage');
-  return (
-    override ??
-    (maybeStorage !== undefined ? (maybeStorage as Storage) : undefined) ??
-    makeStorage()
-  );
-}
-
 function makeSessionRuntime(
   source: LegacyRuntimeSource,
   override: StreamRuntimeTestOverrides['session'],
-  storage: Storage,
 ): StreamRuntime['session'] {
-  const fallbackMediaStore = new LocalMediaStore({
-    rootDirectory: join(
-      storage.getProjectTempDir(),
-      `stream-runtime-test-media-${randomUUID()}`,
-    ),
-    quotaBytes: 1024 * 1024,
-  });
-  const getLocalMediaStore =
-    override?.getLocalMediaStore ??
-    (() => call(source, 'getLocalMediaStore', fallbackMediaStore));
   const getSessionRecordingQueueByteLimit =
     override?.getSessionRecordingQueueByteLimit ??
     (() => call(source, 'getSessionRecordingQueueByteLimit', 1024 * 1024));
-  const createSessionPersistenceService =
-    override?.createSessionPersistenceService ??
-    ((sessionId: string): SessionPersistenceService => {
-      const factory = getMember(source, 'createSessionPersistenceService');
-      if (typeof factory === 'function') {
-        return (factory as (value: string) => SessionPersistenceService).call(
-          source,
-          sessionId,
-        );
-      }
-      return new SessionPersistenceService(storage, sessionId, {
-        mediaStore: getLocalMediaStore(),
-        maxQueueBytes: getSessionRecordingQueueByteLimit(),
-      });
-    });
   return {
     getSessionId: () => call(source, 'getSessionId', 'test-session'),
     adoptSessionId: (sessionId) =>
@@ -201,9 +165,7 @@ function makeSessionRuntime(
     getProjectRoot: () => call(source, 'getProjectRoot', '/tmp'),
     getWorkingDir: () => call(source, 'getWorkingDir', '/tmp'),
     getProjectTempDir: () => call(source, 'getProjectTempDir', '/tmp'),
-    getLocalMediaStore,
     getSessionRecordingQueueByteLimit,
-    createSessionPersistenceService,
     getLlxprtDir: () => call(source, 'getLlxprtDir', '/tmp/.llxprt'),
     ...override,
   };
@@ -217,18 +179,6 @@ function makeModelRuntime(
     getModel: () => call(source, 'getModel', 'test-model'),
     getProvider: () =>
       call(source, 'getProvider', undefined as string | undefined),
-    setProvider: (provider: string) => {
-      const fn = getMember(source, 'setProvider');
-      if (typeof fn === 'function') {
-        (fn as (value: string) => void).call(source, provider);
-      }
-    },
-    getProviderManager: () =>
-      call(
-        source,
-        'getProviderManager',
-        undefined as RuntimeProviderManager | undefined,
-      ),
     getContentGeneratorConfig: () =>
       call(source, 'getContentGeneratorConfig', {
         model: 'test-model',
@@ -267,26 +217,24 @@ function makeFilesRuntime(
   override: StreamRuntimeTestOverrides['files'],
 ): StreamRuntime['files'] {
   return {
-    getFileService: () =>
-      call(source, 'getFileService', {} as FileDiscoveryService),
+    ignore: fixtureRoot().ignore,
+    search: fixtureRoot().search.search,
+    initializeSearch: fixtureRoot().search.initializeSearch,
     getFileFilteringOptions: () =>
       call(source, 'getFileFilteringOptions', {} as FileFilteringOptions),
     getFileFilteringDisableFuzzySearch: () =>
       call(source, 'getFileFilteringDisableFuzzySearch', false),
-    getFileExclusions: () =>
-      call(source, 'getFileExclusions', {
-        getGlobExcludes: () => [],
-        getReadManyFilesExcludes: () => [],
-      }),
     getFileFilteringRespectLlxprtIgnore: () =>
       call(source, 'getFileFilteringRespectLlxprtIgnore', true),
     getFileFilteringRespectGitIgnore: () =>
       call(source, 'getFileFilteringRespectGitIgnore', true),
-    getFileSystemService: () =>
-      call(source, 'getFileSystemService', {} as FileSystemService),
     getEnableRecursiveFileSearch: () =>
       call(source, 'getEnableRecursiveFileSearch', true),
-    getWorkspaceContext: () => makeWorkspaceContext(source),
+    directories: () => fixturePaths().directories(),
+    addDirectory: () => {
+      throw new Error('Use explicit workspace override for directory mutation');
+    },
+    contains: (filePath) => fixturePaths().contains(filePath),
     ...override,
   };
 }
@@ -302,10 +250,6 @@ function makeMemoryRuntime(
     getLlxprtMdFileCount: () => call(source, 'getLlxprtMdFileCount', 0),
     getCoreMemoryFileCount: () => call(source, 'getCoreMemoryFileCount', 0),
     getLlxprtMdFilePaths: () => call(source, 'getLlxprtMdFilePaths', []),
-    setLlxprtMdFileCount: (count) =>
-      delegateVoid(source, 'setLlxprtMdFileCount', count),
-    setLlxprtMdFilePaths: (paths) =>
-      delegateVoid(source, 'setLlxprtMdFilePaths', paths),
     refreshMemory: async () =>
       call(source, 'refreshMemory', {
         memoryContent: '',
@@ -331,7 +275,6 @@ function makeIdeRuntime(
     setIdeClientDisconnected: () =>
       delegateVoid(source, 'setIdeClientDisconnected'),
     getLspConfig: () => call(source, 'getLspConfig', undefined),
-    getLspServiceClient: () => call(source, 'getLspServiceClient', undefined),
     ...override,
   };
 }
@@ -341,29 +284,57 @@ function makeHooksRuntime(
   override: StreamRuntimeTestOverrides['hooks'],
 ): StreamRuntime['hooks'] {
   return {
-    getHookSystem: () =>
-      call(source, 'getHookSystem', undefined as HookSystem | undefined),
+    endHookSession: async (reason) => {
+      const endHookSession = getMember(source, 'endHookSession');
+      if (typeof endHookSession === 'function')
+        await endHookSession.call(source, reason);
+    },
     getEnableHooks: () => call(source, 'getEnableHooks', false),
     getDisabledHooks: () => call(source, 'getDisabledHooks', []),
     setDisabledHooks: (disabledHooks) =>
       delegateVoid(source, 'setDisabledHooks', disabledHooks),
     isSkillsSupportEnabled: () => call(source, 'isSkillsSupportEnabled', false),
     getEnableHooksUI: () => call(source, 'getEnableHooksUI', false),
-    reloadSkills: () => {
-      const fn = getMember(source, 'reloadSkills');
-      return typeof fn === 'function'
-        ? Promise.resolve((fn as () => Promise<void>).call(source))
-        : Promise.resolve();
-    },
-    getSkillManager: () => call(source, 'getSkillManager', {} as SkillManager),
+    isAdminSkillsEnabled: () => call(source, 'isAdminSkillsEnabled', true),
     ...override,
   };
 }
 
+let catalogs: readonly WorkspaceMcpCatalogOwner[] = [];
+afterEach(async () => {
+  const retained = catalogs;
+  catalogs = [];
+  for (const catalog of retained) await catalog.dispose();
+});
 function makeMcpRuntime(
   source: LegacyRuntimeSource,
   override: StreamRuntimeTestOverrides['mcp'],
 ): StreamRuntime['mcp'] {
+  const catalog = new WorkspaceMcpCatalogOwner(
+    () => true,
+    async () => {
+      throw new Error('Stream fixture has no resource transport');
+    },
+  );
+  catalogs = [...catalogs, catalog];
+  if (hasPromptSelection(source)) {
+    const servers = call<Record<string, MCPServerConfig> | undefined>(
+      source,
+      'getMcpServers',
+      undefined,
+    );
+    for (const server of Object.keys(servers ?? {}))
+      for (const prompt of source.listPrompts(server))
+        catalog.promptPublication.registerPrompt(prompt);
+  }
+  const resources = hasResourceSelection(source) ? source.listResources() : [];
+  for (const server of new Set(
+    resources.map((resource) => resource.serverName),
+  ))
+    catalog.resourcePublication.setResourcesForServer(
+      server,
+      resources.filter((resource) => resource.serverName === server),
+    );
   return {
     getMcpServers: () =>
       call(
@@ -373,10 +344,9 @@ function makeMcpRuntime(
       ),
     getMcpServerCommand: () =>
       call(source, 'getMcpServerCommand', undefined as string | undefined),
-    getMcpClientManager: () => makeMcpClientManager(source),
     getBlockedMcpServers: () => call(source, 'getBlockedMcpServers', undefined),
-    getResourceRegistry: () => makeResourceRegistry(source),
-    getPromptRegistry: () => makePromptRegistry(source),
+    ...catalog.promptSelection,
+    listResources: catalog.resourceSelection.listResources,
     ...override,
   };
 }
@@ -385,9 +355,37 @@ function makeSettingsRuntime(
   source: LegacyRuntimeSource,
   override: StreamRuntimeTestOverrides['settings'],
 ): StreamRuntime['settings'] {
+  const telemetry = RootTelemetry.prepare({
+    enabled: false,
+    sessionId: 'stream-fixture',
+    maxBytes: 1024,
+    maxFiles: 1,
+  });
   return {
-    getSettingsService: () =>
-      call(source, 'getSettingsService', makeSettingsService()),
+    logUserPrompt: (event) =>
+      logUserPrompt(
+        {
+          getSessionId: () => 'stream-fixture',
+          getTelemetryLogPromptsEnabled: () => false,
+        },
+        event,
+        telemetry,
+      ),
+    logSlashCommand: (event) =>
+      logSlashCommand(
+        { getSessionId: () => 'stream-fixture' },
+        event,
+        telemetry,
+      ),
+    readCitations: () => call(source, 'readCitations', false),
+    readProfileName: () =>
+      call(source, 'readProfileName', null as string | null),
+    readSelectedProvider: () =>
+      call(source, 'readSelectedProvider', undefined as string | undefined),
+    subscribeModelSelection: (listener) => {
+      coreEvents.on(CoreEvent.ModelChanged, listener);
+      return () => coreEvents.off(CoreEvent.ModelChanged, listener);
+    },
     getProxy: () => call(source, 'getProxy', undefined as string | undefined),
     getBugCommand: () => call(source, 'getBugCommand', undefined),
     getTelemetrySettings: () =>
@@ -396,8 +394,9 @@ function makeSettingsRuntime(
         'getTelemetrySettings',
         {} as TelemetrySettings & { [key: string]: unknown },
       ),
-    updateTelemetrySettings: (settings) =>
-      delegateVoid(source, 'updateTelemetrySettings', settings),
+    updateTelemetrySettings: async (settings) => {
+      delegateVoid(source, 'updateTelemetrySettings', settings);
+    },
     getTelemetryLogPromptsEnabled: () =>
       call(source, 'getTelemetryLogPromptsEnabled', false),
     getTelemetryEnabled: () => call(source, 'getTelemetryEnabled', false),
@@ -421,88 +420,6 @@ function makeSettingsRuntime(
   };
 }
 
-function makeSchedulerRuntime(
-  source: LegacyRuntimeSource,
-  override: StreamRuntimeTestOverrides['scheduler'],
-): StreamRuntime['scheduler'] {
-  return {
-    disposeScheduler: (
-      owner: object,
-      purpose: SchedulerPurpose,
-      handle?: object,
-    ) => {
-      const fn = getMember(source, 'disposeScheduler');
-      if (typeof fn === 'function') {
-        (fn as StreamRuntime['scheduler']['disposeScheduler']).call(
-          source,
-          owner,
-          purpose,
-          handle,
-        );
-      }
-    },
-    getOrCreateScheduler: async (
-      owner: object,
-      purpose: SchedulerPurpose,
-      callbacks: SchedulerCallbacks,
-      options?: SchedulerOptions,
-      dependencies?: {
-        messageBus?: MessageBus;
-        toolRegistry?: ToolRegistry;
-      },
-    ) => {
-      const fn = getMember(source, 'getOrCreateScheduler');
-      if (typeof fn === 'function') {
-        return (fn as StreamRuntime['scheduler']['getOrCreateScheduler']).call(
-          source,
-          owner,
-          purpose,
-          callbacks,
-          options,
-          dependencies,
-        );
-      }
-      return {
-        schedule: vi.fn(),
-        dispose: vi.fn(),
-      } as unknown as SchedulerHandle;
-    },
-    setInteractiveSubagentSchedulerFactory: (factory) => {
-      const fn = getMember(source, 'setInteractiveSubagentSchedulerFactory');
-      if (typeof fn === 'function') {
-        (
-          fn as StreamRuntime['scheduler']['setInteractiveSubagentSchedulerFactory']
-        ).call(source, factory);
-      }
-    },
-    ...override,
-  };
-}
-
-function makeAsyncTasksRuntime(
-  source: LegacyRuntimeSource,
-  override: StreamRuntimeTestOverrides['asyncTasks'],
-): StreamRuntime['asyncTasks'] {
-  return {
-    getAsyncTaskManager: () =>
-      call(
-        source,
-        'getAsyncTaskManager',
-        undefined as AsyncTaskManager | undefined,
-      ),
-    setupAsyncTaskAutoTrigger: (isAgentBusy, triggerAgentTurn) => {
-      const fn = getMember(source, 'setupAsyncTaskAutoTrigger');
-      if (typeof fn === 'function') {
-        return (
-          fn as StreamRuntime['asyncTasks']['setupAsyncTaskAutoTrigger']
-        ).call(source, isAgentBusy, triggerAgentTurn);
-      }
-      return () => undefined;
-    },
-    ...override,
-  };
-}
-
 function makeEphemeralRuntime(
   source: LegacyRuntimeSource,
   override: StreamRuntimeTestOverrides['ephemeral'],
@@ -518,16 +435,68 @@ function makeEphemeralRuntime(
   };
 }
 
+function makeCheckpointRuntime(
+  source: LegacyRuntimeSource,
+  override: StreamRuntimeTestOverrides['checkpoint'],
+): StreamRuntime['checkpoint'] {
+  return {
+    checkpoints: fixtureCheckpoints(source),
+    getCheckpointingEnabled: () =>
+      call(source, 'getCheckpointingEnabled', false),
+    ...override,
+  };
+}
+
+function selectedCommandPaths(
+  storage: Storage,
+  overrides: StreamRuntimeTestOverrides,
+): Pick<
+  StreamRuntime,
+  | 'projectCheckpointsDir'
+  | 'historyFilePath'
+  | 'projectChatsDir'
+  | 'userCommandsDir'
+  | 'projectCommandsDir'
+> {
+  return {
+    projectCheckpointsDir:
+      overrides.projectCheckpointsDir ??
+      join(
+        overrides.projectTempDir ?? storage.getProjectTempDir(),
+        'checkpoints',
+      ),
+    historyFilePath: overrides.historyFilePath ?? storage.getHistoryFilePath(),
+    projectChatsDir: overrides.projectChatsDir ?? storage.getProjectChatsDir(),
+    userCommandsDir: overrides.userCommandsDir ?? Storage.getUserCommandsDir(),
+    projectCommandsDir:
+      overrides.projectCommandsDir ?? storage.getProjectCommandsDir(),
+  };
+}
+
 export function createStreamRuntimeForTest(
   source: LegacyRuntimeSource = {},
   overrides: StreamRuntimeTestOverrides = {},
 ): StreamRuntime {
-  const storage = makeStorageFromSource(source, overrides.storage);
+  const selectedStorage = new Storage(process.cwd());
+  const projectTempDir =
+    overrides.projectTempDir ?? selectedStorage.getProjectTempDir();
+  const fallbackMediaStore = new LocalMediaStore({
+    rootDirectory: join(
+      projectTempDir,
+      `stream-runtime-test-media-${randomUUID()}`,
+    ),
+    quotaBytes: 1024 * 1024,
+  });
+  const sourceClient = makeAgentClient(source);
+  const client =
+    sourceClient.mediaStore === undefined
+      ? Object.assign(sourceClient, { mediaStore: fallbackMediaStore })
+      : sourceClient;
   return {
-    session: makeSessionRuntime(source, overrides.session, storage),
+    session: makeSessionRuntime(source, overrides.session),
     model: makeModelRuntime(source, overrides.model),
     agentClientSource: {
-      getAgentClient: () => makeAgentClient(source),
+      getAgentClient: () => client,
       ...overrides.agentClientSource,
     },
     shell: makeShellRuntime(source, overrides.shell),
@@ -537,26 +506,33 @@ export function createStreamRuntimeForTest(
     hooks: makeHooksRuntime(source, overrides.hooks),
     mcp: makeMcpRuntime(source, overrides.mcp),
     settings: makeSettingsRuntime(source, overrides.settings),
-    scheduler: makeSchedulerRuntime(source, overrides.scheduler),
-    asyncTasks: makeAsyncTasksRuntime(source, overrides.asyncTasks),
     events: {
       onMcpClientUpdate: () => () => undefined,
       ...overrides.events,
     },
     bucketFailover: {
-      getBucketFailoverHandler: () =>
+      resetBuckets: () =>
         call(
           source,
           'getBucketFailoverHandler',
           undefined as BucketFailoverHandler | undefined,
-        ),
+        )?.reset?.(),
+      resetBucketSession: () =>
+        call(
+          source,
+          'getBucketFailoverHandler',
+          undefined as BucketFailoverHandler | undefined,
+        )?.resetSession?.(),
+      ensureBucketsAuthenticated: async () => {
+        await call(
+          source,
+          'getBucketFailoverHandler',
+          undefined as BucketFailoverHandler | undefined,
+        )?.ensureBucketsAuthenticated?.();
+      },
       ...overrides.bucketFailover,
     },
-    checkpoint: {
-      getCheckpointingEnabled: () =>
-        call(source, 'getCheckpointingEnabled', false),
-      ...overrides.checkpoint,
-    },
+    checkpoint: makeCheckpointRuntime(source, overrides.checkpoint),
     sessionLimits: {
       getMaxSessionTurns: () => call(source, 'getMaxSessionTurns', 100),
       ...overrides.sessionLimits,
@@ -566,27 +542,88 @@ export function createStreamRuntimeForTest(
       ...overrides.interactive,
     },
     ephemeral: makeEphemeralRuntime(source, overrides.ephemeral),
-    storage,
+    projectTempDir,
+    ...selectedCommandPaths(selectedStorage, overrides),
   };
 }
 
 export function createReactToolSchedulerRuntimeForTest(
   source: LegacyRuntimeSource = DEFAULT_EMPTY_SOURCE,
+  factory: (
+    callbacks: SchedulerCallbacks,
+  ) => Promise<
+    Pick<ToolSchedulerContract, 'schedule' | 'cancelAll' | 'dispose'>
+  >,
   overrides: StreamRuntimeTestOverrides = {},
   // useReactToolScheduler memoizes by callback identity; for no-overrides scheduler
   // tests, return a stable runtime per source object to avoid test-only resubscribe
   // loops while still allowing per-test freshness through explicit overrides.
-): Pick<StreamRuntime, 'scheduler' | 'session'> {
+): Pick<StreamRuntime, 'session'> & { agent: Agent } {
   if (Object.keys(overrides).length === 0) {
     const cached = reactToolSchedulerRuntimeCache.get(source);
     if (cached) {
       return cached;
     }
     const runtime = createStreamRuntimeForTest(source, overrides);
-    const result = { scheduler: runtime.scheduler, session: runtime.session };
+    const result = {
+      session: runtime.session,
+      agent: createSchedulerTestAgent(factory),
+    };
     reactToolSchedulerRuntimeCache.set(source, result);
     return result;
   }
   const runtime = createStreamRuntimeForTest(source, overrides);
-  return { scheduler: runtime.scheduler, session: runtime.session };
+  return {
+    session: runtime.session,
+    agent: createSchedulerTestAgent(factory),
+  };
+}
+
+function createSchedulerTestAgent(
+  factory: (
+    callbacks: SchedulerCallbacks,
+  ) => Promise<
+    Pick<ToolSchedulerContract, 'schedule' | 'cancelAll' | 'dispose'>
+  >,
+): Agent {
+  const agent = createFakeAgent([]);
+  agent.tools.openClientChannel = () => {
+    const observers = new Set<
+      Parameters<Agent['tools']['setDisplayCallbacks']>[0]
+    >();
+    const instance = factory({
+      getPreferredEditor: () => undefined,
+      onEditorClose: () => {},
+      onToolCallsUpdate: (calls) => {
+        for (const observer of observers) observer.onToolCallsUpdate?.(calls);
+      },
+      outputUpdateHandler: (id, update) => {
+        for (const observer of observers)
+          observer.outputUpdateHandler?.(id, update);
+      },
+      onAllToolCallsComplete: async (calls) => {
+        for (const observer of observers)
+          await observer.onAllToolCallsComplete?.(calls);
+      },
+    });
+    return {
+      ready: instance.then(() => {}),
+      schedule: async (request, signal) =>
+        (await instance).schedule(request, signal),
+      cancelAll: () => {
+        void instance.then((scheduler) => scheduler.cancelAll());
+      },
+      subscribe: (callbacks) => {
+        observers.add(callbacks);
+        return () => {
+          observers.delete(callbacks);
+        };
+      },
+      release: async () => {
+        observers.clear();
+        (await instance).dispose();
+      },
+    };
+  };
+  return agent;
 }

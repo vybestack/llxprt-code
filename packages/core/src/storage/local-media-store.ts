@@ -82,16 +82,37 @@ function storedObjectMetadataMatches(
 export class LocalMediaStore {
   readonly rootDirectory: string;
   readonly quotaBytes: number;
+  readonly recordingArchive: LocalMediaStore | undefined;
+  private readonly operations = new Set<Promise<unknown>>();
+  private closing: Promise<void> | undefined;
   private readonly persistence: LocalMediaStorePersistence;
 
   constructor(options: LocalMediaStoreOptions) {
+    this.recordingArchive = options.recordingArchive;
     this.persistence = new LocalMediaStorePersistence(options);
     this.rootDirectory = this.persistence.rootDirectory;
     this.quotaBytes = this.persistence.quotaBytes;
   }
 
-  async close(): Promise<void> {
-    await this.persistence.close();
+  close(): Promise<void> {
+    this.closing ??= this.joinAndClose();
+    return this.closing;
+  }
+
+  private async joinAndClose(): Promise<void> {
+    const closing = this.persistence.close();
+    await Promise.allSettled([...this.operations]);
+    await closing;
+  }
+
+  private async trackOperation<T>(work: () => Promise<T>): Promise<T> {
+    const operation = work();
+    this.operations.add(operation);
+    try {
+      return await operation;
+    } finally {
+      this.operations.delete(operation);
+    }
   }
 
   async admit(input: MediaAdmissionInput): Promise<MediaReferenceBlock> {
@@ -139,6 +160,10 @@ export class LocalMediaStore {
 
   async stageObjects(
     admissions: readonly MediaStoredObjectAdmission[],
+    reservation?: {
+      readonly references: readonly MediaReferenceBlock[];
+      readonly ownerId: string;
+    },
   ): Promise<StagedMediaObjectAdmission> {
     const copied = admissions.map((admission) => ({
       object: admission.object,
@@ -147,7 +172,30 @@ export class LocalMediaStore {
     const published = await this.persistence.runExclusive(
       'stage object batch',
       undefined,
-      () => this.stageObjectBatchUnlocked(copied),
+      async () => {
+        const published = await this.stageObjectBatchUnlocked(copied);
+        try {
+          if (reservation !== undefined) {
+            for (const reference of reservation.references) {
+              await this.persistence.reserveUnlocked(
+                reference,
+                reservation.ownerId,
+              );
+            }
+          }
+          return published;
+        } catch (error) {
+          const failures = await this.persistence.rollbackPublishedPaths(
+            published.map((entry) => entry.path),
+          );
+          if (failures.length > 0)
+            throw new AggregateError(
+              [error, ...failures],
+              'Staged media reservation cleanup failed',
+            );
+          throw error;
+        }
+      },
     );
     let pending = true;
     return {
@@ -155,9 +203,9 @@ export class LocalMediaStore {
       commit(): void {
         pending = false;
       },
-      rollback: async (): Promise<void> => {
+      rollback: async (readProtected): Promise<void> => {
         if (!pending) return;
-        await this.persistence.rollbackStagedObjects(published);
+        await this.persistence.rollbackStagedObjects(published, readProtected);
         pending = false;
       },
     };
@@ -177,9 +225,9 @@ export class LocalMediaStore {
       commit(): void {
         pending = false;
       },
-      rollback: async (): Promise<void> => {
+      rollback: async (readProtected): Promise<void> => {
         if (!pending) return;
-        await this.persistence.rollbackStagedObjects(published);
+        await this.persistence.rollbackStagedObjects(published, readProtected);
         pending = false;
       },
     };
@@ -216,6 +264,13 @@ export class LocalMediaStore {
   }
 
   async admitKnown(
+    input: MediaKnownAdmissionInput,
+    readBytes: () => Promise<Uint8Array>,
+  ): Promise<MediaReferenceBlock> {
+    return this.trackOperation(() => this.admitKnownSource(input, readBytes));
+  }
+
+  private async admitKnownSource(
     input: MediaKnownAdmissionInput,
     readBytes: () => Promise<Uint8Array>,
   ): Promise<MediaReferenceBlock> {
@@ -693,4 +748,18 @@ export class LocalMediaStore {
       );
     }
   }
+}
+
+export function requireMediaStore(client: {
+  readonly mediaStore?: LocalMediaStore;
+}): LocalMediaStore {
+  if (client.mediaStore === undefined)
+    throw new Error('Client requires an explicit media store');
+  return client.mediaStore;
+}
+
+export function clientMediaStore(
+  client: { readonly mediaStore?: LocalMediaStore } | undefined,
+): LocalMediaStore | undefined {
+  return client?.mediaStore;
 }

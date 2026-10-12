@@ -4,6 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import {
+  readInvocationPolicyRecord,
+  readInvocationPolicyValue,
+} from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { composeProviderOwner, type ProviderOwner } from './providerOwner.js';
 /**
  * Base provider class with authentication precedence logic
  */
@@ -17,6 +23,7 @@ import {
 import {
   type IProvider,
   type GenerateChatOptions,
+  type ProviderRuntimeOptions,
   type ProviderToolset,
 } from './IProvider.js';
 import { type IModel } from './IModel.js';
@@ -31,7 +38,7 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import {
   type AuthPrecedenceConfig,
-  type CredentialResolutionError,
+  CredentialResolutionError,
   type OAuthManager,
   type IProviderKeyStorage,
 } from '@vybestack/llxprt-code-auth';
@@ -39,18 +46,19 @@ import { AuthPrecedenceResolver } from '@vybestack/llxprt-code-auth/precedence.j
 import { createProviderKeyStorage } from './auth/proxy/credential-store-factory.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { type IProviderConfig } from './types/IProviderConfig.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { RuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import {
+  captureInvocationEphemerals,
+  type RuntimeInvocationContext,
+} from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
-  assertProviderRuntimeContext,
+  assertProviderRequestData,
   materializeCallOptions,
+  isRuntimeInvocationContext,
   normalizeProviderGenerateChatOptions,
   readsRequestRowsAtTransport,
-  resolveGenerateChatSettings,
 } from './BaseProviderNormalization.js';
 import { getProviderCustomHeaders } from './customHeaders.js';
-import { MissingProviderRuntimeError } from './errors.js';
 import type {
   ProviderTelemetryContext,
   ResolvedAuthToken,
@@ -92,7 +100,7 @@ export interface NormalizedGenerateChatOptions
    *
    * Providers that declare {@link BaseProvider.materializesContentsAtTransport}
    * leave this empty on the wire path and drain
-   * {@link NormalizedGenerateChatOptions.contentsStream} inside their
+   * {@link NormalizedGenerateChatOptions.requestContents} inside their
    * transport's request-scoped lease instead (issue #854 P05b4).
    */
   contents: IContent[];
@@ -101,10 +109,7 @@ export interface NormalizedGenerateChatOptions
    * materializes contents at the transport (issue #854 P05b4).
    */
   requestContents?: RequestScopedContents;
-  settings: SettingsService;
-  config?: Config;
   userMemory?: UserMemoryInput; // @plan PLAN-20251023-STATELESS-HARDENING.P08: User memory from runtime context
-  runtime?: ProviderRuntimeContext;
   invocation: RuntimeInvocationContext;
   tools?: ProviderToolset;
   metadata: Record<string, unknown>;
@@ -134,22 +139,16 @@ export abstract class BaseProvider implements IProvider {
    * @requirement REQ-SP-001
    * @pseudocode provider-invocation.md lines 8-15
    */
-  private defaultSettingsService: SettingsService | undefined;
-  private defaultConfig?: Config;
+  protected requestMediaResolver?: RequestMediaResolutionService;
+  protected requestMediaBudgetBytes?: number;
+  protected requestAuthentication?: ProviderOwner['readAuthentication'];
+  private owner: ProviderOwner;
   private readonly mediaTransportCapabilities: ProviderMediaTransportCapabilities;
   private readonly activeCallContext =
     new AsyncLocalStorage<NormalizedGenerateChatOptions>();
 
   // Callback for tracking throttle wait times (set by LoggingProviderWrapper)
   protected throttleTracker?: (waitTimeMs: number) => void;
-
-  protected get globalConfig(): Config | undefined {
-    return this.defaultConfig;
-  }
-
-  protected set globalConfig(config: Config | undefined) {
-    this.defaultConfig = config;
-  }
 
   constructor(
     config: BaseProviderConfig,
@@ -160,15 +159,12 @@ export abstract class BaseProvider implements IProvider {
     this.name = config.name;
     this.baseProviderConfig = config;
     this.providerConfig = providerConfig;
-    this.defaultConfig = globalConfig;
     this.mediaTransportCapabilities = copyMediaTransportCapabilities(
       config.mediaTransportCapabilities ??
         conservativeMediaTransportCapabilities(),
     );
 
     const fallbackSettingsService = settingsService ?? new SettingsService();
-
-    this.defaultSettingsService = fallbackSettingsService;
 
     const precedenceConfig: AuthPrecedenceConfig = {
       apiKey: config.apiKey,
@@ -194,7 +190,28 @@ export abstract class BaseProvider implements IProvider {
       providerKeyStorage:
         config.providerKeyStorage ?? createProviderKeyStorage(),
     });
+    this.owner = composeProviderOwner(
+      this.name,
+      fallbackSettingsService,
+      () => this.authResolver,
+    );
   }
+  bindOwnerAuthentication(settings: SettingsService): this {
+    const owner = composeProviderOwner(
+      this.name,
+      settings,
+      () => this.authResolver,
+    );
+    const readAuthentication = owner.captureAuthentication();
+    return new Proxy(this, {
+      get(target, property, receiver): unknown {
+        if (property === 'owner') return owner;
+        if (property === 'requestAuthentication') return readAuthentication;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+  }
+
   getMediaTransportCapabilities(): ProviderMediaTransportCapabilities {
     return copyMediaTransportCapabilities(this.mediaTransportCapabilities);
   }
@@ -211,8 +228,11 @@ export abstract class BaseProvider implements IProvider {
     if (!settingsService) {
       return;
     }
-    this.defaultSettingsService = settingsService;
-    this.authResolver.setSettingsService(settingsService);
+    this.owner = composeProviderOwner(
+      this.name,
+      settingsService,
+      () => this.authResolver,
+    );
   }
 
   /**
@@ -222,27 +242,6 @@ export abstract class BaseProvider implements IProvider {
    * @requirement:REQ-SP4-001
    * @pseudocode base-provider-call-contract.md lines 1-3
    */
-  protected resolveSettingsService(): SettingsService {
-    const activeOptions = this.activeCallContext.getStore();
-    if (activeOptions?.settings) {
-      return activeOptions.settings;
-    }
-
-    const settings = this.defaultSettingsService;
-    if (settings) {
-      return settings;
-    }
-
-    throw new MissingProviderRuntimeError({
-      providerKey: `BaseProvider.${this.name}`,
-      missingFields: ['settings'],
-      stage: 'resolveSettingsService',
-      metadata: {
-        requirement: 'REQ-SP4-001',
-        hint: 'Provider runtime guard expects ProviderManager to set runtime settings.',
-      },
-    });
-  }
 
   /**
    * Set throttle tracking callback (used by LoggingProviderWrapper)
@@ -270,8 +269,7 @@ export abstract class BaseProvider implements IProvider {
     if (activeOptions) {
       return activeOptions.resolved.baseURL;
     }
-    const settingsService = this.resolveSettingsService();
-    return this.computeBaseURL(settingsService);
+    return this.computeBaseURL(this.owner.capturePolicy());
   }
 
   /**
@@ -290,7 +288,7 @@ export abstract class BaseProvider implements IProvider {
     if (options === undefined) {
       return this.getBaseURL();
     }
-    return options.resolved.baseURL ?? this.computeBaseURL(options.settings);
+    return options.resolved.baseURL;
   }
 
   /**
@@ -308,11 +306,12 @@ export abstract class BaseProvider implements IProvider {
     if (activeOptions) {
       return activeOptions.resolved.model;
     }
-    const settingsService = this.resolveSettingsService();
-    return this.computeModel(settingsService);
+    return this.computeModel(this.owner.capturePolicy());
   }
 
-  private computeBaseURL(settingsService: SettingsService): string | undefined {
+  private computeBaseURL(
+    policy: Readonly<Record<string, unknown>>,
+  ): string | undefined {
     const normalizeBaseUrl = (value: unknown): string | undefined => {
       if (typeof value !== 'string') {
         return undefined;
@@ -324,27 +323,22 @@ export abstract class BaseProvider implements IProvider {
       return trimmed;
     };
 
-    const rawActiveProvider = settingsService.get('activeProvider') as
-      | string
-      | undefined;
+    const rawActiveProvider = policy['activeProvider'] as string | undefined;
     const activeProvider =
       typeof rawActiveProvider === 'string' && rawActiveProvider.trim()
         ? rawActiveProvider.trim()
         : undefined;
 
     if (!activeProvider || activeProvider === this.name) {
-      const ephemeralBaseUrl = normalizeBaseUrl(
-        settingsService.get('base-url'),
-      );
+      const ephemeralBaseUrl = normalizeBaseUrl(policy['base-url']);
       if (ephemeralBaseUrl) {
         return ephemeralBaseUrl;
       }
     }
 
     const providerSettings =
-      (settingsService.getProviderSettings(this.name) as
-        | ProviderSettings
-        | undefined) ?? ({} as ProviderSettings);
+      (policy[this.name] as ProviderSettings | undefined) ??
+      ({} as ProviderSettings);
     const providerBaseUrl = normalizeBaseUrl(providerSettings['base-url']);
     if (providerBaseUrl) {
       return providerBaseUrl;
@@ -363,16 +357,15 @@ export abstract class BaseProvider implements IProvider {
     return undefined;
   }
 
-  private computeModel(settingsService: SettingsService): string {
-    const ephemeralModel = settingsService.get('model') as string | undefined;
+  private computeModel(policy: Readonly<Record<string, unknown>>): string {
+    const ephemeralModel = policy['model'] as string | undefined;
     if (ephemeralModel) {
       return ephemeralModel;
     }
 
     const providerSettings =
-      (settingsService.getProviderSettings(this.name) as
-        | ProviderSettings
-        | undefined) ?? ({} as ProviderSettings);
+      (policy[this.name] as ProviderSettings | undefined) ??
+      ({} as ProviderSettings);
     const providerModel = providerSettings.model;
     if (providerModel) {
       return providerModel;
@@ -396,23 +389,18 @@ export abstract class BaseProvider implements IProvider {
   protected async getAuthToken(): Promise<string> {
     const activeOptions = this.activeCallContext.getStore();
     if (activeOptions) {
-      const runtimeToken = await resolveRuntimeAuthToken(
+      const runtimeToken = await this.resolveOptionalAuthentication(
         activeOptions.resolved.authToken,
       );
-      if (runtimeToken) {
-        return runtimeToken;
-      }
+      return runtimeToken ?? '';
     }
-
-    const settingsService = this.resolveSettingsService();
 
     // IMPORTANT: includeOAuth: false for config-time checks
     // OAuth should ONLY trigger during actual prompt sends
     const token =
-      (await this.authResolver.resolveAuthentication({
-        settingsService,
-        includeOAuth: false,
-      })) ?? '';
+      (await this.owner
+        .readAuthentication({ includeOAuth: false })
+        .then((result) => result.token)) ?? '';
 
     return token;
   }
@@ -421,6 +409,23 @@ export abstract class BaseProvider implements IProvider {
    * Get auth token for prompt send - CAN trigger OAuth if needed
    * Use this method ONLY when actually sending a prompt to the API
    */
+  private async resolveOptionalAuthentication(
+    input: ResolvedAuthToken,
+  ): Promise<string | undefined> {
+    try {
+      return await resolveRuntimeAuthToken(input);
+    } catch (error) {
+      if (
+        error instanceof CredentialResolutionError &&
+        (error.kind === 'no-credential-configured' ||
+          (error.kind === 'credential-source-failed' &&
+            error.remediation?.startsWith('Run /auth ') === true))
+      )
+        return '';
+      throw error;
+    }
+  }
+
   protected async getAuthTokenForPrompt(): Promise<string> {
     const activeOptions = this.activeCallContext.getStore();
     if (activeOptions) {
@@ -432,19 +437,19 @@ export abstract class BaseProvider implements IProvider {
       }
     }
 
-    const settingsService = this.resolveSettingsService();
-
     // OAuth is only eligible for the effective base URL of this call. Providers
     // whose OAuth is host-specific (e.g. Anthropic) override isOAuthEligible so
     // a third-party gateway base URL never triggers an OAuth handshake against
     // the wrong endpoint.
     const effectiveBaseURL =
-      activeOptions?.resolved.baseURL ?? this.computeBaseURL(settingsService);
+      activeOptions?.resolved.baseURL ??
+      this.computeBaseURL(this.owner.capturePolicy());
     const token =
-      (await this.authResolver.resolveAuthentication({
-        settingsService,
-        includeOAuth: this.isOAuthEligible(effectiveBaseURL),
-      })) ?? '';
+      (await this.owner
+        .readAuthentication({
+          includeOAuth: this.isOAuthEligible(effectiveBaseURL),
+        })
+        .then((result) => result.token)) ?? '';
 
     return token;
   }
@@ -510,9 +515,7 @@ export abstract class BaseProvider implements IProvider {
    * Checks if authentication is available without triggering OAuth
    */
   async hasNonOAuthAuthentication(): Promise<boolean> {
-    return this.authResolver.hasNonOAuthAuthentication({
-      settingsService: this.resolveSettingsService(),
-    });
+    return this.owner.readNonOAuthAuthentication();
   }
 
   /**
@@ -522,9 +525,7 @@ export abstract class BaseProvider implements IProvider {
    * Checks if OAuth is the only available authentication method
    */
   async isOAuthOnlyAvailable(): Promise<boolean> {
-    return this.authResolver.isOAuthOnlyAvailable({
-      settingsService: this.resolveSettingsService(),
-    });
+    return this.owner.readOAuthOnly();
   }
 
   /**
@@ -534,18 +535,14 @@ export abstract class BaseProvider implements IProvider {
    * Gets the current authentication method name for debugging
    */
   async getAuthMethodName(): Promise<string | null> {
-    return this.authResolver.getAuthMethodName({
-      settingsService: this.resolveSettingsService(),
-    });
+    return this.owner.readAuthMethodName();
   }
 
   /**
    * Clears authentication (used when removing keys/keyfiles)
    */
   clearAuth?(): void {
-    const settingsService = this.resolveSettingsService();
-    settingsService.set('auth-key', undefined);
-    settingsService.set('auth-keyfile', undefined);
+    this.owner.clearAuthentication();
     this.clearAuthCache();
   }
 
@@ -583,7 +580,8 @@ export abstract class BaseProvider implements IProvider {
    * @requirement Issue #975 - OAuth logout cache invalidation
    */
   clearAuthCache(): void {
-    this.authResolver.invalidateCache();
+    // The base resolver holds no credential cache; subclasses override to
+    // drop their own cached clients.
   }
 
   /**
@@ -593,10 +591,9 @@ export abstract class BaseProvider implements IProvider {
     try {
       // Check non-OAuth authentication first (API keys, environment variables, etc.)
       const nonOAuthToken =
-        (await this.authResolver.resolveAuthentication({
-          settingsService: this.resolveSettingsService(),
-          includeOAuth: false,
-        })) ?? '';
+        (await this.owner
+          .readAuthentication({ includeOAuth: false })
+          .then((result) => result.token)) ?? '';
 
       if (nonOAuthToken !== '') {
         return true;
@@ -819,7 +816,6 @@ export abstract class BaseProvider implements IProvider {
       } finally {
         normalized.resolved.authToken = '';
         delete normalized.resolved.authFailure;
-        this.authResolver.setSettingsService(this.defaultSettingsService);
         await this.releaseUnstartedOptions(normalized);
       }
     }.call(this);
@@ -852,66 +848,137 @@ export abstract class BaseProvider implements IProvider {
       lazyWireContents,
       readsRowsAtTransport,
     );
-    const settings = resolveGenerateChatSettings(
-      providedOptions,
-      this.defaultSettingsService,
-      this.name,
+    const owner = this.owner;
+    const capturedPolicy = captureInvocationEphemerals({
+      ...this.providerConfig?.readConnectionPolicy?.(),
+      ...owner.capturePolicy(),
+    });
+    const providerSettingsSnapshot = {
+      ...readInvocationPolicyRecord(capturedPolicy[this.name]),
+    };
+    const providerSettings = {
+      temperature:
+        typeof providerSettingsSnapshot.temperature === 'number'
+          ? providerSettingsSnapshot.temperature
+          : undefined,
+      maxTokens:
+        typeof providerSettingsSnapshot.maxTokens === 'number'
+          ? providerSettingsSnapshot.maxTokens
+          : undefined,
+      streaming:
+        typeof providerSettingsSnapshot.streaming === 'boolean'
+          ? providerSettingsSnapshot.streaming
+          : undefined,
+    };
+    const selectedPolicy = isRuntimeInvocationContext(
+      providedOptions.invocation,
+    )
+      ? providedOptions.invocation.ephemerals
+      : capturedPolicy;
+    const resolvedBaseURL = this.computeBaseURL(selectedPolicy);
+    const resolvedModel = this.computeModel(selectedPolicy);
+    const configuredHeaders = getProviderCustomHeaders(this.providerConfig);
+    const ephemeralsSnapshot = selectedPolicy;
+    const providerDefaults = captureInvocationEphemerals(
+      this.captureProviderDefaults(),
     );
-    const providerSettings =
-      (settings.getProviderSettings(this.name) as
-        | ProviderSettings
-        | undefined) ?? ({} as ProviderSettings);
-    const resolvedBaseURL = this.computeBaseURL(settings);
-    let resolvedAuth: ResolvedAuthToken;
-    let authFailure: CredentialResolutionError | undefined;
-    const runtimeId =
-      providedOptions.runtime?.runtimeId ??
-      providedOptions.invocation?.runtimeId;
-    if (resolveAuthentication) {
-      const { authIntent, profileId } = providedOptions.metadata ?? {};
-      const authResult = await this.authResolver.resolveAuthenticationResult({
-        settingsService: settings,
-        includeOAuth: this.isOAuthEligible(
-          providedOptions.resolved?.baseURL ?? resolvedBaseURL,
-        ),
-        ...(runtimeId === undefined ? {} : { runtimeId }),
-        ...(typeof profileId === 'string' ? { profileId } : {}),
-        ...(authIntent === 'oauth' || authIntent === 'apikey'
-          ? { authIntent }
-          : {}),
-      });
-      resolvedAuth = authResult.token ?? '';
-      if (authResult.token === null) {
-        authFailure = authResult.failure;
-      }
-    } else {
-      resolvedAuth = providedOptions.resolved?.authToken ?? '';
-    }
+    const { token: resolvedAuth, failure: authFailure } =
+      await this.admitAuthentication(
+        owner,
+        {
+          ...providedOptions,
+          metadata: {
+            ...providedOptions.metadata,
+            profileId:
+              providedOptions.metadata?.profileId ??
+              readInvocationPolicyValue(ephemeralsSnapshot, 'currentProfile'),
+          },
+        },
+        resolvedBaseURL,
+        resolveAuthentication,
+      );
 
     return normalizeProviderGenerateChatOptions(this, providedOptions, {
       providerName: this.name,
-      defaultSettingsService: settings,
-      defaultConfig: this.defaultConfig,
       maybeTools,
       authToken: resolvedAuth,
       ...(authFailure === undefined ? {} : { authFailure }),
-      resolvedModel: this.computeModel(settings),
+      resolvedModel,
       resolvedBaseURL,
       providerSettings,
-      buildEphemeralsSnapshot: (snapshotSettings) =>
-        this.buildEphemeralsSnapshot(snapshotSettings),
+      ephemeralsSnapshot,
+      providerDefaults,
+      configuredHeaders: configuredHeaders ?? {},
     });
   }
 
-  private buildEphemeralsSnapshot(
-    settings: SettingsService,
-  ): Record<string, unknown> {
-    const snapshot: Record<string, unknown> = {
-      ...settings.getAllGlobalSettings(),
+  private async admitAuthentication(
+    owner: ProviderOwner,
+    providedOptions: ProviderRuntimeOptions,
+    resolvedBaseURL: string | undefined,
+    resolveAuthentication: boolean,
+  ): Promise<{
+    token: ResolvedAuthToken;
+    failure?: CredentialResolutionError;
+  }> {
+    if (!resolveAuthentication)
+      return { token: providedOptions.resolved?.authToken ?? '' };
+    const runtimeId = providedOptions.invocation?.runtimeId;
+    const { authIntent } = providedOptions.metadata ?? {};
+    const profileId = providedOptions.metadata?.profileId;
+    const authInput: Parameters<ProviderOwner['readAuthentication']>[0] = {
+      includeOAuth: this.isOAuthEligible(
+        providedOptions.resolved?.baseURL ?? resolvedBaseURL,
+      ),
+      runtimeId,
+      ...(typeof profileId === 'string' ? { profileId } : {}),
+      ...(authIntent === 'oauth' || authIntent === 'apikey'
+        ? { authIntent }
+        : {}),
     };
-    const providerEphemerals = settings.getProviderSettings(this.name);
-    snapshot[this.name] = { ...providerEphemerals };
-    return snapshot;
+    const readAuthentication =
+      this.requestAuthentication ?? owner.captureAuthentication();
+    return {
+      token: {
+        provide: async () => {
+          const live = await readAuthentication(authInput);
+          if (live.token === null) throw live.failure;
+          return live.token;
+        },
+      },
+    };
+  }
+
+  protected captureOwnerPolicy(): Readonly<Record<string, unknown>> {
+    const active = this.activeCallContext.getStore();
+    return active?.invocation.ephemerals ?? this.owner.capturePolicy();
+  }
+
+  protected captureOwnerDefaults(): Readonly<Record<string, unknown>> {
+    return (
+      this.activeCallContext.getStore()?.invocation.providerDefaults ??
+      captureInvocationEphemerals(this.captureProviderDefaults())
+    );
+  }
+
+  private captureProviderDefaults(): Record<string, unknown> {
+    const config = this.providerConfig;
+    return {
+      defaultModel: config?.defaultModel ?? this.getDefaultModel(),
+      baseUrl: config?.baseUrl ?? this.baseProviderConfig.baseURL,
+      temperature: config?.temperature,
+      maxTokens: config?.maxTokens,
+      streaming: config?.streaming,
+      timeout: config?.timeout,
+      openaiResponsesEnabled: config?.openaiResponsesEnabled,
+      providerSpecific: config?.providerSpecific,
+      ephemerals: config?.readConnectionPolicy?.(),
+      enableTextToolCallParsing: config?.enableTextToolCallParsing,
+      textToolCallModels: config?.textToolCallModels,
+      providerToolFormatOverrides: config?.providerToolFormatOverrides,
+      organizationId: config?.organizationId,
+      projectId: config?.projectId,
+    };
   }
 
   /**
@@ -921,17 +988,13 @@ export abstract class BaseProvider implements IProvider {
    */
   protected assertRuntimeContext(input: {
     providerKey: string;
-    settings?: SettingsService | null;
-    config?: Config | null;
-    runtime?: ProviderRuntimeContext;
     metadata?: Record<string, unknown>;
     resolved?: NormalizedGenerateChatOptions['resolved'];
     stage: string;
   }): {
-    runtime: ProviderRuntimeContext;
     metadata: Record<string, unknown>;
   } {
-    return assertProviderRuntimeContext(input);
+    return assertProviderRequestData(input);
   }
 
   // Optional methods with default implementations
@@ -953,16 +1016,7 @@ export abstract class BaseProvider implements IProvider {
       return;
     }
 
-    const maybeConfig = config as {
-      getUserMemory?: () => string;
-      getModel?: () => string;
-    };
-
-    if (
-      typeof maybeConfig.getUserMemory === 'function' &&
-      typeof maybeConfig.getModel === 'function'
-    ) {
-      this.defaultConfig = config as Config;
+    if ('getModel' in config && typeof config.getModel === 'function') {
       return;
     }
 
@@ -979,10 +1033,8 @@ export abstract class BaseProvider implements IProvider {
     key: keyof ProviderSettings,
     fallback?: T,
   ): Promise<T | undefined> {
-    const settingsService = this.resolveSettingsService();
-
     try {
-      const settings = await settingsService.getSettings(this.name);
+      const settings = await this.owner.readProviderData();
       const value = settings[key];
       const shouldUseFallback = isFalsyLikeValue(value);
       return shouldUseFallback ? fallback : (value as T);
@@ -1004,16 +1056,10 @@ export abstract class BaseProvider implements IProvider {
     key: keyof ProviderSettings,
     value: T,
   ): Promise<void> {
-    const settingsService = this.resolveSettingsService();
-
     try {
-      await settingsService.updateSettings(this.name, {
+      await this.owner.writeProviderData({
         [key]: value,
       });
-      const updatedSettings = await settingsService.getSettings(this.name);
-      if (updatedSettings[key] !== value) {
-        settingsService.set(`providers.${this.name}.${String(key)}`, value);
-      }
     } catch (error) {
       if (process.env.DEBUG) {
         debugLogger.error(
@@ -1072,10 +1118,8 @@ export abstract class BaseProvider implements IProvider {
   protected async getModelParamsFromSettings(): Promise<
     Record<string, unknown> | undefined
   > {
-    const settingsService = this.resolveSettingsService();
-
     try {
-      const settings = await settingsService.getSettings(this.name);
+      const settings = await this.owner.readProviderData();
 
       // Extract model parameters from settings, excluding standard fields
       const {
@@ -1122,17 +1166,15 @@ export abstract class BaseProvider implements IProvider {
   protected async setModelParamsInSettings(
     params: Record<string, unknown> | undefined,
   ): Promise<void> {
-    const settingsService = this.resolveSettingsService();
-
     if (params === undefined) {
-      await settingsService.updateSettings(this.name, {
+      await this.owner.writeProviderData({
         temperature: undefined,
         max_tokens: undefined,
       });
       return;
     }
 
-    await settingsService.updateSettings(this.name, params);
+    await this.owner.writeProviderData(params);
   }
 
   /**
@@ -1147,7 +1189,11 @@ export abstract class BaseProvider implements IProvider {
   protected getCustomHeaders(
     options?: NormalizedGenerateChatOptions,
   ): Record<string, string> | undefined {
-    return getProviderCustomHeaders(this.providerConfig, options);
+    const admitted = options ?? this.activeCallContext.getStore();
+    if (admitted) {
+      return { ...admitted.invocation.customHeaders };
+    }
+    return getProviderCustomHeaders(this.providerConfig);
   }
 }
 

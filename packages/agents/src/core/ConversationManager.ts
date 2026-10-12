@@ -107,9 +107,14 @@ function mergeTurnMetadata(
  * and managing conversation state.
  */
 export class ConversationManager {
-  private readonly historyService: HistoryService;
-  private readonly runtimeContext: AgentRuntimeContext;
+  private historyService: HistoryService;
+  private runtimeContext: AgentRuntimeContext;
   private readonly baseURL: string | undefined;
+
+  rebindHistory(runtimeContext: AgentRuntimeContext): void {
+    this.runtimeContext = runtimeContext;
+    this.historyService = runtimeContext.history;
+  }
 
   constructor(
     historyService: HistoryService,
@@ -215,6 +220,7 @@ export class ConversationManager {
     usageMetadata?: UsageStats | null,
     options?: RecordHistoryOptions,
     afterPublication?: () => void | Promise<void>,
+    origin?: object,
   ): Promise<void> {
     const newHistoryEntries: IContent[] = [];
 
@@ -264,6 +270,7 @@ export class ConversationManager {
 
     await this.historyService.addBatch(newHistoryEntries, generatingModel, {
       streamPublication: true,
+      origin,
       ...(afterPublication === undefined ? {} : { afterPublication }),
     });
   }
@@ -519,6 +526,7 @@ export class ConversationManager {
    */
   async setHistory(
     history: Iterable<IContent> | AsyncIterable<IContent>,
+    historyOrigin?: object,
   ): Promise<void> {
     // The second argument to historyService.add is only a logging/token-
     // estimation hint, not attribution. This is a restore path that may run
@@ -528,6 +536,7 @@ export class ConversationManager {
     return this.historyService.detachedValues
       .replace(this.stampRestoredRows(history), generatingModel, {
         publishBatch: true,
+        origin: historyOrigin,
       })
       .then(() => this.historyService.resetCacheAnchorSeq());
   }

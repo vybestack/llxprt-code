@@ -24,6 +24,8 @@ import type { AgentProviderSwitchOptions } from './agent.js';
  * callers couple to the auth package's callback type.
  */
 export interface RuntimeSwitchOptions {
+  readonly preserveEphemerals?: string[];
+  readonly skipModelDefaults?: boolean;
   readonly autoOAuth?: boolean;
   readonly addItem?: (
     event: OAuthUIEvent,
@@ -49,9 +51,14 @@ export function toRuntimeSwitchOptions(
     return {};
   }
   const adapted: {
+    preserveEphemerals?: string[];
+    skipModelDefaults?: boolean;
     autoOAuth?: boolean;
     addItem?: (event: OAuthUIEvent, timestamp?: number) => number | undefined;
-  } = {};
+  } = {
+    preserveEphemerals: options.preserveEphemerals,
+    skipModelDefaults: options.skipModelDefaults,
+  };
   if (options.autoOAuth !== undefined) {
     adapted.autoOAuth = options.autoOAuth;
   }

@@ -51,7 +51,7 @@ export function registerTerminationTests(
 
 function registerMaxTurns(getMockSendMessageStream: () => StreamMock): void {
   it('should terminate with MAX_TURNS if the limit is reached', async () => {
-    const { config } = await createMockConfig();
+    const { config, mcpRuntime, settingsService } = await createMockConfig();
     const runConfig: RunConfig = { ...defaultRunConfig, max_turns: 2 };
 
     // Model keeps looping by calling emitvalue repeatedly
@@ -79,7 +79,10 @@ function registerMaxTurns(getMockSendMessageStream: () => StreamMock): void {
       ]),
     );
 
-    const { overrides: maxTurnOverrides } = createRuntimeOverrides();
+    const { overrides: maxTurnOverrides } = createRuntimeOverrides(
+      mcpRuntime.workspaceFilesystem.paths,
+      { settings: settingsService },
+    );
     const scope = await SubAgentScope.create(
       'test-agent',
       config,
@@ -100,7 +103,7 @@ function registerMaxTurns(getMockSendMessageStream: () => StreamMock): void {
 
 function registerLlmTimeout(getMockSendMessageStream: () => StreamMock): void {
   it('should terminate with TIMEOUT if the time limit is reached during an LLM call', async () => {
-    const { config } = await createMockConfig();
+    const { config, mcpRuntime, settingsService } = await createMockConfig();
     // Install fake timers after config creation so config/auth setup runs on
     // real timers; fake timers freeze Date.now/performance.now/hrtime and
     // stop Bun's per-test timeout from firing.
@@ -124,7 +127,10 @@ function registerLlmTimeout(getMockSendMessageStream: () => StreamMock): void {
     let scope: SubAgentScope | undefined;
     let runPromise: Promise<void> | undefined;
     try {
-      const { overrides: timeoutOverrides } = createRuntimeOverrides();
+      const { overrides: timeoutOverrides } = createRuntimeOverrides(
+        mcpRuntime.workspaceFilesystem.paths,
+        { settings: settingsService },
+      );
       scope = await SubAgentScope.create(
         'test-agent',
         config,
@@ -194,12 +200,15 @@ function registerModelFailure(
   getMockSendMessageStream: () => StreamMock,
 ): void {
   it('should terminate with ERROR if the model call throws', async () => {
-    const { config } = await createMockConfig();
+    const { config, mcpRuntime, settingsService } = await createMockConfig();
     getMockSendMessageStream().mockImplementation(() =>
       Promise.reject(new Error('API Failure')),
     );
 
-    const { overrides: errorOverrides } = createRuntimeOverrides();
+    const { overrides: errorOverrides } = createRuntimeOverrides(
+      mcpRuntime.workspaceFilesystem.paths,
+      { settings: settingsService },
+    );
     const scope = await SubAgentScope.create(
       'test-agent',
       config,
@@ -235,9 +244,10 @@ function registerHungModelAbort(
 
 const observeActivelyAbortAStalledNonInteractiveResponseStreamBeforeTheOverallRun =
   async (getMockSendMessageStream: () => StreamMock) => {
-    const { config } = await createMockConfig();
+    const { config, mcpRuntime, settingsOwner, settingsService } =
+      await createMockConfig();
     const testTimeoutMs = 30_000; // 30 second timeout for this test
-    config.setEphemeralSetting('stream-idle-timeout-ms', testTimeoutMs);
+    settingsOwner.writeUserParameter('stream-idle-timeout-ms', testTimeoutMs);
     // Install fake timers after config creation so config/auth setup runs
     // on real timers; fake timers freeze Date.now/performance.now/hrtime
     // and stop Bun's per-test timeout from firing.
@@ -250,7 +260,10 @@ const observeActivelyAbortAStalledNonInteractiveResponseStreamBeforeTheOverallRu
       capturedSignal = signal;
     });
 
-    const { overrides } = createRuntimeOverrides();
+    const { overrides } = createRuntimeOverrides(
+      mcpRuntime.workspaceFilesystem.paths,
+      { settings: settingsService },
+    );
     const scope = await SubAgentScope.create(
       'test-agent',
       config,
@@ -298,7 +311,7 @@ const observeActivelyAbortAStalledNonInteractiveResponseStreamBeforeTheOverallRu
 const observeActivelyAbortAHungNonInteractiveModelCallWhenTheTimeLimit = async (
   getMockSendMessageStream: () => StreamMock,
 ) => {
-  const { config } = await createMockConfig();
+  const { config, mcpRuntime, settingsService } = await createMockConfig();
   const runConfig: RunConfig = {
     max_time_minutes: 0.001,
     max_turns: 100,
@@ -313,7 +326,10 @@ const observeActivelyAbortAHungNonInteractiveModelCallWhenTheTimeLimit = async (
     capturedSignal = signal;
   });
 
-  const { overrides } = createRuntimeOverrides();
+  const { overrides } = createRuntimeOverrides(
+    mcpRuntime.workspaceFilesystem.paths,
+    { settings: settingsService },
+  );
   const scope = await SubAgentScope.create(
     'test-agent',
     config,

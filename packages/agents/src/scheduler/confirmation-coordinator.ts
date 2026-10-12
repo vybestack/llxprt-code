@@ -17,7 +17,8 @@
 import { randomUUID } from 'node:crypto';
 import * as Diff from 'diff';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { ApprovalMode } from '@vybestack/llxprt-code-core/config/config.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   MessageBusType,
@@ -48,6 +49,8 @@ import type {
   ValidatingToolCall,
 } from '@vybestack/llxprt-code-core/scheduler/types.js';
 import type { EditorType } from '@vybestack/llxprt-code-core/utils/editor.js';
+import { createErrorResponse } from '@vybestack/llxprt-code-core/utils/generateContentResponseUtilities.js';
+import { ToolErrorType } from '@vybestack/llxprt-code-tools/types/tool-error.js';
 
 const logger = new DebugLogger('llxprt:scheduler:confirmation-coordinator');
 
@@ -78,9 +81,12 @@ export interface StatusMutator {
  * execution. The getter MUST return the current array on each call — stored
  * references become stale because setStatusInternal reassigns toolCalls[].
  */
+export class ConfirmationRequiredError extends Error {}
+
 export interface SchedulerAccessor {
   attemptExecution(signal: AbortSignal): Promise<void>;
   getToolCalls(): readonly ToolCall[];
+  getHookOwner(callId: string): HookExecutionOwner | undefined;
 }
 
 /**
@@ -173,7 +179,10 @@ export class ConfirmationCoordinator {
     private readonly onToolNotification: (
       config: Config,
       details: ToolCallConfirmationDetails,
+      owner?: HookExecutionOwner,
     ) => Promise<unknown>,
+    private readonly readApprovalMode: () => ApprovalMode = () =>
+      ApprovalMode.DEFAULT,
   ) {}
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -235,7 +244,7 @@ export class ConfirmationCoordinator {
     const evaluation = evaluatePolicyDecision(
       invocation,
       reqInfo,
-      this.config.getPolicyEngine(),
+      this.messageBus,
     );
 
     if (evaluation.decision === PolicyDecision.ALLOW) {
@@ -270,7 +279,7 @@ export class ConfirmationCoordinator {
     const evaluation = evaluatePolicyDecision(
       invocation,
       reqInfo,
-      this.config.getPolicyEngine(),
+      this.messageBus,
     );
 
     // ALLOW and DENY should have been handled by tryFastApprove, but
@@ -301,7 +310,7 @@ export class ConfirmationCoordinator {
 
     const allowedTools = this.config.getAllowedTools() ?? [];
     if (
-      this.config.getApprovalMode() === ApprovalMode.YOLO ||
+      this.readApprovalMode() === ApprovalMode.YOLO ||
       doesToolInvocationMatch(toolCall.tool, invocation, allowedTools)
     ) {
       this.approveInternal(reqInfo.callId);
@@ -335,7 +344,7 @@ export class ConfirmationCoordinator {
     const { request: reqInfo } = toolCall;
 
     if (!this.config.isInteractive()) {
-      throw new Error(
+      throw new ConfirmationRequiredError(
         `Tool execution for "${
           toolCall.tool.displayName || toolCall.tool.name
         }" requires user confirmation, which is not supported in non-interactive mode.`,
@@ -381,7 +390,11 @@ export class ConfirmationCoordinator {
 
     this.pendingConfirmations.set(correlationId, reqInfo.callId);
     this.pendingOriginalConfirmHandlers.set(correlationId, originalOnConfirm);
-    void this.onToolNotification(this.config, wrappedDetails);
+    void this.onToolNotification(
+      this.config,
+      wrappedDetails,
+      this.schedulerAccessor.getHookOwner(reqInfo.callId),
+    );
     const policyContextWithCallId = {
       ...policyContext,
       callId: reqInfo.callId,
@@ -535,7 +548,22 @@ export class ConfirmationCoordinator {
     );
 
     if (outcome !== ToolConfirmationOutcome.ModifyWithEditor) {
-      await originalOnConfirm(outcome, payload);
+      try {
+        await originalOnConfirm(outcome, payload);
+      } catch (error) {
+        if (!waitingToolCall) throw error;
+        this.statusMutator.setError(
+          callId,
+          createErrorResponse(
+            waitingToolCall.request,
+            error instanceof Error ? error : new Error(String(error)),
+            ToolErrorType.UNHANDLED_EXCEPTION,
+          ),
+        );
+        await this.schedulerAccessor.attemptExecution(signal);
+        if (!skipBusPublish) throw error;
+        return;
+      }
     }
 
     if (outcome === ToolConfirmationOutcome.ProceedAlways) {

@@ -4,7 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ChildProcess } from 'node:child_process';
+export interface ShellProcessIdentity {
+  readonly killed: boolean;
+  readonly exitCode: number | null;
+  readonly signalCode: string | null;
+}
 
 /**
  * Resolves with the process exit information when the child exits, regardless
@@ -78,7 +82,7 @@ export interface ShellJobRecord {
   logPath: string;
   /** Windows-only stderr log path (POSIX jobs do not set this). */
   errLogPath?: string;
-  child: ChildProcess;
+  child: ShellProcessIdentity;
   exited: Promise<ProcessExitInfo>;
   onError: (handler: (err: Error) => void) => void;
   escalateTimer?: ReturnType<typeof setTimeout>;

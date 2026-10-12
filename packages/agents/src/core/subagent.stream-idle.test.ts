@@ -29,6 +29,7 @@ import {
   createContentGenerator,
   type ContentGenerator,
 } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import type { AgentRuntimeLoaderResult } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
@@ -108,6 +109,7 @@ void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
 
 function mockSession(
   config: Config,
+  runtimeBundle: AgentRuntimeLoaderResult,
   stream: () => AsyncGenerator<{
     type: StreamEventType;
     value: ReturnType<typeof mockChunk>;
@@ -120,6 +122,8 @@ function mockSession(
       ({
         sendMessageStream: vi.fn().mockImplementation(async () => stream()),
         getConfig: () => config,
+        getStreamTimeoutPolicy: () =>
+          runtimeBundle.runtimeContext.readStreamTimeoutPolicy(),
         getHistory: vi.fn().mockReturnValue([]),
         getHistoryService: vi.fn().mockReturnValue({
           clear: vi.fn(),
@@ -141,14 +145,14 @@ function registerConfigTimeout(): void {
   describe('config timeout', () => {
     it('honors config setting: timeout fires after custom timeout value from config.getEphemeralSetting', async () => {
       const customTimeoutMs = 15_000; // 15 seconds
-      const { config, scope } = await createIdleScope(
+      const { config, runtimeBundle, scope } = await createIdleScope(
         customTimeoutMs,
         'timeout-test-agent',
         'Test timeout behavior.',
       );
 
       // Mock a slow stream that yields after the timeout
-      mockSession(config, async function* slowStream() {
+      mockSession(config, runtimeBundle, async function* slowStream() {
         yield {
           type: StreamEventType.CHUNK,
           value: mockChunk({ text: 'Starting...' }),
@@ -179,7 +183,7 @@ function registerConfigTimeout(): void {
 function registerDisabledTimeout(): void {
   describe('disabled timeout', () => {
     it('disabled path: no timeout when setting is 0, even after extended period', async () => {
-      const { config, scope } = await createIdleScope(
+      const { config, runtimeBundle, scope } = await createIdleScope(
         0,
         'no-timeout-agent',
         'Test no timeout behavior.',
@@ -191,7 +195,7 @@ function registerDisabledTimeout(): void {
         resolveIterator = resolve;
       });
 
-      mockSession(config, async function* stalledStream() {
+      mockSession(config, runtimeBundle, async function* stalledStream() {
         yield {
           type: StreamEventType.CHUNK,
           value: mockChunk({ text: 'Starting...' }),
@@ -255,7 +259,7 @@ function registerEnvPrecedence(): void {
       const envTimeoutMs = 50; // from env
       const configTimeoutMs = 20_000; // from config (should be ignored)
       process.env.LLXPRT_STREAM_IDLE_TIMEOUT_MS = String(envTimeoutMs);
-      const { config, scope } = await createIdleScope(
+      const { config, runtimeBundle, scope } = await createIdleScope(
         configTimeoutMs,
         'env-precedence-agent',
         'Test env precedence.',
@@ -266,7 +270,7 @@ function registerEnvPrecedence(): void {
       const gapPromise = new Promise<void>((resolve) => {
         releaseGap = resolve;
       });
-      mockSession(config, async function* slowStream() {
+      mockSession(config, runtimeBundle, async function* slowStream() {
         yield {
           type: StreamEventType.CHUNK,
           value: mockChunk({ text: 'Starting...' }),

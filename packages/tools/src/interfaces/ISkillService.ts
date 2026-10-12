@@ -33,18 +33,6 @@ export interface SkillInfo {
   location?: string;
 }
 
-/** Opaque handle to the skill manager. */
-export interface SkillManager {
-  /** Discover available skills. */
-  discoverSkills?: (...args: unknown[]) => Promise<void>;
-  /** Get list of skills. */
-  getSkills?: () => SkillInfo[];
-  /** Get one skill by name. */
-  getSkill?: (name: string) => SkillInfo | null;
-  /** Set disabled skills. */
-  setDisabledSkills?: (names: string[]) => void;
-}
-
 export interface ISkillService {
   /**
    * Activate a skill by name.
@@ -52,12 +40,6 @@ export interface ISkillService {
    * @returns The activation result.
    */
   activateSkill(name: string): Promise<SkillActivationResult>;
-
-  /**
-   * Get the skill manager instance.
-   * @returns The skill manager.
-   */
-  getSkillManager(): SkillManager;
 
   /**
    * List available skills for schema generation and validation.

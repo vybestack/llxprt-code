@@ -2,7 +2,7 @@
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
@@ -37,12 +37,12 @@ export interface StreamRequestInput {
   readonly fallbackTools: PreparedRequest['requestPayload']['tools'];
   readonly buildRuntime: (
     extras: Record<string, unknown>,
-  ) => ProviderRuntimeContext;
+  ) => ProviderRequestCollaborators;
   readonly buildOptions: (
     contents: Iterable<IContent> | AsyncIterable<IContent>,
     tools: PreparedRequest['requestPayload']['tools'],
-    runtime: ProviderRuntimeContext,
-    base: ProviderRuntimeContext,
+    runtime: ProviderRequestCollaborators,
+    base: ProviderRequestCollaborators,
   ) => RuntimeGenerateChatOptions;
   readonly consumeSource: (
     stream: AsyncIterable<IContent>,
@@ -63,10 +63,14 @@ async function selection(
   input: StreamRequestInput,
 ): Promise<ToolSelectionHookResult> {
   return applyToolSelectionHook(
-    input.runtime.providerRuntime.config,
     selectRequestTools(input.params, input.fallbackTools),
     input.runtime.state.model,
+    hookOwnerOf(input.params),
   );
+}
+
+function hookOwnerOf(params: SendMessageParams) {
+  return params.hookOwner ?? params.recordingExecution?.hookOwner;
 }
 
 function pinnedAfterModel(
@@ -104,6 +108,9 @@ async function diskRequest(
       tools: tools.tools,
       log: input.log,
       signal: input.params.config?.abortSignal,
+      recordingExecution: input.params.recordingExecution,
+      hookOwner: hookOwnerOf(input.params),
+      modelParameters: input.params.modelParameters,
       historyOverride: streamSemanticPurgeRequest(
         input.semanticMediaPurge,
         input.params.config?.abortSignal,

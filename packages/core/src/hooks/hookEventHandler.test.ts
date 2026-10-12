@@ -4,6 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { PreCompressTrigger, SessionStartSource, HookType } from './types.js';
+import type { HookExecutionPlan } from './types.js';
+import { fixtureHookRuntime } from './__tests__/hook-runtime-fixture.js';
 /**
  * @plan:PLAN-20260216-HOOKSYSTEMREWRITE.P06,P07
  * @requirement:HOOK-061,HOOK-062,HOOK-063,HOOK-064,HOOK-065,HOOK-066,HOOK-067a,HOOK-067b,HOOK-068,HOOK-069,HOOK-070,HOOK-143,HOOK-144,HOOK-145,HOOK-146,HOOK-147
@@ -17,8 +20,7 @@ import type { HookRegistry } from './hookRegistry.js';
 import type { HookPlanner } from './hookPlanner.js';
 import type { HookRunner } from './hookRunner.js';
 import type { HookAggregator, AggregatedHookResult } from './hookAggregator.js';
-import type { SessionRecordingService } from '../recording/SessionRecordingService.js';
-import { HookEventName } from './types.js';
+import { HookEventName, SessionEndReason } from './types.js';
 import type { IContent } from '../services/history/IContent.js';
 import type { HookLLMRequest } from './hookTranslator.js';
 
@@ -91,13 +93,6 @@ describe('HookEventHandler', () => {
     mockConfig = {
       getSessionId: vi.fn().mockReturnValue('test-session-123'),
       getTargetDir: vi.fn().mockReturnValue('/test/target'),
-      getSessionRecordingService: vi.fn().mockReturnValue({
-        getFilePath: vi
-          .fn()
-          .mockReturnValue(
-            '/test/target/.llxprt/tmp/chats/session-2025-01-20-test-session-123.jsonl',
-          ),
-      }),
     } as unknown as Config;
 
     mockRegistry = {} as unknown as HookRegistry;
@@ -116,12 +111,76 @@ describe('HookEventHandler', () => {
     } as unknown as HookAggregator;
 
     eventHandler = new HookEventHandler(
-      mockConfig,
+      fixtureHookRuntime(mockConfig),
       mockRegistry,
       mockPlanner,
       mockRunner,
       mockAggregator,
     );
+  });
+
+  it('routes direct model, tool, selection and compression events through the supplied execution owner', async () => {
+    const plan: HookExecutionPlan = {
+      eventName: HookEventName.BeforeTool,
+      hookConfigs: [{ type: HookType.Command, command: 'echo test' }],
+      sequential: false,
+    };
+    (
+      mockPlanner.createExecutionPlan as Mock<
+        typeof mockPlanner.createExecutionPlan
+      >
+    ).mockReturnValue(plan);
+    let path: string | undefined = '/sessions/a.jsonl';
+    const owner = {
+      sessionId: () => 'owner-a',
+      transcriptPath: () => path,
+    };
+    await eventHandler.fireBeforeToolEvent('read_file', {}, undefined, owner);
+    await eventHandler.fireAfterToolEvent(
+      'read_file',
+      {},
+      {},
+      undefined,
+      owner,
+    );
+    await eventHandler.fireBeforeModelEvent(V2_REQUEST, owner);
+    await eventHandler.fireAfterModelEvent(
+      V2_REQUEST,
+      { content: { speaker: 'ai', blocks: [] } },
+      owner,
+    );
+    await eventHandler.fireBeforeToolSelectionEvent(V2_REQUEST, owner);
+    await eventHandler.firePreCompressEvent(
+      { trigger: PreCompressTrigger.Manual },
+      owner,
+    );
+    expect(
+      (
+        mockRunner.executeHooksParallel as Mock<
+          typeof mockRunner.executeHooksParallel
+        >
+      ).mock.calls.map((call) => [
+        call[1],
+        call[2].session_id,
+        call[2].transcript_path,
+      ]),
+    ).toStrictEqual([
+      ['BeforeTool', 'owner-a', '/sessions/a.jsonl'],
+      ['AfterTool', 'owner-a', '/sessions/a.jsonl'],
+      ['BeforeModel', 'owner-a', '/sessions/a.jsonl'],
+      ['AfterModel', 'owner-a', '/sessions/a.jsonl'],
+      ['BeforeToolSelection', 'owner-a', '/sessions/a.jsonl'],
+      ['PreCompress', 'owner-a', '/sessions/a.jsonl'],
+    ]);
+    path = undefined;
+    await eventHandler.fireBeforeModelEvent(V2_REQUEST, owner);
+    expect(
+      (
+        mockRunner.executeHooksParallel as Mock<
+          typeof mockRunner.executeHooksParallel
+        >
+      ).mock.lastCall?.[2],
+    ).toMatchObject({ session_id: 'owner-a', transcript_path: '' });
   });
 
   describe('fireBeforeToolEvent', () => {
@@ -282,8 +341,9 @@ describe('HookEventHandler', () => {
     it('should include session_id from config', async () => {
       // @requirement:HOOK-062 - Base fields included
       // @requirement:HOOK-144 - Builds HookInput payloads with base fields from Config
-      const plan = {
-        hookConfigs: [{ type: 'command', command: 'echo test' }],
+      const plan: HookExecutionPlan = {
+        eventName: HookEventName.BeforeTool,
+        hookConfigs: [{ type: HookType.Command, command: 'echo test' }],
         sequential: false,
       };
       (
@@ -301,16 +361,17 @@ describe('HookEventHandler', () => {
           session_id: 'test-session-123',
           cwd: '/test/target',
           hook_event_name: 'BeforeModel',
-          transcript_path:
-            '/test/target/.llxprt/tmp/chats/session-2025-01-20-test-session-123.jsonl',
+          transcript_path: '',
         }),
+        expect.any(AbortSignal),
       );
     });
 
     it('should include timestamp in HookInput', async () => {
       // @requirement:HOOK-062
-      const plan = {
-        hookConfigs: [{ type: 'command', command: 'echo test' }],
+      const plan: HookExecutionPlan = {
+        eventName: HookEventName.BeforeTool,
+        hookConfigs: [{ type: HookType.Command, command: 'echo test' }],
         sequential: false,
       };
       (
@@ -327,6 +388,7 @@ describe('HookEventHandler', () => {
         expect.objectContaining({
           timestamp: expect.any(String),
         }),
+        expect.any(AbortSignal),
       );
     });
   });
@@ -334,10 +396,11 @@ describe('HookEventHandler', () => {
   describe('execution flow', () => {
     it('should execute hooks in parallel by default', async () => {
       // @requirement:HOOK-143 - fire*Event methods
-      const plan = {
+      const plan: HookExecutionPlan = {
+        eventName: HookEventName.BeforeTool,
         hookConfigs: [
-          { type: 'command', command: 'hook1' },
-          { type: 'command', command: 'hook2' },
+          { type: HookType.Command, command: 'hook1' },
+          { type: HookType.Command, command: 'hook2' },
         ],
         sequential: false,
       };
@@ -354,8 +417,9 @@ describe('HookEventHandler', () => {
     });
 
     it('should execute hooks sequentially when plan specifies', async () => {
-      const plan = {
-        hookConfigs: [{ type: 'command', command: 'hook1' }],
+      const plan: HookExecutionPlan = {
+        eventName: HookEventName.BeforeTool,
+        hookConfigs: [{ type: HookType.Command, command: 'hook1' }],
         sequential: true,
       };
       (
@@ -371,12 +435,19 @@ describe('HookEventHandler', () => {
     });
 
     it('should aggregate results after execution', async () => {
-      const plan = {
-        hookConfigs: [{ type: 'command', command: 'hook1' }],
+      const plan: HookExecutionPlan = {
+        eventName: HookEventName.BeforeTool,
+        hookConfigs: [{ type: HookType.Command, command: 'hook1' }],
         sequential: false,
       };
-      const executionResults = [
-        { success: true, output: { decision: 'allow' } },
+      const executionResults: HookExecutionResult[] = [
+        {
+          success: true,
+          hookConfig: { type: HookType.Command, command: 'hook1' },
+          eventName: HookEventName.BeforeModel,
+          duration: 0,
+          output: { decision: 'allow' },
+        },
       ];
       (
         mockPlanner.createExecutionPlan as Mock<
@@ -401,8 +472,9 @@ describe('HookEventHandler', () => {
   describe('telemetry logging', () => {
     it('should log hook event execution at debug level', async () => {
       // @requirement:HOOK-146 - Logs telemetry at debug level
-      const plan = {
-        hookConfigs: [{ type: 'command', command: 'test-hook' }],
+      const plan: HookExecutionPlan = {
+        eventName: HookEventName.BeforeTool,
+        hookConfigs: [{ type: HookType.Command, command: 'test-hook' }],
         sequential: false,
       };
       (
@@ -424,17 +496,20 @@ describe('HookEventHandler', () => {
    */
   describe('firePreCompressEvent', () => {
     it('should dispatch with hookEventName: PreCompress', async () => {
-      await eventHandler.firePreCompressEvent({ trigger: 'manual' as const });
+      await eventHandler.firePreCompressEvent({
+        trigger: PreCompressTrigger.Manual as const,
+      });
 
       expect(mockPlanner.createExecutionPlan).toHaveBeenCalledWith(
         'PreCompress',
-        { trigger: 'manual' },
+        { trigger: PreCompressTrigger.Manual },
       );
     });
 
     it('should pass trigger: manual when Manual is given', async () => {
-      const plan = {
-        hookConfigs: [{ type: 'command', command: 'test-hook' }],
+      const plan: HookExecutionPlan = {
+        eventName: HookEventName.BeforeTool,
+        hookConfigs: [{ type: HookType.Command, command: 'test-hook' }],
         sequential: false,
       };
       (
@@ -446,9 +521,19 @@ describe('HookEventHandler', () => {
         mockRunner.executeHooksParallel as Mock<
           typeof mockRunner.executeHooksParallel
         >
-      ).mockResolvedValue([{ success: true, output: {} }]);
+      ).mockResolvedValue([
+        {
+          success: true,
+          hookConfig: { type: HookType.Command, command: 'echo test' },
+          eventName: HookEventName.BeforeTool,
+          duration: 0,
+          output: {},
+        },
+      ]);
 
-      await eventHandler.firePreCompressEvent({ trigger: 'manual' as const });
+      await eventHandler.firePreCompressEvent({
+        trigger: PreCompressTrigger.Manual as const,
+      });
 
       // The trigger is passed in the input context, not to the planner
       expect(mockRunner.executeHooksParallel).toHaveBeenCalled();
@@ -458,12 +543,13 @@ describe('HookEventHandler', () => {
         >
       ).mock.calls[0];
       const input = callArgs[2]; // third arg is the input
-      expect(input).toMatchObject({ trigger: 'manual' });
+      expect(input).toMatchObject({ trigger: PreCompressTrigger.Manual });
     });
 
     it('should pass trigger: auto when Auto is given', async () => {
-      const plan = {
-        hookConfigs: [{ type: 'command', command: 'test-hook' }],
+      const plan: HookExecutionPlan = {
+        eventName: HookEventName.BeforeTool,
+        hookConfigs: [{ type: HookType.Command, command: 'test-hook' }],
         sequential: false,
       };
       (
@@ -475,9 +561,19 @@ describe('HookEventHandler', () => {
         mockRunner.executeHooksParallel as Mock<
           typeof mockRunner.executeHooksParallel
         >
-      ).mockResolvedValue([{ success: true, output: {} }]);
+      ).mockResolvedValue([
+        {
+          success: true,
+          hookConfig: { type: HookType.Command, command: 'echo test' },
+          eventName: HookEventName.BeforeTool,
+          duration: 0,
+          output: {},
+        },
+      ]);
 
-      await eventHandler.firePreCompressEvent({ trigger: 'auto' as const });
+      await eventHandler.firePreCompressEvent({
+        trigger: PreCompressTrigger.Auto as const,
+      });
 
       expect(mockRunner.executeHooksParallel).toHaveBeenCalled();
       const callArgs = (
@@ -486,12 +582,13 @@ describe('HookEventHandler', () => {
         >
       ).mock.calls[0];
       const input = callArgs[2];
-      expect(input).toMatchObject({ trigger: 'auto' });
+      expect(input).toMatchObject({ trigger: PreCompressTrigger.Auto });
     });
 
     it('should return failure envelope (not throw) on hook runner error', async () => {
-      const plan = {
-        hookConfigs: [{ type: 'command', command: 'test-hook' }],
+      const plan: HookExecutionPlan = {
+        eventName: HookEventName.BeforeTool,
+        hookConfigs: [{ type: HookType.Command, command: 'test-hook' }],
         sequential: false,
       };
       (
@@ -506,7 +603,7 @@ describe('HookEventHandler', () => {
       ).mockRejectedValue(new Error('Hook runner error'));
 
       const result = await eventHandler.firePreCompressEvent({
-        trigger: 'auto' as const,
+        trigger: PreCompressTrigger.Auto as const,
       });
 
       expect(result.success).toBe(false);
@@ -520,10 +617,10 @@ describe('HookEventHandler', () => {
    * @requirement R1, R2, R3
    */
   describe('transcript_path population', () => {
-    it('should include transcript_path from SessionRecordingService when available', async () => {
-      // ARRANGE
-      const plan = {
-        hookConfigs: [{ type: 'command', command: 'echo test' }],
+    it('uses an empty transcript for unbound hook producers', async () => {
+      const plan: HookExecutionPlan = {
+        eventName: HookEventName.BeforeTool,
+        hookConfigs: [{ type: HookType.Command, command: 'echo test' }],
         sequential: false,
       };
       (
@@ -532,24 +629,20 @@ describe('HookEventHandler', () => {
         >
       ).mockReturnValue(plan);
 
-      // ACT
       await eventHandler.fireBeforeModelEvent(V2_REQUEST);
 
-      // ASSERT
       expect(mockRunner.executeHooksParallel).toHaveBeenCalledWith(
         plan.hookConfigs,
         'BeforeModel',
-        expect.objectContaining({
-          transcript_path:
-            '/test/target/.llxprt/tmp/chats/session-2025-01-20-test-session-123.jsonl',
-        }),
+        expect.objectContaining({ transcript_path: '' }),
+        expect.any(AbortSignal),
       );
     });
 
-    it('should use empty string for transcript_path when SessionRecordingService is undefined', async () => {
-      // ARRANGE
-      const plan = {
-        hookConfigs: [{ type: 'command', command: 'echo test' }],
+    it('reads the execution owner dynamically for each lifecycle event', async () => {
+      const plan: HookExecutionPlan = {
+        eventName: HookEventName.BeforeTool,
+        hookConfigs: [{ type: HookType.Command, command: 'echo test' }],
         sequential: false,
       };
       (
@@ -557,29 +650,41 @@ describe('HookEventHandler', () => {
           typeof mockPlanner.createExecutionPlan
         >
       ).mockReturnValue(plan);
-      (
-        mockConfig.getSessionRecordingService as Mock<
-          typeof mockConfig.getSessionRecordingService
-        >
-      ).mockReturnValue(undefined);
-
-      // ACT
-      await eventHandler.fireBeforeModelEvent(V2_REQUEST);
-
-      // ASSERT
-      expect(mockRunner.executeHooksParallel).toHaveBeenCalledWith(
+      let currentPath: string | undefined = '/recordings/first.jsonl';
+      const owner = {
+        sessionId: () => 'executing-facade',
+        transcriptPath: () => currentPath,
+      };
+      await eventHandler.fireSessionEndEvent(
+        { reason: SessionEndReason.Exit },
+        owner,
+      );
+      expect(mockRunner.executeHooksParallel).toHaveBeenLastCalledWith(
         plan.hookConfigs,
-        'BeforeModel',
+        'SessionEnd',
         expect.objectContaining({
-          transcript_path: '',
+          session_id: 'executing-facade',
+          transcript_path: '/recordings/first.jsonl',
         }),
+        expect.any(AbortSignal),
+      );
+      currentPath = undefined;
+      await eventHandler.fireSessionEndEvent(
+        { reason: SessionEndReason.Exit },
+        owner,
+      );
+      expect(mockRunner.executeHooksParallel).toHaveBeenLastCalledWith(
+        plan.hookConfigs,
+        'SessionEnd',
+        expect.objectContaining({ transcript_path: '' }),
+        expect.any(AbortSignal),
       );
     });
 
-    it('should use empty string for transcript_path when getFilePath returns null', async () => {
-      // ARRANGE
-      const plan = {
-        hookConfigs: [{ type: 'command', command: 'echo test' }],
+    it('uses an empty transcript path for an ownerless hook', async () => {
+      const plan: HookExecutionPlan = {
+        eventName: HookEventName.BeforeTool,
+        hookConfigs: [{ type: HookType.Command, command: 'echo test' }],
         sequential: false,
       };
       (
@@ -587,31 +692,22 @@ describe('HookEventHandler', () => {
           typeof mockPlanner.createExecutionPlan
         >
       ).mockReturnValue(plan);
-      (
-        mockConfig.getSessionRecordingService as Mock<
-          typeof mockConfig.getSessionRecordingService
-        >
-      ).mockReturnValue({
-        getFilePath: vi.fn().mockReturnValue(null),
-      } as unknown as SessionRecordingService);
 
-      // ACT
       await eventHandler.fireBeforeModelEvent(V2_REQUEST);
 
-      // ASSERT
-      expect(mockRunner.executeHooksParallel).toHaveBeenCalledWith(
+      expect(mockRunner.executeHooksParallel).toHaveBeenLastCalledWith(
         plan.hookConfigs,
         'BeforeModel',
-        expect.objectContaining({
-          transcript_path: '',
-        }),
+        expect.objectContaining({ transcript_path: '' }),
+        expect.any(AbortSignal),
       );
     });
 
     it('should include transcript_path in BeforeTool events', async () => {
       // ARRANGE
-      const plan = {
-        hookConfigs: [{ type: 'command', command: 'echo test' }],
+      const plan: HookExecutionPlan = {
+        eventName: HookEventName.BeforeTool,
+        hookConfigs: [{ type: HookType.Command, command: 'echo test' }],
         sequential: false,
       };
       (
@@ -630,18 +726,19 @@ describe('HookEventHandler', () => {
         plan.hookConfigs,
         'BeforeTool',
         expect.objectContaining({
-          transcript_path:
-            '/test/target/.llxprt/tmp/chats/session-2025-01-20-test-session-123.jsonl',
+          transcript_path: '',
           tool_name: 'read_file',
           tool_input: { path: '/test.txt' },
         }),
+        expect.any(AbortSignal),
       );
     });
 
     it('should include transcript_path in AfterTool events', async () => {
       // ARRANGE
-      const plan = {
-        hookConfigs: [{ type: 'command', command: 'echo test' }],
+      const plan: HookExecutionPlan = {
+        eventName: HookEventName.BeforeTool,
+        hookConfigs: [{ type: HookType.Command, command: 'echo test' }],
         sequential: false,
       };
       (
@@ -662,17 +759,18 @@ describe('HookEventHandler', () => {
         plan.hookConfigs,
         'AfterTool',
         expect.objectContaining({
-          transcript_path:
-            '/test/target/.llxprt/tmp/chats/session-2025-01-20-test-session-123.jsonl',
+          transcript_path: '',
           tool_name: 'write_file',
         }),
+        expect.any(AbortSignal),
       );
     });
 
     it('should include transcript_path in SessionStart events', async () => {
       // ARRANGE
-      const plan = {
-        hookConfigs: [{ type: 'command', command: 'echo test' }],
+      const plan: HookExecutionPlan = {
+        eventName: HookEventName.BeforeTool,
+        hookConfigs: [{ type: HookType.Command, command: 'echo test' }],
         sequential: false,
       };
       (
@@ -682,17 +780,19 @@ describe('HookEventHandler', () => {
       ).mockReturnValue(plan);
 
       // ACT
-      await eventHandler.fireSessionStartEvent({ source: 'startup' as const });
+      await eventHandler.fireSessionStartEvent({
+        source: SessionStartSource.Startup as const,
+      });
 
       // ASSERT
       expect(mockRunner.executeHooksParallel).toHaveBeenCalledWith(
         plan.hookConfigs,
         'SessionStart',
         expect.objectContaining({
-          transcript_path:
-            '/test/target/.llxprt/tmp/chats/session-2025-01-20-test-session-123.jsonl',
-          source: 'startup',
+          transcript_path: '',
+          source: SessionStartSource.Startup,
         }),
+        expect.any(AbortSignal),
       );
     });
   });
@@ -709,7 +809,7 @@ describe('HookEventHandler', () => {
         eventName: HookEventName.BeforeTool,
         hookConfigs: [
           {
-            type: 'command' as const,
+            type: HookType.Command,
             command: './fail.sh',
           },
         ],

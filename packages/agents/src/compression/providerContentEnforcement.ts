@@ -11,15 +11,10 @@ import { getCompletionBudget } from './compressionBudgeting.js';
 import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import { computeMarginAdjustedLimit } from './contextLimitPolicy.js';
 
-type CompletionSettingsService = { get: (key: string) => unknown };
-
-interface ProviderContentEnforcementDeps {
+export interface ProviderContentEnforcementDeps {
   runtimeContext: AgentRuntimeContext;
   generationConfig: ModelGenerationSettings;
-  providerRuntimeNullable:
-    | { settingsService?: CompletionSettingsService }
-    | null
-    | undefined;
+  readCompletionBudgetSetting: () => unknown;
 }
 
 interface ContextLimits {
@@ -71,7 +66,7 @@ export class ProviderContentEnforcer {
       this.deps.generationConfig,
       model,
       provider,
-      this.deps.providerRuntimeNullable?.settingsService,
+      this.deps.readCompletionBudgetSetting(),
       limit,
     );
     const marginAdjustedLimit = computeMarginAdjustedLimit(limit);

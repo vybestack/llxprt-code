@@ -10,12 +10,9 @@
  *
  * BEHAVIORAL tests for {@link discoverSkillsForConfig} (#2378).
  *
- * The CLI `skills list` command previously constructed a session MessageBus and
- * called `Config.initialize({ messageBus })` by hand — a runtime-assembly seam
- * that must live behind a public core API (the CLI is a client, not a co-owner
- * of runtime assembly). `discoverSkillsForConfig` OWNS that assembly: it builds
- * the one session bus internally (from the Config's policy engine) and drives
- * initialization so skill discovery runs, then returns the discovered skills.
+ * The CLI composition root supplies explicit workspace listing operations
+ * and an initialization operation. The helper returns the discovered data
+ * without acquiring Config or a runtime service.
  *
  * These assertions exercise a REAL Config with a REAL on-disk project skills
  * directory (no mock theater): the observable outcome is the set of discovered
@@ -28,7 +25,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { Config } from '../config/config.js';
 import type { ConfigParameters } from '../config/configTypes.js';
-import { attachTestAgentFactories } from '../__tests__/config-test-helpers.js';
+import { initializeTestMcpRuntime } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import { discoverSkillsForConfig } from './skillDiscovery.js';
 
 async function writeProjectSkill(
@@ -52,6 +49,7 @@ Body for ${name}.
 
 describe('discoverSkillsForConfig @plan:PLAN-20270110-ISSUE2378.P03 @requirement:REQ-2378-003', () => {
   let workspaceDir: string;
+  let close: (() => Promise<void>) | undefined;
 
   beforeEach(async () => {
     workspaceDir = await fs.mkdtemp(
@@ -60,6 +58,8 @@ describe('discoverSkillsForConfig @plan:PLAN-20270110-ISSUE2378.P03 @requirement
   });
 
   afterEach(async () => {
+    await close?.();
+    close = undefined;
     await fs.rm(workspaceDir, { recursive: true, force: true });
   });
 
@@ -73,11 +73,6 @@ describe('discoverSkillsForConfig @plan:PLAN-20270110-ISSUE2378.P03 @requirement
       skillsSupport,
     };
     const config = new Config(params);
-    // The discovery API owns Config.initialize; the agent-client factory is a
-    // production wiring concern supplied by the composition root. The test
-    // helper attaches a minimal factory so initialize() completes without a
-    // provider, mirroring the CLI's fully-wired Config.
-    attachTestAgentFactories(config);
     return config;
   }
 
@@ -97,8 +92,18 @@ describe('discoverSkillsForConfig @plan:PLAN-20270110-ISSUE2378.P03 @requirement
     );
 
     const config = buildConfig(true);
+    const owner = await initializeTestMcpRuntime(config);
+    close = async () => {
+      await owner.dispose();
+      await config.dispose();
+    };
 
-    const skills = await discoverSkillsForConfig(config);
+    const skills = await discoverSkillsForConfig(
+      owner.workspaceSkills.operations,
+      async () => {
+        await owner.workspaceSkills.initialize();
+      },
+    );
 
     const names = skills.map((s) => s.name).sort();
     expect(names).toContain('alpha-skill');
@@ -119,13 +124,23 @@ describe('discoverSkillsForConfig @plan:PLAN-20270110-ISSUE2378.P03 @requirement
     );
 
     const config = buildConfig(false);
+    const owner = await initializeTestMcpRuntime(config);
+    close = async () => {
+      await owner.dispose();
+      await config.dispose();
+    };
 
-    const skills = await discoverSkillsForConfig(config);
+    const skills = await discoverSkillsForConfig(
+      owner.workspaceSkills.operations,
+      async () => {
+        await owner.workspaceSkills.initialize();
+      },
+    );
 
     expect(skills).toStrictEqual([]);
   });
 
-  it('drives Config.initialize exactly once so a second discovery call does not double-initialize', async () => {
+  it('retains the root initialization across repeated listing calls', async () => {
     await writeProjectSkill(
       path.join(workspaceDir, '.llxprt', 'skills'),
       'alpha',
@@ -133,14 +148,26 @@ describe('discoverSkillsForConfig @plan:PLAN-20270110-ISSUE2378.P03 @requirement
       'the alpha skill',
     );
     const config = buildConfig(true);
+    const owner = await initializeTestMcpRuntime(config);
+    close = async () => {
+      await owner.dispose();
+      await config.dispose();
+    };
 
-    const first = await discoverSkillsForConfig(config);
+    const first = await discoverSkillsForConfig(
+      owner.workspaceSkills.operations,
+      async () => {
+        await owner.workspaceSkills.initialize();
+      },
+    );
     expect(first.map((s) => s.name)).toContain('alpha-skill');
 
-    // A second call must NOT throw "Config was already initialized"; the API
-    // owns the initialize lifecycle idempotently and re-reads the discovered
-    // skills from the already-initialized skill manager.
-    const second = await discoverSkillsForConfig(config);
+    const second = await discoverSkillsForConfig(
+      owner.workspaceSkills.operations,
+      async () => {
+        await owner.workspaceSkills.initialize();
+      },
+    );
     expect(second.map((s) => s.name)).toContain('alpha-skill');
   });
 });

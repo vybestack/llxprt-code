@@ -14,24 +14,13 @@ import { createMockCommandContext } from '../../__tests__/mockCommandContext.js'
 import type { MessageActionReturn } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 
-const getCliProviderManagerMock = vi.fn();
-const getActiveProviderStatusMock = vi.fn();
+const providerManagerMock = vi.fn();
+const providerStatusMock = vi.fn();
 const getRuntimeDiagnosticsSnapshotMock = vi.fn();
-const getCliOAuthManagerMock = vi.fn();
 const getSessionTokenUsageMock = vi.fn();
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => ({
-    getCliOAuthManager: getCliOAuthManagerMock,
-    getActiveProviderStatus: getActiveProviderStatusMock,
-    getCliProviderManager: getCliProviderManagerMock,
-    getRuntimeDiagnosticsSnapshot: getRuntimeDiagnosticsSnapshotMock,
-    getSessionTokenUsage: getSessionTokenUsageMock,
-  }),
-}));
-
 function setupDefaultRuntimeMocks(): void {
-  getActiveProviderStatusMock.mockReturnValue({
+  providerStatusMock.mockReturnValue({
     providerName: 'load-balancer',
     modelName: 'gptfirst',
     profileName: 'gptfirst',
@@ -45,7 +34,6 @@ function setupDefaultRuntimeMocks(): void {
     modelParams: {},
     ephemeralSettings: {},
   });
-  getCliOAuthManagerMock.mockReturnValue(undefined);
   getSessionTokenUsageMock.mockReturnValue({
     input: 100,
     output: 20,
@@ -95,18 +83,31 @@ describe('diagnosticsCommand - load balancer token accounting (issue #2207)', ()
   let mockContext: CommandContext;
 
   beforeEach(() => {
-    getCliProviderManagerMock.mockReset();
-    getActiveProviderStatusMock.mockReset();
+    providerManagerMock.mockReset();
+    providerStatusMock.mockReset();
     getRuntimeDiagnosticsSnapshotMock.mockReset();
-    getCliOAuthManagerMock.mockReset();
     getSessionTokenUsageMock.mockReset();
-    mockContext = createMockCommandContext();
+    mockContext = createMockCommandContext({
+      runtimeApi: {
+        providerStatus: providerStatusMock,
+        getLoadBalancerStats: () =>
+          providerManagerMock()
+            ?.getProviderByName('load-balancer')
+            ?.getStats?.(),
+        getLoadBalancerTokenAccounting: () =>
+          providerManagerMock()
+            ?.getProviderByName('load-balancer')
+            ?.getTokenAccountingDiagnostics?.(),
+        getRuntimeDiagnosticsSnapshot: getRuntimeDiagnosticsSnapshotMock,
+        getSessionTokenUsage: getSessionTokenUsageMock,
+      },
+    });
     setupDefaultRuntimeMocks();
     addConfigStubs(mockContext);
   });
 
   it('displays shared context limit and accounting source from LB provider diagnostics', async () => {
-    getCliProviderManagerMock.mockReturnValue({
+    providerManagerMock.mockReturnValue({
       getProviderByName: () => ({
         name: 'load-balancer',
         getStats: () => ({
@@ -146,7 +147,7 @@ describe('diagnosticsCommand - load balancer token accounting (issue #2207)', ()
   });
 
   it('distinguishes request-estimated tokens in output', async () => {
-    getCliProviderManagerMock.mockReturnValue({
+    providerManagerMock.mockReturnValue({
       getProviderByName: () => ({
         name: 'load-balancer',
         getStats: () => ({
@@ -185,7 +186,7 @@ describe('diagnosticsCommand - load balancer token accounting (issue #2207)', ()
   });
 
   it('shows active sub-profile name in LB stats section', async () => {
-    getCliProviderManagerMock.mockReturnValue({
+    providerManagerMock.mockReturnValue({
       getProviderByName: () => ({
         name: 'load-balancer',
         getStats: () => ({
@@ -217,7 +218,7 @@ describe('diagnosticsCommand - load balancer token accounting (issue #2207)', ()
   });
 
   it('handles providers without getTokenAccountingDiagnostics gracefully', async () => {
-    getCliProviderManagerMock.mockReturnValue({
+    providerManagerMock.mockReturnValue({
       getProviderByName: () => ({
         name: 'load-balancer',
         getStats: () => ({
@@ -244,7 +245,7 @@ describe('diagnosticsCommand - load balancer token accounting (issue #2207)', ()
   });
 
   it('handles unavailable session token usage gracefully', async () => {
-    getCliProviderManagerMock.mockReturnValue({
+    providerManagerMock.mockReturnValue({
       getProviderByName: () => ({
         name: 'load-balancer',
         getStats: () => ({
@@ -279,7 +280,7 @@ describe('diagnosticsCommand - load balancer token accounting (issue #2207)', ()
   });
 
   it('suppresses malformed non-finite session token usage', async () => {
-    getCliProviderManagerMock.mockReturnValue({
+    providerManagerMock.mockReturnValue({
       getProviderByName: () => ({
         name: 'load-balancer',
         getStats: () => ({
@@ -321,7 +322,7 @@ describe('diagnosticsCommand - load balancer token accounting (issue #2207)', ()
   });
 
   it('renders null and zero token accounting values distinctly', async () => {
-    getCliProviderManagerMock.mockReturnValue({
+    providerManagerMock.mockReturnValue({
       getProviderByName: () => ({
         name: 'load-balancer',
         getStats: () => ({
@@ -351,7 +352,7 @@ describe('diagnosticsCommand - load balancer token accounting (issue #2207)', ()
     expect(output).toContain('Shared Context Limit: unbounded');
     expect(output).toContain('Request-Estimated Tokens: n/a');
 
-    getCliProviderManagerMock.mockReturnValue({
+    providerManagerMock.mockReturnValue({
       getProviderByName: () => ({
         name: 'load-balancer',
         getStats: () => ({
@@ -383,7 +384,7 @@ describe('diagnosticsCommand - load balancer token accounting (issue #2207)', ()
   });
 
   it('suppresses malformed session usage when any token field is non-finite', async () => {
-    getCliProviderManagerMock.mockReturnValue({
+    providerManagerMock.mockReturnValue({
       getProviderByName: () => ({
         name: 'load-balancer',
         getStats: () => ({
@@ -424,7 +425,7 @@ describe('diagnosticsCommand - load balancer token accounting (issue #2207)', ()
     expect(output).not.toContain('NaN');
   });
   it('skips load-balancer diagnostics when provider manager cannot resolve provider', async () => {
-    getCliProviderManagerMock.mockReturnValue({
+    providerManagerMock.mockReturnValue({
       getProviderByName: () => null,
     });
 
@@ -435,7 +436,7 @@ describe('diagnosticsCommand - load balancer token accounting (issue #2207)', ()
   });
 
   it('suppresses load balancer section when stats collection throws', async () => {
-    getCliProviderManagerMock.mockReturnValue({
+    providerManagerMock.mockReturnValue({
       getProviderByName: () => ({
         name: 'load-balancer',
         getStats: () => {

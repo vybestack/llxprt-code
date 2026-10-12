@@ -53,19 +53,6 @@ const StatRow: React.FC<StatRowProps> = ({
   </Box>
 );
 
-function renderNoProviderManager() {
-  return (
-    <Box
-      borderStyle={getBorderStyle('round')}
-      borderColor={Colors.Gray}
-      paddingY={1}
-      paddingX={2}
-    >
-      <Text color={Colors.Foreground}>Provider manager not available</Text>
-    </Box>
-  );
-}
-
 function renderNoLoadBalancer() {
   return (
     <Box
@@ -227,36 +214,11 @@ function renderBackendSection(
 }
 
 export const LBStatsDisplay: React.FC = () => {
-  const { getCliProviderManager } = useRuntimeApi();
-  const providerManager = getCliProviderManager() as ReturnType<
-    typeof getCliProviderManager
-  > | null;
-
-  if (!providerManager) {
-    return renderNoProviderManager();
-  }
-
-  const activeProvider = providerManager.getActiveProvider() as ReturnType<
-    typeof providerManager.getActiveProvider
-  > | null;
-
-  if (!activeProvider || activeProvider.name !== 'load-balancer') {
-    return renderNoLoadBalancer();
-  }
-
-  const lbProvider = providerManager.getProviderByName('load-balancer') as
-    | { getStats?: () => ExtendedLoadBalancerStats }
-    | undefined;
-
-  if (
-    !lbProvider ||
-    !('getStats' in lbProvider) ||
-    typeof lbProvider.getStats !== 'function'
-  ) {
-    return renderNoStatsSupport(activeProvider.name);
-  }
-
-  const stats = lbProvider.getStats();
+  const runtime = useRuntimeApi();
+  const name = runtime.providerStatus().providerName;
+  if (name !== 'load-balancer') return renderNoLoadBalancer();
+  const stats = runtime.getLoadBalancerStats();
+  if (stats === undefined) return renderNoStatsSupport(name);
   const backends = Object.keys(stats.backendMetrics);
 
   return (

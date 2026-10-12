@@ -54,17 +54,24 @@ async function installHistory(rows: readonly IContent[]): Promise<void> {
   const chat = publicChat(history);
   Object.assign(context.services.config, {
     getEphemeralSetting: () => 'allowed',
-    getAgentClient: () => ({
-      hasChatInitialized: () => true,
-      getChat: () => chat,
-      getHistoryService: () => history,
-      setHistoryFromSource: async (source: AsyncIterable<IContent>) => {
-        await history.transformRows(async (_previous, sink) => {
-          for await (const row of source) sink.appendDetached(row);
-        });
-      },
-    }),
   });
+  context.services.agent = createMockCommandContext({
+    services: {
+      agent: {
+        agentClient: {
+          mediaStore,
+          hasChatInitialized: () => true,
+          getChat: () => chat,
+          getHistoryService: () => history,
+          setHistoryFromSource: async (source: AsyncIterable<IContent>) => {
+            await history.transformRows(async (_previous, sink) => {
+              for await (const row of source) sink.appendDetached(row);
+            });
+          },
+        },
+      },
+    },
+  }).services.agent;
   displayed = [];
   context.ui.addItem = (item) => {
     displayed.push(item);
@@ -123,10 +130,14 @@ async function chatCommandCase0(): Promise<void> {
     },
   });
   assertDefined(context.services.config);
-  Object.assign(context.services.config, {
-    getProjectRoot: () => root,
-    getLocalMediaStore: () => mediaStore,
-  });
+  Object.assign(context.services.config, { getProjectRoot: () => root });
+  context.services.agent = createMockCommandContext({
+    services: {
+      agent: {
+        agentClient: { mediaStore, hasChatInitialized: () => false },
+      },
+    },
+  }).services.agent;
 }
 
 async function chatCommandCase1(): Promise<void> {
@@ -209,6 +220,7 @@ function chatCommandCase4(): void {
         PROJECT_HASH,
       );
       expect(replay.ok).toBe(true);
+      if (!replay.ok) throw new Error(replay.error);
       expect(replay.sessionName).toBe('living-branch');
       expect(replay.metadata).toStrictEqual(
         expect.not.objectContaining({ title: expect.anything() }),
@@ -306,6 +318,7 @@ function chatCommandCase11(): void {
         recordingPath(recording),
         PROJECT_HASH,
       );
+      if (!replay.ok) throw new Error(replay.error);
 
       expect({
         result,
@@ -466,6 +479,12 @@ function chatCommandCase17(): void {
 function chatCommandCase18(): void {
   describe('reports recording-native debug information', () => {
     it('reports recording-native debug information', async () => {
+      assertDefined(context.services.config);
+      Object.assign(context.services.config, {
+        getModel: () => {
+          throw new Error('No model configured for the recording fixture');
+        },
+      });
       const result = await command('debug').action?.(context, '');
 
       expect(result).toStrictEqual({

@@ -1,8 +1,13 @@
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
+const modelTools = installModelToolFixture();
 
 /**
  * Stream idle timeout behavioral tests for TurnProcessor and
@@ -16,6 +21,7 @@ import {
 } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { ChatSession } from './chatSession.js';
+import { resolveStreamIdleTimeoutMs } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
 
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
@@ -34,7 +40,7 @@ import { createAgentRuntimeStateFromConfig } from '@vybestack/llxprt-code-core/r
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
-  createTelemetryAdapterFromConfig,
+  createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
@@ -102,10 +108,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
 
       localSettingsService = new SettingsService();
       localConfig = new Config(createConfigParams(localSettingsService));
-      localConfig.setEphemeralSetting(
-        'stream-idle-timeout-ms',
-        customTimeoutMs,
-      );
+      localSettingsService.set('stream-idle-timeout-ms', customTimeoutMs);
 
       // Verify ChatSession.getConfig() returns a config that provides the setting
       localProviderRuntime = createProviderRuntimeContext({
@@ -117,7 +120,8 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
 
       localManager = new TestRuntimeProviderManager(localProviderRuntime);
       localManager.setConfig(localConfig);
-      localConfig.setProviderManager(localManager);
+      const { tokenizerFactory: promptEstimator } =
+        configureProviderRuntimeFactories(localConfig, localManager);
 
       const provider: IProvider = {
         name: 'stub',
@@ -132,13 +136,26 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       const contentGenerator = {} as ContentGenerator;
       const chat = new ChatSession(
         createAgentRuntimeContext({
+          promptEstimator,
+          readRuntimeSettings: fixtureRuntimePolicyReader(
+            localConfig,
+            localSettingsService,
+          ),
+          prepareProviderInvocation: (name, parameters, signal) =>
+            captureProviderInvocation(
+              localProviderRuntime,
+              name,
+              parameters,
+              signal,
+            ),
           state: createAgentRuntimeStateFromConfig(localConfig),
           settings: { compressionThreshold: 0.8 },
           provider: createProviderAdapterFromManager(localManager),
-          telemetry: createTelemetryAdapterFromConfig(localConfig),
-          tools: createToolRegistryViewFromRegistry(
-            localConfig.getToolRegistry(),
+          telemetry: createTelemetryAdapter(
+            localConfig,
+            createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
           ),
+          tools: createToolRegistryViewFromRegistry(modelTools()),
           providerRuntime: localProviderRuntime,
         }),
         contentGenerator,
@@ -146,18 +163,15 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
         [],
       );
 
-      // Verify the config is accessible via getConfig()
-      const configFromChat = chat.getConfig();
-      expect(configFromChat).toBeDefined();
-      expect(
-        configFromChat?.getEphemeralSetting('stream-idle-timeout-ms'),
-      ).toBe(customTimeoutMs);
+      expect(resolveStreamIdleTimeoutMs(chat.getStreamTimeoutPolicy())).toBe(
+        customTimeoutMs,
+      );
     });
 
     it('disabled path: setting 0 disables watchdog', async () => {
       localSettingsService = new SettingsService();
       localConfig = new Config(createConfigParams(localSettingsService));
-      localConfig.setEphemeralSetting('stream-idle-timeout-ms', 0);
+      localSettingsService.set('stream-idle-timeout-ms', 0);
 
       localProviderRuntime = createProviderRuntimeContext({
         settingsService: localSettingsService,
@@ -168,7 +182,8 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
 
       localManager = new TestRuntimeProviderManager(localProviderRuntime);
       localManager.setConfig(localConfig);
-      localConfig.setProviderManager(localManager);
+      const { tokenizerFactory: promptEstimator } =
+        configureProviderRuntimeFactories(localConfig, localManager);
 
       const provider: IProvider = {
         name: 'stub',
@@ -183,13 +198,26 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       const contentGenerator = {} as ContentGenerator;
       const chat = new ChatSession(
         createAgentRuntimeContext({
+          promptEstimator,
+          readRuntimeSettings: fixtureRuntimePolicyReader(
+            localConfig,
+            localSettingsService,
+          ),
+          prepareProviderInvocation: (name, parameters, signal) =>
+            captureProviderInvocation(
+              localProviderRuntime,
+              name,
+              parameters,
+              signal,
+            ),
           state: createAgentRuntimeStateFromConfig(localConfig),
           settings: { compressionThreshold: 0.8 },
           provider: createProviderAdapterFromManager(localManager),
-          telemetry: createTelemetryAdapterFromConfig(localConfig),
-          tools: createToolRegistryViewFromRegistry(
-            localConfig.getToolRegistry(),
+          telemetry: createTelemetryAdapter(
+            localConfig,
+            createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
           ),
+          tools: createToolRegistryViewFromRegistry(modelTools()),
           providerRuntime: localProviderRuntime,
         }),
         contentGenerator,
@@ -197,10 +225,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
         [],
       );
 
-      const configFromChat = chat.getConfig();
-      expect(
-        configFromChat?.getEphemeralSetting('stream-idle-timeout-ms'),
-      ).toBe(0);
+      expect(resolveStreamIdleTimeoutMs(chat.getStreamTimeoutPolicy())).toBe(0);
     });
 
     it('starts a second real ChatSession send after timeout while the first provider iterator remains blocked', async () => {
@@ -208,7 +233,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       const timeoutMs = 30_000;
       localSettingsService = new SettingsService();
       localConfig = new Config(createConfigParams(localSettingsService));
-      localConfig.setEphemeralSetting('stream-idle-timeout-ms', timeoutMs);
+      localSettingsService.set('stream-idle-timeout-ms', timeoutMs);
       localProviderRuntime = createProviderRuntimeContext({
         settingsService: localSettingsService,
         config: localConfig,
@@ -217,20 +242,22 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       });
       localManager = new TestRuntimeProviderManager(localProviderRuntime);
       localManager.setConfig(localConfig);
-      localConfig.setProviderManager(localManager);
-      localConfig.setTokenizerFactory({
-        getTokenizer: () => undefined,
-        async estimatePrompt(request) {
-          return {
-            count: await request.legacyEstimate(),
-            method: 'calibrated',
-            family: 'legacy-unregistered',
-            estimatorVersion: 'core-estimate-tokens-v1',
-            assetRevision: 'none',
-            projectionRevision: request.projectionRevision,
-          };
-        },
-      });
+      const { tokenizerFactory: promptEstimator } =
+        configureProviderRuntimeFactories(localConfig, localManager, {
+          tokenizerFactory: {
+            getTokenizer: () => undefined,
+            async estimatePrompt(request) {
+              return {
+                count: await request.legacyEstimate(),
+                method: 'calibrated',
+                family: 'legacy-unregistered',
+                estimatorVersion: 'core-estimate-tokens-v1',
+                assetRevision: 'none',
+                projectionRevision: request.projectionRevision,
+              };
+            },
+          },
+        });
       let transports = 0;
       let pendingReads = 0;
       let firstTransportSignal: AbortSignal | undefined;
@@ -295,6 +322,18 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       localManager.setActiveProvider('stub');
       const chat = new ChatSession(
         createAgentRuntimeContext({
+          promptEstimator,
+          readRuntimeSettings: fixtureRuntimePolicyReader(
+            localConfig,
+            localSettingsService,
+          ),
+          prepareProviderInvocation: (name, parameters, signal) =>
+            captureProviderInvocation(
+              localProviderRuntime,
+              name,
+              parameters,
+              signal,
+            ),
           state: createAgentRuntimeState({
             runtimeId: 'test.runtime.deadlock',
             provider: 'stub',
@@ -304,10 +343,11 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
           history: new HistoryService(),
           settings: { compressionThreshold: 0.8 },
           provider: createProviderAdapterFromManager(localManager),
-          telemetry: createTelemetryAdapterFromConfig(localConfig),
-          tools: createToolRegistryViewFromRegistry(
-            localConfig.getToolRegistry(),
+          telemetry: createTelemetryAdapter(
+            localConfig,
+            createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
           ),
+          tools: createToolRegistryViewFromRegistry(modelTools()),
           providerRuntime: localProviderRuntime,
         }),
         createContentGeneratorStub(),
@@ -345,13 +385,17 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
 
       localSettingsService = new SettingsService();
       localConfig = new Config(createConfigParams(localSettingsService));
-      localConfig.setEphemeralSetting('stream-idle-timeout-ms', 60_000);
+      localSettingsService.set('stream-idle-timeout-ms', 60_000);
 
       const { resolveStreamIdleTimeoutMs } = await import(
         '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js'
       );
 
-      const result = resolveStreamIdleTimeoutMs(localConfig);
+      const result = resolveStreamIdleTimeoutMs({
+        'stream-idle-timeout-ms': localSettingsService.get(
+          'stream-idle-timeout-ms',
+        ),
+      });
       expect(result).toBe(envTimeoutMs); // Env wins
     });
 
@@ -360,7 +404,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       const timeoutMs = 30_000;
       localSettingsService = new SettingsService();
       localConfig = new Config(createConfigParams(localSettingsService));
-      localConfig.setEphemeralSetting('stream-idle-timeout-ms', timeoutMs);
+      localSettingsService.set('stream-idle-timeout-ms', timeoutMs);
       localProviderRuntime = createProviderRuntimeContext({
         settingsService: localSettingsService,
         config: localConfig,
@@ -369,20 +413,22 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       });
       localManager = new TestRuntimeProviderManager(localProviderRuntime);
       localManager.setConfig(localConfig);
-      localConfig.setProviderManager(localManager);
-      localConfig.setTokenizerFactory({
-        getTokenizer: () => undefined,
-        async estimatePrompt(request) {
-          return {
-            count: await request.legacyEstimate(),
-            method: 'calibrated',
-            family: 'legacy-unregistered',
-            estimatorVersion: 'core-estimate-tokens-v1',
-            assetRevision: 'none',
-            projectionRevision: request.projectionRevision,
-          };
-        },
-      });
+      const { tokenizerFactory: promptEstimator } =
+        configureProviderRuntimeFactories(localConfig, localManager, {
+          tokenizerFactory: {
+            getTokenizer: () => undefined,
+            async estimatePrompt(request) {
+              return {
+                count: await request.legacyEstimate(),
+                method: 'calibrated',
+                family: 'legacy-unregistered',
+                estimatorVersion: 'core-estimate-tokens-v1',
+                assetRevision: 'none',
+                projectionRevision: request.projectionRevision,
+              };
+            },
+          },
+        });
 
       const capturedSignals: AbortSignal[] = [];
       const pendingReadsBySession: Record<string, number> = {};
@@ -395,7 +441,7 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
           (options: GenerateChatOptions): AsyncIterableIterator<IContent> => {
             capturedSignals.push(options.invocation?.signal as AbortSignal);
             return createNoncooperativeStream(() => {
-              const rid = options.runtime?.runtimeId ?? 'unknown';
+              const rid = options.invocation?.runtimeId ?? 'unknown';
               pendingReadsBySession[rid] =
                 (pendingReadsBySession[rid] ?? 0) + 1;
             });
@@ -420,6 +466,18 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
 
       const chat = new ChatSession(
         createAgentRuntimeContext({
+          promptEstimator,
+          readRuntimeSettings: fixtureRuntimePolicyReader(
+            localConfig,
+            localSettingsService,
+          ),
+          prepareProviderInvocation: (name, parameters, signal) =>
+            captureProviderInvocation(
+              localProviderRuntime,
+              name,
+              parameters,
+              signal,
+            ),
           state: createAgentRuntimeState({
             runtimeId: 'test.runtime.concurrent',
             provider: 'stub',
@@ -429,10 +487,11 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
           history: new HistoryService(),
           settings: { compressionThreshold: 0.8 },
           provider: createProviderAdapterFromManager(localManager),
-          telemetry: createTelemetryAdapterFromConfig(localConfig),
-          tools: createToolRegistryViewFromRegistry(
-            localConfig.getToolRegistry(),
+          telemetry: createTelemetryAdapter(
+            localConfig,
+            createSessionSettingsFixture(localConfig).settingsOwner.telemetry,
           ),
+          tools: createToolRegistryViewFromRegistry(modelTools()),
           providerRuntime: localProviderRuntime,
         }),
         createContentGeneratorStub(),
@@ -480,13 +539,10 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
 
       localSettingsService = new SettingsService();
       localConfig = new Config(createConfigParams(localSettingsService));
-      localConfig.setEphemeralSetting(
-        'stream-idle-timeout-ms',
-        customTimeoutMs,
-      );
+      localSettingsService.set('stream-idle-timeout-ms', customTimeoutMs);
 
       // Verify the config is properly set
-      expect(localConfig.getEphemeralSetting('stream-idle-timeout-ms')).toBe(
+      expect(localSettingsService.get('stream-idle-timeout-ms')).toBe(
         customTimeoutMs,
       );
 
@@ -495,8 +551,23 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       const { resolveStreamIdleTimeoutMs } = await import(
         '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js'
       );
-      const result = resolveStreamIdleTimeoutMs(localConfig);
+      const result = resolveStreamIdleTimeoutMs({
+        'stream-idle-timeout-ms': localSettingsService.get(
+          'stream-idle-timeout-ms',
+        ),
+      });
       expect(result).toBe(customTimeoutMs);
     });
   });
 });
+
+function fixtureRuntimePolicyReader(
+  config: Config,
+  settingsService: SettingsService,
+) {
+  const { settingsOwner } = createSessionSettingsFixture(
+    config,
+    settingsService,
+  );
+  return () => settingsOwner.readRuntimePolicy();
+}

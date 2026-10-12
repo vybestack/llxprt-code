@@ -9,13 +9,25 @@ import type {
   Prompt,
   Resource,
 } from '@modelcontextprotocol/sdk/types.js';
-import type {
-  MCPServerConfig,
-  McpExtensionConfig,
-} from '../config/mcpServerConfig.js';
+import type { MCPServerConfig, McpExtensionConfig } from '../config/index.js';
 
 export interface McpTrustConfig {
   isTrustedFolder(): boolean;
+}
+
+export interface McpApprovalTarget {
+  readonly serverName: string;
+  readonly toolName: string;
+}
+
+export type McpApproval = 'tool-session' | 'server-session' | 'tool-saved';
+
+export interface McpApprovalPolicy {
+  evaluate(
+    target: McpApprovalTarget,
+    args: Record<string, unknown>,
+  ): 'allow' | 'ask_user' | 'deny';
+  approve(target: McpApprovalTarget, approval: McpApproval): Promise<void>;
 }
 
 export interface McpWorkspaceContext {
@@ -25,7 +37,10 @@ export interface McpWorkspaceContext {
 
 export type DiscoveredMCPPrompt = Prompt & {
   serverName: string;
-  invoke: (params: Record<string, unknown>) => Promise<GetPromptResult>;
+  invoke: (
+    params: Record<string, unknown>,
+    signal?: AbortSignal,
+  ) => Promise<GetPromptResult>;
 };
 
 export interface McpPromptRegistry {
@@ -39,16 +54,14 @@ export interface McpResourceRegistry {
 }
 
 export interface McpHostConfig extends McpTrustConfig {
-  refreshMcpContext(): Promise<void>;
   getAllowedMcpServers(): string[] | undefined;
   getBlockedMcpServers():
     | Array<{ name: string; extensionName: string }>
     | undefined;
   getMcpServers(): Record<string, MCPServerConfig> | undefined;
   getMcpServerCommand(): string | undefined;
-  getPromptRegistry(): McpPromptRegistry;
-  getResourceRegistry(): McpResourceRegistry;
-  getWorkspaceContext(): McpWorkspaceContext;
+  getWorkspaceDirectories(): readonly string[];
+  onWorkspaceDirectoriesChanged(listener: () => void): () => void;
   getDebugMode(): boolean;
   getExtensions(): McpExtensionConfig[];
 }

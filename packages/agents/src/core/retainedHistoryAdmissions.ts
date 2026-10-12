@@ -87,7 +87,7 @@ export class RetainedHistoryAdmissions {
   private retained: readonly RetainedHistoryAdmission[] = [];
   private sequence = 0;
 
-  constructor(private readonly getStore: () => LocalMediaStore) {}
+  constructor(private readonly mediaStore: LocalMediaStore) {}
 
   get all(): readonly RetainedHistoryAdmission[] {
     return this.retained;
@@ -101,7 +101,7 @@ export class RetainedHistoryAdmissions {
     return this.retainDeferredArray(
       prepareDeferredArrayAdmission(
         history,
-        this.getStore(),
+        this.mediaStore,
         `agent-client-history:${this.sequence}`,
         options,
       ),

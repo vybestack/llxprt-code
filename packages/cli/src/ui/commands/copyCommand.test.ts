@@ -49,7 +49,8 @@ describe('copyCommand absent output', () => {
   it('returns info when no chat has been initialized', async () => {
     const context = createMockCommandContext({
       services: {
-        config: { getAgentClient: () => ({ hasChatInitialized: () => false }) },
+        agent: { agentClient: { hasChatInitialized: () => false } },
+        config: {},
       },
     });
     expect(await copyCommand.action?.(context, '')).toStrictEqual({

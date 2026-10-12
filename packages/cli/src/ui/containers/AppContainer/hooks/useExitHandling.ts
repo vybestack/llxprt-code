@@ -10,10 +10,7 @@ import type {
   SlashCommandProcessorResult,
 } from '../../../types.js';
 
-import {
-  triggerSessionEndHook,
-  SessionEndReason,
-} from '@vybestack/llxprt-code-core';
+import { SessionEndReason } from '@vybestack/llxprt-code-core';
 import { restoreTerminalProtocolsSync } from '../../../utils/terminalProtocolCleanup.js';
 import type { HookSkillState } from '../../../cliUiRuntime.js';
 
@@ -56,43 +53,48 @@ export interface UseExitHandlingParams {
     command: string,
   ) => Promise<SlashCommandProcessorResult | false>;
   config: HookSkillState;
+  onBeforeExit?: () => Promise<void>;
 }
 
 function useQuitEffect(
   quittingMessages: HistoryItem[] | null,
   config: HookSkillState,
+  onBeforeExit: (() => Promise<void>) | undefined,
 ): void {
   useEffect(() => {
     if (quittingMessages) {
       // Allow UI to render the quit message briefly before exiting
       const timer = setTimeout(() => {
         // Fire SessionEnd hook before exiting
-        triggerSessionEndHook(config, SessionEndReason.Exit)
+        config
+          .endHookSession(SessionEndReason.Exit)
           .catch(() => {
             // Hook failures must not block exit
           })
-          .finally(() => {
-            // Flush protocol restore before process.exit() so script/pty wrappers
-            // don't drop the final disable sequences.
+          .then(async () => {
+            await onBeforeExit?.();
             restoreTerminalProtocolsSync();
-            // Note: We don't call runExitCleanup() here because it includes
-            // instance.waitUntilExit() which would deadlock. The cleanup is
-            // triggered by process.exit() which fires SIGTERM/exit handlers.
-            // The mouse events cleanup is registered in cli.tsx and will
-            // run via the process exit handlers. (fixes #959)
             process.exit(0);
+          })
+          .catch((error: unknown) => {
+            restoreTerminalProtocolsSync();
+            process.stderr
+              .write(`Recording owner cleanup failed: ${String(error)}
+`);
+            process.exit(1);
           });
       }, 100); // 100ms delay to show quit screen
 
       return () => clearTimeout(timer);
     }
     return undefined;
-  }, [quittingMessages, config]);
+  }, [quittingMessages, config, onBeforeExit]);
 }
 
 export function useExitHandling({
   handleSlashCommand,
   config,
+  onBeforeExit,
 }: UseExitHandlingParams): UseExitHandlingResult {
   const [ctrlCPressedOnce, setCtrlCPressedOnce] = useState(false);
   const [ctrlDPressedOnce, setCtrlDPressedOnce] = useState(false);
@@ -143,7 +145,7 @@ export function useExitHandling({
     handleExit(ctrlDPressedOnce, setCtrlDPressedOnce, ctrlDTimerRef);
   }, [ctrlDPressedOnce, handleExit]);
 
-  useQuitEffect(quittingMessages, config);
+  useQuitEffect(quittingMessages, config, onBeforeExit);
 
   // Cleanup timers on unmount
   useEffect(

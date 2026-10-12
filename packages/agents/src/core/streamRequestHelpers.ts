@@ -3,7 +3,6 @@
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 
 /**
@@ -33,9 +32,8 @@ import {
   type ProviderRequestSnapshot,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { ProviderCuratedStreamOptions } from '@vybestack/llxprt-code-core/services/history/provider-curated-stream.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
@@ -55,7 +53,7 @@ export interface PreparedRequest {
     contents: IContent[];
     tools: ToolDeclaration[] | undefined;
   };
-  baseRuntimeContext: ProviderRuntimeContext;
+  baseRuntimeContext: ProviderRequestCollaborators;
 }
 
 /** Cold, repeatable request copies preserve the purge transaction and boundary identity. */
@@ -171,39 +169,21 @@ export function extractAllowedToolNames(
 }
 
 export async function applyToolSelectionHook(
-  configForHooks: AgentRuntimeContext['providerRuntime']['config'],
   tools: AgentClientGenerateConfig['tools'],
   model: string,
+  owner?: HookExecutionOwner,
 ): Promise<ToolSelectionHookResult> {
-  if (configForHooks === undefined) {
+  if (owner?.beforeToolSelection === undefined)
     return { tools, allowedFunctionNames: undefined };
-  }
-
-  const getToolSelectionHooksEnabled = configForHooks.getEnableHooks;
-  if (
-    typeof getToolSelectionHooksEnabled !== 'function' ||
-    getToolSelectionHooksEnabled.call(configForHooks) !== true
-  ) {
-    return { tools, allowedFunctionNames: undefined };
-  }
-
-  const getToolSelectionHookSystem = configForHooks.getHookSystem;
-  const hookSystem =
-    typeof getToolSelectionHookSystem === 'function'
-      ? getToolSelectionHookSystem.call(configForHooks)
-      : undefined;
-  if (hookSystem === undefined) {
-    return { tools, allowedFunctionNames: undefined };
-  }
-
-  // Re-initializing would discard runtime enable/disable state of registered hooks.
-  if (!hookSystem.isInitialized()) await hookSystem.initialize();
-  const toolsFromConfig = Array.isArray(tools) ? tools : [];
-  const toolSelectionResult = await hookSystem.fireBeforeToolSelectionEvent({
-    model,
-    contents: [],
-    tools: toolsFromConfig,
-  });
+  const toolsFromConfig = tools ?? [];
+  const toolSelectionResult = await owner.beforeToolSelection(
+    {
+      model,
+      contents: [],
+      tools: toolsFromConfig,
+    },
+    owner.signal,
+  );
   const modifiedConfig = toolSelectionResult?.applyToolChoiceModifications({
     tools: toolsFromConfig,
   });
@@ -251,9 +231,9 @@ export async function applyToolSelectionHook(
  * original Config instance untouched.
  */
 export function buildRuntimeContext(
-  baseRuntimeContext: ProviderRuntimeContext,
+  baseRuntimeContext: ProviderRequestCollaborators,
   params: SendMessageParams,
-): ProviderRuntimeContext {
+): ProviderRequestCollaborators {
   if (!params.config?.abortSignal) return baseRuntimeContext;
   return {
     ...baseRuntimeContext,
@@ -335,21 +315,6 @@ export function applyRequestModifications(
     return requestContents;
   }
   return modifiedContents;
-}
-
-/**
- * Resolve the user-memory string from the provider runtime config.
- *
- * `Config.getUserMemory()` is declared as a required method, but tests may
- * mock Config without it, so boundary-validate `typeof === 'function'`.
- */
-export function resolveUserMemory(
-  config: Config | undefined,
-): string | undefined {
-  if (config && typeof config.getUserMemory === 'function') {
-    return config.getUserMemory();
-  }
-  return undefined;
 }
 
 /**

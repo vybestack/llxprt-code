@@ -1,3 +1,6 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -26,13 +29,21 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import type { Config } from '@vybestack/llxprt-code-core';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
+  Config,
+  OutputFormat,
   shutdownTelemetry,
   isTelemetrySdkInitialized,
   DebugLogger,
   PLACEHOLDER_MODEL,
 } from '@vybestack/llxprt-code-core';
+import {
+  ProviderManager,
+  type IProvider,
+} from '@vybestack/llxprt-code-providers';
 import { runNonInteractive } from './nonInteractiveCli.js';
 import type { LoadedSettings } from './config/settings.js';
 import { __setWriteToStderrForTesting } from './session/errorReporting.js';
@@ -42,9 +53,10 @@ const realAtCommandProcessorModule = {
 };
 
 const original = { ...(await import('@vybestack/llxprt-code-agents')) };
+const fromConfigSentinel = vi.fn(original.fromConfig);
 void vi.mock('@vybestack/llxprt-code-agents', () => ({
   ...original,
-  fromConfig: vi.fn(),
+  fromConfig: fromConfigSentinel,
 }));
 
 const actualOriginal = { ...(await import('@vybestack/llxprt-code-core')) };
@@ -82,33 +94,62 @@ const authEnvVars = [
   'LLXPRT_DEFAULT_PROVIDER',
 ] as const;
 
-function makeUnconfiguredConfig(): Config {
-  return {
-    initialize: vi.fn().mockResolvedValue(undefined),
-    getMaxSessionTurns: vi.fn().mockReturnValue(10),
-    getIdeMode: vi.fn().mockReturnValue(false),
-    getContentGeneratorConfig: vi.fn().mockReturnValue({}),
-    getDebugMode: vi.fn().mockReturnValue(false),
-    getQuiet: vi.fn().mockReturnValue(false),
-    getProvider: vi.fn().mockReturnValue(undefined),
-    getModel: vi.fn().mockReturnValue(PLACEHOLDER_MODEL),
-    getProviderManager: vi.fn().mockReturnValue({
-      getActiveProviderName: () => '',
-      hasActiveProvider: () => false,
-    }),
-    getOutputFormat: vi.fn().mockReturnValue('text'),
-    getFolderTrust: vi.fn().mockReturnValue(false),
-    isTrustedFolder: vi.fn().mockReturnValue(false),
-    getProjectRoot: vi.fn().mockReturnValue('/tmp/test-project'),
-    getSessionId: vi.fn().mockReturnValue('test-session'),
-    getEphemeralSetting: vi.fn().mockReturnValue(undefined),
-    setEphemeralSetting: vi.fn(),
-    getSettingsService: vi.fn().mockReturnValue({ get: vi.fn(), set: vi.fn() }),
-    isInteractive: vi.fn().mockReturnValue(false),
-    storage: {
-      getDir: vi.fn().mockReturnValue('/tmp/.llxprt'),
+const ownedConfigs: Array<{
+  config: Config;
+  directory: string;
+  owner: SessionSettingsOwner;
+}> = [];
+
+async function disposeOwnedConfigs(): Promise<void> {
+  for (const { config, directory, owner } of ownedConfigs.splice(0)) {
+    await owner.dispose();
+    await config.dispose();
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+function makeUnconfiguredConfig(outputFormat?: OutputFormat): {
+  config: Config;
+  runtimeSettings: { store: SettingsService; owner: SessionSettingsOwner };
+} {
+  const directory = mkdtempSync(join(tmpdir(), 'llxprt-unconfigured-'));
+  const config = new Config({
+    sessionId: 'test-session',
+    targetDir: directory,
+    cwd: directory,
+    model: PLACEHOLDER_MODEL,
+    debugMode: false,
+    interactive: false,
+    outputFormat,
+  });
+  const store = new SettingsService();
+  const owner = new SessionSettingsOwner(store);
+  ownedConfigs.push({ config, directory, owner });
+  return { config, runtimeSettings: { store, owner } };
+}
+
+function configureProvider(
+  config: Config,
+  name: string,
+  runtimeSettings: { store: SettingsService; owner: SessionSettingsOwner },
+): ProviderManager {
+  const manager = new ProviderManager({
+    config,
+    settingsService: runtimeSettings.store,
+  });
+  const provider: IProvider = {
+    name,
+    getDefaultModel: () => PLACEHOLDER_MODEL,
+    getModels: async () => [],
+    async *generateChatCompletion() {
+      yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ready' }] };
     },
-  } as unknown as Config;
+  };
+  manager.registerProvider(provider);
+  manager.setActiveProvider(name);
+  runtimeSettings.owner.initializeProviderSelection(name, PLACEHOLDER_MODEL);
+  configureProviderRuntimeFactories(config, manager);
+  return manager;
 }
 
 function makeSettings(): LoadedSettings {
@@ -131,8 +172,9 @@ function makeSettings(): LoadedSettings {
 }
 
 describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
+  afterEach(disposeOwnedConfigs);
   let originalEnv: Map<string, string | undefined>;
-  let fromConfigMock: Mock<(...args: never[]) => unknown>;
+  let fromConfigMock: Mock<typeof original.fromConfig>;
   let capturedStderr: string[];
 
   beforeEach(async () => {
@@ -167,20 +209,9 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
       throw new Error(`process.exit(${code}) called`);
     });
 
-    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
-    fromConfigMock = fromConfig as Mock<typeof fromConfig>;
+    fromConfigMock = fromConfigSentinel;
     fromConfigMock.mockReset();
-    fromConfigMock.mockResolvedValue({
-      async *stream() {
-        yield { type: 'done', reason: 'stop' };
-      },
-      dispose: vi.fn().mockResolvedValue(undefined),
-      getMessageBus: () => ({}) as never,
-      hooks: {
-        triggerSessionStart: () => Promise.resolve({}),
-        triggerSessionEnd: () => Promise.resolve(),
-      },
-    } as never);
+    fromConfigMock.mockImplementation(original.fromConfig);
 
     const { handleAtCommand } = await import(
       './ui/hooks/atCommandProcessor.js'
@@ -206,10 +237,11 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
   });
 
   it('does NOT call fromConfig when unconfigured — exits before Agent construction', async () => {
-    const config = makeUnconfiguredConfig();
+    const { config, runtimeSettings } = makeUnconfiguredConfig();
 
     await expect(
       runNonInteractive({
+        runtimeSettings,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -222,10 +254,11 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
   it('exits with code 52 (FATAL_CONFIG_ERROR) even when bare GEMINI_API_KEY is set', async () => {
     process.env.GEMINI_API_KEY = 'bare-key';
-    const config = makeUnconfiguredConfig();
+    const { config, runtimeSettings } = makeUnconfiguredConfig();
 
     await expect(
       runNonInteractive({
+        runtimeSettings,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -238,10 +271,11 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
   it('exits with code 52 even when bare OPENAI_API_KEY is set', async () => {
     process.env.OPENAI_API_KEY = 'sk-bare';
-    const config = makeUnconfiguredConfig();
+    const { config, runtimeSettings } = makeUnconfiguredConfig();
 
     await expect(
       runNonInteractive({
+        runtimeSettings,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -254,10 +288,11 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
   it('exits with code 52 even when bare ANTHROPIC_API_KEY is set', async () => {
     process.env.ANTHROPIC_API_KEY = 'sk-ant-bare';
-    const config = makeUnconfiguredConfig();
+    const { config, runtimeSettings } = makeUnconfiguredConfig();
 
     await expect(
       runNonInteractive({
+        runtimeSettings,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -269,10 +304,11 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
   });
 
   it('provides actionable guidance mentioning --provider, --profile-load, and LLXPRT_DEFAULT_PROVIDER', async () => {
-    const config = makeUnconfiguredConfig();
+    const { config, runtimeSettings } = makeUnconfiguredConfig();
 
     await expect(
       runNonInteractive({
+        runtimeSettings,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -300,10 +336,11 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
       throw new Error(`process.exit(${code}) called`);
     });
 
-    const config = makeUnconfiguredConfig();
+    const { config, runtimeSettings } = makeUnconfiguredConfig();
 
     await expect(
       runNonInteractive({
+        runtimeSettings,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -322,10 +359,11 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
     cleanupMock.mockClear();
     cleanupMock.mockRejectedValue(new Error('cleanup exploded'));
 
-    const config = makeUnconfiguredConfig();
+    const { config, runtimeSettings } = makeUnconfiguredConfig();
 
     await expect(
       runNonInteractive({
+        runtimeSettings,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -337,21 +375,19 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
   });
 
   it('passes through when a provider IS explicitly configured', async () => {
-    const config = makeUnconfiguredConfig();
-    (config.getProvider as Mock<typeof config.getProvider>).mockReturnValue(
+    const { config, runtimeSettings } = makeUnconfiguredConfig();
+    const providerManager = configureProvider(
+      config,
       'openai',
+      runtimeSettings,
     );
-    (
-      config.getProviderManager as Mock<typeof config.getProviderManager>
-    ).mockReturnValue({
-      getActiveProviderName: () => 'openai',
-      hasActiveProvider: () => true,
-    } as never);
 
     await runNonInteractive({
+      runtimeSettings,
       config,
       settings: makeSettings(),
       input: 'hello',
+      providerManager,
       prompt_id: 'test-configured',
     });
 
@@ -360,21 +396,19 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
   it('passes through when LLXPRT_DEFAULT_PROVIDER selects a provider', async () => {
     process.env.LLXPRT_DEFAULT_PROVIDER = 'anthropic';
-    const config = makeUnconfiguredConfig();
-    (config.getProvider as Mock<typeof config.getProvider>).mockReturnValue(
+    const { config, runtimeSettings } = makeUnconfiguredConfig();
+    const providerManager = configureProvider(
+      config,
       'anthropic',
+      runtimeSettings,
     );
-    (
-      config.getProviderManager as Mock<typeof config.getProviderManager>
-    ).mockReturnValue({
-      getActiveProviderName: () => 'anthropic',
-      hasActiveProvider: () => true,
-    } as never);
 
     await runNonInteractive({
+      runtimeSettings,
       config,
       settings: makeSettings(),
       input: 'hello',
+      providerManager,
       prompt_id: 'test-env-provider',
     });
 
@@ -383,8 +417,9 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 });
 
 describe('runNonInteractive: unconfigured error output format contracts (#2481)', () => {
+  afterEach(disposeOwnedConfigs);
   let originalEnv: Map<string, string | undefined>;
-  let fromConfigMock: Mock<(...args: never[]) => unknown>;
+  let fromConfigMock: Mock<typeof original.fromConfig>;
   let capturedStderr: string[];
 
   beforeEach(async () => {
@@ -419,8 +454,7 @@ describe('runNonInteractive: unconfigured error output format contracts (#2481)'
       throw new Error(`process.exit(${code}) called`);
     });
 
-    const { fromConfig } = await import('@vybestack/llxprt-code-agents');
-    fromConfigMock = fromConfig as Mock<typeof fromConfig>;
+    fromConfigMock = fromConfigSentinel;
     fromConfigMock.mockReset();
 
     const { handleAtCommand } = await import(
@@ -447,13 +481,13 @@ describe('runNonInteractive: unconfigured error output format contracts (#2481)'
   });
 
   it('reports error as JSON when output format is JSON', async () => {
-    const config = makeUnconfiguredConfig();
-    (
-      config.getOutputFormat as Mock<typeof config.getOutputFormat>
-    ).mockReturnValue('json' as never);
+    const { config, runtimeSettings } = makeUnconfiguredConfig(
+      OutputFormat.JSON,
+    );
 
     await expect(
       runNonInteractive({
+        runtimeSettings,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -469,13 +503,13 @@ describe('runNonInteractive: unconfigured error output format contracts (#2481)'
   });
 
   it('reports error as stream-JSON when output format is STREAM_JSON', async () => {
-    const config = makeUnconfiguredConfig();
-    (
-      config.getOutputFormat as Mock<typeof config.getOutputFormat>
-    ).mockReturnValue('stream-json' as never);
+    const { config, runtimeSettings } = makeUnconfiguredConfig(
+      OutputFormat.STREAM_JSON,
+    );
 
     await expect(
       runNonInteractive({
+        runtimeSettings,
         config,
         settings: makeSettings(),
         input: 'hello',
@@ -493,13 +527,13 @@ describe('runNonInteractive: unconfigured error output format contracts (#2481)'
   });
 
   it('reports error as text when output format is TEXT', async () => {
-    const config = makeUnconfiguredConfig();
-    (
-      config.getOutputFormat as Mock<typeof config.getOutputFormat>
-    ).mockReturnValue('text' as never);
+    const { config, runtimeSettings } = makeUnconfiguredConfig(
+      OutputFormat.TEXT,
+    );
 
     await expect(
       runNonInteractive({
+        runtimeSettings,
         config,
         settings: makeSettings(),
         input: 'hello',

@@ -1,12 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   assertRequestMediaBudget,
   DEFAULT_REQUEST_MEDIA_BUDGET_BYTES,
   type ResolvedMediaRequest,
 } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import { resolveRequestMedia } from '../utils/request-media-resolution.js';
+
+/** The captured media input of one request: id, aggregate budget and resolver. */
+export type RowsMediaInput = Parameters<typeof resolveRequestMedia>[0];
 
 function hasReference(row: IContent): boolean {
   return row.blocks.some(
@@ -37,12 +39,11 @@ function rowMediaBytes(row: IContent): number {
  */
 export async function* resolveRowsMedia(
   rows: AsyncIterable<IContent>,
-  runtime: ProviderRuntimeContext | undefined,
+  media: RowsMediaInput,
   owner: ResolvedMediaRequest,
   signal: AbortSignal | undefined,
 ): AsyncGenerator<IContent, void> {
-  const budget =
-    runtime?.requestMediaBudgetBytes ?? DEFAULT_REQUEST_MEDIA_BUDGET_BYTES;
+  const budget = media.aggregateBudgetBytes ?? DEFAULT_REQUEST_MEDIA_BUDGET_BYTES;
   let used = 0;
   for await (const row of rows) {
     const bytes = rowMediaBytes(row);
@@ -50,13 +51,13 @@ export async function* resolveRowsMedia(
     used += bytes;
     yield bytes === 0
       ? row
-      : await resolveRow(row, runtime, remaining, owner, signal);
+      : await resolveRow(row, media, remaining, owner, signal);
   }
 }
 
 async function resolveRow(
   row: IContent,
-  runtime: ProviderRuntimeContext | undefined,
+  media: RowsMediaInput,
   remaining: number,
   owner: ResolvedMediaRequest,
   signal: AbortSignal | undefined,
@@ -70,9 +71,7 @@ async function resolveRow(
     return row;
   }
   const resolved = await resolveRequestMedia(
-    runtime === undefined
-      ? undefined
-      : { ...runtime, requestMediaBudgetBytes: remaining },
+    { ...media, aggregateBudgetBytes: remaining },
     [row],
     signal,
   );

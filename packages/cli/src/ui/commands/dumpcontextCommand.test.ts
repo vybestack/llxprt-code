@@ -1,4 +1,4 @@
-import type { IContent } from '@vybestack/llxprt-code-core';
+import { parseOutputLimits, type IContent } from '@vybestack/llxprt-code-core';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -6,6 +6,7 @@ import type { IContent } from '@vybestack/llxprt-code-core';
  */
 
 import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
+import { bindDumpManager } from './__tests__/dumpcontext-owner-fixture.js';
 import { dumpcontextCommand } from './dumpcontextCommand.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
@@ -35,20 +36,27 @@ void vi.mock('@vybestack/llxprt-code-providers', () => ({
 
 import { dumpRequestContext } from '@vybestack/llxprt-code-providers';
 
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: vi.fn(() => ({
-    getSessionSetting: vi.fn((key: string) => {
-      if (key === 'dumpcontext') {
-        return 'off';
-      }
-      return undefined;
-    }),
-    setSessionSetting: vi.fn(),
-  })),
+const getRuntimeApi = vi.fn<() => Record<string, unknown>>(() => ({
+  getSessionSetting: vi.fn((key: string) => {
+    if (key === 'dumpcontext') {
+      return 'off';
+    }
+    return undefined;
+  }),
+  setSessionSetting: vi.fn(),
 }));
-
-import { getRuntimeApi } from '../contexts/RuntimeContext.js';
 import { assertDefined } from '../../__tests__/assertions.js';
+
+function createOwnedCommandContext(
+  ...args: Parameters<typeof createMockCommandContext>
+): CommandContext {
+  const context = createMockCommandContext(...args);
+  Object.defineProperty(context, 'runtimeApi', {
+    configurable: true,
+    get: () => getRuntimeApi(),
+  });
+  return context;
+}
 
 let mockContext: CommandContext;
 
@@ -70,7 +78,7 @@ describe('dumpcontextCommand', () => {
       requestFilename: '20260101-120000-anthropic-abc123-request.json',
       dumpDir: '/tmp/.llxprt/dumps',
     });
-    mockContext = createMockCommandContext();
+    mockContext = createOwnedCommandContext();
   });
   registerStatusTests();
   registerOnTests();
@@ -286,18 +294,20 @@ async function dumpsWithoutSettingSession(): Promise<void> {
   });
   const mockGetProviderManager = vi.fn().mockReturnValue({
     getActiveProviderName: vi.fn().mockReturnValue('anthropic'),
+    getActiveProvider: () => undefined,
   });
 
-  const ctxWithHistory = createMockCommandContext({
+  const ctxWithHistory = createOwnedCommandContext({
     services: {
-      config: {
-        getAgentClient: vi.fn().mockReturnValue({
+      agent: {
+        agentClient: {
           getHistoryService: mockGetHistoryService,
-        }),
-        getProviderManager: mockGetProviderManager,
-      } as unknown as CommandContext['services']['config'],
+        },
+      } as unknown as CommandContext['services']['agent'],
+      config: {} as unknown as CommandContext['services']['config'],
     },
   });
+  bindDumpManager(ctxWithHistory, getRuntimeApi, mockGetProviderManager);
 
   const result = await dumpcontextAction(ctxWithHistory, 'now');
 
@@ -339,23 +349,19 @@ async function preservesAgentClientReceiver(): Promise<void> {
     openDumpSnapshot: snapshotFixture,
   };
 
-  const configWithReceiverDependentMethod = {
+  const agentWithReceiverDependentMethod = {
     agentClient: {
       getHistoryService: () => historyService,
     },
-    getAgentClient() {
-      return this.agentClient;
-    },
-    getProviderManager() {
-      return {
-        getActiveProviderName: () => 'anthropic',
-      };
-    },
   };
 
-  const ctxWithHistory = createMockCommandContext();
-  ctxWithHistory.services.config =
-    configWithReceiverDependentMethod as unknown as CommandContext['services']['config'];
+  const ctxWithHistory = createOwnedCommandContext();
+  ctxWithHistory.services.agent =
+    agentWithReceiverDependentMethod as unknown as CommandContext['services']['agent'];
+  bindDumpManager(ctxWithHistory, getRuntimeApi, () => ({
+    getActiveProviderName: () => 'anthropic',
+    getActiveProvider: () => undefined,
+  }));
 
   const result = await dumpcontextAction(ctxWithHistory, 'now');
 
@@ -380,26 +386,32 @@ async function shapesOpenAIHistory(): Promise<void> {
     setSessionSetting: vi.fn(),
   } as never);
 
-  const ctxWithHistory = createMockCommandContext({
+  const ctxWithHistory = createOwnedCommandContext({
     services: {
-      config: {
-        getAgentClient: vi.fn().mockReturnValue({
+      agent: {
+        agentClient: {
           getHistoryService: vi.fn().mockReturnValue({
             streamRawHistory: () => fixtureRows(createOpenAIDumpHistory()),
             getChronologyTrace: vi.fn(async function* () {}),
             openDumpSnapshot: snapshotFixture,
           }),
-        }),
+        },
+      } as unknown as CommandContext['services']['agent'],
+      config: {
         getEphemeralSettings: vi.fn().mockReturnValue({}),
-        getProviderManager: vi.fn().mockReturnValue({
-          getActiveProviderName: vi.fn().mockReturnValue('openai'),
-          getActiveProvider: vi.fn().mockReturnValue({
-            getCurrentModel: vi.fn().mockReturnValue('gpt-4.1'),
-          }),
-        }),
       } as unknown as CommandContext['services']['config'],
     },
   });
+  bindDumpManager(
+    ctxWithHistory,
+    getRuntimeApi,
+    vi.fn().mockReturnValue({
+      getActiveProviderName: vi.fn().mockReturnValue('openai'),
+      getActiveProvider: vi.fn().mockReturnValue({
+        getCurrentModel: vi.fn().mockReturnValue('gpt-4.1'),
+      }),
+    }),
+  );
 
   await dumpcontextAction(ctxWithHistory, 'now');
 
@@ -442,23 +454,30 @@ async function shapesOpenAIAliasHistory(): Promise<void> {
   const history: IContent[] = [
     { speaker: 'human', blocks: [{ type: 'text', text: 'Hello alias' }] },
   ];
-  const ctxWithHistory = createMockCommandContext({
+  const ctxWithHistory = createOwnedCommandContext({
     services: {
-      config: {
-        getAgentClient: vi.fn().mockReturnValue({
+      agent: {
+        agentClient: {
           getHistoryService: vi.fn().mockReturnValue({
             streamRawHistory: () => fixtureRows(history),
             getChronologyTrace: vi.fn(async function* () {}),
             openDumpSnapshot: snapshotFixture,
           }),
-        }),
+        },
+      } as unknown as CommandContext['services']['agent'],
+      config: {
         getEphemeralSettings: vi.fn().mockReturnValue({}),
-        getProviderManager: vi.fn().mockReturnValue({
-          getActiveProviderName: vi.fn().mockReturnValue('openaivercel'),
-        }),
       } as unknown as CommandContext['services']['config'],
     },
   });
+  bindDumpManager(
+    ctxWithHistory,
+    getRuntimeApi,
+    vi.fn().mockReturnValue({
+      getActiveProviderName: vi.fn().mockReturnValue('openaivercel'),
+      getActiveProvider: () => undefined,
+    }),
+  );
 
   await dumpcontextAction(ctxWithHistory, 'now');
 
@@ -478,23 +497,30 @@ async function shapesAnthropicHistory(): Promise<void> {
     setSessionSetting: vi.fn(),
   } as never);
 
-  const ctxWithHistory = createMockCommandContext({
+  const ctxWithHistory = createOwnedCommandContext({
     services: {
-      config: {
-        getAgentClient: vi.fn().mockReturnValue({
+      agent: {
+        agentClient: {
           getHistoryService: vi.fn().mockReturnValue({
             streamRawHistory: () => fixtureRows(createAnthropicDumpHistory()),
             getChronologyTrace: vi.fn(async function* () {}),
             openDumpSnapshot: snapshotFixture,
           }),
-        }),
+        },
+      } as unknown as CommandContext['services']['agent'],
+      config: {
         getEphemeralSettings: vi.fn().mockReturnValue({}),
-        getProviderManager: vi.fn().mockReturnValue({
-          getActiveProviderName: vi.fn().mockReturnValue('anthropic'),
-        }),
       } as unknown as CommandContext['services']['config'],
     },
   });
+  bindDumpManager(
+    ctxWithHistory,
+    getRuntimeApi,
+    vi.fn().mockReturnValue({
+      getActiveProviderName: vi.fn().mockReturnValue('anthropic'),
+      getActiveProvider: () => undefined,
+    }),
+  );
 
   await dumpcontextAction(ctxWithHistory, 'now');
 
@@ -565,10 +591,10 @@ async function preservesGeminiPluginBody(): Promise<void> {
       },
     ],
   };
-  const ctxWithHistory = createMockCommandContext({
+  const ctxWithHistory = createOwnedCommandContext({
     services: {
-      config: {
-        getAgentClient: vi.fn().mockReturnValue({
+      agent: {
+        agentClient: {
           getHistoryService: vi.fn().mockReturnValue({
             streamRawHistory: () =>
               fixtureRows([
@@ -580,18 +606,23 @@ async function preservesGeminiPluginBody(): Promise<void> {
             getChronologyTrace: vi.fn(async function* () {}),
             openDumpSnapshot: snapshotFixture,
           }),
-        }),
-        getProviderManager: vi.fn().mockReturnValue({
-          getActiveProviderName: vi.fn().mockReturnValue('gemini'),
-          getActiveProvider: vi.fn().mockReturnValue({
-            getCurrentModel: vi.fn().mockReturnValue('gemini-2.5-pro'),
-            contextDumpVersion: 2,
-            buildContextDumpBody: vi.fn().mockResolvedValue(pluginBuiltBody),
-          }),
-        }),
-      } as unknown as CommandContext['services']['config'],
+        },
+      } as unknown as CommandContext['services']['agent'],
+      config: {} as unknown as CommandContext['services']['config'],
     },
   });
+  bindDumpManager(
+    ctxWithHistory,
+    getRuntimeApi,
+    vi.fn().mockReturnValue({
+      getActiveProviderName: vi.fn().mockReturnValue('gemini'),
+      getActiveProvider: vi.fn().mockReturnValue({
+        getCurrentModel: vi.fn().mockReturnValue('gemini-2.5-pro'),
+        contextDumpVersion: 2,
+        buildContextDumpBody: vi.fn().mockResolvedValue(pluginBuiltBody),
+      }),
+    }),
+  );
 
   await dumpcontextAction(ctxWithHistory, 'now');
 
@@ -609,61 +640,52 @@ async function passesGeminiActiveConfigAndModel(): Promise<void> {
   const history: IContent[] = [
     { speaker: 'human', blocks: [{ type: 'text', text: 'Ping' }] },
   ];
-  const config = {
-    getAgentClient: vi.fn().mockReturnValue({
-      getHistoryService: vi.fn().mockReturnValue({
-        streamRawHistory: () => fixtureRows(history),
-        getChronologyTrace: vi.fn(async function* () {}),
-        openDumpSnapshot: snapshotFixture,
-      }),
-    }),
-    getProviderManager: vi.fn().mockReturnValue({
-      getActiveProviderName: vi.fn().mockReturnValue('gemini'),
-      getActiveProvider: vi.fn().mockReturnValue({
-        getCurrentModel: vi.fn().mockReturnValue('gemini-3-pro'),
-        contextDumpVersion: 2,
-        buildContextDumpBody: vi.fn().mockResolvedValue({ contents: [] }),
-      }),
-    }),
-  } as unknown as CommandContext['services']['config'];
-  if (!config) {
-    throw new Error('Expected services.config fixture');
-  }
-  const ctxWithHistory = createMockCommandContext({
-    services: { config },
+  const config = createMockCommandContext().services.config;
+  const ctxWithHistory = createOwnedCommandContext({
+    services: {
+      config,
+      agent: {
+        agentClient: {
+          getHistoryService: vi.fn().mockReturnValue({
+            streamRawHistory: () => fixtureRows(history),
+            getChronologyTrace: vi.fn(async function* () {}),
+            openDumpSnapshot: snapshotFixture,
+          }),
+        },
+      } as unknown as CommandContext['services']['agent'],
+    },
   });
   const ctxConfig = ctxWithHistory.services.config;
   if (!ctxConfig) {
     throw new Error('Expected services.config on mock context');
   }
-  const providerManager = ctxConfig.getProviderManager();
-  if (!providerManager) {
-    throw new Error('Expected provider manager on mock context config');
-  }
+
+  const dumpManager = vi.fn().mockReturnValue({
+    getActiveProviderName: vi.fn().mockReturnValue('gemini'),
+    getActiveProvider: vi.fn().mockReturnValue({
+      getCurrentModel: vi.fn().mockReturnValue('gemini-3-pro'),
+      contextDumpVersion: 2,
+      buildContextDumpBody: vi.fn().mockResolvedValue({ contents: [] }),
+    }),
+  });
+  bindDumpManager(ctxWithHistory, getRuntimeApi, dumpManager);
 
   await dumpcontextAction(ctxWithHistory, 'now');
 
-  const buildContextDumpBody = (
-    providerManager.getActiveProvider() as unknown as {
-      buildContextDumpBody: ReturnType<typeof vi.fn>;
-    }
-  ).buildContextDumpBody;
+  const buildContextDumpBody = dumpManager().getActiveProvider()
+    .buildContextDumpBody as ReturnType<typeof vi.fn>;
   expect(buildContextDumpBody).toHaveBeenCalledOnce();
-  // Identity assertions: the command threads the SAME history and active
-  // model through to the plugin-owned seam, plus the context's ACTIVE
-  // config object. createMockCommandContext deep-merges the config given
-  // to the factory with its own defaults into a derived instance, so the
-  // seam's config identity is the context's config, not the literal
-  // argument passed to the factory; production passes
-  // context.services.config unchanged.
-  const [historyArg, modelArg, configArg] = buildContextDumpBody.mock.calls[0];
+  // The command threads the SAME history rows and active model through to
+  // the plugin-owned seam, plus the output limits parsed from the context's
+  // ACTIVE ephemeral settings (the plugin contract takes limits, not Config).
+  const [historyArg, modelArg, limitsArg] = buildContextDumpBody.mock.calls[0];
   const receivedRows = [];
   for await (const row of historyArg.rows()) receivedRows.push(row);
   expect(receivedRows).toStrictEqual(history);
   expect(modelArg).toBe('gemini-3-pro');
-  expect(configArg).toBe(ctxConfig);
-  // The derived config still carries this test's provider-manager wiring.
-  expect(configArg.getProviderManager).toBe(config.getProviderManager);
+  expect(limitsArg).toStrictEqual(
+    parseOutputLimits(ctxConfig.getEphemeralSettings()),
+  );
   const requestArg = (dumpRequestContext as ReturnType<typeof vi.fn>).mock
     .calls[0][0];
   expect(requestArg.body).toStrictEqual({ contents: [] });
@@ -677,10 +699,10 @@ async function reportsMissingGeminiPlugin(): Promise<void> {
 
   // A base-only install without the google-gemini plugin: the provider
   // name is Gemini-family but no plugin-owned conversion exists.
-  const ctxWithoutPlugin = createMockCommandContext({
+  const ctxWithoutPlugin = createOwnedCommandContext({
     services: {
-      config: {
-        getAgentClient: vi.fn().mockReturnValue({
+      agent: {
+        agentClient: {
           getHistoryService: vi.fn().mockReturnValue({
             streamRawHistory: () =>
               fixtureRows([
@@ -692,16 +714,21 @@ async function reportsMissingGeminiPlugin(): Promise<void> {
             getChronologyTrace: vi.fn(async function* () {}),
             openDumpSnapshot: snapshotFixture,
           }),
-        }),
-        getProviderManager: vi.fn().mockReturnValue({
-          getActiveProviderName: vi.fn().mockReturnValue('gemini'),
-          getActiveProvider: vi.fn().mockReturnValue({
-            getCurrentModel: vi.fn().mockReturnValue('gemini-2.5-pro'),
-          }),
-        }),
-      } as unknown as CommandContext['services']['config'],
+        },
+      } as unknown as CommandContext['services']['agent'],
+      config: {} as unknown as CommandContext['services']['config'],
     },
   });
+  bindDumpManager(
+    ctxWithoutPlugin,
+    getRuntimeApi,
+    vi.fn().mockReturnValue({
+      getActiveProviderName: vi.fn().mockReturnValue('gemini'),
+      getActiveProvider: vi.fn().mockReturnValue({
+        getCurrentModel: vi.fn().mockReturnValue('gemini-2.5-pro'),
+      }),
+    }),
+  );
 
   const result = await dumpcontextAction(ctxWithoutPlugin, 'now');
 
@@ -722,23 +749,30 @@ async function preservesUnknownProviderHistory(): Promise<void> {
     setSessionSetting: vi.fn(),
   } as never);
 
-  const ctxWithHistory = createMockCommandContext({
+  const ctxWithHistory = createOwnedCommandContext({
     services: {
-      config: {
-        getAgentClient: vi.fn().mockReturnValue({
+      agent: {
+        agentClient: {
           getHistoryService: vi.fn().mockReturnValue({
             streamRawHistory: () => fixtureRows(history),
             getChronologyTrace: vi.fn(async function* () {}),
             openDumpSnapshot: snapshotFixture,
           }),
-        }),
+        },
+      } as unknown as CommandContext['services']['agent'],
+      config: {
         getEphemeralSettings: vi.fn().mockReturnValue({}),
-        getProviderManager: vi.fn().mockReturnValue({
-          getActiveProviderName: vi.fn().mockReturnValue('custom'),
-        }),
       } as unknown as CommandContext['services']['config'],
     },
   });
+  bindDumpManager(
+    ctxWithHistory,
+    getRuntimeApi,
+    vi.fn().mockReturnValue({
+      getActiveProviderName: vi.fn().mockReturnValue('custom'),
+      getActiveProvider: () => undefined,
+    }),
+  );
 
   await dumpcontextAction(ctxWithHistory, 'now');
 
@@ -753,11 +787,10 @@ async function reportsUnavailableHistory(): Promise<void> {
     setSessionSetting: vi.fn(),
   } as never);
 
-  const ctxWithoutHistory = createMockCommandContext({
+  const ctxWithoutHistory = createOwnedCommandContext({
     services: {
-      config: {
-        getAgentClient: vi.fn().mockReturnValue(null),
-      } as unknown as CommandContext['services']['config'],
+      agent: null,
+      config: {} as unknown as CommandContext['services']['config'],
     },
   });
 
@@ -777,11 +810,10 @@ async function reportsUndefinedAgentClient(): Promise<void> {
     setSessionSetting: vi.fn(),
   } as never);
 
-  const ctxWithoutAgentClient = createMockCommandContext({
+  const ctxWithoutAgentClient = createOwnedCommandContext({
     services: {
-      config: {
-        getAgentClient: vi.fn().mockReturnValue(undefined),
-      } as unknown as CommandContext['services']['config'],
+      agent: null,
+      config: {} as unknown as CommandContext['services']['config'],
     },
   });
 
@@ -811,16 +843,21 @@ async function defaultsToBackendProvider(): Promise<void> {
     openDumpSnapshot: snapshotFixture,
   });
 
-  const ctxNoProviderManager = createMockCommandContext({
+  const ctxNoProviderManager = createOwnedCommandContext({
     services: {
-      config: {
-        getAgentClient: vi.fn().mockReturnValue({
+      agent: {
+        agentClient: {
           getHistoryService: mockGetHistoryService,
-        }),
-        getProviderManager: vi.fn().mockReturnValue(undefined),
-      } as unknown as CommandContext['services']['config'],
+        },
+      } as unknown as CommandContext['services']['agent'],
+      config: {} as unknown as CommandContext['services']['config'],
     },
   });
+  bindDumpManager(
+    ctxNoProviderManager,
+    getRuntimeApi,
+    vi.fn().mockReturnValue(undefined),
+  );
 
   await dumpcontextAction(ctxNoProviderManager, 'now');
 
@@ -841,13 +878,14 @@ async function reportsNullHistory(): Promise<void> {
     setSessionSetting: vi.fn(),
   } as never);
 
-  const ctxWithNullHistory = createMockCommandContext({
+  const ctxWithNullHistory = createOwnedCommandContext({
     services: {
-      config: {
-        getAgentClient: vi.fn().mockReturnValue({
+      agent: {
+        agentClient: {
           getHistoryService: vi.fn().mockReturnValue(null),
-        }),
-      } as unknown as CommandContext['services']['config'],
+        },
+      } as unknown as CommandContext['services']['agent'],
+      config: {} as unknown as CommandContext['services']['config'],
     },
   });
 
@@ -867,11 +905,10 @@ async function reportsNonCallableAgentClient(): Promise<void> {
     setSessionSetting: vi.fn(),
   } as never);
 
-  const ctxWithoutCallableAgentClient = createMockCommandContext({
+  const ctxWithoutCallableAgentClient = createOwnedCommandContext({
     services: {
-      config: {
-        getAgentClient: undefined,
-      } as unknown as CommandContext['services']['config'],
+      agent: null,
+      config: {} as unknown as CommandContext['services']['config'],
     },
   });
 

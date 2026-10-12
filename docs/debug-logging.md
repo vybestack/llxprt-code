@@ -227,12 +227,12 @@ requests are retried or tool calls interleave with ordinary messages.
 
 Each marker carries:
 
-| Field        | Meaning                                                              |
-| ------------ | -------------------------------------------------------------------- |
-| `seq`        | Monotonic insertion ordinal. Never reused, including after `/clear`. |
-| `userTurn`   | Which user turn the item belongs to (`0` before the first prompt).   |
-| `step`       | Position within that user turn, so tool round-trips stay ordered.    |
-| `recordedAt` | Epoch milliseconds when the item entered history.                    |
+| Field        | Meaning                                                                           |
+| ------------ | --------------------------------------------------------------------------------- |
+| `seq`        | Monotonic insertion ordinal within a conversation. `/clear` starts a new session. |
+| `userTurn`   | Which user turn the item belongs to (`0` before the first prompt).                |
+| `step`       | Position within that user turn, so tool round-trips stay ordered.                 |
+| `recordedAt` | Epoch milliseconds when the item entered history.                                 |
 
 Markers are **client-side only**. They are never included in a provider request
 payload, and they are excluded from token estimation so they cannot affect when

@@ -150,10 +150,6 @@ describe('Issue #276: OAuth token behavior through public APIs', () => {
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
     runtimeContext.config ??= createRuntimeConfigStub(settingsService);
-    runtimeContext.config.getEphemeralSettings = () => ({
-      ...settingsService.getAllGlobalSettings(),
-      ...settingsService.getProviderSettings('anthropic'),
-    });
   });
   describe('getModels: OAuth and API-key tokens both dynamically list models', () => {
     registerAnthropicBehavior1();
@@ -301,9 +297,6 @@ function registerAnthropicBehavior6(): void {
         undefined,
         {
           ...TEST_PROVIDER_CONFIG,
-          getEphemeralSettings: () => ({
-            streaming: 'disabled',
-          }),
         },
       );
 
@@ -344,9 +337,6 @@ function registerAnthropicBehavior7(): void {
     it('constructs SDK with apiKey and no authToken for regular API keys, without OAuth beta headers', async () => {
       const apiProvider = new AnthropicProvider('test-api-key', undefined, {
         ...TEST_PROVIDER_CONFIG,
-        getEphemeralSettings: () => ({
-          streaming: 'disabled',
-        }),
       });
 
       const callOptions = buildCallOptions(
@@ -387,9 +377,6 @@ function registerAnthropicBehavior8(): void {
         undefined,
         {
           ...TEST_PROVIDER_CONFIG,
-          getEphemeralSettings: () => ({
-            streaming: 'disabled',
-          }),
         },
       );
 
@@ -434,9 +421,6 @@ function registerAnthropicBehavior9(): void {
     it('sends tool names without prefix when using a regular API key', async () => {
       const apiProvider = new AnthropicProvider('test-api-key', undefined, {
         ...TEST_PROVIDER_CONFIG,
-        getEphemeralSettings: () => ({
-          streaming: 'disabled',
-        }),
       });
 
       const callOptions = buildCallOptions(
@@ -484,9 +468,6 @@ function registerAnthropicBehavior10(): void {
         undefined,
         {
           ...TEST_PROVIDER_CONFIG,
-          getEphemeralSettings: () => ({
-            streaming: 'disabled',
-          }),
         },
       );
 
@@ -525,9 +506,6 @@ function registerAnthropicBehavior11(): void {
     it('does not include oauth-2025-04-20 in anthropic-beta header for API key requests', async () => {
       const apiProvider = new AnthropicProvider('test-api-key', undefined, {
         ...TEST_PROVIDER_CONFIG,
-        getEphemeralSettings: () => ({
-          streaming: 'disabled',
-        }),
       });
 
       settingsService.setProviderSetting('anthropic', 'prompt-caching', 'off');

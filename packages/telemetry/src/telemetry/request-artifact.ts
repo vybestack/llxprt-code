@@ -2,7 +2,6 @@
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import type { LogRecord, LogAttributes } from '@opentelemetry/api-logs';
-import { flushTelemetry } from './sdk.js';
 
 export interface RequestArtifactDescriptor {
   readonly schema_version: 2;
@@ -34,9 +33,9 @@ export function artifactAttributes(
 export async function emitRequestArtifact(
   artifact: RequestArtifactDescriptor,
   attributes: LogAttributes,
+  // Awaited per chunk so the SDK queue cannot retain or drop a transcript's chunks.
   emit: (record: LogRecord) => void | Promise<void>,
   signal?: AbortSignal,
-  acknowledged = false,
 ): Promise<void> {
   const file = await fs.open(artifact.artifact_path, 'r');
   const buffer = Buffer.alloc(16384);
@@ -45,7 +44,6 @@ export async function emitRequestArtifact(
   let index = 0;
   const name = attributes['event.name'];
   try {
-    if (!acknowledged) await flushTelemetry();
     while (offset < artifact.content_bytes) {
       signal?.throwIfAborted();
       const { bytesRead } = await file.read(
@@ -69,8 +67,6 @@ export async function emitRequestArtifact(
         },
       });
       offset += bytesRead;
-      // Await each export so the SDK queue cannot retain or drop a transcript's chunks.
-      if (!acknowledged) await flushTelemetry();
     }
     signal?.throwIfAborted();
     if (hash.digest('hex') !== artifact.content_sha256)
@@ -85,7 +81,6 @@ export async function emitRequestArtifact(
         content_complete: true,
       },
     });
-    if (!acknowledged) await flushTelemetry();
   } finally {
     await file.close();
   }

@@ -27,9 +27,7 @@ import { describe, it, expect } from 'bun:test';
 import {
   ProviderContentGenerator,
   ContentGeneratorRole,
-  type IProviderManager,
 } from '@vybestack/llxprt-code-providers';
-import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { RuntimeContentGeneratorFactory } from '@vybestack/llxprt-code-core';
 
 /**
@@ -47,20 +45,7 @@ describe('ProviderContentGenerator behavioral tests', () => {
    * ProviderContentGenerator is constructable with IProviderManager.
    */
   it('constructs with IProviderManager', () => {
-    const mockManager = {
-      getActiveProvider: () => ({
-        name: 'test',
-        async *generateChatCompletion() {
-          yield { speaker: 'ai', blocks: [{ type: 'text', text: 'test' }] };
-        },
-      }),
-      getActiveProviderName: () => 'test',
-      setActiveProvider: () => {},
-      getAvailableModels: async () => [],
-      listProviders: () => ['test'],
-    } as unknown as IProviderManager;
-
-    const generator = new ProviderContentGenerator(mockManager, {});
+    const generator = new ProviderContentGenerator();
     expect(generator).toBeDefined();
     expect(typeof generator.countTokens).toBe('function');
   });
@@ -72,13 +57,7 @@ describe('ProviderContentGenerator behavioral tests', () => {
    * ProviderContentGenerator.countTokens returns an estimated token count.
    */
   it('countTokens returns estimated token count for string content', async () => {
-    const mockManager = {
-      getActiveProvider: () => ({
-        name: 'test',
-      }),
-    } as unknown as IProviderManager;
-
-    const generator = new ProviderContentGenerator(mockManager, {});
+    const generator = new ProviderContentGenerator();
     const result = await generator.countTokens({
       contents: [
         {
@@ -98,8 +77,7 @@ describe('ProviderContentGenerator behavioral tests', () => {
    * ProviderContentGenerator throws for embedContent (unsupported).
    */
   it('embedContent throws because embeddings are not supported', async () => {
-    const mockManager = {} as unknown as IProviderManager;
-    const generator = new ProviderContentGenerator(mockManager, {});
+    const generator = new ProviderContentGenerator();
 
     await expect(generator.embedContent({ texts: [] })).rejects.toThrow(
       /embeddings not supported/i,
@@ -146,11 +124,7 @@ describe('RuntimeContentGeneratorFactory structural compatibility', () => {
    */
   it('ProviderContentGenerator factory satisfies RuntimeContentGeneratorFactory contract', () => {
     const factory: RuntimeContentGeneratorFactory = {
-      createContentGenerator: (manager: RuntimeProviderManager) => {
-        // Use manager as IProviderManager — structural typing
-        const providerManager = manager as unknown as IProviderManager;
-        return new ProviderContentGenerator(providerManager, {});
-      },
+      createContentGenerator: () => new ProviderContentGenerator(),
     };
 
     expect(typeof factory.createContentGenerator).toBe('function');

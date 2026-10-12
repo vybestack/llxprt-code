@@ -176,6 +176,7 @@ describe('SessionControl post-resume recording', () => {
     expect(path.length).toBeGreaterThan(0);
     expect(raw.match(/post-resume-sentinel-gamma/g)).toHaveLength(1);
     expect(raw).toContain('a plain text reply');
+    expect(raw.match(/pre-resume base turn/g)).toHaveLength(1);
   });
 
   const observePostResumeTurnsAppendToTheResumedJSONLFile = async () =>

@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { MCPOAuthTokenStorage } from './oauth-token-storage.js';
 import type { MCPOAuthToken } from './token-store.js';
-import type { OAuthCredentials, TokenStorage } from './token-storage/types.js';
+import type { OAuthCredentials, TokenStorage } from './token-storage/index.js';
 
 class MockTokenStorage implements TokenStorage {
   private readonly tokens = new Map<string, OAuthCredentials>();
@@ -70,17 +70,20 @@ describe('MCPOAuthTokenStorage', () => {
   };
 
   let mockStore: MockTokenStorage;
+  let storage: MCPOAuthTokenStorage;
 
   beforeEach(() => {
     mockStore = new MockTokenStorage();
-    MCPOAuthTokenStorage.setTokenStore(mockStore);
+    storage = new MCPOAuthTokenStorage(mockStore);
   });
 
-  it('allows swapping the underlying token store', () => {
-    const custom = new MockTokenStorage();
-    MCPOAuthTokenStorage.setTokenStore(custom);
-
-    expect(MCPOAuthTokenStorage.getTokenStore()).toBe(custom);
+  it('retains independent backends for the same account', async () => {
+    const other = new MCPOAuthTokenStorage(new MockTokenStorage());
+    await storage.saveToken('demo', mockToken);
+    await other.saveToken('demo', { ...mockToken, accessToken: 'other' });
+    await other.removeToken('demo');
+    expect(await other.getToken('demo')).toBeNull();
+    expect((await storage.getToken('demo'))?.token.accessToken).toBe('access');
   });
 
   it('loads tokens via the shared interface', async () => {
@@ -90,16 +93,16 @@ describe('MCPOAuthTokenStorage', () => {
       updatedAt: Date.now(),
     });
 
-    const tokens = await MCPOAuthTokenStorage.loadTokens();
+    const tokens = await storage.loadTokens();
 
     expect(tokens.size).toBe(1);
     expect(tokens.get('demo')?.token.accessToken).toBe('access');
   });
 
   it('saves tokens with metadata', async () => {
-    await MCPOAuthTokenStorage.saveToken('demo', mockToken, 'client');
+    await storage.saveToken('demo', mockToken, 'client');
 
-    const saved = await MCPOAuthTokenStorage.getToken('demo');
+    const saved = await storage.getToken('demo');
     expect(saved).toMatchObject({
       serverName: 'demo',
       clientId: 'client',
@@ -109,47 +112,47 @@ describe('MCPOAuthTokenStorage', () => {
   });
 
   it('updates existing tokens', async () => {
-    await MCPOAuthTokenStorage.saveToken('demo', mockToken);
+    await storage.saveToken('demo', mockToken);
     const newToken = { ...mockToken, accessToken: 'new' };
 
-    await MCPOAuthTokenStorage.saveToken('demo', newToken);
+    await storage.saveToken('demo', newToken);
 
-    const saved = await MCPOAuthTokenStorage.getToken('demo');
+    const saved = await storage.getToken('demo');
     expect(saved?.token.accessToken).toBe('new');
   });
 
   it('removes tokens', async () => {
-    await MCPOAuthTokenStorage.saveToken('demo', mockToken);
-    await MCPOAuthTokenStorage.removeToken('demo');
+    await storage.saveToken('demo', mockToken);
+    await storage.removeToken('demo');
 
-    const result = await MCPOAuthTokenStorage.getToken('demo');
+    const result = await storage.getToken('demo');
     expect(result).toBeNull();
   });
 
   it('clears all tokens', async () => {
-    await MCPOAuthTokenStorage.saveToken('one', mockToken);
-    await MCPOAuthTokenStorage.saveToken('two', mockToken);
+    await storage.saveToken('one', mockToken);
+    await storage.saveToken('two', mockToken);
 
-    await MCPOAuthTokenStorage.clearAllTokens();
+    await storage.clearAll();
 
-    const tokens = await MCPOAuthTokenStorage.loadTokens();
+    const tokens = await storage.loadTokens();
     expect(tokens.size).toBe(0);
   });
 
   it('throws when attempting to save invalid data', async () => {
     // Invalid server name
-    await expect(MCPOAuthTokenStorage.saveToken('', mockToken)).rejects.toThrow(
+    await expect(storage.saveToken('', mockToken)).rejects.toThrow(
       'Server name must be a non-empty string',
     );
 
     // Invalid token
     await expect(
-      MCPOAuthTokenStorage.saveToken('demo', { ...mockToken, accessToken: '' }),
+      storage.saveToken('demo', { ...mockToken, accessToken: '' }),
     ).rejects.toThrow('Token must have a valid access token');
   });
 
   it('supports the TokenStorage instance API', async () => {
-    const storage = new MCPOAuthTokenStorage();
+    const storage = new MCPOAuthTokenStorage(mockStore);
     await storage.saveToken('demo', mockToken);
 
     const credentials = await storage.getCredentials('demo');
@@ -174,12 +177,10 @@ describe('MCPOAuthTokenStorage', () => {
   it('handles backend errors gracefully', async () => {
     mockStore.setShouldThrow(true);
 
-    await expect(MCPOAuthTokenStorage.loadTokens()).rejects.toThrowError(
-      'Mock get error',
-    );
+    await expect(storage.loadTokens()).rejects.toThrowError('Mock get error');
 
-    await expect(
-      MCPOAuthTokenStorage.saveToken('demo', mockToken),
-    ).rejects.toThrowError('Mock set error');
+    await expect(storage.saveToken('demo', mockToken)).rejects.toThrowError(
+      'Mock set error',
+    );
   });
 });

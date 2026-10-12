@@ -35,6 +35,7 @@
  * (`package.json` / lockfiles are shared inputs that force a full run).
  */
 
+import { createBundleBuildFixture } from './bundle-build-fixture.js';
 import { afterAll, describe, expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync, rmSync } from 'node:fs';
@@ -43,13 +44,15 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const repoRoot = resolve(__filename, '..', '..', '..');
-const bundleDir = join(repoRoot, 'packages', 'cli', 'bundle');
+const buildFixture = createBundleBuildFixture(repoRoot);
+const buildRoot = buildFixture.root;
+const bundleDir = join(buildRoot, 'packages', 'cli', 'bundle');
 const bundlePath = join(bundleDir, 'llxprt.js');
 
 afterAll(() => {
   // The bundle is a gitignored publish artifact; remove it so a stale build
   // can never satisfy a future run or interfere with the launch smoke.
-  rmSync(bundleDir, { recursive: true, force: true });
+  buildFixture.dispose();
 });
 
 /**
@@ -105,7 +108,7 @@ describe('issue #3055: prebuilt CLI bundle is free of build-tree paths', () => {
       process.execPath,
       ['scripts/bun-build.config.ts', '--cli-only'],
       {
-        cwd: repoRoot,
+        cwd: buildRoot,
         encoding: 'utf8',
         timeout: 120_000,
         env: { ...process.env, CI: 'true' },
@@ -151,7 +154,12 @@ describe('issue #3055: prebuilt CLI bundle is free of build-tree paths', () => {
     // may canonicalize a symlinked checkout, emitting the real path rather
     // than the logical one.
     const pathForms = new Set<string>();
-    for (const basePath of [repoRoot, realpathSync(repoRoot)]) {
+    for (const basePath of [
+      repoRoot,
+      realpathSync(repoRoot),
+      buildRoot,
+      realpathSync(buildRoot),
+    ]) {
       pathForms.add(basePath);
       pathForms.add(JSON.stringify(basePath).slice(1, -1));
     }

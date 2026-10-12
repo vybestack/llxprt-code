@@ -178,7 +178,7 @@ class StructuralAnalysisInvocation extends BaseToolInvocation<
       maxNodes: normalizeMaxNodes(maxNodes),
       reverse: reverse === true,
       budget: resolveAnalysisBudget(
-        this.host.getEphemeralSettings()['tool-output-max-items'] as
+        this.host.readExecutionPolicy()['tool-output-max-items'] as
           | number
           | undefined,
       ),

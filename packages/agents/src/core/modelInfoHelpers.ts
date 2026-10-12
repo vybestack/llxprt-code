@@ -81,8 +81,12 @@ export function resolveProfileName(config: Config): string | null {
 export function buildModelInfo(
   config: Config,
   identity: EffectiveModelIdentity,
+  admittedProfileName?: string | null,
 ): ModelInfo {
-  const profileName = resolveProfileName(config);
+  const profileName =
+    admittedProfileName === undefined
+      ? resolveProfileName(config)
+      : admittedProfileName;
   return {
     model: identity.model,
     providerName: identity.providerName,
@@ -112,4 +116,34 @@ export async function* emitModelInfoForNewSequence(
     type: AgentEventType.ModelInfo,
     value: buildModelInfo(config, identity),
   };
+}
+
+export function resolveClientModelIdentity(
+  configFallback: string,
+  runtimeProviderName: string,
+  currentSequenceModel: string | null,
+  chat:
+    | { resolveProviderForRuntime(operation: string): RoutedModelProvider }
+    | undefined,
+): EffectiveModelIdentity {
+  let routedProviderName = runtimeProviderName;
+  let routedProvider: RoutedModelProvider | undefined = undefined;
+  if (chat && typeof chat.resolveProviderForRuntime === 'function') {
+    try {
+      const provider = chat.resolveProviderForRuntime(
+        'AgentClient.getEffectiveModelIdentity',
+      );
+      routedProviderName = provider.name;
+      routedProvider = provider;
+    } catch {
+      routedProviderName = runtimeProviderName;
+      routedProvider = undefined;
+    }
+  }
+  return buildEffectiveModelIdentity(
+    routedProviderName,
+    routedProvider,
+    currentSequenceModel,
+    configFallback,
+  );
 }

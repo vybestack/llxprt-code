@@ -1,7 +1,7 @@
 # LLxprt Code Telemetry
 
 **LLxprt Code never sends telemetry anywhere.** There is no network exporter in
-the codebase — no OTLP, no Google, no vendor endpoint of any kind. Everything
+the codebase. no OTLP, no Google, no vendor endpoint of any kind. Everything
 described on this page happens entirely on your own machine.
 
 Within that boundary there are two separate layers:
@@ -11,7 +11,7 @@ Within that boundary there are two separate layers:
 | Session stats            | Always on                        | In memory; shown by `/stats`  |
 | OTEL traces/metrics/logs | Off (`telemetry.enabled: false`) | A local file, or your console |
 
-Session stats are what populate the `/stats` display — token counts, tool call
+Session stats are what populate the `/stats` display. token counts, tool call
 tallies, and timings for the current session. They are aggregated in memory
 regardless of the `telemetry.enabled` setting, are never written to disk by this
 layer, and disappear when the session ends. Nothing to opt out of: it is your
@@ -26,22 +26,26 @@ logging (the `/logging` command), see
 
 ## What telemetry does
 
-When enabled, the OpenTelemetry SDK registers **only `HttpInstrumentation`** —
-it does not create custom spans for tool calls or model responses. The data
-emitted is:
+Session assembly selects a private telemetry root before constructing consumers.
+Config holds immutable startup values; constructing Config does not initialize
+an SDK or select a global exporter. Each root owns its logger, tracer and meter
+providers. There is no global HTTP instrumentation registration.
 
-- **Traces**: HTTP request/response spans (auto-instrumented by
-  `HttpInstrumentation`). There are no custom `startSpan` calls for tool calls
-  or API interactions.
-- **Metrics**: session counts, tool call counts/latency, API request
-  counts/latency, token usage, file operation counts.
-- **Logs**: configuration events, user prompts (if `logPrompts` is enabled),
-  tool calls, hook calls, API requests/responses/errors, slash commands.
+The enabled root records explicitly submitted spans, metrics and events:
 
-All data is written locally — to a file if you configure an outfile, or to the
-console otherwise. The SDK constructs only `File*Exporter` or
-`Console*Exporter`; no OTLP or network exporter is imported anywhere in the
-source, so there is no code path that could transmit this data.
+- **Traces**: spans submitted through the selected root with an explicit root
+  context. HTTP traffic is not automatically instrumented.
+- **Metrics**: session counts, tool call counts and latency, API request counts
+  and latency, token usage and file operation counts.
+- **Logs**: configuration events, permitted user prompts, tool calls, hook calls,
+  API requests, responses and errors, and slash commands.
+
+Root transports construct local file exporters when an outfile is configured,
+or console exporters otherwise. No OTLP or network exporter is imported.
+Session settings provide live privacy reads to the selected root. Independent
+sessions retain separate providers and sinks, even when they share a settings
+store. Child sessions borrow the parent's root without reconfiguring or closing
+it. Closing the owning root denies further admission and joins accepted exports.
 
 ## Enable telemetry
 
@@ -74,7 +78,7 @@ llxprt --telemetry "your prompt"
 
 CLI flags take precedence over settings files. Specifically, the configuration
 builder resolves the effective value as `argv.telemetry ?? settings.telemetry.enabled`
-— a CLI flag wins if present, otherwise the persisted setting is used. See
+a CLI flag wins if present, otherwise the persisted setting is used. See
 [Configuration](./cli/configuration.md) for the full settings reference.
 
 ### Outfile rotation
@@ -116,7 +120,7 @@ llxprt --telemetry --telemetry-outfile=/tmp/llxprt-telemetry.log "your prompt"
 
 Telemetry defaults to off, so simply not enabling it is sufficient. If
 telemetry is enabled in your persisted settings (`settings.json`), omitting
-`--telemetry` on the command line does **not** disable it — the persisted
+`--telemetry` on the command line does **not** disable it. the persisted
 setting still applies (the builder uses `argv.telemetry ?? settings.telemetry.enabled`).
 To explicitly disable telemetry for a single session regardless of persisted
 settings, use `--no-telemetry`:

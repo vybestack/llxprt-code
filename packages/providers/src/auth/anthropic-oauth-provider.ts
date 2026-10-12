@@ -39,7 +39,7 @@ import {
   hasValidRefreshToken,
   isTokenExpired,
 } from './oauth-provider-base.js';
-import { oauthRuntimeBridge } from './runtime-accessor-bridge.js';
+import type { BrowserProfileAssociation } from './browser-profile-association-store.js';
 
 const CALLBACK_PORT_RANGE: [number, number] = [8765, 8795];
 const CALLBACK_TIMEOUT_MS = 3 * 60 * 1000;
@@ -96,7 +96,15 @@ export class AnthropicOAuthProvider implements OAuthProvider {
    *
    * Constructor completes synchronously - no async calls
    */
-  constructor(tokenStore: TokenStore, addItem?: OAuthUICallback) {
+  constructor(
+    tokenStore: TokenStore,
+    addItem?: OAuthUICallback,
+    private readonly isBrowserDisabled: () => boolean = () => false,
+    private readonly getBrowserProfileAssociation: (
+      provider: string,
+      bucket?: string,
+    ) => BrowserProfileAssociation | undefined = () => undefined,
+  ) {
     assertTokenStore(tokenStore);
     this.deviceFlow = new AnthropicDeviceFlow();
     this.retryHandler = new RetryHandler();
@@ -190,16 +198,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     localCallback: LocalOAuthCallbackServer | null;
   }> {
     const deviceCodeResponse = await this.deviceFlow.initiateDeviceFlow();
-    let noBrowser = false;
-    try {
-      noBrowser =
-        (oauthRuntimeBridge.getEphemeralSetting('auth.noBrowser') as
-          | boolean
-          | null
-          | undefined) ?? false;
-    } catch {
-      // Runtime not initialized (e.g., tests) — use default
-    }
+    const noBrowser = this.isBrowserDisabled();
     const interactive = shouldLaunchBrowser({ forceManual: noBrowser });
     let localCallback: LocalOAuthCallbackServer | null = null;
 
@@ -268,7 +267,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
   private async openAuthBrowser(browserUrl: string): Promise<void> {
     let browserOpts: BrowserLaunchOptions | undefined;
     try {
-      const assoc = oauthRuntimeBridge.getBrowserProfileAssociation(
+      const assoc = this.getBrowserProfileAssociation(
         this.name,
         this.currentAuthBucket,
       );
@@ -468,13 +467,18 @@ export class AnthropicOAuthProvider implements OAuthProvider {
     );
   }
 
-  async refreshToken(currentToken: OAuthToken): Promise<OAuthToken | null> {
+  async refreshToken(
+    currentToken: OAuthToken,
+    signal?: AbortSignal,
+  ): Promise<OAuthToken | null> {
     await this.ensureInitialized();
+    signal?.throwIfAborted();
 
     if (hasValidRefreshToken(currentToken)) {
       try {
         const refreshedToken = await this.deviceFlow.refreshToken(
           currentToken.refresh_token,
+          signal,
         );
 
         return {
@@ -484,6 +488,7 @@ export class AnthropicOAuthProvider implements OAuthProvider {
             refreshedToken.refresh_token ?? currentToken.refresh_token,
         };
       } catch (error) {
+        signal?.throwIfAborted();
         const refreshError =
           error instanceof OAuthError
             ? error

@@ -131,7 +131,10 @@ async function lifecycleBehavior(): Promise<number> {
   const activeRecording = await startMetricRecording(history);
   recording = activeRecording;
   const persistence = new SessionPersistenceService(
-    new Storage(directory),
+    {
+      projectRoot: new Storage(directory).getProjectRoot(),
+      chatsDir: new Storage(directory).getProjectChatsDir(),
+    },
     'metrics-session',
     { mediaStore: store },
   );

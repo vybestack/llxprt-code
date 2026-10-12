@@ -15,9 +15,10 @@
  * @see project-plans/issue1581/README.md
  */
 
+import type { SessionSchedulerOwner } from '../session/sessionSchedulerOwner.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { SchedulerCallbacks } from '@vybestack/llxprt-code-core/core/toolSchedulerContract.js';
 import type {
   IContent,
   ToolCallBlock,
@@ -26,7 +27,7 @@ import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.
 import type { EmojiFilter } from '@vybestack/llxprt-code-core/filters/EmojiFilter.js';
 import type { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
 import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { SubagentSchedulerFactory } from './subagentScheduler.js';
+import type { SubagentExecutionOptions } from './subagentScheduler.js';
 import type {
   CompletedToolCall,
   OutputUpdateHandler,
@@ -567,7 +568,9 @@ function synthesizeToolCalls(
 
 /** Context needed to initialize an interactive scheduler. */
 export interface InitSchedulerContext {
-  schedulerConfig: Config;
+  createSchedulerOwner: (
+    callbacks: SchedulerCallbacks,
+  ) => SessionSchedulerOwner;
   onMessage?: (message: string) => void;
   messageBus?: MessageBus;
   subagentId: string;
@@ -657,43 +660,39 @@ export function createCompletionChannel(
 
 /** Creates and returns the interactive scheduler and its dispose function. */
 export async function initInteractiveScheduler(
-  options: { schedulerFactory?: SubagentSchedulerFactory } | undefined,
+  options: SubagentExecutionOptions | undefined,
   ctx: InitSchedulerContext,
 ) {
   const channel = createCompletionChannel(ctx);
 
-  // Issue #2657: The engine fallback here is the canonical scheduler
-  // creation path. A consumer-provided schedulerFactory (e.g. the CLI's
-  // display-callback factory in interactiveToolScheduler.ts) is purely
-  // for UI-side display callbacks — NOT for fixing scheduler.schedule
-  // receiver binding. Both paths wrap schedule in a closure below.
-  //
-  // Registry owner: the per-run scheduler config facade. It is the same
-  // object at acquisition and release, and two subagents (or two runs) never
-  // share the facade, so their 'subagent' entries never collide.
-  const owner = ctx.schedulerConfig;
+  const callbacks = {
+    outputUpdateHandler: (callId, update) => {
+      channel.outputUpdateHandler(callId, update);
+      options?.displayCallbacks?.outputUpdateHandler?.(callId, update);
+    },
+    onToolCallsUpdate: (calls) =>
+      options?.displayCallbacks?.onToolCallsUpdate?.(calls),
+    onAllToolCallsComplete: async (calls) => {
+      await channel.handleCompletion(calls);
+      await options?.displayCallbacks?.onAllToolCallsComplete?.(calls);
+    },
+    getPreferredEditor: () => undefined,
+    onEditorClose: () => {},
+  } satisfies SchedulerCallbacks;
   const schedulerPromise = options?.schedulerFactory
     ? Promise.resolve(
         options.schedulerFactory({
-          schedulerConfig: ctx.schedulerConfig,
-          onAllToolCallsComplete: channel.handleCompletion,
-          outputUpdateHandler: channel.outputUpdateHandler,
-          onToolCallsUpdate: undefined,
+          onAllToolCallsComplete: callbacks.onAllToolCallsComplete,
+          outputUpdateHandler: callbacks.outputUpdateHandler,
+          onToolCallsUpdate: callbacks.onToolCallsUpdate,
         }),
       )
-    : ctx.schedulerConfig.getOrCreateScheduler(
-        owner,
-        'subagent',
-        {
-          outputUpdateHandler: channel.outputUpdateHandler,
-          onAllToolCallsComplete: channel.handleCompletion,
-          onToolCallsUpdate: undefined,
-          getPreferredEditor: () => undefined,
-          onEditorClose: () => {},
-        },
-        undefined,
-        { messageBus: ctx.messageBus },
-      );
+    : (async () => {
+        const owner = ctx.createSchedulerOwner(callbacks);
+        const lease = owner.acquire();
+        await lease.ready;
+        return { schedule: lease.schedule, dispose: lease.release };
+      })();
 
   let scheduler: Awaited<typeof schedulerPromise>;
   try {
@@ -708,19 +707,9 @@ export async function initInteractiveScheduler(
     throw error;
   }
 
-  let schedulerDispose: () => Promise<void>;
-  if (options?.schedulerFactory) {
-    if (typeof scheduler.dispose === 'function') {
-      schedulerDispose = async () => scheduler.dispose?.();
-    } else {
-      schedulerDispose = async () => {};
-    }
-  } else {
-    schedulerDispose = async () =>
-      // Pass the acquired scheduler so a stale release after a disposeAll
-      // sweep cannot dispose a replacement entry under the same key.
-      ctx.schedulerConfig.disposeScheduler(owner, 'subagent', scheduler);
-  }
+  const schedulerDispose = async (): Promise<void> => {
+    await scheduler.dispose?.();
+  };
 
   return {
     scheduler: {
@@ -731,7 +720,7 @@ export async function initInteractiveScheduler(
       // scheduler.schedule themselves (issue #2657).
       schedule: (
         request: Parameters<typeof scheduler.schedule>[0],
-        signal: Parameters<typeof scheduler.schedule>[1],
+        signal: AbortSignal,
       ) => scheduler.schedule(request, signal),
       awaitCompletedCalls: channel.awaitCompletedCalls,
     },

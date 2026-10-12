@@ -32,11 +32,20 @@ describe('Agent.getMessageBus @plan:PLAN-20270110-ISSUE2378.P01 @requirement:REQ
     try {
       const callerBus: MessageBus = built.messageBus;
       const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
         config: built.config,
+        mcpRuntime: built.mcpRuntime,
         messageBus: callerBus,
       });
-      // The public accessor returns the EXACT caller bus — no second bus.
-      expect(agent.getMessageBus()).toBe(callerBus);
+      try {
+        // The public accessor returns the EXACT caller bus — no second bus.
+        expect(agent.getMessageBus()).toBe(callerBus);
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
@@ -45,12 +54,24 @@ describe('Agent.getMessageBus @plan:PLAN-20270110-ISSUE2378.P01 @requirement:REQ
   it('returns a single defined bus when none is supplied, stable across repeated reads', async () => {
     const built = await buildCliStyleConfig('plain-text.jsonl');
     try {
-      const agent: Agent = await fromConfig({ config: built.config });
-      const first = agent.getMessageBus();
-      const second = agent.getMessageBus();
-      expect(first).toBeDefined();
-      // Idempotent read: the accessor never builds a bus on demand.
-      expect(second).toBe(first);
+      const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
+        config: built.config,
+        mcpRuntime: built.mcpRuntime,
+      });
+      try {
+        const first = agent.getMessageBus();
+        const second = agent.getMessageBus();
+        expect(first).toBeDefined();
+        // Idempotent read: the accessor never builds a bus on demand.
+        expect(second).toBe(first);
+        expect(first).toBe(built.messageBus);
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }
@@ -73,13 +94,22 @@ describe('Agent.getMessageBus @plan:PLAN-20270110-ISSUE2378.P01 @requirement:REQ
     try {
       const callerBus: MessageBus = built.messageBus;
       const agent: Agent = await fromConfig({
+        settingsOwner: built.settingsOwner,
+        settingsService: built.settingsService,
+        agentClient: built.agentClient,
+        providerManager: built.providerManager,
         config: built.config,
+        mcpRuntime: built.mcpRuntime,
         messageBus: callerBus,
       });
-      const exposed = agent.getMessageBus();
-      // The exposed bus IS the caller bus, so a subscription on the caller bus
-      // is observable through the accessor-returned reference (identity).
-      expect(exposed).toBe(callerBus);
+      try {
+        const exposed = agent.getMessageBus();
+        // The exposed bus IS the caller bus, so a subscription on the caller bus
+        // is observable through the accessor-returned reference (identity).
+        expect(exposed).toBe(callerBus);
+      } finally {
+        await agent.dispose();
+      }
     } finally {
       await built.cleanup();
     }

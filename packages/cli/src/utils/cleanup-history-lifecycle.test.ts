@@ -24,6 +24,7 @@ for (const size of [512, 8192]) {
             {},
             fixture.root,
             controller.signal,
+            fixture.readActiveHistory,
           );
           const outcome = await Promise.race([
             fixture.history.paused.promise.then(() => 'paused'),
@@ -64,6 +65,8 @@ for (const size of [512, 8192]) {
               fixture.config,
               {},
               fixture.root,
+              undefined,
+              fixture.readActiveHistory,
             );
             recordCleanupOwners(
               size,
@@ -97,6 +100,8 @@ describe('CLI cleanup cold source lifecycle', () => {
         fixture.config,
         { sessionRetention: { enabled: false } },
         fixture.root,
+        undefined,
+        fixture.readActiveHistory,
       );
       expect(disabled.disabled).toBe(true);
       expect(fixture.history.opened).toBe(0);
@@ -107,6 +112,8 @@ describe('CLI cleanup cold source lifecycle', () => {
           fixture.config,
           {},
           fixture.root,
+          undefined,
+          fixture.readActiveHistory,
         );
         expect({
           wonLease: busy.janitorWonLease,
@@ -134,6 +141,7 @@ describe('CLI cleanup cold source lifecycle', () => {
         {},
         fixture.root,
         controller.signal,
+        fixture.readActiveHistory,
       );
       expect(result.failed).toBe(1);
       expect(fixture.decoded()).toBe(0);

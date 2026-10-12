@@ -8,7 +8,6 @@ export { CoreShellToolHostAdapter } from './CoreShellToolHostAdapter.js';
 export { CoreSkillServiceAdapter } from './CoreSkillServiceAdapter.js';
 export { CoreStorageServiceAdapter } from './CoreStorageServiceAdapter.js';
 export { coreStorageServiceAdapter } from './CoreStorageServiceAdapter.js';
-export { CoreSubagentServiceAdapter } from './CoreSubagentServiceAdapter.js';
 export { CoreTodoServiceAdapter } from './CoreTodoServiceAdapter.js';
 export { CoreToolHostAdapter } from './CoreToolHostAdapter.js';
 export { CoreToolKeyStorageAdapter } from './CoreToolKeyStorageAdapter.js';

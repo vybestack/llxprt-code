@@ -39,31 +39,6 @@ type ProfileManagerStub = {
   loadProfile: (profileName: string) => Promise<Profile>;
 };
 
-type RuntimeServices = {
-  config: {
-    getModel: () => string | undefined;
-    setModel: (value: string | undefined) => void;
-    getEphemeralSetting: (key: string) => unknown;
-    setEphemeralSetting: (key: string, value: unknown) => void;
-    getEphemeralSettings: () => Record<string, unknown>;
-    getContentGeneratorConfig: () => Record<string, unknown> | undefined;
-  };
-  settingsService: {
-    setCurrentProfileName?: (name: string | null) => void;
-    getCurrentProfileName?: () => string | null;
-    set: (key: string, value: unknown) => void;
-    get: (key: string) => unknown;
-    getProviderSettings: (providerName: string) => Record<string, unknown>;
-    setProviderSetting: (
-      providerName: string,
-      key: string,
-      value: unknown,
-    ) => void;
-  };
-  providerManager: ProviderManagerStub;
-  profileManager?: ProfileManagerStub;
-};
-
 export const switchActiveProviderMock = vi.fn<
   (providerName: string) => Promise<{
     infoMessages: string[];
@@ -82,14 +57,10 @@ export const clearActiveModelParamMock = vi.fn<(key: string) => void>();
 export const getActiveModelParamsMock = vi.fn<() => Record<string, unknown>>();
 export const setEphemeralSettingMock =
   vi.fn<(key: string, value: unknown) => void>();
-export const getCliRuntimeServicesMock = vi.fn<() => RuntimeServices>();
 export const getActiveProviderOrThrowMock = vi.fn<() => { name: string }>();
 export const isCliStatelessProviderModeEnabledMock = vi
   .fn<() => boolean>()
   .mockReturnValue(false);
-export const isCliRuntimeStatelessReadyMock = vi
-  .fn<() => boolean>()
-  .mockReturnValue(true);
 export const createProviderKeyStorageMock =
   vi.fn<() => { getKey: (name: string) => Promise<string | null> }>();
 
@@ -271,17 +242,8 @@ export function resetLbProfileApplicationStubs(): void {
     configStub.setEphemeralSetting(key, value);
   });
 
-  getCliRuntimeServicesMock.mockReturnValue({
-    config: configStub,
-    settingsService: settingsServiceStub,
-    providerManager: providerManagerStub,
-    profileManager: profileManagerStub,
-  });
-  keyStorageStub.getKey.mockResolvedValue(null);
-  createProviderKeyStorageMock.mockReturnValue(keyStorageStub);
   getActiveProviderOrThrowMock.mockReturnValue({ name: 'gemini' });
   isCliStatelessProviderModeEnabledMock.mockReturnValue(true);
-  isCliRuntimeStatelessReadyMock.mockReturnValue(true);
 }
 
 /**

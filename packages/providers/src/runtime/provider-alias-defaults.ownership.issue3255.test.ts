@@ -1,8 +1,13 @@
+import { Config as RealConfig } from '@vybestack/llxprt-code-core/config/config.js';
+import { SettingsService as RealSettingsService } from '@vybestack/llxprt-code-settings';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { assembleModelSelection } from './providerMutations.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+let initializeClient = async (): Promise<void> => {};
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import {
@@ -10,7 +15,6 @@ import {
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
-import type { Profile } from '@vybestack/llxprt-code-settings';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { prepareRequest } from '../openai/OpenAIRequestPreparation.js';
 
@@ -30,130 +34,9 @@ const {
   StubConfig: StubConfigClass,
   StubProvider: StubProviderClass,
 } = (() => {
-  class StubSettingsService {
-    providers: Record<string, Record<string, unknown>> = {};
-    global: Record<string, unknown> = {};
+  const StubSettingsService = RealSettingsService;
 
-    set(key: string, value: unknown): void {
-      this.global[key] = value;
-    }
-
-    get(key: string): unknown {
-      return this.global[key];
-    }
-
-    getAllGlobalSettings(): Record<string, unknown> {
-      return { ...this.global };
-    }
-
-    setProviderSetting(provider: string, key: string, value: unknown): void {
-      this.providers[provider] ??= {};
-      if (value === undefined) {
-        delete this.providers[provider][key];
-      } else {
-        this.providers[provider][key] = value;
-      }
-    }
-
-    getProviderSettings(provider: string): Record<string, unknown> {
-      return this.providers[provider] ?? {};
-    }
-
-    // Mirrors the real SettingsService rollback primitives (#2534 C5).
-    exportForStateSnapshot(): {
-      global: Record<string, unknown>;
-      providers: Record<string, Record<string, unknown>>;
-    } {
-      return {
-        global: { ...this.global },
-        providers: structuredClone(this.providers),
-      };
-    }
-
-    restoreFromStateSnapshot(snapshot: {
-      global: Record<string, unknown>;
-      providers: Record<string, Record<string, unknown>>;
-    }): void {
-      this.global = { ...snapshot.global };
-      this.providers = structuredClone(snapshot.providers);
-    }
-
-    switchProvider = vi.fn(async (provider: string) => {
-      this.set('activeProvider', provider);
-    });
-
-    async updateSettings(
-      providerOrChanges?: string | Record<string, unknown>,
-      changes?: Record<string, unknown>,
-    ): Promise<void> {
-      if (typeof providerOrChanges === 'string') {
-        for (const [key, value] of Object.entries(changes!)) {
-          this.setProviderSetting(providerOrChanges, key, value);
-        }
-      } else if (typeof providerOrChanges === 'object') {
-        for (const [key, value] of Object.entries(providerOrChanges)) {
-          this.set(key, value);
-        }
-      }
-    }
-  }
-
-  class StubConfig {
-    private model: string | undefined = undefined;
-    private provider = 'openai';
-    private ephemeral: Record<string, unknown> = {};
-    private providerManager: unknown;
-    private settingsService: InstanceType<typeof StubSettingsService>;
-    initializeContentGeneratorConfig = vi.fn(async () => {});
-
-    constructor(settingsService: InstanceType<typeof StubSettingsService>) {
-      this.settingsService = settingsService;
-    }
-
-    getSettingsService(): unknown {
-      return this.settingsService;
-    }
-
-    setEphemeralSetting(key: string, value: unknown): void {
-      if (value === undefined) {
-        delete this.ephemeral[key];
-      } else {
-        this.ephemeral[key] = value;
-      }
-    }
-
-    getEphemeralSetting(key: string): unknown {
-      return this.ephemeral[key];
-    }
-
-    getEphemeralSettings(): Record<string, unknown> {
-      return { ...this.ephemeral };
-    }
-
-    getModel(): string | undefined {
-      return this.model;
-    }
-
-    setModel(model: string | undefined): void {
-      this.model = model;
-    }
-
-    setProvider(provider: string): void {
-      this.provider = provider;
-    }
-
-    getProvider(): string {
-      return this.provider;
-    }
-
-    setProviderManager(manager: unknown): void {
-      this.providerManager = manager;
-    }
-
-    getProviderManager(): unknown {
-      return this.providerManager;
-    }
-  }
+  const StubConfig = RealConfig;
 
   class StubProvider {
     name: string;
@@ -227,27 +110,51 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
       runtimeId?: string;
       metadata?: Record<string, unknown>;
     }) => context,
-    getCurrentRuntimeScope: () => undefined,
   };
 });
 
-const {
-  switchActiveProvider,
-  setEphemeralSetting,
-  clearEphemeralSetting,
-  setActiveModel,
-  setCliRuntimeContext,
-  registerCliProviderInfrastructure,
-} = await import('./runtimeSettings.js');
-const { applyProfileWithGuards } = await import('./profileApplication.js');
+const { switchActiveProvider } = await import('./providerSwitch.js');
+const { setEphemeralSetting, clearEphemeralSetting } = await import(
+  './ownerSettingsOperations.js'
+);
+const { setActiveModel } = await import('./providerMutations.js');
 
 const mockOAuthManager = {
+  clearRetryHandlers: () => {},
+
   isOAuthEnabled: vi.fn(() => false),
   toggleOAuthEnabled: vi.fn(),
   authenticate: vi.fn(),
   setMessageBus: vi.fn(),
   setConfigGetter: vi.fn(),
 } as never;
+
+function stubSwitchInputs(): [
+  Parameters<typeof switchActiveProvider>[2],
+  Parameters<typeof switchActiveProvider>[3],
+  Parameters<typeof switchActiveProvider>[4],
+  Parameters<typeof switchActiveProvider>[5],
+  undefined,
+  () => Promise<void>,
+  Parameters<typeof switchActiveProvider>[8],
+] {
+  return [
+    stubConfig,
+    stubSettingsService,
+    mockProviderManager as never,
+    mockOAuthManager,
+    undefined,
+    initializeClient,
+    settingsOwner,
+  ];
+}
+
+function stubOverrideInputs(): [
+  Parameters<typeof setActiveModel>[1],
+  RealSettingsService,
+] {
+  return [assembleModelSelection(settingsOwner), stubSettingsService];
+}
 
 const debugLoggerWarnSpy = vi
   .spyOn(DebugLogger.prototype, 'warn')
@@ -298,29 +205,33 @@ function pushOpenRouterReasoningAlias(
 }
 
 describe('explicit ownership across provider switches (issue #3255)', () => {
+  afterEach(async () => {
+    const retiring = retainedRoots.splice(0);
+    await Promise.all(
+      retiring.map(async (root) => {
+        await root.settingsOwner.dispose();
+        await root.config.dispose();
+      }),
+    );
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    initializeClient = async () => {};
 
     stubSettingsService = new StubSettingsService();
-    stubConfig = new StubConfig(stubSettingsService);
-    activeProviderName = 'openai';
-
-    // Set up runtime context and provider infrastructure
-    setCliRuntimeContext(stubSettingsService as never, stubConfig as never, {
-      runtimeId: 'test-runtime',
+    stubConfig = new StubConfig({
+      sessionId: 'alias-defaults-fixture',
+      model: '',
+      provider: 'openai',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
     });
-    const runtimeMessageBus = {} as never;
-    (
-      mockOAuthManager as unknown as { runtimeMessageBus?: unknown }
-    ).runtimeMessageBus = runtimeMessageBus;
-    registerCliProviderInfrastructure(
-      mockProviderManager as never,
-      mockOAuthManager,
-      {
-        messageBus: runtimeMessageBus,
-        runtimeId: 'test-runtime',
-      },
-    );
+    settingsOwner = new SessionSettingsOwner(stubSettingsService);
+    settingsOwner.initializeProviderSelection('openai', '');
+    retainedRoots.push({ config: stubConfig, settingsOwner });
+    activeProviderName = 'openai';
 
     aliasEntries.length = 0;
     providers.anthropic.defaultModel = 'claude-opus-4-6';
@@ -341,23 +252,27 @@ describe('explicit ownership across provider switches (issue #3255)', () => {
         'reasoning.effortWireFormat': 'anthropic',
       },
     });
-    await switchActiveProvider('anthropic');
+    await switchActiveProvider('anthropic', {}, ...stubSwitchInputs());
     activeProviderName = 'anthropic';
-    expect(stubConfig.getEphemeralSetting('reasoning.effortWireFormat')).toBe(
+    expect(settingsOwner.readNamedParameter('reasoning.effortWireFormat')).toBe(
       'anthropic',
     );
 
     // Explicit session write carrying the same scalar as the source alias
     // default: ownership, not value equality, decides what survives.
-    setEphemeralSetting('reasoning.effortWireFormat', 'anthropic');
+    setEphemeralSetting(
+      'reasoning.effortWireFormat',
+      'anthropic',
+      settingsOwner,
+    );
 
     pushOpenRouterReasoningAlias({
       'reasoning.effortWireFormat': 'openrouter',
     });
-    await switchActiveProvider('openrouter');
+    await switchActiveProvider('openrouter', {}, ...stubSwitchInputs());
     activeProviderName = 'openrouter';
 
-    expect(stubConfig.getEphemeralSetting('reasoning.effortWireFormat')).toBe(
+    expect(settingsOwner.readNamedParameter('reasoning.effortWireFormat')).toBe(
       'anthropic',
     );
   });
@@ -369,25 +284,29 @@ describe('explicit ownership across provider switches (issue #3255)', () => {
         'reasoning.effortMap': { high: 'provider-high' },
       },
     });
-    await switchActiveProvider('anthropic');
+    await switchActiveProvider('anthropic', {}, ...stubSwitchInputs());
     activeProviderName = 'anthropic';
-    expect(stubConfig.getEphemeralSetting('reasoning.effortMap')).toStrictEqual(
-      { high: 'provider-high' },
-    );
+    expect(
+      settingsOwner.readNamedParameter('reasoning.effortMap'),
+    ).toStrictEqual({ high: 'provider-high' });
 
     // Fresh object with equal content: neither identity nor equality can
     // classify it, only explicit ownership can.
-    setEphemeralSetting('reasoning.effortMap', { high: 'provider-high' });
+    setEphemeralSetting(
+      'reasoning.effortMap',
+      { high: 'provider-high' },
+      settingsOwner,
+    );
 
     pushOpenRouterReasoningAlias({
       'reasoning.effortMap': { high: 'openrouter-high' },
     });
-    await switchActiveProvider('openrouter');
+    await switchActiveProvider('openrouter', {}, ...stubSwitchInputs());
     activeProviderName = 'openrouter';
 
-    expect(stubConfig.getEphemeralSetting('reasoning.effortMap')).toStrictEqual(
-      { high: 'provider-high' },
-    );
+    expect(
+      settingsOwner.readNamedParameter('reasoning.effortMap'),
+    ).toStrictEqual({ high: 'provider-high' });
   });
 
   it('replaces a default-owned selector with the target provider default on switch', async () => {
@@ -397,7 +316,7 @@ describe('explicit ownership across provider switches (issue #3255)', () => {
         'reasoning.effortWireFormat': 'anthropic',
       },
     });
-    await switchActiveProvider('anthropic');
+    await switchActiveProvider('anthropic', {}, ...stubSwitchInputs());
     activeProviderName = 'anthropic';
 
     // No explicit write: the source alias default owns the key, so the
@@ -405,39 +324,11 @@ describe('explicit ownership across provider switches (issue #3255)', () => {
     pushOpenRouterReasoningAlias({
       'reasoning.effortWireFormat': 'openrouter',
     });
-    await switchActiveProvider('openrouter');
+    await switchActiveProvider('openrouter', {}, ...stubSwitchInputs());
     activeProviderName = 'openrouter';
 
-    expect(stubConfig.getEphemeralSetting('reasoning.effortWireFormat')).toBe(
+    expect(settingsOwner.readNamedParameter('reasoning.effortWireFormat')).toBe(
       'openrouter',
-    );
-  });
-
-  it('keeps an explicit profile selector through a later provider switch', async () => {
-    pushAnthropicAlias();
-    const profile: Profile = {
-      version: 1,
-      provider: 'anthropic',
-      model: 'claude-opus-4-6',
-      modelParams: {},
-      ephemeralSettings: { 'reasoning.enabledWireFormat': 'thinking' },
-    };
-    await applyProfileWithGuards(profile, {
-      profileName: 'explicit-selector-profile',
-    });
-    activeProviderName = 'anthropic';
-    expect(stubConfig.getEphemeralSetting('reasoning.enabledWireFormat')).toBe(
-      'thinking',
-    );
-
-    pushOpenRouterReasoningAlias({
-      'reasoning.enabledWireFormat': 'openrouter',
-    });
-    await switchActiveProvider('openrouter');
-    activeProviderName = 'openrouter';
-
-    expect(stubConfig.getEphemeralSetting('reasoning.enabledWireFormat')).toBe(
-      'thinking',
     );
   });
 
@@ -448,20 +339,20 @@ describe('explicit ownership across provider switches (issue #3255)', () => {
         'reasoning.effortWireFormat': 'anthropic',
       },
     });
-    await switchActiveProvider('anthropic');
+    await switchActiveProvider('anthropic', {}, ...stubSwitchInputs());
     activeProviderName = 'anthropic';
-    setEphemeralSetting('reasoning.effortWireFormat', 'openai');
-    clearEphemeralSetting('reasoning.effortWireFormat');
+    setEphemeralSetting('reasoning.effortWireFormat', 'openai', settingsOwner);
+    clearEphemeralSetting('reasoning.effortWireFormat', settingsOwner);
 
     // Clearing releases explicit ownership, so the target default applies
     // instead of the key staying permanently user-owned.
     pushOpenRouterReasoningAlias({
       'reasoning.effortWireFormat': 'openrouter',
     });
-    await switchActiveProvider('openrouter');
+    await switchActiveProvider('openrouter', {}, ...stubSwitchInputs());
     activeProviderName = 'openrouter';
 
-    expect(stubConfig.getEphemeralSetting('reasoning.effortWireFormat')).toBe(
+    expect(settingsOwner.readNamedParameter('reasoning.effortWireFormat')).toBe(
       'openrouter',
     );
   });
@@ -482,65 +373,81 @@ describe('explicit ownership across provider switches (issue #3255)', () => {
         },
       ],
     });
-    await switchActiveProvider('anthropic');
+    await switchActiveProvider('anthropic', {}, ...stubSwitchInputs());
     activeProviderName = 'anthropic';
 
     // The alias default and the matching model default both claimed the
     // key: the model default owns the visible value, the alias default is
     // the provider-owned restore point behind it.
-    expect(stubConfig.getEphemeralSetting('reasoning.effortWireFormat')).toBe(
+    expect(settingsOwner.readNamedParameter('reasoning.effortWireFormat')).toBe(
       'anthropic-budget',
     );
 
-    clearEphemeralSetting('reasoning.effortWireFormat');
-    expect(stubConfig.getEphemeralSetting('reasoning.effortWireFormat')).toBe(
+    clearEphemeralSetting('reasoning.effortWireFormat', settingsOwner);
+    expect(settingsOwner.readNamedParameter('reasoning.effortWireFormat')).toBe(
       undefined,
     );
 
     // Departing the default-owning model must not resurrect the cleared
     // alias default through a stale provider-owned restore point.
-    await setActiveModel('plain-model');
-    expect(stubConfig.getEphemeralSetting('reasoning.effortWireFormat')).toBe(
+    await setActiveModel(
+      'plain-model',
+      ...stubOverrideInputs(),
+      mockProviderManager.getActiveProvider(),
+    );
+    expect(settingsOwner.readNamedParameter('reasoning.effortWireFormat')).toBe(
       undefined,
     );
 
     // Re-entering the default-owning model re-applies the model default
     // through normal default ownership, not through the stale record.
-    await setActiveModel('model-with-defaults');
-    expect(stubConfig.getEphemeralSetting('reasoning.effortWireFormat')).toBe(
+    await setActiveModel(
+      'model-with-defaults',
+      ...stubOverrideInputs(),
+      mockProviderManager.getActiveProvider(),
+    );
+    expect(settingsOwner.readNamedParameter('reasoning.effortWireFormat')).toBe(
       'anthropic-budget',
     );
 
-    await setActiveModel('plain-model');
-    expect(stubConfig.getEphemeralSetting('reasoning.effortWireFormat')).toBe(
+    await setActiveModel(
+      'plain-model',
+      ...stubOverrideInputs(),
+      mockProviderManager.getActiveProvider(),
+    );
+    expect(settingsOwner.readNamedParameter('reasoning.effortWireFormat')).toBe(
       undefined,
     );
   });
 });
 
 describe('alias reasoning maps propagate to request preparation (issue #3255)', () => {
+  afterEach(async () => {
+    const retiring = retainedRoots.splice(0);
+    await Promise.all(
+      retiring.map(async (root) => {
+        await root.settingsOwner.dispose();
+        await root.config.dispose();
+      }),
+    );
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
 
     stubSettingsService = new StubSettingsService();
-    stubConfig = new StubConfig(stubSettingsService);
-    activeProviderName = 'openai';
-
-    setCliRuntimeContext(stubSettingsService as never, stubConfig as never, {
-      runtimeId: 'test-runtime',
+    stubConfig = new StubConfig({
+      sessionId: 'alias-defaults-fixture',
+      model: '',
+      provider: 'openai',
+      targetDir: process.cwd(),
+      cwd: process.cwd(),
+      debugMode: false,
     });
-    const runtimeMessageBus = {} as never;
-    (
-      mockOAuthManager as unknown as { runtimeMessageBus?: unknown }
-    ).runtimeMessageBus = runtimeMessageBus;
-    registerCliProviderInfrastructure(
-      mockProviderManager as never,
-      mockOAuthManager,
-      {
-        messageBus: runtimeMessageBus,
-        runtimeId: 'test-runtime',
-      },
-    );
+    settingsOwner = new SessionSettingsOwner(stubSettingsService);
+    settingsOwner.initializeProviderSelection('openai', '');
+    retainedRoots.push({ config: stubConfig, settingsOwner });
+    activeProviderName = 'openai';
 
     aliasEntries.length = 0;
     providers.anthropic.defaultModel = 'claude-opus-4-6';
@@ -559,9 +466,9 @@ describe('alias reasoning maps propagate to request preparation (issue #3255)', 
       'reasoning.effortWireFormat': 'openrouter',
       'reasoning.effortMap': effortMap,
     });
-    await switchActiveProvider('openrouter');
+    await switchActiveProvider('openrouter', {}, ...stubSwitchInputs());
     activeProviderName = 'openrouter';
-    return stubConfig.getEphemeralSettings();
+    return settingsOwner.captureNamedParameters();
   }
 
   async function prepareAliasRequest(
@@ -571,11 +478,15 @@ describe('alias reasoning maps propagate to request preparation (issue #3255)', 
     // ephemerals through separateSettings, so the alias value must survive
     // the full runtime hand-off to reach request preparation.
     const invocation = createRuntimeInvocationContext({
-      runtime: createProviderRuntimeContext({
+      runtimeId: createProviderRuntimeContext({
         settingsService: stubSettingsService as never,
         runtimeId: 'alias-request-test',
-      }),
-      settings: stubSettingsService as never,
+      }).runtimeId,
+      runtimeMetadata: createProviderRuntimeContext({
+        settingsService: stubSettingsService as never,
+        runtimeId: 'alias-request-test',
+      }).metadata,
+
       providerName: 'openrouter',
       ephemeralsSnapshot,
     });
@@ -583,8 +494,7 @@ describe('alias reasoning maps propagate to request preparation (issue #3255)', 
       contents: [],
       tools: undefined,
       metadata: {},
-      settings: stubSettingsService as never,
-      config: undefined,
+
       invocation,
       systemInstruction: undefined,
       resolved: {
@@ -609,7 +519,9 @@ describe('alias reasoning maps propagate to request preparation (issue #3255)', 
     // The switch stores alias maps unvalidated by design; rejection is
     // owned by request preparation, proving the malformed value actually
     // propagated through the runtime rather than being dropped earlier.
-    expect(ephemerals['reasoning.effortMap']).toStrictEqual(['high']);
+    expect(
+      settingsOwner.readNamedParameter('reasoning.effortMap'),
+    ).toStrictEqual(['high']);
 
     await expect(prepareAliasRequest(ephemerals)).rejects.toThrow(
       'reasoning.effortMap must be a JSON object',
@@ -619,7 +531,9 @@ describe('alias reasoning maps propagate to request preparation (issue #3255)', 
   it('rejects an alias effort map with an unknown key before transport', async () => {
     const ephemerals = await switchToOpenRouterAlias({ turbo: 'high' });
 
-    expect(ephemerals['reasoning.effortMap']).toStrictEqual({
+    expect(
+      settingsOwner.readNamedParameter('reasoning.effortMap'),
+    ).toStrictEqual({
       turbo: 'high',
     });
 
@@ -628,3 +542,9 @@ describe('alias reasoning maps propagate to request preparation (issue #3255)', 
     );
   });
 });
+
+let settingsOwner: SessionSettingsOwner;
+const retainedRoots: Array<{
+  config: RealConfig;
+  settingsOwner: SessionSettingsOwner;
+}> = [];
