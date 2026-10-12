@@ -39,9 +39,8 @@ const noopLogger = {
   info: () => {},
 } as unknown as import('@vybestack/llxprt-code-core/debug/DebugLogger.js').DebugLogger;
 
-function makeRuntime(settings: SettingsService): ProviderRuntimeContext {
+function makeRuntime(): ProviderRuntimeContext {
   return {
-    settingsService: settings,
     config: undefined,
     runtimeId: 'test-lb-runtime',
     metadata: {},
@@ -58,8 +57,8 @@ function makeUpstreamInvocation(
   settings: SettingsService,
 ): RuntimeInvocationContext {
   return createRuntimeInvocationContext({
-    runtimeId: makeRuntime(settings).runtimeId,
-    runtimeMetadata: makeRuntime(settings).metadata,
+    runtimeId: makeRuntime().runtimeId,
+    runtimeMetadata: makeRuntime().metadata,
 
     providerName: 'load-balancer',
     ephemeralsSnapshot: settings.getAllGlobalSettings(),
@@ -75,7 +74,7 @@ function makeBaseOptions(
   return {
     contents: [],
     settings,
-    runtime: makeRuntime(settings),
+    runtime: makeRuntime(),
     config: { getModel: () => 'test-model' } as unknown as Config,
     invocation,
     resolved: {

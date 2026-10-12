@@ -38,7 +38,6 @@ describe('provider manager filesystem ownership', () => {
         first.settingsService,
         {
           runtimeId: 'shared-provider-label',
-          settingsService: first.settingsService,
         },
         first.config,
         new CredentialAuthority(),
@@ -52,7 +51,6 @@ describe('provider manager filesystem ownership', () => {
         second.settingsService,
         {
           runtimeId: 'shared-provider-label',
-          settingsService: second.settingsService,
         },
         second.config,
         new CredentialAuthority(),

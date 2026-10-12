@@ -38,7 +38,6 @@ describe('OpenAIResponsesProvider text.verbosity (text.verbosity setting)', () =
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-responses-verbosity-runtime',
-      settingsService: settings,
     });
 
     let capturedBody: string | undefined;
@@ -105,7 +104,6 @@ describe('OpenAIResponsesProvider text.verbosity (text.verbosity setting)', () =
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-responses-verbosity-runtime-medium',
-      settingsService: settings,
     });
 
     let capturedBody: string | undefined;
@@ -172,7 +170,6 @@ describe('OpenAIResponsesProvider text.verbosity (text.verbosity setting)', () =
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-responses-verbosity-runtime-high',
-      settingsService: settings,
     });
 
     let capturedBody: string | undefined;
@@ -238,7 +235,6 @@ describe('OpenAIResponsesProvider text.verbosity (text.verbosity setting)', () =
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-responses-verbosity-runtime-none',
-      settingsService: settings,
     });
 
     let capturedBody: string | undefined;
@@ -305,7 +301,6 @@ describe('OpenAIResponsesProvider text.verbosity (text.verbosity setting)', () =
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'openai-responses-verbosity-runtime-uppercase',
-      settingsService: settings,
     });
 
     let capturedBody: string | undefined;

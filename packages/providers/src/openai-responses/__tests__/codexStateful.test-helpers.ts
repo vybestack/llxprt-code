@@ -114,7 +114,6 @@ export function buildOptions(
 ): NormalizedGenerateChatOptions {
   const settings = new SettingsService();
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: TEST_RUNTIME_ID,
   });
   const invocation = createRuntimeInvocationContext({

@@ -140,7 +140,7 @@ export const createRuntimeContext = (
   config: Config,
 ): ProviderRuntimeContext => ({
   runtimeId: 'test-runtime',
-  settingsService: settings,
+
   config,
   metadata: { source: 'LoggingProviderWrapper.test-helpers' },
 });

@@ -111,7 +111,6 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
     workingDir?: string;
   }): Promise<ChatSession> {
     const providerRuntime = createProviderRuntimeContext({
-      settingsService,
       config,
       runtimeId: opts.runtimeId,
       metadata: { source: 'subagent-assembler.test' },

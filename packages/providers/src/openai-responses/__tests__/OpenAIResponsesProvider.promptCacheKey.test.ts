@@ -142,7 +142,6 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: 'test-runtime-id-123',
       config,
     });
@@ -205,7 +204,6 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: 'test-runtime-id-123',
       config,
     });
@@ -283,7 +281,6 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: 'test-runtime-id-123',
       config,
     });
@@ -361,7 +358,6 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: 'fallback-runtime-id',
       config,
     });
@@ -419,7 +415,6 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: 'test-runtime-id-123',
       config,
     });
@@ -486,7 +481,6 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: longRuntimeId,
       config,
     });
@@ -553,7 +547,6 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: 'short-runtime-id',
       config,
     });
@@ -622,7 +615,6 @@ describe('OpenAIResponsesProvider prompt-caching @issue:1145', () => {
 
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: 'short-runtime-id',
       config,
     });

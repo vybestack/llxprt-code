@@ -372,7 +372,6 @@ function createRuntimeContext(
     providerRuntime: {
       runtimeId: 'runtime-123',
       metadata: {},
-      settingsService: policies.settings,
     } as unknown as ProviderRuntimeContext,
   } as unknown as AgentRuntimeContext;
 }

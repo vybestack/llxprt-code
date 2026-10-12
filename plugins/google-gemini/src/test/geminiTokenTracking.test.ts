@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -25,13 +26,22 @@ describe('gemini token tracking', () => {
   let manager: ProviderManager;
 
   beforeEach(() => {
+    const settings = new SettingsService();
     const runtime = createProviderRuntimeContext({
-      settingsService: new SettingsService(),
       runtimeId: 'gemini-token-tracking',
     });
     // Config first so registerProvider applies the production wrapping,
     // matching the setup used by ProviderManager.gemini-switch.test.ts.
-    manager = new ProviderManager(runtime);
+    manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+      undefined,
+      runtime,
+      new CredentialAuthority(),
+    );
     manager.setConfig(makeFakeConfig());
   });
 

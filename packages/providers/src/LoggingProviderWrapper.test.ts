@@ -28,7 +28,6 @@ import type {
   ProviderToolset,
 } from './IProvider.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService as SettingsServiceImpl } from '@vybestack/llxprt-code-settings';
 import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
@@ -120,7 +119,6 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
     );
 
     const runtime: ProviderRuntimeContext = {
-      settingsService: settings as unknown as SettingsService,
       config: configStub,
       runtimeId: 'test-runtime',
       metadata: { source: 'LoggingProviderWrapper.test' },
@@ -139,10 +137,8 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
         {
           runtimeId: runtime.runtimeId,
           metadata: runtime.metadata,
-          globalSettings: runtime.settingsService.getAllGlobalSettings(),
-          providerSettings: runtime.settingsService.getProviderSettings(
-            fake.name,
-          ),
+          globalSettings: settings.getAllGlobalSettings(),
+          providerSettings: settings.getProviderSettings(fake.name),
         },
         fake.name,
       ),
@@ -255,7 +251,6 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
     const warnSpy = vi.spyOn(DebugLogger.prototype, 'warn');
 
     const runtime: ProviderRuntimeContext = {
-      settingsService: settings as unknown as SettingsService,
       config: configStub,
       runtimeId: 'request-log-failure-runtime',
       metadata: { source: 'LoggingProviderWrapper.test' },
@@ -269,9 +264,8 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
           {
             runtimeId: runtime.runtimeId,
             metadata: runtime.metadata,
-            globalSettings: runtime.settingsService.getAllGlobalSettings(),
-            providerSettings:
-              runtime.settingsService.getProviderSettings('fake'),
+            globalSettings: settings.getAllGlobalSettings(),
+            providerSettings: settings.getProviderSettings('fake'),
           },
           'fake',
         ),

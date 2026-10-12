@@ -192,7 +192,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
         metadata?: Record<string, unknown>;
       }) => ({
         runtime: {
-          settingsService: input.settingsService,
           config: input.config,
           runtimeId: input.runtimeId,
           metadata: input.metadata,

@@ -79,7 +79,7 @@ describe('provider request ownership', () => {
     });
     const runtime = createProviderRuntimeContext({
       runtimeId: 'same-label',
-      settingsService: settings,
+
       config,
     });
     if (

@@ -108,7 +108,6 @@ function buildRuntimeContext(
     tools: mockToolsView,
     providerRuntime: createProviderRuntimeContext({
       runtimeId: runtimeState.runtimeId,
-      settingsService,
     }),
   });
 }

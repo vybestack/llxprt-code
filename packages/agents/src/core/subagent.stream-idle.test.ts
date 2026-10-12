@@ -181,7 +181,7 @@ describe('subagent.ts', () => {
         readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
         providerRuntime: createProviderRuntimeContext({
           runtimeId: state.runtimeId,
-          settingsService,
+
           config,
         }),
         prepareProviderInvocation: (name, parameters, signal) =>

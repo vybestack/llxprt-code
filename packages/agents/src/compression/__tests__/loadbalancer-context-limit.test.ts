@@ -79,7 +79,7 @@ function buildLbRuntimeContext(
 
   const providerRuntime = {
     runtimeId: 'test-runtime',
-    settingsService: { get: vi.fn(() => undefined) } as never,
+
     config: {} as never,
   } as ProviderRuntimeContext;
 

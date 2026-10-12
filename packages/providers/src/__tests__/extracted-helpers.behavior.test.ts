@@ -362,7 +362,7 @@ describe('extracted provider helper behavior', () => {
 
     expect(() =>
       ensureRuntimeContext(
-        { contents: [], runtime: { settingsService } },
+        { contents: [], runtime: {} },
         'provider-a',
         debugLoggerStub(),
       ),
@@ -500,7 +500,6 @@ describe('extracted provider helper behavior', () => {
       contents: [],
       userMemory: 'remember this',
       runtime: {
-        settingsService,
         config,
         runtimeId: 'runtime-a',
         metadata: { existing: true },
@@ -549,7 +548,6 @@ describe('extracted provider helper behavior', () => {
       {
         ...rawOptions,
         runtime: {
-          settingsService,
           config,
           runtimeId: 'runtime-signal',
         },
@@ -589,7 +587,6 @@ describe('extracted provider helper behavior', () => {
     const rawOptions: GenerateChatOptions = {
       contents: [],
       runtime: {
-        settingsService: invocationSettingsService,
         config,
         runtimeId: 'runtime-a',
         metadata: {},
@@ -631,7 +628,6 @@ describe('extracted provider helper behavior', () => {
         {
           contents: [],
           runtime: {
-            settingsService,
             config,
             runtimeId: 'runtime-a',
             metadata: {},
@@ -676,7 +672,6 @@ describe('extracted provider helper behavior', () => {
       contents: [],
       settings: settingsService,
       runtime: {
-        settingsService,
         config,
         runtimeId: 'lb-runtime',
         metadata: { parent: true },
@@ -762,7 +757,6 @@ describe('extracted provider helper behavior', () => {
       contents: [],
       settings: settingsService,
       runtime: {
-        settingsService,
         config,
         runtimeId: 'lb-runtime',
         metadata: { parent: true },

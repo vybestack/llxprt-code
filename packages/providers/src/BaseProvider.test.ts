@@ -86,7 +86,7 @@ function createOptionsWithRuntime(
     config ?? createRuntimeConfigStub(settings, { getModel: () => '' });
   const runtime = createProviderRuntimeContext({
     runtimeId: `base-provider.${Math.random().toString(36).slice(2, 10)}`,
-    settingsService: settings,
+
     config: runtimeConfig,
   });
 
@@ -96,8 +96,8 @@ function createOptionsWithRuntime(
       {
         runtimeId: runtime.runtimeId,
         metadata: runtime.metadata,
-        globalSettings: runtime.settingsService.getAllGlobalSettings(),
-        providerSettings: runtime.settingsService.getProviderSettings('test'),
+        globalSettings: settings.getAllGlobalSettings(),
+        providerSettings: settings.getProviderSettings('test'),
       },
       'test',
     ),
@@ -541,7 +541,7 @@ describe('BaseProvider', () => {
       const runtimeConfig = createRuntimeConfigStub(settings);
       const runtime = createProviderRuntimeContext({
         runtimeId: 'oauth-cache',
-        settingsService: settings,
+
         config: runtimeConfig,
       });
 

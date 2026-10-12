@@ -235,12 +235,12 @@ describe('Anthropic provider stateless contract tests', () => {
     const configB = createRuntimeConfigStub(settingsB);
     const runtimeA = createProviderRuntimeContext({
       runtimeId: 'runtime-A',
-      settingsService: settingsA,
+
       config: configA,
     });
     const runtimeB = createProviderRuntimeContext({
       runtimeId: 'runtime-B',
-      settingsService: settingsB,
+
       config: configB,
     });
 
@@ -304,7 +304,7 @@ describe('Anthropic provider stateless contract tests', () => {
     });
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-invocation',
-      settingsService: settings,
+
       config,
     });
     const invocation = createRuntimeInvocationContext({
@@ -380,7 +380,7 @@ describe('Anthropic provider stateless contract tests', () => {
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-oauth',
-      settingsService: settings,
+
       config,
     });
 

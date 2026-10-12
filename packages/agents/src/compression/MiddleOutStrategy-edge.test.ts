@@ -1,3 +1,4 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -177,12 +178,10 @@ describe('MiddleOutStrategy edge cases', () => {
             {
               runtimeId: testProviderRuntime.runtimeId,
               metadata: testProviderRuntime.metadata,
-              globalSettings:
-                testProviderRuntime.settingsService.getAllGlobalSettings(),
-              providerSettings:
-                testProviderRuntime.settingsService.getProviderSettings(
-                  multiChunkProvider.name,
-                ),
+              globalSettings: new SettingsService().getAllGlobalSettings(),
+              providerSettings: new SettingsService().getProviderSettings(
+                multiChunkProvider.name,
+              ),
             },
             multiChunkProvider.name,
           ),

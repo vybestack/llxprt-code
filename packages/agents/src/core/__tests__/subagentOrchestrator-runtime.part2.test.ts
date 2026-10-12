@@ -108,11 +108,12 @@ describe('SubagentOrchestrator - Runtime Assembly (load balancer profiles)', () 
 
     const foregroundConfig1 = config;
     const foregroundSettings1 = createSessionSettingsFixture(foregroundConfig1);
+    const settingsService =
+      foregroundSettings1.settingsOwner.createChildStore();
     const orchestrator = new SubagentOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       workspaceTrust: foregroundSettings1.workspaceTrust,
-      createChildSettings: () =>
-        foregroundSettings1.settingsOwner.createChildStore(),
+      createChildSettings: () => settingsService,
       readRunPolicy: () =>
         foregroundSettings1.settingsOwner.readSubagentRunPolicy(),
 
@@ -133,7 +134,6 @@ describe('SubagentOrchestrator - Runtime Assembly (load balancer profiles)', () 
     });
 
     const loaderArgs = runtimeLoader.mock.calls[0][0];
-    const settingsService = loaderArgs.profile.providerRuntime.settingsService;
 
     // The load-balancer profile is preserved and activated as a real
     // load-balancer provider, not collapsed to profiles[0].

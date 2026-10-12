@@ -155,7 +155,6 @@ export function assembleCliProviderRuntime(
     if (input.registration && config) undoAdoption = registration.adopt(config);
     if (config !== undefined) input.settingsOwner?.bindTelemetry(config);
     const runtime: ProviderRuntimeContext = {
-      settingsService,
       runtimeId,
       runtimeKind: resolveRuntimeKind(undefined, metadata, 'cli-interactive'),
       metadata,

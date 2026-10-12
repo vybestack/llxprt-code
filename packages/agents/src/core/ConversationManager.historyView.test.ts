@@ -61,7 +61,6 @@ function buildConversationManager(): {
   settingsService.set('providers.stub.model', 'stub-model');
 
   const providerRuntime: ProviderRuntimeContext = createProviderRuntimeContext({
-    settingsService,
     config,
     runtimeId: 'test.runtime.conversationManager.historyView',
     metadata: { source: 'ConversationManager.historyView.test' },

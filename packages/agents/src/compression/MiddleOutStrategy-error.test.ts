@@ -1,3 +1,4 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -59,12 +60,10 @@ describe('MiddleOutStrategy empty summary handling', () => {
           {
             runtimeId: testProviderRuntime.runtimeId,
             metadata: testProviderRuntime.metadata,
-            globalSettings:
-              testProviderRuntime.settingsService.getAllGlobalSettings(),
-            providerSettings:
-              testProviderRuntime.settingsService.getProviderSettings(
-                emptyProvider.name,
-              ),
+            globalSettings: new SettingsService().getAllGlobalSettings(),
+            providerSettings: new SettingsService().getProviderSettings(
+              emptyProvider.name,
+            ),
           },
           emptyProvider.name,
         ),
@@ -91,12 +90,10 @@ describe('MiddleOutStrategy empty summary handling', () => {
           {
             runtimeId: testProviderRuntime.runtimeId,
             metadata: testProviderRuntime.metadata,
-            globalSettings:
-              testProviderRuntime.settingsService.getAllGlobalSettings(),
-            providerSettings:
-              testProviderRuntime.settingsService.getProviderSettings(
-                whitespaceProvider.name,
-              ),
+            globalSettings: new SettingsService().getAllGlobalSettings(),
+            providerSettings: new SettingsService().getProviderSettings(
+              whitespaceProvider.name,
+            ),
           },
           whitespaceProvider.name,
         ),
@@ -155,12 +152,10 @@ describe('MiddleOutStrategy enriched EmptySummaryError diagnostics (issue #2333)
           {
             runtimeId: testProviderRuntime.runtimeId,
             metadata: testProviderRuntime.metadata,
-            globalSettings:
-              testProviderRuntime.settingsService.getAllGlobalSettings(),
-            providerSettings:
-              testProviderRuntime.settingsService.getProviderSettings(
-                thinkingOnlyProvider.name,
-              ),
+            globalSettings: new SettingsService().getAllGlobalSettings(),
+            providerSettings: new SettingsService().getProviderSettings(
+              thinkingOnlyProvider.name,
+            ),
           },
           thinkingOnlyProvider.name,
         ),

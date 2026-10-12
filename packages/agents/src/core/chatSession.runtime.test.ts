@@ -80,7 +80,6 @@ describe('ChatSession runtime context', () => {
     settingsService.set('providers.stub.model', 'stub-model');
 
     providerRuntime = createProviderRuntimeContext({
-      settingsService,
       config,
       runtimeId: 'test.runtime',
       metadata: { source: 'chatSession.runtime.test' },

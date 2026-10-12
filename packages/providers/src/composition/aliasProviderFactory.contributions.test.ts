@@ -512,7 +512,6 @@ describe('refreshAliasProviders registry reuse', () => {
     const { manager } = createProviderManager(
       new SettingsService(),
       {
-        settingsService: new SettingsService(),
         runtimeId: 'issue2758-refresh-test',
       },
       undefined,
@@ -575,7 +574,7 @@ describe('refreshAliasProviders registry reuse', () => {
 
     const a = createProviderManager(
       new SettingsService(),
-      { settingsService: new SettingsService(), runtimeId: 'shared' },
+      { runtimeId: 'shared' },
       undefined,
       new CredentialAuthority(),
       new NodeFileSystem(),
@@ -592,7 +591,7 @@ describe('refreshAliasProviders registry reuse', () => {
     ).manager;
     const b = createProviderManager(
       new SettingsService(),
-      { settingsService: new SettingsService(), runtimeId: 'shared' },
+      { runtimeId: 'shared' },
       undefined,
       new CredentialAuthority(),
       new NodeFileSystem(),

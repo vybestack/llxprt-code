@@ -93,7 +93,6 @@ function buildConversationManager(
   settingsService.set('providers.stub.model', 'stub-model');
 
   const providerRuntime: ProviderRuntimeContext = createProviderRuntimeContext({
-    settingsService,
     config,
     runtimeId: 'test.runtime.conversationManager.modelStamp',
     metadata: { source: 'generatingModelStamp.issue2511.bun' },
@@ -256,7 +255,6 @@ function buildChatSessionWithLiveProvider(
   settingsService.set('providers.stub.model', 'stub-model');
 
   const providerRuntime: ProviderRuntimeContext = createProviderRuntimeContext({
-    settingsService,
     config,
     runtimeId: 'test.runtime.turnprocessor.modelStamp',
     metadata: { source: 'generatingModelStamp.issue2511.bun' },

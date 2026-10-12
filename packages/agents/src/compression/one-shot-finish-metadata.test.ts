@@ -32,30 +32,23 @@ describe('One-shot finish diagnostics', () => {
         };
       },
     };
+    const settingsService = new SettingsService();
     const context = buildContext({
       history: generateHistory(20),
       resolveProvider: () => ({
         invocation: captureProviderInvocation(
           {
-            runtimeId: createProviderRuntimeContext({
-              settingsService: new SettingsService(),
-            }).runtimeId,
-            metadata: createProviderRuntimeContext({
-              settingsService: new SettingsService(),
-            }).metadata,
-            globalSettings: createProviderRuntimeContext({
-              settingsService: new SettingsService(),
-            }).settingsService.getAllGlobalSettings(),
-            providerSettings: createProviderRuntimeContext({
-              settingsService: new SettingsService(),
-            }).settingsService.getProviderSettings(provider.name),
+            runtimeId: createProviderRuntimeContext({}).runtimeId,
+            metadata: createProviderRuntimeContext({}).metadata,
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings(
+              provider.name,
+            ),
           },
           provider.name,
         ),
         provider,
-        runtime: createProviderRuntimeContext({
-          settingsService: new SettingsService(),
-        }),
+        runtime: createProviderRuntimeContext({}),
       }),
     });
 

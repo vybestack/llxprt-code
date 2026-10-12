@@ -57,7 +57,6 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
     });
 
     const providerRuntime = createProviderRuntimeContext({
-      settingsService,
       config,
       runtimeId: 'test.runtime',
       metadata: { source: 'chatSession.issue1729.test' },

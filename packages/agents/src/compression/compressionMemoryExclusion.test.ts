@@ -150,7 +150,6 @@ const noopLogger = {
 
 function createStubProviderRuntime(): ProviderRuntimeContext {
   return {
-    settingsService: new SettingsService(),
     config: undefined,
     runtimeId: 'test-provider-runtime',
     metadata: { source: 'test' },
@@ -166,17 +165,14 @@ function buildCompressionContext(
 ): CompressionContext {
   const provider =
     overrides.provider ?? createOptionsCapturingProvider([], VALID_SNAPSHOT);
+  const settingsService = new SettingsService();
   const resolveProvider = (): CompressionProviderResult => ({
     invocation: captureProviderInvocation(
       {
         runtimeId: createStubProviderRuntime().runtimeId,
         metadata: createStubProviderRuntime().metadata,
-        globalSettings:
-          createStubProviderRuntime().settingsService.getAllGlobalSettings(),
-        providerSettings:
-          createStubProviderRuntime().settingsService.getProviderSettings(
-            provider.name,
-          ),
+        globalSettings: settingsService.getAllGlobalSettings(),
+        providerSettings: settingsService.getProviderSettings(provider.name),
       },
       provider.name,
     ),

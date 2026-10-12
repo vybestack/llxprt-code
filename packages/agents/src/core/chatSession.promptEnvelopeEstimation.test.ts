@@ -136,6 +136,7 @@ function createEstimatingProvider(
 }
 
 interface TestFixture {
+  runtimeSetup: ReturnType<typeof createChatSessionRuntime>;
   providerManager: ReturnType<
     typeof createChatSessionRuntime
   >['providerManager'];
@@ -202,6 +203,7 @@ function createTestFixture(provider: IProvider): TestFixture {
   const historyService = new HistoryService();
 
   return {
+    runtimeSetup,
     providerManager: runtimeSetup.providerManager,
     mockConfig,
     runtimeState,
@@ -214,7 +216,7 @@ function createTestFixture(provider: IProvider): TestFixture {
 function buildChatSession(fixture: TestFixture): ChatSession {
   const view = createAgentRuntimeContext({
     ...createSessionPolicyFixture(
-      fixture.providerRuntimeSnapshot.settingsService,
+      fixture.runtimeSetup.settingsService,
       fixture.providerRuntimeSnapshot.runtimeId,
     ),
     state: fixture.runtimeState,

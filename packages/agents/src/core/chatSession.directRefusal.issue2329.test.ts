@@ -74,7 +74,6 @@ describe('Issue 2329: direct-path refusal preservation @issue:2329', () => {
     settingsService.set('providers.stub.model', 'stub-model');
 
     providerRuntime = createProviderRuntimeContext({
-      settingsService,
       config,
       runtimeId: 'test.runtime',
       metadata: { source: 'chatSession.directRefusal.issue2329.test' },

@@ -46,7 +46,6 @@ function createChatSession(options: {
   const settingsOwner = new SessionSettingsOwner(settingsService);
   settingsOwners.push(settingsOwner);
   const providerRuntime = createProviderRuntimeContext({
-    settingsService,
     runtimeId: 'resolved-base-url-test',
     metadata: { source: 'chatSession.resolvedBaseUrl.bun.test' },
   });

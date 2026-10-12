@@ -9,15 +9,31 @@ import { createProviderManager } from '@vybestack/llxprt-code-providers/composit
 import type { IProvider, IModel } from '@vybestack/llxprt-code-providers';
 import { NodeFileSystem } from '@vybestack/llxprt-code-providers/composition.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 function createManager() {
   const settingsService = new SettingsService();
-  const runtime = createProviderRuntimeContext({ settingsService });
-  const { manager } = createProviderManager(runtime, {
-    allowBrowserEnvironment: true,
-    fileSystem: new NodeFileSystem(),
-  });
+  const runtime = createProviderRuntimeContext({});
+  const { manager } = createProviderManager(
+    settingsService,
+    runtime,
+    undefined,
+    new CredentialAuthority(),
+    new NodeFileSystem(),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    true,
+  );
   return manager;
 }
 

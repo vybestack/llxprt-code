@@ -112,9 +112,9 @@ describe('CLI provider manager creation uses concrete providers', () => {
    */
   it('returns a concrete ProviderManager from the providers package', () => {
     const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       undefined,
       new CredentialAuthority(),
@@ -198,9 +198,9 @@ describe('CLI provider manager creation uses concrete providers', () => {
    */
   it('registers and switches active providers through CLI-created manager', () => {
     const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       undefined,
       new CredentialAuthority(),
@@ -242,9 +242,9 @@ describe('CLI provider manager creation uses concrete providers', () => {
    */
   it('ProviderContentGenerator constructs with CLI-created ProviderManager', () => {
     const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       undefined,
       new CredentialAuthority(),
@@ -282,9 +282,9 @@ describe('CLI provider manager creation uses concrete providers', () => {
    */
   it('CLI-created ProviderManager satisfies core RuntimeProviderManager contract', () => {
     const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       undefined,
       new CredentialAuthority(),
@@ -339,9 +339,9 @@ describe('CLI provider manager creation uses concrete providers', () => {
    */
   it('RuntimeContentGeneratorFactory wiring produces working ProviderContentGenerator', () => {
     const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       undefined,
       new CredentialAuthority(),
@@ -565,9 +565,9 @@ describe('Provider-backed content generator path reachable through runtime', () 
    */
   it('ContentGeneratorConfig constructs through the wired factory without manager data', async () => {
     const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       undefined,
       new CredentialAuthority(),
@@ -640,9 +640,9 @@ describe('Provider-backed content generator path reachable through runtime', () 
    */
   it('contentGeneratorFactory injection path produces a provider-backed generator', async () => {
     const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       undefined,
       new CredentialAuthority(),
@@ -730,9 +730,9 @@ describe('Provider-backed content generator path reachable through runtime', () 
     );
 
     const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       undefined,
       new CredentialAuthority(),

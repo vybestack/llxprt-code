@@ -1,3 +1,4 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -81,12 +82,10 @@ describe('compression media composition', () => {
           invocation: captureProviderInvocation(
             {
               runtimeId: testProviderRuntime.runtimeId,
-              globalSettings:
-                testProviderRuntime.settingsService.getAllGlobalSettings(),
-              providerSettings:
-                testProviderRuntime.settingsService.getProviderSettings(
-                  provider.name,
-                ),
+              globalSettings: new SettingsService().getAllGlobalSettings(),
+              providerSettings: new SettingsService().getProviderSettings(
+                provider.name,
+              ),
             },
             provider.name,
           ),

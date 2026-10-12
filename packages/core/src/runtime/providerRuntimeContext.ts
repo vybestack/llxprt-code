@@ -23,11 +23,10 @@
  * Issue #2616 PR A: this module is explicit-only. The former module-level
  * activeContext pointer, its set/clear/peek/get accessors, and the
  * defaultRuntimeStateFactory fallback are deleted — a context exists only
- * when a caller supplies its settings service.
+ * when a caller supplies its identity and retry operations.
  */
 import type { ProviderRetryOperations } from './contracts/ProviderRetryOperations.js';
 import type { Config } from '../config/config.js';
-import { MissingRuntimeProviderError } from './errors/MissingRuntimeProviderError.js';
 import type { ProviderFileReferenceMetadata } from '../services/history/IContent.js';
 
 export interface ProviderFileBindingStore {
@@ -77,7 +76,6 @@ export interface ProviderRequestCollaborators extends ProviderRetryOperations {
 }
 
 export interface ProviderRuntimeContext extends ProviderRetryOperations {
-  settingsService: RuntimeSettingsState;
   config?: Config;
   runtimeId?: string;
   runtimeKind?: RuntimeKind;
@@ -91,7 +89,6 @@ export interface ProviderRuntimeContext extends ProviderRetryOperations {
  * @pseudocode lines 122-133
  */
 export interface ProviderRuntimeContextInit extends ProviderRetryOperations {
-  settingsService?: RuntimeSettingsState | null;
   config?: Config;
   runtimeId?: string;
   runtimeKind?: RuntimeKind;
@@ -101,23 +98,7 @@ export interface ProviderRuntimeContextInit extends ProviderRetryOperations {
 export function createProviderRuntimeContext(
   init: ProviderRuntimeContextInit = {},
 ): ProviderRuntimeContext {
-  const settingsService = init.settingsService;
-  if (!settingsService) {
-    throw new MissingRuntimeProviderError({
-      providerKey: 'provider-runtime',
-      missingFields: ['settings'],
-      requirement: 'REQ-SP4-004',
-      stage: 'createProviderRuntimeContext',
-      metadata: {
-        hint: 'init.settingsService is not provided. Construct the service at the composition site (e.g. via the runtime settings adapter) and pass it explicitly before creating provider runtime contexts.',
-      },
-      message:
-        'MissingProviderRuntimeError(provider-runtime): provider runtime context creation requires settings (REQ-SP4-004).',
-    });
-  }
-
   return {
-    settingsService,
     readRetryAuthToken: init.readRetryAuthToken,
     handleAuthError: init.handleAuthError,
     tryBucketFailover: init.tryBucketFailover,

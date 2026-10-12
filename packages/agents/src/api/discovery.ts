@@ -129,7 +129,6 @@ function projectProviderInfos(
 export function listProviders(): readonly ProviderInfo[] {
   const settingsService = new SettingsService();
   const context: ProviderRuntimeContext = {
-    settingsService,
     runtimeId: 'static-discovery',
     metadata: { stage: 'static-discovery' },
   };

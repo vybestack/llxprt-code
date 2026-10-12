@@ -153,9 +153,7 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
           },
         },
       }),
-      runtime: {
-        settingsService: settings,
-      },
+      runtime: {},
       configOverrides: { getTargetDir: () => '/workspace/kimi-media' },
     });
 

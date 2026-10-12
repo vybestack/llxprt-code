@@ -120,7 +120,6 @@ describe('OpenAIProvider', () => {
         settings,
         contents,
         runtime: {
-          settingsService: settings,
           runtimeId,
         },
         configOverrides: { getTargetDir: () => '/workspace/test' },
@@ -249,7 +248,6 @@ describe('OpenAIProvider', () => {
           settings,
           contents: mediaHistory(false),
           runtime: {
-            settingsService: settings,
             runtimeId: 'same-label',
           },
           resolved: {
@@ -548,7 +546,6 @@ describe('OpenAIProvider', () => {
         settings,
         contents,
         runtime: {
-          settingsService: settings,
           runtimeId,
         },
         configOverrides: { getTargetDir: () => '/workspace/projection' },
@@ -733,7 +730,6 @@ describe('OpenAIProvider', () => {
           contents: [{ speaker: 'human', blocks: [reference] }],
           metadata: { abortSignal: controller.signal },
           runtime: {
-            settingsService: new SettingsService(),
             runtimeId: 'runtime-cancelled-chat',
           },
           ephemerals: { streaming: 'disabled' },

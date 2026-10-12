@@ -454,7 +454,7 @@ describe('interactive runtime owner bridge', () => {
     const runtimeId = 'alias-owner-shared-label';
     const firstManager = createProviderManager(
       first.settingsService,
-      { settingsService: first.settingsService, runtimeId },
+      { runtimeId },
       first.config,
       new CredentialAuthority(),
       new NodeFileSystem(),
@@ -474,7 +474,7 @@ describe('interactive runtime owner bridge', () => {
     ).manager;
     const secondManager = createProviderManager(
       second.settingsService,
-      { settingsService: second.settingsService, runtimeId },
+      { runtimeId },
       second.config,
       new CredentialAuthority(),
       new NodeFileSystem(),

@@ -120,8 +120,8 @@ function buildContext(
     config: Config;
   }> = {},
 ): CompressionContext {
+  const invocationSettings = new SettingsService();
   const contextProviderRuntime = {
-    settingsService: new SettingsService(),
     config: overrides.config,
     runtimeId: 'test-provider-runtime',
     metadata: { source: 'test' },
@@ -132,12 +132,8 @@ function buildContext(
       {
         runtimeId: contextProviderRuntime.runtimeId,
         metadata: contextProviderRuntime.metadata,
-        globalSettings:
-          contextProviderRuntime.settingsService.getAllGlobalSettings(),
-        providerSettings:
-          contextProviderRuntime.settingsService.getProviderSettings(
-            provider.name,
-          ),
+        globalSettings: invocationSettings.getAllGlobalSettings(),
+        providerSettings: invocationSettings.getProviderSettings(provider.name),
       },
       provider.name,
     ),
@@ -463,10 +459,7 @@ function createLoadBalancerCandidate(
   return {
     profileName: `${providerName}-profile`,
     provider,
-    runtime: {
-      settingsService:
-        {} as CompressionLoadBalancerCandidate['runtime']['settingsService'],
-    },
+    runtime: {},
     config: undefined,
     resolved: { model },
     invocation: {} as CompressionLoadBalancerCandidate['invocation'],

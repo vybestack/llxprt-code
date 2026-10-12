@@ -53,7 +53,7 @@ describe('createProviderManager: unconfigured state (#2481)', () => {
     settings.set('activeProvider', 'anthropic');
     const foreign = new SettingsService();
     foreign.set('activeProvider', 'openai');
-    const runtime = createProviderRuntimeContext({ settingsService: foreign });
+    const runtime = createProviderRuntimeContext({});
     const { manager, oauthManager } = createProviderManager(
       settings,
       runtime,
@@ -84,9 +84,9 @@ describe('createProviderManager: unconfigured state (#2481)', () => {
 
   function buildUnconfiguredManager() {
     const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       undefined,
       new CredentialAuthority(),
@@ -147,9 +147,9 @@ describe('createProviderManager: explicit provider activation unchanged (#2481)'
 
   it('activates openai when explicitly set via setActiveProvider after creation', () => {
     const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       undefined,
       new CredentialAuthority(),
@@ -180,9 +180,9 @@ describe('createProviderManager: explicit provider activation unchanged (#2481)'
   it('auto-activates openai from explicit settingsService activeProvider (no manual setActiveProvider)', () => {
     const settingsService = new SettingsService();
     settingsService.set('activeProvider', 'openai');
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       undefined,
       new CredentialAuthority(),
@@ -216,12 +216,12 @@ describe('createProviderManager: invalid configured provider (#2481)', () => {
 
   it('throws when an explicitly-configured provider name is invalid (typo)', () => {
     const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
 
     // Build a valid unconfigured manager first, then test that a typo'd
     // explicit provider name surfaces as a structured error.
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       undefined,
       new CredentialAuthority(),
@@ -247,9 +247,9 @@ describe('createProviderManager: invalid configured provider (#2481)', () => {
 
   it('activateExplicitProvider does not swallow invalid provider errors', () => {
     const settingsService = new SettingsService();
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       undefined,
       new CredentialAuthority(),
@@ -281,11 +281,11 @@ describe('createProviderManager: invalid configured provider (#2481)', () => {
     // Set a whitespace-padded invalid provider name in the settingsService
     // so createProviderManager → activateExplicitProvider is exercised.
     settingsService.set('activeProvider', 'nonexistent-provider');
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
 
     const captured = captureThrown(() =>
       createProviderManager(
-        runtime.settingsService,
+        settingsService,
         runtime,
         undefined,
         new CredentialAuthority(),
@@ -318,9 +318,9 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
   it('trims whitespace from settingsService activeProvider', () => {
     const settingsService = new SettingsService();
     settingsService.set('activeProvider', '  openai  ');
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       undefined,
       new CredentialAuthority(),
@@ -346,9 +346,9 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
   it('treats whitespace-only activeProvider as unconfigured', () => {
     const settingsService = new SettingsService();
     settingsService.set('activeProvider', '   ');
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       undefined,
       new CredentialAuthority(),
@@ -373,9 +373,9 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
   it('getActiveProviderName returns undefined for whitespace-only configuration', () => {
     const settingsService = new SettingsService();
     settingsService.set('activeProvider', '   ');
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       undefined,
       new CredentialAuthority(),
@@ -400,9 +400,9 @@ describe('createProviderManager: explicit provider trimming (#2481)', () => {
   it('getActiveProvider returns undefined for whitespace-only configuration', () => {
     const settingsService = new SettingsService();
     settingsService.set('activeProvider', '   ');
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       undefined,
       new CredentialAuthority(),
@@ -433,9 +433,9 @@ describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#248
   it('treats UNCONFIGURED_PROVIDER sentinel in settingsService as absent', () => {
     const settingsService = new SettingsService();
     settingsService.set('activeProvider', 'unconfigured');
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       undefined,
       new CredentialAuthority(),
@@ -464,10 +464,10 @@ describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#248
     // to the settingsService source, activating the real provider.
     const settingsService = new SettingsService();
     settingsService.set('activeProvider', 'openai');
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const config = makeMinimalConfig('unconfigured');
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       config,
       new CredentialAuthority(),
@@ -493,10 +493,10 @@ describe('createProviderManager: UNCONFIGURED_PROVIDER sentinel precedence (#248
   it('falls through whitespace-only config provider to a real settingsService provider', () => {
     const settingsService = new SettingsService();
     settingsService.set('activeProvider', 'openai');
-    const runtime = createProviderRuntimeContext({ settingsService });
+    const runtime = createProviderRuntimeContext({});
     const config = makeMinimalConfig('   ');
     const { manager } = createProviderManager(
-      runtime.settingsService,
+      settingsService,
       runtime,
       config,
       new CredentialAuthority(),

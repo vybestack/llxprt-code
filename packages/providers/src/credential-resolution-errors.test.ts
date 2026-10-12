@@ -39,7 +39,6 @@ function createSettings(providerName: string): SettingsService {
 
 function createOptions(providerName: string, settings: SettingsService) {
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: RUNTIME_ID,
     metadata: { source: 'credential-resolution-errors.test.ts' },
   });

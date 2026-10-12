@@ -22,7 +22,6 @@ function buildOptions(
   if (setting !== undefined) settings.set('media.pdf.enabled', setting);
   const config = createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     config,
     runtimeId: 'pdf-owner',
   });

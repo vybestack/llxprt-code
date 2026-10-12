@@ -94,7 +94,6 @@ function createTestRuntimeContext(
   historyService?: HistoryService,
 ): AgentRuntimeContext {
   const providerRuntime = createProviderRuntimeContext({
-    settingsService: root.settingsService,
     config: root.config,
     runtimeId: runtimeState.runtimeId,
     metadata: { source: 'chatSession.runtimeState.test' },

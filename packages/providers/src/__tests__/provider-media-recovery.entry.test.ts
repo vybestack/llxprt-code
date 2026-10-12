@@ -185,7 +185,6 @@ describe('provider-media-recovery', () => {
     settings.setProviderSetting(provider.name, 'prompt-caching', 'off');
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      settingsService: settings,
       config,
       runtimeId: `${providerCase.kind}-media-entry`,
     });

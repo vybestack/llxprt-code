@@ -61,12 +61,10 @@ const createConfigStub = (label: string): Config =>
     telemetry: { enabled: false, logConversations: false },
   });
 
-const createRuntimeWithoutConfig = (
-  settings: SettingsService,
-): ProviderRuntimeContext =>
+const createRuntimeWithoutConfig = (): ProviderRuntimeContext =>
   ({
     runtimeId: 'stateless-runtime',
-    settingsService: settings,
+
     config: undefined,
     metadata: { source: 'LoggingProviderWrapper.stateless.test' },
   }) as ProviderRuntimeContext;
@@ -81,7 +79,7 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
     );
 
     const settings = new SettingsService();
-    const runtime = createRuntimeWithoutConfig(settings);
+    const runtime = createRuntimeWithoutConfig();
 
     const iterator = wrapper.generateChatCompletion({
       contents: [],
@@ -111,7 +109,7 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
     ).settingsOwner;
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'missing-settings-runtime',
-      settingsService: undefined as unknown as SettingsService,
+
       config,
       metadata: { source: 'test' },
     };
@@ -145,7 +143,7 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
     ).settingsOwner;
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'complete-runtime',
-      settingsService: settings,
+
       config,
       metadata: { source: 'test' },
     };
@@ -191,7 +189,7 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
 
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'provided-runtime',
-      settingsService: settings,
+
       config,
       metadata: { provided: true, source: 'caller' },
     };
@@ -224,7 +222,7 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
     }) as unknown as Config;
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'prototype-lost-runtime',
-      settingsService: settings,
+
       config: invalidConfig,
       metadata: { source: 'prototype-lost-test' },
     };

@@ -21,7 +21,7 @@ describe('fixture request admission settings ownership', () => {
     const admitted = normalizeRuntimeInputs(
       {
         contents: [],
-        runtime: { settingsService: foreign, runtimeId: 'same-label' },
+        runtime: { runtimeId: 'same-label' },
       },
       settings,
       {

@@ -47,11 +47,10 @@ export function observeFakeProviderRegistration(): {
         model: 'fake-model',
       });
       const rt = createProviderRuntimeContext({
-        settingsService,
         config: cfg,
       });
       const { manager } = createProviderManager(
-        rt.settingsService,
+        settingsService,
         rt,
         cfg,
         new CredentialAuthority(),

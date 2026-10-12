@@ -29,7 +29,7 @@ describe('Composed OAuth session policy', () => {
     };
     const first = createProviderManager(
       firstStore,
-      { config, settingsService: firstStore, runtimeId: 'same-label' },
+      { config, runtimeId: 'same-label' },
       undefined,
       options.credentialAuthority,
       options.fileSystem,
@@ -49,7 +49,7 @@ describe('Composed OAuth session policy', () => {
     );
     const second = createProviderManager(
       secondStore,
-      { config, settingsService: secondStore, runtimeId: 'same-label' },
+      { config, runtimeId: 'same-label' },
       undefined,
       options.credentialAuthority,
       options.fileSystem,

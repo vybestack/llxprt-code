@@ -156,7 +156,6 @@ function buildContext(
         },
       },
       providerRuntime: {
-        settingsService: new SettingsService(),
         config: undefined,
         runtimeId: 'test-provider-runtime',
         metadata: { source: 'test' },
@@ -180,8 +179,8 @@ function buildContext(
       log: () => {},
     } as unknown as Logger,
     resolveProvider: () => {
+      const invocationSettings = new SettingsService();
       const runtime = {
-        settingsService: new SettingsService(),
         config: undefined,
         runtimeId: 'test-provider-runtime',
         metadata: { source: 'test' },
@@ -191,8 +190,8 @@ function buildContext(
           {
             runtimeId: runtime.runtimeId,
             metadata: runtime.metadata,
-            globalSettings: runtime.settingsService.getAllGlobalSettings(),
-            providerSettings: runtime.settingsService.getProviderSettings(
+            globalSettings: invocationSettings.getAllGlobalSettings(),
+            providerSettings: invocationSettings.getProviderSettings(
               provider.name,
             ),
           },

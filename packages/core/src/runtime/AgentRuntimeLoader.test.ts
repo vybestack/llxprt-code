@@ -139,7 +139,6 @@ describe('AgentRuntimeLoader', () => {
     settingsOwner = new SessionSettingsOwner(settingsService);
     settingsOwner.bindTelemetry(config);
     providerRuntime = createProviderRuntimeContext({
-      settingsService,
       metadata: { source: 'AgentRuntimeLoader.test' },
     });
   });

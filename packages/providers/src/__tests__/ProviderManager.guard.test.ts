@@ -349,7 +349,7 @@ describe('ProviderManager runtime replacement ownership', () => {
     manager.setActiveProvider('openai');
 
     manager.setRuntimeContext(
-      { settingsService: foreign, runtimeId: 'same-label' },
+      { runtimeId: 'same-label' },
       undefined,
       selected,
       createRuntimeConfigStub(selected),
@@ -375,7 +375,6 @@ describe('ProviderManager runtime replacement ownership', () => {
 
     manager.setRuntimeContext(
       {
-        settingsService: selected,
         config: formerConfig,
         runtimeId: 'same-label',
       },
@@ -423,7 +422,6 @@ describe('ProviderManager stateless preparation ownership', () => {
       selected,
       config,
       {
-        settingsService: foreign,
         runtimeId: 'same-label',
         metadata: { owner: 'selected' },
       },
@@ -464,7 +462,6 @@ describe('ProviderManager stateless preparation ownership', () => {
       selected,
       undefined,
       {
-        settingsService: selected,
         runtimeId: 'same-label',
       },
     );
@@ -495,7 +492,6 @@ describe('ProviderManager selected workspace binding', () => {
       selected.settingsService,
       selected.config,
       {
-        settingsService: selected.settingsService,
         config: former,
         runtimeId: 'same-label',
       },

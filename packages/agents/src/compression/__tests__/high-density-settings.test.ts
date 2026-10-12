@@ -115,7 +115,6 @@ function buildRuntimeContext(
       getToolMetadata: vi.fn(() => undefined),
     },
     providerRuntime: createProviderRuntimeContext({
-      settingsService,
       runtimeId: runtimeState.runtimeId,
     }),
   });

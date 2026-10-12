@@ -499,9 +499,12 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
     const foregroundConfig7 = makeForegroundConfig();
     const foregroundSettings7 = createSessionSettingsFixture(foregroundConfig7);
+    const settingsService =
+      foregroundSettings7.settingsOwner.createChildStore();
     const orchestrator = new SubagentOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings7),
+      createChildSettings: () => settingsService,
 
       instructions: emptyInstructionReads,
       workspacePaths: fixturePaths(),
@@ -520,7 +523,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     });
 
     const loaderArgs = runtimeLoader.mock.calls[0][0];
-    const settingsService = loaderArgs.profile.providerRuntime.settingsService;
 
     expect(loaderArgs.profile.state.baseUrl).toBe(qwenBaseUrl);
     expect(settingsService.getProviderSettings('qwen')['base-url']).toBe(
@@ -568,11 +570,12 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       const foregroundConfig8 = makeForegroundConfig();
       const foregroundSettings8 =
         createSessionSettingsFixture(foregroundConfig8);
+      const settingsService =
+        foregroundSettings8.settingsOwner.createChildStore();
       const orchestrator = new SubagentOrchestrator({
         credentialAuthority: new CredentialAuthority(),
         workspaceTrust: foregroundSettings8.workspaceTrust,
-        createChildSettings: () =>
-          foregroundSettings8.settingsOwner.createChildStore(),
+        createChildSettings: () => settingsService,
         readRunPolicy: () =>
           foregroundSettings8.settingsOwner.readSubagentRunPolicy(),
 
@@ -590,8 +593,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
       await orchestrator.launch({ name: vertexSubagent.name });
 
-      const settingsService =
-        runtimeLoader.mock.calls[0][0].profile.providerRuntime.settingsService;
       // This mocked runtime-loader boundary verifies settings population itself:
       // GCP ephemerals are scoped to SettingsService and never written globally.
       expect(settingsService.get('GOOGLE_CLOUD_PROJECT')).toBe(
@@ -712,9 +713,12 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const foregroundConfig10 = makeForegroundConfig();
     const foregroundSettings10 =
       createSessionSettingsFixture(foregroundConfig10);
+    const settingsService =
+      foregroundSettings10.settingsOwner.createChildStore();
     const orchestrator = new SubagentOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings10),
+      createChildSettings: () => settingsService,
 
       instructions: emptyInstructionReads,
       workspacePaths: fixturePaths(),
@@ -731,9 +735,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     await orchestrator.launch({
       name: kimiSubagent.name,
     });
-
-    const loaderArgs = runtimeLoader.mock.calls[0][0];
-    const settingsService = loaderArgs.profile.providerRuntime.settingsService;
 
     expect(settingsService.get('user-agent')).toBe('RooCode/1.0');
   });
@@ -774,9 +775,12 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const foregroundConfig11 = makeForegroundConfig();
     const foregroundSettings11 =
       createSessionSettingsFixture(foregroundConfig11);
+    const settingsService =
+      foregroundSettings11.settingsOwner.createChildStore();
     const orchestrator = new SubagentOrchestrator({
       credentialAuthority: new CredentialAuthority(),
       ...subagentSessionPorts(foregroundSettings11),
+      createChildSettings: () => settingsService,
 
       instructions: emptyInstructionReads,
       workspacePaths: fixturePaths(),
@@ -793,9 +797,6 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     await orchestrator.launch({
       name: keyNameSubagent.name,
     });
-
-    const loaderArgs = runtimeLoader.mock.calls[0][0];
-    const settingsService = loaderArgs.profile.providerRuntime.settingsService;
 
     expect(settingsService.getCurrentProfileName()).toBe(
       keyNameSubagent.profile,

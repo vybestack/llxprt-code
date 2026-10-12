@@ -153,7 +153,6 @@ describe('ProviderManager media/file composition', () => {
       maxBytes: 1024,
     });
     const runtime = {
-      settingsService: selected.settingsService,
       runtimeId: 'same-label',
     };
     const manager = new ProviderManager(

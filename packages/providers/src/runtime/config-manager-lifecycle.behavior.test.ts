@@ -297,7 +297,7 @@ describe('Config-independent provider owner lifecycle', () => {
       a.setRuntimeContext(
         createProviderRuntimeContext({
           config: right.config,
-          settingsService: right.settingsService,
+
           runtimeId: 'rebound-owner',
         }),
         right.settingsOwner,

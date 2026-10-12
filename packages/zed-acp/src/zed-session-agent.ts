@@ -332,7 +332,7 @@ async function composeSessionProviderManager(
     );
   const { manager, oauthManager } = createProviderManager(
     settingsService,
-    { config, settingsService, runtimeId: sessionId },
+    { config, runtimeId: sessionId },
     config,
     providerInputs.credentialAuthority,
     new NodeFileSystem(),

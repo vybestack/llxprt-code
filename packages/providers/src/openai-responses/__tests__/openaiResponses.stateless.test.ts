@@ -129,12 +129,12 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     const configB = createRuntimeConfigStub(settingsB);
     const runtimeA = createProviderRuntimeContext({
       runtimeId: 'runtime-A',
-      settingsService: settingsA,
+
       config: configA,
     });
     const runtimeB = createProviderRuntimeContext({
       runtimeId: 'runtime-B',
-      settingsService: settingsB,
+
       config: configB,
     });
 
@@ -173,7 +173,7 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     });
     const runtimeA = createProviderRuntimeContext({
       runtimeId: 'runtime-A',
-      settingsService: settingsA,
+
       config: configA,
     });
 
@@ -200,7 +200,7 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     });
     const runtimeB = createProviderRuntimeContext({
       runtimeId: 'runtime-B',
-      settingsService: settingsB,
+
       config: configB,
     });
 
@@ -236,7 +236,7 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     });
     const runtimeA = createProviderRuntimeContext({
       runtimeId: 'runtime-config',
-      settingsService: settingsA,
+
       config: configA,
     });
 
@@ -268,7 +268,7 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     });
     const runtimeB = createProviderRuntimeContext({
       runtimeId: 'runtime-config',
-      settingsService: settingsB,
+
       config: configB,
     });
 
@@ -302,7 +302,7 @@ describe('OpenAI Responses provider stateless contract tests', () => {
     });
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-invocation',
-      settingsService: settings,
+
       config,
     });
     const invocation = createRuntimeInvocationContext({

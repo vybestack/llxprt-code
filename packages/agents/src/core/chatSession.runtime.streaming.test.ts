@@ -60,7 +60,6 @@ describe('ChatSession runtime streaming and abort behavior', () => {
     settingsService.set('providers.stub.model', 'stub-model');
 
     providerRuntime = createProviderRuntimeContext({
-      settingsService,
       config,
       runtimeId: 'test.runtime',
       metadata: { source: 'chatSession.runtime.streaming.test' },
@@ -109,7 +108,6 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       afterModel: async () => new AfterModelHookOutput({}),
     };
     const hookProviderRuntime = createProviderRuntimeContext({
-      settingsService,
       config,
       runtimeId: 'test.runtime.hook-selection',
       metadata: { source: 'chatSession.runtime.streaming.test' },

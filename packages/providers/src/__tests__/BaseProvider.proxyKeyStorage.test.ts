@@ -174,7 +174,7 @@ function buildChatOptions(settings: SettingsService) {
   const config = createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
     runtimeId: `proxy-aware.${Math.random().toString(36).slice(2, 10)}`,
-    settingsService: settings,
+
     config,
   });
   return {
@@ -183,9 +183,8 @@ function buildChatOptions(settings: SettingsService) {
       {
         runtimeId: runtime.runtimeId,
         metadata: runtime.metadata,
-        globalSettings: runtime.settingsService.getAllGlobalSettings(),
-        providerSettings:
-          runtime.settingsService.getProviderSettings('proxy-aware'),
+        globalSettings: settings.getAllGlobalSettings(),
+        providerSettings: settings.getProviderSettings('proxy-aware'),
       },
       'proxy-aware',
     ),

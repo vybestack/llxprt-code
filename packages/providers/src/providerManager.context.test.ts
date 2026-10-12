@@ -29,7 +29,6 @@ describe('ProviderManager runtime context', () => {
     const selected = new SettingsService();
     const foreign = new SettingsService();
     const runtime = createProviderRuntimeContext({
-      settingsService: foreign,
       runtimeId: 'foreign-constructor-settings',
     });
     const manager = new ProviderManager(
@@ -53,7 +52,6 @@ describe('ProviderManager runtime context', () => {
   it('writes active provider to the injected settings service', async () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({
-      settingsService,
       runtimeId: 'manager-context-test',
       metadata: { source: 'unit-test' },
     });
@@ -63,7 +61,7 @@ describe('ProviderManager runtime context', () => {
       undefined,
       undefined,
       undefined,
-      runtime.settingsService,
+      settingsService,
       runtime.config,
       runtime,
     );
@@ -90,7 +88,6 @@ describe('ProviderManager runtime context', () => {
 
     const explicitSettings = new SettingsService();
     const runtime = createProviderRuntimeContext({
-      settingsService: explicitSettings,
       runtimeId: 'explicit-context',
       metadata: { source: 'unit-test-explicit' },
     });
@@ -100,7 +97,7 @@ describe('ProviderManager runtime context', () => {
       undefined,
       undefined,
       undefined,
-      runtime.settingsService,
+      explicitSettings,
       runtime.config,
       runtime,
     );

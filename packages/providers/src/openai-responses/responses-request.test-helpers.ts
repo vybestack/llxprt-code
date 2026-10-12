@@ -39,7 +39,6 @@ export function buildNormalizedOptions(
 ): NormalizedGenerateChatOptions {
   const settings = new SettingsService();
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: 'test-runtime',
     config: createRuntimeConfigStub(settings, {}),
   });

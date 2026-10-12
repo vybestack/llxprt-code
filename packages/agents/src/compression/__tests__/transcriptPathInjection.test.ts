@@ -1,3 +1,4 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -62,12 +63,10 @@ async function captureRequestText(
           {
             runtimeId: testProviderRuntime.runtimeId,
             metadata: testProviderRuntime.metadata,
-            globalSettings:
-              testProviderRuntime.settingsService.getAllGlobalSettings(),
-            providerSettings:
-              testProviderRuntime.settingsService.getProviderSettings(
-                provider.name,
-              ),
+            globalSettings: new SettingsService().getAllGlobalSettings(),
+            providerSettings: new SettingsService().getProviderSettings(
+              provider.name,
+            ),
           },
           provider.name,
         ),

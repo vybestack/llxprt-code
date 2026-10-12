@@ -83,7 +83,6 @@ function buildOptions(
   contents?: IContent[],
 ): ReturnType<typeof createProviderCallOptions> {
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: TEST_RUNTIME_ID,
     config: createRuntimeConfigStub(settings),
   });

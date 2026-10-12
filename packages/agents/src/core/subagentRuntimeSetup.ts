@@ -803,7 +803,7 @@ export function createSubagentProviderRuntime(
   const profileId = handle.settingsService.getCurrentProfileName() ?? undefined;
   return createProviderRuntimeContext({
     ...handle.oauthManager.composeRetryOperations(provider, { profileId }),
-    settingsService: handle.settingsService,
+
     config: handle.config,
     runtimeId: handle.runtimeId,
     metadata: { source: 'SubagentOrchestrator', subagent },

@@ -62,7 +62,6 @@ export function createHeadlessProviderManager(
 ): { manager: ProviderManager; oauthManager: OAuthManager } {
   const settingsService = new SettingsService();
   const context: ProviderRuntimeContext = {
-    settingsService,
     runtimeId: 'headless',
     metadata: { stage: 'headless' },
   };

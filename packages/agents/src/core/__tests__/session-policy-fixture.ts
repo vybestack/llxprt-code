@@ -90,7 +90,6 @@ export function createOwnerPolicyFixture(
     },
     tools: { listToolNames: () => [], getToolMetadata: () => undefined },
     providerRuntime: createProviderRuntimeContext({
-      settingsService: settings,
       runtimeId: state.runtimeId,
     }),
   });

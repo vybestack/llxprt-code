@@ -41,7 +41,6 @@ describe('retry runtime kind', () => {
     const { config } = root;
     configs.push(config);
     const owner = createProviderRuntimeContext({
-      settingsService: settings,
       config,
       runtimeId: 'same-label',
       runtimeKind,

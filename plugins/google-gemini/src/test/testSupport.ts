@@ -295,7 +295,6 @@ function ensureConfig(
 
 function ensureRuntime(
   providerName: string,
-  settings: SettingsService,
   config: Config,
   init: ProviderCallOptionsInit,
 ): ProviderRuntimeContext {
@@ -314,7 +313,7 @@ function ensureRuntime(
   if (init.runtime) {
     return {
       ...init.runtime,
-      settingsService: settings,
+
       config: init.runtime.config ?? config,
       runtimeId: resolvedRuntimeId,
       metadata: runtimeMetadata,
@@ -322,7 +321,6 @@ function ensureRuntime(
   }
 
   return createProviderRuntimeContext({
-    settingsService: settings,
     config,
     runtimeId: resolvedRuntimeId,
     metadata: runtimeMetadata,
@@ -395,7 +393,7 @@ export function createProviderCallOptions(
     init.configOverrides,
   );
 
-  const runtime = ensureRuntime(init.providerName, settings, config, init);
+  const runtime = ensureRuntime(init.providerName, config, init);
 
   const mergedMetadata: Record<string, unknown> = {
     ...(runtime.metadata ?? {}),

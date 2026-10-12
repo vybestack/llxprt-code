@@ -330,7 +330,7 @@ describe('LoadBalancingProvider', () => {
             contents: [{ role: 'user', parts: [{ text: 'test' }] }],
             settings: settingsService,
             config,
-            runtime: { settingsService, config },
+            runtime: { config },
           });
           for await (const _chunk of iterator) {
             // Consume
@@ -419,7 +419,7 @@ describe('LoadBalancingProvider', () => {
             contents: [{ role: 'user', parts: [{ text: 'test' }] }],
             settings: settingsService,
             config,
-            runtime: { settingsService, config },
+            runtime: { config },
           });
           for await (const _chunk of iterator) {
             // Consume
@@ -486,7 +486,7 @@ describe('LoadBalancingProvider', () => {
               contents: [{ role: 'user', parts: [{ text: 'test' }] }],
               settings: settingsService,
               config,
-              runtime: { settingsService, config },
+              runtime: { config },
               metadata: { abortSignal: controller.signal },
             })) {
               void _chunk;

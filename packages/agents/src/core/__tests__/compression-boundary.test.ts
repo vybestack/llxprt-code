@@ -99,13 +99,9 @@ function buildRuntimeContext(
 
   return createAgentRuntimeContext({
     ...createSessionPolicyFixture(
+      new SettingsService(),
       createProviderRuntimeContext({
         runtimeId: 'test-runtime',
-        settingsService: new SettingsService(),
-      }).settingsService,
-      createProviderRuntimeContext({
-        runtimeId: 'test-runtime',
-        settingsService: new SettingsService(),
       }).runtimeId,
     ),
     state: runtimeState,
@@ -121,7 +117,6 @@ function buildRuntimeContext(
     tools: mockToolsView,
     providerRuntime: createProviderRuntimeContext({
       runtimeId: 'test-runtime',
-      settingsService: new SettingsService(),
     }),
   });
 }

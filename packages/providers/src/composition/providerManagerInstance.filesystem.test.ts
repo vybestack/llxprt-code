@@ -21,7 +21,6 @@ describe('public provider-manager filesystem injection', () => {
     const { manager } = createProviderManager(
       new SettingsService(),
       {
-        settingsService: new SettingsService(),
         runtimeId: 'filesystem-injection-test',
         metadata: { stage: 'test' },
       },

@@ -128,7 +128,6 @@ async function send(
     },
   };
   const runtime = createProviderRuntimeContext({
-    settingsService,
     config,
     runtimeId: 'empty-tools',
   });

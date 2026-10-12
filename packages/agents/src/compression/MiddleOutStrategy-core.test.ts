@@ -1,3 +1,4 @@
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 /**
  * @license
@@ -206,12 +207,10 @@ describe('MiddleOutStrategy core', () => {
             {
               runtimeId: testProviderRuntime.runtimeId,
               metadata: testProviderRuntime.metadata,
-              globalSettings:
-                testProviderRuntime.settingsService.getAllGlobalSettings(),
-              providerSettings:
-                testProviderRuntime.settingsService.getProviderSettings(
-                  fakeProvider.name,
-                ),
+              globalSettings: new SettingsService().getAllGlobalSettings(),
+              providerSettings: new SettingsService().getProviderSettings(
+                fakeProvider.name,
+              ),
             },
             fakeProvider.name,
           ),
@@ -286,11 +285,10 @@ describe('MiddleOutStrategy core', () => {
                     runtimeId: testProviderRuntime.runtimeId,
                     metadata: testProviderRuntime.metadata,
                     globalSettings:
-                      testProviderRuntime.settingsService.getAllGlobalSettings(),
-                    providerSettings:
-                      testProviderRuntime.settingsService.getProviderSettings(
-                        profileProvider.name,
-                      ),
+                      new SettingsService().getAllGlobalSettings(),
+                    providerSettings: new SettingsService().getProviderSettings(
+                      profileProvider.name,
+                    ),
                   },
                   profileProvider.name,
                 ),
@@ -303,12 +301,10 @@ describe('MiddleOutStrategy core', () => {
                 {
                   runtimeId: testProviderRuntime.runtimeId,
                   metadata: testProviderRuntime.metadata,
-                  globalSettings:
-                    testProviderRuntime.settingsService.getAllGlobalSettings(),
-                  providerSettings:
-                    testProviderRuntime.settingsService.getProviderSettings(
-                      defaultProvider.name,
-                    ),
+                  globalSettings: new SettingsService().getAllGlobalSettings(),
+                  providerSettings: new SettingsService().getProviderSettings(
+                    defaultProvider.name,
+                  ),
                 },
                 defaultProvider.name,
               ),
@@ -345,12 +341,10 @@ describe('MiddleOutStrategy core', () => {
               {
                 runtimeId: testProviderRuntime.runtimeId,
                 metadata: testProviderRuntime.metadata,
-                globalSettings:
-                  testProviderRuntime.settingsService.getAllGlobalSettings(),
-                providerSettings:
-                  testProviderRuntime.settingsService.getProviderSettings(
-                    defaultProvider.name,
-                  ),
+                globalSettings: new SettingsService().getAllGlobalSettings(),
+                providerSettings: new SettingsService().getProviderSettings(
+                  defaultProvider.name,
+                ),
               },
               defaultProvider.name,
             ),

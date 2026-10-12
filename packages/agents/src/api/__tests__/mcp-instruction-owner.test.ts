@@ -267,7 +267,7 @@ describe('MCP instruction ownership', () => {
             ),
           providerRuntime: createProviderRuntimeContext({
             config,
-            settingsService: candidate.settingsService,
+
             runtimeId: state.runtimeId,
           }),
           contentGeneratorConfig:

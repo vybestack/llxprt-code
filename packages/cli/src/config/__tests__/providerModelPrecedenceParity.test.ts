@@ -71,7 +71,17 @@ void vi.mock('fs', () => {
     ...actualFs,
     mkdirSync: vi.fn(),
     writeFileSync: vi.fn(),
-    existsSync: vi.fn((p) => mockPaths.has(p.toString())),
+    existsSync: vi.fn(
+      (p) =>
+        mockPaths.has(p.toString()) ||
+        (String(p).startsWith(
+          pathMod.resolve(
+            process.cwd(),
+            'packages/providers/src/composition/aliases',
+          ),
+        ) &&
+          actualFs.existsSync(p) === true),
+    ),
     statSync: vi.fn((p) => {
       if (mockPaths.has(p.toString())) {
         return { isDirectory: () => true } as unknown as import('fs').Stats;
@@ -188,7 +198,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
         metadata?: Record<string, unknown>;
       }) => ({
         runtime: {
-          settingsService: input.settingsService,
           config: input.config,
           runtimeId: input.runtimeId,
           metadata: input.metadata,

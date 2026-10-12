@@ -64,7 +64,6 @@ describe('Issue #1150 REPRO: thinking/tool-call round-trip and history persisten
     settingsService.set('reasoning.stripFromContext', 'none');
 
     providerRuntime = createProviderRuntimeContext({
-      settingsService,
       config,
       runtimeId: 'test.runtime.issue1150.repro',
       metadata: { source: 'chatSession.thinking-toolcalls.repro.test' },

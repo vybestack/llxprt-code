@@ -96,7 +96,6 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
     settingsService.set('providers.stub.model', 'stub-model');
 
     providerRuntime = createProviderRuntimeContext({
-      settingsService,
       config,
       runtimeId: 'test.runtime',
       metadata: { source: 'chatSession.issue1749.test' },

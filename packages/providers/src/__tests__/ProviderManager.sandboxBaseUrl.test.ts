@@ -26,7 +26,7 @@ function createMinimalOptions(
     config: mockConfig,
     runtime: {
       runtimeId: 'test-runtime',
-      settingsService,
+
       config: mockConfig,
     },
     resolved: {

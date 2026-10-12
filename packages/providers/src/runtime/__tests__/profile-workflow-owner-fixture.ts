@@ -103,7 +103,7 @@ function createWorkflowOwner(
     config,
     createProviderRuntimeContext({
       config,
-      settingsService: settings,
+
       runtimeId: 'workflow-owner',
       runtimeKind: 'agent',
     }),

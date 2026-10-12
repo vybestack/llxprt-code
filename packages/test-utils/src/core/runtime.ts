@@ -90,7 +90,6 @@ export function createProviderWithRuntime<P>(
 ): ProviderWithRuntimeResult<P> {
   const settingsService = options.settingsService ?? new SettingsService();
   const runtime = createProviderRuntimeContext({
-    settingsService,
     config: options.config,
     runtimeId: options.runtimeId ?? 'test.provider.runtime',
     metadata: {
@@ -145,7 +144,6 @@ export function initializeTestProviderRuntime(
     ...(options.configOverrides ?? {}),
   });
   const runtime = createProviderRuntimeContext({
-    settingsService,
     config,
     runtimeId:
       options.runtimeId ??
@@ -243,7 +241,6 @@ export function createChatSessionRuntime(
   const vi = requireVi();
   const settingsService = options.settingsService ?? new SettingsService();
   const runtime = createProviderRuntimeContext({
-    settingsService,
     runtimeId: options.runtimeId ?? 'test.chatSession.runtime',
     metadata: {
       source: 'test-utils#createChatSessionRuntime',

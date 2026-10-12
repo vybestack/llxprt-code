@@ -48,7 +48,6 @@ function makeContent(text: string): IContent {
  */
 function buildRuntimeContext(): ProviderRuntimeContext {
   return {
-    settingsService: new SettingsService(),
     config: {
       getTargetDir: () => process.cwd(),
       getTokenizerFactory: () => undefined,
@@ -73,6 +72,7 @@ function buildRuntimeContext(): ProviderRuntimeContext {
 }
 
 function buildChainOptions(contents: IContent[]): GenerateChatOptions {
+  const settingsService = new SettingsService();
   const runtime = buildRuntimeContext();
   return {
     contents,
@@ -81,8 +81,8 @@ function buildChainOptions(contents: IContent[]): GenerateChatOptions {
       {
         runtimeId: runtime.runtimeId,
         metadata: runtime.metadata,
-        globalSettings: runtime.settingsService.getAllGlobalSettings(),
-        providerSettings: runtime.settingsService.getProviderSettings(
+        globalSettings: settingsService.getAllGlobalSettings(),
+        providerSettings: settingsService.getProviderSettings(
           'estimating-provider',
         ),
       },

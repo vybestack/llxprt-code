@@ -14,9 +14,9 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 function createManager() {
   const settingsService = new SettingsService();
-  const runtime = createProviderRuntimeContext({ settingsService });
+  const runtime = createProviderRuntimeContext({});
   const { manager } = createProviderManager(
-    runtime.settingsService,
+    settingsService,
     runtime,
     undefined,
     new CredentialAuthority(),

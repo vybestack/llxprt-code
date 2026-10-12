@@ -205,7 +205,7 @@ describe('OpenAI provider stateless contract tests', () => {
     });
     const runtimeOverride = createProviderRuntimeContext({
       runtimeId: 'runtime-config',
-      settingsService: settingsOverride,
+
       config: configOverride,
     });
 
@@ -250,7 +250,7 @@ describe('OpenAI provider stateless contract tests', () => {
     });
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-invocation',
-      settingsService: settings,
+
       config,
     });
     const invocation = createRuntimeInvocationContext({

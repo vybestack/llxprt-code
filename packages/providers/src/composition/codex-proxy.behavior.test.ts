@@ -43,7 +43,6 @@ async function generate(
   settings.setProviderSetting(provider.name, 'temperature', 0.4);
   const config = createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
-    settingsService: settings,
     runtimeId: 'codex-proxy',
     config,
   });

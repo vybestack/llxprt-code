@@ -27,7 +27,7 @@ function root(
 ): ReturnType<typeof createProviderManager> {
   return createProviderManager(
     new SettingsService(),
-    { settingsService: new SettingsService(), runtimeId },
+    { runtimeId },
     undefined,
     authority,
     new NodeFileSystem(),

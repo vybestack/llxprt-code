@@ -40,11 +40,8 @@ function createRuntimeConfigStub(): Config {
 // active context (some assertions read settings back through the singleton).
 // The manager itself always receives the runtime EXPLICITLY — it never reads
 // ambient global state (issue #2300).
-function setTestRuntimeContext(
-  settingsService = new SettingsService(),
-): ProviderRuntimeContext {
+function setTestRuntimeContext(): ProviderRuntimeContext {
   const runtime = createProviderRuntimeContext({
-    settingsService,
     config: createRuntimeConfigStub(),
     metadata: { source: 'ProviderManager.test' },
   });
@@ -61,7 +58,9 @@ describe('ProviderManager provider ordering', () => {
     }) as unknown as IProvider;
 
   let runtime: ProviderRuntimeContext;
+  let settingsService: SettingsService;
   beforeEach(() => {
+    settingsService = new SettingsService();
     runtime = setTestRuntimeContext();
   });
 
@@ -71,7 +70,7 @@ describe('ProviderManager provider ordering', () => {
       undefined,
       undefined,
       undefined,
-      runtime.settingsService,
+      settingsService,
       runtime.config,
       runtime,
     );
@@ -140,15 +139,17 @@ describe('ProviderManager provider ordering', () => {
 describe('ProviderPerformanceTracker', () => {
   let mockProvider: IProvider;
   let runtime: ProviderRuntimeContext;
+  let settingsService: SettingsService;
 
   it('returns null metrics when no active provider is set', () => {
-    const runtime = setTestRuntimeContext();
+    const settingsService = new SettingsService();
+    runtime = setTestRuntimeContext();
     const manager = new ProviderManager(
       undefined,
       undefined,
       undefined,
       undefined,
-      runtime.settingsService,
+      settingsService,
       runtime.config,
       runtime,
     );
@@ -156,6 +157,7 @@ describe('ProviderPerformanceTracker', () => {
     expect(manager.getProviderMetrics()).toBeNull();
   });
   beforeEach(() => {
+    settingsService = new SettingsService();
     runtime = setTestRuntimeContext();
     mockProvider = {
       name: 'test-provider',
@@ -172,7 +174,7 @@ describe('ProviderPerformanceTracker', () => {
       undefined,
       undefined,
       undefined,
-      runtime.settingsService,
+      settingsService,
       runtime.config,
       runtime,
     );
@@ -234,7 +236,7 @@ describe('ProviderPerformanceTracker', () => {
       undefined,
       undefined,
       undefined,
-      runtime.settingsService,
+      settingsService,
       runtime.config,
       runtime,
     );

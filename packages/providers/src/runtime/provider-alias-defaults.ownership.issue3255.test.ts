@@ -471,11 +471,9 @@ describe('alias reasoning maps propagate to request preparation (issue #3255)', 
     // the full runtime hand-off to reach request preparation.
     const invocation = createRuntimeInvocationContext({
       runtimeId: createProviderRuntimeContext({
-        settingsService: stubSettingsService as never,
         runtimeId: 'alias-request-test',
       }).runtimeId,
       runtimeMetadata: createProviderRuntimeContext({
-        settingsService: stubSettingsService as never,
         runtimeId: 'alias-request-test',
       }).metadata,
 

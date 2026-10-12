@@ -97,16 +97,8 @@ function buildRuntimeContext(
 
   return createAgentRuntimeContext({
     ...createSessionPolicyFixture(
-      {
-        runtimeId: 'test-runtime',
-        settingsService: new SettingsService(),
-        config: createRuntimeConfigStub(new SettingsService()),
-      }.settingsService,
-      {
-        runtimeId: 'test-runtime',
-        settingsService: new SettingsService(),
-        config: createRuntimeConfigStub(new SettingsService()),
-      }.runtimeId,
+      new SettingsService(),
+      runtimeState.runtimeId,
     ),
     state: runtimeState,
     history: historyService,
@@ -122,7 +114,7 @@ function buildRuntimeContext(
     tools: mockToolsView,
     providerRuntime: {
       runtimeId: 'test-runtime',
-      settingsService: new SettingsService(),
+
       config: createRuntimeConfigStub(new SettingsService()),
     },
   });

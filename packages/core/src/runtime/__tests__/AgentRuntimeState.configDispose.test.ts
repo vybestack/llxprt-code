@@ -62,7 +62,6 @@ async function owner() {
     config,
     createProviderRuntimeContext({
       config,
-      settingsService,
     }),
     credentialAuthority,
   );

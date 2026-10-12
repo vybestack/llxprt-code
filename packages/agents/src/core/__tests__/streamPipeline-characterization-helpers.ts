@@ -160,7 +160,6 @@ export function createFullLoopHarness(
   seedStubProviderSettings(settingsService);
 
   const providerRuntime = createProviderRuntimeContext({
-    settingsService,
     config,
     runtimeId: 'test.runtime',
     metadata: { source: 'p06.characterization' },

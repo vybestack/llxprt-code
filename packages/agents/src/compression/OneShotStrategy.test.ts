@@ -154,7 +154,6 @@ const noopLogger = {
 } as unknown as Logger;
 
 const testProviderRuntime = {
-  settingsService: new SettingsService(),
   config: undefined,
   runtimeId: 'test-provider-runtime',
   metadata: { source: 'test' },
@@ -176,8 +175,8 @@ function buildContext(
   }> = {},
 ): CompressionContext {
   const defaultProvider = createFakeProvider('default-provider');
+  const invocationSettings = new SettingsService();
   const contextProviderRuntime = {
-    settingsService: new SettingsService(),
     config: undefined,
     runtimeId: 'test-provider-runtime',
     metadata: { source: 'test' },
@@ -237,12 +236,10 @@ function buildContext(
           {
             runtimeId: resolved.runtime.runtimeId,
             metadata: resolved.runtime.metadata,
-            globalSettings:
-              resolved.runtime.settingsService.getAllGlobalSettings(),
-            providerSettings:
-              resolved.runtime.settingsService.getProviderSettings(
-                resolved.provider.name,
-              ),
+            globalSettings: invocationSettings.getAllGlobalSettings(),
+            providerSettings: invocationSettings.getProviderSettings(
+              resolved.provider.name,
+            ),
           },
           resolved.provider.name,
         ),

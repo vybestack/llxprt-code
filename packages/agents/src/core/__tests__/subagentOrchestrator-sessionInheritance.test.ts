@@ -90,11 +90,11 @@ async function launchSubagent(
     foregroundRoot1,
     foregroundSettings,
   );
+  const isolatedSettings = foregroundSettings1.settingsOwner.createChildStore();
   const orchestrator = new SubagentOrchestrator({
     credentialAuthority: new CredentialAuthority(),
     workspaceTrust: foregroundSettings1.workspaceTrust,
-    createChildSettings: () =>
-      foregroundSettings1.settingsOwner.createChildStore(),
+    createChildSettings: () => isolatedSettings,
     readRunPolicy: () =>
       foregroundSettings1.settingsOwner.readSubagentRunPolicy(),
     toolRegistry: fixtureToolSelection(),
@@ -110,8 +110,6 @@ async function launchSubagent(
   });
 
   const result = await orchestrator.launch({ name: subagentConfig.name });
-  const isolatedSettings = runtimeLoader.mock.calls[0][0].profile
-    .providerRuntime.settingsService as SettingsService;
 
   return {
     isolatedSettings,
@@ -344,11 +342,12 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
         foregroundRoot2,
         foreground,
       );
+      const isolatedSettings =
+        foregroundSettings2.settingsOwner.createChildStore();
       const orchestrator = new SubagentOrchestrator({
         credentialAuthority: new CredentialAuthority(),
         workspaceTrust: foregroundSettings2.workspaceTrust,
-        createChildSettings: () =>
-          foregroundSettings2.settingsOwner.createChildStore(),
+        createChildSettings: () => isolatedSettings,
         readRunPolicy: () =>
           foregroundSettings2.settingsOwner.readSubagentRunPolicy(),
         toolRegistry: fixtureToolSelection(),
@@ -374,8 +373,7 @@ describe('SubagentOrchestrator — session dumpcontext inheritance (#3151)', () 
 
       // The runtime loader receives the foreground on mode through the
       // production-constructed isolated settings service.
-      const isolatedSettings = runtimeLoader.mock.calls[0][0].profile
-        .providerRuntime.settingsService as SettingsService;
+
       expect(isolatedSettings).toBe(capturedSettings);
       expect(isolatedSettings).not.toBe(foreground);
       expect(isolatedSettings.get('dumpcontext')).toBe('on');

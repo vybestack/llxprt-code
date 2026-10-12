@@ -27,7 +27,6 @@ import type { SubagentTestInputs } from './subagent-test-helpers.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { SubAgentScope } from '../subagent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
@@ -153,10 +152,6 @@ function createStatelessRuntimeBundle(options?: {
     ({
       runtimeId: 'runtime-bundle',
       metadata: {},
-      settingsService: {
-        get: vi.fn(),
-        set: vi.fn(),
-      },
     } as unknown as ProviderRuntimeContext);
 
   const toolRegistry =
@@ -815,9 +810,7 @@ describe('SubAgentScope - Stateless Behavior (P07 TDD)', () => {
       );
       const runConfig = createTestRunConfig();
 
-      const settingsService = new SettingsService();
       const providerRuntime = createProviderRuntimeContext({
-        settingsService,
         runtimeId: 'override-runtime',
       });
 

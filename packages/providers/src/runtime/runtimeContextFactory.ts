@@ -284,7 +284,6 @@ function buildActivateClosure(
       activationOptions?.runtimeKind ?? options.runtimeKind ?? 'agent';
 
     const scopedRuntime = createProviderRuntimeContext({
-      settingsService: resolvedSettingsService,
       runtimeId: state.currentRuntimeId,
       runtimeKind: state.currentRuntimeKind,
       metadata: state.currentMetadata,
@@ -548,7 +547,6 @@ function initialProviderManager(
     settingsService,
     config,
     createProviderRuntimeContext({
-      settingsService,
       runtimeId,
       runtimeKind: runtimeKind ?? 'agent',
       metadata,

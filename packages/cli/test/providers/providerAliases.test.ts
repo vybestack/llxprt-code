@@ -82,11 +82,10 @@ describe('Provider alias integration', () => {
     // After DI migration, set up runtime context and create ProviderManager
     // Issue #2616: the runtime context carries its settings service
     // explicitly (no ambient install or teardown).
-    const runtimeContext = createProviderRuntimeContext({
-      settingsService: new SettingsService(),
-    });
+    const settingsService = new SettingsService();
+    const runtimeContext = createProviderRuntimeContext({});
     providerManager = createProviderManager(
-      runtimeContext.settingsService,
+      settingsService,
       runtimeContext,
       undefined,
       new CredentialAuthority(),
