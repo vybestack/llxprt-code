@@ -54,7 +54,12 @@ describe('ZedAgent.loadSession orchestration (issue #1604)', () => {
       getHistory: vi.fn(async () => []),
       dispose: firstDispose,
       async *stream() {},
-      session: { resume: firstResume, setRecording: vi.fn() },
+      session: {
+        resume: firstResume,
+        setRecording: vi.fn(),
+        getRecordingTitle: () => undefined,
+        recordRecordingTitle: async () => undefined,
+      },
       tools: { respondToConfirmation: vi.fn() },
     } as unknown as Agent;
 

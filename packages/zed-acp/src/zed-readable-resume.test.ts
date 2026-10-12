@@ -57,13 +57,13 @@ for (const kind of kinds) {
           clientCapabilities: {},
         });
         const created = await peer.client.newSession({
-          cwd: '/project',
+          cwd: process.cwd(),
           mcpServers: [],
         });
         const advertised = updates.length;
         const resumed = await peer.client.resumeSession({
           sessionId: created.sessionId,
-          cwd: '/project',
+          cwd: process.cwd(),
           mcpServers: [],
         });
         expect(resumed.modes?.currentModeId).toBe('default');
