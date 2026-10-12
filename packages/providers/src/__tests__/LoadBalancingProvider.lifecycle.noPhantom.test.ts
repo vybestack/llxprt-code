@@ -99,7 +99,9 @@ describe('LoadBalancingProvider lifecycle (finding #2): no phantom starts', () =
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager(
-      { settingsService, config },
+      settingsService,
+      config,
+      undefined,
       undefined,
       fixtureOwners.adopt(config, settingsService).settingsOwner,
     );

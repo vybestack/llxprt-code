@@ -34,9 +34,7 @@ describe('activation media owner lifetime', () => {
         }).isTrustedFolder(),
     });
     const owner = new SessionMediaOwner(built.config.projectTempDir, 1024);
-    const manager = new ProviderManager({
-      settingsService: built.settingsService,
-    });
+    const manager = new ProviderManager(built.settingsService);
     const entered = gate();
     const factories = configureProviderRuntimeFactories(built.config, manager);
     const released = gate();
@@ -128,10 +126,7 @@ describe('activation media owner lifetime', () => {
       await release.promise;
       throw new Error('publication rejected during teardown');
     });
-    const manager = new ProviderManager({
-      config: built.config,
-      settingsService: built.settingsService,
-    });
+    const manager = new ProviderManager(built.settingsService, built.config);
     const operation = await assembleAgentActivationBootstrap(
       built.config,
       built.settingsService,

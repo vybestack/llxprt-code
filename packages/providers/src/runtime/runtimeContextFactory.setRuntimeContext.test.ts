@@ -111,10 +111,7 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
     // — which reads this.runtime — succeeds after activation.
     const settingsService = new SettingsService();
     const config = createRuntimeConfigStub(settingsService);
-    const adoptedManager = new ProviderManager({
-      settingsService,
-      config,
-    });
+    const adoptedManager = new ProviderManager(settingsService, config);
 
     // Assign to the describe-scope `handle` (do NOT shadow with a local const)
     // so the afterEach hook owns cleanup even if activation throws.

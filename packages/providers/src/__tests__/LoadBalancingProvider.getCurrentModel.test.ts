@@ -28,7 +28,7 @@ describe('LoadBalancingProvider.getCurrentModel (issue #2379)', () => {
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({ settingsService, config });
+    providerManager = new ProviderManager(settingsService, config);
   });
 
   /** Build an LB provider bound to the current providerManager. */

@@ -556,11 +556,13 @@ export function createProviderManager(
   context: RuntimeContextShape,
   options: ProviderManagerFactoryOptions,
   borrowedOAuthManager?: OAuthManager,
-  sessionSettings?: SessionSettingsOwner,
+  owner?: SessionSettingsOwner,
 ): { manager: ProviderManager; oauthManager: OAuthManager } {
   const userSettings = resolveUserSettings(options.fileSystem);
+  const { settingsService: settings, config: runtimeConfig } = context;
   const manager =
-    options.manager ?? new ProviderManager(context, undefined, sessionSettings);
+    options.manager ??
+    new ProviderManager(settings, runtimeConfig, context, undefined, owner);
 
   bindCredentialKeys(manager, options.credentialAuthority);
 
@@ -582,7 +584,7 @@ export function createProviderManager(
       options.runtimeMessageBus,
       options.config,
       manager,
-      context.settingsService,
+      settings,
     );
 
   bindOwnerRetryOperations(manager, oauthManager);
@@ -608,13 +610,10 @@ export function createProviderManager(
     configureProviderRuntimeFactories(config, manager);
   }
 
-  const authOnlyEnabled = resolveAuthOnlyFlag(
-    context.settingsService,
-    userSettings,
-  );
+  const authOnlyEnabled = resolveAuthOnlyFlag(settings, userSettings);
   const { openaiApiKey, openaiBaseUrl, openaiProviderConfig } =
     resolveOpenaiSettings(
-      context.settingsService,
+      settings,
       userSettings,
       authOnlyEnabled,
       allowBrowserEnvironment,

@@ -37,9 +37,7 @@ async function failingCleanupOperation() {
     },
   );
   cleanups.push(built.cleanup);
-  const manager = new ProviderManager({
-    settingsService: built.settingsService,
-  });
+  const manager = new ProviderManager(built.settingsService);
   manager.registerProvider(
     new FakeProvider(join(import.meta.dir, 'fixtures/plain-text.jsonl')),
   );

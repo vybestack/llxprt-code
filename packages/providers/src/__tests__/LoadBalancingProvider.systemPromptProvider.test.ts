@@ -145,7 +145,9 @@ describe('LoadBalancingProvider - provider-specific prompt rendering (issue #317
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager(
-      { settingsService, config },
+      settingsService,
+      config,
+      undefined,
       undefined,
       fixtureOwners.adopt(config, settingsService).settingsOwner,
     );

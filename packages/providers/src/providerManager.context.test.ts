@@ -25,6 +25,23 @@ function createStubProvider(name: string): IProvider {
 }
 
 describe('ProviderManager runtime context', () => {
+  it('uses separately selected settings instead of runtime-carried settings at construction', () => {
+    const selected = new SettingsService();
+    const foreign = new SettingsService();
+    const runtime = createProviderRuntimeContext({
+      settingsService: foreign,
+      runtimeId: 'foreign-constructor-settings',
+    });
+    const manager = new ProviderManager(selected, undefined, runtime);
+    manager.registerProvider(createStubProvider('selected-provider'));
+    manager.setActiveProvider('selected-provider');
+
+    expect(selected.get('activeProvider')).toBe(
+      manager.getActiveProviderName(),
+    );
+    expect(foreign.get('activeProvider')).toBeUndefined();
+  });
+
   it('writes active provider to the injected settings service', async () => {
     const settingsService = new SettingsService();
     const runtime = createProviderRuntimeContext({
@@ -33,7 +50,11 @@ describe('ProviderManager runtime context', () => {
       metadata: { source: 'unit-test' },
     });
 
-    const manager = new ProviderManager(runtime);
+    const manager = new ProviderManager(
+      runtime.settingsService,
+      runtime.config,
+      runtime,
+    );
     const provider = createStubProvider('stub-provider');
 
     manager.registerProvider(provider);
@@ -62,7 +83,11 @@ describe('ProviderManager runtime context', () => {
       metadata: { source: 'unit-test-explicit' },
     });
 
-    const manager = new ProviderManager(runtime);
+    const manager = new ProviderManager(
+      runtime.settingsService,
+      runtime.config,
+      runtime,
+    );
     manager.registerProvider(createStubProvider('explicit-provider'));
     manager.setActiveProvider('explicit-provider');
 

@@ -102,10 +102,7 @@ describe('foreground MCP plugin ownership', () => {
         },
       },
     });
-    const providerManager = new ProviderManager({
-      settingsService,
-      config,
-    });
+    const providerManager = new ProviderManager(settingsService, config);
     providerManager.registerProvider(
       new FakeProvider(process.env.LLXPRT_FAKE_RESPONSES, directory),
     );

@@ -81,7 +81,9 @@ describe('Config-independent provider owner lifecycle', () => {
     settings.set('model', 'test-model');
     settings.set('base-url', 'http://127.0.0.1:10');
     const manager = new ProviderManager(
-      { config: host, settingsService: settings },
+      settings,
+      host,
+      undefined,
       undefined,
       owner,
     );
@@ -147,10 +149,7 @@ describe('Config-independent provider owner lifecycle', () => {
   it('keeps borrowed manager subscriptions usable after facade runtime cleanup', async () => {
     const settings = new SettingsService();
     const owner = config(settings);
-    const manager = new ProviderManager({
-      config: owner.config,
-      settingsService: settings,
-    });
+    const manager = new ProviderManager(settings, owner.config);
     const provider = new CacheProvider();
     manager.registerProvider(provider);
     manager.setActiveProvider(provider.name);
@@ -250,12 +249,16 @@ describe('Config-independent provider owner lifecycle', () => {
     const left = config(new SettingsService());
     const right = config(new SettingsService());
     const a = new ProviderManager(
-      { settingsService: left.settingsService, config: left.config },
+      left.settingsService,
+      left.config,
+      undefined,
       undefined,
       left.settingsOwner,
     );
     const b = new ProviderManager(
-      { settingsService: right.settingsService, config: right.config },
+      right.settingsService,
+      right.config,
+      undefined,
       undefined,
       right.settingsOwner,
     );
@@ -296,12 +299,16 @@ describe('Config-independent provider owner lifecycle', () => {
     const left = config(new SettingsService());
     const right = config(new SettingsService());
     const a = new ProviderManager(
-      { settingsService: left.settingsService, config: left.config },
+      left.settingsService,
+      left.config,
+      undefined,
       undefined,
       left.settingsOwner,
     );
     const b = new ProviderManager(
-      { settingsService: right.settingsService, config: right.config },
+      right.settingsService,
+      right.config,
+      undefined,
       undefined,
       right.settingsOwner,
     );

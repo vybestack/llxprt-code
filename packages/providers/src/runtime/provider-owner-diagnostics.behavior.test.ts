@@ -21,14 +21,8 @@ describe('provider owner diagnostic accounting', () => {
       });
     const settings = new SessionSettingsOwner(configSettingsService);
     settings.bindTelemetry(config);
-    const owner = new ProviderManager({
-      config,
-      settingsService: configSettingsService,
-    });
-    const sibling = new ProviderManager({
-      config,
-      settingsService: configSettingsService,
-    });
+    const owner = new ProviderManager(configSettingsService, config);
+    const sibling = new ProviderManager(configSettingsService, config);
     Object.defineProperty(config, 'getProviderManager', {
       configurable: true,
       value: () => {

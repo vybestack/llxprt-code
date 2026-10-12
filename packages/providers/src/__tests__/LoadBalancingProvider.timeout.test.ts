@@ -87,7 +87,9 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
     settingsService = new SettingsService();
     runtimeConfig = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager(
-      { settingsService, config: runtimeConfig },
+      settingsService,
+      runtimeConfig,
+      undefined,
       undefined,
       fixtureOwners.adopt(runtimeConfig, settingsService).settingsOwner,
     );

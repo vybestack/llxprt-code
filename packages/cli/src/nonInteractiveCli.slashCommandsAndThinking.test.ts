@@ -92,7 +92,7 @@ function makeConfig(sessionId: string): {
   const settingsOwner = new SessionSettingsOwner(settingsService);
   settingsOwner.bindTelemetry(config);
   settingsOwner.initializeProviderSelection('openai', PLACEHOLDER_MODEL);
-  const manager = new ProviderManager({ config, settingsService });
+  const manager = new ProviderManager(settingsService, config);
   manager.registerProvider(new OpenAIProvider(undefined));
   manager.setActiveProvider('openai');
   configureProviderRuntimeFactories(config, manager);

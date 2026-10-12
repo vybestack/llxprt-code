@@ -117,7 +117,7 @@ void vi.mock('../profileBootstrap.js', () => {
     ...actual,
     prepareRuntimeForProfile: vi.fn(async () => {
       const settingsService = new RealSettingsService();
-      const providerManager = new ProviderManager({ settingsService });
+      const providerManager = new ProviderManager(settingsService);
       const provider: IProvider = {
         name: 'openai',
         getDefaultModel: () => 'mock-default-model',

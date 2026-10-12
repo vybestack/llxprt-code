@@ -37,7 +37,7 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
   beforeEach(() => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
-    providerManager = new ProviderManager({ settingsService, config });
+    providerManager = new ProviderManager(settingsService, config);
   });
 
   describe('members', () => {

@@ -204,9 +204,7 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
           'member-keyname',
           deps(pm),
         );
-        const providerManager = new ProviderManager({
-          settingsService: new SettingsService(),
-        });
+        const providerManager = new ProviderManager(new SettingsService());
         providerManager.bindProviderKeyStorage(keyStorage);
         const delegate: IProvider = {
           name: 'key-probe',
@@ -235,9 +233,7 @@ describe('resolveLoadBalancerSubProfile — member auth handling', () => {
         providerManager.registerProvider(lb);
         providerManager.setActiveProvider(lb.name);
 
-        const siblingManager = new ProviderManager({
-          settingsService: new SettingsService(),
-        });
+        const siblingManager = new ProviderManager(new SettingsService());
         const siblingDelegate: IProvider = {
           name: delegate.name,
           getModels: async () => [],

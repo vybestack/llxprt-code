@@ -212,7 +212,9 @@ async function assembleUiInfrastructure(
     config.getIdeMode(),
   );
   const manager = new ProviderManager(
-    { config, settingsService },
+    settingsService,
+    config,
+    undefined,
     undefined,
     settings,
   );

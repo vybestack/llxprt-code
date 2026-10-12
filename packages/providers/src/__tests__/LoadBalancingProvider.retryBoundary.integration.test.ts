@@ -156,7 +156,9 @@ describe('LoadBalancingProvider retry boundary integration (issue #2450)', () =>
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager(
-      { settingsService, config },
+      settingsService,
+      config,
+      undefined,
       undefined,
       fixtureOwners.adopt(config, settingsService).settingsOwner,
     );

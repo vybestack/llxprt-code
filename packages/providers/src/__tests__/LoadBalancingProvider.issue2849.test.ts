@@ -162,7 +162,9 @@ describe('LoadBalancingProvider issue #2849: LB reliability for transient 429', 
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager(
-      { settingsService, config },
+      settingsService,
+      config,
+      undefined,
       undefined,
       fixtureOwners.adopt(config, settingsService).settingsOwner,
     );

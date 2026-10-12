@@ -212,7 +212,9 @@ describe('LoadBalancingProvider - system prompt model rendering (issue #3157)', 
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager(
-      { settingsService, config },
+      settingsService,
+      config,
+      undefined,
       undefined,
       fixtureOwners.adopt(config, settingsService).settingsOwner,
     );

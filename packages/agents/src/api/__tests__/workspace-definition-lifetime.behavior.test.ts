@@ -310,10 +310,7 @@ describe('public Agent workspace definition lifetime', () => {
         workingDir: root,
       },
     );
-    const manager = new ProviderManager({
-      config: caller.config,
-      settingsService: caller.settingsService,
-    });
+    const manager = new ProviderManager(caller.settingsService, caller.config);
     manager.registerProvider(
       new FakeProvider(join(fixturesDir, 'multi-turn-text.jsonl')),
     );

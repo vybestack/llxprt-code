@@ -44,7 +44,9 @@ function createProjectionFixture(
     runtimeId: 'projection-test',
   };
   const manager = new ProviderManager(
-    { settingsService: settings, config, runtime },
+    settings,
+    config,
+    runtime,
     undefined,
     fixtureOwners.adopt(config, settings).settingsOwner,
   );

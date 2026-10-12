@@ -107,7 +107,9 @@ describe('LoadBalancingProvider - Failover Sticky Index (Issue #2492)', () => {
     settingsService = new SettingsService();
     config = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager(
-      { settingsService, config },
+      settingsService,
+      config,
+      undefined,
       undefined,
       fixtureOwners.adopt(config, settingsService).settingsOwner,
     );

@@ -52,6 +52,8 @@ async function owner() {
     'runtime',
   );
   const manager = new ProviderManager(
+    settingsService,
+    config,
     createProviderRuntimeContext({
       config,
       settingsService,

@@ -66,7 +66,11 @@ describe('ProviderManager provider ordering', () => {
   });
 
   it('prioritizes core providers and sorts remaining alphabetically', () => {
-    const manager = new ProviderManager(runtime);
+    const manager = new ProviderManager(
+      runtime.settingsService,
+      runtime.config,
+      runtime,
+    );
 
     const providerNames = [
       'openai-responses',
@@ -101,17 +105,14 @@ describe('ProviderManager provider ordering', () => {
     // only { settingsService } — it must NOT backfill config from ambient
     // state, so no LoggingProviderWrapper is applied.
 
-    const withoutConfig = new ProviderManager({ settingsService });
+    const withoutConfig = new ProviderManager(settingsService);
     withoutConfig.registerProvider(createProvider('no-config-provider'));
     expect(
       withoutConfig.getProviderByName('no-config-provider'),
     ).not.toBeInstanceOf(LoggingProviderWrapper);
 
     // The same construction WITH an explicit config gets the wrapper.
-    const withConfig = new ProviderManager({
-      settingsService,
-      config: runtimeConfig,
-    });
+    const withConfig = new ProviderManager(settingsService, runtimeConfig);
     withConfig.registerProvider(createProvider('with-config-provider'));
     expect(withConfig.getProviderByName('with-config-provider')).toBeInstanceOf(
       LoggingProviderWrapper,
@@ -124,7 +125,12 @@ describe('ProviderPerformanceTracker', () => {
   let runtime: ProviderRuntimeContext;
 
   it('returns null metrics when no active provider is set', () => {
-    const manager = new ProviderManager(setTestRuntimeContext());
+    const runtime = setTestRuntimeContext();
+    const manager = new ProviderManager(
+      runtime.settingsService,
+      runtime.config,
+      runtime,
+    );
 
     expect(manager.getProviderMetrics()).toBeNull();
   });
@@ -140,7 +146,11 @@ describe('ProviderPerformanceTracker', () => {
   });
 
   it('should accumulate session tokens correctly', () => {
-    const manager = new ProviderManager(runtime);
+    const manager = new ProviderManager(
+      runtime.settingsService,
+      runtime.config,
+      runtime,
+    );
 
     // Register a mock provider
     manager.registerProvider(mockProvider);
@@ -194,7 +204,11 @@ describe('ProviderPerformanceTracker', () => {
   });
 
   it('should reset session token usage', () => {
-    const manager = new ProviderManager(runtime);
+    const manager = new ProviderManager(
+      runtime.settingsService,
+      runtime.config,
+      runtime,
+    );
 
     // Register a mock provider
     manager.registerProvider(mockProvider);

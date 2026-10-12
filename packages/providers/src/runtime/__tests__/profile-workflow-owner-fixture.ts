@@ -95,6 +95,8 @@ function createWorkflowOwner(
     debugMode: false,
   });
   const manager = new ProviderManager(
+    settings,
+    config,
     createProviderRuntimeContext({
       config,
       settingsService: settings,

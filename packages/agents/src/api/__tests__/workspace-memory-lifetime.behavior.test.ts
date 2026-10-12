@@ -91,9 +91,7 @@ async function preflightWithSuppliedMemory(
   memory: WorkspaceMemoryOwner,
   memoryOwnership?: 'borrowed' | 'transferred',
 ) {
-  const manager = new ProviderManager({
-    settingsService: built.settingsService,
-  });
+  const manager = new ProviderManager(built.settingsService);
   manager.registerProvider(
     new FakeProvider(join(import.meta.dir, 'fixtures/plain-text.jsonl')),
   );
@@ -254,9 +252,7 @@ describe('supplied workspace memory lifetime through public adoption', () => {
   it('retains the explicit preflight memory transfer through physical refresh and facade retirement', async () => {
     const { directory, file } = await physicalMemory();
     const built = await factoryless(directory);
-    const manager = new ProviderManager({
-      settingsService: built.settingsService,
-    });
+    const manager = new ProviderManager(built.settingsService);
     manager.registerProvider(
       new FakeProvider(join(import.meta.dir, 'fixtures/plain-text.jsonl')),
     );
@@ -305,9 +301,7 @@ describe('supplied workspace memory lifetime through public adoption', () => {
   it('rejects replacing preflight memory while preserving the supplied caller root', async () => {
     const { directory, file, memory } = await physicalMemory();
     const built = await factoryless(directory);
-    const manager = new ProviderManager({
-      settingsService: built.settingsService,
-    });
+    const manager = new ProviderManager(built.settingsService);
     manager.registerProvider(
       new FakeProvider(join(import.meta.dir, 'fixtures/plain-text.jsonl')),
     );

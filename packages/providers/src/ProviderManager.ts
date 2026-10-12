@@ -60,24 +60,6 @@ function asSettingsService(
   return settingsService as SettingsService;
 }
 
-interface ProviderManagerInit {
-  runtime?: ProviderRuntimeContext;
-  config?: Config;
-  settingsService?: SettingsService;
-}
-
-/**
- * Type guard: distinguish ProviderRuntimeContext from ProviderManagerInit.
- * A ProviderRuntimeContext has settingsService plus either runtimeId or metadata.
- */
-function isRuntimeContext(
-  init: ProviderManagerInit | ProviderRuntimeContext,
-): init is ProviderRuntimeContext {
-  return (
-    'settingsService' in init && ('runtimeId' in init || 'metadata' in init)
-  );
-}
-
 /**
  * Check whether a settings value is effectively absent (null, undefined, empty,
  * false, 0, or NaN).
@@ -161,15 +143,16 @@ export class ProviderManager implements IProviderManager {
   }
 
   constructor(
-    init?: ProviderManagerInit | ProviderRuntimeContext,
+    settingsService?: RuntimeSettingsState,
+    config?: Config,
+    runtime?: ProviderRuntimeContext,
     credentialAuthority?: Pick<CredentialAuthority, 'createProviderKeyStorage'>,
     sessionSettings?: SessionSettingsOwner,
   ) {
-    const resolved = this.resolveInit(init);
     this.providers = new Map<string, IProvider>();
-    this.settingsService = resolved.settingsService;
-    this.config = resolved.config ?? this.config;
-    this.runtime = resolved.runtime;
+    this.settingsService = this.resolveInit(settingsService);
+    this.config = config;
+    this.runtime = runtime;
     this.sessionSettings = sessionSettings;
     this.bindSettingsLifecycle();
     this.capabilitiesService = new ProviderCapabilitiesService(
@@ -189,32 +172,7 @@ export class ProviderManager implements IProviderManager {
    * @requirement:REQ-SP2-002
    * @pseudocode multi-runtime-baseline.md lines 3-4
    */
-  private resolveInit(init?: ProviderManagerInit | ProviderRuntimeContext): {
-    settingsService: SettingsService;
-    config?: Config;
-    runtime?: ProviderRuntimeContext;
-  } {
-    // Identity/settings must be supplied explicitly by the caller. The manager
-    // never reads ambient global runtime state to backfill a missing runtime,
-    // so a background/isolated runtime can never silently adopt the foreground
-    // context (issue #2300). config remains optional — methods that require it
-    // (e.g. prepareStatelessProviderInvocation) throw a precise error when it
-    // is genuinely absent.
-    if (init && isRuntimeContext(init)) {
-      return {
-        settingsService: asSettingsService(init.settingsService),
-        config: init.config,
-        runtime: init,
-      };
-    }
-
-    const runtime = init?.runtime;
-    const settingsService =
-      init?.settingsService ??
-      (runtime?.settingsService
-        ? asSettingsService(runtime.settingsService)
-        : undefined);
-
+  private resolveInit(settingsService?: RuntimeSettingsState): SettingsService {
     if (!settingsService) {
       throw new MissingProviderRuntimeError({
         providerKey: 'ProviderManager',
@@ -222,16 +180,12 @@ export class ProviderManager implements IProviderManager {
         requirement: 'REQ-SP2-002',
         stage: 'ProviderManager.constructor',
         message:
-          'ProviderManager requires an explicit runtime context or { settingsService }; ' +
+          'ProviderManager requires separately selected settings; ' +
           'it does not read ambient global runtime state (issue #2300).',
       });
     }
 
-    return {
-      settingsService,
-      config: init?.config ?? runtime?.config,
-      runtime,
-    };
+    return asSettingsService(settingsService);
   }
 
   buildEphemeralsSnapshot(

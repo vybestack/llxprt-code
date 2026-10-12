@@ -47,7 +47,9 @@ describe('LoadBalancingProvider Circuit Breaker - Phase 2', () => {
     settingsService = new SettingsService();
     runtimeConfig = createRuntimeConfigStub(settingsService);
     providerManager = new ProviderManager(
-      { settingsService, config: runtimeConfig },
+      settingsService,
+      runtimeConfig,
+      undefined,
       undefined,
       fixtureOwners.adopt(runtimeConfig, settingsService).settingsOwner,
     );

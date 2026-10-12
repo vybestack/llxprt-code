@@ -59,7 +59,7 @@ function fixture() {
   settings.setProviderSetting('openai', 'model', 'owner-model');
   settings.setProviderSetting('openai', 'base-url', 'http://127.0.0.1:1/v1');
   const config = createRuntimeConfigStub(settings);
-  const manager = new ProviderManager({ settingsService: settings, config });
+  const manager = new ProviderManager(settings, config);
   const provider = new HarnessProvider();
   manager.registerProvider(provider);
   return { manager, provider, settings };
@@ -159,7 +159,7 @@ describe('ProviderManager owner admission', () => {
 
   it('fails closed when no provider is active or targeted', () => {
     const settingsService = new SettingsService();
-    const manager = new ProviderManager({ settingsService });
+    const manager = new ProviderManager(settingsService);
     expect(() => manager.normalizeRuntimeInputs({ contents: [] })).toThrow(
       'No provider is active or targeted',
     );
@@ -176,7 +176,7 @@ describe('ProviderManager admission fallback and isolation', () => {
       getEphemeralSetting: (key) =>
         key === 'base-url' ? 'https://foreign.example.test/v1' : undefined,
     });
-    const manager = new ProviderManager({ settingsService: own, config });
+    const manager = new ProviderManager(own, config);
     manager.registerProvider(new HarnessProvider());
     const normalized = manager.normalizeRuntimeInputs(
       { contents: [] },
@@ -191,7 +191,7 @@ describe('ProviderManager admission fallback and isolation', () => {
       const settingsService = new SettingsService();
       settingsService.set('base-url', 'https://config.example.test/v1');
       const config = createRuntimeConfigStub(settingsService, {});
-      const manager = new ProviderManager({ settingsService, config });
+      const manager = new ProviderManager(settingsService, config);
       manager.registerProvider(new HarnessProvider());
       const normalized = manager.normalizeRuntimeInputs(
         { contents: [], resolved: { baseURL: absent } },
@@ -210,7 +210,7 @@ describe('ProviderManager admission fallback and isolation', () => {
     const config = createRuntimeConfigStub(settingsService, {
       getModel: () => 'config-model',
     });
-    const manager = new ProviderManager({ settingsService, config });
+    const manager = new ProviderManager(settingsService, config);
     manager.registerProvider(new HarnessProvider('anthropic'));
     expect(
       manager.normalizeRuntimeInputs({ contents: [] }, 'anthropic').resolved
@@ -223,7 +223,7 @@ describe('ProviderManager admission fallback and isolation', () => {
     settingsService.set('activeProvider', 'openai');
     settingsService.set('auth-key', 'foreground-credential');
     const config = createRuntimeConfigStub(settingsService);
-    const manager = new ProviderManager({ settingsService, config });
+    const manager = new ProviderManager(settingsService, config);
     manager.registerProvider(new HarnessProvider('anthropic'));
     expect(
       manager.normalizeRuntimeInputs({ contents: [] }, 'anthropic').resolved
@@ -251,7 +251,7 @@ describe('ProviderManager admission fallback and isolation', () => {
     const config = createRuntimeConfigStub(settingsService, {
       getModel: () => '',
     });
-    const manager = new ProviderManager({ settingsService, config });
+    const manager = new ProviderManager(settingsService, config);
     expect(() =>
       manager.normalizeRuntimeInputs(
         { contents: [], resolved: { model: '' } },
@@ -265,7 +265,7 @@ describe('ProviderManager admission fallback and isolation', () => {
     const config = createRuntimeConfigStub(settingsService, {
       getModel: () => '',
     });
-    const manager = new ProviderManager({ settingsService, config });
+    const manager = new ProviderManager(settingsService, config);
     expect(() =>
       manager.normalizeRuntimeInputs(
         { contents: [], resolved: { model: 'explicit-model', baseURL: '' } },
@@ -283,7 +283,7 @@ describe('ProviderManager runtime replacement ownership', () => {
     selected.setProviderSetting('openai', 'model', 'selected-model');
     const foreign = new SettingsService();
     foreign.setProviderSetting('openai', 'model', 'foreign-model');
-    const manager = new ProviderManager({ settingsService: initial });
+    const manager = new ProviderManager(initial);
     manager.registerProvider(new HarnessProvider());
     manager.setActiveProvider('openai');
 
@@ -303,10 +303,7 @@ describe('ProviderManager runtime replacement ownership', () => {
   it('clears the former Config when replacement explicitly has no Config', () => {
     const selected = new SettingsService();
     const formerConfig = createRuntimeConfigStub(selected);
-    const manager = new ProviderManager({
-      settingsService: selected,
-      config: formerConfig,
-    });
+    const manager = new ProviderManager(selected, formerConfig);
 
     manager.setRuntimeContext(
       {
@@ -328,7 +325,7 @@ describe('ProviderManager runtime replacement ownership', () => {
 describe('ProviderManager Config binding', () => {
   it('does not synthesize a runtime when binding Config', () => {
     const selected = new SettingsService();
-    const manager = new ProviderManager({ settingsService: selected });
+    const manager = new ProviderManager(selected);
     manager.setConfig(createRuntimeConfigStub(selected));
 
     expect(() => manager.prepareStatelessProviderInvocation()).toThrow(
@@ -344,14 +341,10 @@ describe('ProviderManager stateless preparation ownership', () => {
     const foreign = new SettingsService();
     foreign.setProviderSetting('openai', 'model', 'foreign-model');
     const config = createRuntimeConfigStub(selected);
-    const manager = new ProviderManager({
-      settingsService: selected,
-      config,
-      runtime: {
-        settingsService: foreign,
-        runtimeId: 'same-label',
-        metadata: { owner: 'selected' },
-      },
+    const manager = new ProviderManager(selected, config, {
+      settingsService: foreign,
+      runtimeId: 'same-label',
+      metadata: { owner: 'selected' },
     });
     manager.registerProvider(new HarnessProvider());
 
@@ -365,7 +358,7 @@ describe('ProviderManager stateless preparation ownership', () => {
   it('requires an explicitly selected runtime before preparation', () => {
     const selected = new SettingsService();
     const config = createRuntimeConfigStub(selected);
-    const manager = new ProviderManager({ settingsService: selected, config });
+    const manager = new ProviderManager(selected, config);
 
     expect(() => manager.prepareStatelessProviderInvocation()).toThrow(
       'runtime',
@@ -374,9 +367,9 @@ describe('ProviderManager stateless preparation ownership', () => {
 
   it('requires Config from the manager owner before preparation', () => {
     const selected = new SettingsService();
-    const manager = new ProviderManager({
+    const manager = new ProviderManager(selected, undefined, {
       settingsService: selected,
-      runtime: { settingsService: selected, runtimeId: 'same-label' },
+      runtimeId: 'same-label',
     });
 
     expect(() => manager.prepareStatelessProviderInvocation()).toThrow(
@@ -398,14 +391,12 @@ describe('ProviderManager selected workspace binding', () => {
       getTargetDir: () => '/workspace-former',
     });
     const manager = new ProviderManager(
+      selected.settingsService,
+      selected.config,
       {
         settingsService: selected.settingsService,
-        config: selected.config,
-        runtime: {
-          settingsService: selected.settingsService,
-          config: former,
-          runtimeId: 'same-label',
-        },
+        config: former,
+        runtimeId: 'same-label',
       },
       undefined,
       selected.settingsOwner,

@@ -133,10 +133,7 @@ function configureProvider(
   name: string,
   runtimeSettings: { store: SettingsService; owner: SessionSettingsOwner },
 ): ProviderManager {
-  const manager = new ProviderManager({
-    config,
-    settingsService: runtimeSettings.store,
-  });
+  const manager = new ProviderManager(runtimeSettings.store, config);
   const provider: IProvider = {
     name,
     getDefaultModel: () => PLACEHOLDER_MODEL,

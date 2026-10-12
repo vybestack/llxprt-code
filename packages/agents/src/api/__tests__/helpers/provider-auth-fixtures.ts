@@ -37,9 +37,7 @@ export function makeFakeConfigForOauth(
     refreshMethod: undefined,
     contentProviderManager: undefined,
   };
-  const manager = new ProviderManager({
-    settingsService: new SettingsService(),
-  });
+  const manager = new ProviderManager(new SettingsService());
   if (hasActiveProvider) {
     manager.registerProvider(new FakeProvider(fixturePath, process.cwd()));
     manager.setActiveProvider('fake');

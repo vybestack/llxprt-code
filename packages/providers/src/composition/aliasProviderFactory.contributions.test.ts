@@ -63,10 +63,7 @@ function makeAliasEntry(
 }
 
 function makeManager(): ProviderManager {
-  return new ProviderManager({
-    settingsService: new SettingsService() as never,
-    runtimeId: 'issue2758-contributions-test',
-  });
+  return new ProviderManager(new SettingsService() as never);
 }
 
 /**
