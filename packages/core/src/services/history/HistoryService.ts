@@ -235,10 +235,6 @@ export class HistoryService extends HistoryServiceReads {
     });
   }
 
-  getContentOrigin(content: IContent): object | undefined {
-    return this.contentOrigins.get(content);
-  }
-
   /**
    * Stage the candidate's rows against the live journal and return the commit.
    * Preparing changes nothing visible; the returned function flips rows and

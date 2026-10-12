@@ -625,13 +625,14 @@ describe('SessionRecordingService queue retention: holds a materializing commit 
     expect(bounded.getPendingRecordCount()).toBe(2);
     expect(bounded.getPendingByteCount()).toBe(headerBytes + fillerBytes);
     // And nothing was appended for it: the gate held the only drain, so no
-    // journal byte exists yet — the file itself is only created by the
-    // first append.
+    // journal byte exists yet — materialization only claims the unique
+    // file name with an empty file.
     const boundedFile = bounded.getFilePath();
     if (boundedFile === null) {
       throw new Error('filler admission never materialized a session file');
     }
-    expect(existsSync(boundedFile)).toBe(false);
+    expect(existsSync(boundedFile)).toBe(true);
+    expect(readFileSync(boundedFile, 'utf8')).toBe('');
 
     gate.release();
     requireWatermarks(await Promise.all([fillerCommit, contentCommit]));

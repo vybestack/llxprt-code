@@ -1,6 +1,6 @@
 import { forbidHistoryMaterializationForTest } from '@vybestack/llxprt-code-test-utils/core/history-materialization-test-guard.js';
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it, spyOn, vi } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -10,10 +10,7 @@ import { ProviderManager } from '@vybestack/llxprt-code-providers/ProviderManage
 import { OpenAIProvider } from '@vybestack/llxprt-code-providers/openai/OpenAIProvider.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { dumpcontextCommand } from './dumpcontextCommand.js';
-
-void vi.mock('../contexts/RuntimeContext.js', () => ({
-  getRuntimeApi: () => ({}),
-}));
+import { bindDumpManager } from './__tests__/dumpcontext-owner-fixture.js';
 
 class StreamingHistory extends HistoryService {
   constructor(options?: ConstructorParameters<typeof HistoryService>[0]) {
@@ -48,13 +45,16 @@ describe('dumpcontext real streaming command', () => {
         });
         manager.registerProvider(new OpenAIProvider('unused-test-key'));
         manager.setActiveProvider('openai');
-        const context = createMockCommandContext();
-        if (context.services.config === null)
-          throw new Error('Missing test config');
-        context.services.config = Object.assign(context.services.config, {
-          getAgentClient: () => ({ getHistoryService: () => history }),
-          getProviderManager: () => manager,
+        const context = createMockCommandContext({
+          services: {
+            agent: { agentClient: { getHistoryService: () => history } },
+          },
         });
+        bindDumpManager(
+          context,
+          () => ({}),
+          () => manager,
+        );
         if (dumpcontextCommand.action === undefined)
           throw new Error('Missing dump command');
         const result = await dumpcontextCommand.action(context, 'now');

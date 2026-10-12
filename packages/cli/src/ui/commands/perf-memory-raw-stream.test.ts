@@ -19,11 +19,10 @@ for (const size of [512, 8192]) {
         const expected = formatHistoryMemoryBreakdown(
           Array.from({ length: size }, (_, index) => suffixRow(index)),
         );
-        const context = createMockCommandContext();
-        if (context.services.config === null)
-          throw new Error('Missing test config');
-        context.services.config = Object.assign(context.services.config, {
-          getAgentClient: () => ({ getHistoryService: () => history }),
+        const context = createMockCommandContext({
+          services: {
+            agent: { agentClient: { getHistoryService: () => history } },
+          },
         });
         const memory = createPerfCommand().subCommands?.find(
           (command) => command.name === 'memory',

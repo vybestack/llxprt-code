@@ -10,10 +10,7 @@ import { Config as PackageConfig } from '@vybestack/llxprt-code-core/config/conf
 describe('CLI native test Core source resolution', () => {
   it('loads the current recording implementation through the Core root', () => {
     expect(
-      typeof Reflect.get(
-        RecordingIntegration.prototype,
-        'rememberRecordedHistory',
-      ),
+      typeof Reflect.get(RecordingIntegration.prototype, 'subscribeToJournal'),
     ).toBe('function');
   });
 

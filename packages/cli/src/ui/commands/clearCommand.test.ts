@@ -164,7 +164,7 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
     expect(pending).toStrictEqual(running);
     expect(agent.session.getSessionId()).toBe(oldId);
     expect(
-      (await agent.getHistory()).flatMap((item) => item.blocks),
+      (await agent.session.getHistory()).flatMap((item) => item.blocks),
     ).toContainEqual({ type: 'text', text: 'old question' });
     expect(uiEvents).not.toContain('clear');
     expect(uiEvents).not.toContain('tokens:0');
@@ -184,7 +184,7 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
     expect(hooks[1].session_id).not.toBe(oldId);
     expect(hooks[1].session_id).toBe(agent.session.getSessionId());
     expect(built.config.getSessionId()).toBe(hooks[1].session_id);
-    expect(await agent.getHistory()).toStrictEqual([]);
+    expect(await agent.session.getHistory()).toStrictEqual([]);
     expect(uiEvents).toContain('SessionStart feedback');
     expect(uiEvents.slice(-2)).toStrictEqual(['tokens:0', 'clear']);
   });
@@ -209,7 +209,7 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
     const history = await agent.session.resumeSession(result.sessionRef);
     expect(history.id).toBe(oldId);
     expect(
-      (await agent.getHistory()).flatMap((item) => item.blocks),
+      (await agent.session.getHistory()).flatMap((item) => item.blocks),
     ).toStrictEqual([
       { type: 'text', text: 'old question' },
       { type: 'text', text: 'old answer' },
@@ -227,7 +227,9 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
       },
     });
     const resumed = await setupOwnerSessionRecording(request, agent, {}, null);
-    expect(resumed?.flatMap((item) => item.blocks)).toStrictEqual([
+    if (resumed === null) throw new Error('Expected resumed rows');
+    const resumedRows = await Array.fromAsync(resumed.streamRows());
+    expect(resumedRows.flatMap((item) => item.blocks)).toStrictEqual([
       { type: 'text', text: 'old question' },
       { type: 'text', text: 'old answer' },
     ]);
@@ -240,7 +242,7 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
       await writeFile(join(directory, 'failure'), event);
       await clearAction(context, '');
       expect(agent.session.getSessionId()).not.toBe(oldId);
-      expect(await agent.getHistory()).toStrictEqual([]);
+      expect(await agent.session.getHistory()).toStrictEqual([]);
       expect(
         (await inputs()).map((input) => input.hook_event_name),
       ).toStrictEqual(['SessionEnd', 'SessionStart']);
@@ -265,7 +267,7 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
     });
     await clearAction(explicit, '');
     expect(agent.session.getSessionId()).not.toBe(oldId);
-    expect(await agent.getHistory()).toStrictEqual([]);
+    expect(await agent.session.getHistory()).toStrictEqual([]);
     expect(uiEvents).toContain('SessionStart feedback');
   });
 });

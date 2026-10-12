@@ -122,7 +122,7 @@ async function writeSessionMediaPackage(
     source: recordingPath,
     label: 'Session recording',
     outputPath: stagedRecording,
-    exportAdmission: { service: admission, ledger },
+    exportAdmission: { mediaStore, service: admission, ledger },
     onContents,
   });
   const persistedStateFiles = await exportPersistedStates({
@@ -130,6 +130,7 @@ async function writeSessionMediaPackage(
     stateDirectory: join(temporaryDirectory, 'state'),
     sessionId: recording.sessionId,
     projectHash,
+    mediaStore,
     admission,
     ledger,
     onContents,

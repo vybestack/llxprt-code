@@ -5,7 +5,6 @@
  */
 import { describe, expect, it } from 'bun:test';
 import { replayableContents } from '../utils/collectContents.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   normalizeChatCompletionOptions,
   type NormalizerContext,
@@ -70,16 +69,11 @@ describe('flat tool normalization and runtime metadata integration', () => {
     ).toHaveLength(1);
   });
 
-  it('carries runtime hook-disabled tool metadata without an injected runtime', () => {
-    const settingsService = new SettingsService();
+  it('carries hook-disabled tool metadata supplied on the request options', () => {
     const options = {
       contents: replayableContents([]),
       tools: [],
-      runtime: {
-        settingsService,
-        metadata: { conversationLogEmptyTools: true, routing: 'runtime' },
-      },
-      metadata: { routing: 'explicit' },
+      metadata: { conversationLogEmptyTools: true, routing: 'explicit' },
     };
     const normalized = normalizeChatCompletionOptions(options, tools, context);
     expect(normalized.metadata).toStrictEqual({
@@ -88,10 +82,9 @@ describe('flat tool normalization and runtime metadata integration', () => {
       routing: 'explicit',
     });
     expect(normalized.tools).toStrictEqual([]);
-    expect(options.metadata).toStrictEqual({ routing: 'explicit' });
-    expect(options.runtime.metadata).toStrictEqual({
+    expect(options.metadata).toStrictEqual({
       conversationLogEmptyTools: true,
-      routing: 'runtime',
+      routing: 'explicit',
     });
   });
 });

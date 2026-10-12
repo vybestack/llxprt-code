@@ -165,12 +165,6 @@ export abstract class HistoryServiceCore
    */
   protected spanWindow = new SpanWindow();
 
-  /**
-   * Origin of each content object published through `add`. Weak so the
-   * facade never retains context-sized state (#854); contents published
-   * through journal batches are row-streamed and carry no object identity.
-   */
-  protected contentOrigins = new WeakMap<IContent, object>();
   protected totalTokens: number = 0;
   protected baseTokenOffset: number = 0;
   protected tokenizerCache = new Map<string, ITokenizer>();
@@ -698,8 +692,6 @@ export abstract class HistoryServiceCore
       try {
         this.emit('contentAdded', content, origin);
         this.mediaOwner?.adopt([content]);
-        if (origin !== undefined) this.contentOrigins.set(content, origin);
-        else this.contentOrigins.delete(content);
       } catch (error: unknown) {
         // Roll back the insertion with a compensating rewind. The consumed
         // chronology sequence number is intentionally NOT reclaimed: sequence
@@ -777,7 +769,7 @@ export abstract class HistoryServiceCore
 
   addBatch(
     contents: readonly IContent[],
-    modelName?: string,
+    modelName = this.activeTokenizationModel,
     options: HistoryBatchOptions = {},
   ): Promise<void> {
     if (contents.length === 0)
@@ -787,7 +779,7 @@ export abstract class HistoryServiceCore
 
   replaceBatch(
     contents: readonly IContent[],
-    modelName?: string,
+    modelName = this.activeTokenizationModel,
     options: HistoryBatchOptions = {},
   ): Promise<void> {
     return this.detachedValues.replace(contents, modelName, {
@@ -1065,7 +1057,7 @@ export abstract class HistoryServiceCore
    */
   async estimateTokensForContents(
     contents: Iterable<IContent> | AsyncIterable<IContent>,
-    modelName = this.activeTokenizationModel,
+    modelName?: string,
     signal?: AbortSignal,
   ): Promise<number> {
     return estimateTokensForContentsImpl(

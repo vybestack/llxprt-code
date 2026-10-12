@@ -496,7 +496,7 @@ for (const count of [512, 8192])
   });
 
 describe('private pending fold empty-source and ownership boundaries', () => {
-  it('captures an external first write queued before the journal file exists', () =>
+  it('captures an external first write queued before the journal file has any rows', () =>
     useFixture(async (root) => {
       const recorder = recording(root, 'queued-first-write');
       const store = new HistoryJournalStore(recorder);
@@ -505,7 +505,7 @@ describe('private pending fold empty-source and ownership boundaries', () => {
         if (first === null) throw new Error('First record not queued');
         const journalPath = recorder.getFilePath();
         if (journalPath === null) throw new Error('No queued journal path');
-        expect(fs.existsSync(journalPath)).toBe(false);
+        expect(fs.statSync(journalPath).size).toBe(0);
         expect(store.materialize()).toStrictEqual([]);
         const snapshot = store.capturePendingFold();
         const fold = await foldPendingRows(snapshot, { scratchRoot: root });

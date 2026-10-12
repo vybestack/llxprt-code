@@ -4,35 +4,24 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import {
   SessionRecordingService,
   resumeSession,
   type IContent,
   type ResumeResult,
 } from '@vybestack/llxprt-code-core';
-import {
-  buildAgent,
-  internalConfig,
-} from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
+import { buildAgent } from '../../../agents/src/api/__tests__/helpers/agentHarness.js';
 import {
   restoreResumeBoot,
   admitResumeHistorySource,
 } from './restoreResumeBoot.js';
-import { AgentClient } from '../../../agents/src/core/client.js';
+import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { bindClientTokenization } from '../../../agents/src/session/session-client-binding.js';
-import { requireMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { accountingFactory } from '@vybestack/llxprt-code-core/services/history/__tests__/support/token-accounting-stream-test-helpers.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
 import { createRowCounters } from '@vybestack/llxprt-code-core/recording/journalCounters.js';
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-
-const fixturePaths = installTestWorkspacePaths({
-  targetDir: process.cwd(),
-  isTrusted: () => true,
-});
 
 function phase(
   size: number,
@@ -71,7 +60,7 @@ async function bodyDigest(rows: AsyncIterable<IContent>): Promise<{
 async function withDiskResume(
   size: number,
   run: (
-    client: AgentClient,
+    client: AgentClientContract,
     result: ResumeResult,
     owners: RowOwnership,
   ) => Promise<void>,
@@ -103,18 +92,11 @@ async function withDiskResume(
   if (!result.ok) throw new Error(result.error);
   phase(size, 'opened');
   const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-  const client = new AgentClient(
-    internalConfig(agent),
-    createAgentRuntimeState({
-      runtimeId: randomUUID(),
-      provider: 'fake',
-      model: 'fake-model',
-    }),
-    () => undefined,
-    requireMediaStore(agent.agentClient),
-    fixturePaths(),
+  const client = await agent.sessionClient.createDetachedAgentClient();
+  bindClientTokenization(
+    client,
+    accountingFactory((text) => text.length),
   );
-  bindClientTokenization(client, accountingFactory((text) => text.length));
   try {
     await run(client, result, owners);
   } finally {

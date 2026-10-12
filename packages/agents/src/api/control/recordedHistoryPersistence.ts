@@ -66,21 +66,7 @@ export class AgentSessionPersistence {
 }
 import type { SemanticPurgeRowSource } from '@vybestack/llxprt-code-core/services/history/semantic-purge-disk-rows.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { SemanticMediaPurgeFrontier } from '@vybestack/llxprt-code-core/services/history/semantic-media-purge.js';
-export function seedOwnerRecording(
-  recording: SessionRecordingService,
-  history: readonly IContent[],
-  historyService: HistoryService | null,
-  owner: object,
-): void {
-  for (const content of history) {
-    const origin = historyService?.getContentOrigin(content);
-    if (origin === undefined || origin === owner)
-      recording.recordContent(content);
-  }
-}
-
 export async function persistSemanticMediaPurge(
   recording: SessionRecordingService,
   candidate: SemanticPurgeRowSource,

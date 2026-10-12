@@ -54,9 +54,11 @@ async function pausedRestore(
   active = false,
 ): Promise<boolean> {
   return withCheckpoint(1, active, async (fixture, dir) => {
-    fixture.history.setTokenizerFactory(
-      accountingFactory((text) => text.length),
-    );
+    const tokenizer = accountingFactory((text) => text.length);
+    fixture.history.setTokenizerFactory(tokenizer);
+    // A restore into an inactive chat builds a replacement history from the
+    // client's bound tokenization, so the client must count the same way.
+    fixture.client.bindTokenization?.(tokenizer.getTokenizer, tokenizer);
     fixture.history.setBaseTokenOffset(0);
     await fixture.history.recalculateTokens();
     const previousTokens = 2050;

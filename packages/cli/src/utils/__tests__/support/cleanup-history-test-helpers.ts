@@ -190,7 +190,7 @@ export async function withCleanupHistory<T>(
         const config = internalConfig(agent);
         const client = agent.agentClient;
         service.setTokenizerFactory(accountingFactory((text) => text.length));
-        internalSettingsOwner(agent).writeSessionOverride(
+        internalSettingsOwner(agent).writeNamedParameter(
           'context-limit',
           100_000_000,
         );

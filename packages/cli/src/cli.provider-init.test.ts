@@ -368,9 +368,8 @@ describe('cli main provider initialization', () => {
       sessionId: freshId,
       sessionIdentityOwnership: 'config',
     });
-    const client = owner.agentClient;
     if (failRestore) {
-      vi.spyOn(client, 'setHistory').mockRejectedValueOnce(
+      vi.spyOn(owner.session, 'resume').mockRejectedValueOnce(
         new Error('restore failed on purpose'),
       );
     }

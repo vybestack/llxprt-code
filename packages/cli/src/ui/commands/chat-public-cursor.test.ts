@@ -29,7 +29,7 @@ for (const size of [512, 8192]) {
           );
           expect(result).toMatchObject({
             messageType: 'info',
-            content: `Chat Debug Information:\n• Chat initialized: true\n• History entries: ${size}\n• Current model: unavailable\n• Recording: not active`,
+            content: `Chat Debug Information:\n• Chat initialized: true\n• History entries: ${size}\n• Current model: public-cursor-model\n• Recording: not active`,
           });
           expect(reader.snapshot().peakRows).toBe(1);
           expect(reader.snapshot().liveRows).toBe(0);

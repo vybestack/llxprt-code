@@ -99,7 +99,7 @@ export function publicCommandContext(
   return createMockCommandContext({
     signal,
     services: {
-      config: {},
+      config: { getModel: () => 'public-cursor-model' },
       agent: {
         agentClient: {
           hasChatInitialized: () => true,

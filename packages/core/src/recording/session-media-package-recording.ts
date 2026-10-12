@@ -7,6 +7,8 @@
 import { open, type FileHandle } from 'node:fs/promises';
 import type { IContent } from '../services/history/IContent.js';
 import type { MediaAdmissionService } from '../storage/media-admission-service.js';
+import type { LocalMediaStore } from '../storage/local-media-store.js';
+import { hydrateRecordedMedia } from '../storage/recorded-media-transfer.js';
 import type { ReservationLedger } from './session-media-package-ledger.js';
 import {
   streamBoundedLines,
@@ -30,6 +32,7 @@ const RECORDING_LIMITS = {
 
 /** Export-side admission: media is admitted and reserved before packaging. */
 export interface ExportAdmission {
+  readonly mediaStore: LocalMediaStore;
   readonly service: MediaAdmissionService;
   readonly ledger: ReservationLedger;
 }
@@ -79,6 +82,7 @@ async function admitForExport(
     turnId: `session-package-line-${lineNumber}`,
     source: 'session-package-export',
   };
+  await hydrateRecordedMedia(admission.mediaStore, contents);
   const admitted =
     mode === 'content'
       ? [await admission.service.admitContent(contents[0], context)]

@@ -12,6 +12,8 @@ import type {
   MediaReferenceBlock,
 } from '../services/history/IContent.js';
 import type { MediaAdmissionService } from '../storage/media-admission-service.js';
+import type { LocalMediaStore } from '../storage/local-media-store.js';
+import { hydrateRecordedMedia } from '../storage/recorded-media-transfer.js';
 import { collectMediaReferences } from '../storage/media-reference-lifecycle.js';
 import type { ReservationLedger } from './session-media-package-ledger.js';
 import {
@@ -189,6 +191,7 @@ export interface ExportStateContext {
   readonly stateDirectory: string;
   readonly sessionId: string;
   readonly projectHash: string;
+  readonly mediaStore: LocalMediaStore;
   readonly admission: MediaAdmissionService;
   readonly ledger: ReservationLedger;
   readonly onContents: (contents: readonly IContent[]) => void;
@@ -262,6 +265,7 @@ async function exportPersistedState(
     turnId: `session-package-persisted-${stateIndex}`,
     source: 'session-package-export',
   };
+  await hydrateRecordedMedia(context.mediaStore, history);
   const admitted = await context.admission.admitContents(
     history,
     admissionContext,
