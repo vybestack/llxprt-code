@@ -94,10 +94,13 @@ describe('loggers', () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
-  function exportedRecords(): Array<{
-    body?: unknown;
-    attributes: Record<string, unknown>;
-  }> {
+  async function exportedRecords(): Promise<
+    Array<{
+      body?: unknown;
+      attributes: Record<string, unknown>;
+    }>
+  > {
+    await telemetry.flush();
     if (!existsSync(outfile)) return [];
     return readFileSync(outfile, 'utf8')
       .split('\n')
@@ -201,7 +204,7 @@ describe('loggers', () => {
 
       logToolCall(mockConfig, event, telemetry);
 
-      expect(exportedRecords()).toContainEqual({
+      expect(await exportedRecords()).toContainEqual({
         body: 'Tool call: test-function. Decision: accept. Success: true. Duration: 100ms.',
         attributes: {
           'session.id': 'test-session-id',
@@ -312,7 +315,7 @@ describe('loggers', () => {
 
       logToolCall(mockConfig, event, telemetry);
 
-      expect(exportedRecords()).toContainEqual({
+      expect(await exportedRecords()).toContainEqual({
         body: 'Tool call: test-function. Decision: reject. Success: false. Duration: 100ms.',
         attributes: {
           'session.id': 'test-session-id',
@@ -421,7 +424,7 @@ describe('loggers', () => {
 
       logToolCall(mockConfig, event, telemetry);
 
-      expect(exportedRecords()).toContainEqual({
+      expect(await exportedRecords()).toContainEqual({
         body: 'Tool call: test-function. Decision: modify. Success: true. Duration: 100ms.',
         attributes: {
           'session.id': 'test-session-id',
@@ -529,7 +532,7 @@ describe('loggers', () => {
 
       logToolCall(mockConfig, event, telemetry);
 
-      expect(exportedRecords()).toContainEqual({
+      expect(await exportedRecords()).toContainEqual({
         body: 'Tool call: test-function. Success: true. Duration: 100ms.',
         attributes: {
           'session.id': 'test-session-id',
@@ -636,7 +639,7 @@ describe('loggers', () => {
 
       logToolCall(mockConfig, event, telemetry);
 
-      expect(exportedRecords()).toContainEqual({
+      expect(await exportedRecords()).toContainEqual({
         body: 'Tool call: test-function. Success: false. Duration: 100ms.',
         attributes: {
           'session.id': 'test-session-id',
@@ -757,7 +760,7 @@ describe('loggers', () => {
 
       logToolCall(mockConfig, event, telemetry);
 
-      expect(exportedRecords()).toContainEqual({
+      expect(await exportedRecords()).toContainEqual({
         body: 'Tool call: mock_mcp_tool. Success: true. Duration: 100ms.',
         attributes: {
           'session.id': 'test-session-id',
