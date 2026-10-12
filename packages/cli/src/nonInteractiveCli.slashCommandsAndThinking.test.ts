@@ -1,5 +1,9 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
-import { runHeadlessPolicyFixture } from './__tests__/headless-policy-fixture.js';
+import {
+  makeHeadlessConfig,
+  runHeadlessPolicyFixture,
+} from './__tests__/headless-policy-fixture.js';
 import { makeBootstrapProfileArgs } from './test-utils/bootstrap-config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
@@ -7,7 +11,6 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
@@ -17,10 +20,7 @@ import {
   DebugLogger,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import {
-  OpenAIProvider,
-  ProviderManager,
-} from '@vybestack/llxprt-code-providers';
+import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import {} from '@vybestack/llxprt-code-providers/runtime.js';
 import { beginCliRuntimeRegistration } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
 import { setCommand } from './ui/commands/setCommand.js';
@@ -74,32 +74,13 @@ type ConfigWithActivationParams = Config & {
   _bootstrapArgs?: BootstrapProfileArgs;
 };
 
-function makeConfig(sessionId: string): {
-  config: Config;
-  manager: ProviderManager;
-  settingsService: SettingsService;
-  settingsOwner: SessionSettingsOwner;
-} {
-  const settingsService = new SettingsService();
-  const config = new Config({
-    cwd: process.cwd(),
-    targetDir: process.cwd(),
-    debugMode: false,
-    sessionId,
-    model: PLACEHOLDER_MODEL,
-    provider: 'openai',
-  });
-  const settingsOwner = new SessionSettingsOwner(settingsService);
-  settingsOwner.bindTelemetry(config);
-  settingsOwner.initializeProviderSelection('openai', PLACEHOLDER_MODEL);
-  const manager = new ProviderManager({ config, settingsService });
-  manager.registerProvider(new OpenAIProvider(undefined));
-  manager.setActiveProvider('openai');
-  configureProviderRuntimeFactories(config, manager);
-  fixtureRoots.push({ config, manager, settingsOwner });
-  return { config, manager, settingsOwner, settingsService };
+function makeConfig(sessionId: string): ReturnType<typeof makeHeadlessConfig> {
+  const root = makeHeadlessConfig(sessionId);
+  fixtureRoots.push(root);
+  return root;
 }
 
+let mockCredentialAuthority: CredentialAuthority;
 let mockProviderManager: ProviderManager;
 let mockRuntimeSettings: {
   owner: SessionSettingsOwner;
@@ -115,7 +96,7 @@ function runWithMcpBus(
   params: Parameters<typeof runNonInteractive>[0],
 ): Promise<void> {
   return runHeadlessPolicyFixture(
-    params,
+    { ...params, credentialAuthority: mockCredentialAuthority },
     mockRuntimeSettings,
     mockProviderManager,
   );
@@ -210,6 +191,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     agentState.events = [{ type: 'done', reason: 'stop' }];
 
     const builtOwner = makeConfig('test-session');
+    mockCredentialAuthority = builtOwner.credentialAuthority;
     mockConfig = builtOwner.config;
     mockProviderManager = builtOwner.manager;
     mockRuntimeSettings = {

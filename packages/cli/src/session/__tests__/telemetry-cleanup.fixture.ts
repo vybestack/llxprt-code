@@ -12,7 +12,10 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import {
+  OAuthManager,
+  CredentialAuthority,
+} from '@vybestack/llxprt-code-providers/auth.js';
 import { FakeProvider } from '@vybestack/llxprt-code-providers';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { MemoryTokenStore } from '../../../../agents/src/api/__tests__/helpers/provider-auth-fixtures.js';
@@ -90,6 +93,7 @@ export async function runCleanupFailure(primary: boolean): Promise<void> {
   let failure: unknown;
   try {
     await runNonInteractive({
+      credentialAuthority: new CredentialAuthority(),
       config: cli.config,
       settings,
       input: 'exercise public CLI cleanup',

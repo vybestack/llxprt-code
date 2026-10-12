@@ -1,3 +1,4 @@
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
@@ -109,6 +110,7 @@ async function disposeOwnedConfigs(): Promise<void> {
 }
 
 function makeUnconfiguredConfig(outputFormat?: OutputFormat): {
+  credentialAuthority: CredentialAuthority;
   config: Config;
   runtimeSettings: { store: SettingsService; owner: SessionSettingsOwner };
 } {
@@ -125,18 +127,26 @@ function makeUnconfiguredConfig(outputFormat?: OutputFormat): {
   const store = new SettingsService();
   const owner = new SessionSettingsOwner(store);
   ownedConfigs.push({ config, directory, owner });
-  return { config, runtimeSettings: { store, owner } };
+  return {
+    credentialAuthority: new CredentialAuthority(),
+    config,
+    runtimeSettings: { store, owner },
+  };
 }
 
 function configureProvider(
   config: Config,
   name: string,
+  credentialAuthority: CredentialAuthority,
   runtimeSettings: { store: SettingsService; owner: SessionSettingsOwner },
 ): ProviderManager {
-  const manager = new ProviderManager({
-    config,
-    settingsService: runtimeSettings.store,
-  });
+  const manager = new ProviderManager(
+    {
+      config,
+      settingsService: runtimeSettings.store,
+    },
+    credentialAuthority,
+  );
   const provider: IProvider = {
     name,
     getDefaultModel: () => PLACEHOLDER_MODEL,
@@ -375,14 +385,17 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
   });
 
   it('passes through when a provider IS explicitly configured', async () => {
-    const { config, runtimeSettings } = makeUnconfiguredConfig();
+    const { config, runtimeSettings, credentialAuthority } =
+      makeUnconfiguredConfig();
     const providerManager = configureProvider(
       config,
       'openai',
+      credentialAuthority,
       runtimeSettings,
     );
 
     await runNonInteractive({
+      credentialAuthority,
       runtimeSettings,
       config,
       settings: makeSettings(),
@@ -396,14 +409,17 @@ describe('runNonInteractive: unconfigured provider gate (#2481)', () => {
 
   it('passes through when LLXPRT_DEFAULT_PROVIDER selects a provider', async () => {
     process.env.LLXPRT_DEFAULT_PROVIDER = 'anthropic';
-    const { config, runtimeSettings } = makeUnconfiguredConfig();
+    const { config, runtimeSettings, credentialAuthority } =
+      makeUnconfiguredConfig();
     const providerManager = configureProvider(
       config,
       'anthropic',
+      credentialAuthority,
       runtimeSettings,
     );
 
     await runNonInteractive({
+      credentialAuthority,
       runtimeSettings,
       config,
       settings: makeSettings(),
