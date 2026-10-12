@@ -266,8 +266,6 @@ describe('MCP instruction ownership', () => {
               config.getExcludeTools() ?? [],
             ),
           providerRuntime: createProviderRuntimeContext({
-            config,
-
             runtimeId: state.runtimeId,
           }),
           contentGeneratorConfig:

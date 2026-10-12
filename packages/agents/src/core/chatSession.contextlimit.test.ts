@@ -86,7 +86,6 @@ describe('ChatSession Context Limit Enforcement', () => {
     // Set up provider runtime context
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
-      config: mockConfig,
     };
 
     // Create mock ContentGenerator

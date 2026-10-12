@@ -112,7 +112,6 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
 
       // Verify ChatSession.getConfig() returns a config that provides the setting
       localProviderRuntime = createProviderRuntimeContext({
-        config: localConfig,
         runtimeId: 'test.runtime',
         metadata: { source: 'timeout-test' },
       });
@@ -184,7 +183,6 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       localSettingsService.set('stream-idle-timeout-ms', 0);
 
       localProviderRuntime = createProviderRuntimeContext({
-        config: localConfig,
         runtimeId: 'test.runtime',
         metadata: { source: 'disabled-test' },
       });
@@ -255,7 +253,6 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       localConfig = new Config(createConfigParams(localSettingsService));
       localSettingsService.set('stream-idle-timeout-ms', timeoutMs);
       localProviderRuntime = createProviderRuntimeContext({
-        config: localConfig,
         runtimeId: 'test.runtime.deadlock',
         metadata: { source: 'deadlock-test' },
       });
@@ -436,7 +433,6 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
       localConfig = new Config(createConfigParams(localSettingsService));
       localSettingsService.set('stream-idle-timeout-ms', timeoutMs);
       localProviderRuntime = createProviderRuntimeContext({
-        config: localConfig,
         runtimeId: 'test.runtime.concurrent',
         metadata: { source: 'concurrent-test' },
       });

@@ -127,7 +127,6 @@ ${TEST_USER_MEMORY}`;
 
     // Create call options with runtime context
     const runtime = createProviderRuntimeContext({
-      config,
       runtimeId: 'test-runtime-api-key',
     });
 
@@ -195,7 +194,6 @@ ${TEST_USER_MEMORY}`;
     );
 
     const runtime1 = createProviderRuntimeContext({
-      config,
       runtimeId: 'test-runtime-switch-1',
     });
 
@@ -259,7 +257,7 @@ ${TEST_USER_MEMORY}`;
     );
 
     const runtime2 = createProviderRuntimeContext({
-      config, // Same config
+      // Same config
       runtimeId: 'test-runtime-switch-2',
     });
 

@@ -90,7 +90,6 @@ export function createProviderWithRuntime<P>(
 ): ProviderWithRuntimeResult<P> {
   const settingsService = options.settingsService ?? new SettingsService();
   const runtime = createProviderRuntimeContext({
-    config: options.config,
     runtimeId: options.runtimeId ?? 'test.provider.runtime',
     metadata: {
       source: 'test-utils#createProviderWithRuntime',
@@ -144,7 +143,6 @@ export function initializeTestProviderRuntime(
     ...(options.configOverrides ?? {}),
   });
   const runtime = createProviderRuntimeContext({
-    config,
     runtimeId:
       options.runtimeId ??
       `test.provider.runtime.${Math.random().toString(36).slice(2, 10)}`,
@@ -297,8 +295,6 @@ export function createChatSessionRuntime(
   });
 
   const config = Object.assign(baseConfig, options.configOverrides ?? {});
-
-  Object.assign(runtime, { config });
 
   return {
     tokenizerFactory,

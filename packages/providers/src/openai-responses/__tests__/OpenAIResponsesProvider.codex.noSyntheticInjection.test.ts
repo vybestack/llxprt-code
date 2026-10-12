@@ -128,7 +128,6 @@ async function captureRequestBody(
 
   const runtime = createProviderRuntimeContext({
     runtimeId: TEST_RUNTIME_ID,
-    config: createRuntimeConfigStub(settings),
   });
 
   const invocation = createRuntimeInvocationContext({

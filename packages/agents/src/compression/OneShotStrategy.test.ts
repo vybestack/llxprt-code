@@ -154,7 +154,6 @@ const noopLogger = {
 } as unknown as Logger;
 
 const testProviderRuntime = {
-  config: undefined,
   runtimeId: 'test-provider-runtime',
   metadata: { source: 'test' },
 };
@@ -177,7 +176,6 @@ function buildContext(
   const defaultProvider = createFakeProvider('default-provider');
   const invocationSettings = new SettingsService();
   const contextProviderRuntime = {
-    config: undefined,
     runtimeId: 'test-provider-runtime',
     metadata: { source: 'test' },
   };

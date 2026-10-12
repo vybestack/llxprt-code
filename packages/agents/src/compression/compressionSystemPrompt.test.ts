@@ -122,7 +122,6 @@ function buildContext(
 ): CompressionContext {
   const invocationSettings = new SettingsService();
   const contextProviderRuntime = {
-    config: overrides.config,
     runtimeId: 'test-provider-runtime',
     metadata: { source: 'test' },
   };

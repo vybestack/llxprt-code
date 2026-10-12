@@ -375,7 +375,6 @@ describe('ProviderManager runtime replacement ownership', () => {
 
     manager.setRuntimeContext(
       {
-        config: formerConfig,
         runtimeId: 'same-label',
       },
       undefined,
@@ -481,9 +480,7 @@ describe('ProviderManager selected workspace binding', () => {
       model: 'workspace-model',
       debugMode: false,
     });
-    const former = createRuntimeConfigStub(selected.settingsService, {
-      getTargetDir: () => '/workspace-former',
-    });
+
     const manager = new ProviderManager(
       undefined,
       undefined,
@@ -492,7 +489,6 @@ describe('ProviderManager selected workspace binding', () => {
       selected.settingsService,
       selected.config,
       {
-        config: former,
         runtimeId: 'same-label',
       },
       undefined,

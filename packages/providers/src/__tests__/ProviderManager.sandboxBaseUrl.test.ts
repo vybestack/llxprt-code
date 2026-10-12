@@ -26,8 +26,6 @@ function createMinimalOptions(
     config: mockConfig,
     runtime: {
       runtimeId: 'test-runtime',
-
-      config: mockConfig,
     },
     resolved: {
       authToken: 'dummy-key',

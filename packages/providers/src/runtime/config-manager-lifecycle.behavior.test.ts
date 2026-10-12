@@ -296,8 +296,6 @@ describe('Config-independent provider owner lifecycle', () => {
       const detached = first.clientRevision;
       a.setRuntimeContext(
         createProviderRuntimeContext({
-          config: right.config,
-
           runtimeId: 'rebound-owner',
         }),
         right.settingsOwner,

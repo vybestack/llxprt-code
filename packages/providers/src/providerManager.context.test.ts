@@ -62,7 +62,7 @@ describe('ProviderManager runtime context', () => {
       undefined,
       undefined,
       settingsService,
-      runtime.config,
+      undefined,
       runtime,
     );
     const provider = createStubProvider('stub-provider');
@@ -98,7 +98,7 @@ describe('ProviderManager runtime context', () => {
       undefined,
       undefined,
       explicitSettings,
-      runtime.config,
+      undefined,
       runtime,
     );
     manager.registerProvider(createStubProvider('explicit-provider'));

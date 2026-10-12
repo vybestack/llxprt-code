@@ -80,7 +80,6 @@ describe('ChatSession runtime context', () => {
     settingsService.set('providers.stub.model', 'stub-model');
 
     providerRuntime = createProviderRuntimeContext({
-      config,
       runtimeId: 'test.runtime',
       metadata: { source: 'chatSession.runtime.test' },
     });
@@ -165,7 +164,7 @@ describe('ChatSession runtime context', () => {
         createSessionSettingsFixture(config).settingsOwner.telemetry,
       ),
       tools: createToolRegistryViewFromRegistry(modelTools()),
-      providerRuntime: { ...providerRuntime, config: undefined },
+      providerRuntime: { ...providerRuntime },
     });
 
     const chat = new ChatSession(
@@ -282,7 +281,7 @@ describe('ChatSession runtime context', () => {
           },
         }),
     };
-    const hookRuntime = { ...providerRuntime, config };
+    const hookRuntime = { ...providerRuntime };
     const view = createAgentRuntimeContext({
       state: runtimeState,
       history: historyService,
@@ -414,7 +413,7 @@ describe('ChatSession runtime context', () => {
       model: config.getModel(),
       sessionId: config.getSessionId(),
     });
-    const hookRuntime = { ...providerRuntime, config };
+    const hookRuntime = { ...providerRuntime };
     const view = createAgentRuntimeContext({
       state: runtimeState,
       history: new HistoryService(),

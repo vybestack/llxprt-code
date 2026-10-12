@@ -462,7 +462,7 @@ describe('ChatSession media history boundaries', () => {
         }),
       ),
       tools: createToolRegistryViewFromRegistry(),
-      providerRuntime: { ...setup.runtime, config: setup.config },
+      providerRuntime: { ...setup.runtime },
       mediaStore: store,
       mediaAdmission: new MediaAdmissionService(store),
     });

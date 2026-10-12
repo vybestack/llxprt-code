@@ -68,6 +68,7 @@ export interface MockAnthropicInstance {
 export interface AnthropicTestSetup {
   provider: AnthropicProvider;
   runtimeContext: ProviderRuntimeContext;
+  config: ReturnType<typeof createRuntimeConfigStub>;
   settingsService: SettingsService;
   buildCallOptions: (
     contents: IContent[],
@@ -94,7 +95,7 @@ export function setupAnthropicProvider(): AnthropicTestSetup {
   );
 
   const { provider, runtime: runtimeContext, settingsService } = result;
-  runtimeContext.config ??= createRuntimeConfigStub(settingsService);
+  const config = createRuntimeConfigStub(settingsService);
 
   // Issue #2616: the runtime context is handed to the provider explicitly via
   // buildCallOptions; no ambient context is installed.
@@ -107,13 +108,14 @@ export function setupAnthropicProvider(): AnthropicTestSetup {
       contents,
       settings: settingsService,
       runtime: runtimeContext,
-      config: runtimeContext.config,
+      config,
       ...overrides,
     });
 
   return {
     provider,
     runtimeContext,
+    config,
     settingsService,
     buildCallOptions,
   };

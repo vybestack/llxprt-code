@@ -128,7 +128,6 @@ async function send(
     },
   };
   const runtime = createProviderRuntimeContext({
-    config,
     runtimeId: 'empty-tools',
   });
   const manager = new TestRuntimeProviderManager(runtime);

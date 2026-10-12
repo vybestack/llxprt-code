@@ -22,7 +22,7 @@ import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/c
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { ChatSession } from '../chatSession.js';
 
@@ -114,8 +114,6 @@ function buildRuntimeContext(
     tools: mockToolsView,
     providerRuntime: {
       runtimeId: 'test-runtime',
-
-      config: createRuntimeConfigStub(new SettingsService()),
     },
   });
 }

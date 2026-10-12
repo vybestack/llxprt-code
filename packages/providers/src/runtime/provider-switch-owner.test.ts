@@ -61,8 +61,6 @@ describe('explicit provider switch ownership', () => {
       settings,
       config,
       createProviderRuntimeContext({
-        config,
-
         runtimeId: 'same-label',
         runtimeKind: 'agent',
       }),

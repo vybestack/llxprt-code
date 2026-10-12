@@ -137,7 +137,6 @@ function createDirectHarness(
   settingsService.set('providers.stub.model', 'stub-model');
 
   const providerRuntime: ProviderRuntimeContext = createProviderRuntimeContext({
-    config,
     runtimeId: 'test.runtime',
     metadata: { source: 'p12.directMessage.characterization' },
   });

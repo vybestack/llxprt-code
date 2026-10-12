@@ -122,7 +122,6 @@ describe('System prompt provider — non-foreground subagent (issue #3176, D5)',
     const config = new Config(createConfigParams(settings));
     const capturedCalls: GenerateChatOptions[] = [];
     const providerRuntime = createProviderRuntimeContext({
-      config,
       runtimeId: 'test.subagent.nonforeground',
     });
     const provider: IProvider = {

@@ -181,7 +181,7 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
       const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
@@ -219,7 +219,7 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
       const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
@@ -258,7 +258,7 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
       const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
@@ -298,7 +298,7 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
       const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
@@ -336,7 +336,7 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
       const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
@@ -374,7 +374,7 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
       const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
@@ -418,7 +418,7 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
       const settings = new SettingsService();
       const config = createConfigStub(false);
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
       const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
@@ -490,7 +490,7 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
       const settings = new SettingsService();
       const config = createConfigStub(true); // Logging ENABLED → logResponseStream path
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
       const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
@@ -528,7 +528,7 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
       const settings = new SettingsService();
       const config = createConfigStub(true); // Logging ENABLED → logResponseStream path
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
       const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
@@ -609,7 +609,7 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
       const settings = new SettingsService();
       const config = createConfigStub(true); // Logging ENABLED → logResponseStream path
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
       const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
@@ -655,7 +655,7 @@ describe('LoggingProviderWrapper Enhanced Metrics', () => {
 
       const settings = new SettingsService();
       const config = createConfigStub(true);
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
       const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(

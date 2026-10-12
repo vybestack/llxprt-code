@@ -98,11 +98,11 @@ describe('runtime context activation wires setRuntimeContext @requirement:REQ-SP
       expect(
         manager.admittedContexts.map((runtime) => ({
           runtimeId: runtime.runtimeId,
-          config: runtime.config,
+          hasConfig: 'config' in runtime,
         })),
       ).toStrictEqual([
-        { runtimeId: 'first-activation', config: undefined },
-        { runtimeId: 'second-activation', config: undefined },
+        { runtimeId: 'first-activation', hasConfig: false },
+        { runtimeId: 'second-activation', hasConfig: false },
       ]);
       expect(() => manager.prepareStatelessProviderInvocation()).not.toThrow();
     } finally {

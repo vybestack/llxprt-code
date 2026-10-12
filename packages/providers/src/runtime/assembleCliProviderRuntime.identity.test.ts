@@ -43,7 +43,7 @@ describe('CLI foreground provider ownership', () => {
       runtimeId: 'config-owner',
     });
     try {
-      expect(bundle.runtime.config).toBeUndefined();
+      expect(bundle.runtime).not.toHaveProperty('config');
       expect(bundle.registration.config).toBe(config);
       const prepare = bundle.providerManager.prepareStatelessProviderInvocation;
       if (prepare === undefined)

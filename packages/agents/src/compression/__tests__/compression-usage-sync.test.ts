@@ -156,7 +156,6 @@ function buildContext(
         },
       },
       providerRuntime: {
-        config: undefined,
         runtimeId: 'test-provider-runtime',
         metadata: { source: 'test' },
       },
@@ -181,7 +180,6 @@ function buildContext(
     resolveProvider: () => {
       const invocationSettings = new SettingsService();
       const runtime = {
-        config: undefined,
         runtimeId: 'test-provider-runtime',
         metadata: { source: 'test' },
       };

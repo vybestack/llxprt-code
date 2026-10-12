@@ -249,7 +249,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
         runtimeSettingsState.oauthManager = { id: 'oauth-manager' };
         return {
           runtime: {
-            config: input.config,
             runtimeId: input.runtimeId,
             metadata: input.metadata,
           },

@@ -52,7 +52,6 @@ function buildConversationManager(model: string): {
   settingsService.set('providers.stub.model', 'stub-model');
 
   const providerRuntime: ProviderRuntimeContext = createProviderRuntimeContext({
-    config,
     runtimeId: 'test.runtime.conversationManager.responseId',
     metadata: { source: 'ConversationManager.responseId.test' },
   });

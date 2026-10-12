@@ -32,7 +32,7 @@ import type {
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { IModel } from '../IModel.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 function makeContent(text: string): IContent {
@@ -48,24 +48,6 @@ function makeContent(text: string): IContent {
  */
 function buildRuntimeContext(): ProviderRuntimeContext {
   return {
-    config: {
-      getTargetDir: () => process.cwd(),
-      getTokenizerFactory: () => undefined,
-      getConversationLogPath: () => '',
-
-      getModel: () => '',
-      getEphemeralSetting: () => undefined,
-      getUserMemory: () => '',
-      getConversationLoggingEnabled: () => false,
-      getRedactionConfig: () => ({
-        redactApiKeys: false,
-        redactCredentials: false,
-        redactFilePaths: false,
-        redactUrls: false,
-        redactEmails: false,
-        redactPersonalInfo: false,
-      }),
-    } as unknown as Config,
     runtimeId: 'prompt-envelope-wrapper-chain-test',
     metadata: {},
   };

@@ -158,7 +158,6 @@ describe('openai-responses-media-resolution', () => {
     settings.setProviderSetting(provider.name, 'model', 'gpt-5.6');
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
-      config,
       runtimeId: 'responses-media-stateful',
     });
     const invocation = createRuntimeInvocationContext({

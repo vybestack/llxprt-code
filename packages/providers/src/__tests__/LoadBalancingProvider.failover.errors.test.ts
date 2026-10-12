@@ -714,7 +714,7 @@ describe('LoadBalancingProvider - Failover Strategy', () => {
           contents: [{ role: 'user', parts: [{ text: 'test' }] }],
           settings: settingsService,
           config,
-          runtime: { config },
+          runtime: {},
         });
         for await (const _chunk of iterator) {
           // Consume

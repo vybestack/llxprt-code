@@ -79,8 +79,6 @@ describe('provider request ownership', () => {
     });
     const runtime = createProviderRuntimeContext({
       runtimeId: 'same-label',
-
-      config,
     });
     if (
       !(provider instanceof OpenAIProvider) &&

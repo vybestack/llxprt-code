@@ -336,7 +336,6 @@ async function createHarness(params: {
     ...baseBundle.runtimeContext,
     providerRuntime: {
       ...baseBundle.runtimeContext.providerRuntime,
-      config,
     },
   };
   const runtimeBundle = { ...baseBundle, runtimeContext };

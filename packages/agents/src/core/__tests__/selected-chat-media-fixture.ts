@@ -134,7 +134,6 @@ export function createMediaHistoryChat(
     tools: createToolRegistryViewFromRegistry(),
     providerRuntime: {
       ...setup.runtime,
-      config: undefined,
     },
     mediaStore: store,
     mediaAdmission: new MediaAdmissionService(store),

@@ -125,7 +125,6 @@ async function captureRequestBody(
 ): Promise<Record<string, unknown>> {
   const runtime = createProviderRuntimeContext({
     runtimeId: TEST_RUNTIME_ID,
-    config: createRuntimeConfigStub(settings),
   });
 
   const invocation = createRuntimeInvocationContext({
@@ -385,7 +384,6 @@ describe('OpenAIResponsesProvider Codex stateful conversations @issue:3134', () 
 
     const runtime = createProviderRuntimeContext({
       runtimeId: TEST_RUNTIME_ID,
-      config: createRuntimeConfigStub(settings),
     });
 
     const invocation = createRuntimeInvocationContext({

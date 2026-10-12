@@ -64,7 +64,7 @@ describe('LoggingProviderWrapper Metrics', () => {
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // Logging disabled → processStreamForMetrics path
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
       const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
@@ -104,7 +104,7 @@ describe('LoggingProviderWrapper Metrics', () => {
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // processStreamForMetrics path
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
       const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
@@ -143,7 +143,7 @@ describe('LoggingProviderWrapper Metrics', () => {
 
       const settings = new SettingsService();
       const config = createConfigStub(false); // Logging disabled → processStreamForMetrics path
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
       const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
@@ -187,7 +187,7 @@ describe('LoggingProviderWrapper Metrics', () => {
       const settings = new SettingsService();
       const accumulateMock = vi.fn();
       const config = createConfigStub(false);
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
       const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
@@ -230,7 +230,7 @@ describe('LoggingProviderWrapper Metrics', () => {
       const settings = new SettingsService();
       const accumulateMock = vi.fn();
       const config = createConfigStub(false);
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
       const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
@@ -294,7 +294,7 @@ describe('LoggingProviderWrapper Metrics', () => {
 
       const settings = new SettingsService();
       const config = createConfigStub(false);
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
       const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(
@@ -358,7 +358,7 @@ describe('LoggingProviderWrapper Metrics', () => {
 
       const settings = new SettingsService();
       const config = createConfigStub(false);
-      const runtime = createRuntimeContext(settings, config);
+      const runtime = createRuntimeContext();
       const settingsOwner = createSettingsOwner(settings, config);
 
       const iterator = wrapper.generateChatCompletion(

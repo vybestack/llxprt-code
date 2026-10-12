@@ -39,7 +39,6 @@ function createProjectionFixture(
   settings.setProviderSetting('projection-probe', 'auth-key', 'ambient-key');
   const config = createRuntimeConfigStub(settings);
   const runtime = {
-    config,
     runtimeId: 'projection-test',
   };
   const manager = new ProviderManager(

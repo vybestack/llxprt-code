@@ -119,7 +119,6 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
     );
 
     const runtime: ProviderRuntimeContext = {
-      config: configStub,
       runtimeId: 'test-runtime',
       metadata: { source: 'LoggingProviderWrapper.test' },
     };
@@ -251,7 +250,6 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
     const warnSpy = vi.spyOn(DebugLogger.prototype, 'warn');
 
     const runtime: ProviderRuntimeContext = {
-      config: configStub,
       runtimeId: 'request-log-failure-runtime',
       metadata: { source: 'LoggingProviderWrapper.test' },
     };

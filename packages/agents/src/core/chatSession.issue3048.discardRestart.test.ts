@@ -71,7 +71,6 @@ describe('Issue 3048: discard-and-restart after a transient transport failure th
     settingsService.set('providers.stub.model', 'stub-model');
 
     providerRuntime = createProviderRuntimeContext({
-      config,
       runtimeId: 'test.runtime',
       metadata: { source: 'chatSession.issue3048.test' },
     });

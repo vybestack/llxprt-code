@@ -65,7 +65,6 @@ const createRuntimeWithoutConfig = (): ProviderRuntimeContext =>
   ({
     runtimeId: 'stateless-runtime',
 
-    config: undefined,
     metadata: { source: 'LoggingProviderWrapper.stateless.test' },
   }) as ProviderRuntimeContext;
 
@@ -110,7 +109,6 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'missing-settings-runtime',
 
-      config,
       metadata: { source: 'test' },
     };
 
@@ -144,7 +142,6 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'complete-runtime',
 
-      config,
       metadata: { source: 'test' },
     };
 
@@ -190,7 +187,6 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'provided-runtime',
 
-      config,
       metadata: { provided: true, source: 'caller' },
     };
 
@@ -223,7 +219,6 @@ describe('LoggingProviderWrapper stateless hardening integration', () => {
     const runtime: ProviderRuntimeContext = {
       runtimeId: 'prototype-lost-runtime',
 
-      config: invalidConfig,
       metadata: { source: 'prototype-lost-test' },
     };
 

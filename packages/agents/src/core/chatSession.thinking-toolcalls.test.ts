@@ -64,7 +64,6 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
     settingsService.set('reasoning.stripFromContext', 'none');
 
     providerRuntime = createProviderRuntimeContext({
-      config,
       runtimeId: 'test.runtime.issue1150',
       metadata: { source: 'chatSession.thinking-toolcalls.test' },
     });

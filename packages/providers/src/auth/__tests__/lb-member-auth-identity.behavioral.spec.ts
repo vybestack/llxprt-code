@@ -212,7 +212,6 @@ describe('load balancer member OAuth identity (#2643)', () => {
     settings.setProviderSetting(PROVIDER, 'auth-key', 'ambient-provider-key');
     const config = createRuntimeConfigStub(settings);
     const runtime = {
-      config,
       runtimeId: lbParentName,
     };
     const delegate = new AuthProbeProvider(

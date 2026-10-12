@@ -79,8 +79,6 @@ function buildLbRuntimeContext(
 
   const providerRuntime = {
     runtimeId: 'test-runtime',
-
-    config: {} as never,
   } as ProviderRuntimeContext;
 
   const factoryOptions: AgentRuntimeContextFactoryOptions = {

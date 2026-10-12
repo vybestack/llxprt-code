@@ -129,16 +129,16 @@ void vi.mock('@anthropic-ai/sdk', () => ({
 describe('AnthropicProvider', () => {
   let provider: AnthropicProvider;
   let settingsService: AnthropicTestSetup['settingsService'];
-  let runtimeContext: ProviderRuntimeContext;
+  let config: AnthropicTestSetup['config'];
   let buildCallOptions: AnthropicTestSetup['buildCallOptions'];
 
   beforeEach(() => {
     vi.clearAllMocks();
     const setup = setupAnthropicProvider();
     settingsService = setup.settingsService;
-    runtimeContext = setup.runtimeContext;
+    config = setup.config;
     buildCallOptions = setup.buildCallOptions;
-    runtimeContext.config.getEphemeralSettings = () => ({
+    config.getEphemeralSettings = () => ({
       ...settingsService.getAllGlobalSettings(),
       ...settingsService.getProviderSettings('anthropic'),
     });
@@ -149,7 +149,7 @@ describe('AnthropicProvider', () => {
         ...settingsService.getProviderSettings('anthropic'),
       }),
     });
-    runtimeContext.config.streaming = 'disabled';
+    config.streaming = 'disabled';
   });
 
   describe('Rate limit throttling', () => {

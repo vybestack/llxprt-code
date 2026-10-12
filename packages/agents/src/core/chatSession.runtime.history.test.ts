@@ -55,7 +55,6 @@ describe('ChatSession runtime history and tool-call behavior', () => {
     configureHistoryProviderSettings(settingsService);
 
     providerRuntime = createProviderRuntimeContext({
-      config,
       runtimeId: 'test.runtime',
       metadata: { source: 'chatSession.runtime.history.test' },
     });

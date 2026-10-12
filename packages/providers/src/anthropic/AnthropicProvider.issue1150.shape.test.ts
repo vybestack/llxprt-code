@@ -73,6 +73,7 @@ void vi.mock('@anthropic-ai/sdk', () => ({
 describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
   let provider: AnthropicProvider;
   let runtimeContext: ProviderRuntimeContext;
+  let config: ReturnType<typeof createRuntimeConfigStub>;
   let settingsService: SettingsService;
 
   beforeEach(() => {
@@ -106,14 +107,14 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
     runtimeContext = result.runtime;
     settingsService = result.settingsService;
 
-    runtimeContext.config ??= createRuntimeConfigStub(settingsService);
+    config = createRuntimeConfigStub(settingsService);
 
-    runtimeContext.config.getEphemeralSettings = () => ({
+    config.getEphemeralSettings = () => ({
       ...settingsService.getAllGlobalSettings(),
       ...settingsService.getProviderSettings(provider.name),
     });
 
-    runtimeContext.config.getEphemeralSetting = (key: string) => {
+    config.getEphemeralSetting = (key: string) => {
       const providerValue = settingsService.getProviderSetting(
         provider.name,
         key,
@@ -140,7 +141,7 @@ describe('AnthropicProvider Issue #1150: API Shape Validation', () => {
       contents,
       settings: settingsService,
       runtime: runtimeContext,
-      config: runtimeContext.config,
+      config,
       ...overrides,
     });
 

@@ -119,7 +119,6 @@ describe('CompressionHandler wasRecentlyCompressed (issue #1792)', () => {
     runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
-      config: runtimeSetup.config,
     };
   });
 
@@ -268,7 +267,6 @@ describe('CompressionHandler performCompression result (issue #1792)', () => {
     runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
-      config: runtimeSetup.config,
     };
   });
 

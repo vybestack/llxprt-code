@@ -237,7 +237,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
           runtime: {
             providerFileLifecycle,
             settingsService: input.settingsService,
-            config: input.config,
             runtimeId: input.runtimeId,
             metadata: input.metadata,
           },

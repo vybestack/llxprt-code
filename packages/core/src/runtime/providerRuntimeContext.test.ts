@@ -5,21 +5,16 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import type { Config } from '../config/config.js';
 import { createProviderRuntimeContext } from './providerRuntimeContext.js';
 
 describe('createProviderRuntimeContext', () => {
-  it('builds a context from explicitly injected config and identity', () => {
-    const mockConfig = {
-      getSessionId: () => 'runtime-test',
-    } as unknown as Config;
+  it('builds identity data without publishing Config', () => {
     const context = createProviderRuntimeContext({
-      config: mockConfig,
       runtimeId: 'injected-runtime',
       metadata: { source: 'unit-test' },
     });
 
-    expect(context.config).toBe(mockConfig);
+    expect(context).not.toHaveProperty('config');
     expect(context.runtimeId).toBe('injected-runtime');
     expect(context.metadata).toStrictEqual({ source: 'unit-test' });
     expect('settingsService' in context).toBe(false);

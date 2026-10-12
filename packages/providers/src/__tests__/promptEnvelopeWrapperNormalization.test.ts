@@ -122,7 +122,6 @@ function buildManagedWrapper(base: RecordingProvider): {
   const settings = new SettingsService();
   const config = buildConfigStub();
   const runtime: ProviderRuntimeContext = {
-    config,
     runtimeId: 'managed-runtime',
     metadata: { source: 'ProviderManager.syncProviderRuntime' },
   };

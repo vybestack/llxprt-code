@@ -160,7 +160,6 @@ export function createFullLoopHarness(
   seedStubProviderSettings(settingsService);
 
   const providerRuntime = createProviderRuntimeContext({
-    config,
     runtimeId: 'test.runtime',
     metadata: { source: 'p06.characterization' },
   });
@@ -206,14 +205,14 @@ export function createFullLoopHarness(
     provider: createProviderAdapterFromManager(manager),
     telemetry: createTelemetryAdapter(config, invocationOwner.telemetry),
     tools: { listToolNames: () => [], getToolMetadata: () => undefined },
-    providerRuntime: { ...providerRuntime, config: effectiveConfig },
+    providerRuntime: { ...providerRuntime },
   });
 
   const generationConfig = fullLoopGenerationConfig(options?.tools);
 
   const chat = new ChatSession(
     view,
-    config,
+    effectiveConfig,
     undefined,
     undefined,
     undefined,

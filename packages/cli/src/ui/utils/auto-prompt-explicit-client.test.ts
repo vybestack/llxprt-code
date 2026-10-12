@@ -80,7 +80,6 @@ async function owner(
   };
   const manager = new TestRuntimeProviderManager(
     createProviderRuntimeContext({
-      config,
       runtimeId: name,
     }),
   );

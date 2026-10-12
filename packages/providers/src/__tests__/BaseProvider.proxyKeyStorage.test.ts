@@ -20,7 +20,7 @@ import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
 import type { IProviderKeyStorage } from '@vybestack/llxprt-code-auth';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   BaseProvider,
@@ -171,11 +171,8 @@ class ProxyAwareProvider extends BaseProvider {
 }
 
 function buildChatOptions(settings: SettingsService) {
-  const config = createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
     runtimeId: `proxy-aware.${Math.random().toString(36).slice(2, 10)}`,
-
-    config,
   });
   return {
     contents: [userMessage('hi')],

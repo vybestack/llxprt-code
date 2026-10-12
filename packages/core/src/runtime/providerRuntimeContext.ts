@@ -26,7 +26,6 @@
  * when a caller supplies its identity and retry operations.
  */
 import type { ProviderRetryOperations } from './contracts/ProviderRetryOperations.js';
-import type { Config } from '../config/config.js';
 import type { ProviderFileReferenceMetadata } from '../services/history/IContent.js';
 
 export interface ProviderFileBindingStore {
@@ -69,14 +68,12 @@ export interface RuntimeSettingsState {
  * @pseudocode lines 122-133
  */
 export interface ProviderRequestCollaborators extends ProviderRetryOperations {
-  readonly config?: Config;
   readonly runtimeId?: string;
   readonly runtimeKind?: RuntimeKind;
   readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
 export interface ProviderRuntimeContext extends ProviderRetryOperations {
-  config?: Config;
   runtimeId?: string;
   runtimeKind?: RuntimeKind;
   metadata?: Record<string, unknown>;
@@ -89,7 +86,6 @@ export interface ProviderRuntimeContext extends ProviderRetryOperations {
  * @pseudocode lines 122-133
  */
 export interface ProviderRuntimeContextInit extends ProviderRetryOperations {
-  config?: Config;
   runtimeId?: string;
   runtimeKind?: RuntimeKind;
   metadata?: Record<string, unknown>;
@@ -106,7 +102,7 @@ export function createProviderRuntimeContext(
     readCurrentBucket: init.readCurrentBucket,
     readFailoverReasons: init.readFailoverReasons,
     resetBucketSession: init.resetBucketSession,
-    config: init.config,
+
     runtimeId: init.runtimeId,
     runtimeKind: init.runtimeKind,
     metadata: init.metadata,

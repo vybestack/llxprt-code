@@ -135,13 +135,9 @@ export const createConfigStub = (loggingEnabled = false): Config =>
     telemetry: { enabled: false, logConversations: loggingEnabled },
   });
 
-export const createRuntimeContext = (
-  settings: SettingsService,
-  config: Config,
-): ProviderRuntimeContext => ({
+export const createRuntimeContext = (): ProviderRuntimeContext => ({
   runtimeId: 'test-runtime',
 
-  config,
   metadata: { source: 'LoggingProviderWrapper.test-helpers' },
 });
 

@@ -13,7 +13,7 @@ import {
   type RuntimeProviderManager,
   FatalError,
   type MessageBus,
-  type ProviderRuntimeContext,
+  type Config,
 } from '@vybestack/llxprt-code-core';
 
 import {
@@ -75,7 +75,7 @@ export interface RuntimeBootstrapMetadata {
   readonly credentialAuthority?: CredentialAuthority;
   readonly sessionSettingsOwner?: SessionSettingsOwner;
   settingsService?: SettingsService;
-  config?: ProviderRuntimeContext['config'];
+  config?: Config;
   oauthManager?: OAuthManager;
   runtimeId?: string;
   messageBus?: MessageBus;

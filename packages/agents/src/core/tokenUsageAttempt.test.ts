@@ -94,7 +94,6 @@ describe('Issue #3130 slice 3b — attempt-level token-usage records', () => {
     settingsService.set('providers.stub.model', 'stub-model');
 
     providerRuntime = createProviderRuntimeContext({
-      config,
       runtimeId: 'test.runtime',
       metadata: { source: 'tokenUsageAttempt.test' },
     });

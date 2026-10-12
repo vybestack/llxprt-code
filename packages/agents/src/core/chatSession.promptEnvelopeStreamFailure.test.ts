@@ -116,7 +116,7 @@ function createTestFixture(provider: IProvider): TestFixture {
   const mockConfig = runtimeSetup.config;
   const providerRuntimeSnapshot: ProviderRuntimeContext = {
     ...runtimeSetup.runtime,
-    config: mockConfig,
+
     metadata: {
       ...runtimeSetup.runtime.metadata,
       promptEnvelopeEstimation: true,

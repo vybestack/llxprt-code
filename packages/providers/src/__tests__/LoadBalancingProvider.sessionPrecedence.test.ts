@@ -41,7 +41,6 @@ const noopLogger = {
 
 function makeRuntime(): ProviderRuntimeContext {
   return {
-    config: undefined,
     runtimeId: 'test-lb-runtime',
     metadata: {},
   };

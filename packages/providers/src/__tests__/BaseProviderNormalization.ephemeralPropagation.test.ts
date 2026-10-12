@@ -67,7 +67,6 @@ function createHarnessRuntimeContext(settingsService: SettingsService) {
   const config = createRuntimeConfigStub(settingsService);
   const runtimeContext = {
     settingsService,
-    config,
     runtimeId: 'ephemeral-harness',
   };
   return { config, runtimeContext };

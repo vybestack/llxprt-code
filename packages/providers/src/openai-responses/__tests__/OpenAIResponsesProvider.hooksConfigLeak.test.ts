@@ -97,7 +97,6 @@ describe('OpenAIResponsesProvider hooksConfig leak @issue:3218', () => {
     const config = createRuntimeConfigStub(settings);
     const runtime = createProviderRuntimeContext({
       runtimeId: 'test-runtime-id-3218',
-      config,
     });
 
     const invocation = createRuntimeInvocationContext({

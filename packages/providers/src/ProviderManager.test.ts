@@ -42,7 +42,6 @@ function createRuntimeConfigStub(): Config {
 // ambient global state (issue #2300).
 function setTestRuntimeContext(): ProviderRuntimeContext {
   const runtime = createProviderRuntimeContext({
-    config: createRuntimeConfigStub(),
     metadata: { source: 'ProviderManager.test' },
   });
   return runtime;
@@ -71,7 +70,7 @@ describe('ProviderManager provider ordering', () => {
       undefined,
       undefined,
       settingsService,
-      runtime.config,
+      createRuntimeConfigStub(),
       runtime,
     );
 
@@ -150,7 +149,7 @@ describe('ProviderPerformanceTracker', () => {
       undefined,
       undefined,
       settingsService,
-      runtime.config,
+      createRuntimeConfigStub(),
       runtime,
     );
 
@@ -175,7 +174,7 @@ describe('ProviderPerformanceTracker', () => {
       undefined,
       undefined,
       settingsService,
-      runtime.config,
+      createRuntimeConfigStub(),
       runtime,
     );
 
@@ -237,7 +236,7 @@ describe('ProviderPerformanceTracker', () => {
       undefined,
       undefined,
       settingsService,
-      runtime.config,
+      createRuntimeConfigStub(),
       runtime,
     );
 

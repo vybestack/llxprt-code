@@ -191,8 +191,6 @@ describe('Gemini provider stateless contract tests', () => {
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-stream',
-
-      config,
     });
 
     const chunks = await collectResults(
@@ -245,8 +243,6 @@ describe('Gemini provider stateless contract tests', () => {
     });
     const runtimePrimary = createProviderRuntimeContext({
       runtimeId: 'runtime-config',
-
-      config: configPrimary,
     });
 
     await collectResults(
@@ -296,8 +292,6 @@ describe('Gemini provider stateless contract tests', () => {
     });
     const runtimeOverride = createProviderRuntimeContext({
       runtimeId: 'runtime-config',
-
-      config: configOverride,
     });
 
     await collectResults(
@@ -357,8 +351,6 @@ describe('Gemini provider stateless contract tests', () => {
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-tools',
-
-      config,
     });
 
     await collectResults(
@@ -419,8 +411,6 @@ describe('Gemini provider stateless contract tests', () => {
     });
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-invocation',
-
-      config,
     });
     const authMock = mockDetermineBestAuth([
       { authMode: 'gemini-api-key', token: 'runtime-key' },

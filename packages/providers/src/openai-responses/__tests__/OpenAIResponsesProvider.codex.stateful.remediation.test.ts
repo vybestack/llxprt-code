@@ -602,7 +602,6 @@ describe('OpenAIResponsesProvider Codex stateful provider-level remediation @iss
 
     const runtime = createProviderRuntimeContext({
       runtimeId: TEST_RUNTIME_ID,
-      config: createRuntimeConfigStub(settings),
     });
     const invocation = createRuntimeInvocationContext({
       runtimeId: runtime.runtimeId,

@@ -79,15 +79,11 @@ const getContentText = (content: IContent | undefined): string => {
 function createOptionsWithRuntime(
   contents: IContent[],
   settingsService?: SettingsService,
-  config?: Config,
 ) {
   const settings = settingsService ?? testSettingsService;
-  const runtimeConfig =
-    config ?? createRuntimeConfigStub(settings, { getModel: () => '' });
+
   const runtime = createProviderRuntimeContext({
     runtimeId: `base-provider.${Math.random().toString(36).slice(2, 10)}`,
-
-    config: runtimeConfig,
   });
 
   return {
@@ -541,8 +537,6 @@ describe('BaseProvider', () => {
       const runtimeConfig = createRuntimeConfigStub(settings);
       const runtime = createProviderRuntimeContext({
         runtimeId: 'oauth-cache',
-
-        config: runtimeConfig,
       });
 
       // When: Make multiple API calls

@@ -493,14 +493,10 @@ describe('extracted provider helper behavior', () => {
       'https://settings.example.test',
     );
     settingsService.set('auth-key', 'global-token');
-    const config = runtimeConfig('config-model', {
-      'base-url': 'https://config.example.test',
-    });
     const rawOptions: GenerateChatOptions = {
       contents: [],
       userMemory: 'remember this',
       runtime: {
-        config,
         runtimeId: 'runtime-a',
         metadata: { existing: true },
       },
@@ -536,7 +532,6 @@ describe('extracted provider helper behavior', () => {
       'https://provider-a.example.test',
     );
     settingsService.setProviderSetting('provider-a', 'auth-key', 'test-token');
-    const config = runtimeConfig();
     const controller = new AbortController();
     const rawOptions = createProviderCallOptions({
       providerName: 'provider-a',
@@ -548,7 +543,6 @@ describe('extracted provider helper behavior', () => {
       {
         ...rawOptions,
         runtime: {
-          config,
           runtimeId: 'runtime-signal',
         },
         metadata: { abortSignal: controller.signal },
@@ -580,14 +574,9 @@ describe('extracted provider helper behavior', () => {
       'auth-key',
       'provider-scoped-token',
     );
-    const config = runtimeConfig('config-model', {
-      'auth-key': 'global-token',
-      'base-url': 'https://config.example.test',
-    });
     const rawOptions: GenerateChatOptions = {
       contents: [],
       runtime: {
-        config,
         runtimeId: 'runtime-a',
         metadata: {},
       },
@@ -617,7 +606,6 @@ describe('extracted provider helper behavior', () => {
       'base-url',
       'https://settings.example.test',
     );
-    const config = runtimeConfig();
     const cyclicProvider = providerStub({ name: 'wrapper' }) as IProvider & {
       wrappedProvider?: IProvider;
     };
@@ -628,7 +616,6 @@ describe('extracted provider helper behavior', () => {
         {
           contents: [],
           runtime: {
-            config,
             runtimeId: 'runtime-a',
             metadata: {},
           },
@@ -644,35 +631,10 @@ describe('extracted provider helper behavior', () => {
 
   it('preserves load-balancer resolved delegate option construction', () => {
     const settingsService = new SettingsService();
-    const config = Object.assign(
-      new Config({
-        sessionId: 'logging-policy',
-        targetDir: process.cwd(),
-        cwd: process.cwd(),
-        model: 'logging-model',
-        debugMode: false,
-      }),
-      {
-        getModel: () => '',
-        getUserMemory: () => '',
-        getTargetDir: () => process.cwd(),
-        getConversationLogPath: () => '',
-        getRedactionConfig: () => ({
-          redactApiKeys: false,
-          redactCredentials: false,
-          redactFilePaths: false,
-          redactUrls: false,
-          redactEmails: false,
-          redactPersonalInfo: false,
-        }),
-        getConversationLoggingEnabled: () => false,
-      },
-    );
     const options: GenerateChatOptions = {
       contents: [],
       settings: settingsService,
       runtime: {
-        config,
         runtimeId: 'lb-runtime',
         metadata: { parent: true },
       },
@@ -729,35 +691,10 @@ describe('extracted provider helper behavior', () => {
 
   it('carries the member profileId on delegate metadata alongside loadBalancerDelegate (#2643)', () => {
     const settingsService = new SettingsService();
-    const config = Object.assign(
-      new Config({
-        sessionId: 'logging-policy',
-        targetDir: process.cwd(),
-        cwd: process.cwd(),
-        model: 'logging-model',
-        debugMode: false,
-      }),
-      {
-        getModel: () => '',
-        getUserMemory: () => '',
-        getTargetDir: () => process.cwd(),
-        getConversationLogPath: () => '',
-        getRedactionConfig: () => ({
-          redactApiKeys: false,
-          redactCredentials: false,
-          redactFilePaths: false,
-          redactUrls: false,
-          redactEmails: false,
-          redactPersonalInfo: false,
-        }),
-        getConversationLoggingEnabled: () => false,
-      },
-    );
     const options: GenerateChatOptions = {
       contents: [],
       settings: settingsService,
       runtime: {
-        config,
         runtimeId: 'lb-runtime',
         metadata: { parent: true },
       },

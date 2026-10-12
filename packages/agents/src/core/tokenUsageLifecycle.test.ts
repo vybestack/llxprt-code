@@ -91,7 +91,6 @@ function buildCompressionHandler(logFile: string): {
   const runtimeSetup = createChatSessionRuntime();
   const providerRuntimeSnapshot: ProviderRuntimeContext = {
     ...runtimeSetup.runtime,
-    config: runtimeSetup.config,
   };
 
   const runtimeState = createAgentRuntimeState({

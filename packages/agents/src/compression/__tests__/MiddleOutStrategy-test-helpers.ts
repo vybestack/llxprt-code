@@ -162,7 +162,6 @@ export const noopLogger = {
 } as unknown as DebugLogger;
 
 export const testProviderRuntime = {
-  config: undefined,
   runtimeId: 'test-provider-runtime',
   metadata: { source: 'test' },
 };

@@ -41,7 +41,6 @@ describe('retry runtime kind', () => {
     const { config } = root;
     configs.push(config);
     const owner = createProviderRuntimeContext({
-      config,
       runtimeId: 'same-label',
       runtimeKind,
     });
@@ -91,9 +90,8 @@ describe('retry runtime kind', () => {
     throw new Error('Expected bucket exhaustion');
   }
   it('preserves bootstrap recovery wording through CLI context and assembly', async () => {
-    const { options, owner: runtime, root } = request(undefined);
-    const config = runtime.config;
-    if (!config) throw new Error('Missing fixture config');
+    const { options, root } = request(undefined);
+    const { config } = root;
     const assembled = assembleCliProviderRuntime({
       credentialAuthority: new CredentialAuthority(),
 
@@ -115,8 +113,7 @@ describe('retry runtime kind', () => {
   });
   it('reads activation overrides through the owning provider manager at invocation time', async () => {
     const { options, owner: runtime, root } = request('agent');
-    const config = runtime.config;
-    if (!config) throw new Error('Missing fixture runtime');
+    const { config } = root;
     root.settingsOwner.writeUserParameter('retrywait', 0);
     root.settingsOwner.writeUserParameter('auth-key', 'test-key');
     const owner = assembleCliProviderRuntime({

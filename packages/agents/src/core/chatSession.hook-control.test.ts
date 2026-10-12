@@ -101,7 +101,6 @@ describe('ChatSession hook execution control', () => {
     // Set up provider runtime context
     const providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
-      config: mockConfig,
     };
 
     // Create mock ContentGenerator

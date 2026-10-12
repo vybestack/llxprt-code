@@ -44,7 +44,6 @@ async function generate(
   const config = createRuntimeConfigStub(settings);
   const runtime = createProviderRuntimeContext({
     runtimeId: 'codex-proxy',
-    config,
   });
   const invocation = createRuntimeInvocationContext({
     runtimeId: runtime.runtimeId,

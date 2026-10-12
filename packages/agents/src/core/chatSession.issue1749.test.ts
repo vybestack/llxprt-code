@@ -96,7 +96,6 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
     settingsService.set('providers.stub.model', 'stub-model');
 
     providerRuntime = createProviderRuntimeContext({
-      config,
       runtimeId: 'test.runtime',
       metadata: { source: 'chatSession.issue1749.test' },
     });
@@ -141,7 +140,7 @@ describe('Issue 1749: AfterModel hook modified-response text', () => {
         createSessionSettingsFixture(config).settingsOwner.telemetry,
       ),
       tools: createToolRegistryViewFromRegistry(undefined),
-      providerRuntime: { ...providerRuntime, config },
+      providerRuntime: { ...providerRuntime },
     });
 
     const chat = new ChatSession(

@@ -46,9 +46,7 @@ export function observeFakeProviderRegistration(): {
         cwd: tempDir,
         model: 'fake-model',
       });
-      const rt = createProviderRuntimeContext({
-        config: cfg,
-      });
+      const rt = createProviderRuntimeContext({});
       const { manager } = createProviderManager(
         settingsService,
         rt,

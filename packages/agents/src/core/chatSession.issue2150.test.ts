@@ -80,7 +80,6 @@ describe('Issue 2150: transient connection error must retry the turn, not break 
     settingsService.set('providers.stub.model', 'stub-model');
 
     providerRuntime = createProviderRuntimeContext({
-      config,
       runtimeId: 'test.runtime',
       metadata: { source: 'chatSession.issue2150.test' },
     });

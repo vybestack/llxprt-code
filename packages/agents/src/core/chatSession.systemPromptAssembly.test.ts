@@ -86,7 +86,6 @@ function buildFixture(
   settingsService.set('model', initialModel);
 
   const providerRuntime: ProviderRuntimeContext = createProviderRuntimeContext({
-    config,
     runtimeId: 'test.runtime.assembly',
     metadata: { source: 'systemPromptAssembly.test' },
   });
@@ -376,7 +375,6 @@ describe('ChatSession per-turn system prompt assembly (issue #3136)', () => {
     settingsService.set('model', 'whatever');
 
     const providerRuntime = createProviderRuntimeContext({
-      config,
       runtimeId: 'test.runtime.no-assembler',
       metadata: { source: 'test' },
     });

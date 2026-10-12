@@ -60,9 +60,7 @@ async function owner() {
     undefined,
     settingsService,
     config,
-    createProviderRuntimeContext({
-      config,
-    }),
+    createProviderRuntimeContext({}),
     credentialAuthority,
   );
   manager.registerProvider(

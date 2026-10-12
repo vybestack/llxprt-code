@@ -160,8 +160,6 @@ describe('Gemini provider thinkingLevel tests', () => {
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-think-2x',
-
-      config,
     });
 
     await collectResults(
@@ -209,8 +207,6 @@ describe('Gemini provider thinkingLevel tests', () => {
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-think-3x',
-
-      config,
     });
 
     await collectResults(
@@ -275,8 +271,6 @@ describe('Gemini provider thinkingLevel tests', () => {
 
       const runtime = createProviderRuntimeContext({
         runtimeId: `runtime-effort-${effort}`,
-
-        config,
       });
 
       await collectResults(
@@ -326,8 +320,6 @@ describe('Gemini provider thinkingLevel tests', () => {
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-think-3x-default',
-
-      config,
     });
 
     await collectResults(
@@ -376,8 +368,6 @@ describe('Gemini provider thinkingLevel tests', () => {
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-think-2x-budget',
-
-      config,
     });
 
     await collectResults(
@@ -426,8 +416,6 @@ describe('Gemini provider thinkingLevel tests', () => {
 
     const runtime = createProviderRuntimeContext({
       runtimeId: 'runtime-think-2x-auto',
-
-      config,
     });
 
     await collectResults(

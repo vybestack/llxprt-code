@@ -65,7 +65,6 @@ describe('provider manager runtime OAuth MessageBus composition', () => {
       createProviderManager(
         runtimeHandle.settingsService,
         {
-          config: runtimeHandle.config,
           runtimeId: runtimeHandle.runtimeId,
           metadata: { source: 'phase-07-provider-test' },
         },

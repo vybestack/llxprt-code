@@ -63,7 +63,6 @@ describe('Hard-limit compression behavior (Issue #1791)', () => {
     runtimeSetup = createChatSessionRuntime();
     providerRuntimeSnapshot = {
       ...runtimeSetup.runtime,
-      config: runtimeSetup.config,
     };
   });
 

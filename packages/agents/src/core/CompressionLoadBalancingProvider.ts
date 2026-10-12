@@ -1,3 +1,4 @@
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 /**
@@ -24,7 +25,7 @@ export interface CompressionLoadBalancerCandidate {
   profileName: string;
   provider: IProvider;
   runtime: ProviderRequestCollaborators;
-  config: NonNullable<ProviderRequestCollaborators['config']> | undefined;
+  config: Config | undefined;
   resolved: RuntimeGenerateChatOptions['resolved'];
   invocation: NonNullable<RuntimeGenerateChatOptions['invocation']>;
 }
