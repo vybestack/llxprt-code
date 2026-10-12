@@ -10,7 +10,7 @@ import {
 async function verifyAcknowledgementFailure(size: number): Promise<number> {
   return withAgentCarry(
     size,
-    async (agent, replacement) => {
+    async (agent, replacement, previous) => {
       const started = agent.setModel('durability-model');
       const outcome = started.then(
         () => undefined,
@@ -19,12 +19,14 @@ async function verifyAcknowledgementFailure(size: number): Promise<number> {
       await replacement.ready;
       const next = replacement();
       await next.entered.promise;
-      const history = next.getHistoryService();
-      if (history === null) throw new Error('Missing carried journal');
+      const history = previous.getHistoryService();
+      if (history === null) throw new Error('Missing previous journal');
       const tokens = history.getTotalTokens();
+      // Only the carried write's acknowledgement fails; the rollback of that
+      // admission acknowledges through the same recorder and must still succeed.
       const failure = vi
         .spyOn(SessionRecordingService.prototype, 'waitForCommitSequence')
-        .mockImplementation(async () => {
+        .mockImplementationOnce(async () => {
           throw new Error('Carried write acknowledgement failed');
         });
       try {
@@ -33,17 +35,22 @@ async function verifyAcknowledgementFailure(size: number): Promise<number> {
         await expect(started).rejects.toThrow(
           'Carried write acknowledgement failed',
         );
+        // The injected failure plus the rollback's own acknowledgement.
+        expect(failure).toHaveBeenCalledTimes(2);
       } finally {
         failure.mockRestore();
         next.proceed.open();
       }
+      expect(next.admissions).toBe(1);
       expect(next.hasChatInitialized()).toBe(false);
-      expect(await historyDigest(next.streamHistory())).toStrictEqual(
-        expectedDigest(size),
-      );
-      expect(history.getTotalTokens() - tokens).toBe(0);
+      expect(next.getHistoryService()).toBeNull();
+      expect(await historyDigest(next.streamHistory())).toStrictEqual({
+        count: 0,
+        digest: expectedDigest(0).digest,
+      });
       expect(next.owners.snapshot().liveRows).toBe(0);
-      await next.startChat([]);
+      expect(agent.agentClient).toBe(previous);
+      expect(history.getTotalTokens() - tokens).toBe(0);
       const restored = await historyDigest(agent.streamHistory());
       expect(restored).toStrictEqual(expectedDigest(size));
       return restored.count;
