@@ -17,15 +17,8 @@ describe('Profile credential timing at the owner', () => {
 
   for (const directive of ['auth-key', 'auth-keyfile', 'base-url']) {
     it(`installs ${directive} in SettingsService before switching providers`, async () => {
-      const {
-        config,
-        settings,
-        manager,
-        oauth,
-        store,
-        switchProvider,
-        directory,
-      } = owner();
+      const { settings, manager, oauth, store, switchProvider, directory } =
+        owner();
       const keyfile = join(directory, 'credential');
       await writeFile(keyfile, ' file-key\n');
       const values: Record<string, string> = {
@@ -36,7 +29,6 @@ describe('Profile credential timing at the owner', () => {
       const value = values[directive];
       const observed: unknown[] = [];
       const application = assembleProfileApplication(
-        config,
         settings,
         manager,
         oauth,
@@ -59,10 +51,9 @@ describe('Profile credential timing at the owner', () => {
   }
 
   it('has SettingsService auth available when the switch starts', async () => {
-    const { config, settings, manager, oauth, store, switchProvider } = owner();
+    const { settings, manager, oauth, store, switchProvider } = owner();
     const observed: unknown[] = [];
     const application = assembleProfileApplication(
-      config,
       settings,
       manager,
       oauth,
@@ -158,12 +149,11 @@ describe('Profile credential timing at the owner', () => {
   });
 
   it('clears stale state before installing auth and applies remaining settings after switching', async () => {
-    const { config, settings, manager, oauth, store, switchProvider } = owner();
+    const { settings, manager, oauth, store, switchProvider } = owner();
     owner().settingsOwner.writeUserParameter('old-setting', 'stale');
     owner().settingsOwner.writeUserParameter('auth-key', 'old-auth');
     const observed: unknown[] = [];
     const application = assembleProfileApplication(
-      config,
       settings,
       manager,
       oauth,

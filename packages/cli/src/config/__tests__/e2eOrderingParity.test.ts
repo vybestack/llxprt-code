@@ -158,21 +158,18 @@ const runtimeSettingsState = {
 };
 
 // Mock applyProfileSnapshot (static import in config.ts from profileSnapshot.js)
-void vi.mock(
-  '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js',
-  () => ({
-    applyProfileSnapshot: vi.fn(
-      async (profile: { provider?: string; model?: string }) => {
-        callLog.entries.push('applyProfileSnapshot');
-        return {
-          providerName: profile.provider ?? '',
-          modelName: profile.model ?? '',
-          warnings: [],
-        };
-      },
-    ),
-  }),
-);
+void vi.mock('../../../../agents/src/api/profileSnapshot.js', () => ({
+  applyProfileSnapshot: vi.fn(
+    async (profile: { provider?: string; model?: string }) => {
+      callLog.entries.push('applyProfileSnapshot');
+      return {
+        providerName: profile.provider ?? '',
+        modelName: profile.model ?? '',
+        warnings: [],
+      };
+    },
+  ),
+}));
 
 // Mock switchActiveProvider (static import in config.ts from providerSwitch.js)
 void vi.mock(

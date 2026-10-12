@@ -17,13 +17,23 @@ type PrepareClientReplacement = () => Promise<{
 }>;
 
 export function assembleProfileReplacement(
-  deps: RebuildLoopDeps,
+  resolveClient: RebuildLoopDeps['resolveClient'],
+  telemetry: RebuildLoopDeps['telemetry'],
+  loopHolder: RebuildLoopDeps['loopHolder'],
+  toolSelection: RebuildLoopDeps['toolSelection'],
+  readApprovalMode: RebuildLoopDeps['readApprovalMode'],
+  readExecutionPolicy: RebuildLoopDeps['readExecutionPolicy'],
+  getToolGovernance: RebuildLoopDeps['getToolGovernance'],
+  config: RebuildLoopDeps['config'],
+  messageBus: RebuildLoopDeps['messageBus'],
+  approvalHandler: RebuildLoopDeps['approvalHandler'],
+  displayCallbacks: RebuildLoopDeps['displayCallbacks'],
   prepareClientReplacement: PrepareClientReplacement,
   readActiveRun: () => ActiveRun | undefined,
 ): (changed: boolean, signal: AbortSignal) => Promise<PreparedProfileFacade> {
   return (changed, signal) => {
     const active = readActiveRun();
-    const run = active?.loop === deps.loopHolder.current ? active : undefined;
+    const run = active?.loop === loopHolder.current ? active : undefined;
     const retirePrior = (retire: () => Promise<void>): Promise<void> => {
       if (run !== undefined && readActiveRun() === run) {
         run.retirements = [...run.retirements, retire];
@@ -34,7 +44,21 @@ export function assembleProfileReplacement(
     return prepareProfileReplacement(
       changed,
       signal,
-      deps,
+      resolveClient,
+      (client) =>
+        prepareLoop({
+          telemetry,
+          loopHolder,
+          toolSelection,
+          readApprovalMode,
+          readExecutionPolicy,
+          getToolGovernance,
+          config,
+          messageBus,
+          resolveClient: () => client,
+          approvalHandler,
+          displayCallbacks,
+        }),
       prepareClientReplacement,
       retirePrior,
     );
@@ -44,14 +68,17 @@ export function assembleProfileReplacement(
 export async function prepareProfileReplacement(
   providerChanged: boolean,
   signal: AbortSignal,
-  deps: RebuildLoopDeps,
+  resolveClient: RebuildLoopDeps['resolveClient'],
+  prepareLoopForClient: (
+    client: ReturnType<RebuildLoopDeps['resolveClient']>,
+  ) => ReturnType<typeof prepareLoop>,
   prepareClientReplacement: PrepareClientReplacement,
   retirePrior: (retire: () => Promise<void>) => Promise<void>,
 ): Promise<PreparedProfileFacade> {
   const replacement = providerChanged
     ? await prepareClientReplacement()
     : undefined;
-  const client = replacement?.client ?? deps.resolveClient();
+  const client = replacement?.client ?? resolveClient();
   try {
     signal.throwIfAborted();
     if (replacement) {
@@ -60,20 +87,7 @@ export async function prepareProfileReplacement(
       await client.startChat(history.length > 0 ? history : undefined);
     }
     signal.throwIfAborted();
-    const loop = prepareLoop({
-      telemetry: deps.telemetry,
-      loopHolder: deps.loopHolder,
-      toolSelection: deps.toolSelection,
-      readExecutionPolicy: deps.readExecutionPolicy,
-      readApprovalMode: deps.readApprovalMode,
-      getToolGovernance: deps.getToolGovernance,
-      config: deps.config,
-      messageBus: deps.messageBus,
-      resolveClient: () => client,
-      approvalHandler: deps.approvalHandler,
-      displayCallbacks: deps.displayCallbacks,
-      AgenticLoopCtor: deps.AgenticLoopCtor,
-    });
+    const loop = prepareLoopForClient(client);
     const commitHistory = await replacement?.prepareHistoryCommit();
     signal.throwIfAborted();
     return {

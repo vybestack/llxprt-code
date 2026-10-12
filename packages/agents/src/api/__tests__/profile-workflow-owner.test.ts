@@ -15,27 +15,19 @@ import {
   useProfileOwner,
 } from './helpers/profile-owner-fixture.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { applyProfileCascade } from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
+import { applyProfileCascade } from '../profileApplication.js';
 import { assembleProfileApplication } from '../profileApplicationAssembly.js';
 
 describe('Profile cascade workflow at the owner', () => {
   const owner = useProfileOwner();
 
   it('sets keyfile ephemeral and provider credential before switching', async () => {
-    const {
-      directory,
-      config,
-      settings,
-      manager,
-      oauth,
-      store,
-      switchProvider,
-    } = owner();
+    const { directory, settings, manager, oauth, store, switchProvider } =
+      owner();
     const keyfile = join(directory, 'key');
     await writeFile(keyfile, ' file-key\n');
     const observed: unknown[] = [];
     const application = assembleProfileApplication(
-      config,
       settings,
       manager,
       oauth,
@@ -56,10 +48,9 @@ describe('Profile cascade workflow at the owner', () => {
   });
 
   it('sets base-url in ephemeral and provider settings before switching', async () => {
-    const { config, settings, manager, oauth, store, switchProvider } = owner();
+    const { settings, manager, oauth, store, switchProvider } = owner();
     const observed: unknown[] = [];
     const application = assembleProfileApplication(
-      config,
       settings,
       manager,
       oauth,
@@ -314,7 +305,6 @@ describe('Profile cascade workflow at the owner', () => {
       applyProfileCascade(
         { ...standardProfile(), provider: 'no-default', model: '' },
         {},
-        config,
         settings,
         manager,
         store,
@@ -331,6 +321,7 @@ describe('Profile cascade workflow at the owner', () => {
           applyParameter: (key, value) =>
             owner().settingsOwner.writeUserParameter(key, value),
         },
+        (name) => owner().config.getProviderKeys().getKey(name),
       ),
     ).rejects.toThrow('does not specify a model');
   });

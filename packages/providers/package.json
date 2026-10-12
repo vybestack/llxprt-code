@@ -106,16 +106,6 @@
       "bun": "./src/runtime/providerConfigUtils.ts",
       "import": "./dist/src/runtime/providerConfigUtils.js"
     },
-    "./runtime/profileSnapshot.js": {
-      "types": "./dist/src/runtime/profileSnapshot.d.ts",
-      "bun": "./src/runtime/profileSnapshot.ts",
-      "import": "./dist/src/runtime/profileSnapshot.js"
-    },
-    "./runtime/profileApplication.js": {
-      "types": "./dist/src/runtime/profileApplication.d.ts",
-      "bun": "./src/runtime/profileApplication.ts",
-      "import": "./dist/src/runtime/profileApplication.js"
-    },
     "./runtime/statelessHardening.js": {
       "types": "./dist/src/runtime/statelessHardening.d.ts",
       "bun": "./src/runtime/statelessHardening.ts",

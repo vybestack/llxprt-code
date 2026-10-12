@@ -33,10 +33,8 @@ export interface AgentToolFormatControl {
 }
 
 export function assembleToolFormatControl(
-  readOwner: () => Pick<
-    SessionSettingsOwner,
-    'readToolFormat' | 'writeToolFormat'
-  >,
+  readToolFormat: SessionSettingsOwner['readToolFormat'],
+  writeToolFormat: SessionSettingsOwner['writeToolFormat'],
   readProvider: RuntimeProviderManager['getActiveProvider'],
   assertReadAdmission: () => void,
   assertWriteAdmission: () => void,
@@ -45,7 +43,7 @@ export function assembleToolFormatControl(
     assertReadAdmission();
     const provider = readProvider();
     if (!provider) throw new Error('No active provider is configured.');
-    const raw = readOwner().readToolFormat();
+    const raw = readToolFormat();
     const override = typeof raw === 'string' ? raw : 'auto';
     const isAutoDetected = !override || override === 'auto';
     return {
@@ -62,9 +60,7 @@ export function assembleToolFormatControl(
     setOverride: async (format) => {
       assertWriteAdmission();
       if (!readProvider()) throw new Error('No active provider is configured.');
-      await readOwner().writeToolFormat(
-        !format || format === 'auto' ? 'auto' : format,
-      );
+      await writeToolFormat(!format || format === 'auto' ? 'auto' : format);
       return getState();
     },
   };

@@ -1,4 +1,3 @@
-import { extractModelParams } from '@vybestack/llxprt-code-providers/model-parameter-data.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -14,12 +13,13 @@ import type {
 import type { Profile, SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProfileDefinitionReads } from '@vybestack/llxprt-code-core';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { applyProfileCascade } from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
+import { applyProfileCascade } from './profileApplication.js';
 import {
+  captureProfileModelParams,
   finishProfileApplication,
   type ProfileLoadOptions,
   type ProfileLoadResult,
-} from '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js';
+} from './profileSnapshot.js';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
 
 import { checkpointProviderTransition } from './providerTransitionCheckpoint.js';
@@ -57,7 +57,6 @@ function assembleProfileParameterCommands(owner: SessionSettingsOwner): {
 type PreparedProfile = Awaited<ReturnType<typeof finishProfileApplication>>;
 
 export function assembleProfileApplication(
-  config: Config,
   settings: SettingsService,
   manager: RuntimeProviderManager,
   oauth: OAuthManager | null,
@@ -70,6 +69,11 @@ export function assembleProfileApplication(
   ) => Promise<PreparedProfileFacade | void> = async () => {},
   assertAdmission: () => void = () => {},
 ): AgentProfileApplication {
+  const keys = manager.getProviderKeys?.();
+  if (!keys)
+    throw new Error(
+      'Profile key resolution requires an explicit credential owner',
+    );
   let installed: PreparedProfile | undefined;
   return queueProfileApplications(
     profiles,
@@ -88,13 +92,13 @@ export function assembleProfileApplication(
         const application = await applyProfileCascade(
           profile,
           options,
-          config,
           settings,
           manager,
           profiles,
           switchProvider,
           assembleModelSelection(settingsOwner),
           assembleProfileParameterCommands(settingsOwner),
+          (name) => keys.getKey(name),
         );
         signal.throwIfAborted();
         prepared = await finishProfileApplication(
@@ -284,7 +288,6 @@ export function assembleAgentProfiles(
   return new ProfilesControl({
     getState: () => providerState,
     application: assembleProfileApplication(
-      config,
       settings,
       manager,
       oauth,
@@ -293,7 +296,7 @@ export function assembleAgentProfiles(
       settingsOwner,
       profiles,
       async (result, signal) => {
-        const modelParams = extractModelParams(
+        const modelParams = captureProfileModelParams(
           settings.getProviderSettings(result.providerName),
         );
         const replacement = await prepareReplacement(

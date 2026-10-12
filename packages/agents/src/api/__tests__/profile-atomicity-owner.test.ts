@@ -14,7 +14,7 @@ describe('Profile settings rollback at the owner', () => {
   const owner = useProfileOwner();
 
   it('restores pre-application settings state when a mid-cascade step fails and rethrows the original error', async () => {
-    const { config, settings, manager, switchProvider, store } = owner();
+    const { settings, manager, switchProvider, store } = owner();
     settings.setProviderSetting('openai', 'auth-key', 'keep-me');
     settings.setProviderSetting('openai', 'model', 'gpt-4');
     settings.setCurrentProfileName('previous-profile');
@@ -25,7 +25,6 @@ describe('Profile settings rollback at the owner', () => {
     const activeBefore = manager.getActiveProvider();
     const failure = new Error('injected cascade failure');
     const application = assembleProfileApplication(
-      config,
       settings,
       manager,
       null,
@@ -55,7 +54,7 @@ describe('Profile settings rollback at the owner', () => {
   });
 
   it('rolls back profile tool policy imported mid-cascade when a later step fails', async () => {
-    const { config, settings, manager, store, switchProvider } = owner();
+    const { settings, manager, store, switchProvider } = owner();
     await settings.importFromProfile({
       providers: { openai: { model: 'gpt-4', 'auth-key': 'keep-me' } },
       tools: { allowed: ['read_file', 'glob'], disabled: [] },
@@ -64,7 +63,6 @@ describe('Profile settings rollback at the owner', () => {
     const before = settings.exportForStateSnapshot();
     const failure = new Error('injected post-import failure');
     const application = assembleProfileApplication(
-      config,
       settings,
       manager,
       null,

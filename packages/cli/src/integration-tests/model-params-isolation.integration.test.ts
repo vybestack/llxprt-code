@@ -1,4 +1,5 @@
 import { CredentialAuthority } from '../../../providers/src/auth/proxy/credential-store-factory.js';
+import { buildRuntimeProfileSnapshot } from '../../../agents/src/api/profileSnapshot.js';
 import {
   modelSelectionInputs,
   providerSwitchInputs,
@@ -37,7 +38,6 @@ import {
 } from '../../../agents/src/api/model-parameters.js';
 import {
   switchActiveProvider,
-  buildRuntimeProfileSnapshot,
   setActiveModel,
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
@@ -243,7 +243,6 @@ describe('Runtime model parameter isolation', () => {
     };
 
     await assembleProfileApplication(
-      config,
       settingsService,
       providerManager,
       null,

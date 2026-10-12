@@ -362,6 +362,8 @@ describe('real startup activation owner cleanup', () => {
   );
 
   it('closes an untransferred owner when keyfile loading fails during finalization', async () => {
+    delete process.env.LLXPRT_FAKE_RESPONSES;
+    process.argv[3] = 'openai';
     process.argv.push('--keyfile', resolve(directory, 'missing-key'));
     const settings = loadSettings(directory);
     const argv = await parseArguments(settings.merged);

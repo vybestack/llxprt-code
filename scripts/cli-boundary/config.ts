@@ -102,7 +102,6 @@ export const PUBLIC_SUBPATHS_BY_PACKAGE: {
     'runtime/assembleCliProviderRuntime.js',
     'runtime/cliForegroundRuntime.js',
     'runtime/ownerSettingsOperations.js',
-    'runtime/profileSnapshot.js',
     'runtime/providerModelParameters.js',
     'runtime/providerMutations.js',
     'runtime/providerReadOperations.js',

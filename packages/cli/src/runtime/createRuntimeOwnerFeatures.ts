@@ -26,7 +26,7 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { getOpenAIProviderInfo } from '@vybestack/llxprt-code-providers';
 import { refreshAliasProviders } from '@vybestack/llxprt-code-providers/composition.js';
 import { updateActiveProviderApiKey } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
-import { getProfileByName } from '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js';
+import { assembleProfileDefinitions } from '@vybestack/llxprt-code-agents';
 import type { RuntimeOwnerFeatures } from '../ui/contexts/RuntimeContext.js';
 import type { ProviderAliasRefresh } from '../ui/contexts/ProviderAliasRefreshContext.js';
 import { createProviderInspection } from './providerInspection.js';
@@ -110,13 +110,10 @@ export function createRuntimeOwnerFeatures(
       settings.setEphemeralSetting(key, value),
     getUnallowedParametersForActiveModel: () =>
       reads.getUnallowedParametersForActiveModel(),
-    saveLoadBalancerProfile: (name, profile) =>
-      definitions.profileWrites.saveProfile(name, profile),
-    listSavedProfiles: () => definitions.profileDefinitions.listProfiles(),
-    getProfileByName: (name) =>
-      getProfileByName(name, definitions.profileDefinitions),
-    saveProfileDefinition: (name, profile) =>
-      definitions.profileWrites.saveProfile(name, profile),
+    ...assembleProfileDefinitions(
+      definitions.profileDefinitions,
+      definitions.profileWrites,
+    ),
     ...createProviderInspection(
       () => sessionSettings.readSelectedEndpoint(),
       manager,

@@ -830,7 +830,6 @@ export class SubagentOrchestrator {
 
       if (isLoadBalancerActivation) {
         await assembleProfileApplication(
-          handle.config,
           handle.settingsService,
           handle.providerManager,
           handle.oauthManager,

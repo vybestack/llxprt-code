@@ -1,4 +1,5 @@
 import { CredentialAuthority } from '../../../../providers/src/auth/proxy/credential-store-factory.js';
+import { buildRuntimeProfileSnapshot } from '../../../../agents/src/api/profileSnapshot.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
 import {
@@ -31,7 +32,6 @@ import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { setActiveModelParam } from '../../../../agents/src/api/model-parameters.js';
 import {
   activateIsolatedRuntimeContext,
-  buildRuntimeProfileSnapshot,
   createIsolatedRuntimeContext,
   setActiveModel,
   switchActiveProvider,
@@ -200,7 +200,6 @@ describe('CLI runtime isolation', () => {
           },
         };
         await assembleProfileApplication(
-          runtimeA.handle.config,
           runtimeA.handle.settingsService,
           runtimeA.handle.providerManager,
           runtimeA.handle.oauthManager,
@@ -276,7 +275,6 @@ describe('CLI runtime isolation', () => {
             },
           };
           await assembleProfileApplication(
-            runtimeB.handle.config,
             runtimeB.handle.settingsService,
             runtimeB.handle.providerManager,
             runtimeB.handle.oauthManager,

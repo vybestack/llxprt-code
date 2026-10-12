@@ -12,6 +12,7 @@ import {
   type LoadBalancerProfile,
 } from '@vybestack/llxprt-code-settings';
 import { successful, withOwners } from './turn-revision-capture.fixture.js';
+import { usePromptFixture } from './helpers/prompt-fixture.js';
 
 function barrier(): {
   entered: Promise<void>;
@@ -55,6 +56,8 @@ const lb = (policy: 'roundrobin' | 'failover'): LoadBalancerProfile => ({
 });
 
 describe('Final LB delegate authorization after asynchronous member authentication', () => {
+  usePromptFixture();
+
   for (const policy of ['roundrobin', 'failover'] as const) {
     it(`rejects active ${policy} replacement and preserves admitted members independently of a same-label sibling`, async () => {
       await withOwners(async (a, b, oldEndpoint, newEndpoint, start) => {

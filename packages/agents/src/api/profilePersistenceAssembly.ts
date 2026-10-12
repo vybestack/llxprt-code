@@ -1,4 +1,4 @@
-import { extractModelParams } from '@vybestack/llxprt-code-providers/model-parameter-data.js';
+import { LoadBalancingProvider } from '@vybestack/llxprt-code-providers';
 import { setActiveModel } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
 import { assembleModelSelection } from './model-selection.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
@@ -8,18 +8,15 @@ import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clien
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type {
-  Config,
-  RuntimeProviderManager,
-} from '@vybestack/llxprt-code-core';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProfileDefinitionWrites } from '@vybestack/llxprt-code-core';
-import { LoadBalancingProvider } from '@vybestack/llxprt-code-providers';
 import {
   buildRuntimeProfileSnapshot,
-  deleteProfileByName,
+  captureProfileModelParams,
   saveProfileSnapshot,
-} from '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js';
+  type ProfileSnapshotData,
+} from './profileSnapshot.js';
 import type { Agent, ProviderStatus } from './agent.js';
 import type { AgentProviderState } from './agentImpl.js';
 import type { AuthWinner } from './control/authState.js';
@@ -39,12 +36,29 @@ type ProfilePersistence = Pick<
 };
 
 export function assembleProfilePersistence(
-  config: Config,
-  settings: SettingsService,
-  manager: RuntimeProviderManager,
+  readModel: () => string,
+  readProvider: () => string | undefined,
+  settings: Pick<
+    SettingsService,
+    | 'getProviderSettings'
+    | 'getCurrentProfileName'
+    | 'setCurrentProfileName'
+    | 'set'
+  >,
+  manager: Pick<
+    RuntimeProviderManager,
+    'getActiveProviderName' | 'getProviderByName'
+  >,
   captureParameters: () => Readonly<Record<string, unknown>>,
   profiles: ProfileDefinitionWrites,
 ): ProfilePersistence {
+  const reads = assembleProfilePersistenceReads(
+    readModel,
+    readProvider,
+    settings,
+    manager,
+    captureParameters,
+  );
   let closed = false;
   const pending = new Set<Promise<unknown>>();
   const admit = <T>(operation: () => Promise<T>): Promise<T> => {
@@ -58,25 +72,8 @@ export function assembleProfilePersistence(
     );
     return accepted;
   };
-  const captureProfile: Agent['captureProfile'] = () => {
-    const providerName =
-      manager.getActiveProviderName() ?? config.getProvider() ?? 'openai';
-    const provider = manager.getProviderByName(providerName);
-    const providerSettings = settings.getProviderSettings(providerName);
-    return buildRuntimeProfileSnapshot({
-      providerName,
-      modelName:
-        typeof providerSettings.model === 'string'
-          ? providerSettings.model
-          : config.getModel(),
-      providerSettings,
-      ephemeralSettings: captureParameters(),
-      loadBalancerConfig:
-        provider instanceof LoadBalancingProvider
-          ? provider.getLoadBalancerConfig()
-          : undefined,
-    });
-  };
+  const captureProfile: Agent['captureProfile'] = () =>
+    buildRuntimeProfileSnapshot(reads.capture());
   return {
     closeAdmission: () => {
       closed = true;
@@ -98,38 +95,16 @@ export function assembleProfilePersistence(
         saveProfileSnapshot(name, captureProfile(), additionalConfig, profiles),
       ),
     deleteProfileByName: (name) =>
-      admit(() => deleteProfileByName(name, settings, profiles)),
+      admit(async () => {
+        await profiles.deleteProfile(name);
+        if (settings.getCurrentProfileName() === name)
+          settings.setCurrentProfileName(null);
+      }),
     getActiveProfileName: () => settings.getCurrentProfileName(),
     setDefaultProfileName: (name) =>
       settings.set('defaultProfile', name ?? undefined),
-    getRuntimeDiagnosticsSnapshot: () =>
-      captureProfileDiagnostics(config, settings, manager, captureParameters),
+    getRuntimeDiagnosticsSnapshot: () => structuredClone(reads.diagnostics()),
   };
-}
-
-function captureProfileDiagnostics(
-  config: Config,
-  settings: SettingsService,
-  manager: RuntimeProviderManager,
-  captureParameters: () => Readonly<Record<string, unknown>>,
-): ReturnType<Agent['getRuntimeDiagnosticsSnapshot']> {
-  const providerName = manager.getActiveProviderName() ?? null;
-  const storedModel = providerName
-    ? settings.getProviderSettings(providerName).model
-    : undefined;
-  return structuredClone({
-    providerName,
-    modelName:
-      typeof storedModel === 'string' && storedModel.trim()
-        ? storedModel
-        : config.getModel() || null,
-    profileName: settings.getCurrentProfileName(),
-    modelParams:
-      providerName === null
-        ? {}
-        : extractModelParams(settings.getProviderSettings(providerName)),
-    ephemeralSettings: captureParameters(),
-  });
 }
 
 export function buildProfileProviderStatus(
@@ -190,4 +165,63 @@ export function setAgentSelectedModel(
     roots.settingsService,
     roots.providerManager.getActiveProvider(),
   );
+}
+
+function assembleProfilePersistenceReads(
+  readModel: () => string,
+  readProvider: () => string | undefined,
+  settings: Pick<
+    SettingsService,
+    'getProviderSettings' | 'getCurrentProfileName'
+  >,
+  manager: Pick<
+    RuntimeProviderManager,
+    'getActiveProviderName' | 'getProviderByName'
+  >,
+  captureParameters: () => Readonly<Record<string, unknown>>,
+): {
+  capture: () => ProfileSnapshotData;
+  diagnostics: Agent['getRuntimeDiagnosticsSnapshot'];
+} {
+  return {
+    capture: () => {
+      const providerName =
+        manager.getActiveProviderName() ?? readProvider() ?? 'openai';
+      const provider = manager.getProviderByName(providerName);
+      const providerSettings = settings.getProviderSettings(providerName);
+      return {
+        providerName,
+        modelName:
+          typeof providerSettings.model === 'string'
+            ? providerSettings.model
+            : readModel(),
+        providerSettings,
+        ephemeralSettings: captureParameters(),
+        loadBalancerConfig:
+          provider instanceof LoadBalancingProvider
+            ? provider.getLoadBalancerConfig()
+            : undefined,
+      };
+    },
+    diagnostics: () => {
+      const providerName = manager.getActiveProviderName() ?? null;
+      const storedModel = providerName
+        ? settings.getProviderSettings(providerName).model
+        : undefined;
+      return {
+        providerName,
+        modelName:
+          typeof storedModel === 'string' && storedModel.trim()
+            ? storedModel
+            : readModel() || null,
+        profileName: settings.getCurrentProfileName(),
+        modelParams: providerName
+          ? captureProfileModelParams(
+              settings.getProviderSettings(providerName),
+            )
+          : {},
+        ephemeralSettings: captureParameters(),
+      };
+    },
+  };
 }

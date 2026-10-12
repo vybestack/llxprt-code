@@ -16,7 +16,8 @@ async function setActiveToolFormatOverride(
   provider: typeof activeProvider,
 ) {
   return assembleToolFormatControl(
-    () => owner,
+    owner.readToolFormat.bind(owner),
+    owner.writeToolFormat.bind(owner),
     () => provider,
     () => {},
     () => {},

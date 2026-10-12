@@ -237,7 +237,7 @@ export class SessionClientOwner {
     this.toolCatalog.bindImageOperation((input) => this.images.run(input));
   }
 
-  readonly runImageOperation: ImageOperationRunner = (input) => {
+  readonly runImageOperation: ImageOperationRunner = async (input) => {
     this.getAgentClient();
     return this.images.run(input);
   };

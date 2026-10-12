@@ -122,8 +122,10 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     );
 
     expect(scopeFactory).toHaveBeenCalledTimes(1);
-    const overrides = scopeFactory.mock.calls[0][7];
-    expect<unknown>(overrides.runtimeBundle).toBe(runtimeBundle);
+    const scopeArguments = scopeFactory.mock.calls[0];
+    expect(scopeArguments[7]).toBe(runtimeBundle.runtimeContext);
+    expect(scopeArguments[8]).toBe(runtimeBundle.contentGenerator);
+    expect(result.runtime).toBe(runtimeBundle);
 
     expect(result.scope).toBe(scope);
     expect(result.agentId).toBe('planner-1');

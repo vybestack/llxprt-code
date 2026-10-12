@@ -1,4 +1,5 @@
 import { CredentialAuthority } from '../../../providers/src/auth/proxy/credential-store-factory.js';
+import { buildRuntimeProfileSnapshot } from '../../../agents/src/api/profileSnapshot.js';
 import { modelParamInputs } from '../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
 /**
  * @license
@@ -25,7 +26,6 @@ import {
   setActiveModelParam,
   clearActiveModelParam,
 } from '../../../agents/src/api/model-parameters.js';
-import { buildRuntimeProfileSnapshot } from '@vybestack/llxprt-code-providers/runtime.js';
 import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
 import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
 import { assertDefined } from '../__tests__/assertions.js';

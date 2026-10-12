@@ -13,6 +13,7 @@
  */
 
 import { vi } from 'bun:test';
+import { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import type React from 'react';
 import type { UseSubmitQueryDeps } from '../useSubmitQuery.js';
 import { StreamingState, type HistoryItemWithoutId } from '../../../types.js';
@@ -102,7 +103,10 @@ export function buildLifecycleHookDeps(
 ): UseSubmitQueryDeps {
   return {
     runtime: createStreamRuntimeForTest(),
-    agent: createMockAgentClient() as unknown as Agent,
+    agent: {
+      ...createMockAgentClient(),
+      metrics: new UiTelemetryService(),
+    } as unknown as Agent,
     addItem: vi.fn().mockReturnValue(1),
     settings: {} as never,
     onDebugMessage: vi.fn(),

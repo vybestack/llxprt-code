@@ -34,7 +34,6 @@ import {
 } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
 import { assembleModelParameterControl } from './model-parameters.js';
 import {
-  setAgentSelectedModel,
   restoreAgentChatVisibility,
   assembleProfilePersistence,
   buildProfileProviderStatus,
@@ -288,39 +287,44 @@ export class AgentImpl implements Agent {
   readonly providerReads: Agent['providerReads'];
   readonly modelParameters: Agent['modelParameters'] =
     assembleModelParameterControl(
-      () => this.deps.settingsService,
+      (provider, key, value) =>
+        this.deps.settingsService.setProviderSetting(provider, key, value),
       () => this.deps.providerManager.getActiveProviderName(),
       () => this.providerState.modelParams,
       () => this.coordinator.assertNoCommit(),
     );
   readonly settings: Agent['settings'] = assembleSettingsControl(
-    () => this.deps.settingsOwner,
+    (key) => this.deps.settingsOwner.readNamedParameter(key),
+    () => this.deps.settingsOwner.captureNamedParameters(),
+    (key, value) => this.deps.settingsOwner.writeUserParameter(key, value),
+    (key) => this.deps.settingsOwner.readSessionOverride(key),
+    (key, value) => this.deps.settingsOwner.writeSessionOverride(key, value),
+    (key) => this.deps.settingsOwner.clearSessionOverride(key),
     () => this.coordinator.assertSettingsAdmission(),
     () => this.assertProfileIdle(),
   );
   readonly toolFormat: Agent['toolFormat'] = assembleToolFormatControl(
-    () => this.deps.settingsOwner,
+    () => this.deps.settingsOwner.readToolFormat(),
+    (format) => this.deps.settingsOwner.writeToolFormat(format),
     () => this.deps.providerManager.getActiveProvider(),
     () => this.coordinator.assertSettingsAdmission(),
     () => this.assertProfileIdle(),
   );
 
-  constructor(private readonly deps: AgentDeps) {
+  constructor(
+    private readonly deps: AgentDeps,
+    private readonly selectOwnerModel: (model: string) => Promise<void>,
+  ) {
     this.metrics = deps.settingsOwner.telemetry.localMetrics;
     this.sessionClient = this.buildSessionClient();
-    const reads = assembleProviderReads(
-      deps.providerManager,
-      () => this.getProviderStatus().provider,
-      deps.settingsOwner,
-      () => this.providerState.model,
-      (provider) => deps.settingsService.getProviderSettings(provider),
-    );
+    const reads = this.buildProviderReads();
     this.providerReads = reads.providerReads;
     this.hasActiveProvider = reads.hasActiveProvider;
     this.getProviderContextLimit = reads.getProviderContextLimit;
     this.listAvailableModels = reads.listAvailableModels;
     this.profilePersistence = assembleProfilePersistence(
-      deps.config,
+      () => deps.config.getModel(),
+      () => deps.config.getProvider(),
       deps.settingsService,
       deps.providerManager,
       () => deps.settingsOwner.captureNamedParameters(),
@@ -392,26 +396,32 @@ export class AgentImpl implements Agent {
     this.lsp = this.newControls.lsp;
   }
 
+  private buildProviderReads() {
+    return assembleProviderReads(
+      this.deps.providerManager,
+      () => this.getProviderStatus().provider,
+      this.deps.settingsOwner,
+      () => this.providerState.model,
+      (provider) => this.deps.settingsService.getProviderSettings(provider),
+    );
+  }
+
   private readonly prepareReplacement = (
     changed: boolean,
     signal: AbortSignal,
   ) =>
     assembleProfileReplacement(
-      {
-        telemetry: this.deps.settingsOwner.telemetry,
-        loopHolder: this.deps.loopHolder,
-        toolSelection: this.deps.sessionClient.toolCatalog.selection,
-        readApprovalMode: () => this.getApprovalMode(),
-        readExecutionPolicy: () =>
-          this.deps.settingsOwner.readToolExecutionPolicy(),
-        getToolGovernance: () =>
-          this.deps.sessionClient.toolCatalog.readGovernance(),
-        config: this.deps.config,
-        messageBus: this.deps.messageBus,
-        resolveClient: this.deps.resolveClient,
-        approvalHandler: this.deps.approvalHandler,
-        displayCallbacks: this.deps.displayCallbacks,
-      },
+      this.deps.resolveClient,
+      this.deps.settingsOwner.telemetry,
+      this.deps.loopHolder,
+      this.deps.sessionClient.toolCatalog.selection,
+      () => this.getApprovalMode(),
+      () => this.deps.settingsOwner.readToolExecutionPolicy(),
+      () => this.deps.sessionClient.toolCatalog.readGovernance(),
+      this.deps.config,
+      this.deps.messageBus,
+      this.deps.approvalHandler,
+      this.deps.displayCallbacks,
       () => this.deps.sessionClient.prepareProfileClientReplacement(),
       () => this.activeRun,
     )(changed, signal);
@@ -533,14 +543,12 @@ export class AgentImpl implements Agent {
         );
       },
     };
-    return new AuthControl({
-      authState: this.authState,
-      getCurrentProvider: () => this.providerState.provider,
-      getKeyName: () => this.providerState.keyName,
-      getStatus: (provider) =>
-        authStatusForWinner(this.computeWinner(provider)),
-      onOAuthPrompt: onOAuthPromptHandler,
-      setBaseUrl: async (baseUrl) => {
+    return new AuthControl(
+      this.authState,
+      () => this.providerState.provider,
+      (provider) => authStatusForWinner(this.computeWinner(provider)),
+      onOAuthPromptHandler,
+      async (baseUrl) => {
         this.providerState.baseUrl = baseUrl ?? undefined;
         try {
           await updateActiveProviderBaseUrl(
@@ -557,9 +565,8 @@ export class AgentImpl implements Agent {
         }
       },
       keysDeps,
-      // @plan:PLAN-20260622-COREAPIGAP.P12 @requirement:REQ-005
-      getOAuthManager: () => this.deps.oauthManager,
-    });
+      () => this.deps.oauthManager,
+    );
   }
 
   /**
@@ -739,7 +746,7 @@ export class AgentImpl implements Agent {
     if (!this.isProviderReady()) {
       throw new Error(UNCONFIGURED_AGENT_MESSAGE);
     }
-    await this.setOwnerModel(model);
+    await this.selectOwnerModel(model);
     await this.deps.sessionClient.refreshAuth();
     await this.restoreChatVisibility();
     this.rebuild();
@@ -769,9 +776,7 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-005
    * @pseudocode lines 10-12
    */
-  getRuntimeId(): string {
-    return this.deps.runtimeId;
-  }
+  readonly getRuntimeId = (): string => this.deps.runtimeId;
 
   /**
    * Returns the single session MessageBus the facade owns — the SAME instance
@@ -782,9 +787,7 @@ export class AgentImpl implements Agent {
    * @plan:PLAN-20270110-ISSUE2378.P01
    * @requirement:REQ-2378-001
    */
-  getMessageBus(): MessageBus {
-    return this.deps.messageBus;
-  }
+  readonly getMessageBus = (): MessageBus => this.deps.messageBus;
 
   /** @plan:PLAN-20260621-COREAPIREMED.P12 @requirement:REQ-002 @pseudocode lines 20-22 */
   getEphemeralSetting(key: string): unknown {
@@ -917,8 +920,7 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-010
    */
   async updateSystemInstruction(): Promise<void> {
-    const client = this.deps.resolveClient();
-    await client.updateSystemInstruction();
+    await this.deps.resolveClient().updateSystemInstruction();
   }
 
   /**
@@ -928,8 +930,7 @@ export class AgentImpl implements Agent {
    * @requirement:REQ-010
    */
   async addDirectoryContext(): Promise<void> {
-    const client = this.deps.resolveClient();
-    await client.addDirectoryContext();
+    await this.deps.resolveClient().addDirectoryContext();
   }
 
   /**
@@ -1138,7 +1139,7 @@ export class AgentImpl implements Agent {
       // Real provider switch succeeded; apply the requested model (if any) via
       // setActiveModel + the explicit model-only rebuild.
       if (model !== undefined && model !== this.providerState.model) {
-        await this.setOwnerModel(model);
+        await this.selectOwnerModel(model);
         await this.deps.sessionClient.refreshAuth();
       }
       await this.restoreChatVisibility();
@@ -1148,7 +1149,7 @@ export class AgentImpl implements Agent {
       // change, so the client/HistoryService identity is preserved).
       // setActiveModel updates the model on the existing provider; the
       // rebuild() below propagates it to the loop (#2374 deepthinker finding).
-      await this.setOwnerModel(model);
+      await this.selectOwnerModel(model);
     }
     // Under the fake seam (providerChanged === false), the client is unchanged;
     // history/HistoryService identity is trivially preserved (same client).
@@ -1177,15 +1178,8 @@ export class AgentImpl implements Agent {
    * @plan:PLAN-20260617-COREAPI.P16
    * @requirement:REQ-005
    */
-  private setOwnerModel(
-    model: string,
-  ): ReturnType<typeof setAgentSelectedModel> {
-    return setAgentSelectedModel(model, this.deps);
-  }
-
-  private restoreChatVisibility(): Promise<void> {
-    return restoreAgentChatVisibility(this.deps.resolveClient());
-  }
+  private readonly restoreChatVisibility = (): Promise<void> =>
+    restoreAgentChatVisibility(this.deps.resolveClient());
 
   /**
    * Applies a profile's modelParams onto the live agent via the lazy runtime
@@ -1323,9 +1317,11 @@ export class AgentImpl implements Agent {
       cancelAndJoinOwnedWork: [
         () =>
           joinAgentWork(
-            this,
-            this.deps.taskLaunchOwner,
-            this.ownership,
+            () => this.profiles.cancelAndJoin(),
+            () => this.mcp.cancelAndJoin(),
+            () => this.deps.taskLaunchOwner.hasPendingWork(),
+            () => this.deps.taskLaunchOwner.join(),
+            () => this.ownership.disposeMcpRuntime?.(),
             errors,
           ),
         () => joinCapturedRun(run, errors),
@@ -1337,7 +1333,11 @@ export class AgentImpl implements Agent {
       ],
       flushRecording: [
         async () => {
-          await finishOwnedHooks(this.hooks, this.deps.sessionClient, errors);
+          await finishOwnedHooks(
+            () => this.hooks.finishSessionEnd(),
+            () => this.deps.sessionClient.disposeHooks(),
+            errors,
+          );
           await disposeAgentObservers(
             this.ownership,
             this.hooks,
@@ -1372,12 +1372,4 @@ export class AgentImpl implements Agent {
       errors,
     );
   }
-}
-
-/**
- * Factory that injects bootstrap deps into AgentImpl.
- * @pseudocode createAgent.md steps 150-160
- */
-export function buildAgent(deps: AgentDeps): Agent {
-  return new AgentImpl(deps);
 }

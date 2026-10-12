@@ -46,20 +46,12 @@ describe('Profile application basics at the owner', () => {
   });
 
   it('reads a keyfile before switching and installs the resolved credential', async () => {
-    const {
-      config,
-      settings,
-      manager,
-      directory,
-      oauth,
-      switchProvider,
-      store,
-    } = owner();
+    const { settings, manager, directory, oauth, switchProvider, store } =
+      owner();
     const keyfile = join(directory, 'credential');
     await writeFile(keyfile, ' file-credential\n');
     const observed: unknown[] = [];
     const application = assembleProfileApplication(
-      config,
       settings,
       manager,
       oauth,

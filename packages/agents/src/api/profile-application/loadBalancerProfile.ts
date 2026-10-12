@@ -7,11 +7,8 @@ import {
   LoadBalancingProvider,
   type LoadBalancingProviderConfig,
   type ResolvedSubProfile,
-} from '../../LoadBalancingProvider.js';
-import {
-  isRecord,
-  type ProfileAuthIntent,
-} from '../../loadBalancing/loadBalancerTypes.js';
+} from '@vybestack/llxprt-code-providers';
+type ProfileAuthIntent = NonNullable<ResolvedSubProfile['auth']>;
 import {
   type LoadBalancerProfile,
   type Profile,
@@ -146,6 +143,14 @@ async function resolveSubProfileContextWindow(
  * resolution uses the member identity, not one shared default. Only the intent is
  * copied; token material continues to flow via authToken/authKeyfile.
  */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
 function resolveSubProfileAuthIntent(
   subProfile: unknown,
 ): ProfileAuthIntent | undefined {

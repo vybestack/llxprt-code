@@ -15,7 +15,7 @@ import {
   workflowApplication,
 } from './profile-workflow-owner-fixture.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { applyProfileCascade } from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
+import { applyProfileCascade } from '../../../../agents/src/api/profileApplication.js';
 
 describe('Profile cascade workflow at the owner', () => {
   const owner = useProfileOwner();
@@ -290,7 +290,6 @@ describe('Profile cascade workflow at the owner', () => {
       applyProfileCascade(
         { ...standardProfile(), provider: 'no-default', model: '' },
         {},
-        config,
         settings,
         manager,
         store,
@@ -306,6 +305,7 @@ describe('Profile cascade workflow at the owner', () => {
           applyParameter: (key, value) =>
             owner().settingsOwner.writeUserParameter(key, value),
         },
+        (name) => owner().manager.getProviderKeys().getKey(name),
       ),
     ).rejects.toThrow('does not specify a model');
   });

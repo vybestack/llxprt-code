@@ -17,11 +17,27 @@ export {
 } from './src/api/providerSwitchAssembly.js';
 
 export {
+  captureAgentPreflightHostInput,
+  requestAgentPreflightOAuth,
+  openAgentPreflightBrowser,
+  type AgentPreflightData,
+  type AgentPreflightHostInput,
+  type AgentPreflightOAuthRequest,
+  type AgentPreflightOAuthHost,
+  type AgentPreflightBrowserHost,
+} from './src/api/preflight-host-input.js';
+
+export {
   assembleProfileApplication,
   type AgentProfileApplication,
 } from './src/api/profileApplicationAssembly.js';
 
 export { McpRuntimeOwner } from './src/api/mcpRuntimeAssembly.js';
+
+export {
+  assembleProfileDefinitions,
+  type AgentProfileDefinitions,
+} from './src/api/profileDefinitions.js';
 
 export {
   NO_ACTIVE_PROVIDER_ERROR_MESSAGE,

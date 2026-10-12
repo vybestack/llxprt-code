@@ -1,5 +1,4 @@
 import { resolveRequestedModel } from './profile-model-selection.js';
-import type { ModelSelectionOperations } from './providerMutations.js';
 import {
   selectAvailableProvider,
   type ProviderSelectionResult,
@@ -9,10 +8,7 @@ export {
   type ProviderSelectionResult,
 } from './profile-application/providerSelection.js';
 import { switchProviderForProfile } from './profile-application/switchProfileProvider.js';
-import type {
-  Config,
-  RuntimeProviderManager,
-} from '@vybestack/llxprt-code-core';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings/profiles/types.js';
 import { isInternalSettingKey } from '@vybestack/llxprt-code-settings/settings/settingsRegistry.js';
@@ -22,17 +18,17 @@ import type {
   ProfileManager,
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
-import { extractModelParams } from '../model-parameter-data.js';
+import type { ModelSelectionOperations } from './model-selection.js';
 import * as fs from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import { captureProfileModelParams } from './profileSnapshot.js';
 import {
   setActiveModel,
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
-} from './providerMutations.js';
-import type { ProviderSwitcher } from './providerSwitch.js';
-import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
+} from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import type { ProviderSwitcher } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js';
 import {
   getProfileEphemeralSettings,
   getProfileModelParams,
@@ -44,6 +40,11 @@ import {
   collectProfileValueWarnings,
   formatProfileValueWarnings,
 } from './profile-application/profileValueWarnings.js';
+
+type ProfileSettings = Pick<
+  SettingsService,
+  'get' | 'getAllGlobalSettings' | 'getProviderSettings' | 'setProviderSetting'
+>;
 
 export interface ProfileApplicationOptions {
   profileName?: string;
@@ -68,7 +69,6 @@ function logger(): DebugLogger {
 type ProfileEphemeralWriter = (key: string, value: unknown) => void;
 
 interface AuthWiringDeps {
-  readonly getKeyStorage: () => Pick<ProviderKeyStorageLike, 'getKey'>;
   setEphemeral: ProfileEphemeralWriter;
   targetProviderName: string;
   warnings: string[];
@@ -106,7 +106,7 @@ interface NamedAuthResolution {
  */
 async function resolveNamedAuthKey(
   authKeyName: unknown,
-  getKeyStorage: () => Pick<ProviderKeyStorageLike, 'getKey'>,
+  readNamedKey: (name: string) => Promise<string | null | undefined>,
 ): Promise<NamedAuthResolution> {
   if (typeof authKeyName !== 'string' || authKeyName.trim() === '') {
     return {
@@ -116,9 +116,9 @@ async function resolveNamedAuthKey(
     };
   }
   const trimmedKeyName = authKeyName.trim();
-  let resolvedAuthKey: string | null;
+  let resolvedAuthKey: string | null | undefined;
   try {
-    resolvedAuthKey = await getKeyStorage().getKey(trimmedKeyName);
+    resolvedAuthKey = await readNamedKey(trimmedKeyName);
   } catch (error) {
     // A retrieval fault is not a missing key: the key may well be stored and
     // the keychain merely locked or unreadable. Suggesting '/key save' here
@@ -192,10 +192,11 @@ async function wireAuthBeforeSwitch(
   sanitizedProfile: Profile,
   deps: AuthWiringDeps,
   previousKeys: readonly string[],
+  readNamedKey: (name: string) => Promise<string | null | undefined>,
 ): Promise<AuthWiringResult> {
   const namedAuth = await resolveNamedAuthKey(
     getProfileEphemeralSettings(sanitizedProfile)['auth-key-name'],
-    deps.getKeyStorage,
+    readNamedKey,
   );
   const setEphemeralSetting = deps.setEphemeral;
   clearProfileEphemerals(previousKeys, sanitizedProfile, setEphemeralSetting);
@@ -317,15 +318,10 @@ function applyNonAuthEphemerals(
   }
 }
 
-interface ModelAndParamsDeps {
-  modelSelection: ModelSelectionOperations;
-  sanitizedProfile: Profile;
-  actualProfile: Profile;
-  providerRecord: { getDefaultModel?: () => string } | null | undefined;
-  settingsService: SettingsService;
-  providerManager: Pick<RuntimeProviderManager, 'getActiveProvider'>;
-  targetProviderName: string;
-}
+type ProfileModelProvider =
+  | { getDefaultModel?: () => string }
+  | null
+  | undefined;
 
 interface ModelAndParamsResult {
   appliedModelName: string;
@@ -334,13 +330,13 @@ interface ModelAndParamsResult {
 
 function applyProfileModelParams(
   sanitizedProfile: Profile,
-  settingsService: SettingsService,
+  settingsService: ProfileSettings,
   providerName: string | undefined,
 ): void {
   if (!providerName)
     throw new Error('No active provider available to set model parameters.');
   const profileParams = getProfileModelParams(sanitizedProfile);
-  const existingParams = extractModelParams(
+  const existingParams = captureProfileModelParams(
     settingsService.getProviderSettings(providerName),
   );
   for (const [key, value] of Object.entries(profileParams)) {
@@ -354,33 +350,30 @@ function applyProfileModelParams(
 }
 
 async function applyModelAndParams(
-  deps: ModelAndParamsDeps,
+  sanitizedProfile: Profile,
+  actualProfile: Profile,
+  providerRecord: ProfileModelProvider,
+  settingsService: ProfileSettings,
+  providerManager: Pick<RuntimeProviderManager, 'getActiveProvider'>,
+  targetProviderName: string,
+  modelSelection: ModelSelectionOperations,
 ): Promise<ModelAndParamsResult> {
-  const {
-    sanitizedProfile,
-    actualProfile,
-    providerRecord,
-    providerManager,
-    targetProviderName,
-    settingsService,
-  } = deps;
-
   const modelToSet = resolveRequestedModel(
     sanitizedProfile,
     actualProfile,
     providerRecord,
-    deps.modelSelection,
+    modelSelection,
     providerManager,
   );
   const modelResult = await setActiveModel(
     modelToSet,
-    deps.modelSelection,
+    modelSelection,
     settingsService,
     providerManager.getActiveProvider(),
   );
   applyProfileModelParams(
     sanitizedProfile,
-    deps.settingsService,
+    settingsService,
     providerManager.getActiveProvider()?.name,
   );
 
@@ -425,7 +418,7 @@ interface ProfileApplicationContext {
   selection: ProviderSelectionResult;
   warnings: string[];
   targetProviderName: string;
-  providerRecord: ModelAndParamsDeps['providerRecord'];
+  providerRecord: ProfileModelProvider;
   authDeps: AuthWiringDeps;
 }
 
@@ -510,7 +503,7 @@ function clearProfileEphemerals(
 function buildProfileApplicationContext(
   profileInput: Profile,
   providerManager: RuntimeProviderManager,
-  settingsService: SettingsService,
+  settingsService: ProfileSettings,
   setEphemeral: ProfileEphemeralWriter,
   profileName: string | undefined,
 ): ProfileApplicationContext {
@@ -562,14 +555,6 @@ function buildProfileApplicationContext(
     targetProviderName,
     providerRecord,
     authDeps: {
-      getKeyStorage: () => {
-        const storage = providerManager.getProviderKeys?.();
-        if (!storage)
-          throw new Error(
-            'Profile key resolution requires an explicit credential owner',
-          );
-        return storage;
-      },
       setEphemeral,
       targetProviderName,
       warnings,
@@ -624,8 +609,7 @@ function hasExplicitClearDirective(
 }
 
 async function applyAuthProviderUpdate(
-  config: Config,
-  settingsService: SettingsService,
+  settingsService: ProfileSettings,
   profileEphemeralSettings: Record<string, unknown>,
   authKeyApplied: boolean,
   resolvedAuthKeyfilePath: string | null,
@@ -689,7 +673,7 @@ async function applyBaseUrlProviderUpdate(
   setEphemeralSetting: ProfileEphemeralWriter,
   profileEphemeralSettings: Record<string, unknown>,
   infoMessages: string[],
-  settingsService: SettingsService,
+  settingsService: ProfileSettings,
   providerName: string,
 ): Promise<string | undefined> {
   const rawUrl = settingsService.get('base-url');
@@ -723,11 +707,10 @@ async function applyBaseUrlProviderUpdate(
 }
 
 async function applyProviderAuthUpdates(
-  config: Config,
   sanitizedProfile: Profile,
   authResult: AuthWiringResult,
   infoMessages: string[],
-  settingsService: SettingsService,
+  settingsService: ProfileSettings,
   providerName: string,
   setEphemeral: ProfileEphemeralWriter,
   activeProvider: ReturnType<RuntimeProviderManager['getActiveProvider']>,
@@ -735,7 +718,6 @@ async function applyProviderAuthUpdates(
   const profileEphemeralSettings =
     getProfileEphemeralSettings(sanitizedProfile);
   await applyAuthProviderUpdate(
-    config,
     settingsService,
     profileEphemeralSettings,
     authResult.authKeyApplied,
@@ -768,13 +750,13 @@ function normalizeProfileEndpoint(value: unknown): string | undefined {
 export async function applyProfileCascade(
   profileInput: Profile,
   options: ProfileApplicationOptions,
-  config: Config,
-  settingsService: SettingsService,
+  settingsService: ProfileSettings,
   providerManager: RuntimeProviderManager,
   profileManager: Pick<ProfileManager, 'loadProfile'>,
   switchProvider: ProviderSwitcher,
   modelSelection: ModelSelectionOperations,
   parameters: ProfileParameterOperations,
+  readNamedKey: (name: string) => Promise<string | null | undefined>,
 ): Promise<ProfileApplicationResult> {
   const setEphemeral: ProfileEphemeralWriter = parameters.applyParameter;
   const copiedProfile = structuredClone(profileInput);
@@ -798,6 +780,7 @@ export async function applyProfileCascade(
     sanitizedProfile,
     authDeps,
     Object.keys(settingsService.getAllGlobalSettings()),
+    readNamedKey,
   );
   const providerSwitch = await switchProviderForProfile(
     targetProviderName,
@@ -805,7 +788,6 @@ export async function applyProfileCascade(
   );
   const infoMessages = providerSwitch.infoMessages;
   const { appliedBaseUrl } = await applyProviderAuthUpdates(
-    config,
     sanitizedProfile,
     authResult,
     infoMessages,
@@ -816,15 +798,15 @@ export async function applyProfileCascade(
   );
 
   // STEP 5: Apply model and modelParams
-  const { appliedModelName, provider } = await applyModelAndParams({
-    modelSelection,
-    settingsService,
+  const { appliedModelName, provider } = await applyModelAndParams(
     sanitizedProfile,
-    actualProfile: context.actualProfile,
-    providerRecord: context.providerRecord,
+    context.actualProfile,
+    context.providerRecord,
+    settingsService,
     providerManager,
     targetProviderName,
-  });
+    modelSelection,
+  );
 
   // STEP 6: Apply non-auth ephemerals after model defaults so profile values win
   applyNonAuthEphemerals(sanitizedProfile, setEphemeral);

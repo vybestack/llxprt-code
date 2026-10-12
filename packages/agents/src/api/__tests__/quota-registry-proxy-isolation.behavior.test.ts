@@ -14,7 +14,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fetchApiKeyQuota } from '../../../../providers/src/apiKeyQuotaResolver.js';
+import { fetchApiKeyQuota } from '@vybestack/llxprt-code-providers';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { buildAgent, type Agent } from './helpers/agentHarness.js';

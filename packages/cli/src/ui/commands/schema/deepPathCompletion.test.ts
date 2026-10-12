@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { beforeEach, describe, it, expect } from 'bun:test';
 import { createCompletionHandler } from './index.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import type {
@@ -12,9 +12,6 @@ import type {
   LiteralArgument,
   ValueArgument,
 } from './types.js';
-
-// Mock command context for tests
-const mockContext = createMockCommandContext();
 
 // Helper functions to create test arguments
 const literal = (
@@ -59,6 +56,10 @@ function atLeastOneMatch(first: boolean, second: boolean): boolean {
 }
 
 describe('Deep Path Completion @plan:PLAN-411-DEEPCOMPLETION', () => {
+  let mockContext: ReturnType<typeof createMockCommandContext>;
+  beforeEach(() => {
+    mockContext = createMockCommandContext();
+  });
   describe('Flattened path search', () => {
     it('finds single-level matches and prioritizes them first @requirement:REQ-001', async () => {
       // Schema simulating /set with both direct options and nested paths

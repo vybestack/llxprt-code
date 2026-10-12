@@ -1,5 +1,6 @@
 import { createTaskRegistration } from './runtimeFactories.js';
 import { HostCredentialOwner } from '@vybestack/llxprt-code-providers/auth.js';
+import { setActiveModel } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -78,7 +79,7 @@ import type { DisplayCallbacks } from '../core/agenticLoop/types.js';
 import { CoreToolScheduler } from '../core/coreToolScheduler.js';
 import { wrapRegistryWithConfirmation } from './confirmationForcing.js';
 import { rebuildLoop, type LoopHolder } from './loop/rebuildLoop.js';
-import { buildAgent } from './agentImpl.js';
+import { AgentImpl } from './agentImpl.js';
 import {
   assembleProviderSwitch,
   assembleSessionProviderSwitch,
@@ -537,9 +538,7 @@ async function assembleFacade(deps: AssembleFacadeDeps): Promise<Agent> {
     getToolGovernance: () => deps.sessionClient.toolCatalog.readGovernance(),
     config: deps.config,
     messageBus: deps.messageBus,
-    ...(deps.approvalHandler !== undefined
-      ? { approvalHandler: deps.approvalHandler }
-      : {}),
+    approvalHandler: deps.approvalHandler,
     displayCallbacks: deps.displayCallbacks,
     AgenticLoopCtor: AgenticLoop,
   });
@@ -553,55 +552,59 @@ async function assembleFacade(deps: AssembleFacadeDeps): Promise<Agent> {
     configOwnership: deps.configOwnership,
     disposeMcpRuntime: deps.disposeMcpRuntime,
   });
-  const agent = buildAgent({
-    sessionClient: deps.sessionClient,
-    workspaceSkills: deps.workspaceSkills,
-    mediaOwner: deps.mediaOwner,
-    taskLaunchOwner: deps.taskLaunchOwner,
-    shellOwner: deps.shellOwner,
-    config: deps.config,
-    mcpOperations: deps.mcpOperations,
-    providerManager: deps.manager,
-    oauthManager: deps.oauthManager,
-    switchProvider: assembleProviderSwitch(
-      deps.config,
-      deps.sharedSettingsService,
-      deps.manager,
-      deps.oauthManager,
-      () => deps.handle.readRuntimeKind(),
-      () => deps.sessionClient.refreshAuth(),
-      deps.handle.settingsOwner,
-    ),
-    settingsService: deps.sharedSettingsService,
-    settingsOwner: deps.handle.settingsOwner,
-    runtimeId: deps.runtimeId,
-    runtimeHandle: deps.handle,
-    messageBus: deps.messageBus,
-    loopHolder: deps.loopHolder,
-    runtimeState: deps.runtimeState,
-    ownership,
-    sessionIdentityOwnership: deps.sessionIdentityOwnership,
-    rebuildLoop,
-    resolveClient: deps.resolveClient,
-    initialHistoryService: initializeAgentHistory(
-      deps.sessionClient.getAgentClient(),
-    ),
-    ...(deps.approvalHandler !== undefined
-      ? { approvalHandler: deps.approvalHandler }
-      : {}),
-    displayCallbacks: deps.displayCallbacks,
-    editorCallbacksHolder: deps.editorCallbacksHolder,
-    displayCallbacksHolder: deps.displayCallbacksHolder,
-    onOAuthPrompt: deps.onOAuthPrompt,
-    editorCallbacks: deps.editorCallbacks,
-    ...(deps.initialAuth !== undefined
-      ? { initialAuth: deps.initialAuth }
-      : {}),
-  });
+  return new AgentImpl(
+    {
+      sessionClient: deps.sessionClient,
+      workspaceSkills: deps.workspaceSkills,
+      mediaOwner: deps.mediaOwner,
+      taskLaunchOwner: deps.taskLaunchOwner,
+      shellOwner: deps.shellOwner,
+      config: deps.config,
+      mcpOperations: deps.mcpOperations,
+      providerManager: deps.manager,
+      oauthManager: deps.oauthManager,
+      switchProvider: assembleProviderSwitch(
+        deps.config,
+        deps.sharedSettingsService,
+        deps.manager,
+        deps.oauthManager,
+        () => deps.handle.readRuntimeKind(),
+        () => deps.sessionClient.refreshAuth(),
+        deps.handle.settingsOwner,
+      ),
+      settingsService: deps.sharedSettingsService,
+      settingsOwner: deps.handle.settingsOwner,
+      runtimeId: deps.runtimeId,
+      runtimeHandle: deps.handle,
+      messageBus: deps.messageBus,
+      loopHolder: deps.loopHolder,
+      runtimeState: deps.runtimeState,
+      ownership,
+      sessionIdentityOwnership: deps.sessionIdentityOwnership,
+      rebuildLoop,
+      resolveClient: deps.resolveClient,
+      initialHistoryService: initializeAgentHistory(
+        deps.sessionClient.getAgentClient(),
+      ),
+      approvalHandler: deps.approvalHandler,
+      displayCallbacks: deps.displayCallbacks,
+      editorCallbacksHolder: deps.editorCallbacksHolder,
+      displayCallbacksHolder: deps.displayCallbacksHolder,
+      onOAuthPrompt: deps.onOAuthPrompt,
+      initialAuth: deps.initialAuth,
+    },
+    async (model) => {
+      await setActiveModel(
+        model,
+        assembleModelSelection(deps.handle.settingsOwner),
+        deps.sharedSettingsService,
+        deps.manager.getActiveProvider(),
+      );
+    },
+  );
 
   // SessionStart is driven by the frontend after it has installed observers
   // and is ready to consume the hook's system message and additional context.
-  return agent;
 }
 
 function initializeAgentHistory(

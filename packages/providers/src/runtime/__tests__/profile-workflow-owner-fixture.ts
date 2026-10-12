@@ -25,7 +25,7 @@ import { ProviderManager } from '../../ProviderManager.js';
 import {
   applyProfileCascade,
   type ProfileApplicationResult,
-} from '../profileApplication.js';
+} from '../../../../agents/src/api/profileApplication.js';
 import {
   switchActiveProvider,
   type ProviderSwitcher,
@@ -66,7 +66,6 @@ export function workflowApplication(
       applyProfileCascade(
         profile,
         {},
-        owner.config,
         owner.settings,
         owner.manager,
         owner.store,
@@ -77,6 +76,7 @@ export function workflowApplication(
           applyParameter: (key, value) =>
             owner.settingsOwner.writeUserParameter(key, value),
         },
+        (name) => owner.manager.getProviderKeys().getKey(name),
       ),
   };
 }

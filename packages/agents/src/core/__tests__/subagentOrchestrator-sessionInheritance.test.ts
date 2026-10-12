@@ -33,7 +33,7 @@ import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import * as runtimeModule from '@vybestack/llxprt-code-providers/runtime.js';
 
-import * as profileApplicationModule from '@vybestack/llxprt-code-providers/runtime/profileApplication.js';
+import * as profileApplicationModule from '../../api/profileApplication.js';
 import type { SubAgentScope } from '../subagent.js';
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import { createRuntimeBundle } from './subagentOrchestrator-test-helpers.js';

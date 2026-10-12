@@ -1,3 +1,7 @@
+import {
+  getProfileEphemeralSettings,
+  getProfileModelParams,
+} from './profile-application/profileAccessors.js';
 /**
  * @plan:PLAN-20260603-ISSUE1584.P12
  * @requirement:REQ-API-001
@@ -10,6 +14,7 @@ import type { ProfileManager } from '@vybestack/llxprt-code-settings';
 import { isLoadBalancerProfile } from '@vybestack/llxprt-code-settings/profiles/types.js';
 import {
   getProfilePersistableKeys,
+  getProviderConfigKeys,
   isInternalSettingKey,
 } from '@vybestack/llxprt-code-settings/settings/settingsRegistry.js';
 import type {
@@ -18,17 +23,10 @@ import type {
   LoadBalancerProfile,
   SettingsService,
 } from '@vybestack/llxprt-code-settings';
-import { extractModelParams } from '../model-parameter-data.js';
-import type { OAuthManager } from '../auth/oauth-manager.js';
-import type { ProfileOAuthWork } from '../auth/types.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+type ProfileOAuthWork = ReturnType<OAuthManager['createProfileOAuthWork']>;
 import type { ProfileApplicationResult } from './profileApplication.js';
-import type { LoadBalancingProviderConfig } from '../loadBalancing/loadBalancerTypes.js';
-import {
-  getProfileEphemeralSettings,
-  getProfileModel,
-  getProfileModelParams,
-  getProfileProvider,
-} from './profile-application/profileAccessors.js';
+import type { LoadBalancingProviderConfig } from '@vybestack/llxprt-code-providers';
 
 type LoadBalancerProfileDetail = {
   name: string;
@@ -48,6 +46,18 @@ type LoadBalancerProfileWithDetails = LoadBalancerProfile & {
 
 function logger(): DebugLogger {
   return new DebugLogger('llxprt:runtime:settings');
+}
+
+export function captureProfileModelParams(
+  providerSettings: Record<string, unknown>,
+): Record<string, unknown> {
+  const reserved = getProviderConfigKeys();
+  return Object.fromEntries(
+    Object.entries(providerSettings).filter(
+      ([key, value]) =>
+        value !== undefined && value !== null && !reserved.includes(key),
+    ),
+  );
 }
 
 export interface ProfileSnapshotData {
@@ -220,7 +230,7 @@ export function buildRuntimeProfileSnapshot(
   }
 
   const modelParams = stripSensitiveModelParams(
-    extractModelParams(providerSettings) as ModelParams,
+    captureProfileModelParams(providerSettings) as ModelParams,
   );
 
   return {
@@ -601,20 +611,6 @@ export async function saveProfileSnapshot(
   return finalProfile;
 }
 
-/**
- * @deprecated This function saves old-style load balancer profiles (type='loadbalancer').
- * The old architecture did round-robin at profile-load time (selecting a profile once).
- * Use the new subProfiles architecture instead which does per-request load balancing.
- * This function is kept for backward compatibility only.
- */
-export async function saveLoadBalancerProfile(
-  profileName: string,
-  profile: LoadBalancerProfile,
-  manager: Pick<ProfileManager, 'saveProfile'>,
-): Promise<void> {
-  await manager.saveProfile(profileName, profile);
-}
-
 export async function deleteProfileByName(
   profileName: string,
   settingsService: Pick<
@@ -642,8 +638,8 @@ async function resolveLoadBalancerProfileDetail(
     const modelParams = getProfileModelParams(memberProfile);
     return {
       name: memberName,
-      provider: getProfileProvider(memberProfile),
-      model: getProfileModel(memberProfile),
+      provider: memberProfile.provider,
+      model: memberProfile.model,
       contextLimit:
         typeof ephemerals['context-limit'] === 'number'
           ? ephemerals['context-limit']

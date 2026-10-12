@@ -71,7 +71,9 @@ const stubSwitchProvider: ProviderSwitcher = async (name) => {
   };
 };
 
-const { applyProfileCascade } = await import('../profileApplication.js');
+const { applyProfileCascade } = await import(
+  '../../../../agents/src/api/profileApplication.js'
+);
 
 function applyProfileForTest(
   profile: Profile,
@@ -81,7 +83,6 @@ function applyProfileForTest(
   return applyProfileCascade(
     profile,
     options,
-    root().config,
     root().settings,
     root().manager,
     root().store,
@@ -92,6 +93,7 @@ function applyProfileForTest(
       applyParameter: (key, value) =>
         root().settingsOwner.writeUserParameter(key, value),
     },
+    (name) => createProviderKeyStorageDouble().getKey(name),
   );
 }
 

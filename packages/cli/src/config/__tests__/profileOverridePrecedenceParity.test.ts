@@ -145,35 +145,32 @@ void vi.mock('../profileBootstrap.js', () => {
 
 // Track applyProfileSnapshot calls — path must match config.ts's import source
 // config.ts imports applyProfileSnapshot from
-// '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js', which resolves
+// '../../../../agents/src/api/profileSnapshot.js', which resolves
 // to packages/providers/src/runtime/profileSnapshot.js
 const profileSnapshotCalls = [] as Array<{
   provider?: string;
   profileName?: string;
 }>;
 
-void vi.mock(
-  '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js',
-  () => ({
-    applyProfileSnapshot: vi.fn(
-      async (
-        profile: { provider?: string; model?: string; baseUrl?: string },
-        opts?: { profileName?: string },
-      ) => {
-        profileSnapshotCalls.push({
-          provider: profile.provider,
-          profileName: opts?.profileName,
-        });
-        return {
-          providerName: profile.provider ?? '',
-          modelName: profile.model ?? '',
-          baseUrl: profile.baseUrl,
-          warnings: [],
-        };
-      },
-    ),
-  }),
-);
+void vi.mock('../../../../agents/src/api/profileSnapshot.js', () => ({
+  applyProfileSnapshot: vi.fn(
+    async (
+      profile: { provider?: string; model?: string; baseUrl?: string },
+      opts?: { profileName?: string },
+    ) => {
+      profileSnapshotCalls.push({
+        provider: profile.provider,
+        profileName: opts?.profileName,
+      });
+      return {
+        providerName: profile.provider ?? '',
+        modelName: profile.model ?? '',
+        baseUrl: profile.baseUrl,
+        warnings: [],
+      };
+    },
+  ),
+}));
 
 // Track switchActiveProvider calls
 // config.ts: import { switchActiveProvider } from '@vybestack/llxprt-code-providers/runtime/providerSwitch.js'

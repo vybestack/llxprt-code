@@ -10,6 +10,14 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 import type { ModelProfileInfoPayload } from '@vybestack/llxprt-code-core/utils/events.js';
 
+function observeModelProfiles(): ModelProfileInfoPayload[] {
+  const profiles: ModelProfileInfoPayload[] = [];
+  switchInputs[6].subscribeModelChanges((profile) => {
+    if (profile !== undefined) profiles.push(profile);
+  });
+  return profiles;
+}
+
 const realProviderMutationsModule = {
   ...(await import('./providerMutations.js')),
 };
@@ -236,10 +244,7 @@ describe('providerSwitch', () => {
 
     it('emits ModelProfileChanged with resolved model when modelToApply is empty', async () => {
       const { switchActiveProvider } = await import('./providerSwitch.js');
-      const emittedProfiles: ModelProfileInfoPayload[] = [];
-      switchInputs[6].subscribeModelChanges((profile) => {
-        if (profile) emittedProfiles.push(profile);
-      });
+      const emittedProfiles = observeModelProfiles();
 
       // computeModelDefaults mock returns {} so modelToApply stays empty.
       // getActiveModelName mock returns 'gpt-4' as fallback.
@@ -289,10 +294,7 @@ describe('providerSwitch', () => {
         async () => {},
         ownSettings(config, settingsService),
       ];
-      const emittedProfiles: ModelProfileInfoPayload[] = [];
-      switchInputs[6].subscribeModelChanges((profile) => {
-        if (profile) emittedProfiles.push(profile);
-      });
+      const emittedProfiles = observeModelProfiles();
 
       await switchActiveProvider('gemini', {}, ...stubSwitchInputs());
 
@@ -305,10 +307,7 @@ describe('providerSwitch', () => {
 
     it('does not emit empty displayLabel when no profile and no modelToApply', async () => {
       const { switchActiveProvider } = await import('./providerSwitch.js');
-      const emittedProfiles: ModelProfileInfoPayload[] = [];
-      switchInputs[6].subscribeModelChanges((profile) => {
-        if (profile) emittedProfiles.push(profile);
-      });
+      const emittedProfiles = observeModelProfiles();
 
       await switchActiveProvider('gemini', {}, ...stubSwitchInputs());
 
@@ -356,10 +355,7 @@ describe('providerSwitch', () => {
         async () => {},
         ownSettings(config, settingsService),
       ];
-      const emittedProfiles: ModelProfileInfoPayload[] = [];
-      switchInputs[6].subscribeModelChanges((profile) => {
-        if (profile) emittedProfiles.push(profile);
-      });
+      const emittedProfiles = observeModelProfiles();
 
       await switchActiveProvider('gemini', {}, ...stubSwitchInputs());
 
@@ -415,10 +411,7 @@ describe('providerSwitch', () => {
         },
         ownSettings(config, settingsService),
       ];
-      const emittedProfiles: ModelProfileInfoPayload[] = [];
-      switchInputs[6].subscribeModelChanges((profile) => {
-        if (profile) emittedProfiles.push(profile);
-      });
+      const emittedProfiles = observeModelProfiles();
       await switchActiveProvider('gemini', {}, ...stubSwitchInputs());
 
       expect(emittedProfiles).toHaveLength(1);
@@ -468,10 +461,7 @@ describe('providerSwitch', () => {
         },
         ownSettings(config, settingsService),
       ];
-      const emittedProfiles: ModelProfileInfoPayload[] = [];
-      switchInputs[6].subscribeModelChanges((profile) => {
-        if (profile) emittedProfiles.push(profile);
-      });
+      const emittedProfiles = observeModelProfiles();
       await switchActiveProvider('anthropic', {}, ...stubSwitchInputs());
 
       const emitted = emittedProfiles[0];

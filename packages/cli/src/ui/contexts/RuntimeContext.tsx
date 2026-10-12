@@ -15,6 +15,7 @@ import {
 } from 'react';
 import type {
   Agent,
+  AgentProfileDefinitions,
   AgentProviderSwitchOptions,
   AgentProviderSwitchResult,
   SessionProviderReads,
@@ -24,10 +25,6 @@ import type {
   updateActiveProviderApiKey,
   BaseUrlUpdateResult,
 } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
-import type {
-  getProfileByName,
-  saveLoadBalancerProfile,
-} from '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js';
 import type { createProviderInspection } from '../../runtime/providerInspection.js';
 import type { getOpenAIProviderInfo } from '@vybestack/llxprt-code-providers';
 
@@ -38,6 +35,7 @@ import type { getOpenAIProviderInfo } from '@vybestack/llxprt-code-providers';
  * React bridge that binds UI runtime operations to its Agent and owner features.
  */
 type RuntimeFunctions = ReturnType<typeof createProviderInspection> &
+  AgentProfileDefinitions &
   Pick<
     SessionProviderReads,
     | 'listProviders'
@@ -51,13 +49,6 @@ type RuntimeFunctions = ReturnType<typeof createProviderInspection> &
   > & {
     getEphemeralSettings: () => Readonly<Record<string, unknown>>;
     setEphemeralSetting: (key: string, value: unknown) => void;
-    saveProfileDefinition: (name: string, profile: unknown) => Promise<void>;
-    saveLoadBalancerProfile: (
-      name: string,
-      profile: Parameters<typeof saveLoadBalancerProfile>[1],
-    ) => Promise<void>;
-    listSavedProfiles: () => Promise<string[]>;
-    getProfileByName: (name: string) => ReturnType<typeof getProfileByName>;
     getActiveToolFormatState: () => ReturnType<Agent['toolFormat']['getState']>;
     setActiveToolFormatOverride: (
       format: Parameters<Agent['toolFormat']['setOverride']>[0],

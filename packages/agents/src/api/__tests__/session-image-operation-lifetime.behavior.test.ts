@@ -215,7 +215,7 @@ describe('image operation authority and session lifetime', () => {
           outputPath: 'closed.png',
           prompt: 'local protocol fixture',
         }),
-      ).rejects.toThrow('abort');
+      ).rejects.toThrow('Session client owner is disposed');
       expect(wire.requests()).toBe(0);
       expect(await readdir(directory)).not.toContain('closed.png');
     });
