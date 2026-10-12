@@ -90,7 +90,9 @@ describe('provider switch transaction ownership', () => {
       managerB,
       null,
       () => 'subagent',
-      () => second.sessionClient.refreshAuth(),
+      // The agent owns its client replacement; the fixture's owner would
+      // dispose the client that the agent still borrows.
+      () => b.sessionClient.refreshAuth(),
       second.settingsOwner,
     );
     try {
