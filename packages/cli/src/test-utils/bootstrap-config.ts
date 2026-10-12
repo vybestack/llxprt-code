@@ -33,6 +33,8 @@ export function handoffCliConfig(
     providerManager.setRuntimeContext(
       { config, settingsService: store },
       owner,
+      store,
+      config,
     );
     owner.initializeProviderSelection(config.getProvider(), config.getModel());
     const operation = await createOperation(store, owner);

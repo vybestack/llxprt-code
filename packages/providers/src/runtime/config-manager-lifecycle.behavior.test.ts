@@ -279,6 +279,8 @@ describe('Config-independent provider owner lifecycle', () => {
           runtimeId: 'rebound-owner',
         }),
         right.settingsOwner,
+        right.settingsService,
+        right.config,
       );
       left.settingsService.set('auth-key', 'former-owner-key');
       expect(detached).toBe(first.clientRevision);

@@ -260,6 +260,56 @@ describe('ProviderManager admission fallback and isolation', () => {
   });
 });
 
+describe('ProviderManager runtime replacement ownership', () => {
+  it('adopts the separately selected settings rather than context-carried settings', () => {
+    const initial = new SettingsService();
+    initial.setProviderSetting('openai', 'model', 'initial-model');
+    const selected = new SettingsService();
+    selected.setProviderSetting('openai', 'model', 'selected-model');
+    const foreign = new SettingsService();
+    foreign.setProviderSetting('openai', 'model', 'foreign-model');
+    const manager = new ProviderManager({ settingsService: initial });
+    manager.registerProvider(new HarnessProvider());
+    manager.setActiveProvider('openai');
+
+    manager.setRuntimeContext(
+      { settingsService: foreign, runtimeId: 'same-label' },
+      undefined,
+      selected,
+      createRuntimeConfigStub(selected),
+    );
+    const admitted = manager.normalizeRuntimeInputs({ contents: [] }, 'openai');
+
+    expect(admitted.resolved?.model).toBe('selected-model');
+    expect(selected.get('activeProvider')).toBe('openai');
+    expect(foreign.get('activeProvider')).toBeUndefined();
+  });
+
+  it('clears the former Config when replacement explicitly has no Config', () => {
+    const selected = new SettingsService();
+    const formerConfig = createRuntimeConfigStub(selected);
+    const manager = new ProviderManager({
+      settingsService: selected,
+      config: formerConfig,
+    });
+
+    manager.setRuntimeContext(
+      {
+        settingsService: selected,
+        config: formerConfig,
+        runtimeId: 'same-label',
+      },
+      undefined,
+      selected,
+      undefined,
+    );
+
+    expect(() => manager.prepareStatelessProviderInvocation()).toThrow(
+      'config',
+    );
+  });
+});
+
 describe('ProviderManager Config binding', () => {
   it('does not synthesize a runtime when binding Config', () => {
     const selected = new SettingsService();

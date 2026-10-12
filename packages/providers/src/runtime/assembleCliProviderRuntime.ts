@@ -199,7 +199,7 @@ export function assembleCliProviderRuntime(
           )
         : { manager: borrowedManager, oauthManager: input.oauthManager };
     if (borrowedManager !== undefined && config !== undefined)
-      bindFinalProviderOwner(manager, config, runtime, input.settingsOwner);
+      bindOwner(manager, config, runtime, input.settingsOwner, settingsService);
 
     registration.expectManager(manager);
 
@@ -248,16 +248,17 @@ function bindCliPolicy(
   return owner;
 }
 
-function bindFinalProviderOwner(
+function bindOwner(
   manager: RuntimeProviderManager,
   config: Config,
   runtime: ProviderRuntimeContext,
   settingsOwner: SessionSettingsOwner | undefined,
+  settingsService: SettingsService,
 ): void {
   if (!(manager instanceof ProviderManager))
     throw new Error('CLI provider runtime requires a ProviderManager owner');
   const selected =
-    runtime.settingsService.get('activeProvider') ?? config.getProvider();
+    settingsService.get('activeProvider') ?? config.getProvider();
   if (selected !== undefined) {
     if (typeof selected !== 'string')
       throw new TypeError('Active provider must be a string');
@@ -270,7 +271,7 @@ function bindFinalProviderOwner(
       );
     }
   }
-  manager.setRuntimeContext(runtime, settingsOwner);
+  manager.setRuntimeContext(runtime, settingsOwner, settingsService, config);
   manager.setConfig(config);
   configureProviderRuntimeFactories(config, manager);
 }

@@ -29,7 +29,10 @@ import {
 } from '@vybestack/llxprt-code-core/telemetry/types.js';
 import type { ProviderCapabilities, ProviderComparison } from './types.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type {
+  ProviderRuntimeContext,
+  RuntimeSettingsState,
+} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { MissingProviderRuntimeError } from './errors.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
@@ -52,7 +55,7 @@ import { resolveAvailableModels } from './modelResolver.js';
 const logger = new DebugLogger('llxprt:provider:manager');
 
 function asSettingsService(
-  settingsService: ProviderRuntimeContext['settingsService'],
+  settingsService: RuntimeSettingsState,
 ): SettingsService {
   return settingsService as SettingsService;
 }
@@ -326,14 +329,16 @@ export class ProviderManager implements IProviderManager {
   setRuntimeContext(
     runtime: ProviderRuntimeContext,
     sessionSettings: SessionSettingsOwner | undefined,
+    settingsService: RuntimeSettingsState,
+    config: Config | undefined,
   ): void {
     const currentActiveProvider = this.getActiveProviderName();
     this.runtime = runtime;
     this.sessionSettings = sessionSettings;
     this.stopSettingsLifecycle?.();
-    this.settingsService = asSettingsService(runtime.settingsService);
+    this.settingsService = asSettingsService(settingsService);
     this.bindSettingsLifecycle();
-    this.config = runtime.config ?? this.config;
+    this.config = config;
     if (
       currentActiveProvider &&
       this.providers.has(currentActiveProvider) &&

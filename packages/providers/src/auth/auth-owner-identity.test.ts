@@ -221,6 +221,8 @@ describe('explicit OAuth owner identity', () => {
         runtimeKind: 'cli-interactive',
       },
       undefined,
+      isolated.settingsService,
+      isolated.config,
     );
     await isolated.activate({
       runtimeId: 'unrelated',

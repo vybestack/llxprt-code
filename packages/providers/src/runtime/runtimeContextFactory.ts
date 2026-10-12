@@ -297,11 +297,14 @@ function buildActivateClosure(
         profileId ? { profileId } : undefined,
       ),
     );
-    providerManager.setRuntimeContext(scopedRuntime, options.settingsOwner);
-
-    await Promise.resolve(
-      bindings.resetInfrastructure(state.currentRuntimeId, config),
+    providerManager.setRuntimeContext(
+      scopedRuntime,
+      options.settingsOwner,
+      resolvedSettingsService,
+      config,
     );
+
+    await bindings.resetInfrastructure(state.currentRuntimeId, config);
     await Promise.resolve(
       bindings.setRuntimeContext(resolvedSettingsService, config, {
         runtimeId: state.currentRuntimeId,
@@ -334,9 +337,7 @@ function buildActivateClosure(
         config,
       }),
     );
-    await Promise.resolve(
-      bindings.linkProviderManager(config, providerManager),
-    );
+    await bindings.linkProviderManager(config, providerManager);
   };
 }
 

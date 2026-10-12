@@ -133,7 +133,12 @@ describe('retry runtime kind', () => {
       readFailoverBuckets: options.readFailoverBuckets,
       readFailoverReasons: options.readFailoverReasons,
     }));
-    owner.providerManager.setRuntimeContext(runtime, root.settingsOwner);
+    owner.providerManager.setRuntimeContext(
+      runtime,
+      root.settingsOwner,
+      root.settingsService,
+      config,
+    );
     owner.providerManager.registerProvider(provider);
     await owner.providerManager.setActiveProvider(provider.name);
     const fail = async (): Promise<string> => {
@@ -160,6 +165,8 @@ describe('retry runtime kind', () => {
           runtimeKind: 'cli-interactive',
         },
         root.settingsOwner,
+        root.settingsService,
+        config,
       );
       expect(await fail()).toContain(
         'auth dialog will open on your next message',
@@ -171,6 +178,8 @@ describe('retry runtime kind', () => {
           runtimeKind: 'subagent',
         },
         root.settingsOwner,
+        root.settingsService,
+        config,
       );
       expect(await fail()).toContain('interactive host session');
     } finally {
