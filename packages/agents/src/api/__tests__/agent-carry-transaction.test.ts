@@ -8,9 +8,10 @@ import {
 } from './helpers/agent-carry-fixture.js';
 
 async function verifyUnchangedDurableSource(size: number): Promise<number> {
+  let paused = false;
   return withAgentCarry(
     size,
-    async (agent, replacement) => {
+    async (agent, replacement, previous) => {
       const started = agent.setModel('transaction-carried-model');
       const outcome = started.then(
         () => undefined,
@@ -19,14 +20,16 @@ async function verifyUnchangedDurableSource(size: number): Promise<number> {
       await replacement.ready;
       const next = replacement();
       await next.entered.promise;
-      const source = next.getHistoryService();
+      // The replacement has no journal while its single admission is paused;
+      // the durable source is still the previous client's.
+      const source = previous.getHistoryService();
       if (source === null) throw new Error('Missing carried source');
       const before = await source.withRawHistorySnapshot(
         async (snapshot) => snapshot.durableTail,
       );
       const failure = vi
         .spyOn(SessionRecordingService.prototype, 'waitForCommitSequence')
-        .mockImplementation(async () => {
+        .mockImplementationOnce(async () => {
           throw new Error('Candidate durable acknowledgement failed');
         });
       try {
@@ -35,6 +38,8 @@ async function verifyUnchangedDurableSource(size: number): Promise<number> {
         await expect(started).rejects.toThrow(
           'Candidate durable acknowledgement failed',
         );
+        // The injected failure plus the rollback's own acknowledgement.
+        expect(failure).toHaveBeenCalledTimes(2);
       } finally {
         failure.mockRestore();
         next.proceed.open();
@@ -44,20 +49,30 @@ async function verifyUnchangedDurableSource(size: number): Promise<number> {
         async (snapshot) => snapshot.durableTail,
       );
       expect(after - before).toBe(0);
-      expect(next.getHistoryService() === source).toBe(true);
-      expect(await historyDigest(next.streamHistory())).toStrictEqual(
+      expect(next.admissions).toBe(1);
+      expect(next.getHistoryService()).toBeNull();
+      expect(agent.agentClient).toBe(previous);
+      expect(previous.getHistoryService() === source).toBe(true);
+      expect(await historyDigest(next.streamHistory())).toStrictEqual({
+        count: 0,
+        digest: expectedDigest(0).digest,
+      });
+      expect(next.owners.snapshot().liveRows).toBe(0);
+      expect(await historyDigest(agent.streamHistory())).toStrictEqual(
         expectedDigest(size),
       );
-      expect(next.owners.snapshot().liveRows).toBe(0);
-      await next.setHistoryFromSource(next.streamHistory());
-      expect(next.getHistoryService() === source).toBe(false);
-      await next.startChat([]);
+      await agent.setModel('transaction-retried-model');
+      expect(agent.agentClient).not.toBe(previous);
+      expect(agent.agentClient.getHistoryService() === source).toBe(false);
       const restored = await historyDigest(agent.streamHistory());
       expect(restored).toStrictEqual(expectedDigest(size));
       return restored.count;
     },
     2048,
+    // Only the first replacement pauses and fails; the retry runs unpaused.
     (client) => {
+      if (paused) return;
+      paused = true;
       client.pause = true;
     },
   );
