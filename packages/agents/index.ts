@@ -44,3 +44,8 @@ export {
   SessionProviderReads,
   type SessionProviderStatus,
 } from './src/api/session-provider-reads.js';
+
+export {
+  prepareAgentPreflight,
+  AgentProfilePreflight,
+} from './src/api/profile-preflight.js';

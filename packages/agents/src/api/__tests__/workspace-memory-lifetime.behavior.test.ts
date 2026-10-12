@@ -1,4 +1,5 @@
 import { Storage } from '@vybestack/llxprt-code-settings';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -91,9 +92,12 @@ async function preflightWithSuppliedMemory(
   memory: WorkspaceMemoryOwner,
   memoryOwnership?: 'borrowed' | 'transferred',
 ) {
-  const manager = new ProviderManager({
-    settingsService: built.settingsService,
-  });
+  const manager = new ProviderManager(
+    {
+      settingsService: built.settingsService,
+    },
+    new CredentialAuthority(),
+  );
   manager.registerProvider(
     new FakeProvider(join(import.meta.dir, 'fixtures/plain-text.jsonl')),
   );
@@ -254,9 +258,12 @@ describe('supplied workspace memory lifetime through public adoption', () => {
   it('retains the explicit preflight memory transfer through physical refresh and facade retirement', async () => {
     const { directory, file } = await physicalMemory();
     const built = await factoryless(directory);
-    const manager = new ProviderManager({
-      settingsService: built.settingsService,
-    });
+    const manager = new ProviderManager(
+      {
+        settingsService: built.settingsService,
+      },
+      new CredentialAuthority(),
+    );
     manager.registerProvider(
       new FakeProvider(join(import.meta.dir, 'fixtures/plain-text.jsonl')),
     );
@@ -305,9 +312,12 @@ describe('supplied workspace memory lifetime through public adoption', () => {
   it('rejects replacing preflight memory while preserving the supplied caller root', async () => {
     const { directory, file, memory } = await physicalMemory();
     const built = await factoryless(directory);
-    const manager = new ProviderManager({
-      settingsService: built.settingsService,
-    });
+    const manager = new ProviderManager(
+      {
+        settingsService: built.settingsService,
+      },
+      new CredentialAuthority(),
+    );
     manager.registerProvider(
       new FakeProvider(join(import.meta.dir, 'fixtures/plain-text.jsonl')),
     );

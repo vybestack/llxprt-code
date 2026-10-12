@@ -195,24 +195,6 @@ function resolveActivationSettings(
   return owner;
 }
 
-function bindActivationWorkspace(
-  sessionClient: SessionClientOwner,
-  workspaceDefinitions: WorkspaceDefinitionOwner,
-  workspaceMemory: WorkspaceMemoryOwner,
-  mcpRuntime: McpRuntimeOwner | undefined,
-): void {
-  if (mcpRuntime !== undefined) {
-    sessionClient.bindMcpRuntime(mcpRuntime);
-    sessionClient.bindHooks();
-  } else {
-    sessionClient.bindDefinitionReads(
-      workspaceDefinitions.profileReads,
-      workspaceDefinitions.subagentReads,
-    );
-    sessionClient.bindWorkspaceInstructions(workspaceMemory);
-  }
-}
-
 export async function assembleAgentActivationBootstrap(
   config: Config,
   settings: SettingsService,
@@ -233,16 +215,7 @@ export async function assembleAgentActivationBootstrap(
   messageBus?: ConstructorParameters<typeof SessionClientOwner>[11],
   memoryOwnership: 'borrowed' | 'transferred' = 'borrowed',
 ): Promise<AgentActivationOperation> {
-  const {
-    ownedTrust,
-    workspaceTrust,
-    settingsOwner,
-    mediaOwner,
-    store,
-    workspaceFilesystem,
-    workspaceMemory,
-    workspaceDefinitions,
-  } = prepareActivationInputs(
+  const workspace = prepareActivationInputs(
     config,
     manager,
     agentClient,
@@ -253,43 +226,110 @@ export async function assembleAgentActivationBootstrap(
     settings,
     suppliedSettingsOwner,
   );
-  const sessionClient = await createActivationClient(
-    config,
-    settings,
-    manager,
-    store,
-    mcpRuntime,
-    workspaceFilesystem,
-    settingsOwner,
-    agentClient,
+  const factories = configureProviderRuntimeFactories(config, manager, {
     tokenizerFactory,
     contentGeneratorFactory,
+  });
+  const sessionClient = await SessionClientOwner.create(
+    config,
+    assembleTaskSchemaPolicy(settings),
+    manager,
+    buildAgentClientFactory(),
+    workspace.store,
+    mcpRuntime?.readInstructions ?? (() => undefined),
+    workspace.workspaceFilesystem.paths,
+    workspace.settingsOwner,
+    factories.contentGeneratorFactory,
+    factories.tokenizerFactory,
+    agentClient,
     messageBus,
-    providerFileLifecycle,
-    oauth,
-    workspaceDefinitions,
-    workspaceMemory,
   );
-  return createActivationOwner(
+  const execute = await bindActivationClient(
+    sessionClient,
     config,
     manager,
-    settings,
     oauth,
-    readKind,
-    mediaOwner,
-    sessionClient,
-    workspaceFilesystem,
-    workspaceMemory,
+    settings,
+    workspace,
     mcpRuntime,
-    settingsOwner,
+    providerFileLifecycle,
+    readKind,
+  );
+  return new AgentActivationBootstrap(
+    config,
+    manager,
+    execute,
+    workspace.mediaOwner,
+    sessionClient,
+    workspace.workspaceFilesystem,
+    workspace.workspaceMemory,
+    mcpRuntime === undefined,
+    workspace.settingsOwner,
     settingsOwnerOwnership,
-    workspaceDefinitions,
-    workspaceTrust,
-    ownedTrust,
-    trustCleanup,
-    messageBus,
+    workspace.workspaceDefinitions,
+    mcpRuntime === undefined,
+    workspace.workspaceTrust,
+    resolveTrustCleanup(workspace.ownedTrust, trustCleanup),
+    oauth ?? undefined,
+    messageBus ?? mcpRuntime?.messageBus,
     resolveActivationMemoryOwnership(mcpRuntime, memoryOwner, memoryOwnership),
   );
+}
+
+function resolveTrustCleanup(
+  owned: WorkspaceTrustLifecycle | undefined,
+  cleanup: (() => Promise<void>) | undefined,
+): (() => Promise<void>) | undefined {
+  return owned === undefined ? cleanup : () => owned.dispose();
+}
+
+async function bindActivationClient(
+  sessionClient: SessionClientOwner,
+  config: Config,
+  manager: RuntimeProviderManager,
+  oauth: OAuthManager | null,
+  settings: SettingsService,
+  workspace: ReturnType<typeof prepareActivationInputs>,
+  mcpRuntime: McpRuntimeOwner | undefined,
+  providerFileLifecycle: ProviderFileLifecycle | undefined,
+  readKind: () => RuntimeKind | undefined,
+): Promise<ReturnType<typeof assembleActivationExecutor>> {
+  try {
+    assembleSessionImages(
+      sessionClient,
+      config.getTargetDir(),
+      manager,
+      oauth ?? undefined,
+      settings,
+    );
+    bindActivationCapabilities(
+      sessionClient,
+      providerFileLifecycle,
+      oauth,
+      workspace.workspaceDefinitions,
+      workspace.workspaceMemory,
+      mcpRuntime,
+    );
+    return createPreflightExecutor(
+      config,
+      settings,
+      manager,
+      oauth,
+      readKind,
+      workspace.settingsOwner,
+      (method) => sessionClient.refreshAuth(method),
+    );
+  } catch (error) {
+    try {
+      await sessionClient.dispose();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        'Activation client binding cleanup failed',
+      );
+    }
+    throw error;
+  }
 }
 
 function prepareActivationInputs(
@@ -338,55 +378,6 @@ function prepareActivationInputs(
   };
 }
 
-function createActivationOwner(
-  config: Config,
-  manager: RuntimeProviderManager,
-  settings: SettingsService,
-  oauth: OAuthManager | null,
-  readKind: () => RuntimeKind | undefined,
-  mediaOwner: SessionMediaOwner | undefined,
-  sessionClient: SessionClientOwner,
-  workspaceFilesystem: WorkspaceFilesystemOwner,
-  workspaceMemory: WorkspaceMemoryOwner,
-  mcpRuntime: McpRuntimeOwner | undefined,
-  settingsOwner: SessionSettingsOwner,
-  settingsOwnerOwnership: 'borrowed' | 'transferred',
-  workspaceDefinitions: WorkspaceDefinitionOwner,
-  workspaceTrust: WorkspaceTrustControlPort,
-  ownedTrust: WorkspaceTrustLifecycle | undefined,
-  trustCleanup: (() => Promise<void>) | undefined,
-  messageBus: ConstructorParameters<typeof SessionClientOwner>[11],
-  workspaceMemoryOwnership: 'borrowed' | 'transferred',
-): AgentActivationOperation {
-  return new AgentActivationBootstrap(
-    config,
-    manager,
-    createPreflightExecutor(
-      config,
-      settings,
-      manager,
-      oauth,
-      readKind,
-      settingsOwner,
-      sessionClient,
-    ),
-    mediaOwner,
-    sessionClient,
-    workspaceFilesystem,
-    workspaceMemory,
-    mcpRuntime === undefined,
-    settingsOwner,
-    settingsOwnerOwnership,
-    workspaceDefinitions,
-    mcpRuntime === undefined,
-    workspaceTrust,
-    ownedTrust === undefined ? trustCleanup : () => ownedTrust.dispose(),
-    oauth ?? undefined,
-    messageBus ?? mcpRuntime?.messageBus,
-    workspaceMemoryOwnership,
-  );
-}
-
 // Memory disposition is tracked independently of filesystem ownership: memory
 // the preflight assembled itself is its to transfer, memory supplied by the
 // caller stays borrowed unless the caller explicitly transfers it, and memory
@@ -416,7 +407,14 @@ export function assembleSessionProviderSwitch(
 }
 
 function bindActivationCapabilities(
-  sessionClient: SessionClientOwner,
+  sessionClient: Pick<
+    SessionClientOwner,
+    | 'bindProviderFiles'
+    | 'bindMcpRuntime'
+    | 'bindHooks'
+    | 'bindDefinitionReads'
+    | 'bindWorkspaceInstructions'
+  >,
   providerFileLifecycle: ProviderFileLifecycle | undefined,
   oauth: OAuthManager | null,
   workspaceDefinitions: WorkspaceDefinitionOwner,
@@ -431,12 +429,16 @@ function bindActivationCapabilities(
     (provider) => oauth?.composeRetryOperations(provider) ?? {},
     (scope) => SessionClientOwner.cleanupProviderScope(files, scope),
   );
-  bindActivationWorkspace(
-    sessionClient,
-    workspaceDefinitions,
-    workspaceMemory,
-    mcpRuntime,
-  );
+  if (mcpRuntime !== undefined) {
+    sessionClient.bindMcpRuntime(mcpRuntime);
+    sessionClient.bindHooks();
+  } else {
+    sessionClient.bindDefinitionReads(
+      workspaceDefinitions.profileReads,
+      workspaceDefinitions.subagentReads,
+    );
+    sessionClient.bindWorkspaceInstructions(workspaceMemory);
+  }
 }
 
 function resolveActivationTrust(
@@ -457,73 +459,6 @@ function resolveActivationTrust(
   return { ownedTrust, workspaceTrust };
 }
 
-async function createActivationClient(
-  config: Config,
-  settings: SettingsService,
-  manager: RuntimeProviderManager,
-  store: ConstructorParameters<typeof SessionClientOwner>[4],
-  mcpRuntime: McpRuntimeOwner | undefined,
-  workspaceFilesystem: WorkspaceFilesystemOwner,
-  settingsOwner: SessionSettingsOwner,
-  agentClient: AgentClientContract | undefined,
-  tokenizerFactory: SessionClientOwner['tokenizerFactory'] | undefined,
-  contentGeneratorFactory:
-    | SessionClientOwner['contentGeneratorFactory']
-    | undefined,
-  messageBus: ConstructorParameters<typeof SessionClientOwner>[11],
-  providerFileLifecycle: ProviderFileLifecycle | undefined,
-  oauth: OAuthManager | null,
-  workspaceDefinitions: WorkspaceDefinitionOwner,
-  workspaceMemory: WorkspaceMemoryOwner,
-): Promise<SessionClientOwner> {
-  const factories = configureProviderRuntimeFactories(config, manager, {
-    tokenizerFactory,
-    contentGeneratorFactory,
-  });
-  const client = await SessionClientOwner.create(
-    config,
-    assembleTaskSchemaPolicy(settings),
-    manager,
-    buildAgentClientFactory(),
-    store,
-    mcpRuntime?.readInstructions ?? (() => undefined),
-    workspaceFilesystem.paths,
-    settingsOwner,
-    factories.contentGeneratorFactory,
-    factories.tokenizerFactory,
-    agentClient,
-    messageBus,
-  );
-  try {
-    assembleSessionImages(
-      client,
-      config.getTargetDir(),
-      manager,
-      oauth ?? undefined,
-      settings,
-    );
-    bindActivationCapabilities(
-      client,
-      providerFileLifecycle,
-      oauth,
-      workspaceDefinitions,
-      workspaceMemory,
-      mcpRuntime,
-    );
-  } catch (error) {
-    try {
-      await client.dispose();
-    } catch (cleanupError) {
-      throw new AggregateError(
-        [error, cleanupError],
-        'Activation client binding cleanup failed',
-      );
-    }
-    throw error;
-  }
-  return client;
-}
-
 function createPreflightExecutor(
   config: Config,
   settings: SettingsService,
@@ -531,7 +466,7 @@ function createPreflightExecutor(
   oauth: OAuthManager | null,
   readKind: () => RuntimeKind | undefined,
   settingsOwner: SessionSettingsOwner,
-  sessionClient: SessionClientOwner,
+  refreshAuth: (method?: string) => Promise<void>,
 ): ReturnType<typeof assembleActivationExecutor> {
   const switchProvider = assembleProviderSwitch(
     config,
@@ -539,7 +474,7 @@ function createPreflightExecutor(
     manager,
     oauth,
     readKind,
-    () => sessionClient.refreshAuth(),
+    () => refreshAuth(),
     settingsOwner,
   );
   return assembleActivationExecutor(
@@ -548,7 +483,7 @@ function createPreflightExecutor(
     manager,
     switchProvider,
     settingsOwner,
-    (method) => sessionClient.refreshAuth(method),
+    refreshAuth,
   );
 }
 

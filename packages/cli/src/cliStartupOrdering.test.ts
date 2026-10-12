@@ -135,6 +135,7 @@ function setupCommonMainMocks(callOrder: string[], config: Config): void {
       callOrder.push('exit-cleanup');
     },
     registerSyncCleanup: () => {},
+    registerCleanup: () => {},
   }));
   void mock.module('./utils/sessionCleanup.js', () => ({
     cleanupExpiredSessions: async () => {},
@@ -565,6 +566,7 @@ describe('main() image mode: bypasses the conversational stdin guard (#2128)', (
       cleanupCheckpoints: async () => {},
       runExitCleanup: async () => {},
       registerSyncCleanup: () => {},
+      registerCleanup: () => {},
     }));
     void mock.module('./utils/sessionCleanup.js', () => ({
       cleanupExpiredSessions: async () => {},

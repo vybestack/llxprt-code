@@ -21,7 +21,7 @@ import type {
   SandboxConfig,
   MCPServerConfig,
 } from '@vybestack/llxprt-code-core';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { AgentProfilePreflight } from '@vybestack/llxprt-code-agents';
 
 import {
   loadSettings,
@@ -37,7 +37,6 @@ import type { ExtensionEnablementManager } from './extensions/extensionEnablemen
 import {
   parseBootstrapArgs,
   prepareRuntimeForProfile,
-  type BootstrapRuntimeState,
   type CliRuntimeOverrides,
 } from './profileBootstrap.js';
 
@@ -109,9 +108,7 @@ async function bootstrapAndLoadProfile(
   };
   const bootstrapArgs = parsedWithOverrides.bootstrapArgs;
   const runtimeState = await prepareRuntimeForProfile(parsedWithOverrides);
-  if (runtimeState.registration) {
-    runtimeOverrides.onRuntimeRegistrationReady?.(runtimeState.registration);
-  }
+  runtimeOverrides.onPreflightReady?.(runtimeState);
   // The registry may come from either source. Post-config re-assembly must see
   // the SAME one, or it rebuilds the provider manager without the plugins.
   const effectiveOverrides: CliRuntimeOverrides = {
@@ -145,7 +142,7 @@ function resolveApprovalAndProvider(
   profileMergedSettings: MergedSettings,
   context: ContextResolutionResult,
   profileResult: ProfileLoadResult,
-  runtimeState: BootstrapRuntimeState,
+  runtimeState: AgentProfilePreflight,
 ) {
   const securitySettings = (profileMergedSettings as Partial<MergedSettings>)
     .security;
@@ -165,18 +162,15 @@ function resolveApprovalAndProvider(
     settingsModel: profileMergedSettings.model,
     envDefaultModel: process.env.LLXPRT_DEFAULT_MODEL,
     envProviderModel: process.env.GEMINI_MODEL,
-    providerDefaultModel: runtimeState.providerManager
-      .getProviderByName('gemini')
-      ?.getDefaultModel(),
+    providerDefaultModel: runtimeState.readProviderDefaultModel('gemini'),
   });
   if (
     providerModel.provider !== undefined &&
     providerModel.model &&
     providerModel.model.trim() !== ''
   ) {
-    runtimeState.runtime.settingsService.setProviderSetting(
+    runtimeState.chooseProviderModel(
       providerModel.provider,
-      'model',
       providerModel.model,
     );
   }
@@ -211,7 +205,7 @@ async function resolveConfigBuildPieces(
   settings: Settings,
   profileMergedSettings: MergedSettings,
   profileResult: ProfileLoadResult,
-  runtimeState: BootstrapRuntimeState,
+  runtimeState: AgentProfilePreflight,
   cwd: string,
   extensions: LlxprtExtension[],
   extensionEnablementManager: ExtensionEnablementManager,
@@ -286,50 +280,17 @@ async function resolveConfigBuildPieces(
   };
 }
 
-/**
- * Narrow the bootstrap runtime's structural settings state to the
- * SettingsService surface Config consumes (profileBootstrap composes it via
- * createRuntimeSettingsService). Fails fast with a clear message instead of
- * letting a malformed runtime surface as an opaque error inside buildConfig.
- */
-function isSettingsServiceLike(
-  value: unknown,
-): value is { get: unknown; set: unknown } {
-  if (value === null || typeof value !== 'object') {
-    return false;
-  }
-  const candidate = value as { get?: unknown; set?: unknown };
-  return (
-    typeof candidate.get === 'function' && typeof candidate.set === 'function'
-  );
-}
-
-function requireBootstrapSettingsService(
-  runtimeState: BootstrapRuntimeState,
-): SettingsService {
-  // The runtime is assembled upstream via type assertions, so the static type
-  // cannot be trusted here — validate the value structurally as unknown.
-  const settingsService: unknown = runtimeState.runtime.settingsService;
-  if (!isSettingsServiceLike(settingsService)) {
-    throw new Error(
-      '[config] Bootstrap runtime is missing its SettingsService. ' +
-        'prepareRuntimeForProfile() must run before loadCliConfig() (issue #2300).',
-    );
-  }
-  return settingsService as SettingsService;
-}
-
 function buildLoadedConfig(
   sessionId: string,
   cwd: string,
   argv: CliArgs,
   pieces: ConfigBuildPieces,
-  settingsService: SettingsService,
+  initialSettings: Record<string, unknown>,
 ): Config {
   return buildConfig({
     sessionId,
     cwd,
-    settingsService,
+    initialSettings,
     argv,
     profileSettingsWithTools: pieces.profileSettingsWithTools,
     context: pieces.context,
@@ -394,7 +355,7 @@ export async function loadCliConfig(
     cwd,
     argv,
     pieces,
-    requireBootstrapSettingsService(runtimeState),
+    runtimeState.captureSettings(),
   );
 
   const trust = new WorkspaceTrustLifecycle({

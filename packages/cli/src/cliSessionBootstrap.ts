@@ -251,8 +251,8 @@ export async function bootstrapRuntimeAndConfig(
         settingsService: runtimeSettingsService,
         sessionSettingsOwner: runtimeSettingsOwner,
         providerContributions,
-        onRuntimeRegistrationReady: (registration) => {
-          registerCleanup(() => registration.dispose());
+        onPreflightReady: (operation) => {
+          registerCleanup(() => operation.dispose());
         },
         onPolicyOwnerReady: (owner) => (policyOwner = ownCliPolicy(owner)),
         onOAuthManagerReady: (manager) => (oauthManager = manager),

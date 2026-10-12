@@ -6,7 +6,7 @@
 
 import {
   type WorkspaceTrustControlPort,
-  SessionSettingsOwner,
+  type SessionSettingsOwner,
   type WorkspaceMemoryOwner,
   type WorkspaceFilesystemOwner,
   ApprovalMode,
@@ -17,21 +17,13 @@ import {
 
 import { setOsKeyringDisabledBySetting } from '@vybestack/llxprt-code-storage';
 import { DebugLogger } from '@vybestack/llxprt-code-telemetry';
-import type {
-  EphemeralSettings,
-  SettingsService,
-} from '@vybestack/llxprt-code-settings';
+import type { EphemeralSettings } from '@vybestack/llxprt-code-settings';
 import { applyCliSetArguments } from '@vybestack/llxprt-code-settings/settings/cli-ephemeral-settings.js';
-import type { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import {
-  assembleProfileApplication,
   type AgentProfileApplication,
-  assembleProviderSwitch,
-  assembleAgentActivationBootstrap,
   type AgentActivationOperation,
+  type AgentProfilePreflight,
 } from '@vybestack/llxprt-code-agents';
-import { createOAuthSettingsAdapter } from '../auth/oauth-settings-adapter.js';
 import {
   READ_ONLY_TOOL_NAMES,
   EDIT_TOOL_NAME,
@@ -40,9 +32,6 @@ import {
 } from './toolGovernance.js';
 import { applyProfileToRuntime } from './profileRuntimeApplication.js';
 import {
-  createBootstrapResult,
-  resolveForegroundRuntimeId,
-  type BootstrapRuntimeState,
   type BootstrapProfileArgs,
   type CliRuntimeOverrides,
 } from './profileBootstrap.js';
@@ -61,7 +50,7 @@ export interface PostConfigInput {
   readonly filesystem: WorkspaceFilesystemOwner;
   readonly memory: WorkspaceMemoryOwner;
   readonly config: Config;
-  readonly runtimeState: BootstrapRuntimeState;
+  readonly runtimeState: AgentProfilePreflight;
   readonly bootstrapArgs: BootstrapProfileArgs;
   readonly argv: CliArgs;
   readonly settings: Settings;
@@ -204,15 +193,6 @@ export function applyGlobalAndProfileEphemeralSettings(
   }
 }
 
-function getSettingsService(
-  input: Pick<PostConfigInput, 'runtimeState' | 'runtimeOverrides'>,
-): SettingsService {
-  return (
-    input.runtimeOverrides.settingsService ??
-    (input.runtimeState.runtime.settingsService as SettingsService)
-  );
-}
-
 /**
  * Reads a `disabled` flag from a hooks settings object, returning null when
  * the container is absent or does not define the property.
@@ -246,56 +226,15 @@ function applyDisabledHooks(input: SetupRuntimeContextInput): void {
 async function setupRuntimeContext(
   input: SetupRuntimeContextInput,
 ): Promise<void> {
-  const { config, runtimeState } = input;
-  const settingsService = getSettingsService(input);
-  const bootstrapRuntimeId =
-    runtimeState.runtime.runtimeId ?? resolveForegroundRuntimeId();
-  const baseBootstrapMetadata = {
-    ...(runtimeState.runtime.metadata ?? {}),
-    stage: 'post-config',
-  };
   applyDisabledHooks(input);
-
-  // The early profile runtime has no Config, so its bus cannot carry the
-  // resolved policy. Recompose once Config exists and adopt that final runtime.
-  const { assembleCliProviderRuntime } = await import(
-    '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js'
-  );
-  const providerContributions = input.runtimeOverrides.providerContributions;
-  if (input.runtimeOverrides.credentialAuthority === undefined)
-    throw new Error('CLI runtime requires a credential authority');
-  const finalRuntime = assembleCliProviderRuntime({
-    credentialAuthority: input.runtimeOverrides.credentialAuthority,
-    trustPort: input.workspaceTrust,
-    settingsService,
-    config,
-    settingsOwner: input.sessionSettings,
-    runtimeId: bootstrapRuntimeId,
-    metadata: baseBootstrapMetadata,
-    oauthSettings: createOAuthSettingsAdapter(),
-    ...(runtimeState.registration && {
-      registration: runtimeState.registration,
-      oauthManager: runtimeState.oauthManager,
-    }),
-    ...(providerContributions !== undefined ? { providerContributions } : {}),
-  });
-  runtimeState.runtime = finalRuntime.runtime;
-  runtimeState.providerManager =
-    finalRuntime.providerManager as ProviderManager;
-  runtimeState.oauthManager = finalRuntime.oauthManager;
-  runtimeState.runtimeMessageBus = finalRuntime.runtimeMessageBus;
-  await runtimeState.policyOwner?.dispose();
-  runtimeState.policyOwner = finalRuntime.policyOwner;
-  if (finalRuntime.policyOwner)
-    input.runtimeOverrides.onPolicyOwnerReady?.(finalRuntime.policyOwner);
-  input.runtimeOverrides.onProviderManagerReady?.(finalRuntime.providerManager);
-  input.runtimeOverrides.onOAuthManagerReady?.(finalRuntime.oauthManager);
-  input.runtimeOverrides.onProviderFilesReady?.(
-    finalRuntime.registration.providerFileLifecycle,
-  );
-
-  logger.debug(
-    () => `[bootstrap] Runtime context set, runtimeId=${bootstrapRuntimeId}`,
+  await input.runtimeState.bindConfig(
+    input.config,
+    input.workspaceTrust,
+    input.sessionSettings,
+    input.runtimeOverrides.onPolicyOwnerReady,
+    input.runtimeOverrides.onProviderManagerReady,
+    input.runtimeOverrides.onOAuthManagerReady,
+    input.runtimeOverrides.onProviderFilesReady,
   );
 }
 
@@ -324,34 +263,13 @@ async function activateProviderAndProfile(
 
   const finalProvider = profileApplicationResult.resolvedFinalProvider;
 
-  const runtimeContext = input.runtimeState.runtime;
-  const bootstrapResult = createBootstrapResult({
-    runtime: runtimeContext,
-    providerManager: input.runtimeState.providerManager,
-    oauthManager: input.runtimeState.oauthManager,
-    bootstrapArgs,
-    profileApplication: {
-      providerName:
-        profileApplicationResult.resolvedProviderAfterProfile ??
-        finalProvider ??
-        null,
-      modelName:
-        profileApplicationResult.resolvedModelAfterProfile ??
-        providerModelResult.model,
-      ...(profileApplicationResult.resolvedBaseUrlAfterProfile
-        ? { baseUrl: profileApplicationResult.resolvedBaseUrlAfterProfile }
-        : {}),
-      warnings: [...profileApplicationResult.profileWarnings],
-    },
-  });
-
   // Store bootstrap args on config
   (
     input.config as Config & { _bootstrapArgs?: BootstrapProfileArgs }
   )._bootstrapArgs = bootstrapArgs;
 
-  if (bootstrapResult.profile.warnings.length > 0) {
-    for (const warning of bootstrapResult.profile.warnings) {
+  if (profileApplicationResult.profileWarnings.length > 0) {
+    for (const warning of profileApplicationResult.profileWarnings) {
       logger.warn(() => `[bootstrap] ${warning}`);
     }
   }
@@ -396,7 +314,7 @@ async function reapplyCliOverrides(
   finalProvider: string | undefined,
 ): Promise<void> {
   const { config, bootstrapArgs, argv } = input;
-  const settingsService = getSettingsService(input);
+  const preflight = input.runtimeState;
 
   const cliModelOverride = (() => {
     if (typeof argv.model === 'string') {
@@ -412,11 +330,7 @@ async function reapplyCliOverrides(
 
   if (cliModelOverride) {
     if (finalProvider !== undefined) {
-      settingsService.setProviderSetting(
-        finalProvider,
-        'model',
-        cliModelOverride,
-      );
+      preflight.chooseProviderModel(finalProvider, cliModelOverride);
       input.sessionSettings.chooseModel(cliModelOverride);
     }
     (config as Config & { _cliModelOverride?: string })._cliModelOverride =
@@ -428,10 +342,9 @@ async function reapplyCliOverrides(
   }
 
   if (hasCliArgumentOverrides(bootstrapArgs)) {
-    const { applyCliArgumentOverrides } = await import(
-      '@vybestack/llxprt-code-providers/runtime/settingsResolver.js'
-    );
-    await applyCliArgumentOverrides(
+    await preflight.applyArgumentOverrides(
+      input.config,
+      input.sessionSettings,
       {
         key: argv.key,
         keyfile: argv.keyfile,
@@ -439,13 +352,6 @@ async function reapplyCliOverrides(
         set: argv.set,
       },
       bootstrapArgs,
-      {
-        getProviderKeys: () => input.config.getProviderKeys(),
-        setEphemeralSetting: (key, value) =>
-          input.sessionSettings.writeUserParameter(key, value),
-      },
-      settingsService,
-      input.runtimeState.providerManager.getActiveProvider(),
     );
   }
 }
@@ -524,7 +430,7 @@ function applyEphemeralSettings(
 ): void {
   const { config, argv, profileSettingsWithTools, runtimeOverrides } = input;
 
-  const settingsService = getSettingsService(input);
+  const preflight = input.runtimeState;
   if (!runtimeOverrides.settingsService) {
     logger.warn(
       '[cli-runtime] loadCliConfig called without runtime SettingsService override; using bootstrap-scoped instance (temporary compatibility path).',
@@ -532,9 +438,9 @@ function applyEphemeralSettings(
   }
   if (
     profileSettingsWithTools.emojifilter !== undefined &&
-    settingsService.get('emojifilter') === undefined
+    preflight.readSetting('emojifilter') === undefined
   ) {
-    settingsService.set('emojifilter', profileSettingsWithTools.emojifilter);
+    preflight.writeSetting('emojifilter', profileSettingsWithTools.emojifilter);
   }
 
   // Apply stream idle timeout from settings.json and profile ephemerals.
@@ -646,7 +552,7 @@ export async function finalizeConfig(
 ): Promise<Config> {
   const sessionSettings =
     original.runtimeOverrides.sessionSettingsOwner ??
-    new SessionSettingsOwner(getSettingsService(original));
+    original.runtimeState.createSettingsOwner();
   const input = { ...original, sessionSettings };
   // Propagate security.disableOsKeyring into the storage package's process-wide
   // opt-out (issue #2928 R3.2) BEFORE any profile/auth application. Profile
@@ -664,14 +570,9 @@ export async function finalizeConfig(
   await setupRuntimeContext(input);
 
   // Steps 12-13: Apply profile + switch provider
-  const activationOperation = await assembleAgentActivationBootstrap(
+  let preparedActivation: AgentActivationOperation | undefined;
+  await input.runtimeState.prepareActivation(
     input.config,
-    getSettingsService(input),
-    input.runtimeState.providerManager,
-    input.runtimeState.oauthManager ?? null,
-    () => input.runtimeState.runtime.runtimeKind,
-    undefined,
-    undefined,
     input.filesystem,
     input.memory,
     sessionSettings,
@@ -680,32 +581,22 @@ export async function finalizeConfig(
       : 'borrowed',
     input.workspaceTrust,
     input.trustCleanup,
-    undefined,
-    undefined,
-    requireSelectedProviderFiles(
-      input.runtimeState.runtime.providerFileLifecycle,
-    ),
-    input.runtimeState.runtimeMessageBus,
-    // The CLI builds this memory solely for the activation (alongside the
-    // filesystem and trust it hands over), so the activation owns its release.
-    'transferred',
+    (operation) => {
+      preparedActivation = operation;
+    },
   );
-  const switchProvider = assembleProviderSwitch(
+  if (preparedActivation === undefined)
+    throw new Error('Agent preflight did not prepare activation');
+  const activationOperation = preparedActivation;
+  const switchProvider = input.runtimeState.prepareSwitch(
     input.config,
-    getSettingsService(input),
-    input.runtimeState.providerManager,
-    input.runtimeState.oauthManager ?? null,
-    () => input.runtimeState.runtime.runtimeKind,
     () => activationOperation.sessionClient.refreshAuth(),
     sessionSettings,
   );
-  const profileApplication = assembleProfileApplication(
-    getSettingsService(input),
-    input.runtimeState.providerManager,
-    input.runtimeState.oauthManager ?? null,
+  const profileApplication = input.runtimeState.prepareProfile(
+    activationOperation.workspaceDefinitions.profileReads,
     switchProvider,
     sessionSettings,
-    activationOperation.workspaceDefinitions.profileReads,
   );
   let transferred = false;
   try {
@@ -770,14 +661,4 @@ async function activateUnprofiledProvider(
         }`,
     );
   }
-}
-
-function requireSelectedProviderFiles(
-  value: object | undefined,
-): ProviderFileLifecycle {
-  if (!(value instanceof ProviderFileLifecycle))
-    throw new Error(
-      'CLI preflight requires the explicitly assembled provider file owner',
-    );
-  return value;
 }
