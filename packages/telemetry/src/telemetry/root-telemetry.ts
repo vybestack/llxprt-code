@@ -556,6 +556,17 @@ export class RootTelemetry {
     return this.lifetime;
   }
 
+  /**
+   * Flushes queued log records without joining other in-flight exports, so a
+   * best-effort publication never waits behind a withheld strict
+   * acknowledgement. Export failures stay queued for the next {@link flush}.
+   */
+  flushLogRecords(): Promise<void> {
+    if (this.lifetime === undefined)
+      return this.pendingRetirement ?? Promise.resolve();
+    return this.lifetime.providers.logger.forceFlush();
+  }
+
   flush(): Promise<void> {
     if (this.pendingFlush !== undefined) return this.pendingFlush;
     if (this.lifetime === undefined)

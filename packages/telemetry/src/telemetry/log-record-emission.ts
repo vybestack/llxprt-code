@@ -42,7 +42,7 @@ export function aggregateLocally(
 /**
  * Emitter for request-artifact publications. Acknowledged emission resolves
  * after the exporter confirms the record; best-effort emission resolves after
- * the root has flushed it, so chunks never accumulate in the SDK queue.
+ * the root has flushed its log queue (not other in-flight exports), so chunks never accumulate in the SDK queue.
  */
 export function recordEmitter(
   telemetry: RootTelemetry,
@@ -53,6 +53,6 @@ export function recordEmitter(
     return (record) => telemetry.publishAcknowledged(record, signal);
   return (record) => {
     telemetry.events.record(() => record);
-    return telemetry.flush();
+    return telemetry.flushLogRecords();
   };
 }

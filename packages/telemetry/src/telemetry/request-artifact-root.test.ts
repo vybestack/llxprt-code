@@ -9,14 +9,20 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ExportResultCode } from '@opentelemetry/core';
-import type { LogRecordExporter } from '@opentelemetry/sdk-logs';
+import type {
+  LogRecordExporter,
+  ReadableLogRecord,
+} from '@opentelemetry/sdk-logs';
 import { createRootTelemetry, type RootTelemetry } from './root-telemetry.js';
 import { logBoundedRequestArtifact } from './bounded-request-artifact.js';
 import {
   assertRequestArtifactExporter,
   flushRequestArtifactTelemetry,
 } from './sdk.js';
-import { acknowledgeTerminalTelemetry } from './log-record-emission.js';
+import {
+  acknowledgeTerminalTelemetry,
+  recordEmitter,
+} from './log-record-emission.js';
 
 const roots: RootTelemetry[] = [];
 const outfile = (): string =>
@@ -114,10 +120,63 @@ describe('request artifact telemetry owned by a RootTelemetry', () => {
       other.runAfterTerminalAcknowledgement(() => order.push('other-now'));
     });
 
-    expect(order).toEqual(['other-now']);
+    expect(order).toStrictEqual(['other-now']);
     expect(readFileSync(file, 'utf8')).toContain('terminal-1');
     accept();
-    expect(order).toEqual(['other-now', 'effect']);
+    expect(order).toStrictEqual(['other-now', 'effect']);
+  });
+
+  it('does not make a best-effort publication wait behind a withheld strict acknowledgement', async () => {
+    const withheld: Array<() => void> = [];
+    const exported: string[] = [];
+    const logger: LogRecordExporter & { requestArtifactSchemaVersion: 4 } = {
+      requestArtifactSchemaVersion: 4,
+      export: (records: ReadableLogRecord[], done) => {
+        const marker = String(records[0]?.attributes.marker);
+        exported.push(marker);
+        if (marker === 'withheld')
+          withheld.push(() => done({ code: ExportResultCode.SUCCESS }));
+        else done({ code: ExportResultCode.SUCCESS });
+      },
+      shutdown: () => Promise.resolve(),
+      forceFlush: () => Promise.resolve(),
+    };
+    const selected = await createRootTelemetry(
+      { sessionId: 'withheld', enabled: true, maxBytes: 1, maxFiles: 1 },
+      () => ({
+        tracer: {
+          export: (_spans, done) => done({ code: ExportResultCode.SUCCESS }),
+          shutdown: () => Promise.resolve(),
+        },
+        logger,
+        meter: {
+          export: (_metrics, done) => done({ code: ExportResultCode.SUCCESS }),
+          shutdown: () => Promise.resolve(),
+          forceFlush: () => Promise.resolve(),
+        },
+      }),
+    );
+    roots.push(selected);
+    const abort = new AbortController();
+    const strict = selected.publishAcknowledged(
+      { body: 'strict', attributes: { marker: 'withheld' } },
+      abort.signal,
+    );
+    const strictOutcome = strict.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    await recordEmitter(
+      selected,
+      undefined,
+      false,
+    )({ body: 'eager', attributes: { marker: 'eager' } });
+
+    expect(exported).toStrictEqual(['withheld', 'eager']);
+    abort.abort(new Error('released'));
+    expect(await strictOutcome).toBeInstanceOf(Error);
+    for (const release of withheld) release();
   });
 
   it('rejects a terminal publication with more than two records', async () => {
