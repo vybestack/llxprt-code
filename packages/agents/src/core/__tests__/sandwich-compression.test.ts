@@ -14,17 +14,17 @@ import { createSessionPolicyFixture } from './session-policy-fixture.js';
  * have been moved into the compression strategy module.
  */
 
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { ChatSession } from '../chatSession.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { ChatSession } from '../chatSession.js';
 
 function createUserMessage(text: string): IContent {
   return {
@@ -200,6 +200,10 @@ describe('Sandwich Compression (Issue #1011)', () => {
 
         const chat = new ChatSession(
           runtimeContext,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
           mockContentGenerator,
           {},
           [],
@@ -251,6 +255,10 @@ describe('Sandwich Compression (Issue #1011)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -290,6 +298,10 @@ describe('Sandwich Compression (Issue #1011)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -352,6 +364,10 @@ describe('Sandwich Compression (Issue #1011)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -411,6 +427,10 @@ describe('Sandwich Compression (Issue #1011)', () => {
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],

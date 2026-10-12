@@ -1,5 +1,5 @@
-import { afterEach as closeInvocationRoots } from 'bun:test';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { afterEach as closeInvocationRoots } from 'bun:test';
 const retainedInvocationOwners: SessionSettingsOwner[] = [];
 closeInvocationRoots(async () => {
   for (const owner of retainedInvocationOwners.splice(0)) await owner.dispose();
@@ -19,24 +19,24 @@ closeInvocationRoots(async () => {
  * disable is needed.
  */
 
-import { vi } from 'bun:test';
 import {
   EmptySummaryError,
   type CompressionContext,
 } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import * as compressionFactory from '../compressionStrategyFactory.js';
-import { ChatSession } from '../../core/chatSession.js';
-import type { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { vi } from 'bun:test';
+import { ChatSession } from '../../core/chatSession.js';
+import * as compressionFactory from '../compressionStrategyFactory.js';
 
 // ---------------------------------------------------------------------------
 // Helper error factories
@@ -175,7 +175,16 @@ export function makeChatSession(
     embedContent: vi.fn(),
   };
 
-  return new ChatSession(view, mockContentGenerator, {}, []);
+  return new ChatSession(
+    view,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    mockContentGenerator,
+    {},
+    [],
+  );
 }
 
 // ---------------------------------------------------------------------------

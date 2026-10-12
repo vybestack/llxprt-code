@@ -4,75 +4,81 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
-import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
-import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
-import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
-import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
+import { isSchemaDepthError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type {
-  IContent,
-  ContentMetadata,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+  AgentChatRecordingExecution,
+  AgentClientGenerateConfig,
+} from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
+import type { HookLLMResponse } from '@vybestack/llxprt-code-core/hooks/hookTranslator.js';
+import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import type {
   ModelOutput,
   ToolChoice,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
-  toModelStreamChunk,
   emptyModelOutput,
+  iContentFromBlocks,
+  isProviderApiError,
+  toModelStreamChunk,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { isProviderApiError } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type {
+  ProviderFileBindingStore,
+  ProviderRequestCollaborators,
+} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type {
+  ContentMetadata,
+  IContent,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
+import { retryWithBackoff } from '@vybestack/llxprt-code-core/utils/retry.js';
 import {
-  normalizeToolInteractionInput,
+  nextStreamEventWithIdleTimeout,
+  resolveStreamIdleTimeoutMs,
+} from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
+import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
+import {
   aggregateTextWithSpacing,
+  normalizeToolInteractionInput,
 } from './MessageConverter.js';
 import {
   applyRequestModifications,
   extractSystemInstructionText,
 } from './streamRequestHelpers.js';
-import { isSchemaDepthError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
-import {
-  nextStreamEventWithIdleTimeout,
-  resolveStreamIdleTimeoutMs,
-} from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
-import type { BeforeModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
-import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
-import type { HookLLMResponse } from '@vybestack/llxprt-code-core/hooks/hookTranslator.js';
 
 interface ToolSelectionHookResult {
   tools: ToolDeclaration[] | undefined;
   allowedFunctionNames: string[] | undefined;
 }
 
-import { logApiRequest, logApiResponse, logApiError } from './turnLogging.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import {
-  filterHookRestrictedBlocks,
-  filterAfcByHookRestrictions,
-} from './hookToolRestrictions.js';
-import {
-  afterModelModifiedToChunk,
-  beforeModelBlockingToModelOutput,
-} from './hookWireAdapter.js';
+  ensureResponseText,
+  extractResponseText,
+} from './directResponseText.js';
 import {
   afterModelRequestEnvelope,
   afterModelResponseEnvelope,
   beforeModelRequestEnvelope,
   toolSelectionRequest,
 } from './hookEnvelopeHelpers.js';
+import {
+  filterAfcByHookRestrictions,
+  filterHookRestrictedBlocks,
+} from './hookToolRestrictions.js';
+import {
+  afterModelModifiedToChunk,
+  beforeModelBlockingToModelOutput,
+} from './hookWireAdapter.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import { isTerminalRetryError } from './turnAbortHelpers.js';
-import {
-  ensureResponseText,
-  extractResponseText,
-} from './directResponseText.js';
+import { logApiError, logApiRequest, logApiResponse } from './turnLogging.js';
 
 /**
  * Reads the next chunk from the stream iterator, applying idle-timeout
@@ -139,13 +145,21 @@ function buildBlockingModelOutput(
 export class DirectMessageProcessor {
   private logger = new DebugLogger('llxprt:direct-message-processor');
 
-  rebindHistory(runtimeContext: AgentRuntimeContext): void {
+  rebindHistory(
+    runtimeContext: AgentRuntimeContext,
+    providerFileBindings: ProviderFileBindingStore,
+  ): void {
     this.runtimeContext = runtimeContext;
     this.historyService = runtimeContext.history;
+    this.providerFileBindings = providerFileBindings;
   }
 
   constructor(
     private runtimeContext: AgentRuntimeContext,
+    private readonly mediaResolver: RequestMediaResolutionService | undefined,
+    private readonly requestMediaBudgetBytes: number | undefined,
+    private providerFileBindings: ProviderFileBindingStore | undefined,
+    private readonly providerFileLifecycle: object | undefined,
     private readonly providerResolver: (contextLabel: string) => IProvider,
     private readonly providerRuntimeBuilder: (
       source: string,
@@ -503,10 +517,10 @@ export class DirectMessageProcessor {
 
     return bindProviderMediaAndFiles(
       provider,
-      runtimeContext.mediaResolver,
-      runtimeContext.requestMediaBudgetBytes,
-      runtimeContext.providerFileBindings,
-      runtimeContext.providerFileLifecycle,
+      this.mediaResolver,
+      this.requestMediaBudgetBytes,
+      this.providerFileBindings,
+      this.providerFileLifecycle,
       runtimeContext.config?.getTargetDir(),
     ).generateChatCompletion({
       contents: contentsForApi,

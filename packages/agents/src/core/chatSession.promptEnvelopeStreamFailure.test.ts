@@ -18,28 +18,28 @@ import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.j
  * a failed attempt's estimate visible.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { ChatSession } from './chatSession.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import {
   createAgentRuntimeState,
   type AgentRuntimeState,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type {
   GenerateChatOptions,
   IProvider,
 } from '@vybestack/llxprt-code-providers/IProvider.js';
-import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { createChatSessionRuntime } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
+import { ChatSession } from './chatSession.js';
 
 /**
  * Provider whose stream yields one chunk and then throws, simulating a
@@ -180,7 +180,16 @@ function buildChatSession(fixture: TestFixture): ChatSession {
     },
   });
 
-  return new ChatSession(view, fixture.mockContentGenerator, {}, []);
+  return new ChatSession(
+    view,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    fixture.mockContentGenerator,
+    {},
+    [],
+  );
 }
 
 describe('ChatSession prompt-envelope estimate on mid-stream failure (issue #2817)', () => {

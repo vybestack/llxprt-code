@@ -1,3 +1,4 @@
+import { createHistoryProviderFileBindingStore } from '@vybestack/llxprt-code-core/services/history/provider-file-binding.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { buildToolGovernance } from '@vybestack/llxprt-code-tools';
 /**
@@ -16,56 +17,56 @@ import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/serv
  * Extracted from subagent.ts as part of Issue #1581 (Phase 2).
  */
 
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
+import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
+import type { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import {
+  templateString,
+  type EnvironmentContextLoader,
+  type ModelConfig,
+  type OutputConfig,
+  type PromptConfig,
+  type ToolConfig,
+} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
+import {
+  EmojiFilter,
+  type EmojiFilterMode,
+} from '@vybestack/llxprt-code-core/filters/EmojiFilter.js';
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type {
+  AgentRuntimeContext,
+  ReadonlySettingsSnapshot,
+  ToolMetadata,
+  ToolRegistryView,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
-import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
-import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import {
-  ChatSession,
-  type ChatSessionConfig,
-  type SystemPromptAssembler,
-} from './chatSession.js';
-import type {
-  AgentRuntimeContext,
-  ReadonlySettingsSnapshot,
-  ToolRegistryView,
-  ToolMetadata,
-} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
+import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
+import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import {
   canonicalizeToolName,
   INVALID_TOOL_NAME,
 } from '@vybestack/llxprt-code-tools/formatters/toolNameUtils.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import {
+  ChatSession,
+  type ChatSessionConfig,
+  type SystemPromptAssembler,
+} from './chatSession.js';
+import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
+import { resolvePromptMemory } from './promptMemoryPolicy.js';
 import {
   getToolNameCandidates,
   isSubagentExcludedToolName,
   SUBAGENT_EXCLUDED_TOOL_NAMES,
 } from './toolGovernance.js';
-import { getCoreSystemPromptAsync } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { resolvePromptMemory } from './promptMemoryPolicy.js';
-import {
-  EmojiFilter,
-  type EmojiFilterMode,
-} from '@vybestack/llxprt-code-core/filters/EmojiFilter.js';
-import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
-import type { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import {
-  templateString,
-  type ToolConfig,
-  type OutputConfig,
-  type ModelConfig,
-  type PromptConfig,
-  type EnvironmentContextLoader,
-} from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 
 // ---------------------------------------------------------------------------
 // Simple utilities
@@ -603,6 +604,7 @@ export interface CreateChatObjectParams {
 
 export async function createChatObject(
   params: CreateChatObjectParams,
+  providerFileLifecycle: object | undefined,
 ): Promise<ChatSession | null> {
   const { promptConfig, modelConfig, outputConfig, toolConfig } = params;
   const { runtimeContext, contentGenerator, environmentContextLoader } = params;
@@ -673,6 +675,8 @@ export async function createChatObject(
     contentGenerator,
     logger,
     systemPromptAssembler,
+    providerFileLifecycle,
+    config.getImagePayloadBudgetBytes(),
   );
 }
 
@@ -755,7 +759,9 @@ function instantiateChat(
   runtimeContext: AgentRuntimeContext,
   contentGenerator: ContentGenerator,
   _logger: { debug: (fn: () => string) => void },
-  systemPromptAssembler?: SystemPromptAssembler,
+  systemPromptAssembler: SystemPromptAssembler | undefined,
+  providerFileLifecycle: object | undefined,
+  requestMediaBudgetBytes: number,
 ): ChatSession | null {
   try {
     const generationConfig: ChatSessionConfig = {
@@ -767,6 +773,10 @@ function instantiateChat(
 
     return new ChatSession(
       runtimeContext,
+      runtimeContext.mediaResolver,
+      requestMediaBudgetBytes,
+      createHistoryProviderFileBindingStore(runtimeContext.history),
+      providerFileLifecycle,
       contentGenerator,
       generationConfig,
       startHistory,

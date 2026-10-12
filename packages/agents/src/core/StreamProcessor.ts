@@ -4,83 +4,85 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
 import type {
-  ModelStreamChunk,
   ModelOutput,
+  ModelStreamChunk,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
+import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
+import type { ProviderFileBindingStore } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { MediaAdmissionRelease } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import { prependAsyncGenerator } from '@vybestack/llxprt-code-core/utils/asyncIterator.js';
 import {
   isRetryableError,
   retryWithBackoff,
 } from '@vybestack/llxprt-code-core/utils/retry.js';
-import { prependAsyncGenerator } from '@vybestack/llxprt-code-core/utils/asyncIterator.js';
+import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
+import { StreamOutputAccumulator } from './streamOutputAccumulator.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
-import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
-import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { AfterModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
+import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { CompressionHandler } from '../compression/CompressionHandler.js';
+import { fireBeforeModelHook } from './beforeModelHookFire.js';
+import {
+  AgentExecutionBlockedError,
+  AgentExecutionStoppedError,
+} from './chatSession.js';
+import type { ConversationManager } from './ConversationManager.js';
+import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
+import {
+  afterModelBlockingToModelOutput,
+  afterModelModifiedToChunk,
+} from './hookWireAdapter.js';
 import { prepareAtSendSeam } from './promptEnvelopeSendSeam.js';
 import { prepareStreamEnvelope } from './streamEnvelopePreparation.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { ConversationManager } from './ConversationManager.js';
-import type { CompressionHandler } from '../compression/CompressionHandler.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { logApiError } from './turnLogging.js';
-import { EmptyStreamError } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
-import { isTerminalRetryError } from './turnAbortHelpers.js';
 import {
-  AgentExecutionStoppedError,
-  AgentExecutionBlockedError,
-} from './chatSession.js';
-import { filterHookRestrictedBlocks } from './hookToolRestrictions.js';
+  applyToolSelectionHook,
+  buildRequestContentsResult,
+  buildRuntimeContext,
+  contentForTelemetryPreservingUsage,
+  logOutgoingRequest,
+  prepareRequestPayload,
+  selectRequestTools,
+  type PreparedRequest,
+  type ToolSelectionHookResult,
+} from './streamRequestHelpers.js';
+import { trackPromptTokens } from './streamResponseHelpers.js';
 import {
   attachStreamTiming,
   logStreamTelemetry,
   RawTokenDeltaBridge,
   StreamTimingTracker,
 } from './streamTelemetryLogger.js';
-import {
-  applyToolSelectionHook,
-  buildRequestContentsResult,
-  contentForTelemetryPreservingUsage,
-  selectRequestTools,
-  prepareRequestPayload,
-  buildRuntimeContext,
-  logOutgoingRequest,
-  type ToolSelectionHookResult,
-  type PreparedRequest,
-} from './streamRequestHelpers.js';
-import { fireBeforeModelHook } from './beforeModelHookFire.js';
-import { trackPromptTokens } from './streamResponseHelpers.js';
-import {
-  afterModelModifiedToChunk,
-  afterModelBlockingToModelOutput,
-} from './hookWireAdapter.js';
-import type { AfterModelHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
-import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
+import { isTerminalRetryError } from './turnAbortHelpers.js';
+import { logApiError } from './turnLogging.js';
 
-import { withCompressionCallbackCleanup } from './streamCleanup.js';
-import { stampTurnIdentityOnInput } from './turnIdentity.js';
 import { assertAdmittedRoute } from './admittedRouteSecurity.js';
-import { buildStreamChatOptions } from './streamChatOptions.js';
-import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
 import {
   admitStreamChunkForHistory,
   turnMediaAdmissionContext,
   type PreparedUserTurn,
 } from './mediaAdmissionSeam.js';
+import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
+import { buildStreamChatOptions } from './streamChatOptions.js';
+import { withCompressionCallbackCleanup } from './streamCleanup.js';
 import {
   failStreamProcessing,
   finalizeStreamResponse,
 } from './streamResponseFinalizer.js';
+import { stampTurnIdentityOnInput } from './turnIdentity.js';
 
 function isPreparedUserTurn(
   value: IContent | IContent[] | PreparedUserTurn,
@@ -111,13 +113,21 @@ export class StreamProcessor {
     return this.currentPromptEnvelopeEstimate;
   }
 
-  rebindHistory(runtimeContext: AgentRuntimeContext): void {
+  rebindHistory(
+    runtimeContext: AgentRuntimeContext,
+    providerFileBindings: ProviderFileBindingStore,
+  ): void {
     this.runtimeContext = runtimeContext;
     this.historyService = runtimeContext.history;
+    this.providerFileBindings = providerFileBindings;
   }
 
   constructor(
     private runtimeContext: AgentRuntimeContext,
+    private readonly mediaResolver: RequestMediaResolutionService | undefined,
+    private readonly requestMediaBudgetBytes: number | undefined,
+    private providerFileBindings: ProviderFileBindingStore | undefined,
+    private readonly providerFileLifecycle: object | undefined,
     private readonly conversationManager: ConversationManager,
     private readonly compressionHandler: CompressionHandler,
     private readonly providerResolver: (contextLabel: string) => IProvider,
@@ -340,10 +350,10 @@ export class StreamProcessor {
   ): IProvider {
     return bindProviderMediaAndFiles(
       provider,
-      runtimeContext.mediaResolver,
-      runtimeContext.requestMediaBudgetBytes,
-      runtimeContext.providerFileBindings,
-      runtimeContext.providerFileLifecycle,
+      this.mediaResolver,
+      this.requestMediaBudgetBytes,
+      this.providerFileBindings,
+      this.providerFileLifecycle,
       runtimeContext.config?.getTargetDir(),
     );
   }

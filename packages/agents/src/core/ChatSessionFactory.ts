@@ -1,16 +1,19 @@
-import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
-import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import type {
+  ProfileDefinitionReads,
+  RuntimeTokenizerFactory,
+  SubagentDefinitionReads,
+} from '@vybestack/llxprt-code-core';
 import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
-import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
-import type { SubagentDefinitionReads } from '@vybestack/llxprt-code-core';
-import type { ProfileDefinitionReads } from '@vybestack/llxprt-code-core';
+import type { ProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
+import { createHistoryProviderFileBindingStore } from '@vybestack/llxprt-code-core/services/history/provider-file-binding.js';
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Google LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import type { ToolGovernance } from '@vybestack/llxprt-code-tools';
 import type { PrepareProviderInvocation } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { ToolGovernance } from '@vybestack/llxprt-code-tools';
 
 import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 
@@ -19,27 +22,29 @@ import { assembleChatSystemPrompt } from './chat-system-prompt.js';
 import type { ModelGenerationSettings } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import type { ChatSessionConfig } from './chatSession.js';
 
-import { buildToolDeclarationsFromView } from './clientToolGovernance.js';
-import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
-import { ChatSession } from './chatSession.js';
-export { resolveModelForSystemPrompt } from './systemPromptModel.js';
-import type { SystemPromptAssembler } from './chatSession.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type {
+  AgentRuntimeProviderAdapter,
+  ReadonlySettingsSnapshot,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
-import type { AgentRuntimeProviderAdapter } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import { MediaAdmissionService } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
+import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
+import type { SystemPromptAssembler } from './chatSession.js';
+import { ChatSession } from './chatSession.js';
+import { buildToolDeclarationsFromView } from './clientToolGovernance.js';
+export { resolveModelForSystemPrompt } from './systemPromptModel.js';
 
-import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
+import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import { getErrorMessage } from '@vybestack/llxprt-code-core/utils/errors.js';
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import { isThinkingSupported } from './clientHelpers.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
 
 /**
@@ -185,7 +190,7 @@ async function readActiveTodosPrompt(
   return active.map((todo) => `- [${todo.status}] ${todo.content}`).join('\n');
 }
 
-function assembleChatProviderRuntime(
+function chatRuntime(
   config: Config,
   runtimeState: AgentRuntimeState,
   lifecycle: object | undefined,
@@ -241,7 +246,7 @@ async function buildChatFromRuntime(
   profileDefinitions: CreateChatSessionDeps['profileDefinitions'],
   promptEstimator: CreateChatSessionDeps['promptEstimator'],
   lifecycle: object | undefined,
-  composeRetryOperations: CreateChatSessionDeps['composeRetryOperations'],
+  retry: CreateChatSessionDeps['composeRetryOperations'],
   telemetry: RootTelemetry,
   requestDiagnostics: ProviderRequestDiagnostics | undefined,
 ): Promise<ChatSession> {
@@ -254,12 +259,7 @@ async function buildChatFromRuntime(
       state: runtimeState,
       settings: readRuntimeSettings(),
       promptEstimator,
-      providerRuntime: assembleChatProviderRuntime(
-        config,
-        runtimeState,
-        lifecycle,
-        composeRetryOperations,
-      ),
+      providerRuntime: chatRuntime(config, runtimeState, lifecycle, retry),
       readRuntimeSettings,
       readToolGovernance,
       prepareProviderInvocation,
@@ -285,6 +285,10 @@ async function buildChatFromRuntime(
         prepareProviderInvocation,
         profileDefinitions,
       },
+      runtimeBundle.runtimeContext.mediaResolver,
+      config.getImagePayloadBudgetBytes(),
+      createHistoryProviderFileBindingStore(historyService),
+      lifecycle,
       runtimeBundle.contentGenerator,
       buildGenerateContentConfig(
         generateContentConfig,

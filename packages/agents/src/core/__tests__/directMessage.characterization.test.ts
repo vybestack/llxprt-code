@@ -1,7 +1,7 @@
-import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { createSessionSettingsFixture } from '../../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -26,19 +26,22 @@ const modelTools = installModelToolFixture();
  * @requirement:REQ-INT-001.3
  */
 
-import { describe, it, expect, vi, type Mock } from 'bun:test';
+import { describe, expect, it, vi, type Mock } from 'bun:test';
 import * as fc from 'fast-check';
 
-import { ChatSession } from '../chatSession.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { TestRuntimeProviderManager } from '../../test-utils/runtimeProviderManager.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import {
+  AfterModelHookOutput,
+  BeforeModelHookOutput,
+} from '@vybestack/llxprt-code-core/hooks/types.js';
+import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
@@ -46,18 +49,15 @@ import {
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import {
-  AfterModelHookOutput,
-  BeforeModelHookOutput,
-} from '@vybestack/llxprt-code-core/hooks/types.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { TestRuntimeProviderManager } from '../../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from '../chatSession-runtime-helpers.js';
+import { ChatSession } from '../chatSession.js';
 
 import {
-  visibleText,
   committedHistory,
   usageCounts,
+  visibleText,
 } from './helpers/directMessageObservers.js';
 
 // retry must be a no-op so the real DMP runs the provider call exactly once
@@ -203,6 +203,10 @@ function createDirectHarness(
 
   const chat = new ChatSession(
     view,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
     {} as unknown as ContentGenerator,
     generationConfig,
     [],

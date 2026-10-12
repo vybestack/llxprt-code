@@ -1,3 +1,5 @@
+import type { ProviderInvocationData } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -29,4 +31,24 @@ export function createConfigParams(
     model: 'gemini-1.5-pro',
     initialSettings: settingsService.getAllGlobalSettings(),
   };
+}
+
+export function invocationData(
+  runtime: ProviderRuntimeContext,
+  name: string,
+): ProviderInvocationData {
+  return {
+    runtimeId: runtime.runtimeId,
+    metadata: runtime.metadata,
+    globalSettings: runtime.settingsService.getAllGlobalSettings(),
+    providerSettings: runtime.settingsService.getProviderSettings(name),
+  };
+}
+
+export function configureHistoryProviderSettings(
+  settingsService: SettingsService,
+): void {
+  settingsService.set('providers.stub.base-url', 'https://stub.example.com');
+  settingsService.set('providers.stub.auth-key', 'stub-api-key');
+  settingsService.set('providers.stub.model', 'stub-model');
 }

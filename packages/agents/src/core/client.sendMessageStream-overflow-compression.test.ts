@@ -13,34 +13,34 @@ let metricSource: UiTelemetryService;
  * file-level max-lines).
  */
 
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
+import type { ContentBlock } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
   afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
   type Mock,
 } from 'bun:test';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { AgentClient } from './client.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { ChatSession } from './chatSession.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { AgentEventType, PerformCompressionResult } from './turn.js';
 import {
-  buildRuntimeContext,
   buildMockContentGenerator,
-  makeUserMessage,
+  buildRuntimeContext,
   makeAiText,
+  makeUserMessage,
 } from './__tests__/chatSession-density-helpers.js';
-import { tokenLimit } from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import {
   fromAsync,
   setupAgentClient,
   type MockResponseShape,
 } from './__tests__/client-test-helpers.js';
+import { ChatSession } from './chatSession.js';
+import { AgentClient } from './client.js';
+import { AgentEventType, PerformCompressionResult } from './turn.js';
 
 // Mock prompts module before imports
 const realConfigModule = {
@@ -431,6 +431,10 @@ describe('AgentClient — finalized-envelope enforcement handoff (issues 2402, 2
 
       const realChat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         buildMockContentGenerator(),
         { maxOutputTokens: 100 },
         [],

@@ -4,55 +4,59 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
-import { withRetryRequestState } from './retry-request-state.js';
-import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
+import {
+  INVALID_CONTENT_RETRY_OPTIONS,
+  StreamEventType,
+  type StreamEvent,
+} from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { AgentClientGenerateConfig } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
-import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
-import { resolveStreamIdleTimeoutMs } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/toolDeclaration.js';
 import type { AgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { bindProviderMediaAndFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderMediaAndFiles.js';
+import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
+import type {
+  ProviderFileBindingStore,
+  ProviderRequestCollaborators,
+} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type {
   IContent,
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
+import { resolveStreamIdleTimeoutMs } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
+import type { CompressionHandler } from '../compression/CompressionHandler.js';
+import type { ChatSessionConfig, SendMessageParams } from './chatSession.js';
+import { resolveGeneratingModel } from './generatingModelResolver.js';
+import {
+  filterAfcByHookRestrictions,
+  filterHookRestrictedBlocks,
+} from './hookToolRestrictions.js';
+import { normalizeToolInteractionInput } from './MessageConverter.js';
 import {
   bindPreparedTransportSignal,
   buildProviderChatOptions,
   enforceAndSendWithPromptEnvelopeRetries,
   prepareAtSendSeam,
 } from './promptEnvelopeSendSeam.js';
-import { resolveGeneratingModel } from './generatingModelResolver.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { CompressionHandler } from '../compression/CompressionHandler.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { withRetryRequestState } from './retry-request-state.js';
 import type { StreamProcessor } from './StreamProcessor.js';
-import { normalizeToolInteractionInput } from './MessageConverter.js';
-import {
-  StreamEventType,
-  type StreamEvent,
-  INVALID_CONTENT_RETRY_OPTIONS,
-} from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
-import {
-  filterHookRestrictedBlocks,
-  filterAfcByHookRestrictions,
-} from './hookToolRestrictions.js';
+import { withReportedUsage } from './streamRequestHelpers.js';
+import { recordSendSeamTelemetry } from './tokenUsageEstimateLogger.js';
 import { canonicalizeToolName } from './toolGovernance.js';
 import {
-  shouldRetryStreamAttempt,
   applyRetryTemperature,
   chunkHasVisibleOutput,
+  shouldRetryStreamAttempt,
 } from './turnAbortHelpers.js';
-import { withReportedUsage } from './streamRequestHelpers.js';
 
 import {
-  AgentExecutionStoppedError,
   AgentExecutionBlockedError,
+  AgentExecutionStoppedError,
 } from './chatSession.js';
 import {
   createProviderSendTiming,
@@ -64,31 +68,31 @@ import {
 import { throwTurnSendError } from './turnSendError.js';
 
 import type {
-  ModelStreamChunk,
   ModelOutput,
+  ModelStreamChunk,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import {
-  toModelStreamChunk,
   emptyModelOutput,
+  toModelStreamChunk,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { recordAbandonedStreamAttempt } from './tokenUsageActualLogger.js';
-import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
-import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
-
-type SemanticMediaPurgeFactory = () => Promise<
-  SemanticMediaPurgeAttempt | undefined
->;
 import {
   prepareAdmittedUserTurn,
   type PreparedUserTurn,
 } from './mediaAdmissionSeam.js';
-import { enforceTurnMediaRequestContents } from './turnMediaRequest.js';
+import type { SemanticMediaPurgeAttempt } from './semanticMediaPurgeSession.js';
+import { recordAbandonedStreamAttempt } from './tokenUsageActualLogger.js';
 import { commitTurnHistory } from './turnHistoryCommit.js';
 import {
   failedTurnCleanup,
   throwAfterFailedTurnCleanup,
   wrapStreamGeneratorLifecycle,
 } from './turnMediaAdmissionLifecycle.js';
+import { enforceTurnMediaRequestContents } from './turnMediaRequest.js';
+import { shouldRetryDirectProviderError } from './turnRetryPolicy.js';
+
+type SemanticMediaPurgeFactory = () => Promise<
+  SemanticMediaPurgeAttempt | undefined
+>;
 
 interface ToolSelectionHookResult {
   tools: ToolDeclaration[] | undefined;
@@ -134,13 +138,21 @@ export class TurnProcessor {
     return this.currentPromptEnvelopeEstimate;
   }
 
-  rebindHistory(runtimeContext: AgentRuntimeContext): void {
+  rebindHistory(
+    runtimeContext: AgentRuntimeContext,
+    providerFileBindings: ProviderFileBindingStore,
+  ): void {
     this.runtimeContext = runtimeContext;
     this.historyService = runtimeContext.history;
+    this.providerFileBindings = providerFileBindings;
   }
 
   constructor(
     private runtimeContext: AgentRuntimeContext,
+    private readonly mediaResolver: RequestMediaResolutionService | undefined,
+    private readonly requestMediaBudgetBytes: number | undefined,
+    private providerFileBindings: ProviderFileBindingStore | undefined,
+    private readonly providerFileLifecycle: object | undefined,
     private readonly compressionHandler: CompressionHandler,
     private readonly providerResolver: (contextLabel: string) => IProvider,
     private readonly providerRuntimeBuilder: (
@@ -563,10 +575,10 @@ export class TurnProcessor {
     );
     provider = bindProviderMediaAndFiles(
       provider,
-      runtimeContext.mediaResolver,
-      runtimeContext.requestMediaBudgetBytes,
-      runtimeContext.providerFileBindings,
-      runtimeContext.providerFileLifecycle,
+      this.mediaResolver,
+      this.requestMediaBudgetBytes,
+      this.providerFileBindings,
+      this.providerFileLifecycle,
       runtimeContext.config?.getTargetDir(),
     );
     return enforceAndSendWithPromptEnvelopeRetries({

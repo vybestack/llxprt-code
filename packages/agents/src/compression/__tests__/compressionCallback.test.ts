@@ -7,19 +7,19 @@
  * CompressionHandler.enforceProviderContents (issue #2207).
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { CompressionCallback } from '@vybestack/llxprt-code-providers';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import {
-  makeUserMessage,
-  makeAiText,
-  buildRuntimeContext,
   buildMockContentGenerator,
+  buildRuntimeContext,
+  makeAiText,
+  makeUserMessage,
 } from '../../core/__tests__/chatSession-density-helpers.js';
 import { ChatSession } from '../../core/chatSession.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import type { CompressionCallback } from '@vybestack/llxprt-code-providers';
 
 function expectCapturedCallback(
   callback: CompressionCallback | null,
@@ -90,7 +90,16 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
     historyService.add(makeUserMessage('test'));
     historyService.add(makeAiText('response'));
 
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      runtimeContext,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     const providerWithCallback = {
       name: 'load-balancer',
@@ -147,6 +156,10 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
       historyService.add(makeUserMessage('test'));
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -173,7 +186,16 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
 
     historyService.add(makeUserMessage('test'));
 
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      runtimeContext,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     const providerWithoutCallback = {
       name: 'gemini',
@@ -198,7 +220,16 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
 
     historyService.add(makeUserMessage('test'));
 
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      runtimeContext,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
 
     const providerWithNonCallableCallback = {
       name: 'load-balancer',
@@ -246,6 +277,10 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
 
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -333,6 +368,10 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
       const pending = makeUserMessage('latest user request after tool result');
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],
@@ -379,7 +418,16 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
       compressionThreshold: 0.0001,
     });
     historyService.add(makeUserMessage('previous assistant context'));
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      runtimeContext,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
     const compressionHandler = chat['compressionHandler'];
     const performCompression = vi
       .spyOn(compressionHandler, 'performCompression')
@@ -442,6 +490,10 @@ describe('CompressionHandler.enforceProviderContents - compression callback atta
       };
       const chat = new ChatSession(
         runtimeContext,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
         mockContentGenerator,
         {},
         [],

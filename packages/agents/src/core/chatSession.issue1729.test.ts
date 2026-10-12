@@ -1,25 +1,27 @@
-import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
-import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
-import { describe, it, expect, beforeEach } from 'bun:test';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ThinkingBlock } from '@vybestack/llxprt-code-core/services/history/blocks/ThinkingBlock.js';
-import { ChatSession } from './chatSession.js';
-import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { toModelStreamChunk } from '@vybestack/llxprt-code-core/llm-types/index.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type {
+  IContent,
+  TextBlock,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type { ThinkingBlock } from '@vybestack/llxprt-code-core/services/history/blocks/ThinkingBlock.js';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { beforeEach, describe, expect, it } from 'bun:test';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
+import { ChatSession } from './chatSession.js';
 
 /**
  * Extracts visible (non-thinking) text from a neutral ModelOutput's content
@@ -109,7 +111,16 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
       providerRuntime: { ...providerRuntime },
     });
 
-    new ChatSession(view, {} as unknown as ContentGenerator, {}, []);
+    new ChatSession(
+      view,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {} as unknown as ContentGenerator,
+      {},
+      [],
+    );
   });
 
   describe('Phase 1: finishReason propagation from Anthropic', () => {

@@ -1,3 +1,8 @@
+import { completedToolResponseIds } from './chatSessionProviderRuntime.js';
+import {
+  completedToolResponses,
+  logChatInitialization,
+} from './chatSessionProviderRuntime.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -6,17 +11,39 @@
 
 // ChatSession — thin coordinator that wires up the decomposed modules.
 
-import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
-import { createTokenUsageLogger } from './TokenUsageLogger.js';
+import type { AgentHistoryAdmission as SessionHistoryAdmission } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
+import type { StructuredError } from '@vybestack/llxprt-code-core/core/turn.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type {
+  AgentMessageInput,
   ModelGenerationSettings,
   ModelOutput,
-  AgentMessageInput,
   ToolDeclaration,
 } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import type { ContentBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { StructuredError } from '@vybestack/llxprt-code-core/core/turn.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
+import type {
+  AgentRuntimeContext,
+  AgentRuntimeProviderAdapter,
+  ToolRegistryView,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type {
+  ProviderFileBindingStore,
+  ProviderRequestCollaborators,
+} from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { createHistoryProviderFileBindingStore } from '@vybestack/llxprt-code-core/services/history/provider-file-binding.js';
+import type { MediaAdmissionContext } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
+import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { StreamLivenessEvent } from '@vybestack/llxprt-code-core/utils/streamIdleTimeout.js';
+import { installHistoryDensityTracking } from './chatHistoryDensity.js';
+import type { CompletedToolCall } from './coreToolScheduler.js';
+import { createTokenUsageLogger } from './TokenUsageLogger.js';
 
 /**
  * Neutral generation config carried by ChatSession. Extends the neutral
@@ -64,72 +91,52 @@ export interface SendMessageParams {
   hookOwner?: AgentChatRecordingExecution['hookOwner'];
   recordingExecution?: AgentChatRecordingExecution;
 }
-import type { CompletedToolCall } from './coreToolScheduler.js';
-import type { AgentHistoryAdmission as SessionHistoryAdmission } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { installHistoryDensityTracking } from './chatHistoryDensity.js';
-import { createHistoryProviderFileBindingStore } from '@vybestack/llxprt-code-core/services/history/provider-file-binding.js';
-import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import type { PromptEnvelopeEstimate } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import type {
-  AgentRuntimeContext,
-  AgentRuntimeProviderAdapter,
-  ToolRegistryView,
-} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { triggerPreCompressHook } from '@vybestack/llxprt-code-core/core/lifecycleHookTriggers.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import type { MediaAdmissionContext } from '@vybestack/llxprt-code-core/storage/media-admission-service.js';
 
 // Decomposed modules
-import { CompressionHandler } from '../compression/CompressionHandler.js';
-import { ConversationManager } from './ConversationManager.js';
-import { TurnProcessor } from './TurnProcessor.js';
-import { StreamProcessor } from './StreamProcessor.js';
-import { DirectMessageProcessor } from './DirectMessageProcessor.js';
-import { createCompressionHookTrigger } from './compressionHookWiring.js';
-import type { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { CompressionHandler } from '../compression/CompressionHandler.js';
 import {
   createSemanticMediaPurgeSession,
   requiresObservedSemanticPurgeCacheWrite,
 } from './chatSessionMediaLifecycle.js';
-import type { TokenUsageLogger } from './TokenUsageLogger.js';
 import {
   cleanupChatSessionProviderFiles,
   initialProviderBaseUrl,
   resolveProviderBaseUrl,
 } from './chatSessionProviderRuntime.js';
+import { createCompressionHookTrigger } from './compressionHookWiring.js';
+import type { CompressionProfileResolverContext } from './CompressionProfileResolver.js';
+import { resolveCompressionProvider } from './CompressionProfileResolver.js';
+import { ConversationManager } from './ConversationManager.js';
+import { DirectMessageProcessor } from './DirectMessageProcessor.js';
 import {
   convertPartListUnionToIContent,
   validateHistory,
 } from './MessageConverter.js';
-import { splitPartsByRole } from './agenticLoop/loopHelpers.js';
-import { resolveCompressionProvider } from './CompressionProfileResolver.js';
-import type { CompressionProfileResolverContext } from './CompressionProfileResolver.js';
+import type { SemanticMediaPurgeSession } from './semanticMediaPurgeSession.js';
+import { StreamProcessor } from './StreamProcessor.js';
+import type { TokenUsageLogger } from './TokenUsageLogger.js';
+import { TurnProcessor } from './TurnProcessor.js';
 
 // Re-exports — consumers import from './chatSession.js'
-export { StreamEventType } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
-export type { StreamEvent } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 export {
-  InvalidStreamError,
   EmptyStreamError,
+  InvalidStreamError,
   isSchemaDepthError,
+  StreamEventType,
 } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
+export type { StreamEvent } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 export {
   aggregateTextWithSpacing,
   isValidNonThoughtTextPart,
 } from './MessageConverter.js';
 
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { StreamEvent } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import { CompressionProfileNotFoundError } from '@vybestack/llxprt-code-core/core/compression/types.js';
-import type { PerformCompressionResult } from './turn.js';
-import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { resolveSystemPromptForTurn } from './systemPromptModel.js';
+import type { PerformCompressionResult } from './turn.js';
 
 /**
  * Assembles the complete system prompt for a turn, given the freshly-resolved
@@ -222,7 +229,7 @@ export class ChatSession {
   private readonly conversationManager: ConversationManager;
   private readonly turnProcessor: TurnProcessor;
   private readonly streamProcessor: StreamProcessor;
-  private readonly directMessageProcessor: DirectMessageProcessor;
+  private readonly directProcessor: DirectMessageProcessor;
   private readonly tokenUsageLogger: TokenUsageLogger;
   private semanticMediaPurge: SemanticMediaPurgeSession;
   private readonly compressionLoadBalancerRoundRobinIndexes = new Map<
@@ -239,6 +246,10 @@ export class ChatSession {
 
   constructor(
     private runtimeContext: AgentRuntimeContext,
+    private readonly mediaResolver: RequestMediaResolutionService | undefined,
+    private readonly requestMediaBudgetBytes: number | undefined,
+    private providerFileBindings: ProviderFileBindingStore | undefined,
+    private readonly providerFileLifecycle: object | undefined,
     _contentGenerator: ContentGenerator,
     generationConfig: ChatSessionConfig = {},
     initialHistory: readonly IContent[] = [],
@@ -264,7 +275,7 @@ export class ChatSession {
     validateHistory(initialHistory);
 
     const model = this.runtimeState.model;
-    this.logInitialization(initialHistory.length);
+    logChatInitialization(this.logger, model, initialHistory.length);
 
     // Create composed modules
     const providerResolver = (ctx: string) =>
@@ -304,6 +315,10 @@ export class ChatSession {
 
     this.streamProcessor = new StreamProcessor(
       this.runtimeContext,
+      this.mediaResolver,
+      this.requestMediaBudgetBytes,
+      this.providerFileBindings,
+      this.providerFileLifecycle,
       this.conversationManager,
       this.compressionHandler,
       providerResolver,
@@ -314,30 +329,33 @@ export class ChatSession {
 
     this.turnProcessor = new TurnProcessor(
       this.runtimeContext,
+      this.mediaResolver,
+      this.requestMediaBudgetBytes,
+      this.providerFileBindings,
+      this.providerFileLifecycle,
       this.compressionHandler,
-      providerResolver,
-      providerRuntimeBuilder,
+      (contextLabel) => this.resolveProviderForRuntime(contextLabel),
+      (source, extras) => this.buildProviderRuntime(source, extras),
       this.generationConfig,
       this.historyService,
       this.streamProcessor,
       resolveBaseUrl,
     );
-    this.directMessageProcessor = new DirectMessageProcessor(
+    this.directProcessor = this.createDirectMessageProcessor();
+  }
+
+  private createDirectMessageProcessor(): DirectMessageProcessor {
+    return new DirectMessageProcessor(
       this.runtimeContext,
-      providerResolver,
-      providerRuntimeBuilder,
+      this.mediaResolver,
+      this.requestMediaBudgetBytes,
+      this.providerFileBindings,
+      this.providerFileLifecycle,
+      (contextLabel) => this.resolveProviderForRuntime(contextLabel),
+      (source, extras) => this.buildProviderRuntime(source, extras),
       this.generationConfig,
       this.historyService,
     );
-  }
-
-  private logInitialization(initialHistoryLength: number): void {
-    this.logger.debug('ChatSession initialized:', {
-      model: this.runtimeState.model,
-      initialHistoryLength,
-      hasHistoryService: true,
-      hasRuntimeState: true,
-    });
   }
 
   takeHistoryAdmissions(): readonly SessionHistoryAdmission[] {
@@ -351,12 +369,13 @@ export class ChatSession {
     history: HistoryService,
     previousChat?: Pick<ChatSession, 'takeHistoryAdmissions'>,
   ): () => void {
+    const providerFileBindings = createHistoryProviderFileBindingStore(history);
     const runtimeContext: AgentRuntimeContext = Object.freeze({
       ...this.runtimeContext,
       history,
       providerRuntime: Object.freeze({
         ...this.runtimeContext.providerRuntime,
-        providerFileBindings: createHistoryProviderFileBindingStore(history),
+        providerFileBindings,
       }),
     });
     const semanticMediaPurge = createSemanticMediaPurgeSession(
@@ -372,11 +391,12 @@ export class ChatSession {
       this.removeDensityWrapper = undefined;
       this.runtimeContext = runtimeContext;
       this.historyService = history;
+      this.providerFileBindings = providerFileBindings;
       this.compressionHandler.rebindHistory(runtimeContext);
       this.conversationManager.rebindHistory(runtimeContext);
-      this.streamProcessor.rebindHistory(runtimeContext);
-      this.turnProcessor.rebindHistory(runtimeContext);
-      this.directMessageProcessor.rebindHistory(runtimeContext);
+      this.streamProcessor.rebindHistory(runtimeContext, providerFileBindings);
+      this.turnProcessor.rebindHistory(runtimeContext, providerFileBindings);
+      this.directProcessor.rebindHistory(runtimeContext, providerFileBindings);
       this.semanticMediaPurge = semanticMediaPurge;
       this._installDensityWrapper();
     };
@@ -687,7 +707,7 @@ export class ChatSession {
   ): Promise<ModelOutput> {
     return this._withResolvedSystemPrompt(
       () =>
-        this.directMessageProcessor.generateDirectMessage(
+        this.directProcessor.generateDirectMessage(
           params,
           prompt_id,
           execution,
@@ -772,7 +792,7 @@ export class ChatSession {
 
   async clearHistory(): Promise<void> {
     await cleanupChatSessionProviderFiles(
-      this.runtimeContext.providerRuntime.providerFileLifecycle,
+      this.providerFileLifecycle,
       this.runtimeState.runtimeId,
     );
     const releaseFailures = await this.releaseSessionHistoryAdmissions(
@@ -901,24 +921,7 @@ export class ChatSession {
     _model: string,
     toolCalls: CompletedToolCall[],
   ): void {
-    const allBlocks = toolCalls.flatMap((toolCall): ContentBlock[] => {
-      // Defensive for deserialized/test-cast tool responses that bypass the
-      // static ToolCallResponseInfo contract.
-      const response = toolCall.response as
-        | { responseParts?: unknown }
-        | undefined;
-      const responseParts = response?.responseParts;
-      if (!Array.isArray(responseParts)) {
-        this.logger.warn(
-          () =>
-            `recordCompletedToolCalls: skipping tool call '${toolCall.request.callId}' because responseParts is not an array`,
-        );
-        return [];
-      }
-      return responseParts as ContentBlock[];
-    });
-    const { functionResponses } = splitPartsByRole(allBlocks);
-
+    const functionResponses = completedToolResponses(toolCalls, this.logger);
     // Only persist the tool-response side eagerly. The assistant tool_call is
     // already recorded by the preceding model stream, and any non-tool-response
     // continuation text can be recorded by the normal next-turn finalization
@@ -930,11 +933,7 @@ export class ChatSession {
         speaker: 'tool',
         blocks: functionResponses,
       });
-      const responseCallIds = functionResponses
-        .map((response) =>
-          response.type === 'tool_response' ? response.callId : undefined,
-        )
-        .filter((id): id is string => typeof id === 'string' && id.length > 0);
+      const responseCallIds = completedToolResponseIds(functionResponses);
       this.turnProcessor.markToolResponsesRecorded(responseCallIds);
       this.streamProcessor.markToolResponsesRecorded(responseCallIds);
     }

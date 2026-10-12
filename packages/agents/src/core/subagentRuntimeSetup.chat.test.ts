@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import {
-  getScopeLocalFuncDefs,
   buildChatSystemPrompt,
   createChatObject,
+  getScopeLocalFuncDefs,
   type CreateChatObjectParams,
 } from './subagentRuntimeSetup.js';
 
@@ -112,7 +112,7 @@ describe('createChatObject', () => {
       context: { get: () => undefined, get_keys: () => [], set: () => {} },
     };
 
-    await expect(createChatObject(params)).rejects.toThrow(
+    await expect(createChatObject(params, undefined)).rejects.toThrow(
       'PromptConfig.systemPrompt must be a non-empty string.',
     );
   });
@@ -143,7 +143,7 @@ describe('createChatObject', () => {
       context: { get: () => undefined, get_keys: () => [], set: () => {} },
     };
 
-    await expect(createChatObject(params)).rejects.toThrow(
+    await expect(createChatObject(params, undefined)).rejects.toThrow(
       'PromptConfig.systemPrompt must be a non-empty string.',
     );
   });
@@ -174,7 +174,7 @@ describe('createChatObject', () => {
       context: { get: () => undefined, get_keys: () => [], set: () => {} },
     };
 
-    await expect(createChatObject(params)).rejects.toThrow(
+    await expect(createChatObject(params, undefined)).rejects.toThrow(
       'PromptConfig.systemPrompt must be a non-empty string.',
     );
   });
@@ -205,7 +205,7 @@ describe('createChatObject', () => {
       context: { get: () => undefined, get_keys: () => [], set: () => {} },
     };
 
-    await expect(createChatObject(params)).rejects.toThrow(
+    await expect(createChatObject(params, undefined)).rejects.toThrow(
       'PromptConfig.systemPrompt must be a non-empty string.',
     );
   });

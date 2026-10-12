@@ -1,6 +1,6 @@
-import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
-import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -15,35 +15,35 @@ import { instructionFixture } from './__tests__/instruction-fixture.js';
 import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
 const modelTools = installModelToolFixture();
 
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
 const fixturePaths = installTestWorkspacePaths({
   targetDir: process.cwd(),
   isTrusted: () => true,
 });
-import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { createChatObject } from './subagentRuntimeSetup.js';
-import type { ChatSession } from './chatSession.js';
-import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
-import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import {
+  AfterModelHookOutput,
+  BeforeModelHookOutput,
+} from '@vybestack/llxprt-code-core/hooks/types.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import {
-  AfterModelHookOutput,
-  BeforeModelHookOutput,
-} from '@vybestack/llxprt-code-core/hooks/types.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
+import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
+import type { ChatSession } from './chatSession.js';
+import { createChatObject } from './subagentRuntimeSetup.js';
 
 // Capture getCoreSystemPromptAsync calls so we can assert interactionMode,
 // provider, and model on both the creation-time call and the per-turn call.
@@ -217,25 +217,28 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
         ),
     });
 
-    const chat = await createChatObject({
-      instructions: instructionFixture(
-        opts.userMemory ?? '',
-        opts.coreMemory ?? '',
-        opts.globalMemory ?? '',
-        opts.jitMemory ?? '',
-      ),
-      workspaceDirectories: () => fixturePaths().directories(),
-      readMcpInstructions: () => opts.mcpInstructions,
-      promptConfig: { systemPrompt: opts.persona },
-      modelConfig: { model: 'sub-model-v1', temp: 0, top_p: 1 },
-      outputConfig: undefined,
-      toolConfig: undefined,
-      runtimeContext: view,
-      contentGenerator: {} as unknown as ContentGenerator,
-      environmentContextLoader: async () => [],
-      foregroundConfig: config,
-      context: { get: () => undefined, get_keys: () => [], set: () => {} },
-    });
+    const chat = await createChatObject(
+      {
+        instructions: instructionFixture(
+          opts.userMemory ?? '',
+          opts.coreMemory ?? '',
+          opts.globalMemory ?? '',
+          opts.jitMemory ?? '',
+        ),
+        workspaceDirectories: () => fixturePaths().directories(),
+        readMcpInstructions: () => opts.mcpInstructions,
+        promptConfig: { systemPrompt: opts.persona },
+        modelConfig: { model: 'sub-model-v1', temp: 0, top_p: 1 },
+        outputConfig: undefined,
+        toolConfig: undefined,
+        runtimeContext: view,
+        contentGenerator: {} as unknown as ContentGenerator,
+        environmentContextLoader: async () => [],
+        foregroundConfig: config,
+        context: { get: () => undefined, get_keys: () => [], set: () => {} },
+      },
+      undefined,
+    );
 
     expect(chat).not.toBeNull();
     return chat as ChatSession;

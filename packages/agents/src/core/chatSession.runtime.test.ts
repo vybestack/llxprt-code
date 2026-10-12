@@ -1,9 +1,9 @@
-import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import { BeforeToolSelectionHookOutput } from '@vybestack/llxprt-code-core/hooks/types.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -12,35 +12,35 @@ import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-provid
 import { installModelToolFixture } from './__tests__/model-tool-fixture.js';
 const modelTools = installModelToolFixture();
 
-import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
-import type { ChatSessionConfig } from './chatSession.js';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
+import {
+  AfterModelHookOutput,
+  BeforeModelHookOutput,
+} from '@vybestack/llxprt-code-core/hooks/types.js';
 import type { ToolDeclaration } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { ChatSession } from './chatSession.js';
-import type { TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { getToolCalls } from '@vybestack/llxprt-code-core/llm-types/index.js';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import type { RuntimeGenerateChatOptions as GenerateChatOptions } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
-import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderRuntimeContext,
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
-import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
   createProviderAdapterFromManager,
   createTelemetryAdapter,
   createToolRegistryViewFromRegistry,
 } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import {
-  AfterModelHookOutput,
-  BeforeModelHookOutput,
-} from '@vybestack/llxprt-code-core/hooks/types.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'bun:test';
+import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 import { createConfigParams } from './chatSession-runtime-helpers.js';
+import type { ChatSessionConfig } from './chatSession.js';
+import { ChatSession } from './chatSession.js';
 
 /**
  * Extracts visible text from a neutral ModelOutput — the post-P13
@@ -173,6 +173,10 @@ describe('ChatSession runtime context', () => {
 
     const chat = new ChatSession(
       view,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       generationConfig,
       [],
@@ -317,6 +321,10 @@ describe('ChatSession runtime context', () => {
 
     const chat = new ChatSession(
       view,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       {},
       [],
@@ -445,6 +453,10 @@ describe('ChatSession runtime context', () => {
 
     const chat = new ChatSession(
       view,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
       {} as unknown as ContentGenerator,
       { tools },
       [],

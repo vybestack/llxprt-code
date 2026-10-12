@@ -9,24 +9,24 @@
  * tokenLimit, not DEFAULT_TOKEN_LIMIT.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'bun:test';
-import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import {
-  createAgentRuntimeState,
-  type AgentRuntimeState,
-} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+  DEFAULT_TOKEN_LIMIT,
+  tokenLimit,
+} from '@vybestack/llxprt-code-core/core/tokenLimits.js';
 import type {
   AgentRuntimeContext,
   AgentRuntimeContextFactoryOptions,
   AgentRuntimeProviderAdapter,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
 import {
-  DEFAULT_TOKEN_LIMIT,
-  tokenLimit,
-} from '@vybestack/llxprt-code-core/core/tokenLimits.js';
+  createAgentRuntimeState,
+  type AgentRuntimeState,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import type { RuntimeProvider as IProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
+import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { buildMockContentGenerator } from '../../core/__tests__/chatSession-density-helpers.js';
 import { ChatSession } from '../../core/chatSession.js';
 
@@ -113,7 +113,16 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
       providerContextLimit: 150_000,
     });
 
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      runtimeContext,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
     const lbProvider = runtimeContext.provider.getActiveProvider();
 
     const limits = chat['compressionHandler'].computeContextLimits(lbProvider);
@@ -127,7 +136,16 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
       providerContextLimit: 200_000,
     });
 
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      runtimeContext,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
     const lbProvider = runtimeContext.provider.getActiveProvider();
 
     const limits = chat['compressionHandler'].computeContextLimits(lbProvider);
@@ -140,7 +158,16 @@ describe('CompressionHandler.computeContextLimits() — LB provider-derived cont
       stateProvider: 'openai',
     });
 
-    const chat = new ChatSession(runtimeContext, mockContentGenerator, {}, []);
+    const chat = new ChatSession(
+      runtimeContext,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockContentGenerator,
+      {},
+      [],
+    );
     const provider = runtimeContext.provider.getActiveProvider();
 
     const limits = chat['compressionHandler'].computeContextLimits(provider);

@@ -1,6 +1,6 @@
+import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
-import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configTypes.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -10,94 +10,94 @@ import type { ApprovalMode } from '@vybestack/llxprt-code-core/config/configType
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 
-import {
-  processInteractiveStreamEvent,
-  InteractiveOutputCounter,
-  readInteractiveOutputTokens,
-} from './subagent-interactive-output.js';
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import { AggregateDisposeError } from '../api/disposeErrors.js';
+import {
+  InteractiveOutputCounter,
+  processInteractiveStreamEvent,
+  readInteractiveOutputTokens,
+} from './subagent-interactive-output.js';
 
 /**
  * @plan PLAN-20251028-STATELESS6.P08
  * @requirement REQ-STAT6-001.1, REQ-STAT6-003.1
  * @pseudocode agent-runtime-context.md lines 92-101
  */
-import { assembleSchedulerOwner } from '../session/assembleSchedulerOwner.js';
-import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
-import { type ToolCallRequestInfo, Turn } from './turn.js';
-import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
-import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
-import type {
-  IContent,
-  ContentBlock,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { iContentFromBlocks } from '@vybestack/llxprt-code-core/llm-types/index.js';
+import type { AdmittedModelParameters } from '@vybestack/llxprt-code-core/runtime/admittedModelParameters.js';
+import type {
+  ContentBlock,
+  IContent,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { createAbortError } from '@vybestack/llxprt-code-core/utils/delay.js';
+import { assembleSchedulerOwner } from '../session/assembleSchedulerOwner.js';
+import { type ToolExecutionConfig } from './nonInteractiveToolExecutor.js';
+import { Turn, type ToolCallRequestInfo } from './turn.js';
 
-import { type ChatSession } from './chatSession.js';
-import { isToolNameRestricted } from './hookToolRestrictions.js';
-import { SCOPE_LOCAL_EMIT_TOOL_NAME } from './toolGovernance.js';
+import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { type EmojiFilter } from '@vybestack/llxprt-code-core/filters/EmojiFilter.js';
+import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
 import type {
   AgentRuntimeContext,
-  ToolRegistryView,
   ReadonlySettingsSnapshot,
+  ToolRegistryView,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
-import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
-import type { SubagentExecutionOptions } from './subagentScheduler.js';
+import { type ChatSession } from './chatSession.js';
 import { type CompletedToolCall } from './coreToolScheduler.js';
-import { type EmojiFilter } from '@vybestack/llxprt-code-core/filters/EmojiFilter.js';
-import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { isToolNameRestricted } from './hookToolRestrictions.js';
 import {
-  filterToolsAgainstRuntime,
-  createToolExecutionConfig,
-  createEmojiFilter,
-  buildRuntimeFunctionDeclarations,
-  getScopeLocalFuncDefs,
-  createChatObject,
-} from './subagentRuntimeSetup.js';
+  forwardNonInteractiveAdmission,
+  providerNameOrDefault,
+} from './subagentAdmissionForwarding.js';
 import {
-  buildToolUnavailableMessage,
-  finalizeOutput,
-  handleEmitValueCall,
-  buildPartsFromCompletedCalls,
-  buildTodoCompletionPrompt,
-  recordFatalToolError,
-  classifyToolCompletions,
-  type InteractiveToolMarker,
-  recordSuccessfulToolExecution,
-} from './subagentToolProcessing.js';
-import {
-  checkTerminationConditions,
   checkGoalCompletion,
-  processInteractiveTextResponse,
+  checkOutputBudget,
+  checkTerminationConditions,
   handleExecutionError,
   initInteractiveScheduler,
-  checkOutputBudget,
+  processInteractiveTextResponse,
   recordTurnOutputTokens,
   type ExecutionLoopContext,
 } from './subagentExecution.js';
 import type { executeNonInteractiveRun } from './subagentNonInteractive.js';
 import {
-  forwardNonInteractiveAdmission,
-  providerNameOrDefault,
-} from './subagentAdmissionForwarding.js';
+  buildRuntimeFunctionDeclarations,
+  createChatObject,
+  createEmojiFilter,
+  createToolExecutionConfig,
+  filterToolsAgainstRuntime,
+  getScopeLocalFuncDefs,
+} from './subagentRuntimeSetup.js';
+import type { SubagentExecutionOptions } from './subagentScheduler.js';
+import {
+  buildPartsFromCompletedCalls,
+  buildTodoCompletionPrompt,
+  buildToolUnavailableMessage,
+  classifyToolCompletions,
+  finalizeOutput,
+  handleEmitValueCall,
+  recordFatalToolError,
+  recordSuccessfulToolExecution,
+  type InteractiveToolMarker,
+} from './subagentToolProcessing.js';
+import { SCOPE_LOCAL_EMIT_TOOL_NAME } from './toolGovernance.js';
 
 // --- Internal imports from subagentTypes.ts (used within this file) ---
+import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { ContextState } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import {
   SubagentTerminateMode,
   defaultEnvironmentContextLoader,
-  type OutputObject,
-  type PromptConfig,
-  type ToolConfig,
-  type OutputConfig,
   type EnvironmentContextLoader,
   type ModelConfig,
+  type OutputConfig,
+  type OutputObject,
+  type PromptConfig,
   type RunConfig,
+  type ToolConfig,
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 
 /**
  * Represents the scope and execution environment for a subagent.
@@ -315,20 +315,23 @@ export class SubAgentScope {
   }
 
   private async prepareRun(context: ContextState) {
-    const chat = await createChatObject({
-      promptConfig: this.promptConfig,
-      modelConfig: this.modelConfig,
-      outputConfig: this.outputConfig,
-      toolConfig: this.toolConfig,
-      runtimeContext: this.runtimeContext,
-      contentGenerator: this.contentGenerator,
-      environmentContextLoader: this.environmentContextLoader,
-      foregroundConfig: this.config,
-      workspaceDirectories: () => this.workspacePaths.directories(),
-      readMcpInstructions: this.readMcpInstructions,
-      instructions: this.instructions,
-      context,
-    });
+    const chat = await createChatObject(
+      {
+        promptConfig: this.promptConfig,
+        modelConfig: this.modelConfig,
+        outputConfig: this.outputConfig,
+        toolConfig: this.toolConfig,
+        runtimeContext: this.runtimeContext,
+        contentGenerator: this.contentGenerator,
+        environmentContextLoader: this.environmentContextLoader,
+        foregroundConfig: this.config,
+        workspaceDirectories: () => this.workspacePaths.directories(),
+        readMcpInstructions: this.readMcpInstructions,
+        instructions: this.instructions,
+        context,
+      },
+      this.runtimeContext.providerRuntime.providerFileLifecycle,
+    );
     if (!chat) {
       this.output.terminate_reason = SubagentTerminateMode.ERROR;
       return null;
