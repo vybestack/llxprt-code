@@ -202,7 +202,19 @@ describe('Subagent per-turn assembler (issue #3136)', () => {
       tools: createToolRegistryViewFromRegistry(modelTools()),
       providerRuntime,
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          {
+            runtimeId: providerRuntime.runtimeId,
+            metadata: providerRuntime.metadata,
+            globalSettings:
+              providerRuntime.settingsService.getAllGlobalSettings(),
+            providerSettings:
+              providerRuntime.settingsService.getProviderSettings(name),
+          },
+          name,
+          parameters,
+          signal,
+        ),
     });
 
     const chat = await createChatObject({

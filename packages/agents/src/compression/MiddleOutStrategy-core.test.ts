@@ -178,7 +178,16 @@ describe('MiddleOutStrategy core', () => {
         history,
         resolveProvider: () => ({
           invocation: captureProviderInvocation(
-            testProviderRuntime,
+            {
+              runtimeId: testProviderRuntime.runtimeId,
+              metadata: testProviderRuntime.metadata,
+              globalSettings:
+                testProviderRuntime.settingsService.getAllGlobalSettings(),
+              providerSettings:
+                testProviderRuntime.settingsService.getProviderSettings(
+                  fakeProvider.name,
+                ),
+            },
             fakeProvider.name,
           ),
           provider: fakeProvider,
@@ -238,7 +247,16 @@ describe('MiddleOutStrategy core', () => {
             if (profileName === 'compression-profile') {
               return {
                 invocation: captureProviderInvocation(
-                  testProviderRuntime,
+                  {
+                    runtimeId: testProviderRuntime.runtimeId,
+                    metadata: testProviderRuntime.metadata,
+                    globalSettings:
+                      testProviderRuntime.settingsService.getAllGlobalSettings(),
+                    providerSettings:
+                      testProviderRuntime.settingsService.getProviderSettings(
+                        profileProvider.name,
+                      ),
+                  },
                   profileProvider.name,
                 ),
                 provider: profileProvider,
@@ -247,7 +265,16 @@ describe('MiddleOutStrategy core', () => {
             }
             return {
               invocation: captureProviderInvocation(
-                testProviderRuntime,
+                {
+                  runtimeId: testProviderRuntime.runtimeId,
+                  metadata: testProviderRuntime.metadata,
+                  globalSettings:
+                    testProviderRuntime.settingsService.getAllGlobalSettings(),
+                  providerSettings:
+                    testProviderRuntime.settingsService.getProviderSettings(
+                      defaultProvider.name,
+                    ),
+                },
                 defaultProvider.name,
               ),
               provider: defaultProvider,
@@ -280,7 +307,16 @@ describe('MiddleOutStrategy core', () => {
           resolvedWithProfileName = profileName;
           return {
             invocation: captureProviderInvocation(
-              testProviderRuntime,
+              {
+                runtimeId: testProviderRuntime.runtimeId,
+                metadata: testProviderRuntime.metadata,
+                globalSettings:
+                  testProviderRuntime.settingsService.getAllGlobalSettings(),
+                providerSettings:
+                  testProviderRuntime.settingsService.getProviderSettings(
+                    defaultProvider.name,
+                  ),
+              },
               defaultProvider.name,
             ),
             provider: defaultProvider,

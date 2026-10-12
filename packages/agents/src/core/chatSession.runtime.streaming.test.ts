@@ -127,7 +127,14 @@ describe('ChatSession runtime streaming and abort behavior', () => {
       readRuntimeSettings: fixtureRuntimePolicyReader(config, settingsService),
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(
-          hookProviderRuntime,
+          {
+            runtimeId: hookProviderRuntime.runtimeId,
+            metadata: hookProviderRuntime.metadata,
+            globalSettings:
+              hookProviderRuntime.settingsService.getAllGlobalSettings(),
+            providerSettings:
+              hookProviderRuntime.settingsService.getProviderSettings(name),
+          },
           name,
           parameters,
           signal,
@@ -227,7 +234,19 @@ describe('ChatSession runtime streaming and abort behavior', () => {
           settingsService,
         ),
         prepareProviderInvocation: (name, parameters, signal) =>
-          captureProviderInvocation(providerRuntime, name, parameters, signal),
+          captureProviderInvocation(
+            {
+              runtimeId: providerRuntime.runtimeId,
+              metadata: providerRuntime.metadata,
+              globalSettings:
+                providerRuntime.settingsService.getAllGlobalSettings(),
+              providerSettings:
+                providerRuntime.settingsService.getProviderSettings(name),
+            },
+            name,
+            parameters,
+            signal,
+          ),
         state: runtimeState,
         history: historyService,
         settings: {
@@ -334,7 +353,19 @@ describe('ChatSession runtime streaming and abort behavior', () => {
           settingsService,
         ),
         prepareProviderInvocation: (name, parameters, signal) =>
-          captureProviderInvocation(providerRuntime, name, parameters, signal),
+          captureProviderInvocation(
+            {
+              runtimeId: providerRuntime.runtimeId,
+              metadata: providerRuntime.metadata,
+              globalSettings:
+                providerRuntime.settingsService.getAllGlobalSettings(),
+              providerSettings:
+                providerRuntime.settingsService.getProviderSettings(name),
+            },
+            name,
+            parameters,
+            signal,
+          ),
         state: runtimeState,
         history: historyService,
         settings: {

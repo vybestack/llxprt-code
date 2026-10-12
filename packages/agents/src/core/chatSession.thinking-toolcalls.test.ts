@@ -152,7 +152,19 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          {
+            runtimeId: providerRuntime.runtimeId,
+            metadata: providerRuntime.metadata,
+            globalSettings:
+              providerRuntime.settingsService.getAllGlobalSettings(),
+            providerSettings:
+              providerRuntime.settingsService.getProviderSettings(name),
+          },
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -273,7 +285,19 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          {
+            runtimeId: providerRuntime.runtimeId,
+            metadata: providerRuntime.metadata,
+            globalSettings:
+              providerRuntime.settingsService.getAllGlobalSettings(),
+            providerSettings:
+              providerRuntime.settingsService.getProviderSettings(name),
+          },
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -387,7 +411,19 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          {
+            runtimeId: providerRuntime.runtimeId,
+            metadata: providerRuntime.metadata,
+            globalSettings:
+              providerRuntime.settingsService.getAllGlobalSettings(),
+            providerSettings:
+              providerRuntime.settingsService.getProviderSettings(name),
+          },
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -512,7 +548,19 @@ describe('Issue #1150: Thinking blocks must be attached to tool call messages', 
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          {
+            runtimeId: providerRuntime.runtimeId,
+            metadata: providerRuntime.metadata,
+            globalSettings:
+              providerRuntime.settingsService.getAllGlobalSettings(),
+            providerSettings:
+              providerRuntime.settingsService.getProviderSettings(name),
+          },
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: historyService,
       settings: {

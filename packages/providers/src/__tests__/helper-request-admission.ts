@@ -28,7 +28,16 @@ export function normalizeRuntimeInputs(
         if (!suppliedOwner) throw new Error('Fixture owner is required');
         const owner = suppliedOwner;
         const invocation =
-          input.invocation ?? captureProviderInvocation(owner, name);
+          input.invocation ??
+          captureProviderInvocation(
+            {
+              runtimeId: owner.runtimeId,
+              metadata: owner.metadata,
+              globalSettings: owner.settingsService.getAllGlobalSettings(),
+              providerSettings: owner.settingsService.getProviderSettings(name),
+            },
+            name,
+          );
         const scoped = owner.settingsService.getProviderSettings(name);
         const scopedAuth = scoped['auth-key'];
         const globalAuth = owner.settingsService.get('auth-key');

@@ -51,7 +51,16 @@ describe('MiddleOutStrategy empty summary handling', () => {
       history,
       resolveProvider: () => ({
         invocation: captureProviderInvocation(
-          testProviderRuntime,
+          {
+            runtimeId: testProviderRuntime.runtimeId,
+            metadata: testProviderRuntime.metadata,
+            globalSettings:
+              testProviderRuntime.settingsService.getAllGlobalSettings(),
+            providerSettings:
+              testProviderRuntime.settingsService.getProviderSettings(
+                emptyProvider.name,
+              ),
+          },
           emptyProvider.name,
         ),
         provider: emptyProvider,
@@ -74,7 +83,16 @@ describe('MiddleOutStrategy empty summary handling', () => {
       history,
       resolveProvider: () => ({
         invocation: captureProviderInvocation(
-          testProviderRuntime,
+          {
+            runtimeId: testProviderRuntime.runtimeId,
+            metadata: testProviderRuntime.metadata,
+            globalSettings:
+              testProviderRuntime.settingsService.getAllGlobalSettings(),
+            providerSettings:
+              testProviderRuntime.settingsService.getProviderSettings(
+                whitespaceProvider.name,
+              ),
+          },
           whitespaceProvider.name,
         ),
         provider: whitespaceProvider,
@@ -129,7 +147,16 @@ describe('MiddleOutStrategy enriched EmptySummaryError diagnostics (issue #2333)
       history,
       resolveProvider: () => ({
         invocation: captureProviderInvocation(
-          testProviderRuntime,
+          {
+            runtimeId: testProviderRuntime.runtimeId,
+            metadata: testProviderRuntime.metadata,
+            globalSettings:
+              testProviderRuntime.settingsService.getAllGlobalSettings(),
+            providerSettings:
+              testProviderRuntime.settingsService.getProviderSettings(
+                thinkingOnlyProvider.name,
+              ),
+          },
           thinkingOnlyProvider.name,
         ),
         provider: thinkingOnlyProvider,

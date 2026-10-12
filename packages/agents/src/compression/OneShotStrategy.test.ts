@@ -234,7 +234,16 @@ function buildContext(
       return {
         ...resolved,
         invocation: captureProviderInvocation(
-          resolved.runtime,
+          {
+            runtimeId: resolved.runtime.runtimeId,
+            metadata: resolved.runtime.metadata,
+            globalSettings:
+              resolved.runtime.settingsService.getAllGlobalSettings(),
+            providerSettings:
+              resolved.runtime.settingsService.getProviderSettings(
+                resolved.provider.name,
+              ),
+          },
           resolved.provider.name,
         ),
       };

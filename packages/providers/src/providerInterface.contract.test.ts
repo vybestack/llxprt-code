@@ -112,7 +112,11 @@ describe('generateChatCompletion contract', () => {
     const options = {
       contents: [asContent('options-call')],
       invocation: captureProviderInvocation(
-        { settingsService: customSettings, runtimeId: 'options-test' },
+        {
+          runtimeId: 'options-test',
+          globalSettings: customSettings.getAllGlobalSettings(),
+          providerSettings: customSettings.getProviderSettings('contract'),
+        },
         'contract',
       ),
       metadata: { requestId: 'options-test' },

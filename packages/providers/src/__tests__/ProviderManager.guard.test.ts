@@ -78,7 +78,11 @@ describe('ProviderManager owner admission', () => {
     other.setProviderSetting('openai', 'model', 'other-owner-model');
     other.setProviderSetting('openai', 'base-url', 'http://127.0.0.1:2/v1');
     const invocation = captureProviderInvocation(
-      { settingsService: other, runtimeId: 'same-label' },
+      {
+        runtimeId: 'same-label',
+        globalSettings: other.getAllGlobalSettings(),
+        providerSettings: other.getProviderSettings('openai'),
+      },
       'openai',
     );
     const options = manager.normalizeRuntimeInputs(

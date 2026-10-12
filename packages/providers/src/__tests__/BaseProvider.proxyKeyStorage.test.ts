@@ -179,7 +179,16 @@ function buildChatOptions(settings: SettingsService) {
   });
   return {
     contents: [userMessage('hi')],
-    invocation: captureProviderInvocation(runtime, 'proxy-aware'),
+    invocation: captureProviderInvocation(
+      {
+        runtimeId: runtime.runtimeId,
+        metadata: runtime.metadata,
+        globalSettings: runtime.settingsService.getAllGlobalSettings(),
+        providerSettings:
+          runtime.settingsService.getProviderSettings('proxy-aware'),
+      },
+      'proxy-aware',
+    ),
   };
 }
 

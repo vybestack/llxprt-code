@@ -149,7 +149,16 @@ describe('MiddleOutStrategy edge cases', () => {
         history,
         resolveProvider: () => ({
           invocation: captureProviderInvocation(
-            testProviderRuntime,
+            {
+              runtimeId: testProviderRuntime.runtimeId,
+              metadata: testProviderRuntime.metadata,
+              globalSettings:
+                testProviderRuntime.settingsService.getAllGlobalSettings(),
+              providerSettings:
+                testProviderRuntime.settingsService.getProviderSettings(
+                  multiChunkProvider.name,
+                ),
+            },
             multiChunkProvider.name,
           ),
           provider: multiChunkProvider,

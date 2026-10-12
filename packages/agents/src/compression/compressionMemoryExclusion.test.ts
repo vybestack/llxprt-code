@@ -168,7 +168,16 @@ function buildCompressionContext(
     overrides.provider ?? createOptionsCapturingProvider([], VALID_SNAPSHOT);
   const resolveProvider = (): CompressionProviderResult => ({
     invocation: captureProviderInvocation(
-      createStubProviderRuntime(),
+      {
+        runtimeId: createStubProviderRuntime().runtimeId,
+        metadata: createStubProviderRuntime().metadata,
+        globalSettings:
+          createStubProviderRuntime().settingsService.getAllGlobalSettings(),
+        providerSettings:
+          createStubProviderRuntime().settingsService.getProviderSettings(
+            provider.name,
+          ),
+      },
       provider.name,
     ),
     provider,

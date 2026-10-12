@@ -135,7 +135,18 @@ function createDirectHarness(
     tools: createToolRegistryViewFromRegistry(modelTools()),
     providerRuntime: requestRuntime,
     prepareProviderInvocation: (name, parameters, signal) =>
-      captureProviderInvocation(requestRuntime, name, parameters, signal),
+      captureProviderInvocation(
+        {
+          runtimeId: requestRuntime.runtimeId,
+          metadata: requestRuntime.metadata,
+          globalSettings: requestRuntime.settingsService.getAllGlobalSettings(),
+          providerSettings:
+            requestRuntime.settingsService.getProviderSettings(name),
+        },
+        name,
+        parameters,
+        signal,
+      ),
   });
 
   const generationConfig: Record<string, unknown> = {};

@@ -36,9 +36,20 @@ describe('One-shot finish diagnostics', () => {
       history: generateHistory(20),
       resolveProvider: () => ({
         invocation: captureProviderInvocation(
-          createProviderRuntimeContext({
-            settingsService: new SettingsService(),
-          }),
+          {
+            runtimeId: createProviderRuntimeContext({
+              settingsService: new SettingsService(),
+            }).runtimeId,
+            metadata: createProviderRuntimeContext({
+              settingsService: new SettingsService(),
+            }).metadata,
+            globalSettings: createProviderRuntimeContext({
+              settingsService: new SettingsService(),
+            }).settingsService.getAllGlobalSettings(),
+            providerSettings: createProviderRuntimeContext({
+              settingsService: new SettingsService(),
+            }).settingsService.getProviderSettings(provider.name),
+          },
           provider.name,
         ),
         provider,

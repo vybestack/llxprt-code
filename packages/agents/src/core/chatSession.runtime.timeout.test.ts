@@ -143,7 +143,16 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
           ),
           prepareProviderInvocation: (name, parameters, signal) =>
             captureProviderInvocation(
-              localProviderRuntime,
+              {
+                runtimeId: localProviderRuntime.runtimeId,
+                metadata: localProviderRuntime.metadata,
+                globalSettings:
+                  localProviderRuntime.settingsService.getAllGlobalSettings(),
+                providerSettings:
+                  localProviderRuntime.settingsService.getProviderSettings(
+                    name,
+                  ),
+              },
               name,
               parameters,
               signal,
@@ -205,7 +214,16 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
           ),
           prepareProviderInvocation: (name, parameters, signal) =>
             captureProviderInvocation(
-              localProviderRuntime,
+              {
+                runtimeId: localProviderRuntime.runtimeId,
+                metadata: localProviderRuntime.metadata,
+                globalSettings:
+                  localProviderRuntime.settingsService.getAllGlobalSettings(),
+                providerSettings:
+                  localProviderRuntime.settingsService.getProviderSettings(
+                    name,
+                  ),
+              },
               name,
               parameters,
               signal,
@@ -329,7 +347,16 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
           ),
           prepareProviderInvocation: (name, parameters, signal) =>
             captureProviderInvocation(
-              localProviderRuntime,
+              {
+                runtimeId: localProviderRuntime.runtimeId,
+                metadata: localProviderRuntime.metadata,
+                globalSettings:
+                  localProviderRuntime.settingsService.getAllGlobalSettings(),
+                providerSettings:
+                  localProviderRuntime.settingsService.getProviderSettings(
+                    name,
+                  ),
+              },
               name,
               parameters,
               signal,
@@ -473,7 +500,16 @@ describe('stream idle timeout behavioral tests for TurnProcessor and DirectMessa
           ),
           prepareProviderInvocation: (name, parameters, signal) =>
             captureProviderInvocation(
-              localProviderRuntime,
+              {
+                runtimeId: localProviderRuntime.runtimeId,
+                metadata: localProviderRuntime.metadata,
+                globalSettings:
+                  localProviderRuntime.settingsService.getAllGlobalSettings(),
+                providerSettings:
+                  localProviderRuntime.settingsService.getProviderSettings(
+                    name,
+                  ),
+              },
               name,
               parameters,
               signal,

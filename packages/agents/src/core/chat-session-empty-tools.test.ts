@@ -167,7 +167,17 @@ async function send(
   const view = createAgentRuntimeContext({
     readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
     prepareProviderInvocation: (name, parameters, signal) =>
-      captureProviderInvocation(runtime, name, parameters, signal),
+      captureProviderInvocation(
+        {
+          runtimeId: runtime.runtimeId,
+          metadata: runtime.metadata,
+          globalSettings: runtime.settingsService.getAllGlobalSettings(),
+          providerSettings: runtime.settingsService.getProviderSettings(name),
+        },
+        name,
+        parameters,
+        signal,
+      ),
     state: createAgentRuntimeState({
       runtimeId: 'empty-tools',
       provider: 'stub',

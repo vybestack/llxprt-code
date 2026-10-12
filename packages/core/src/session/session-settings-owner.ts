@@ -387,7 +387,11 @@ export class SessionSettingsOwner {
   ): RuntimeInvocationContext {
     this.assertOpen();
     return captureProviderInvocation(
-      { settingsService: this.settings, runtimeId },
+      {
+        runtimeId,
+        globalSettings: this.settings.getAllGlobalSettings(),
+        providerSettings: this.settings.getProviderSettings(providerName),
+      },
       providerName,
       modelParameters,
       signal,

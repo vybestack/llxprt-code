@@ -135,7 +135,17 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
 
     const options: GenerateChatOptions = {
       contents: inputContent,
-      invocation: captureProviderInvocation(runtime, fake.name),
+      invocation: captureProviderInvocation(
+        {
+          runtimeId: runtime.runtimeId,
+          metadata: runtime.metadata,
+          globalSettings: runtime.settingsService.getAllGlobalSettings(),
+          providerSettings: runtime.settingsService.getProviderSettings(
+            fake.name,
+          ),
+        },
+        fake.name,
+      ),
     };
 
     // Consume the async iterator to completion
@@ -255,7 +265,16 @@ describe('LoggingProviderWrapper — behavioral JSONL output', () => {
       const chunks: IContent[] = [];
       for await (const chunk of wrapper.generateChatCompletion({
         contents: [{ speaker: 'user', blocks: [{ type: 'text', text: 'hi' }] }],
-        invocation: captureProviderInvocation(runtime, 'fake'),
+        invocation: captureProviderInvocation(
+          {
+            runtimeId: runtime.runtimeId,
+            metadata: runtime.metadata,
+            globalSettings: runtime.settingsService.getAllGlobalSettings(),
+            providerSettings:
+              runtime.settingsService.getProviderSettings('fake'),
+          },
+          'fake',
+        ),
       })) {
         chunks.push(chunk);
       }

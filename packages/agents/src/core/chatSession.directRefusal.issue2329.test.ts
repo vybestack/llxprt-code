@@ -95,7 +95,19 @@ describe('Issue 2329: direct-path refusal preservation @issue:2329', () => {
     });
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          {
+            runtimeId: providerRuntime.runtimeId,
+            metadata: providerRuntime.metadata,
+            globalSettings:
+              providerRuntime.settingsService.getAllGlobalSettings(),
+            providerSettings:
+              providerRuntime.settingsService.getProviderSettings(name),
+          },
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: new HistoryService(),
       settings: {

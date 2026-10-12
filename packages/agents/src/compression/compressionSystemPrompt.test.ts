@@ -129,7 +129,16 @@ function buildContext(
 
   const resolveProvider = (): CompressionProviderResult => ({
     invocation: captureProviderInvocation(
-      contextProviderRuntime,
+      {
+        runtimeId: contextProviderRuntime.runtimeId,
+        metadata: contextProviderRuntime.metadata,
+        globalSettings:
+          contextProviderRuntime.settingsService.getAllGlobalSettings(),
+        providerSettings:
+          contextProviderRuntime.settingsService.getProviderSettings(
+            provider.name,
+          ),
+      },
       provider.name,
     ),
     provider,

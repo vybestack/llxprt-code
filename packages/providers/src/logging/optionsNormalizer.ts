@@ -1,3 +1,4 @@
+import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -56,7 +57,14 @@ export function normalizeChatCompletionOptions(
 
     normalizedOptions.runtimeKind ??= injectedRuntime.runtimeKind;
     normalizedOptions.invocation ??= captureProviderInvocation(
-      injectedRuntime,
+      {
+        runtimeId: injectedRuntime.runtimeId,
+        metadata: injectedRuntime.metadata,
+        globalSettings: injectedRuntime.settingsService.getAllGlobalSettings(),
+        providerSettings: injectedRuntime.settingsService.getProviderSettings(
+          ctx.providerName,
+        ),
+      },
       ctx.providerName,
       normalizedOptions.modelParameters,
     );
@@ -121,7 +129,7 @@ export type { UsageStats };
 
 function applyInjectedRetryOperations(
   options: GenerateChatOptions,
-  injectedRuntime: ProviderRuntimeContext,
+  injectedRuntime: ProviderRetryOperations,
 ): void {
   options.readRetryAuthToken ??= injectedRuntime.readRetryAuthToken;
   options.handleAuthError ??= injectedRuntime.handleAuthError;

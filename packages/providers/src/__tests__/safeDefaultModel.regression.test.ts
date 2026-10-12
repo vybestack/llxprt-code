@@ -146,7 +146,11 @@ describe('safeGetDefaultModel regression', () => {
         contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
         config,
         invocation: captureProviderInvocation(
-          { settingsService, runtimeId: 'test-runtime' },
+          {
+            runtimeId: 'test-runtime',
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings('test'),
+          },
           'test',
         ),
         runtime: {
@@ -184,7 +188,11 @@ describe('safeGetDefaultModel regression', () => {
         contents: [{ role: 'user', parts: [{ text: 'hi' }] }],
         config,
         invocation: captureProviderInvocation(
-          { settingsService, runtimeId: 'test-runtime' },
+          {
+            runtimeId: 'test-runtime',
+            globalSettings: settingsService.getAllGlobalSettings(),
+            providerSettings: settingsService.getProviderSettings('test'),
+          },
           'test',
         ),
         runtime: {

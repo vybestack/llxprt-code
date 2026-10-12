@@ -109,7 +109,11 @@ describe('owner-selected retry authentication over HTTP', () => {
         { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
       ],
       invocation: captureProviderInvocation(
-        { settingsService: settings, runtimeId: 'same-label' },
+        {
+          runtimeId: 'same-label',
+          globalSettings: settings.getAllGlobalSettings(),
+          providerSettings: settings.getProviderSettings('openai'),
+        },
         'openai',
       ),
       resolved: {

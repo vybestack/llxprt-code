@@ -92,7 +92,15 @@ function createOptionsWithRuntime(
 
   return {
     contents,
-    invocation: captureProviderInvocation(runtime, 'test'),
+    invocation: captureProviderInvocation(
+      {
+        runtimeId: runtime.runtimeId,
+        metadata: runtime.metadata,
+        globalSettings: runtime.settingsService.getAllGlobalSettings(),
+        providerSettings: runtime.settingsService.getProviderSettings('test'),
+      },
+      'test',
+    ),
   };
 }
 
@@ -385,7 +393,11 @@ describe('BaseProvider', () => {
       const options = {
         contents: [userMessage('options signature test')],
         invocation: captureProviderInvocation(
-          { settingsService: customSettings, runtimeId: 'req-123' },
+          {
+            runtimeId: 'req-123',
+            globalSettings: customSettings.getAllGlobalSettings(),
+            providerSettings: customSettings.getProviderSettings('test'),
+          },
           'test',
         ),
         metadata: { requestId: 'req-123' },

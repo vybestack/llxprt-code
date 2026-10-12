@@ -13,12 +13,12 @@
       "runtime-service-bundle": 775
     },
     "core": {
-      "runtime-service-bag-parameter": 6,
-      "runtime-service-bundle": 9
+      "runtime-service-bag-parameter": 5,
+      "runtime-service-bundle": 8
     },
     "providers": {
-      "runtime-service-bag-parameter": 27,
-      "runtime-service-bundle": 80
+      "runtime-service-bag-parameter": 26,
+      "runtime-service-bundle": 78
     },
     "zed-acp": {
       "runtime-service-bag-parameter": 7,

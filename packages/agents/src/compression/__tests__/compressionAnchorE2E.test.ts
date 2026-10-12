@@ -98,7 +98,16 @@ function buildHandler(opts: {
   const provider = createCaptureProvider(capturedRequests);
   const providerResult = {
     invocation: captureProviderInvocation(
-      testProviderRuntime as never,
+      {
+        runtimeId: testProviderRuntime.runtimeId,
+        metadata: testProviderRuntime.metadata,
+        globalSettings:
+          testProviderRuntime.settingsService.getAllGlobalSettings(),
+        providerSettings:
+          testProviderRuntime.settingsService.getProviderSettings(
+            provider.name,
+          ),
+      },
       provider.name,
     ),
     provider,

@@ -5,15 +5,21 @@
  */
 
 import { readInvocationPolicyRecord } from './RuntimeInvocationContext.js';
-import type { ProviderRuntimeContext } from './providerRuntimeContext.js';
 import {
   createRuntimeInvocationContext,
   type RuntimeInvocationContext,
 } from './RuntimeInvocationContext.js';
 import type { AdmittedModelParameters } from './admittedModelParameters.js';
 
+export interface ProviderInvocationData {
+  readonly runtimeId?: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+  readonly globalSettings: Readonly<Record<string, unknown>>;
+  readonly providerSettings: Readonly<Record<string, unknown>>;
+}
+
 export function captureProviderInvocation(
-  owner: ProviderRuntimeContext,
+  data: ProviderInvocationData,
   providerName: string,
   modelParameters?: AdmittedModelParameters,
   signal?: AbortSignal,
@@ -23,10 +29,9 @@ export function captureProviderInvocation(
     init?: RequestInit,
   ) => Promise<Response>,
 ): RuntimeInvocationContext {
-  const global = owner.settingsService.getAllGlobalSettings();
+  const global = data.globalSettings;
   const active = global['activeProvider'];
-  const providerSettings =
-    owner.settingsService.getProviderSettings(providerName);
+  const providerSettings = data.providerSettings;
   const isSelected =
     active === undefined ||
     active === null ||
@@ -38,11 +43,11 @@ export function captureProviderInvocation(
     (isSelected ? global['base-url'] : undefined) ??
     providerSettings['base-url'];
   return createRuntimeInvocationContext({
-    runtimeId: owner.runtimeId,
+    runtimeId: data.runtimeId,
     fetch: requestFetch,
     sessionId,
     fallbackRuntimeId: `${providerName}:admission`,
-    runtimeMetadata: owner.metadata,
+    runtimeMetadata: data.metadata,
     providerName,
     modelParams: modelParameters?.modelParams,
     modelParamsProviderName: modelParameters?.providerName,

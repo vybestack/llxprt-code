@@ -241,7 +241,17 @@ export function buildContext(
       return {
         provider,
         runtime,
-        invocation: captureProviderInvocation(runtime, provider.name),
+        invocation: captureProviderInvocation(
+          {
+            runtimeId: runtime.runtimeId,
+            metadata: runtime.metadata,
+            globalSettings: runtime.settingsService.getAllGlobalSettings(),
+            providerSettings: runtime.settingsService.getProviderSettings(
+              provider.name,
+            ),
+          },
+          provider.name,
+        ),
       };
     });
 

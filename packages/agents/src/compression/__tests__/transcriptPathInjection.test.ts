@@ -59,7 +59,16 @@ async function captureRequestText(
     resolveProvider: (): CompressionProviderResult =>
       ({
         invocation: captureProviderInvocation(
-          testProviderRuntime,
+          {
+            runtimeId: testProviderRuntime.runtimeId,
+            metadata: testProviderRuntime.metadata,
+            globalSettings:
+              testProviderRuntime.settingsService.getAllGlobalSettings(),
+            providerSettings:
+              testProviderRuntime.settingsService.getProviderSettings(
+                provider.name,
+              ),
+          },
           provider.name,
         ),
         provider,

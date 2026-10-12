@@ -1,5 +1,8 @@
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
-import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import {
+  captureProviderInvocation,
+  type ProviderInvocationData,
+} from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 /**
  * @license
@@ -27,6 +30,19 @@ import {
   type ProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+
+function invocationData(
+  runtime: ProviderRuntimeContext,
+  name: string,
+): ProviderInvocationData {
+  return {
+    runtimeId: runtime.runtimeId,
+    metadata: runtime.metadata,
+    globalSettings: runtime.settingsService.getAllGlobalSettings(),
+    providerSettings: runtime.settingsService.getProviderSettings(name),
+  };
+}
+
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
@@ -91,7 +107,12 @@ describe('ChatSession runtime history and tool-call behavior', () => {
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          invocationData(providerRuntime, name),
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -191,7 +212,12 @@ describe('ChatSession runtime history and tool-call behavior', () => {
 
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          invocationData(providerRuntime, name),
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -316,7 +342,12 @@ describe('ChatSession runtime history and tool-call behavior', () => {
     });
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          invocationData(providerRuntime, name),
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -489,7 +520,12 @@ describe('ChatSession runtime history and tool-call behavior', () => {
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          invocationData(providerRuntime, name),
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -586,7 +622,12 @@ describe('ChatSession runtime history and tool-call behavior', () => {
 
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          invocationData(providerRuntime, name),
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -689,7 +730,12 @@ describe('ChatSession runtime history and tool-call behavior', () => {
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          invocationData(providerRuntime, name),
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: historyService,
       settings: {
@@ -768,7 +814,12 @@ describe('ChatSession runtime history and tool-call behavior', () => {
       const historyService = new HistoryService();
       const view = createAgentRuntimeContext({
         prepareProviderInvocation: (name, parameters, signal) =>
-          captureProviderInvocation(providerRuntime, name, parameters, signal),
+          captureProviderInvocation(
+            invocationData(providerRuntime, name),
+            name,
+            parameters,
+            signal,
+          ),
         state: runtimeState,
         history: historyService,
         settings: {

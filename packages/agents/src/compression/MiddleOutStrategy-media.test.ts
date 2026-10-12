@@ -112,7 +112,16 @@ describe('MiddleOutStrategy media sanitization', () => {
           history,
           resolveProvider: () => ({
             invocation: captureProviderInvocation(
-              testProviderRuntime,
+              {
+                runtimeId: testProviderRuntime.runtimeId,
+                metadata: testProviderRuntime.metadata,
+                globalSettings:
+                  testProviderRuntime.settingsService.getAllGlobalSettings(),
+                providerSettings:
+                  testProviderRuntime.settingsService.getProviderSettings(
+                    captureProvider.name,
+                  ),
+              },
               captureProvider.name,
             ),
             provider: captureProvider,
@@ -208,7 +217,16 @@ describe('MiddleOutStrategy media sanitization', () => {
           history,
           resolveProvider: () => ({
             invocation: captureProviderInvocation(
-              testProviderRuntime,
+              {
+                runtimeId: testProviderRuntime.runtimeId,
+                metadata: testProviderRuntime.metadata,
+                globalSettings:
+                  testProviderRuntime.settingsService.getAllGlobalSettings(),
+                providerSettings:
+                  testProviderRuntime.settingsService.getProviderSettings(
+                    captureProvider.name,
+                  ),
+              },
               captureProvider.name,
             ),
             provider: captureProvider,
@@ -297,7 +315,16 @@ describe('MiddleOutStrategy media sanitization', () => {
           history,
           resolveProvider: () => ({
             invocation: captureProviderInvocation(
-              testProviderRuntime,
+              {
+                runtimeId: testProviderRuntime.runtimeId,
+                metadata: testProviderRuntime.metadata,
+                globalSettings:
+                  testProviderRuntime.settingsService.getAllGlobalSettings(),
+                providerSettings:
+                  testProviderRuntime.settingsService.getProviderSettings(
+                    captureProvider.name,
+                  ),
+              },
               captureProvider.name,
             ),
             provider: captureProvider,
@@ -381,7 +408,16 @@ describe('MiddleOutStrategy media sanitization', () => {
           history,
           resolveProvider: () => ({
             invocation: captureProviderInvocation(
-              testProviderRuntime,
+              {
+                runtimeId: testProviderRuntime.runtimeId,
+                metadata: testProviderRuntime.metadata,
+                globalSettings:
+                  testProviderRuntime.settingsService.getAllGlobalSettings(),
+                providerSettings:
+                  testProviderRuntime.settingsService.getProviderSettings(
+                    captureProvider.name,
+                  ),
+              },
               captureProvider.name,
             ),
             provider: captureProvider,
@@ -447,7 +483,16 @@ describe('MiddleOutStrategy media sanitization', () => {
           history,
           resolveProvider: () => ({
             invocation: captureProviderInvocation(
-              testProviderRuntime,
+              {
+                runtimeId: testProviderRuntime.runtimeId,
+                metadata: testProviderRuntime.metadata,
+                globalSettings:
+                  testProviderRuntime.settingsService.getAllGlobalSettings(),
+                providerSettings:
+                  testProviderRuntime.settingsService.getProviderSettings(
+                    captureProvider.name,
+                  ),
+              },
               captureProvider.name,
             ),
             provider: captureProvider,
@@ -505,7 +550,16 @@ describe('MiddleOutStrategy media sanitization', () => {
           history,
           resolveProvider: () => ({
             invocation: captureProviderInvocation(
-              testProviderRuntime,
+              {
+                runtimeId: testProviderRuntime.runtimeId,
+                metadata: testProviderRuntime.metadata,
+                globalSettings:
+                  testProviderRuntime.settingsService.getAllGlobalSettings(),
+                providerSettings:
+                  testProviderRuntime.settingsService.getProviderSettings(
+                    defaultProvider.name,
+                  ),
+              },
               defaultProvider.name,
             ),
             provider: defaultProvider,

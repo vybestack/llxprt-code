@@ -75,13 +75,16 @@ describe('Load-balancer admission normalization', () => {
 
   it('normalizes an LB invocation without replacing it with a member partition', () => {
     const { settings, provider, manager } = setup();
-    const config = createRuntimeConfigStub(settings);
     const captured = provider.admitModelParameters(settings);
     const normalized = normalizeRuntimeInputs(
       {
         contents: [],
         invocation: captureProviderInvocation(
-          { runtimeId: 'test-owner', settingsService: settings, config },
+          {
+            runtimeId: 'test-owner',
+            globalSettings: settings.getAllGlobalSettings(),
+            providerSettings: settings.getProviderSettings('load-balancer'),
+          },
           'load-balancer',
           captured,
         ),

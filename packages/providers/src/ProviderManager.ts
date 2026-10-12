@@ -559,7 +559,13 @@ export class ProviderManager implements IProviderManager {
             invocation:
               options.invocation ??
               captureProviderInvocation(
-                owner,
+                {
+                  runtimeId: owner.runtimeId,
+                  metadata: owner.metadata,
+                  globalSettings: owner.settingsService.getAllGlobalSettings(),
+                  providerSettings:
+                    owner.settingsService.getProviderSettings(name),
+                },
                 name,
                 options.modelParameters,
                 undefined,

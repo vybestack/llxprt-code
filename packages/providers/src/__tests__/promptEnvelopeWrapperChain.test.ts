@@ -77,7 +77,17 @@ function buildChainOptions(contents: IContent[]): GenerateChatOptions {
   return {
     contents,
 
-    invocation: captureProviderInvocation(runtime, 'estimating-provider'),
+    invocation: captureProviderInvocation(
+      {
+        runtimeId: runtime.runtimeId,
+        metadata: runtime.metadata,
+        globalSettings: runtime.settingsService.getAllGlobalSettings(),
+        providerSettings: runtime.settingsService.getProviderSettings(
+          'estimating-provider',
+        ),
+      },
+      'estimating-provider',
+    ),
   };
 }
 

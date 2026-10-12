@@ -75,7 +75,19 @@ describe('Issue 1729: Claude stopping after thinking block', () => {
     const historyService = new HistoryService();
     const view = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
-        captureProviderInvocation(providerRuntime, name, parameters, signal),
+        captureProviderInvocation(
+          {
+            runtimeId: providerRuntime.runtimeId,
+            metadata: providerRuntime.metadata,
+            globalSettings:
+              providerRuntime.settingsService.getAllGlobalSettings(),
+            providerSettings:
+              providerRuntime.settingsService.getProviderSettings(name),
+          },
+          name,
+          parameters,
+          signal,
+        ),
       state: runtimeState,
       history: historyService,
       settings: {
