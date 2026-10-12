@@ -21,8 +21,10 @@ import {
   processSingleFileContent,
   getSpecificMimeType,
   DEFAULT_MAX_LINES_TEXT_FILE,
+  MAX_LINE_LENGTH_TEXT_FILE,
   type ProcessedFileReadResult,
 } from '../utils/fileUtils.js';
+import { formatClippedLineGuidance } from '../utils/clippedLineGuidance.js';
 import type { GitLineChangeMarker } from '../utils/gitLineChanges.js';
 import { getGitLineChanges } from '../utils/gitLineChanges.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
@@ -55,6 +57,13 @@ export interface ReadFileToolParams {
    * The number of lines to read (optional)
    */
   limit?: number;
+
+  /**
+   * The 0-based character position (UTF-16 code units) within each selected
+   * line at which to start reading (optional, defaults to 0). Each line window
+   * is capped at the maximum line length.
+   */
+  column_offset?: number;
 
   /**
    * When true, prefixes each text line with a virtual line number.
@@ -220,8 +229,7 @@ class ReadFileToolInvocation extends BaseToolInvocation<
   ): ContentPartUnion {
     const [start, end] = result.linesShown!;
     const total = result.originalLineCount!;
-    const nextOffset =
-      this.params.offset != null ? this.params.offset + end - start + 1 : end;
+    const columnOffset = this.params.column_offset ?? 0;
     const startLine =
       this.params.offset != null ? this.params.offset + 1 : start;
 
@@ -241,10 +249,23 @@ class ReadFileToolInvocation extends BaseToolInvocation<
         ? `\nNOTE: Failed to read git change status: ${gitWarning}\n`
         : '';
 
+    const columnNote =
+      columnOffset > 0
+        ? `\nColumn offset: each line is shown starting at character ${columnOffset} (0-based, UTF-16 code units).`
+        : '';
+    const pageAction =
+      end < total
+        ? `\nAction: To read more of the file, you can use the 'offset' and 'limit' parameters in a subsequent 'read_file' call. For example, to read the next section of the file, use offset: ${end}.`
+        : '';
+    const clipped = result.clippedLines ?? [];
+    const clipAction =
+      clipped.length > 0
+        ? `\n${formatClippedLineGuidance(this.getFilePath(), columnOffset, clipped)}`
+        : '';
+
     return `
 IMPORTANT: The file content has been truncated.${gitWarningText}${gitLegend}
-Status: Showing lines ${start}-${end} of ${total} total lines.
-Action: To read more of the file, you can use the 'offset' and 'limit' parameters in a subsequent 'read_file' call. For example, to read the next section of the file, use offset: ${nextOffset}.
+Status: Showing lines ${start}-${end} of ${total} total lines.${columnNote}${pageAction}${clipAction}
 
 --- FILE CONTENT (truncated) ---
 ${formattedContent}`;
@@ -328,6 +349,7 @@ ${formattedContent}`;
       imageResizePolicy,
       imageBudget,
       (filePath) => this.host.readTextFile(filePath),
+      this.params.column_offset ?? 0,
     );
 
     if (result.error) {
@@ -426,6 +448,11 @@ If git status cannot be read, the tool will still return file content and includ
             description:
               "Optional: For text files, maximum number of lines to read. Use with 'offset' to paginate through large files. If omitted, reads the entire file (if feasible, up to a default limit).",
             type: 'number',
+          },
+          column_offset: {
+            description: `Optional: For text files, the 0-based character position (UTF-16 code units, as in JavaScript string indices) within each selected line at which to start reading. Defaults to 0. Each line is shown at most ${MAX_LINE_LENGTH_TEXT_FILE} characters at a time; when a line is clipped, the response gives the read_file call (offset, limit: 1, column_offset) that continues it.`,
+            type: 'integer',
+            minimum: 0,
           },
           showLineNumbers: {
             description:
