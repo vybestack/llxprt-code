@@ -30,6 +30,7 @@
 import { basename } from 'node:path';
 import { stat } from 'node:fs/promises';
 import { clearClientHistory } from './sessionHistoryClear.js';
+import { collectAsync } from './collectAsync.js';
 import {
   adoptSessionResume,
   openSessionResume,
@@ -627,13 +628,11 @@ export class SessionControl implements AgentSessionControl {
   }> {
     return this.runExclusive(async () => {
       await this.ensureSubscribed();
+      this.requireRecording();
       return restoreOwnerTurns(
         turns,
         this.deps.resolveClient(),
-        this.requireRecording(),
-        this.integration,
-        this,
-        () => this.resubscribeIntegration(),
+        this.deps.mediaStore,
       );
     });
   }
@@ -645,9 +644,10 @@ export class SessionControl implements AgentSessionControl {
     });
   }
 
+  // Caller-requested materialization: the public contract returns an array.
   getHistory = (): Promise<readonly IContent[]> =>
     this.runExclusive(() =>
-      Array.fromAsync(this.deps.resolveClient().getHistory()),
+      collectAsync(this.deps.resolveClient().getHistory()),
     );
 
   getSessionId = (): string => this.recordingSessionId;
@@ -899,18 +899,6 @@ export class SessionControl implements AgentSessionControl {
     frontier: SemanticMediaPurgeFrontier,
   ): Promise<void> {
     return persistPurge(this.requireRecording(), candidate, frontier);
-  }
-
-  private async resubscribeIntegration(): Promise<Error | undefined> {
-    const integration = this.integration;
-    if (integration === null) return undefined;
-    try {
-      this.integrationNeedsSubscribe = !(await this.attachHistory(integration));
-      return undefined;
-    } catch (error: unknown) {
-      this.integrationNeedsSubscribe = true;
-      return error instanceof Error ? error : new Error(String(error));
-    }
   }
 
   /**

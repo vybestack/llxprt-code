@@ -4,18 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Agent, AgentHistoryItem } from '@vybestack/llxprt-code-agents';
+import type { Agent } from '@vybestack/llxprt-code-agents';
 import type {
   ContinueTarget,
   EmojiFilterMode,
   UnreadableRecording,
 } from '@vybestack/llxprt-code-core';
 import type { HistoryItem } from '../types.js';
-import { iContentToHistoryItems } from './iContentToHistoryItems.js';
+import { resumeHistoryWindow } from './streamHistoryItems.js';
 import { resumeOwnerSession as resumeSession } from './resumeOwnerSession.js';
 
 type OwnerUiReplay = {
-  readonly history: readonly AgentHistoryItem[];
   readonly uiHistory: readonly HistoryItem[];
   readonly warnings: readonly string[];
 };
@@ -28,10 +27,11 @@ export async function importOwnerSession(
   emojiFilterMode: EmojiFilterMode,
 ): Promise<OwnerUiReplay> {
   await agent.session.importSession(packageDirectory);
-  const history = await agent.session.getHistory();
   return {
-    history,
-    uiHistory: iContentToHistoryItems([...history], emojiFilterMode),
+    uiHistory: await resumeHistoryWindow(
+      agent.streamHistory(),
+      emojiFilterMode,
+    ),
     warnings: [],
   };
 }

@@ -36,22 +36,39 @@ async function releaseClearMedia(media: ClearMediaScope): Promise<void> {
   }
 }
 
-async function captureClearHistory(
+async function captureHistoryRows(
   source: AsyncIterable<IContent>,
   rows: HistoryDensityRows,
   media: ClearMediaScope,
-): Promise<number> {
-  let foundHuman = false;
-  let cut: number | undefined;
+): Promise<void> {
   for await (const row of source) {
-    if (row.speaker === 'human') {
-      if (foundHuman && cut === undefined) cut = rows.length;
-      foundHuman = true;
-    }
     await reserveClearRow(row, media);
     rows.append(row);
   }
-  return cut ?? rows.length;
+}
+
+/** Index of the second human row: everything from there on is cleared. */
+function clearCut(rows: HistoryDensityRows): number {
+  let foundHuman = false;
+  for (let index = 0; index < rows.length; index++) {
+    if (rows.readRow(index).speaker !== 'human') continue;
+    if (foundHuman) return index;
+    foundHuman = true;
+  }
+  return rows.length;
+}
+
+/** Start of the Nth-from-last human turn, or 0 when there are fewer turns. */
+function restoreCut(turns: number): (rows: HistoryDensityRows) => number {
+  return (rows) => {
+    if (turns === 0 || rows.length === 0) return rows.length;
+    let humans = 0;
+    for (let index = rows.length - 1; index >= 0; index--) {
+      if (rows.readRow(index).speaker === 'human' && ++humans === turns)
+        return index;
+    }
+    return 0;
+  };
 }
 
 async function* prefixRows(
@@ -81,10 +98,11 @@ async function preflightClear(
   }
 }
 
-export async function clearClientHistory(
+async function rewriteClientHistory(
   client: AgentClientContract,
   store: LocalMediaStore,
-): Promise<void> {
+  selectCut: (rows: HistoryDensityRows) => number,
+): Promise<number> {
   const rows = new HistoryDensityRows();
   const media: ClearMediaScope = {
     references: new HistoryMediaIndex(),
@@ -92,8 +110,9 @@ export async function clearClientHistory(
     owner: `clear-snapshot:${randomUUID()}`,
   };
   try {
-    const cut = await captureClearHistory(client.getHistory(), rows, media);
-    if (cut === rows.length) return;
+    await captureHistoryRows(client.getHistory(), rows, media);
+    const cut = selectCut(rows);
+    if (cut === rows.length) return 0;
     await preflightClear(rows, cut, store);
     try {
       await client.resetChat(prefixRows(rows, cut));
@@ -109,6 +128,7 @@ export async function clearClientHistory(
       }
       throw error;
     }
+    return rows.length - cut;
   } finally {
     try {
       try {
@@ -120,4 +140,23 @@ export async function clearClientHistory(
       rows.close();
     }
   }
+}
+
+export async function clearClientHistory(
+  client: AgentClientContract,
+  store: LocalMediaStore,
+): Promise<void> {
+  await rewriteClientHistory(client, store, clearCut);
+}
+
+/** Removes the last `turns` human-led turns; returns the number of rows removed. */
+export async function restoreClientTurns(
+  client: AgentClientContract,
+  store: LocalMediaStore,
+  turns: number,
+): Promise<number> {
+  if (!Number.isSafeInteger(turns) || turns < 0) {
+    throw new Error('Turns to remove must be a non-negative integer');
+  }
+  return rewriteClientHistory(client, store, restoreCut(turns));
 }

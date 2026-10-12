@@ -13,10 +13,8 @@ import type {
 } from '@vybestack/llxprt-code-agents';
 import { Colors } from '../colors.js';
 import { MessageType, type HistoryItemChatList } from '../types.js';
-import {
-  iContentToHistoryItems,
-  resolveEmojiFilterMode,
-} from '../utils/iContentToHistoryItems.js';
+import { resolveEmojiFilterMode } from '../utils/iContentToHistoryItems.js';
+import { resumeHistoryWindow } from '../utils/streamHistoryItems.js';
 import { withFuzzyFilter } from '../utils/fuzzyFilter.js';
 import type {
   CommandContext,
@@ -78,11 +76,11 @@ function resolveCheckpoint(
 
 async function replayUiHistory(
   context: CommandContext,
-  history: readonly AgentHistoryItem[],
+  history: AsyncIterable<AgentHistoryItem> | Iterable<AgentHistoryItem>,
 ): Promise<void> {
   context.ui.loadHistory(
-    iContentToHistoryItems(
-      [...history],
+    await resumeHistoryWindow(
+      history,
       resolveEmojiFilterMode(context.services.config),
     ),
   );
@@ -141,8 +139,7 @@ const actions: Record<string, NonNullable<SlashCommand['action']>> = {
       };
     try {
       const agent = owner(context);
-      const history = await Array.fromAsync(await agent.session.resume(tag));
-      await replayUiHistory(context, history);
+      await replayUiHistory(context, await agent.session.resume(tag));
       return undefined;
     } catch (error) {
       return failure('resume checkpoint', error);
