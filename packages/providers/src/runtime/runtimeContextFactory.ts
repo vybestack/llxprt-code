@@ -46,6 +46,7 @@ import type { TokenStore } from '../auth/types.js';
 import {
   createOwnedTokenStore,
   closeOwnedTokenStore,
+  type CredentialAuthority,
 } from '../auth/proxy/credential-store-factory.js';
 import { validateRuntimeId } from './runtimeIdValidation.js';
 import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -117,6 +118,7 @@ export interface IsolatedRuntimeActivationOptions {
  * Options for constructing an isolated CLI runtime with dedicated SettingsService/Config instances.
  */
 export interface IsolatedRuntimeContextOptions {
+  readonly credentialAuthority?: CredentialAuthority;
   readonly requestInteractiveAuth?: InteractiveAuthPromptOperation;
   readonly borrowedTelemetry?: RootTelemetry;
   readonly profileReads?: Pick<ProfileManager, 'loadProfile'>;

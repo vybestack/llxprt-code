@@ -57,6 +57,8 @@ export {
 
 // ─── Proxy Credential Store Factory ──────────────────────────────────────────
 export {
+  CredentialAuthority,
+  HostCredentialOwner,
   createTokenStore,
   createProviderKeyStorage,
   createGitHubBrokerSocketClient,

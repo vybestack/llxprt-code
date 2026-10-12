@@ -10,10 +10,12 @@ import type {
   OAuthUICallback,
 } from '@vybestack/llxprt-code-auth';
 import type { ProviderManager } from '../ProviderManager.js';
+import type { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 import type { IFileSystem } from './IFileSystem.js';
 import type { ProviderContributionRegistry } from './runtimePlugins/types.js';
 
 export interface ProviderManagerFactoryOptions {
+  readonly credentialAuthority?: CredentialAuthority;
   fileSystem: IFileSystem;
   manager?: ProviderManager;
   config?: Config;

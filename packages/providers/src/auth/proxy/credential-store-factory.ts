@@ -138,29 +138,21 @@ function buildConsumeError(
 }
 
 /**
- * Reads, validates, and closes the inherited capability descriptor (fd 3)
- * pointed to by LLXPRT_CAPABILITY_FD. The raw token is cached in module-private
- * state; the descriptor is closed and the marker env var is deleted before
- * returning. F6: reads to EOF under a strict max, validates exactly 64 hex +
- * delimiter (no trim), always attempts close, surfaces BOTH primary and close
- * errors via AggregateError. Duplicate transport fails fast.
+ * Reads, validates, and closes the inherited capability descriptor (fd 3).
+ * The host supplies its captured marker and receives the validated token.
+ * F6: reads to EOF under a strict max, validates exactly 64 hex + delimiter
+ * (no trim), always attempts close, and surfaces both primary and close
+ * errors via AggregateError.
  *
  * @plan project-plans/issue-1954-sandbox-hardening.md (AC4, AC10, F6)
  */
-function consumeFd3Capability(): string | undefined {
-  const fdMarker = process.env.LLXPRT_CAPABILITY_FD;
-  if (fdMarker === undefined || fdMarker === '') return cachedCapabilityToken;
-
+function consumeInheritedCapability(
+  environment: NodeJS.ProcessEnv,
+  fdMarker: string,
+): string {
   const scrubMarker = (): void => {
-    delete process.env.LLXPRT_CAPABILITY_FD;
+    delete environment.LLXPRT_CAPABILITY_FD;
   };
-
-  if (cachedCapabilityToken !== undefined) {
-    scrubMarker();
-    throw new Error(
-      'Duplicate capability transport: LLXPRT_CAPABILITY_FD supplied after the descriptor was already consumed',
-    );
-  }
 
   const fdNumber = Number(fdMarker);
   if (
@@ -222,7 +214,74 @@ function consumeFd3Capability(): string | undefined {
     );
   }
 
-  cachedCapabilityToken = rawToken.slice(0, 64);
+  return rawToken.slice(0, 64);
+}
+
+export class CredentialAuthority {
+  readonly #socketPath: string | undefined;
+  readonly #capabilityToken: string | undefined;
+
+  constructor(socketPath?: string, capabilityToken?: string) {
+    if (
+      capabilityToken !== undefined &&
+      !/^[0-9a-f]{64}$/.test(capabilityToken)
+    ) {
+      throw new Error('Invalid credential capability token');
+    }
+    if (capabilityToken !== undefined && !socketPath) {
+      throw new Error('Capability transport requires LLXPRT_CREDENTIAL_SOCKET');
+    }
+    this.#socketPath = socketPath;
+    this.#capabilityToken = capabilityToken;
+    Object.freeze(this);
+  }
+
+  createTokenStore(): TokenStore {
+    return this.#socketPath
+      ? new ProxyTokenStore(this.#socketPath, this.#capabilityToken)
+      : createKeyringTokenStore();
+  }
+}
+
+export class HostCredentialOwner {
+  readonly authority: CredentialAuthority;
+
+  constructor(environment: NodeJS.ProcessEnv) {
+    const socketPath = environment.LLXPRT_CREDENTIAL_SOCKET;
+    const fdMarker = environment.LLXPRT_CAPABILITY_FD;
+    let capabilityToken: string | undefined;
+    if (fdMarker !== undefined && fdMarker !== '') {
+      if (!socketPath) {
+        let transportError: unknown;
+        try {
+          consumeInheritedCapability(environment, fdMarker);
+        } catch (error) {
+          transportError = error;
+        }
+        const mismatch = new Error(
+          'Capability transport requires LLXPRT_CREDENTIAL_SOCKET',
+        );
+        throw transportError === undefined
+          ? mismatch
+          : new AggregateError([mismatch, transportError], mismatch.message);
+      }
+      capabilityToken = consumeInheritedCapability(environment, fdMarker);
+    }
+    this.authority = new CredentialAuthority(socketPath, capabilityToken);
+    Object.freeze(this);
+  }
+}
+
+function consumeFd3Capability(): string | undefined {
+  const fdMarker = process.env.LLXPRT_CAPABILITY_FD;
+  if (fdMarker === undefined || fdMarker === '') return cachedCapabilityToken;
+  if (cachedCapabilityToken !== undefined) {
+    delete process.env.LLXPRT_CAPABILITY_FD;
+    throw new Error(
+      'Duplicate capability transport: LLXPRT_CAPABILITY_FD supplied after the descriptor was already consumed',
+    );
+  }
+  cachedCapabilityToken = consumeInheritedCapability(process.env, fdMarker);
   return cachedCapabilityToken;
 }
 
