@@ -325,11 +325,12 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
   }
 
   it(
-    'PROP target-5: for any model string differing from the current, setProvider reflects the new model (change guard) (REQ-005)',
+    'PROP target-5: model switches reflect nonblank selections and blank models use the configured default (REQ-005)',
     async () => {
       await expect(
         fc.assert(
           createPROPTarget5ForAnyModelStringDifferingFromTheCurrentSetProviderProperty(),
+          { examples: [[' '], ['  switched-model  ']] },
         ),
       ).resolves.toBeUndefined();
     },
@@ -347,7 +348,10 @@ describe('mutation P23 — property cases @plan:PLAN-20260621-COREAPIREMED.P23 @
         );
         try {
           await agent.setProvider('p', model);
-          return agent.getModel() === model && agent.getProvider() === 'p';
+          const selectedModel = model.trim() ? model : 'fake-model';
+          return (
+            agent.getModel() === selectedModel && agent.getProvider() === 'p'
+          );
         } finally {
           await cleanup();
         }
