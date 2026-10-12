@@ -273,6 +273,8 @@ async function resolveSlashQuery(
             runtimeSettings.owner,
             runtimeSettings.store,
             agent.workspace,
+            agent.settings,
+            agent.toolFormat,
             agent.providerReads,
           ),
           agent.sessionClient.fetch,

@@ -28,12 +28,6 @@ export type { StatelessHardeningPreference } from './statelessHardening.js';
 export { validateRuntimeId } from './runtimeIdValidation.js';
 
 export {
-  setEphemeralSetting,
-  clearEphemeralSetting,
-  setSessionSetting,
-  clearSessionSetting,
-} from './ownerSettingsOperations.js';
-export {
   setActiveModelParam,
   clearActiveModelParam,
 } from './providerModelParameters.js';
@@ -61,15 +55,11 @@ export type {
 export {
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
-  getActiveToolFormatState,
-  setActiveToolFormatOverride,
   setActiveModel,
 } from './providerMutations.js';
 export type {
   ApiKeyUpdateResult,
   BaseUrlUpdateResult,
-  ToolFormatState,
-  ToolFormatOverrideLiteral,
   ModelChangeResult,
 } from './providerMutations.js';
 

@@ -156,6 +156,8 @@ async function profile() {
         boot.runtimeSettingsOwner,
         boot.runtimeSettingsService,
         agent.workspace,
+        agent.settings,
+        agent.toolFormat,
         agent.providerReads,
       );
       await setupOwnerSessionRecording(boot.config, agent, argv, null);

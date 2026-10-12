@@ -91,11 +91,6 @@
       "bun": "./src/runtime/settingsResolver.ts",
       "import": "./dist/src/runtime/settingsResolver.js"
     },
-    "./runtime/ownerSettingsOperations.js": {
-      "types": "./dist/src/runtime/ownerSettingsOperations.d.ts",
-      "bun": "./src/runtime/ownerSettingsOperations.ts",
-      "import": "./dist/src/runtime/ownerSettingsOperations.js"
-    },
     "./runtime/providerModelParameters.js": {
       "types": "./dist/src/runtime/providerModelParameters.d.ts",
       "bun": "./src/runtime/providerModelParameters.ts",

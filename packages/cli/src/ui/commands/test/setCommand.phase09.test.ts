@@ -69,23 +69,24 @@ assertDefined(commandSchema);
 
 describe('setCommand schema integration', () => {
   // Mock context for testing
-  const mockContext: CommandContext = createMockCommandContext({
-    runtimeApi: mockRuntime,
-    services: {
-      config: {
-        getEphemeralSettings: () => ({
-          'context-limit': 100_000,
-          'compression-threshold': 0.7,
-          streaming: 'enabled',
-          'socket-timeout': 60_000,
-        }),
-      } as unknown as Config,
-    },
-  });
+  let mockContext: CommandContext;
 
   let handler: ReturnType<typeof createCompletionHandler>;
 
   beforeEach(() => {
+    mockContext = createMockCommandContext({
+      runtimeApi: mockRuntime,
+      services: {
+        config: {
+          getEphemeralSettings: () => ({
+            'context-limit': 100_000,
+            'compression-threshold': 0.7,
+            streaming: 'enabled',
+            'socket-timeout': 60_000,
+          }),
+        } as unknown as Config,
+      },
+    });
     mockRuntime.getEphemeralSettings.mockReturnValue({
       'context-limit': 100_000,
       'compression-threshold': 0.7,

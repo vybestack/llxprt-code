@@ -64,6 +64,8 @@ describe('CLI retained session model commands', () => {
           first.settingsOwner,
           first.settingsService,
           agentA.workspace,
+          agentA.settings,
+          agentA.toolFormat,
           agentA.providerReads,
         ),
         agentA.sessionClient.fetch,
@@ -78,6 +80,8 @@ describe('CLI retained session model commands', () => {
           second.settingsOwner,
           second.settingsService,
           agentB.workspace,
+          agentB.settings,
+          agentB.toolFormat,
           agentB.providerReads,
         ),
         agentB.sessionClient.fetch,
@@ -114,6 +118,24 @@ describe('CLI retained session model commands', () => {
       expect(second.settingsOwner.readNamedParameter('auth-key')).toBe(
         'second-key',
       );
+      agentA.settings.setEphemeralSetting('context-limit', 4096);
+      agentB.settings.setEphemeralSetting('context-limit', 8192);
+      agentA.settings.setSessionSetting('dumpcontext', 'on');
+      agentB.settings.setSessionSetting('dumpcontext', 'error');
+      agentA.settings.clearSessionSetting('dumpcontext');
+      expect(agentA.settings.getSessionSetting('dumpcontext')).toBeUndefined();
+      expect(agentB.settings.getSessionSetting('dumpcontext')).toBe('error');
+      expect(firstApi.getEphemeralSetting('context-limit')).toBe(4096);
+      expect(secondApi.getEphemeralSetting('context-limit')).toBe(8192);
+      await agentA.toolFormat.setOverride('kimi');
+      await agentB.toolFormat.setOverride('openai');
+      expect((await firstApi.getActiveToolFormatState()).override).toBe('kimi');
+      expect((await secondApi.getActiveToolFormatState()).override).toBe(
+        'openai',
+      );
+      await firstApi.setActiveToolFormatOverride(null);
+      expect((await agentA.toolFormat.getState()).isAutoDetected).toBe(true);
+      expect((await agentB.toolFormat.getState()).override).toBe('openai');
       firstApi.clearActiveModelParam('temperature');
       await firstApi.updateActiveProviderApiKey(null);
       expect(firstApi.getActiveModelParams()).not.toHaveProperty('temperature');

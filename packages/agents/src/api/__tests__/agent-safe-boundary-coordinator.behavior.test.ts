@@ -218,6 +218,12 @@ describe('Per-Agent foreground safe boundary (#2616 S2)', () => {
         expect(() => a.setEphemeralSetting('maxOutputTokens', 19)).toThrow(
           AgentBusyError,
         );
+        expect(() => a.settings.setSessionSetting('dumpcontext', 'on')).toThrow(
+          AgentBusyError,
+        );
+        await expect(a.toolFormat.setOverride('kimi')).rejects.toBeInstanceOf(
+          AgentBusyError,
+        );
         await expect(a.setModel('next-model')).rejects.toBeInstanceOf(
           AgentBusyError,
         );

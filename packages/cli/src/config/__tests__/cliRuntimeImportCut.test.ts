@@ -1,3 +1,5 @@
+import { assembleSettingsControl } from '../../../../agents/src/api/control/settings-control.js';
+import { assembleToolFormatControl } from '../../../../agents/src/api/control/tool-format-control.js';
 import { SessionProviderReads } from '@vybestack/llxprt-code-agents';
 /**
  * @license
@@ -200,6 +202,17 @@ describe('CLI provider bootstrap across owners', () => {
             item.settingsOwner,
             item.settingsService,
             definitionFixture(),
+            assembleSettingsControl(
+              () => item.settingsOwner,
+              () => {},
+              () => {},
+            ),
+            assembleToolFormatControl(
+              () => item.settingsOwner,
+              () => item.runtimeState.providerManager.getActiveProvider(),
+              () => {},
+              () => {},
+            ),
             new SessionProviderReads(
               item.settingsOwner,
               item.runtimeState.providerManager,

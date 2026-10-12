@@ -140,6 +140,8 @@ describe('interactive runtime owner bridge', () => {
           first.settingsOwner,
           first.settingsService,
           a.workspace,
+          a.settings,
+          a.toolFormat,
           a.providerReads,
         )}
       >
@@ -168,6 +170,8 @@ describe('interactive runtime owner bridge', () => {
           second.settingsOwner,
           second.settingsService,
           b.workspace,
+          b.settings,
+          b.toolFormat,
           b.providerReads,
         )}
       >
@@ -236,6 +240,8 @@ describe('interactive runtime owner bridge', () => {
             second.settingsOwner,
             second.settingsService,
             b.workspace,
+            b.settings,
+            b.toolFormat,
             b.providerReads,
           )}
         >
@@ -297,6 +303,8 @@ describe('interactive runtime owner bridge', () => {
           first.settingsOwner,
           first.settingsService,
           a.workspace,
+          a.settings,
+          a.toolFormat,
           a.providerReads,
         )}
       >
@@ -320,6 +328,8 @@ describe('interactive runtime owner bridge', () => {
           second.settingsOwner,
           second.settingsService,
           b.workspace,
+          b.settings,
+          b.toolFormat,
           b.providerReads,
         )}
       >
@@ -533,6 +543,8 @@ describe('interactive runtime owner bridge', () => {
             first.settingsOwner,
             first.settingsService,
             a.workspace,
+            a.settings,
+            a.toolFormat,
             a.providerReads,
           )}
         >
@@ -558,6 +570,8 @@ describe('interactive runtime owner bridge', () => {
             second.settingsOwner,
             second.settingsService,
             b.workspace,
+            b.settings,
+            b.toolFormat,
             b.providerReads,
           )}
         >

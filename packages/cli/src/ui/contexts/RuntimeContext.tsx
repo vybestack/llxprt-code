@@ -20,14 +20,7 @@ import type {
   SessionProviderReads,
 } from '@vybestack/llxprt-code-agents';
 import type {
-  setEphemeralSetting,
-  setSessionSetting,
-  clearSessionSetting,
-} from '@vybestack/llxprt-code-providers/runtime/ownerSettingsOperations.js';
-import type {
-  getActiveToolFormatState,
   setActiveModel,
-  setActiveToolFormatOverride,
   updateActiveProviderApiKey,
   BaseUrlUpdateResult,
 } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
@@ -57,10 +50,7 @@ type RuntimeFunctions = ReturnType<typeof createProviderInspection> &
     | 'getSessionTokenUsage'
   > & {
     getEphemeralSettings: () => Readonly<Record<string, unknown>>;
-    setEphemeralSetting: (
-      key: string,
-      value: unknown,
-    ) => ReturnType<typeof setEphemeralSetting>;
+    setEphemeralSetting: (key: string, value: unknown) => void;
     saveProfileDefinition: (name: string, profile: unknown) => Promise<void>;
     saveLoadBalancerProfile: (
       name: string,
@@ -68,19 +58,14 @@ type RuntimeFunctions = ReturnType<typeof createProviderInspection> &
     ) => Promise<void>;
     listSavedProfiles: () => Promise<string[]>;
     getProfileByName: (name: string) => ReturnType<typeof getProfileByName>;
-    getActiveToolFormatState: () => ReturnType<typeof getActiveToolFormatState>;
+    getActiveToolFormatState: () => ReturnType<Agent['toolFormat']['getState']>;
     setActiveToolFormatOverride: (
-      format: Parameters<typeof setActiveToolFormatOverride>[0],
-    ) => ReturnType<typeof setActiveToolFormatOverride>;
+      format: Parameters<Agent['toolFormat']['setOverride']>[0],
+    ) => ReturnType<Agent['toolFormat']['setOverride']>;
     getEphemeralSetting: (key: string) => unknown;
     getSessionSetting: (key: string) => unknown;
-    setSessionSetting: (
-      key: string,
-      value: unknown,
-    ) => ReturnType<typeof setSessionSetting>;
-    clearSessionSetting: (
-      key: string,
-    ) => ReturnType<typeof clearSessionSetting>;
+    setSessionSetting: (key: string, value: unknown) => void;
+    clearSessionSetting: (key: string) => void;
   };
 
 type AgentSetProvider = (

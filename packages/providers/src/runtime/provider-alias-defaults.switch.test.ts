@@ -121,8 +121,7 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
   };
 });
 
-const { switchActiveProvider, setActiveModel, setEphemeralSetting } =
-  await import('./index.js');
+const { switchActiveProvider, setActiveModel } = await import('./index.js');
 
 const mockOAuthManager = {
   clearRetryHandlers: () => {},
@@ -653,7 +652,7 @@ describe('Provider alias defaults (model + ephemerals)', () => {
 
       // Explicit session write carrying the same value as the provider
       // default: the session owns the key from here on, regardless of value.
-      setEphemeralSetting('reasoning.effort', 'medium', settingsOwner);
+      settingsOwner.writeUserParameter('reasoning.effort', 'medium');
 
       await setActiveModel('claude-opus-4-6', ...stubOverrideInputs());
 

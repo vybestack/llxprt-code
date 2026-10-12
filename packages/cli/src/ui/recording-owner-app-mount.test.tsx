@@ -66,6 +66,8 @@ describe('interactive Agent owner AppWrapper', () => {
                   settingsOwner,
                   settingsService,
                   agent.workspace,
+                  agent.settings,
+                  agent.toolFormat,
                   agent.providerReads,
                 ),
             }}

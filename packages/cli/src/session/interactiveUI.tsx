@@ -328,6 +328,8 @@ function buildRenderElement(
       runtimeSettings.owner,
       runtimeSettings.store,
       agent.workspace,
+      agent.settings,
+      agent.toolFormat,
       agent.providerReads,
     );
   return (

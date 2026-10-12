@@ -26,19 +26,10 @@ import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { getOpenAIProviderInfo } from '@vybestack/llxprt-code-providers';
 import { refreshAliasProviders } from '@vybestack/llxprt-code-providers/composition.js';
 import {
-  setEphemeralSetting,
-  setSessionSetting,
-  clearSessionSetting,
-} from '@vybestack/llxprt-code-providers/runtime/ownerSettingsOperations.js';
-import {
   clearActiveModelParam,
   setActiveModelParam,
 } from '@vybestack/llxprt-code-providers/runtime/providerModelParameters.js';
-import {
-  getActiveToolFormatState,
-  setActiveToolFormatOverride,
-  updateActiveProviderApiKey,
-} from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { updateActiveProviderApiKey } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
 import { getProfileByName } from '@vybestack/llxprt-code-providers/runtime/profileSnapshot.js';
 import type { RuntimeOwnerFeatures } from '../ui/contexts/RuntimeContext.js';
 import type { ProviderAliasRefresh } from '../ui/contexts/ProviderAliasRefreshContext.js';
@@ -104,6 +95,8 @@ export function createRuntimeOwnerFeatures(
   sessionSettings: SessionSettingsOwner,
   settingsService: SettingsService,
   definitions: Pick<Agent['workspace'], 'profileDefinitions' | 'profileWrites'>,
+  settings: Agent['settings'],
+  toolFormat: Agent['toolFormat'],
   reads: Pick<
     SessionProviderReads,
     | 'listProviders'
@@ -125,9 +118,9 @@ export function createRuntimeOwnerFeatures(
     listAvailableModels: (provider) => reads.listAvailableModels(provider),
     getActiveModelName: () => reads.getActiveModelName(),
     providerStatus: () => reads.providerStatus(),
-    getEphemeralSettings: () => sessionSettings.captureNamedParameters(),
+    getEphemeralSettings: () => settings.getEphemeralSettings(),
     setEphemeralSetting: (key, value) =>
-      setEphemeralSetting(key, value, sessionSettings),
+      settings.setEphemeralSetting(key, value),
     getUnallowedParametersForActiveModel: () =>
       reads.getUnallowedParametersForActiveModel(),
     saveLoadBalancerProfile: (name, profile) =>
@@ -141,21 +134,14 @@ export function createRuntimeOwnerFeatures(
       () => sessionSettings.readSelectedEndpoint(),
       manager,
     ),
-    getActiveToolFormatState: () =>
-      getActiveToolFormatState(sessionSettings, manager.getActiveProvider()),
-    setActiveToolFormatOverride: (format) =>
-      setActiveToolFormatOverride(
-        format,
-        sessionSettings,
-        manager.getActiveProvider(),
-      ),
+    getActiveToolFormatState: () => toolFormat.getState(),
+    setActiveToolFormatOverride: (format) => toolFormat.setOverride(format),
     getActiveProviderMetrics: () => reads.getActiveProviderMetrics(),
     getSessionTokenUsage: () => reads.getSessionTokenUsage(),
-    getEphemeralSetting: (key) => sessionSettings.readNamedParameter(key),
-    getSessionSetting: (key) => sessionSettings.readSessionOverride(key),
-    setSessionSetting: (key, value) =>
-      setSessionSetting(key, value, sessionSettings),
-    clearSessionSetting: (key) => clearSessionSetting(key, sessionSettings),
+    getEphemeralSetting: (key) => settings.getEphemeralSetting(key),
+    getSessionSetting: (key) => settings.getSessionSetting(key),
+    setSessionSetting: (key, value) => settings.setSessionSetting(key, value),
+    clearSessionSetting: (key) => settings.clearSessionSetting(key),
     ...bindProviderMutations(
       sessionSettings,
       settingsService,

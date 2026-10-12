@@ -20,10 +20,14 @@ import type {
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
 import { SessionProviderReads } from './session-provider-reads.js';
-import {
-  setEphemeralSetting,
-  clearEphemeralSetting,
-} from '../../../providers/src/runtime/ownerSettingsOperations.js';
+import { assembleSettingsControl } from './control/settings-control.js';
+function settingsControl(owner: SessionSettingsOwner) {
+  return assembleSettingsControl(
+    () => owner,
+    () => {},
+    () => {},
+  );
+}
 import {
   setActiveModelParam,
   clearActiveModelParam,
@@ -169,10 +173,10 @@ describe('runtimeAccessors', () => {
     it('sets, reads, and clears an ephemeral on only its supplied owner', () => {
       const { settingsOwner: first } = owners.config();
       const { settingsOwner: second } = owners.config();
-      setEphemeralSetting('context-limit', 4096, first);
-      setEphemeralSetting('context-limit', 8192, second);
+      settingsControl(first).setEphemeralSetting('context-limit', 4096);
+      settingsControl(second).setEphemeralSetting('context-limit', 8192);
       expect(first.readNamedParameter('context-limit')).toBe(4096);
-      clearEphemeralSetting('context-limit', first);
+      settingsControl(first).setEphemeralSetting('context-limit', undefined);
       expect(first.readNamedParameter('context-limit')).toBeUndefined();
       expect(first.isUserParameter('context-limit')).toBe(false);
       expect(second.readNamedParameter('context-limit')).toBe(8192);
@@ -181,8 +185,14 @@ describe('runtimeAccessors', () => {
     it('returns the supplied owner ephemeral snapshot without including sibling writes', () => {
       const { settingsOwner: first } = owners.config();
       const { settingsOwner: second } = owners.config();
-      setEphemeralSetting('first-setting', 'first-value', first);
-      setEphemeralSetting('second-setting', 'second-value', second);
+      settingsControl(first).setEphemeralSetting(
+        'first-setting',
+        'first-value',
+      );
+      settingsControl(second).setEphemeralSetting(
+        'second-setting',
+        'second-value',
+      );
       expect(first.captureNamedParameters()).toMatchObject({
         'first-setting': 'first-value',
       });

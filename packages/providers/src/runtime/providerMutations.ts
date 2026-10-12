@@ -179,25 +179,6 @@ export interface BaseUrlUpdateResult {
   baseUrl?: string;
 }
 
-export interface ToolFormatState {
-  providerName: string;
-  currentFormat: string | null;
-  override: string | null;
-  isAutoDetected: boolean;
-}
-
-export type ToolFormatOverrideLiteral =
-  | 'auto'
-  | 'openai'
-  | 'qwen'
-  | 'kimi'
-  | 'hermes'
-  | 'xml'
-  | 'anthropic'
-  | 'deepseek'
-  | 'gemma'
-  | 'llama';
-
 export interface ModelChangeResult {
   providerName: string;
   previousModel?: string;
@@ -327,57 +308,6 @@ export async function updateActiveProviderBaseUrl(
     message: `Base URL updated to '${normalizedBaseUrl}' for provider '${providerName}'.`,
     baseUrl: normalizedBaseUrl,
   };
-}
-
-export async function getActiveToolFormatState(
-  owner: Pick<SessionSettingsOwner, 'readToolFormat' | 'writeToolFormat'>,
-  provider:
-    | Pick<
-        NonNullable<ReturnType<RuntimeProviderManager['getActiveProvider']>>,
-        'name' | 'getToolFormat'
-      >
-    | undefined,
-): Promise<ToolFormatState> {
-  if (!provider) throw new Error('No active provider is configured.');
-
-  const rawOverride = owner.readToolFormat();
-  const override = typeof rawOverride === 'string' ? rawOverride : 'auto';
-
-  const isAutoDetected = !override || override === 'auto';
-
-  // When auto-detecting, call the provider's getToolFormat() to get the actual detected format
-  // This shows users what format will actually be used based on the model name
-  const detectedFormat = isAutoDetected
-    ? (provider.getToolFormat?.() ?? null)
-    : null;
-
-  return {
-    providerName: provider.name,
-    currentFormat: isAutoDetected ? detectedFormat : override,
-    override: isAutoDetected ? null : override,
-    isAutoDetected,
-  };
-}
-
-export async function setActiveToolFormatOverride(
-  formatName: ToolFormatOverrideLiteral | null,
-  owner: Pick<SessionSettingsOwner, 'readToolFormat' | 'writeToolFormat'>,
-  provider:
-    | Pick<
-        NonNullable<ReturnType<RuntimeProviderManager['getActiveProvider']>>,
-        'name' | 'getToolFormat'
-      >
-    | undefined,
-): Promise<ToolFormatState> {
-  if (!provider) throw new Error('No active provider is configured.');
-
-  if (!formatName || formatName === 'auto') {
-    await owner.writeToolFormat('auto');
-    return getActiveToolFormatState(owner, provider);
-  }
-
-  await owner.writeToolFormat(formatName);
-  return getActiveToolFormatState(owner, provider);
 }
 
 /**
