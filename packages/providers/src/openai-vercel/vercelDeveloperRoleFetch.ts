@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import { forwardPreconnect } from '../utils/fetchPreconnect.js';
+
 /**
  * Type guard: parsed JSON body has a `messages` array.
  */
@@ -92,9 +94,6 @@ export function createDeveloperRoleToSystemFetch(
         }),
       });
     },
-    {
-      preconnect: (...args: Parameters<typeof fetch.preconnect>) =>
-        innerFetch.preconnect(...args),
-    },
+    forwardPreconnect(() => innerFetch),
   );
 }

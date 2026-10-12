@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {} from 'bun';
+import { forwardPreconnect } from '../utils/fetchPreconnect.js';
 
 /** Avoid runtime-native stream iteration in the OpenAI SDK's SSE reader. */
 export function createReaderBasedStreamFetch(
@@ -19,10 +19,7 @@ export function createReaderBasedStreamFetch(
         ? wrapResponseWithReaderIteratedBody(response)
         : response;
     },
-    {
-      preconnect: (...args: Parameters<typeof fetch.preconnect>) =>
-        (innerFetch ?? globalThis.fetch).preconnect(...args),
-    },
+    forwardPreconnect(() => innerFetch ?? globalThis.fetch),
   );
 }
 

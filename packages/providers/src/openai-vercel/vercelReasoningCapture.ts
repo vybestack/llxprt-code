@@ -15,6 +15,7 @@
  */
 
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { forwardPreconnect } from '../utils/fetchPreconnect.js';
 import { resolveReasoningField } from '../utils/reasoningField.js';
 import {
   assertProviderStreamByteLimit,
@@ -230,9 +231,6 @@ export function createReasoningCaptureFetch(
         headers: response.headers,
       });
     },
-    {
-      preconnect: (...args: Parameters<typeof fetch.preconnect>) =>
-        globalThis.fetch.preconnect(...args),
-    },
+    forwardPreconnect(() => globalThis.fetch),
   );
 }

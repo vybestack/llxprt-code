@@ -29,6 +29,7 @@ import * as net from 'net';
 import { createRequire } from 'node:module';
 import { Readable } from 'node:stream';
 import type * as Undici from 'undici';
+import { forwardPreconnect } from '../utils/fetchPreconnect.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { OPENAI_TRANSPORT_SELECTOR_KEYS } from './openaiModelPolicy.js';
 import { createReaderBasedStreamFetch } from './openaiStreamFetchSafety.js';
@@ -217,10 +218,7 @@ function fetchWithHeadersTimeout(headersTimeoutMs: number): typeof fetch {
         { status: result.statusCode, headers },
       );
     },
-    {
-      preconnect: (...args: Parameters<typeof fetch.preconnect>) =>
-        globalThis.fetch.preconnect(...args),
-    },
+    forwardPreconnect(() => globalThis.fetch),
   );
 }
 
