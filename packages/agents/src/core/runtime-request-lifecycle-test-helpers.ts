@@ -93,6 +93,16 @@ function expectNoOpenFixtureFiles(directory: string): void {
     .filter((line) => line.startsWith(`n${directory}/`));
   expect(openFixtureFiles).toHaveLength(0);
 }
+/** The blocked outfile fails every transport write, and the root reports that when it closes. */
+async function expectCloseReportsBlockedOutfile(
+  active: ReturnType<typeof runtimeConfig>,
+): Promise<void> {
+  const closeFailure = await shutdownTelemetry(active).catch(
+    (error: unknown) => error,
+  );
+  if (!(closeFailure instanceof AggregateError)) throw closeFailure;
+  expect(closeFailure.errors.map(String).join('\n')).toContain('EISDIR');
+}
 export async function runtimeWriteFailure(parent: string): Promise<void> {
   const directory = await mkdtemp(join(parent, 'runtime-write-'));
   const active = runtimeConfig(directory);
@@ -104,12 +114,7 @@ export async function runtimeWriteFailure(parent: string): Promise<void> {
       sendRuntimeArtifact(await runtimeArtifact(directory), active),
     ).rejects.toThrow('EISDIR');
   } finally {
-    // The blocked outfile fails every transport write, and the root reports that when it closes.
-    const closeFailure = await shutdownTelemetry(active).catch(
-      (error: unknown) => error,
-    );
-    if (!(closeFailure instanceof AggregateError)) throw closeFailure;
-    expect(closeFailure.errors.map(String).join('\n')).toContain('EISDIR');
+    await expectCloseReportsBlockedOutfile(active);
     expect(isTelemetrySdkInitialized(active)).toBe(false);
     expectNoOpenFixtureFiles(directory);
     await rm(directory, { recursive: true });

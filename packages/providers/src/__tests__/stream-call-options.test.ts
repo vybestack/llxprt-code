@@ -19,7 +19,10 @@ import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/s
 import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { useRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
+import {
+  useRuntimeTestOwners,
+  type RuntimeTestOwners,
+} from '../runtime/__tests__/runtime-owner-test-helpers.js';
 import { ProviderManager } from '../ProviderManager.js';
 import { LoggingProviderWrapper } from '../LoggingProviderWrapper.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
@@ -34,8 +37,6 @@ import type { ConversationDataRedactor } from '../logging/ConfigBasedRedactor.js
 import { readFile } from 'node:fs/promises';
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import { getConversationFileWriter } from '@vybestack/llxprt-code-storage/storage/ConversationFileWriter.js';
-const fixtureOwners = useRuntimeTestOwners();
-
 async function textRows(contents: AsyncIterable<IContent>): Promise<string[]> {
   const values: string[] = [];
   for await (const row of contents) {
@@ -170,6 +171,7 @@ class StreamingRedactionWitness implements ConversationDataRedactor {
 }
 
 async function withIngressFixture<T>(
+  fixtureOwners: RuntimeTestOwners,
   logging: boolean,
   action: (
     root: string,
@@ -320,10 +322,12 @@ function verifyIngressIdentities(
 }
 
 async function exerciseWrapperIngress(
+  fixtureOwners: RuntimeTestOwners,
   logging: boolean,
   snapshotBacked = true,
 ): Promise<string> {
   return withIngressFixture(
+    fixtureOwners,
     logging,
     async (root, config, settings, snapshot, settingsOwner) => {
       const observation: IngressObservation = {
@@ -398,17 +402,25 @@ async function exerciseWrapperIngress(
 }
 
 describe('real provider wrapper disk ingress', () => {
+  const fixtureOwners = useRuntimeTestOwners();
   it('reopens cold disk rows after one BODY read without disabled logging predrain', async () => {
-    expect(await exerciseWrapperIngress(false)).toBe(ingressDigest());
+    expect(await exerciseWrapperIngress(fixtureOwners, false)).toBe(
+      ingressDigest(),
+    );
   });
   it('stages a one-shot request on disk and reopens it after the first BODY read fails', async () => {
-    expect(await exerciseWrapperIngress(false, false)).toBe(ingressDigest());
+    expect(await exerciseWrapperIngress(fixtureOwners, false, false)).toBe(
+      ingressDigest(),
+    );
   });
   it('logs every redacted disk row without buffering the request before retry', async () => {
-    expect(await exerciseWrapperIngress(true)).toBe(ingressDigest());
+    expect(await exerciseWrapperIngress(fixtureOwners, true)).toBe(
+      ingressDigest(),
+    );
   });
   it('disposes a one-shot request owner on cancellation', async () => {
     await withIngressFixture(
+      fixtureOwners,
       false,
       async (_root, config, settings, _snapshot, settingsOwner) => {
         const controller = new AbortController();
@@ -486,8 +498,10 @@ describe('real provider wrapper disk ingress', () => {
 });
 
 describe('streamed conversation disk artifact', () => {
+  const fixtureOwners = useRuntimeTestOwners();
   it('writes the complete redacted request to disk one row at a time', async () => {
     await withIngressFixture(
+      fixtureOwners,
       true,
       async (root, _config, _settings, snapshot) => {
         const witness = new StreamingRedactionWitness();

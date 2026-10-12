@@ -60,7 +60,7 @@ import type {
 } from './types.js';
 import type { UiEvent } from './uiTelemetry.js';
 import { artifactAttributes, emitRequestArtifact } from './request-artifact.js';
-import { logTelemetryEvent } from './telemetry-event.js';
+import { logTelemetryEvent, recordTelemetryEvent } from './telemetry-event.js';
 import { aggregateLocally, recordEmitter } from './log-record-emission.js';
 export { acknowledgeTerminalTelemetry } from './log-record-emission.js';
 import { safeJsonStringify } from '../utils/safeJsonStringify.js';
@@ -612,7 +612,7 @@ export function logConversationResponse(
   telemetry: RootTelemetry,
 ): void {
   if (!isConversationExportAllowed(telemetry)) return;
-  logTelemetryEvent(config, event, telemetry);
+  recordTelemetryEvent(config, event, telemetry);
 }
 
 function isConversationExportAllowed(telemetry: RootTelemetry): boolean {
@@ -626,7 +626,7 @@ export function logProviderSwitch(
   telemetry: RootTelemetry,
 ): void {
   if (telemetry.readPrivacySettings().logConversations)
-    logTelemetryEvent(config, event, telemetry);
+    recordTelemetryEvent(config, event, telemetry);
 }
 
 export const logProviderCapability = logProviderSwitch;

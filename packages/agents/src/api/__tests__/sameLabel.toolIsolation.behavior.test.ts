@@ -340,7 +340,9 @@ async function exerciseOwners(sameLabel: boolean): Promise<void> {
         otherInvocation,
       );
     }
-    const historyA = JSON.stringify(await a.callerClient.getHistory());
+    const historyA = JSON.stringify(
+      await Array.fromAsync(a.callerClient.getHistory()),
+    );
     const historyB = JSON.stringify(
       await Array.fromAsync(b.agent.streamHistory()),
     );

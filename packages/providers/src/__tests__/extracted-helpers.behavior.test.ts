@@ -8,7 +8,6 @@ import { afterEach } from 'bun:test';
 import { describe, expect, it, vi } from 'bun:test';
 import { replayableContents } from '../utils/collectContents.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { CircuitBreakerState } from '../LoadBalancingProvider.js';
@@ -50,81 +49,16 @@ import { extractSimpleContent } from '../logging/streamChunkUtils.js';
 import { accumulateTokenUsage } from '../logging/tokenAccumulator.js';
 import { extractTokenCountsFromResponse } from '../logging/tokenCounts.js';
 import { getBackendSkipReasons } from '../loadBalancing/backendRuntime.js';
-
-function captureThrown(fn: () => unknown): { error: unknown } {
-  try {
-    fn();
-  } catch (error) {
-    return { error };
-  }
-  throw new Error('expected the call to throw, but it did not');
-}
-
-function debugLoggerStub(): DebugLogger {
-  return {
-    debug: () => {},
-    log: () => {},
-    warn: () => {},
-    error: () => {},
-  } as unknown as DebugLogger;
-}
-function providerStub(overrides: Partial<IProvider> = {}): IProvider {
-  return {
-    name: 'provider-a',
-    getModels: vi.fn().mockResolvedValue([]),
-    getDefaultModel: vi.fn().mockReturnValue('default-model'),
-    generateChatCompletion: vi.fn(),
-    ...overrides,
-  } as unknown as IProvider;
-}
-
-function statusError(status: number): Error {
-  return Object.assign(new Error(`status ${status}`), { status });
-}
-
-const handlerStub = {
-  tryBucketFailover: async () => false,
-  readFailoverBuckets: () => ['bucket'],
-  getBuckets: () => ['bucket-a'],
-  getCurrentBucket: () => 'bucket-a',
-  isEnabled: () => true,
-  tryFailover: () => Promise.resolve(true),
-  resetSession: () => {},
-};
-
-async function collectChunks(
-  stream: AsyncIterable<IContent>,
-): Promise<IContent[]> {
-  const chunks: IContent[] = [];
-  for await (const chunk of stream) {
-    chunks.push(chunk);
-  }
-  return chunks;
-}
-
-const configRoots: Config[] = [];
-
-function runtimeConfig(
-  model = 'config-model',
-  initialSettings: Readonly<Record<string, unknown>> = {},
-  provider?: string,
-): Config {
-  const config = new Config({
-    sessionId: 'extracted-helper-fixture',
-    model,
-    provider,
-    initialSettings,
-    targetDir: process.cwd(),
-    cwd: process.cwd(),
-    debugMode: false,
-  });
-  configRoots.push(config);
-  return config;
-}
-
-async function disposeConfigRoots(): Promise<void> {
-  await Promise.all(configRoots.splice(0).map((config) => config.dispose()));
-}
+import {
+  captureThrown,
+  collectChunks,
+  debugLoggerStub,
+  disposeConfigRoots,
+  handlerStub,
+  providerStub,
+  runtimeConfig,
+  statusError,
+} from './support/extracted-helpers-fixtures.js';
 
 describe('extracted provider helper behavior: group 1', () => {
   afterEach(disposeConfigRoots);

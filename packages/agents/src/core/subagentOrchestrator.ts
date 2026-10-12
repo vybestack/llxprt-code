@@ -39,6 +39,13 @@ import {
   buildActivationCliOverrides,
   type RuntimeProfileResolution,
 } from './subagentProfileResolution.js';
+import {
+  LOAD_BALANCER_PROVIDER_NAME,
+  buildSubagentModelConfig,
+  buildSubagentPromptConfig,
+  getActivationProfile,
+  getRuntimeStateProfile,
+} from './subagentProfileConfig.js';
 import { getStringSetting } from './subagentSettingsAccess.js';
 import {
   createSettingsSnapshot,
@@ -100,8 +107,6 @@ import {
   buildIsolatedAgentConfig,
   prepareIsolatedProviders,
 } from '../api/agentRuntimeAssembly.js';
-
-const LOAD_BALANCER_PROVIDER_NAME = 'load-balancer';
 
 type RuntimeLoader = (
   options: AgentRuntimeLoaderOptions,
@@ -319,13 +324,12 @@ export class SubagentOrchestrator {
       'Subagent launch aborted while resolving runtime profile.',
     );
 
-    const promptConfig = this.buildPromptConfig(
+    const promptConfig = buildSubagentPromptConfig(
       subagent.systemPrompt,
       request.behaviourPrompts,
     );
-    const runtimeStateProfile =
-      SubagentOrchestrator.getRuntimeStateProfile(runtimeProfile);
-    const modelConfig = this.buildModelConfig(runtimeStateProfile);
+    const runtimeStateProfile = getRuntimeStateProfile(runtimeProfile);
+    const modelConfig = buildSubagentModelConfig(runtimeStateProfile);
     const runConfig = this.resolveRunConfig(profile, request.runConfig);
     this.throwIfAborted(
       signal,
@@ -513,76 +517,6 @@ export class SubagentOrchestrator {
     }
   }
 
-  private buildPromptConfig(
-    basePrompt: string,
-    additions?: string[],
-  ): PromptConfig {
-    const trimmedBase = basePrompt.trim();
-    const trimmedAdditions = (additions ?? [])
-      .map((part) => part.trim())
-      .filter((part): part is string => part.length > 0);
-
-    const promptSections: string[] = [];
-
-    if (trimmedBase) {
-      promptSections.push(trimmedBase);
-    }
-
-    if (trimmedAdditions.length > 0) {
-      const numberedInstructions = trimmedAdditions
-        .map((instruction, index) => `(${index + 1}) ${instruction}`)
-        .join('\n');
-      promptSections.push(
-        [
-          '--- CURRENT TASK DIRECTIVES ---',
-          'Follow these instructions precisely for this run. They take precedence over any default behaviours.',
-          numberedInstructions,
-        ].join('\n'),
-      );
-    }
-
-    const merged = promptSections.join('\n\n');
-
-    return {
-      systemPrompt: merged,
-    };
-  }
-
-  private buildModelConfig(profile: Profile): ModelConfig {
-    return {
-      model: profile.model,
-      temp: profile.modelParams.temperature ?? 0.7,
-      top_p: profile.modelParams.top_p ?? 1,
-    };
-  }
-
-  private static getActivationProfile(
-    runtimeProfile: RuntimeProfileResolution,
-  ): Profile {
-    return isLoadBalancerProfile(runtimeProfile.effectiveProfile)
-      ? runtimeProfile.effectiveProfile
-      : runtimeProfile.primaryProfile;
-  }
-
-  private static getRuntimeStateProfile(
-    runtimeProfile: RuntimeProfileResolution,
-  ): Profile {
-    if (!isLoadBalancerProfile(runtimeProfile.effectiveProfile)) {
-      return runtimeProfile.primaryProfile;
-    }
-    // Keep load-balancer profile metadata/settings while stamping runtime
-    // provider/model to the registered load-balancer provider identity.
-    return {
-      ...runtimeProfile.effectiveProfile,
-      ephemeralSettings: {
-        ...runtimeProfile.effectiveProfile.ephemeralSettings,
-      },
-      modelParams: { ...runtimeProfile.effectiveProfile.modelParams },
-      provider: LOAD_BALANCER_PROVIDER_NAME,
-      model: LOAD_BALANCER_PROVIDER_NAME,
-    };
-  }
-
   private baseSessionId(): string {
     const { foregroundConfig } = this.options;
     if (typeof foregroundConfig.getSessionId === 'function') {
@@ -669,10 +603,8 @@ export class SubagentOrchestrator {
   ): Promise<RuntimeBundle> {
     const { runtimeProfile, modelConfig, agentRuntimeId, subagent } = params;
     const { effectiveProfile } = runtimeProfile;
-    const activationProfile =
-      SubagentOrchestrator.getActivationProfile(runtimeProfile);
-    const runtimeStateProfile =
-      SubagentOrchestrator.getRuntimeStateProfile(runtimeProfile);
+    const activationProfile = getActivationProfile(runtimeProfile);
+    const runtimeStateProfile = getRuntimeStateProfile(runtimeProfile);
     const isLoadBalancerActivation = isLoadBalancerProfile(activationProfile);
 
     this.throwIfAborted(

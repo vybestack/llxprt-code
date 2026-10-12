@@ -93,7 +93,7 @@ import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacemen
 import {
   finishMediaRequest,
   type MediaRequestOutcome,
-  resolveRequestMedia,
+  type resolveRequestMedia,
   captureRequestMediaInput,
 } from '../utils/request-media-resolution.js';
 import { declaredMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';

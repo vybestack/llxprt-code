@@ -73,6 +73,22 @@ async function rawPendingInput(
   return rows;
 }
 
+/** Pending rows read lazily from the source once, until a hook replaces them. */
+function recomposablePendingRows(
+  source: PendingAwareRequestSelection,
+  prepared: IContent[],
+  signal?: AbortSignal,
+): SourcePendingRows {
+  let recomposedPending: IContent[] | undefined;
+  return {
+    read: async () =>
+      (recomposedPending ??= await rawPendingInput(source, prepared, signal)),
+    replace: (rows) => {
+      recomposedPending = rows;
+    },
+  };
+}
+
 function sourceFallbackEstimate(input: StreamDiskSourceInput) {
   return (rows: PromptEnvelopeSource, signal?: AbortSignal): Promise<number> =>
     estimateSourcePendingTokens(
@@ -108,18 +124,11 @@ export async function streamDiskSource(
     log: input.log,
     signal: input.signal,
   });
-  let recomposedPending: IContent[] | undefined;
-  const pending: SourcePendingRows = {
-    read: async () =>
-      (recomposedPending ??= await rawPendingInput(
-        source,
-        preparedPending,
-        input.signal,
-      )),
-    replace: (rows) => {
-      recomposedPending = rows;
-    },
-  };
+  const pending = recomposablePendingRows(
+    source,
+    preparedPending,
+    input.signal,
+  );
   const reopen = async (): Promise<PendingAwareRequestSelection> => {
     const rebuilt = await input.history.prepareCuratedForProviderSnapshot(
       await pending.read(),

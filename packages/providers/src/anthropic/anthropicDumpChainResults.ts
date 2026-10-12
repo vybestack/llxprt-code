@@ -61,10 +61,7 @@ function addResults(
 ): void {
   for (const block of row.blocks) {
     if (block.type !== 'tool_response') continue;
-    const payload = buildToolResponsePayload(
-      block,
-      options.config as Parameters<typeof buildToolResponsePayload>[1],
-    );
+    const payload = buildToolResponsePayload(block, options.config);
     const result: StoredMessageBlock = {
       type: 'tool_result',
       tool_use_id: normalizeToAnthropicToolId(block.callId),

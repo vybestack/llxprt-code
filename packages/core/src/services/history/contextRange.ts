@@ -146,28 +146,31 @@ export function computeContextRange(history: Iterable<IContent>): ContextRange {
  * @plan PLAN-20260917-ISSUE854.P01
  * @requirement REQ-854-004
  */
+export function contextSummaryOfEntry(
+  entry: IContent,
+): ContextSummaryInfo | undefined {
+  const replaced = entry.metadata?.chronologyReplaced;
+  if (replaced === undefined) return undefined;
+  let text = '';
+  for (const block of entry.blocks) {
+    if (block.type === 'text') text += block.text;
+  }
+  return {
+    seq: entry.metadata?.chronology?.seq ?? 0,
+    replacedFromSeq: replaced.fromSeq,
+    replacedToSeq: replaced.toSeq,
+    itemCount: replaced.toSeq - replaced.fromSeq + 1,
+    text,
+  };
+}
+
 export function computeContextSummaries(
   history: readonly IContent[],
 ): ContextSummaryInfo[] {
   const summaries: ContextSummaryInfo[] = [];
   for (const entry of history) {
-    const replaced = entry.metadata?.chronologyReplaced;
-    if (replaced === undefined) {
-      continue;
-    }
-    let text = '';
-    for (const block of entry.blocks) {
-      if (block.type === 'text') {
-        text += block.text;
-      }
-    }
-    summaries.push({
-      seq: entry.metadata?.chronology?.seq ?? 0,
-      replacedFromSeq: replaced.fromSeq,
-      replacedToSeq: replaced.toSeq,
-      itemCount: replaced.toSeq - replaced.fromSeq + 1,
-      text,
-    });
+    const summary = contextSummaryOfEntry(entry);
+    if (summary !== undefined) summaries.push(summary);
   }
   return summaries;
 }

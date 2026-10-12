@@ -34,9 +34,9 @@ import { modelHookWorker } from './__tests__/support/streamprocessor-model-hook-
 
 const root = sourceRootSetup();
 const hookRoots: SessionHookOwner[] = [];
-afterEach(async () => {
+async function disposeHookRoots(): Promise<void> {
   await Promise.all(hookRoots.splice(0).map((owner) => owner.dispose()));
-});
+}
 /** Builds the session hook owner from the hooks registered on the config so far. */
 function hookOwnerOf(config: Config): {
   readonly hooks: SessionHookOwner;
@@ -68,8 +68,7 @@ function hookOwnerOf(config: Config): {
 }
 function registeredCommand(config: Config, event: HookEventName): string {
   const entry = config.getHooks()?.[event]?.[0]?.hooks[0];
-  if (entry === undefined || entry.type !== HookType.Command)
-    throw new Error('Missing registered command hook');
+  if (entry === undefined) throw new Error('Missing registered command hook');
   return entry.command;
 }
 function hook(
@@ -111,6 +110,7 @@ async function dispose(
 }
 
 describe('source tool-selection hook failures', () => {
+  afterEach(disposeHookRoots);
   it('sends without restriction when the tool-selection hook command fails', async () => {
     const http = projectionEndpoint(false);
     unblock(http);
@@ -146,6 +146,7 @@ describe('source tool-selection hook failures', () => {
 });
 
 describe('actual StreamProcessor source contract safety', () => {
+  afterEach(disposeHookRoots);
   it('executes an enabled BeforeModel with full disk history and no eager fallback', async () => {
     const source = await modelHookWorker(root(), 'edit');
     expect(source.error).toBeUndefined();
@@ -221,6 +222,7 @@ describe('actual source tool-selection hook', () => {
 });
 
 describe('actual source runtime-disabled hook', () => {
+  afterEach(disposeHookRoots);
   it('allows a registered but runtime-disabled model hook without invoking it', async () => {
     const http = projectionEndpoint(false);
     unblock(http);
@@ -328,6 +330,7 @@ describe('actual source token-usage contract', () => {
 });
 
 describe('remaining full StreamProcessor source acceptance', () => {
+  afterEach(disposeHookRoots);
   it('executes BeforeModel replacement with full history visible through real HTTP', async () => {
     const http = projectionEndpoint(false);
     unblock(http);

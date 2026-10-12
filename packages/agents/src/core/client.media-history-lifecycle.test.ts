@@ -12,11 +12,9 @@ import {
   automock,
   assertDefined,
   assertInstanceOf,
-  errorMessage,
 } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 import { AgentClient } from './client.js';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -32,11 +30,19 @@ import type {
   MediaReferenceBlock,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
-  fixturePaths,
   setupAgentClient,
   type MockResponseShape,
 } from './__tests__/client-test-helpers.js';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  FailOnceReleaseStore,
+  createSuppliedStoreClient,
+  PNG_BASE64,
+  SECOND_IMAGE_BASE64,
+  deferredRowsOf,
+  inlineMediaHistory,
+  leafErrorMessages,
+} from './__tests__/support/client-media-history-fixtures.js';
 import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
 
 // Mock prompts module before imports
@@ -221,50 +227,6 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
   },
 }));
 
-const PNG_BASE64 =
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl1sAAAAASUVORK5CYII=';
-const SECOND_IMAGE_BASE64 = 'AQIDBAUGBwg=';
-
-function inlineMediaHistory(data: string = PNG_BASE64): IContent[] {
-  return [
-    {
-      speaker: 'human',
-      blocks: [
-        {
-          type: 'media',
-          mimeType: 'image/png',
-          encoding: 'base64',
-          data,
-        },
-        {
-          type: 'media',
-          mimeType: 'image/png',
-          encoding: 'url',
-          data: 'https://example.test/image.png',
-        },
-      ],
-    },
-  ];
-}
-
-class FailOnceReleaseStore extends LocalMediaStore {
-  private releaseFailurePending = true;
-
-  override async release(contentId: string, ownerId: string): Promise<void> {
-    if (this.releaseFailurePending) {
-      this.releaseFailurePending = false;
-      throw new Error('induced history release failure');
-    }
-    await super.release(contentId, ownerId);
-  }
-}
-
-function leafErrorMessages(error: unknown): readonly string[] {
-  return error instanceof AggregateError
-    ? error.errors.flatMap(leafErrorMessages)
-    : [errorMessage(error)];
-}
-
 let client: AgentClient;
 let ownerManager: ProviderManager;
 let ownerSettingsService: SettingsService;
@@ -293,12 +255,6 @@ async function configureMediaStore(
   });
   await rebuildClientWithMediaStore(store);
   return store;
-}
-
-async function deferredRowsOf(target: AgentClient): Promise<IContent[]> {
-  const journal = target['_storedHistoryService'];
-  if (journal === undefined) throw new Error('Missing deferred journal');
-  return collectHistoryFixture(journal.streamRawHistory());
 }
 
 async function deferredRows(): Promise<IContent[]> {
@@ -351,27 +307,15 @@ function registerAdmissionCase0(): void {
         configurable: true,
         value: () => configStore,
       });
-      const retainedClient = new AgentClient(
-        config,
-        client['runtimeState'],
-        () => undefined,
+      const { client: retainedClient } = createSuppliedStoreClient(
+        client,
         supplied,
-        fixturePaths(),
-      );
-      const retainedClientPolicy = createSessionPolicyFixture();
-      retainedClientPolicy.owner.bindTelemetry(config);
-      retainedClient.bindRuntimeSettings(
-        retainedClientPolicy.readRuntimeSettings,
-        retainedClientPolicy.readToolGovernance,
-      );
-      retainedClient.bindProviderInvocation(
-        retainedClientPolicy.prepareProviderInvocation,
       );
       try {
         await retainedClient.storeHistoryForLaterUse(inlineMediaHistory());
         // The retained snapshot lives in the deferred journal, not in an array.
         const block = (await deferredRowsOf(retainedClient))[0]?.blocks[0];
-        if (block?.type !== 'media' || block.encoding !== 'reference') {
+        if (block.type !== 'media' || block.encoding !== 'reference') {
           throw new Error('Expected retained reference');
         }
         expect({
@@ -391,7 +335,6 @@ function registerAdmissionCase0(): void {
 function registerAdmissionCase0b(): void {
   describe('history admission lifecycle [0b]', () => {
     it('isolates same-label clients with distinct supplied stores', async () => {
-      const config = client['config'];
       const firstStore = new LocalMediaStore({
         rootDirectory: join(directory, 'first'),
         quotaBytes: 1024 * 1024,
@@ -400,36 +343,14 @@ function registerAdmissionCase0b(): void {
         rootDirectory: join(directory, 'second'),
         quotaBytes: 1024 * 1024,
       });
-      const first = new AgentClient(
-        config,
-        client['runtimeState'],
-        () => undefined,
+      const { client: first, policy: firstPolicy } = createSuppliedStoreClient(
+        client,
         firstStore,
-        fixturePaths(),
-      );
-      const firstPolicy = createSessionPolicyFixture();
-      firstPolicy.owner.bindTelemetry(config);
-      first.bindRuntimeSettings(
-        firstPolicy.readRuntimeSettings,
-        firstPolicy.readToolGovernance,
       );
       first.bindTelemetry(firstPolicy.owner.telemetry);
-      first.bindProviderInvocation(firstPolicy.prepareProviderInvocation);
-      const second = new AgentClient(
-        config,
-        client['runtimeState'],
-        () => undefined,
-        secondStore,
-        fixturePaths(),
-      );
-      const secondPolicy = createSessionPolicyFixture();
-      secondPolicy.owner.bindTelemetry(config);
-      second.bindRuntimeSettings(
-        secondPolicy.readRuntimeSettings,
-        secondPolicy.readToolGovernance,
-      );
+      const { client: second, policy: secondPolicy } =
+        createSuppliedStoreClient(client, secondStore);
       second.bindTelemetry(secondPolicy.owner.telemetry);
-      second.bindProviderInvocation(secondPolicy.prepareProviderInvocation);
       try {
         await first.storeHistoryForLaterUse(inlineMediaHistory());
         await second.storeHistoryForLaterUse(
@@ -438,9 +359,9 @@ function registerAdmissionCase0b(): void {
         const firstBlock = (await deferredRowsOf(first))[0]?.blocks[0];
         const secondBlock = (await deferredRowsOf(second))[0]?.blocks[0];
         if (
-          firstBlock?.type !== 'media' ||
+          firstBlock.type !== 'media' ||
           firstBlock.encoding !== 'reference' ||
-          secondBlock?.type !== 'media' ||
+          secondBlock.type !== 'media' ||
           secondBlock.encoding !== 'reference'
         ) {
           throw new Error('Expected retained media references');

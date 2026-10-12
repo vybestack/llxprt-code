@@ -290,6 +290,29 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     );
   }
 
+  private async projectDiskTextEnvelope(
+    normalized: NormalizedGenerateChatOptions,
+  ): Promise<PromptEnvelopeProjection> {
+    const prepared = await buildDiskTextResponsesContext(
+      this.captureRequest(normalized),
+      this.buildExecutorDeps(),
+    );
+    const token = Object.freeze({});
+    this.preparedPromptEnvelopes.set(token, prepared);
+    try {
+      return diskTextProjection(prepared, token, async () => {
+        if (!this.preparedPromptEnvelopes.delete(token)) return;
+        await prepared.mediaRequest.release();
+      });
+    } catch (error) {
+      this.preparedPromptEnvelopes.delete(token);
+      return finishMediaRequest(prepared.mediaRequest, {
+        status: 'failed',
+        error,
+      });
+    }
+  }
+
   /**
    * Project the finalized OpenAI Responses envelope (issue #2817) using the
    * SAME `buildRequestContext` path transport consumes, so the estimate is
@@ -299,26 +322,8 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection> {
     const normalized = await this.normalizeOptionsForProjection(options);
-    if (readsRequestRowsAtTransport(normalized)) {
-      const prepared = await buildDiskTextResponsesContext(
-        this.captureRequest(normalized),
-        this.buildExecutorDeps(),
-      );
-      const token = Object.freeze({});
-      this.preparedPromptEnvelopes.set(token, prepared);
-      try {
-        return diskTextProjection(prepared, token, async () => {
-          if (!this.preparedPromptEnvelopes.delete(token)) return;
-          await prepared.mediaRequest.release();
-        });
-      } catch (error) {
-        this.preparedPromptEnvelopes.delete(token);
-        return finishMediaRequest(prepared.mediaRequest, {
-          status: 'failed',
-          error,
-        });
-      }
-    }
+    if (readsRequestRowsAtTransport(normalized))
+      return this.projectDiskTextEnvelope(normalized);
     const requestContents = normalized.requestContents;
     const request = this.captureRequest(normalized);
     let prepared:

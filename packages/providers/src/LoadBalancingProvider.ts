@@ -88,7 +88,10 @@ import {
   LoadBalancerCompressionCallbackError,
   LoadBalancerContextLimitError,
 } from './loadBalancing/contextLimitError.js';
-import { handleFailoverError as handleFailoverErrorFn } from './loadBalancing/failoverErrorHandler.js';
+import {
+  handleFailoverError as handleFailoverErrorFn,
+  type FailoverErrorContext,
+} from './loadBalancing/failoverErrorHandler.js';
 import type { EstimationResult } from './loadBalancing/loadBalancerTokenEstimator.js';
 import {
   estimatePreparedPrompt,
@@ -820,6 +823,8 @@ export class LoadBalancingProvider
   ): AsyncGenerator<IContent, boolean> {
     let attempts = 0;
     const maxAttempts = Math.max(1, settings.retryCount);
+    const advanceToNextBackend = (): boolean =>
+      this.failoverState.advanceFrom(requestOwner, currentIndex, numProfiles);
     while (attempts < maxAttempts && hasTransportAttemptRemaining(options)) {
       attempts++;
       let startTime = 0;
@@ -851,21 +856,13 @@ export class LoadBalancingProvider
           error instanceof LoadBalancerContextLimitError
         ) {
           contextLimitErrors.push({ profile: subProfile.name, error });
-          return this.failoverState.advanceFrom(
-            requestOwner,
-            currentIndex,
-            numProfiles,
-          );
+          return advanceToNextBackend();
         }
         if (!requestStarted) {
           recordBackendFailure(errors, subProfile.name, error);
-          return this.failoverState.advanceFrom(
-            requestOwner,
-            currentIndex,
-            numProfiles,
-          );
+          return advanceToNextBackend();
         }
-        const handled = this.handleFailoverError(
+        const handled = handleFailoverErrorFn(
           error,
           subProfile,
           startTime,
@@ -878,6 +875,7 @@ export class LoadBalancingProvider
           numProfiles,
           requestOwner,
           hasTransportAttemptRemaining(options),
+          this.failoverErrorDeps(),
         );
         if (handled === 'immediate-throw') throw error;
         if (handled === 'break') break;
@@ -968,40 +966,13 @@ export class LoadBalancingProvider
     );
   }
 
-  private handleFailoverError(
-    error: unknown,
-    subProfile: ResolvedSubProfile | LoadBalancerSubProfile,
-    startTime: number,
-    attempts: number,
-    maxAttempts: number,
-    settings: FailoverSettings,
-    errors: Array<{ profile: string; error: Error }>,
-    requestCommitted: boolean,
-    currentIndex: number,
-    numProfiles: number,
-    requestOwner: symbol,
-    transportAttemptRemaining: boolean,
-  ): 'immediate-throw' | 'break' | 'retry' {
-    return handleFailoverErrorFn(
-      error,
-      subProfile,
-      startTime,
-      attempts,
-      maxAttempts,
-      settings,
-      errors,
-      requestCommitted,
-      currentIndex,
-      numProfiles,
-      requestOwner,
-      transportAttemptRemaining,
-      {
-        logger: this.logger,
-        circuitBreaker: this.circuitBreaker,
-        failoverState: this.failoverState,
-        recordFail: (name, st, err) => this.recordFail(name, st, err),
-      },
-    );
+  private failoverErrorDeps(): FailoverErrorContext {
+    return {
+      logger: this.logger,
+      circuitBreaker: this.circuitBreaker,
+      failoverState: this.failoverState,
+      recordFail: (name, st, err) => this.recordFail(name, st, err),
+    };
   }
 
   /**

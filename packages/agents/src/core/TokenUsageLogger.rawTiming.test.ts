@@ -1,5 +1,4 @@
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
-import { afterEach as closeInvocationRoots } from 'bun:test';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 const retainedInvocationOwners: SessionSettingsOwner[] = [];
 
@@ -207,17 +206,15 @@ async function collectConsumedText(
   return text;
 }
 
-closeInvocationRoots(async () => {
-  for (const owner of retainedInvocationOwners.splice(0)) await owner.dispose();
-});
-
 let logFile: string;
 
 const tempLogPath = {
   create(): void {
     logFile = makeTempLogPath();
   },
-  remove(): void {
+  async remove(): Promise<void> {
+    for (const owner of retainedInvocationOwners.splice(0))
+      await owner.dispose();
     const dir = path.dirname(logFile);
     try {
       fs.rmSync(dir, { recursive: true, force: true });

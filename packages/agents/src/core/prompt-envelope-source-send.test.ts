@@ -693,8 +693,8 @@ describe('source prompt envelope cleanup and retry (issue 3507 equivalents)', ()
     const closeFailure = new Error('source cleanup failed');
     const failingClose = {
       ...fixture.source,
-      close: () => {
-        fixture.source.close();
+      close: async () => {
+        await fixture.source.close();
         throw closeFailure;
       },
     };

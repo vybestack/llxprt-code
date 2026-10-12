@@ -46,6 +46,8 @@ function verifyWindow(
   }
 }
 
+type ResumeOptions = Parameters<typeof performResume>[1];
+
 export class MemoryCommand {
   mediaStore: LocalMediaStore | undefined;
   readonly history = new HistoryService();
@@ -72,6 +74,22 @@ export class MemoryCommand {
     workload: string,
     target: string,
   ): Promise<void> {
+    this.registerMediaOwner(directory, workload);
+    const result = await performResume(target, this.resumeOptions(directory));
+    if (!result.ok) throw new Error(result.error);
+    this.uiHistory = await resumeHistoryWindow(
+      verifyRows(result.history, count, workload),
+      undefined,
+      this.ownership,
+    );
+    await this.history.waitForCommit();
+    await this.history.waitForTokenUpdates();
+    await this.history.waitForOwnershipSettlement();
+    await withRecordingFailureReport(this.integration?.flushAtTurnBoundary());
+    await this.verifyPager(count, workload);
+  }
+
+  private registerMediaOwner(directory: string, workload: string): void {
     if (workload === 'media' || workload === 'media-dense') {
       this.mediaStore = new LocalMediaStore({
         rootDirectory: join(directory, 'media'),
@@ -81,7 +99,10 @@ export class MemoryCommand {
         new HistoryMediaOwnership(this.mediaStore),
       );
     }
-    const result = await performResume(target, {
+  }
+
+  private resumeOptions(directory: string): ResumeOptions {
+    return {
       chatsDir: directory,
       mediaStore: this.mediaStore,
       projectHash: MEMORY_PROJECT,
@@ -116,17 +137,10 @@ export class MemoryCommand {
           this.lock = handle;
         },
       },
-    });
-    if (!result.ok) throw new Error(result.error);
-    this.uiHistory = await resumeHistoryWindow(
-      verifyRows(result.history, count, workload),
-      undefined,
-      this.ownership,
-    );
-    await this.history.waitForCommit();
-    await this.history.waitForTokenUpdates();
-    await this.history.waitForOwnershipSettlement();
-    await withRecordingFailureReport(this.integration?.flushAtTurnBoundary());
+    };
+  }
+
+  private async verifyPager(count: number, workload: string): Promise<void> {
     const beforePager = this.counters.snapshot().recordsDecoded;
     const filePath = this.history.journalPath();
     if (filePath === null) throw new Error('Adoption did not bind a journal');

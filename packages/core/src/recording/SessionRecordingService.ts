@@ -64,7 +64,14 @@ import {
   type HeaderRebind,
 } from './sessionHeaderBinding.js';
 import { SessionLockManager, type LockHandle } from './SessionLockManager.js';
-import { validateReplayRows } from './ReplayEngine.js';
+import {
+  assertCheckpointReplayable,
+  requireCheckpointName,
+} from './sessionCheckpointGuards.js';
+import {
+  defaultWriterIo,
+  isDiskSpaceError,
+} from './recordingWriterDefaults.js';
 import { CommitAckRegistry } from './CommitAckRegistry.js';
 import { diagnoseMissingPath, watchChatsDir } from './ChatsDirWatcher.js';
 import type { LocalMediaStore } from '../storage/local-media-store.js';
@@ -105,13 +112,6 @@ type RecordingLifecycle =
   | { readonly status: 'failed'; readonly error: unknown }
   | { readonly status: 'failure-reported' }
   | { readonly status: 'disposed' };
-
-/** Default write seam: journal appends go through `fs/promises.appendFile`. */
-const defaultWriterIo: RecordingWriterIo = {
-  appendFile(filePath, data, encoding) {
-    return fs.appendFile(filePath, data, encoding);
-  },
-};
 
 /**
  * Core service for recording session events to a JSONL file.
@@ -711,20 +711,12 @@ export class SessionRecordingService {
       });
       return true;
     } catch (error: unknown) {
-      if (this.isDiskSpaceError(error)) {
+      if (isDiskSpaceError(error)) {
         this.transitionToFailure(error);
         return false;
       }
       throw error;
     }
-  }
-
-  /**
-   * Check if an error indicates disk space or permission issues.
-   */
-  private isDiskSpaceError(error: unknown): boolean {
-    const code = (error as NodeJS.ErrnoException).code;
-    return code === 'ENOSPC' || code === 'EACCES';
   }
 
   /**
@@ -1121,10 +1113,7 @@ export class SessionRecordingService {
         'Cannot create checkpoint: conversation has no content yet',
       );
     }
-    const trimmed = name.trim();
-    if (trimmed.length === 0) {
-      throw new Error('Cannot create checkpoint: name must not be empty');
-    }
+    const trimmed = requireCheckpointName('create checkpoint', name);
 
     await this.flushAndRequireActive('create checkpoint');
     const filePath = this.filePath;
@@ -1133,24 +1122,11 @@ export class SessionRecordingService {
         'Cannot create checkpoint: conversation has no content yet',
       );
     }
-    const { replay, rowCount } = await validateReplayRows(
+    await assertCheckpointReplayable(
       filePath,
       this.projectHash,
-      { mediaStore: this.mediaStore },
+      this.mediaStore,
     );
-    if (!replay.ok) {
-      throw new Error(`Cannot create checkpoint: ${replay.error}`);
-    }
-    if (replay.sequenceCorrupt) {
-      throw new Error(
-        'Cannot create checkpoint: recording has non-monotonic sequences',
-      );
-    }
-    if (rowCount === 0) {
-      throw new Error(
-        'Cannot create checkpoint: conversation has no content yet',
-      );
-    }
 
     const checkpointId = crypto.randomUUID();
     const event = this.enqueue('checkpoint_created', {
@@ -1170,14 +1146,7 @@ export class SessionRecordingService {
    * The lifecycle event is flushed before the promise resolves.
    */
   async deleteCheckpoint(checkpointId: string): Promise<void> {
-    if (this.lifecycle.status !== 'active') {
-      throw new Error('Cannot delete checkpoint: recording is not active');
-    }
-    if (!this.materialized) {
-      throw new Error(
-        'Cannot delete checkpoint: recording is not materialized',
-      );
-    }
+    this.requireMaterializedRecording('delete checkpoint');
     this.enqueue('checkpoint_deleted', { checkpointId });
     await this.flushAndRequireActive('delete checkpoint');
   }
@@ -1187,18 +1156,8 @@ export class SessionRecordingService {
    * Only display metadata changes; the watermark and ID are unaffected.
    */
   async renameCheckpoint(checkpointId: string, name: string): Promise<void> {
-    if (this.lifecycle.status !== 'active') {
-      throw new Error('Cannot rename checkpoint: recording is not active');
-    }
-    if (!this.materialized) {
-      throw new Error(
-        'Cannot rename checkpoint: recording is not materialized',
-      );
-    }
-    const trimmed = name.trim();
-    if (trimmed.length === 0) {
-      throw new Error('Cannot rename checkpoint: name must not be empty');
-    }
+    this.requireMaterializedRecording('rename checkpoint');
+    const trimmed = requireCheckpointName('rename checkpoint', name);
     this.enqueue('checkpoint_renamed', { checkpointId, name: trimmed });
     await this.flushAndRequireActive('rename checkpoint');
   }
@@ -1217,6 +1176,15 @@ export class SessionRecordingService {
     }
     this.enqueue('session_named', { name: resolved });
     await this.flushAndRequireActive('set session name');
+  }
+
+  private requireMaterializedRecording(operation: string): void {
+    if (this.lifecycle.status !== 'active') {
+      throw new Error(`Cannot ${operation}: recording is not active`);
+    }
+    if (!this.materialized) {
+      throw new Error(`Cannot ${operation}: recording is not materialized`);
+    }
   }
 
   private async flushAndRequireActive(operation: string): Promise<void> {

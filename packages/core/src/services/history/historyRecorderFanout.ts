@@ -120,10 +120,10 @@ export class HistoryFanoutFeed {
    */
   deliverNow(
     primary: SessionRecordingService,
-    lines: readonly Pick<SessionRecordLine, 'seq' | 'type' | 'payload'>[],
+    lines: ReadonlyArray<Pick<SessionRecordLine, 'seq' | 'type' | 'payload'>>,
   ): void {
+    if (lines.length === 0) return;
     const last = lines[lines.length - 1];
-    if (last === undefined) return;
     for (const line of lines) {
       try {
         this.fanout.deliver(line.type, line.payload);

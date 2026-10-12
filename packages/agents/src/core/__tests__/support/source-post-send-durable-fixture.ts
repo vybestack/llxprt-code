@@ -1,5 +1,4 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { appendFile, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -7,10 +6,7 @@ import type {
   IContent,
   UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  ProviderManager,
-  RetryOrchestrator,
-} from '@vybestack/llxprt-code-providers';
+import { RetryOrchestrator } from '@vybestack/llxprt-code-providers';
 import { LoggingProviderWrapper } from '../../../../../providers/src/LoggingProviderWrapper.js';
 import {
   getPerfPhaseObserver,
@@ -20,19 +16,13 @@ import {
 } from '@vybestack/llxprt-code-core/perf/perfPhaseObserver.js';
 import { LOGICAL_REQUEST_ID_KEY } from '@vybestack/llxprt-code-providers/logging/attemptLifecycle.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
-import {
-  FileMetricExporter,
-  FileSpanExporter,
-} from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
+import {} from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
 import {
   flushTelemetry,
   initializeTelemetry,
   shutdownTelemetry,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
-import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
+import { createTelemetrySession } from './source-telemetry-session-fixture.js';
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import { assembleStrictBase } from './source-strict-logger-fixture.js';
 import {
@@ -192,59 +182,21 @@ async function prepareMixed(
     await uploaded.wait;
   });
   const telemetryPath = join(root, 'strict.jsonl');
-  const privacy = {
-    logPrompts: true,
-    logConversations: true,
-    logApiBodies: true,
-    maxChars: 32 * 1024 * 1024,
-  };
-  const config = new Config({
-    cwd: root,
-    targetDir: root,
-    sessionId: randomUUID(),
-    model: 'gpt-5.6',
-    debugMode: false,
-    telemetry: {
-      enabled: true,
-      logPrompts: privacy.logPrompts,
-      logApiBodies: privacy.logApiBodies,
-      logApiBodyMaxChars: privacy.maxChars,
-      logConversations: privacy.logConversations,
-      conversationLogPath: root,
-      outfile: telemetryPath,
-    },
-  });
-  const settingsOwner = new SessionSettingsOwner(
-    assembled.setup.context.settingsService,
-  );
-  const telemetryOptions = {
-    enabled: true,
-    sessionId: config.getSessionId(),
-    outfile: telemetryPath,
-    maxBytes: config.getTelemetryOutfileMaxBytes(),
-    maxFiles: config.getTelemetryOutfileMaxFiles(),
-    readPrivacySettings: () => privacy,
-  };
-  const telemetry = settingsOwner.bindTelemetry(
-    config,
-    RootTelemetry.prepare(telemetryOptions, () => ({
-      tracer: new FileSpanExporter(telemetryPath, telemetryOptions),
+  const { config, settingsOwner, telemetry, manager, diagnostics } =
+    createTelemetrySession({
+      root,
+      telemetryPath,
+      privacy: {
+        logPrompts: true,
+        logConversations: true,
+        logApiBodies: true,
+        maxChars: 32 * 1024 * 1024,
+      },
+      settingsService: assembled.setup.context.settingsService,
+      provider: assembled.setup.provider,
       logger: assembled.exporter,
-      meter: new FileMetricExporter(telemetryPath, telemetryOptions),
-    })),
-  );
+    });
   await initializeTelemetry(telemetry);
-  const manager = new ProviderManager({
-    config,
-    settingsService: assembled.setup.context.settingsService,
-    sessionSettings: settingsOwner,
-  });
-  manager.registerProvider(assembled.setup.provider);
-  const diagnostics = captureProviderRequestDiagnostics(
-    config,
-    settingsOwner,
-    (name, usage) => manager.accumulateSessionTokens(name, usage),
-  );
   const input = {
     ...assembled,
     telemetry,

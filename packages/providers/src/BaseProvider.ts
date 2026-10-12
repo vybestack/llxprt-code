@@ -59,6 +59,7 @@ import {
   readsRequestRowsAtTransport,
 } from './BaseProviderNormalization.js';
 import { getProviderCustomHeaders } from './customHeaders.js';
+import { extractModelParams } from './providerModelParams.js';
 import type {
   ProviderTelemetryContext,
   ResolvedAuthToken,
@@ -1121,34 +1122,7 @@ export abstract class BaseProvider implements IProvider {
     try {
       const settings = await this.owner.readProviderData();
 
-      // Extract model parameters from settings, excluding standard fields
-      const {
-        enabled: _enabled,
-        'auth-key': _authKey,
-        'auth-keyfile': _authKeyfile,
-        'base-url': _baseUrl,
-        model: _model,
-        max_tokens,
-        temperature,
-        // Defensive: strip legacy sensitive aliases that should never reach
-        // the model params pass-through, even if present in imported/malformed
-        // provider settings data.
-        apiKey: _legacyApiKey,
-        apiKeyfile: _legacyApiKeyfile,
-        'api-key': _legacyApiKeyDash,
-        'api-keyfile': _legacyApiKeyfileDash,
-        ...additionalSettings
-      } = settings;
-
-      // Include registered model parameters when present
-      const params: Record<string, unknown> = {};
-      if (temperature !== undefined) params.temperature = temperature;
-      if (max_tokens !== undefined) params.max_tokens = max_tokens;
-
-      return Object.keys(params).length > 0 ||
-        Object.keys(additionalSettings).length > 0
-        ? { ...params, ...additionalSettings }
-        : undefined;
+      return extractModelParams(settings);
     } catch (error) {
       if (process.env.DEBUG) {
         debugLogger.error(

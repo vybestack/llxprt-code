@@ -145,6 +145,37 @@ function makeScriptedChat(history: IContent[]): AgentChatContract {
   };
 }
 
+type ScriptedClientUnusedGenerators = Pick<
+  AgentClientContract,
+  | 'getContentGeneratorConfig'
+  | 'getContentGenerator'
+  | 'startChat'
+  | 'generateDirectMessage'
+  | 'generateJson'
+  | 'generateContent'
+  | 'generateEmbedding'
+>;
+
+function scriptedClientUnusedGenerators(): ScriptedClientUnusedGenerators {
+  return {
+    getContentGeneratorConfig: () => undefined,
+    getContentGenerator: () => {
+      throw new Error('not used by AgenticLoop');
+    },
+    startChat: async () => {
+      throw new Error('not used');
+    },
+    generateDirectMessage: () => {
+      throw new Error('not used');
+    },
+    generateJson: async () => ({}),
+    generateContent: () => {
+      throw new Error('not used');
+    },
+    generateEmbedding: async () => [],
+  };
+}
+
 function makeScriptedClientContract(
   history: IContent[],
   chat: AgentChatContract,
@@ -190,21 +221,7 @@ function makeScriptedClientContract(
     },
     restoreHistory: async () => {},
     addDirectoryContext: async () => {},
-    getContentGeneratorConfig: () => undefined,
-    getContentGenerator: () => {
-      throw new Error('not used by AgenticLoop');
-    },
-    startChat: async () => {
-      throw new Error('not used');
-    },
-    generateDirectMessage: () => {
-      throw new Error('not used');
-    },
-    generateJson: async () => ({}),
-    generateContent: () => {
-      throw new Error('not used');
-    },
-    generateEmbedding: async () => [],
+    ...scriptedClientUnusedGenerators(),
     async *sendMessageStream(
       req: AgentMessageInput,
       signal: AbortSignal,

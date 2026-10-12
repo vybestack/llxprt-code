@@ -348,8 +348,15 @@ async function run(
   large: boolean,
 ): Promise<void> {
   const input = await assemble(root, mode, large);
-  const { setup, http, processor, controller, telemetry, settingsOwner, hooks } =
-    input;
+  const {
+    setup,
+    http,
+    processor,
+    controller,
+    telemetry,
+    settingsOwner,
+    hooks,
+  } = input;
   let output = '';
   let failure: string | undefined;
   try {

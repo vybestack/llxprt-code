@@ -316,6 +316,73 @@ function importPublication(
   };
 }
 
+type StagedObjectFiles = Awaited<
+  ReturnType<LocalMediaStore['stageObjectFiles']>
+>;
+
+async function stageDurableMedia(
+  mediaStore: LocalMediaStore,
+  references: ValidatedSessionMediaPackage['references'],
+  stagedMedia: StagedObjectFiles,
+): ReturnType<typeof stageRecordedMedia> {
+  try {
+    return await stageRecordedMedia(mediaStore, references);
+  } catch (error) {
+    await stagedMedia.rollback();
+    throw error;
+  }
+}
+
+async function reserveImportReferences(
+  mediaStore: LocalMediaStore,
+  references: ValidatedSessionMediaPackage['references'],
+  importedSessionId: string,
+  reservations: ImportReservation[],
+): Promise<void> {
+  for (const [index, reference] of references.entries()) {
+    const ownerId = `session-package-import:${importedSessionId}:${index}`;
+    await mediaStore.reserve(reference, ownerId);
+    reservations.push({ contentId: reference.contentId, ownerId });
+  }
+}
+
+interface ImportRollbackState {
+  readonly durableMedia: Awaited<ReturnType<typeof stageRecordedMedia>>;
+  readonly published: PublishedImportedSession | undefined;
+  readonly stagedMedia: StagedObjectFiles;
+  readonly mediaStore: LocalMediaStore;
+  readonly reservations: ImportReservation[];
+}
+
+async function rollbackWithDurableMedia(
+  error: unknown,
+  state: ImportRollbackState,
+): Promise<never> {
+  const { durableMedia, published, stagedMedia, mediaStore, reservations } =
+    state;
+  try {
+    await durableMedia.rollback();
+  } catch (cleanupError) {
+    return rollbackImport(
+      new AggregateError(
+        [error, cleanupError],
+        'Imported media cleanup failed',
+      ),
+      published,
+      stagedMedia,
+      mediaStore,
+      reservations,
+    );
+  }
+  return rollbackImport(
+    error,
+    published,
+    stagedMedia,
+    mediaStore,
+    reservations,
+  );
+}
+
 export function importSessionMediaPackage(
   packageSource: string | ValidatedSessionMediaPackage,
   destinationChatsDirectory: string,
@@ -352,44 +419,28 @@ export async function importSessionMediaPackage<T>(
     contentIds: validated.objects.map((object) => object.contentId),
   };
   const stagedMedia = await mediaStore.stageObjectFiles(validated.blobs);
-  let durableMedia: Awaited<ReturnType<typeof stageRecordedMedia>>;
-  try {
-    durableMedia = await stageRecordedMedia(mediaStore, validated.references);
-  } catch (error) {
-    await stagedMedia.rollback();
-    throw error;
-  }
+  const durableMedia = await stageDurableMedia(
+    mediaStore,
+    validated.references,
+    stagedMedia,
+  );
   const reservations: ImportReservation[] = [];
   let published: PublishedImportedSession | undefined;
-  const rollbackAll = async (error: unknown): Promise<never> => {
-    try {
-      await durableMedia.rollback();
-    } catch (cleanupError) {
-      return rollbackImport(
-        new AggregateError(
-          [error, cleanupError],
-          'Imported media cleanup failed',
-        ),
-        published,
-        stagedMedia,
-        mediaStore,
-        reservations,
-      );
-    }
-    return rollbackImport(
-      error,
+  const rollbackAll = (error: unknown): Promise<never> =>
+    rollbackWithDurableMedia(error, {
+      durableMedia,
       published,
       stagedMedia,
       mediaStore,
       reservations,
-    );
-  };
+    });
   try {
-    for (const [index, reference] of validated.references.entries()) {
-      const ownerId = `session-package-import:${importedSessionId}:${index}`;
-      await mediaStore.reserve(reference, ownerId);
-      reservations.push({ contentId: reference.contentId, ownerId });
-    }
+    await reserveImportReferences(
+      mediaStore,
+      validated.references,
+      importedSessionId,
+      reservations,
+    );
     published = await publishImportedSession(
       importPublication(
         validated,

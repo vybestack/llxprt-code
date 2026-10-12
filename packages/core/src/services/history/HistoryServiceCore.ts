@@ -74,6 +74,7 @@ import {
 } from './historyEventTypes.js';
 import {
   buildContextRangeSnapshot,
+  contextSummaryOfEntry,
   firstEntryContextRange,
 } from './contextRange.js';
 import { getTokenizerForModel } from './historyTokenizerAdapter.js';
@@ -912,19 +913,8 @@ export abstract class HistoryServiceCore
    */
   async *getContextSummaries(): AsyncIterable<ContextSummaryInfo> {
     for await (const entry of this.journal.streamRows()) {
-      const replaced = entry.metadata?.chronologyReplaced;
-      if (replaced === undefined) continue;
-      let text = '';
-      for (const block of entry.blocks) {
-        if (block.type === 'text') text += block.text;
-      }
-      yield {
-        seq: entry.metadata?.chronology?.seq ?? 0,
-        replacedFromSeq: replaced.fromSeq,
-        replacedToSeq: replaced.toSeq,
-        itemCount: replaced.toSeq - replaced.fromSeq + 1,
-        text,
-      };
+      const summary = contextSummaryOfEntry(entry);
+      if (summary !== undefined) yield summary;
     }
   }
 

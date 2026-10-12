@@ -35,15 +35,13 @@ import type { HookLLMRequest, HookLLMResponse } from './hookTranslator.js';
 import { DebugLogger } from '../debug/index.js';
 import type { MessageBus } from '../confirmation-bus/message-bus.js';
 import {
-  validateBeforeToolInput,
-  validateAfterToolInput,
-  validateBeforeAgentInput,
-  validateAfterAgentInput,
-  validateBeforeModelInput,
-  validateAfterModelInput,
-  validateBeforeToolSelectionInput,
-  validateNotificationInput,
-} from './hookValidators.js';
+  extractCorrelationIdFromMessage,
+  validateEventPayload,
+} from './hookEventPayload.js';
+import {
+  processCommonHookOutput,
+  type ProcessedHookResult,
+} from './hookOutputSemantics.js';
 import { coreEvents } from '../utils/events.js';
 import { HookCallEvent } from '../telemetry/types.js';
 import { MessageBusType } from '../confirmation-bus/types.js';
@@ -65,33 +63,6 @@ const moduleDebugLogger = DebugLogger.getLogger(
   'llxprt:core:hooks:eventHandler',
 );
 
-function extractPayload(rawMessage: unknown): Record<string, unknown> | null {
-  if (
-    rawMessage !== null &&
-    typeof rawMessage === 'object' &&
-    'payload' in rawMessage
-  ) {
-    const payload = (rawMessage as { payload: unknown }).payload;
-    if (payload !== null && typeof payload === 'object') {
-      return payload as Record<string, unknown>;
-    }
-  }
-  return null;
-}
-
-function extractCorrelationIdFromPayload(
-  payload: Record<string, unknown>,
-): string | null {
-  if (
-    'correlationId' in payload &&
-    typeof payload.correlationId === 'string' &&
-    payload.correlationId.length > 0
-  ) {
-    return payload.correlationId;
-  }
-  return null;
-}
-
 /**
  * Metadata for failure envelopes
  * @plan PLAN-20250218-HOOKSYSTEM.P03
@@ -103,19 +74,7 @@ export interface FailureMeta {
   [key: string]: unknown;
 }
 
-/**
- * Processed hook result with common-output semantics.
- *
- * @plan PLAN-20250218-HOOKSYSTEM.P12
- * @requirement DELTA-HRUN-004
- */
-export interface ProcessedHookResult {
-  aggregated: AggregatedHookResult;
-  shouldStop: boolean;
-  stopReason: string | undefined;
-  systemMessage: string | undefined;
-  suppressOutput: boolean;
-}
+export type { ProcessedHookResult } from './hookOutputSemantics.js';
 
 /**
  * Empty success result for no-op scenarios
@@ -864,57 +823,7 @@ export class HookEventHandler {
   private processCommonHookOutputFields(
     aggregated: AggregatedHookResult,
   ): ProcessedHookResult {
-    let shouldStop = false;
-    let stopReason: string | undefined = undefined;
-    let systemMessage: string | undefined = undefined;
-    let suppressOutput = false;
-
-    // Pass 1 - stop intent (first wins): triggered by continue === false (upstream parity)
-    for (const hookOutput of aggregated.allOutputs) {
-      if (hookOutput.continue === false) {
-        shouldStop = true;
-        // Use effective reason: reason, stopReason, or fallback
-        stopReason =
-          this.normalizeStopReason(hookOutput.reason) ??
-          this.normalizeStopReason(hookOutput.stopReason) ??
-          'Hook requested stop';
-        break;
-      }
-    }
-
-    // Pass 2 - systemMessage and suppressOutput (first non-empty systemMessage wins)
-    for (const hookOutput of aggregated.allOutputs) {
-      if (hookOutput.systemMessage != null && hookOutput.systemMessage !== '') {
-        systemMessage = hookOutput.systemMessage;
-        if (hookOutput.suppressOutput === true) {
-          suppressOutput = true;
-        }
-        break;
-      }
-    }
-
-    return {
-      aggregated,
-      shouldStop,
-      stopReason,
-      systemMessage,
-      suppressOutput,
-    };
-  }
-
-  /**
-   * Normalize a raw stopReason value to a trimmed string or undefined.
-   *
-   * @plan PLAN-20250218-HOOKSYSTEM.P14
-   * @requirement DELTA-HRUN-002
-   */
-  private normalizeStopReason(rawReason: unknown): string | undefined {
-    if (rawReason === undefined || rawReason === null) return undefined;
-    if (typeof rawReason === 'string') {
-      const trimmed = rawReason.trim();
-      return trimmed.length === 0 ? undefined : trimmed;
-    }
-    return String(rawReason);
+    return processCommonHookOutput(aggregated);
   }
 
   /**
@@ -1123,7 +1032,7 @@ export class HookEventHandler {
     // Lines 97-101: validate event payload before execution
     // @plan PLAN-20250218-HOOKSYSTEM.P09
     // @requirement DELTA-HPAY-001, DELTA-HPAY-002
-    if (!this.validateEventPayload(eventName as HookEventName, input)) {
+    if (!validateEventPayload(eventName as HookEventName, input)) {
       return this.buildFailureEnvelope(
         {
           code: 'VALIDATION_FAILURE',
@@ -1179,18 +1088,8 @@ export class HookEventHandler {
    * @requirement DELTA-HBUS-003
    * @pseudocode hook-event-handler.md lines 260-264
    */
-  private extractCorrelationId = (rawMessage: unknown): string => {
-    // Lines 261-263: IF rawMessage.payload.correlationId is non-empty string → return it
-    const payload = extractPayload(rawMessage);
-    if (payload !== null) {
-      const correlationId = extractCorrelationIdFromPayload(payload);
-      if (correlationId !== null) {
-        return correlationId;
-      }
-    }
-    // Line 264: RETURN crypto.randomUUID()
-    return crypto.randomUUID();
-  };
+  private extractCorrelationId = (rawMessage: unknown): string =>
+    extractCorrelationIdFromMessage(rawMessage) ?? crypto.randomUUID();
 
   /**
    * Translate model payloads for BeforeModel/AfterModel/BeforeToolSelection.
@@ -1207,46 +1106,6 @@ export class HookEventHandler {
     // For now, return input unchanged - model translation will be
     // enhanced in future phases when hookTranslator integration is needed
     input;
-
-  /**
-   * Validates event payload before execution.
-   * Returns false if payload is invalid for the given event type.
-   *
-   * @plan PLAN-20250218-HOOKSYSTEM.P09
-   * @requirement DELTA-HPAY-001
-   * @pseudocode validation-boundary.md lines 50-81
-   */
-  /**
-   * Route validation to the appropriate type-predicate validator.
-   *
-   * @plan PLAN-20250218-HOOKSYSTEM.P11
-   * @requirement DELTA-HPAY-001, DELTA-HPAY-002
-   */
-  private validateEventPayload(
-    eventName: HookEventName,
-    input: unknown,
-  ): boolean {
-    switch (eventName) {
-      case HookEventName.BeforeTool:
-        return validateBeforeToolInput(input);
-      case HookEventName.AfterTool:
-        return validateAfterToolInput(input);
-      case HookEventName.BeforeAgent:
-        return validateBeforeAgentInput(input);
-      case HookEventName.AfterAgent:
-        return validateAfterAgentInput(input);
-      case HookEventName.BeforeModel:
-        return validateBeforeModelInput(input);
-      case HookEventName.AfterModel:
-        return validateAfterModelInput(input);
-      case HookEventName.BeforeToolSelection:
-        return validateBeforeToolSelectionInput(input);
-      case HookEventName.Notification:
-        return validateNotificationInput(input);
-      default:
-        return false;
-    }
-  }
 
   /**
    * Dispose this HookEventHandler, releasing subscriptions and preventing further use.

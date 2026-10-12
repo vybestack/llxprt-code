@@ -208,6 +208,67 @@ function retentionControls(
   };
 }
 
+interface WorkloadRuntimeInput {
+  readonly config: Config;
+  readonly settings: SettingsService;
+  readonly settingsOwner: SessionSettingsOwner;
+  readonly tokenizerFactory: RuntimeTokenizerFactory;
+  readonly history: HistoryService;
+  readonly provider: OpenAIResponsesProvider;
+  readonly baseURL: string;
+  readonly contextLimit: number;
+}
+
+function workloadRuntime(
+  input: WorkloadRuntimeInput,
+): ReturnType<typeof createAgentRuntimeContext> {
+  const {
+    config,
+    settings,
+    settingsOwner,
+    tokenizerFactory,
+    history,
+    provider,
+    baseURL,
+    contextLimit,
+  } = input;
+  const runtimeId = randomUUID();
+  const providerRuntime = createProviderRuntimeContext({
+    settingsService: settings,
+    config,
+    runtimeId,
+  });
+  return createAgentRuntimeContext({
+    promptEstimator: tokenizerFactory,
+    readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
+    prepareProviderInvocation: (name, parameters, signal) =>
+      settingsOwner.prepareProviderInvocation(
+        runtimeId,
+        name,
+        parameters,
+        signal,
+      ),
+    state: {
+      runtimeId,
+      sessionId: config.getSessionId(),
+      provider: provider.name,
+      model: MODEL,
+      updatedAt: Date.now(),
+      baseUrl: baseURL,
+    },
+    history,
+    settings: { contextLimit },
+    providerRuntime,
+    provider: { getActiveProvider: () => provider, setActiveProvider() {} },
+    tools: { listToolNames: () => [], getToolMetadata: () => undefined },
+    telemetry: {
+      logApiRequest() {},
+      logApiResponse() {},
+      logApiError() {},
+    },
+  });
+}
+
 export async function createWorkload(
   root: string,
   mode: WorkloadMode,
@@ -236,40 +297,15 @@ export async function createWorkload(
   history.setTokenizerFactory(tokenizerFactory);
   history.setActiveTokenizationTarget(MODEL, 'openai-responses');
   const provider = new OpenAIResponsesProvider('test-key', baseURL);
-  const runtimeId = randomUUID();
-  const providerRuntime = createProviderRuntimeContext({
-    settingsService: settings,
+  const runtime = workloadRuntime({
     config,
-    runtimeId,
-  });
-  const runtime = createAgentRuntimeContext({
-    promptEstimator: tokenizerFactory,
-    readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
-    prepareProviderInvocation: (name, parameters, signal) =>
-      settingsOwner.prepareProviderInvocation(
-        runtimeId,
-        name,
-        parameters,
-        signal,
-      ),
-    state: {
-      runtimeId,
-      sessionId: config.getSessionId(),
-      provider: provider.name,
-      model: MODEL,
-      updatedAt: Date.now(),
-      baseUrl: baseURL,
-    },
+    settings,
+    settingsOwner,
+    tokenizerFactory,
     history,
-    settings: { contextLimit },
-    providerRuntime,
-    provider: { getActiveProvider: () => provider, setActiveProvider() {} },
-    tools: { listToolNames: () => [], getToolMetadata: () => undefined },
-    telemetry: {
-      logApiRequest() {},
-      logApiResponse() {},
-      logApiError() {},
-    },
+    provider,
+    baseURL,
+    contextLimit,
   });
   const generation: ChatSessionConfig = { systemInstruction: INSTRUCTIONS };
   const chat = loggingChatSession(runtime, provider, generation);

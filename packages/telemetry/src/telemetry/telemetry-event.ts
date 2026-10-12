@@ -35,6 +35,19 @@ function eventAttributes(
   return attributes;
 }
 
+/** Records a fire-and-forget event with no artifact and no acknowledgement. */
+export function recordTelemetryEvent(
+  config: Pick<TelemetryConfig, 'getSessionId'>,
+  event: object,
+  telemetry: RootTelemetry,
+): void {
+  if (!telemetry.isEnabled()) return;
+  telemetry.events.record(() => ({
+    body: `Telemetry event: ${eventName(event)}`,
+    attributes: eventAttributes(config, event),
+  }));
+}
+
 /** Logs a conversation or provider event; artifact or acknowledged delivery returns a promise. */
 export function logTelemetryEvent(
   config: Pick<TelemetryConfig, 'getSessionId'>,
@@ -42,15 +55,12 @@ export function logTelemetryEvent(
   telemetry: RootTelemetry,
   delivery: TelemetryEventDelivery = {},
 ): void | Promise<void> {
-  if (!telemetry.isEnabled()) return;
   const { artifact, signal, acknowledged = false } = delivery;
   if (!acknowledged && artifact === undefined) {
-    telemetry.events.record(() => ({
-      body: `Telemetry event: ${eventName(event)}`,
-      attributes: eventAttributes(config, event),
-    }));
+    recordTelemetryEvent(config, event, telemetry);
     return;
   }
+  if (!telemetry.isEnabled()) return;
   const attributes = eventAttributes(config, event);
   if (artifact !== undefined)
     Object.assign(attributes, artifactAttributes(artifact));

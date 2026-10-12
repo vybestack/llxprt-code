@@ -552,24 +552,9 @@ export class TurnProcessor {
       requestTools,
       requestParams.hookOwner ?? requestParams.recordingExecution?.hookOwner,
     );
-    const runtimeContext = this.providerRuntimeBuilder(
-      'TurnProcessor.executeProviderCall',
-      {
-        toolCount: toolSelection.tools?.length ?? 0,
-        conversationLogEmptyTools:
-          requestTools === undefined ||
-          (toolSelection.allowedFunctionNames !== undefined &&
-            toolSelection.tools?.length === 0),
-      },
-    );
-    provider = bindProviderMediaAndFiles(
-      provider,
-      runtimeContext.mediaResolver,
-      runtimeContext.requestMediaBudgetBytes,
-      runtimeContext.providerFileBindings,
-      runtimeContext.providerFileLifecycle,
-      runtimeContext.config?.getTargetDir(),
-    );
+    const { provider: boundProvider, runtimeContext } =
+      this._bindRequestRuntime(provider, requestTools, toolSelection);
+    provider = boundProvider;
     this._logToolDiagnostics(provider, toolSelection.tools, providerBaseUrl);
     const signal = requestParams.config?.abortSignal;
     try {
@@ -631,6 +616,35 @@ export class TurnProcessor {
       this.currentPromptEnvelopeEstimate = null;
       throw error;
     }
+  }
+
+  /** Builds the request collaborators and binds the provider to their media and file ports. */
+  private _bindRequestRuntime(
+    provider: IProvider,
+    requestTools: AgentClientGenerateConfig['tools'],
+    toolSelection: ToolSelectionHookResult,
+  ): { provider: IProvider; runtimeContext: ProviderRequestCollaborators } {
+    const runtimeContext = this.providerRuntimeBuilder(
+      'TurnProcessor.executeProviderCall',
+      {
+        toolCount: toolSelection.tools?.length ?? 0,
+        conversationLogEmptyTools:
+          requestTools === undefined ||
+          (toolSelection.allowedFunctionNames !== undefined &&
+            toolSelection.tools?.length === 0),
+      },
+    );
+    return {
+      provider: bindProviderMediaAndFiles(
+        provider,
+        runtimeContext.mediaResolver,
+        runtimeContext.requestMediaBudgetBytes,
+        runtimeContext.providerFileBindings,
+        runtimeContext.providerFileLifecycle,
+        runtimeContext.config?.getTargetDir(),
+      ),
+      runtimeContext,
+    };
   }
 
   private async _recordPreparedSend(

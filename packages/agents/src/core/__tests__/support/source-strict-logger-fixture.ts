@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -8,22 +8,17 @@ import type {
   LogRecordExporter,
 } from '@opentelemetry/sdk-logs';
 import { ExportResultCode, type ExportResult } from '@opentelemetry/core';
-import {
-  FileLogExporter,
-  FileMetricExporter,
-  FileSpanExporter,
-} from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
+import { FileLogExporter } from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
 import {
   initializeTelemetry,
   flushTelemetry,
   shutdownTelemetry,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
-import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { createTelemetrySession } from './source-telemetry-session-fixture.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { createTelemetryAdapter } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import { LoggingProviderWrapper } from '../../../../../providers/src/LoggingProviderWrapper.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
@@ -238,54 +233,18 @@ export async function assembleStrict(
     logApiBodies: true,
     maxChars: 32 * 1024 * 1024,
   };
-  const config = new Config({
-    cwd: root,
-    targetDir: root,
-    sessionId: randomUUID(),
-    model: 'gpt-5.6',
-    debugMode: false,
-    telemetry: {
-      enabled: true,
-      logPrompts: privacy.logPrompts,
-      logApiBodies: privacy.logApiBodies,
-      logApiBodyMaxChars: privacy.maxChars,
-      logConversations: privacy.logConversations,
-      conversationLogPath: root,
-      outfile: telemetryPath,
-    },
-  });
-  const settingsOwner = new SessionSettingsOwner(
-    setup.context.settingsService,
-  );
-  const telemetryOptions = {
-    enabled: true,
-    sessionId: config.getSessionId(),
-    outfile: telemetryPath,
-    maxBytes: config.getTelemetryOutfileMaxBytes(),
-    maxFiles: config.getTelemetryOutfileMaxFiles(),
-    readPrivacySettings: () => privacy,
-  };
-  const logger =
-    fault === 'unsupported' ? new UnsupportedFileExporter(exporter) : exporter;
-  const telemetry = settingsOwner.bindTelemetry(
-    config,
-    RootTelemetry.prepare(telemetryOptions, () => ({
-      tracer: new FileSpanExporter(telemetryPath, telemetryOptions),
-      logger,
-      meter: new FileMetricExporter(telemetryPath, telemetryOptions),
-    })),
-  );
-  const manager = new ProviderManager({
-    config,
-    settingsService: setup.context.settingsService,
-    sessionSettings: settingsOwner,
-  });
-  manager.registerProvider(setup.provider);
-  const diagnostics = captureProviderRequestDiagnostics(
-    config,
-    settingsOwner,
-    (name, usage) => manager.accumulateSessionTokens(name, usage),
-  );
+  const { config, settingsOwner, telemetry, manager, diagnostics } =
+    createTelemetrySession({
+      root,
+      telemetryPath,
+      privacy,
+      settingsService: setup.context.settingsService,
+      provider: setup.provider,
+      logger:
+        fault === 'unsupported'
+          ? new UnsupportedFileExporter(exporter)
+          : exporter,
+    });
   const wrapper = new LoggingProviderWrapper(
     setup.provider,
     undefined,

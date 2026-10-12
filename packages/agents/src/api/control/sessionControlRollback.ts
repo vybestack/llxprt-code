@@ -5,9 +5,9 @@
  */
 
 import {
-  RecordingIntegration,
   withRecordingFailureReport,
   type LockHandle,
+  type RecordingIntegration,
   type SessionRecordingService,
 } from '@vybestack/llxprt-code-core';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';

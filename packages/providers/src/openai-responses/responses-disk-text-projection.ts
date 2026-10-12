@@ -186,6 +186,17 @@ export function assertPreparedStatefulUnchanged(
     );
 }
 
+function requireDiskTextRows(
+  request: ResponsesRequest,
+): NonNullable<ResponsesRequest['requestRows']> {
+  const rows = request.requestRows;
+  if (rows === undefined || request.contentCount !== rows.count)
+    throw new Error(
+      'Explicit Responses disk text selection identity/count is required',
+    );
+  return rows;
+}
+
 export async function buildDiskTextResponsesContext(
   request: ResponsesRequest,
   deps: ResponsesExecutorDeps,
@@ -193,11 +204,7 @@ export async function buildDiskTextResponsesContext(
 ): Promise<PreparedResponsesRequestContext> {
   requireAssembledSystemInstruction(request.systemInstruction);
   const overrides = assertDiskTextShape(request, deps);
-  const rows = request.requestRows;
-  if (rows === undefined || request.contentCount !== rows.count)
-    throw new Error(
-      'Explicit Responses disk text selection identity/count is required',
-    );
+  const rows = requireDiskTextRows(request);
   const ephemerals = resolveInvocationEphemerals(request);
   const signal = getRequestSignal(request);
   const reasoningIdTime =

@@ -3,17 +3,11 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
-import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import {
-  hookSessionRuntime,
-  readHookDefinitions,
-} from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
-import { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import { createSessionHookOwner } from './session-hook-owner-fixture.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
@@ -228,23 +222,7 @@ async function run(
     const selection = selectionMode(mode);
     if (selection !== undefined)
       registerToolHook(setup.config, root, selection);
-    hooks = new SessionHookOwner(
-      readHookDefinitions(setup.config),
-      hookSessionRuntime(
-        setup.config,
-        new WorkspaceTrustLifecycle({
-          localTrust: setup.config.initialWorkspaceTrust,
-        }),
-        RootTelemetry.prepare({
-          enabled: false,
-          sessionId: setup.config.getSessionId(),
-          maxBytes: 1024,
-          maxFiles: 1,
-        }),
-      ),
-      true,
-      new MessageBus(),
-    );
+    hooks = createSessionHookOwner(setup.config);
     const expected = await oracle(setup, mode);
     if (source) observer = observeModelBody(setup.history, retainBoundaryRows);
     const facts = await consume(setup, mode, hooks);

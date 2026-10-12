@@ -158,7 +158,7 @@ describe('real HookSystem snapshot chain', () => {
         expect(scratch(root)).toStrictEqual([]);
       } finally {
         materialize.mockRestore();
-        hooksSystem.dispose();
+        await hooksSystem.dispose();
       }
     });
   });
@@ -206,7 +206,7 @@ describe('real HookSystem snapshot final replacement', () => {
           expect(scratch(root)).toStrictEqual([]);
         } finally {
           result.close();
-          hooksSystem.dispose();
+          await hooksSystem.dispose();
         }
       });
     });
@@ -270,7 +270,7 @@ describe('real HookSystem snapshot AfterModel receipt', () => {
           expect(owners.snapshot().liveRows).toBe(0);
         } finally {
           result.close();
-          hooksSystem.dispose();
+          await hooksSystem.dispose();
         }
         expect(scratch(root)).toStrictEqual([]);
       });
@@ -309,7 +309,7 @@ describe('real HookSystem snapshot parallel receipt', () => {
         expect(owners.snapshot().liveRows).toBe(0);
       } finally {
         result.close();
-        hooksSystem.dispose();
+        await hooksSystem.dispose();
       }
       expect(scratch(root)).toStrictEqual([]);
     });
@@ -341,7 +341,7 @@ describe('real HookSystem snapshot stop/block', () => {
           expect(owners.snapshot().liveRows).toBe(0);
         } finally {
           result.close();
-          hooksSystem.dispose();
+          await hooksSystem.dispose();
         }
       });
     });
@@ -370,7 +370,7 @@ describe('real HookSystem snapshot chain cancellation', () => {
         await ready(root);
         if (mode === 'abort')
           controller.abort(new Error('cancel orchestration'));
-        if (mode === 'dispose') hooksSystem.dispose();
+        const disposal = mode === 'dispose' ? hooksSystem.dispose() : undefined;
         const outcome = await pending.then(
           (result) => {
             const summary = {
@@ -394,7 +394,7 @@ describe('real HookSystem snapshot chain cancellation', () => {
         expect(() =>
           process.kill(Number(fs.readFileSync(join(root, 'ready'), 'utf8')), 0),
         ).toThrow('ESRCH');
-        hooksSystem.dispose();
+        await (disposal ?? hooksSystem.dispose());
       });
     });
   }
@@ -425,7 +425,7 @@ describe('real HookSystem snapshot final cancellation', () => {
       expect(scratch(root)).toStrictEqual([]);
       expect(() => selected.openReader()).toThrow('Hook output disposed');
       result.close();
-      hooksSystem.dispose();
+      await hooksSystem.dispose();
     });
   });
 });
@@ -467,7 +467,7 @@ describe('real HookSystem snapshot array callback', () => {
           'Missing snapshot callback: fireBeforeModelSnapshotEvent; the full-request override is not used on the source route',
       });
       expect(scratch(root)).toStrictEqual([]);
-      hooksSystem.dispose();
+      await hooksSystem.dispose();
     });
   });
 });
@@ -504,7 +504,7 @@ describe('real HookSystem snapshot wire bytes', () => {
         expect(bytes).toBe(oracle);
       } finally {
         result.close();
-        hooksSystem.dispose();
+        await hooksSystem.dispose();
       }
     });
   });
@@ -581,8 +581,7 @@ describe('real snapshot reducer parity', () => {
           expect(owners.snapshot().liveRows).toBe(0);
         } finally {
           result.close();
-          hooksSystem.dispose();
-          legacy.dispose();
+          await Promise.all([hooksSystem.dispose(), legacy.dispose()]);
         }
         expect(scratch(root)).toStrictEqual([]);
       });
@@ -609,8 +608,9 @@ describe('snapshot source ownership', () => {
       if (source === undefined) throw new Error('Missing replacement');
       const reader = source.openReader();
       expect((await reader.next()).done).toBe(false);
-      hooksSystem.dispose();
+      const disposal = hooksSystem.dispose();
       await expect(reader.next()).rejects.toThrow('Hook output disposed');
+      await disposal;
       expect(scratch(root)).toStrictEqual([]);
       const borrowed = snapshot.openReader();
       expect((await borrowed.next()).done).toBe(false);
@@ -639,7 +639,7 @@ describe('snapshot source ownership', () => {
         hooksSystem.fireBeforeModelSnapshotEvent(request, controller.signal),
       ).rejects.toThrow('already aborted');
       expect(scratch(root)).toStrictEqual([]);
-      hooksSystem.dispose();
+      await hooksSystem.dispose();
     });
   });
 });
@@ -672,7 +672,7 @@ describe('snapshot output selection boundaries', () => {
         ).toThrow('not an ancestor');
       } finally {
         result.close();
-        hooksSystem.dispose();
+        await hooksSystem.dispose();
       }
       expect(scratch(root)).toStrictEqual([]);
     });
@@ -718,7 +718,7 @@ describe('snapshot parallel disk failure cleanup', () => {
         ).toThrow('ESRCH');
       } finally {
         fault.mockRestore();
-        hooksSystem.dispose();
+        await hooksSystem.dispose();
       }
     });
   });
@@ -764,7 +764,7 @@ describe('AfterModel snapshot callback contract', () => {
           'Missing snapshot callback: fireAfterModelSnapshotEvent; the full-request override is not used on the source route',
       });
       expect(scratch(root)).toStrictEqual([]);
-      hooksSystem.dispose();
+      await hooksSystem.dispose();
     });
   });
 });

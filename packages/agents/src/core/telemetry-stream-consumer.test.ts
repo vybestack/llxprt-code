@@ -199,8 +199,16 @@ describe('actual FileLogExporter acknowledges only verified chunk protocol', () 
       } finally {
         exporter.releaseHeld();
         // Transport failures stay visible: the root reports a rejected export when it closes.
-        if (['abort', 'no-ack'].includes(fault)) await telemetry.close();
-        else await expect(telemetry.close()).rejects.toThrow(failure);
+        const closeMessage = await telemetry.close().then(
+          () => undefined,
+          (error: unknown) =>
+            error instanceof Error ? error.message : String(error),
+        );
+        const closeReportsFailure = !['abort', 'no-ack'].includes(fault);
+        expect(closeMessage !== undefined).toBe(closeReportsFailure);
+        expect(closeMessage ?? '').toContain(
+          closeReportsFailure ? failure : '',
+        );
       }
     },
     120000,

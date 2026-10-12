@@ -307,14 +307,14 @@ describe('artifact exporter failure contract', () => {
   });
   it('rejects acknowledged exporter write failure rather than claiming completion', async () => {
     // The helper asserts the closed root is no longer initialized.
-    await runtimeWriteFailure(root());
+    await expect(runtimeWriteFailure(root())).resolves.toBeUndefined();
   });
 });
 
 describe('actual runtime artifact release', () => {
   it('releases its >10MiB reader and bounded chunks below unchanged 1MiB', async () => {
     // The helper asserts the closed root is no longer initialized.
-    await runtimeRelease(root());
+    await expect(runtimeRelease(root())).resolves.toBeUndefined();
   }, 60000);
 });
 

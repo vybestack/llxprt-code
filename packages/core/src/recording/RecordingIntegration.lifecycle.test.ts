@@ -314,10 +314,10 @@ describe('RecordingIntegration lifecycle @plan:PLAN-20260211-SESSIONRECORDING.P1
       testRecordingLifecycle13,
     );
 
-    for (const phase of ['before-save', 'after-save'] as const) {
-      it(`joins an admitted batch through its held ${phase} before disposing`, () =>
-        testRecordingLifecycleHeldBatch(phase));
-    }
+    it.each(['before-save', 'after-save'] as const)(
+      'joins an admitted batch through its held %s before disposing',
+      testRecordingLifecycleHeldBatch,
+    );
 
     it(
       'joins a rejected batch publication before disposing',

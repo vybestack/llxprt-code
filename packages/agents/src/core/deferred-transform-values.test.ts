@@ -110,21 +110,30 @@ async function observeDeferred(
   });
 }
 
+async function expectBoundedDeferred(
+  size: number,
+  rollback: boolean,
+): Promise<void> {
+  const { agent, cleanup } = await buildAgent('plain-text.jsonl');
+  try {
+    const store = agent.agentClient.mediaStore;
+    if (store === undefined)
+      throw new Error('Agent client is missing its media store');
+    expect(await observeDeferred(size, rollback, store)).toBe(
+      rollback ? 3 : size,
+    );
+  } finally {
+    await cleanup();
+  }
+}
+
 describe('deferred history uses disk value transform', () => {
   for (const size of [512, 8192]) {
     for (const rollback of [false, true]) {
       it(`bounds the complete streamed input and publication at ${size}, rollback=${rollback}`, async () => {
-        const { agent, cleanup } = await buildAgent('plain-text.jsonl');
-        try {
-          const store = agent.agentClient.mediaStore;
-          if (store === undefined)
-            throw new Error('Agent client is missing its media store');
-          expect(await observeDeferred(size, rollback, store)).toBe(
-            rollback ? 3 : size,
-          );
-        } finally {
-          await cleanup();
-        }
+        await expect(
+          expectBoundedDeferred(size, rollback),
+        ).resolves.toBeUndefined();
       }, 120_000);
     }
   }

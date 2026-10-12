@@ -576,7 +576,7 @@ export class HookSystem implements HookModelSnapshotCallbacks {
 
   private async joinDisposal(
     accepted: ReadonlyArray<Promise<unknown>>,
-    handlerDisposal: Promise<PromiseSettledResult<void | undefined>[]>,
+    handlerDisposal: Promise<Array<PromiseSettledResult<void | undefined>>>,
   ): Promise<void> {
     const results = await Promise.allSettled([
       ...accepted,

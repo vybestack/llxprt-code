@@ -474,7 +474,7 @@ describe('loggers', () => {
         'This is a test request',
       );
 
-      logApiRequest(mockConfig, event, telemetry);
+      await logApiRequest(mockConfig, event, telemetry);
 
       expect(exportedRecords()).toContainEqual({
         body: 'API request to test-model.',
@@ -509,7 +509,7 @@ describe('loggers', () => {
       );
 
       privacy = { ...privacy, logApiBodies: true };
-      logApiRequest(mockConfig, event, telemetry);
+      await logApiRequest(mockConfig, event, telemetry);
 
       expect(exportedRecords()).toContainEqual({
         body: 'API request to test-model.',
@@ -528,7 +528,7 @@ describe('loggers', () => {
     it('should log an API request without request_text', async () => {
       const event = new ApiRequestEvent('test-model', 'prompt-id-6');
 
-      logApiRequest(mockConfig, event, telemetry);
+      await logApiRequest(mockConfig, event, telemetry);
 
       expect(exportedRecords()).toContainEqual({
         body: 'API request to test-model.',

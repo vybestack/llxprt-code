@@ -129,7 +129,7 @@ describe('snapshot model hook telemetry', () => {
         expect(input.llm_request['contents_row_count']).toBe(rows.length);
         expect(input.llm_request['contents']).toBeUndefined();
       } finally {
-        hooksSystem.dispose();
+        await hooksSystem.dispose();
       }
     });
   });
@@ -162,7 +162,7 @@ describe('snapshot model hook telemetry', () => {
           JSON.stringify({ decision: 'deny', reason: 'no' }),
         );
       } finally {
-        hooksSystem.dispose();
+        await hooksSystem.dispose();
       }
     });
   });

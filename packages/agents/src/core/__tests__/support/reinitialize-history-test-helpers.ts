@@ -22,15 +22,12 @@ import type { Agent } from '../../../api/agent.js';
 import { ControlledOrchestratorHistory } from './orchestrator-history-test-helpers.js';
 
 function requireSessionClient(agent: Agent): SessionClientOwner {
-  if (
-    !('deps' in agent) ||
-    typeof agent.deps !== 'object' ||
-    agent.deps === null ||
-    !('sessionClient' in agent.deps) ||
-    !(agent.deps.sessionClient instanceof SessionClientOwner)
-  )
+  const deps = 'deps' in agent ? agent.deps : undefined;
+  if (typeof deps !== 'object' || deps === null || !('sessionClient' in deps))
     throw new Error('Expected an owned session client');
-  return agent.deps.sessionClient;
+  if (!(deps.sessionClient instanceof SessionClientOwner))
+    throw new Error('Expected an owned session client');
+  return deps.sessionClient;
 }
 
 export function reinitializeConfig(config: Config): ContentGeneratorConfig {

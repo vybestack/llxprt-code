@@ -75,7 +75,6 @@ import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type {
   AgentRuntimeContext,
-  AgentRuntimeProviderAdapter,
   ToolRegistryView,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
 import type { ProviderRequestCollaborators } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
@@ -131,7 +130,7 @@ export {
 import type { StreamEvent } from '@vybestack/llxprt-code-core/core/chatSessionTypes.js';
 import type { CompressionProviderResult } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { CompressionAttemptContext } from '../compression/compressionContextBuilder.js';
-import { CompressionProfileNotFoundError } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import { ChatSessionProviderResolution } from './chatSessionProviderResolution.js';
 import type { PerformCompressionResult } from './turn.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { resolveSystemPromptForTurn } from './systemPromptModel.js';
@@ -218,6 +217,11 @@ export class AgentExecutionBlockedError extends Error {
  */
 export class ChatSession {
   private logger = new DebugLogger('llxprt:gemini:chat');
+  private readonly providerResolution = new ChatSessionProviderResolution(
+    () => this.runtimeContext.provider,
+    () => this.runtimeState.provider,
+    this.logger,
+  );
   private readonly runtimeState: AgentRuntimeState;
   private historyService: HistoryService;
   private readonly generationConfig: ChatSessionConfig;
@@ -279,22 +283,8 @@ export class ChatSession {
     const resolveBaseUrl = (p: IProvider) =>
       resolveProviderBaseUrl(p, this.runtimeState.baseUrl);
 
-    this.compressionHandler = new CompressionHandler(
-      this.runtimeContext,
-      this.historyService,
-      this.generationConfig,
-      this.resolveCompressionProvider.bind(this),
-      async (
-        context: CompressionAttemptContext,
-        owner?: HookExecutionOwner,
-      ) => {
-        await triggerCompressionHook(
-          context.trigger === 'auto'
-            ? PreCompressTrigger.Auto
-            : PreCompressTrigger.Manual,
-          owner,
-        );
-      },
+    this.compressionHandler = this._createCompressionHandler(
+      triggerCompressionHook,
     );
 
     this.tokenUsageLogger = createTokenUsageLogger(this.runtimeContext);
@@ -343,6 +333,28 @@ export class ChatSession {
       providerRuntimeBuilder,
       this.generationConfig,
       this.historyService,
+    );
+  }
+
+  private _createCompressionHandler(
+    triggerCompressionHook: typeof triggerPreCompressHook,
+  ): CompressionHandler {
+    return new CompressionHandler(
+      this.runtimeContext,
+      this.historyService,
+      this.generationConfig,
+      this.resolveCompressionProvider.bind(this),
+      async (
+        context: CompressionAttemptContext,
+        owner?: HookExecutionOwner,
+      ) => {
+        await triggerCompressionHook(
+          context.trigger === 'auto'
+            ? PreCompressTrigger.Auto
+            : PreCompressTrigger.Manual,
+          owner,
+        );
+      },
     );
   }
 
@@ -418,110 +430,8 @@ export class ChatSession {
 
   // ── Provider resolution (stays on coordinator) ───────────────────
 
-  private getActiveProvider(): IProvider | undefined {
-    try {
-      return this.runtimeContext.provider.getActiveProvider();
-    } catch {
-      return undefined;
-    }
-  }
-
-  private lookupProviderByName(
-    adapter: AgentRuntimeProviderAdapter,
-    desiredProviderName: string,
-    compressionProfileName: string,
-  ): IProvider | undefined {
-    if (typeof adapter.getProviderByName !== 'function') {
-      return undefined;
-    }
-    try {
-      const candidate = adapter.getProviderByName(desiredProviderName);
-      if (candidate !== undefined) {
-        const active = this.getActiveProvider();
-        if (active !== undefined && active.name !== desiredProviderName) {
-          this.logger.debug(
-            () =>
-              `[ChatSession] selected provider '${desiredProviderName}' via getProviderByName (active remains '${active.name}') [${compressionProfileName}]`,
-          );
-        }
-        return candidate;
-      }
-    } catch (error) {
-      this.logger.debug(
-        () =>
-          `[ChatSession] provider lookup skipped (${compressionProfileName}): ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-    return undefined;
-  }
-
   resolveProviderForRuntime(compressionProfileName: string): IProvider {
-    const desiredProviderName = this.runtimeState.provider.trim();
-    const adapter = this.runtimeContext.provider;
-
-    if (desiredProviderName) {
-      const candidate = this.lookupProviderByName(
-        adapter,
-        desiredProviderName,
-        compressionProfileName,
-      );
-      if (candidate) {
-        return candidate;
-      }
-    }
-
-    let provider = this.getActiveProvider();
-    if (!provider) {
-      throw new Error('No active provider configured');
-    }
-
-    if (desiredProviderName && provider.name !== desiredProviderName) {
-      const previousProviderName = provider.name;
-      try {
-        adapter.setActiveProvider(desiredProviderName);
-        provider = adapter.getActiveProvider();
-        this.logger.debug(
-          () =>
-            `[ChatSession] enforced provider switch to '${desiredProviderName}' (previous '${previousProviderName}') [${compressionProfileName}]`,
-        );
-      } catch (error) {
-        this.logger.debug(
-          () =>
-            `[ChatSession] provider switch skipped (${compressionProfileName}, read-only context): ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-
-    return provider;
-  }
-
-  private resolveExplicitCompressionProvider(
-    profileName: string,
-    providerName: string,
-    lookupProviderName: string = providerName,
-  ): IProvider {
-    const adapter = this.runtimeContext.provider;
-    const lookupResult = this.lookupProviderByName(
-      adapter,
-      lookupProviderName,
-      `compression.profile:${profileName}`,
-    );
-    if (lookupResult) {
-      return lookupResult;
-    }
-
-    const activeProvider = this.getActiveProvider();
-    if (
-      activeProvider?.name === providerName ||
-      activeProvider?.name === lookupProviderName
-    ) {
-      return activeProvider;
-    }
-
-    throw new CompressionProfileNotFoundError(
-      profileName,
-      `provider '${lookupProviderName}' is not available for compression.profile: provider lookup by name is required when it is not already active`,
-    );
+    return this.providerResolution.resolveForRuntime(compressionProfileName);
   }
 
   providerSupportsIContent(provider: IProvider | undefined): boolean {
@@ -540,8 +450,11 @@ export class ChatSession {
       providerRuntime: this.runtimeContext.providerRuntime,
       prepareProviderInvocation: this.runtimeContext.prepareProviderInvocation,
       runtimeState: this.runtimeState,
-      resolveExplicitCompressionProvider:
-        this.resolveExplicitCompressionProvider.bind(this),
+      resolveExplicitCompressionProvider: (profileName, providerName) =>
+        this.providerResolution.resolveExplicitCompression(
+          profileName,
+          providerName,
+        ),
       roundRobinIndexes: this.compressionLoadBalancerRoundRobinIndexes,
     };
   }

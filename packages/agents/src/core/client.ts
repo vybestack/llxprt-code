@@ -81,10 +81,7 @@ import { TodoContinuationService } from './TodoContinuationService.js';
 export { PostTurnAction } from './TodoContinuationService.js';
 import { IdeContextTracker } from './IdeContextTracker.js';
 import { AgentHookManager } from './AgentHookManager.js';
-import {
-  createChatSessionSafe,
-  type CreateChatSessionDeps,
-} from './ChatSessionFactory.js';
+import type { CreateChatSessionDeps } from './ChatSessionFactory.js';
 import {
   MessageStreamOrchestrator,
   type MessageStreamDeps,
@@ -92,24 +89,26 @@ import {
 import { resolveClientModelIdentity } from './modelInfoHelpers.js';
 import {
   RetainedHistoryAdmissions,
-  replaceDeferredArray,
-  releaseDeferredArray,
   type RetainedHistoryAdmission,
 } from './retainedHistoryAdmissions.js';
+import {
+  discardDeferredHistory as discardClientDeferredHistory,
+  releaseDeferredSource,
+  setClientHistory,
+  setHistoryFromSource as setDeferredHistoryFromSource,
+  startChatWithDeferredHistory,
+  storeHistoryForLaterUse as storeDeferredHistory,
+  type ChatSessionInputs,
+  type DeferredHistoryPort,
+} from './client-deferred-history.js';
 
 import {
-  isHistorySource,
   clearClientHistoryForDisposal,
   hasReferenceMedia,
   type DeferredHistoryDeps,
 } from './deferredHistorySource.js';
 import type { DeferredHistorySourceOptions } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { transferReinitializedHistory } from './reinitializeHistorySource.js';
-import {
-  replaceClientHistorySource,
-  replaceClientArrayHistory,
-  replaceDeferredClientSource,
-} from './clientHistoryReplacement.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 
 export class AgentClient
@@ -131,6 +130,7 @@ export class AgentClient
   private _releaseDeferredSource?: () => Promise<void>;
   private streamedDeferredHistory = false;
   private readonly historyAdmissions: RetainedHistoryAdmissions;
+  private readonly deferredHistory: DeferredHistoryPort;
   private _storedHistoryService?: HistoryService;
   private currentSequenceModel: string | null = null;
   private activeStreamCount = 0;
@@ -232,6 +232,7 @@ export class AgentClient
 
     this.runtimeState = runtimeState;
     this.historyAdmissions = new RetainedHistoryAdmissions(mediaStore);
+    this.deferredHistory = this.createDeferredHistoryPort();
     this._historyService = historyService;
     this.logger = new DebugLogger('llxprt:core:client');
 
@@ -366,7 +367,7 @@ export class AgentClient
       }
     }
     try {
-      await this.releaseDeferredSource();
+      await releaseDeferredSource(this.deferredHistory);
       if (this.streamedDeferredHistory) this._storedHistoryService?.dispose();
     } catch (error) {
       failures.push(error);
@@ -548,23 +549,43 @@ export class AgentClient
       historyOrigin,
     }: { stripThoughts?: boolean; historyOrigin?: object } = {},
   ): Promise<void> {
-    return this.settleClientHistoryUpdate(
-      replaceClientArrayHistory(
-        history,
-        this.chat,
-        this.historyAdmissions,
-        this._deferredHistoryAdmission,
-        this.replaceDeferredHistory.bind(this),
-        this.publishActiveArrayHistory.bind(this),
-        stripThoughts,
-        historyOrigin,
-      ),
+    return setClientHistory(
+      this.deferredHistory,
+      history,
+      stripThoughts,
+      historyOrigin,
     );
   }
 
-  private publishActiveArrayHistory(): void {
-    this._previousHistory = undefined;
-    this.streamedDeferredHistory = true;
+  private createDeferredHistoryPort(): DeferredHistoryPort {
+    return {
+      admissions: this.historyAdmissions,
+      runtime: this.runtimeState,
+      deps: () => this.deferredHistoryDeps(),
+      chat: () => this.chat,
+      setChat: (chat) => {
+        this.chat = chat;
+      },
+      admission: () => this._deferredHistoryAdmission,
+      setAdmission: (admission) => {
+        this._deferredHistoryAdmission = admission;
+      },
+      release: () => this._releaseDeferredSource,
+      setRelease: (release) => {
+        this._releaseDeferredSource = release;
+      },
+      stored: () => this._storedHistoryService,
+      setStored: (journal) => {
+        this._storedHistoryService = journal;
+      },
+      clearPrevious: () => {
+        this._previousHistory = undefined;
+      },
+      markStreamed: () => {
+        this.streamedDeferredHistory = true;
+      },
+      resetIdeContext: () => this.ideContextTracker.resetContext(),
+    };
   }
 
   private deferredHistoryDeps(): DeferredHistoryDeps {
@@ -574,67 +595,11 @@ export class AgentClient
     };
   }
 
-  private async settleClientHistoryUpdate(
-    operation: Promise<void>,
-  ): Promise<void> {
-    await operation;
-    if (this.chat !== undefined) this._deferredHistoryAdmission = undefined;
-    this.ideContextTracker.resetContext();
-  }
-
   async setHistoryFromSource(
     source: AsyncIterable<IContent>,
     options: DeferredHistorySourceOptions = {},
   ): Promise<void> {
-    await replaceClientHistorySource(source, options, this.chat !== undefined, {
-      deps: this.deferredHistoryDeps(),
-      runtime: this.runtimeState,
-      existing: this.chat?.getHistoryService() ?? this._storedHistoryService,
-      admissions: this.historyAdmissions,
-      prior: this._deferredHistoryAdmission,
-      priorRelease: this._releaseDeferredSource,
-      publish: (journal, release) => {
-        this._releaseDeferredSource = release;
-        this._previousHistory = undefined;
-        this._deferredHistoryAdmission = undefined;
-        if (this.chat === undefined) {
-          this._storedHistoryService = journal;
-          this.streamedDeferredHistory = true;
-        }
-        this.ideContextTracker.resetContext();
-      },
-    });
-  }
-
-  private replaceDeferredHistory(
-    history: readonly IContent[],
-    options: DeferredHistorySourceOptions = {},
-  ): Promise<void> {
-    return this.publishDeferredArrayHistory(
-      replaceDeferredArray(
-        this.historyAdmissions,
-        history,
-        this._deferredHistoryAdmission,
-        this._storedHistoryService,
-        options,
-      ),
-    );
-  }
-
-  private async publishDeferredArrayHistory(
-    operation: Promise<{
-      journal: HistoryService;
-      retained: RetainedHistoryAdmission;
-    }>,
-  ): Promise<void> {
-    const next = await operation;
-    const priorRelease = this._releaseDeferredSource;
-    this._previousHistory = undefined;
-    this._deferredHistoryAdmission = next.retained;
-    this._storedHistoryService = next.journal;
-    this._releaseDeferredSource = undefined;
-    this.streamedDeferredHistory = true;
-    await priorRelease?.();
+    await setDeferredHistoryFromSource(this.deferredHistory, source, options);
   }
 
   /**
@@ -646,31 +611,7 @@ export class AgentClient
     history: readonly IContent[] | AsyncIterable<IContent>,
     options: DeferredHistorySourceOptions = {},
   ): Promise<void> {
-    if (!isHistorySource(history)) {
-      return this.replaceDeferredHistory(history, options);
-    }
-    if (this.hasChatInitialized())
-      throw new Error('Streamed deferred history requires an inactive chat');
-    return replaceDeferredClientSource(history, options, {
-      deps: this.deferredHistoryDeps(),
-      runtime: this.runtimeState,
-      existing: this._storedHistoryService,
-      admissions: this.historyAdmissions,
-      prior: this._deferredHistoryAdmission,
-      priorRelease: this._releaseDeferredSource,
-      publish: (journal, release) => {
-        this._storedHistoryService = journal;
-        this.streamedDeferredHistory = true;
-        this._previousHistory = undefined;
-        this._deferredHistoryAdmission = undefined;
-        this._releaseDeferredSource = release;
-      },
-    });
-  }
-
-  private async releaseDeferredSource(): Promise<void> {
-    await this._releaseDeferredSource?.();
-    this._releaseDeferredSource = undefined;
+    return storeDeferredHistory(this.deferredHistory, history, options);
   }
 
   prepareHistoryRebind(
@@ -735,16 +676,7 @@ export class AgentClient
   }
 
   async discardDeferredHistory(): Promise<void> {
-    await this.releaseDeferredSource();
-    if (this._deferredHistoryAdmission) {
-      const failures = await this.historyAdmissions.release([
-        this._deferredHistoryAdmission,
-      ]);
-      if (failures.length > 0)
-        throw new AggregateError(failures, 'Deferred history cleanup failed');
-    }
-    this._deferredHistoryAdmission = undefined;
-    this._previousHistory = undefined;
+    await discardClientDeferredHistory(this.deferredHistory);
   }
 
   async resumeChat(history: readonly IContent[]): Promise<void> {
@@ -837,83 +769,35 @@ export class AgentClient
   async startChat(extraHistory?: readonly IContent[]): Promise<ChatSession> {
     this.ideContextTracker.resetContext();
     await this.lazyInitialize();
-    const deferredAdmission = this._deferredHistoryAdmission;
+    return startChatWithDeferredHistory(
+      this.deferredHistory,
+      () => this.chatSessionInputs(),
+      extraHistory,
+    );
+  }
 
-    let chat: ChatSession;
-    try {
-      chat = await createChatSessionSafe({
-        config: this.config,
-        historyTokenization: this.historyTokenization,
-        providerFileLifecycle: this.providerFileLifecycle,
-        composeRetryOperations: this.composeRetryOperations,
-        promptEstimator: this.promptEstimator,
-        mediaStore: this.mediaStore,
-        readMcpInstructions: this.readMcpInstructions,
-        instructions: requireInstructionReads(this.instructions),
-        workspaceDirectories: () => this.workspacePaths.directories(),
-        runtimeState: this.runtimeState,
-        contentGenerator: this.getContentGenerator(),
-        storedHistoryService: this._storedHistoryService,
-        clearStoredHistoryService: () => {
-          if (this._releaseDeferredSource === undefined)
-            this._storedHistoryService = undefined;
-        },
-        extraHistory:
-          deferredAdmission === undefined ||
-          this._storedHistoryService?.isEmpty() === true
-            ? extraHistory
-            : [],
-        generateContentConfig: this.generateContentConfig,
-        todoContinuationService: this.todoContinuationService,
-        toolRegistry: this.tools,
-        createHistoryService: () => new HistoryService(),
-        createChatSessionInstance: (...args) => new ChatSession(...args),
-        providerSelection: this.providerSelection,
-        prepareProviderInvocation: this.prepareProviderInvocation,
-        ...this.chatPolicyInputs(),
-      });
-    } catch (error: unknown) {
-      if (deferredAdmission === undefined) throw error;
-      this._deferredHistoryAdmission = undefined;
-      this._previousHistory = undefined;
-      return this.historyAdmissions.releaseAfterFailure(
-        error,
-        [deferredAdmission],
-        'Chat startup failed and deferred history cleanup was incomplete',
-      );
-    }
-
-    if (deferredAdmission !== undefined) {
-      try {
-        await chat.getHistoryService().settleMediaOwnership();
-      } catch (error: unknown) {
-        this._deferredHistoryAdmission = undefined;
-        this._previousHistory = undefined;
-        return this.historyAdmissions.releaseAfterFailure(
-          error,
-          [deferredAdmission],
-          'Chat startup failed and deferred history cleanup was incomplete',
-          () => chat.clearHistory(),
-        );
-      }
-      this.chat = chat;
-      this._previousHistory = undefined;
-      this.streamedDeferredHistory = true;
-      await releaseDeferredArray(
-        this.historyAdmissions,
-        deferredAdmission,
-        'Deferred history ownership transfer to chat was incomplete',
-      );
-      this._deferredHistoryAdmission = undefined;
-    } else {
-      if (this._releaseDeferredSource !== undefined) {
-        await chat.getHistoryService().settleMediaOwnership();
-        await this.releaseDeferredSource();
-        this._storedHistoryService = undefined;
-      }
-      this.chat = chat;
-    }
-    return chat;
+  private chatSessionInputs(): ChatSessionInputs {
+    return {
+      config: this.config,
+      historyTokenization: this.historyTokenization,
+      providerFileLifecycle: this.providerFileLifecycle,
+      composeRetryOperations: this.composeRetryOperations,
+      promptEstimator: this.promptEstimator,
+      mediaStore: this.mediaStore,
+      readMcpInstructions: this.readMcpInstructions,
+      instructions: requireInstructionReads(this.instructions),
+      workspaceDirectories: () => this.workspacePaths.directories(),
+      runtimeState: this.runtimeState,
+      contentGenerator: this.getContentGenerator(),
+      generateContentConfig: this.generateContentConfig,
+      todoContinuationService: this.todoContinuationService,
+      toolRegistry: this.tools,
+      createHistoryService: () => new HistoryService(),
+      createChatSessionInstance: (...args) => new ChatSession(...args),
+      providerSelection: this.providerSelection,
+      prepareProviderInvocation: this.prepareProviderInvocation,
+      ...this.chatPolicyInputs(),
+    };
   }
 
   async *sendMessageStream(
