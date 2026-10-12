@@ -312,10 +312,6 @@ export class ProviderManager implements IProviderManager {
     this.config = config;
     if (this.providerKeyStorage)
       config.bindProviderKeyStorage(this.providerKeyStorage);
-    this.runtime = this.runtime
-      ? { ...this.runtime, config }
-      : { settingsService: this.settingsService, config };
-
     this.updateProviderWrapping();
   }
 
@@ -877,9 +873,9 @@ export class ProviderManager implements IProviderManager {
 
   /* @plan:PLAN-20251023-STATELESS-HARDENING.P06 */
   /* @requirement:REQ-SP4-004 */
-  prepareStatelessProviderInvocation(context?: ProviderRuntimeContext): void {
+  prepareStatelessProviderInvocation(): void {
     const stage = 'ProviderManager.prepareStatelessProviderInvocation';
-    const runtimeContext = context ?? this.runtime;
+    const runtimeContext = this.runtime;
 
     if (!runtimeContext) {
       throw new MissingProviderRuntimeError({
@@ -893,27 +889,7 @@ export class ProviderManager implements IProviderManager {
       });
     }
 
-    const invocationSettingsService = (
-      runtimeContext as { settingsService?: SettingsService | null }
-    ).settingsService;
-    if (
-      invocationSettingsService === null ||
-      invocationSettingsService === undefined
-    ) {
-      throw new MissingProviderRuntimeError({
-        providerKey: 'ProviderManager',
-        missingFields: ['settings'],
-        requirement: 'REQ-SP4-004',
-        stage,
-        metadata: {
-          runtimeId: runtimeContext.runtimeId,
-          hint: 'ProviderManager requires a SettingsService for stateless invocation.',
-        },
-      });
-    }
-
-    const resolvedConfig = runtimeContext.config ?? this.config;
-    if (!resolvedConfig) {
+    if (!this.config) {
       throw new MissingProviderRuntimeError({
         providerKey: 'ProviderManager',
         missingFields: ['config'],
@@ -939,12 +915,8 @@ export class ProviderManager implements IProviderManager {
 
     this.runtime = {
       ...runtimeContext,
-      settingsService: invocationSettingsService,
-      config: resolvedConfig,
       metadata: statelessMetadata,
     };
-    this.settingsService = asSettingsService(runtimeContext.settingsService);
-    this.config = resolvedConfig;
 
     for (const provider of this.providers.values()) {
       this.attachStatelessRuntimeMetadata(provider, statelessMetadata);

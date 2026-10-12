@@ -259,3 +259,63 @@ describe('ProviderManager admission fallback and isolation', () => {
     ).toThrow('Incomplete runtime resolution (baseURL)');
   });
 });
+
+describe('ProviderManager Config binding', () => {
+  it('does not synthesize a runtime when binding Config', () => {
+    const selected = new SettingsService();
+    const manager = new ProviderManager({ settingsService: selected });
+    manager.setConfig(createRuntimeConfigStub(selected));
+
+    expect(() => manager.prepareStatelessProviderInvocation()).toThrow(
+      'runtime',
+    );
+  });
+});
+
+describe('ProviderManager stateless preparation ownership', () => {
+  it('retains selected settings instead of adopting context-carried settings', () => {
+    const selected = new SettingsService();
+    selected.setProviderSetting('openai', 'model', 'selected-model');
+    const foreign = new SettingsService();
+    foreign.setProviderSetting('openai', 'model', 'foreign-model');
+    const config = createRuntimeConfigStub(selected);
+    const manager = new ProviderManager({
+      settingsService: selected,
+      config,
+      runtime: {
+        settingsService: foreign,
+        runtimeId: 'same-label',
+        metadata: { owner: 'selected' },
+      },
+    });
+    manager.registerProvider(new HarnessProvider());
+
+    manager.prepareStatelessProviderInvocation();
+    const admitted = manager.normalizeRuntimeInputs({ contents: [] }, 'openai');
+
+    expect(admitted.resolved?.model).toBe('selected-model');
+    expect(foreign.getProviderSettings('openai').model).toBe('foreign-model');
+  });
+
+  it('requires an explicitly selected runtime before preparation', () => {
+    const selected = new SettingsService();
+    const config = createRuntimeConfigStub(selected);
+    const manager = new ProviderManager({ settingsService: selected, config });
+
+    expect(() => manager.prepareStatelessProviderInvocation()).toThrow(
+      'runtime',
+    );
+  });
+
+  it('requires Config from the manager owner before preparation', () => {
+    const selected = new SettingsService();
+    const manager = new ProviderManager({
+      settingsService: selected,
+      runtime: { settingsService: selected, runtimeId: 'same-label' },
+    });
+
+    expect(() => manager.prepareStatelessProviderInvocation()).toThrow(
+      'config',
+    );
+  });
+});

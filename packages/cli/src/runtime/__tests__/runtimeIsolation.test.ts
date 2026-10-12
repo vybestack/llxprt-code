@@ -38,10 +38,7 @@ import {
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
 } from '@vybestack/llxprt-code-providers/runtime.js';
-import {
-  Config,
-  createProviderRuntimeContext,
-} from '@vybestack/llxprt-code-core';
+import { Config } from '@vybestack/llxprt-code-core';
 import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeContextFactory.js';
 import { createProviderSessionOwner } from '../../integration-tests/__tests__/session-client-owner-fixture.js';
 import {
@@ -544,20 +541,10 @@ describe('CLI runtime isolation', () => {
       },
     });
 
-    const context = createProviderRuntimeContext({
-      settingsService: runtimeA.handle.settingsService,
-      config: runtimeA.handle.config,
-      providerFileLifecycle: runtimeA.handle.providerFileLifecycle,
-      runtimeId: runtimeA.id,
-      runtimeKind: 'cli-interactive',
-      metadata: { statelessHardening: 'strict' },
-    });
     const prepare =
       runtimeA.handle.providerManager.prepareStatelessProviderInvocation;
     if (!prepare) throw new Error('Stateless preparation is unavailable');
-    expect(() =>
-      prepare.call(runtimeA.handle.providerManager, context),
-    ).not.toThrow();
+    expect(() => prepare.call(runtimeA.handle.providerManager)).not.toThrow();
   });
 
   it('rejects ownerless provider queries without consulting process preference', () => {

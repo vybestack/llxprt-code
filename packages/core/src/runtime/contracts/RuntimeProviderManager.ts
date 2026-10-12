@@ -73,7 +73,7 @@ export interface RuntimeProviderManager {
   getProviderByName(name: string): RuntimeProvider | undefined;
   registerProvider(provider: RuntimeProvider): void;
   checkpointProviderRegistry(): () => void;
-  prepareStatelessProviderInvocation?(runtimeContext?: unknown): unknown;
+  prepareStatelessProviderInvocation?(): unknown;
   getProviderMetrics(): RuntimeProviderMetrics;
   getSessionTokenUsage(): RuntimeSessionTokenUsage;
   setConfig(config: Config): void;
