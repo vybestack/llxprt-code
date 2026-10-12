@@ -35,7 +35,7 @@ import {
   rawRows,
   sendOwned,
   streamOwned,
-} from './chatSession.media-history-harness.js';
+} from './__tests__/support/chatSession.media-history-harness.js';
 const priorTokenLimits = {
   ...(await import('@vybestack/llxprt-code-core/core/tokenLimits.js')),
 };

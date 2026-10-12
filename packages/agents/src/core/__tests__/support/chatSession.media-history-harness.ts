@@ -11,7 +11,7 @@ import { vi } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ChatSession } from './chatSession.js';
+import { ChatSession } from '../../chatSession.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { createAgentRuntimeContext } from '@vybestack/llxprt-code-core/runtime/createAgentRuntimeContext.js';
 import {
@@ -31,7 +31,7 @@ import type {
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import type { AgentChatRecordingExecution } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { collectHistoryFixture } from './__tests__/support/collect-history-test-fixture.js';
+import { collectHistoryFixture } from './collect-history-test-fixture.js';
 
 type ReferenceMediaBlock = Extract<
   IContent['blocks'][number],
