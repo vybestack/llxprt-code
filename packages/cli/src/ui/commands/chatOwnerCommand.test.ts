@@ -158,8 +158,8 @@ describe('owner-backed /chat command route', () => {
       await agent.session.setRecording({ enabled: true });
       const context = createMockCommandContext({ services: { agent } });
       const client = agent.agentClient;
-      const original = client.restoreHistory.bind(client);
-      const fault = spyOn(client, 'restoreHistory').mockImplementationOnce(
+      const original = client.setHistoryFromSource.bind(client);
+      const fault = spyOn(client, 'setHistoryFromSource').mockImplementationOnce(
         async (...args) => {
           await original(...args);
           throw new Error('restore interrupted');

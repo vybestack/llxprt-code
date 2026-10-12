@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -8,15 +8,24 @@ import type {
   LogRecordExporter,
 } from '@opentelemetry/sdk-logs';
 import { ExportResultCode, type ExportResult } from '@opentelemetry/core';
-import { FileLogExporter } from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
+import {
+  FileLogExporter,
+  FileMetricExporter,
+  FileSpanExporter,
+} from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
 import {
   initializeTelemetry,
   flushTelemetry,
   shutdownTelemetry,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
+import { createTelemetryAdapter } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
 import { LoggingProviderWrapper } from '../../../../../providers/src/LoggingProviderWrapper.js';
-import { createTelemetryAdapterFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { getRequestSignal } from '@vybestack/llxprt-code-providers/utils/abortSignal.js';
 import {
@@ -167,12 +176,25 @@ interface StrictInput {
   readonly exporter: ObservedFileExporter;
   readonly fixture: Awaited<ReturnType<typeof preflightDisk>>;
   readonly wrapper: LoggingProviderWrapper;
+  readonly config: Config;
+  readonly settingsOwner: SessionSettingsOwner;
+  /** Prepared with the observed exporter; callers enable it with initializeTelemetry. */
+  readonly telemetry: RootTelemetry;
+  readonly cleanup: () => Promise<void>;
 }
-export async function assembleStrict(
+interface StrictOptions {
+  readonly logConversations?: boolean;
+}
+type StrictBase = Omit<
+  StrictInput,
+  'wrapper' | 'config' | 'settingsOwner' | 'telemetry' | 'cleanup'
+>;
+/** The endpoint, provider setup and disk source, before any telemetry root is built. */
+export async function assembleStrictBase(
   root: string,
   fault: StrictFault,
   onUploaded?: () => Promise<void>,
-): Promise<StrictInput> {
+): Promise<StrictBase> {
   resetConversationFileWriterForTesting();
   const controller = new AbortController();
   const telemetryPath = join(root, 'strict.jsonl');
@@ -196,20 +218,94 @@ export async function assembleStrict(
     `http://127.0.0.1:${http.server.port}/v1`,
     true,
   );
-  await shutdownTelemetry(setup.config);
-  setup.config.updateTelemetrySettings({
-    logConversations: true,
-    conversationLogPath: root,
-    outfile: telemetryPath,
-  });
   const exporter = new ObservedFileExporter(telemetryPath);
-  initializeTelemetry(
-    setup.config,
-    fault === 'unsupported' ? new UnsupportedFileExporter(exporter) : exporter,
-  );
   const fixture = await preflightDisk(root, false);
-  const wrapper = new LoggingProviderWrapper(setup.provider);
-  return { controller, faultPath, http, setup, exporter, fixture, wrapper };
+  return { controller, faultPath, http, setup, exporter, fixture };
+}
+/** Strict base plus a session-owned telemetry root, provider manager and wrapper. */
+export async function assembleStrict(
+  root: string,
+  fault: StrictFault,
+  onUploaded?: () => Promise<void>,
+  options: StrictOptions = {},
+): Promise<StrictInput> {
+  const base = await assembleStrictBase(root, fault, onUploaded);
+  const { setup, exporter } = base;
+  const telemetryPath = join(root, 'strict.jsonl');
+  const privacy = {
+    logPrompts: true,
+    logConversations: options.logConversations ?? true,
+    logApiBodies: true,
+    maxChars: 32 * 1024 * 1024,
+  };
+  const config = new Config({
+    cwd: root,
+    targetDir: root,
+    sessionId: randomUUID(),
+    model: 'gpt-5.6',
+    debugMode: false,
+    telemetry: {
+      enabled: true,
+      logPrompts: privacy.logPrompts,
+      logApiBodies: privacy.logApiBodies,
+      logApiBodyMaxChars: privacy.maxChars,
+      logConversations: privacy.logConversations,
+      conversationLogPath: root,
+      outfile: telemetryPath,
+    },
+  });
+  const settingsOwner = new SessionSettingsOwner(
+    setup.context.settingsService,
+  );
+  const telemetryOptions = {
+    enabled: true,
+    sessionId: config.getSessionId(),
+    outfile: telemetryPath,
+    maxBytes: config.getTelemetryOutfileMaxBytes(),
+    maxFiles: config.getTelemetryOutfileMaxFiles(),
+    readPrivacySettings: () => privacy,
+  };
+  const logger =
+    fault === 'unsupported' ? new UnsupportedFileExporter(exporter) : exporter;
+  const telemetry = settingsOwner.bindTelemetry(
+    config,
+    RootTelemetry.prepare(telemetryOptions, () => ({
+      tracer: new FileSpanExporter(telemetryPath, telemetryOptions),
+      logger,
+      meter: new FileMetricExporter(telemetryPath, telemetryOptions),
+    })),
+  );
+  const manager = new ProviderManager({
+    config,
+    settingsService: setup.context.settingsService,
+    sessionSettings: settingsOwner,
+  });
+  manager.registerProvider(setup.provider);
+  const diagnostics = captureProviderRequestDiagnostics(
+    config,
+    settingsOwner,
+    (name, usage) => manager.accumulateSessionTokens(name, usage),
+  );
+  const wrapper = new LoggingProviderWrapper(
+    setup.provider,
+    undefined,
+    undefined,
+    () => diagnostics,
+  );
+  const cleanup = async (): Promise<void> => {
+    manager.dispose();
+    await shutdownTelemetry(telemetry);
+    await settingsOwner.dispose();
+    await config.dispose();
+  };
+  return {
+    ...base,
+    wrapper,
+    config,
+    settingsOwner,
+    telemetry,
+    cleanup,
+  };
 }
 export async function strictProbe(
   root: string,
@@ -217,6 +313,7 @@ export async function strictProbe(
   source: boolean,
 ): Promise<StrictReceipt> {
   const input = await assembleStrict(root, fault);
+  await initializeTelemetry(input.telemetry);
   const { controller, faultPath, http, setup, fixture, wrapper } = input;
   let preflights = 0;
   let retries = 0;
@@ -234,7 +331,7 @@ export async function strictProbe(
             ...buildSourceProviderChatOptions(
               rows,
               undefined,
-              setup.context,
+              undefined,
               setup.invocation,
               undefined,
               preflightInstructions,
@@ -248,7 +345,7 @@ export async function strictProbe(
           onPrepared: async (prepared): Promise<void> => {
             preflights++;
             if (fault === 'unsupported')
-              await publishPreflight(root, setup, prepared);
+              await publishPreflight(root, input, prepared);
           },
           shouldRetryOnError: (error) => {
             retries++;
@@ -258,15 +355,13 @@ export async function strictProbe(
               error.status === 503
             );
           },
+          tokenizerFactory: setup.tokenizerFactory,
         })
       : wrapper.generateChatCompletion({
           contents: {
             [Symbol.asyncIterator]: () =>
               fixture.source.openReader(controller.signal),
           },
-          config: setup.config,
-          runtime: setup.context,
-          settings: setup.context.settingsService,
           invocation: { ...setup.invocation, signal: controller.signal },
           systemInstruction: preflightInstructions,
           resolved: { model: 'gpt-5.6' },
@@ -279,7 +374,7 @@ export async function strictProbe(
     failure = error;
   } finally {
     if (!source) await fixture.source.close();
-    await flushTelemetry();
+    await flushTelemetry(input.telemetry);
     await http.server.stop(true);
   }
   return captureStrictReceipt(input, fault, source, {
@@ -321,14 +416,14 @@ async function captureStrictReceipt(
     activeReaders: fixture.state.active,
     activeBodies: activeRequestBodyCount(),
   };
-  await shutdownTelemetry(setup.config);
+  await input.cleanup();
   await setup.config.dispose();
   resetConversationFileWriterForTesting();
   return receipt;
 }
 async function publishPreflight(
   root: string,
-  setup: ReturnType<typeof preflightRuntime>,
+  input: StrictInput,
   prepared: PreparedSourcePromptEnvelopeSend,
 ): Promise<void> {
   const signal = getRequestSignal(prepared.options);
@@ -338,7 +433,7 @@ async function publishPreflight(
     signal,
   );
   try {
-    await createTelemetryAdapterFromConfig(setup.config).logApiRequest({
+    await createTelemetryAdapter(input.config, input.telemetry).logApiRequest({
       model: 'gpt-5.6',
       promptId: 'strict-preflight',
       requestArtifact: {

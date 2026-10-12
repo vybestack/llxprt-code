@@ -34,7 +34,7 @@ import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
-import { assembleStrict } from './source-strict-logger-fixture.js';
+import { assembleStrictBase } from './source-strict-logger-fixture.js';
 import {
   preflightDisk,
   preflightInstructions,
@@ -60,7 +60,9 @@ function observeAttempts() {
   });
   return { starts, ends, close: (): void => setPerfPhaseObserver(previous) };
 }
-type Input = Awaited<ReturnType<typeof assembleStrict>>;
+type Input = Awaited<ReturnType<typeof assembleStrictBase>> & {
+  readonly wrapper: LoggingProviderWrapper;
+};
 interface Result {
   readonly output: string;
   readonly usage: readonly UsageStats[];
@@ -136,6 +138,7 @@ async function sendSource(input: Input): Promise<Result> {
         return rows;
       },
       shouldRetryOnError: () => false,
+      tokenizerFactory: input.setup.tokenizerFactory,
     });
     return await consume(stream);
   } catch (error: unknown) {
@@ -180,7 +183,7 @@ async function prepareMixed(
     root,
     `conversation-${new Date().toISOString().split('T')[0]}.jsonl`,
   );
-  const assembled = await assembleStrict(root, fault, async () => {
+  const assembled = await assembleStrictBase(root, fault, async () => {
     observations.uploads++;
     if (observations.uploads === 2) {
       observations.priorRequestLog = await readFile(conversationPath, 'utf8');

@@ -3,7 +3,17 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import {
+  hookSessionRuntime,
+  readHookDefinitions,
+} from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
+import { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 import { estimatePromptEnvelope } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
@@ -112,9 +122,13 @@ async function oracle(
       },
     },
     tools: oracleTools(mode),
-    config: setup.config,
-    runtime: setup.runtime.providerRuntime,
-    settings: setup.settings,
+    invocation: captureProviderInvocation(
+      createProviderRuntimeContext({
+        settingsService: setup.settings,
+        runtimeId: setup.runtime.state.runtimeId,
+      }),
+      setup.provider.name,
+    ),
     systemInstruction: setup.generation.systemInstruction,
   });
   try {
@@ -131,6 +145,7 @@ async function oracle(
 async function consume(
   setup: Awaited<ReturnType<typeof processorFixture>>,
   mode: ModelHookMode,
+  hooks: SessionHookOwner,
 ): Promise<Record<string, unknown>> {
   const controller = new AbortController();
   const timer =
@@ -152,6 +167,10 @@ async function consume(
           tools: toolHookTools,
           abortSignal: controller.signal,
         },
+        hookOwner: hooks.execution({
+          sessionId: () => setup.config.getSessionId(),
+          transcriptPath: () => undefined,
+        }),
       },
       'actual-model-worker',
       sourcePending,
@@ -203,17 +222,32 @@ async function run(
     debug.apply(this, args);
   };
   let observer: ModelBodyObserver | undefined;
+  let hooks: SessionHookOwner | undefined;
   try {
     registerModelHook(setup.config, root, mode);
     const selection = selectionMode(mode);
     if (selection !== undefined)
       registerToolHook(setup.config, root, selection);
-    const system = setup.config.getHookSystem();
-    if (!system) throw new Error('Missing actual HookSystem');
-    await system.initialize();
+    hooks = new SessionHookOwner(
+      readHookDefinitions(setup.config),
+      hookSessionRuntime(
+        setup.config,
+        new WorkspaceTrustLifecycle({
+          localTrust: setup.config.initialWorkspaceTrust,
+        }),
+        RootTelemetry.prepare({
+          enabled: false,
+          sessionId: setup.config.getSessionId(),
+          maxBytes: 1024,
+          maxFiles: 1,
+        }),
+      ),
+      true,
+      new MessageBus(),
+    );
     const expected = await oracle(setup, mode);
     if (source) observer = observeModelBody(setup.history, retainBoundaryRows);
-    const facts = await consume(setup, mode);
+    const facts = await consume(setup, mode, hooks);
     const path = join(root, 'model-hooks.jsonl');
     return {
       ...facts,
@@ -246,6 +280,7 @@ async function run(
     observer?.restore();
     DebugLogger.prototype.debug = debug;
     setup.history.dispose();
+    await hooks?.dispose();
     await http.server.stop(true);
     await setup.config.dispose();
   }

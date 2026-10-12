@@ -54,6 +54,7 @@ function realRuntimeFixture(root: string, baseURL: string, model: string) {
     history,
     baseURL,
     model,
+    factory,
   );
 }
 

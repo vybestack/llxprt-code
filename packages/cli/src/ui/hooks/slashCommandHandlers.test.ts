@@ -776,6 +776,7 @@ describe('slashCommandHandlers', () => {
             ok: true,
             warnings: [],
             metadata: {
+              kind: 'main' as const,
               sessionId: config.getSessionId(),
               projectHash: getProjectHash(config.getProjectRoot()),
               provider: config.getProvider() ?? 'unknown',

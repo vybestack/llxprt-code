@@ -10,12 +10,11 @@ import type {
 } from '@opentelemetry/sdk-logs';
 import { ExportResultCode, type ExportResult } from '@opentelemetry/core';
 import { FileLogExporter } from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { createTelemetryAdapterFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import { createTelemetryAdapter } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import type { RuntimeRequestArtifact } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
 import {
   initializeTelemetry,
-  isTelemetrySdkInitialized,
   flushTelemetry,
   shutdownTelemetry,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
@@ -33,8 +32,13 @@ import {
 
 const root = sourceRootSetup();
 const eventSchema = z.object({ attributes: z.record(z.unknown()).optional() });
-function config(cap = 4000, enabled = true): Config {
-  return runtimeConfig(root(), cap, enabled);
+const sessionIdentity = { getSessionId: () => 'artifact-runtime' };
+function config(
+  cap = 4000,
+  enabled = true,
+  logger?: LogRecordExporter,
+): RootTelemetry {
+  return runtimeConfig(root(), cap, enabled, logger);
 }
 async function events(): Promise<Array<Record<string, unknown>>> {
   return (await readFile(join(root(), 'runtime.jsonl'), 'utf8'))
@@ -66,7 +70,7 @@ async function artifact(large = false): Promise<RuntimeRequestArtifact> {
 }
 async function send(
   staged: RuntimeRequestArtifact,
-  active: Config,
+  active: RootTelemetry,
   signal?: AbortSignal,
 ): Promise<void> {
   return sendRuntimeArtifact(staged, active, signal);
@@ -131,10 +135,11 @@ describe('awaited actual runtime request artifact exporter', () => {
     'preserves capped legacy visible text and full digest with 64 rows, large=%s',
     async (large) => {
       const active = config();
-      initializeTelemetry(active);
+      await initializeTelemetry(active);
       try {
         const staged = await artifact(large);
-        const operation = createTelemetryAdapterFromConfig(
+        const operation = createTelemetryAdapter(
+          sessionIdentity,
           active,
         ).logApiRequest({
           model: 'gpt-5.6',
@@ -164,7 +169,7 @@ describe('runtime artifact UTF-16 cap compatibility', () => {
     'preserves UTF-16 slice cap %s including split surrogate',
     async (cap) => {
       const active = config(cap);
-      initializeTelemetry(active);
+      await initializeTelemetry(active);
       try {
         const text = '🌊雪'.repeat(6000);
         const path = join(root(), 'unicode.txt');
@@ -198,16 +203,16 @@ describe('runtime artifact UTF-16 cap compatibility', () => {
 describe('runtime artifact scalar compatibility', () => {
   it('preserves the scalar legacy request-wide shared-row identity event', async () => {
     const active = config(50000);
-    initializeTelemetry(active);
+    await initializeTelemetry(active);
     try {
       const shared = diskTextRow(0, false);
       const text = getRequestTextFromContents([shared, shared]);
-      await createTelemetryAdapterFromConfig(active).logApiRequest({
+      await createTelemetryAdapter(sessionIdentity, active).logApiRequest({
         model: 'gpt-5.6',
         requestText: text,
         promptId: 'shared',
       });
-      await flushTelemetry();
+      await flushTelemetry(active);
       expect(
         (await events()).filter(
           (event) => event['event.name'] === 'llxprt_code.api_request',
@@ -224,12 +229,12 @@ describe('runtime artifact scalar compatibility', () => {
   });
   it('disabled body toggles retain counts without opening deleted artifact content', async () => {
     const active = config(4000, false);
-    initializeTelemetry(active);
+    await initializeTelemetry(active);
     try {
       const staged = await artifact();
       await rm(staged.source.artifact_path);
       await send(staged, active);
-      await flushTelemetry();
+      await flushTelemetry(active);
       const records = await events();
       expect(records).toHaveLength(1);
       expect(records[0].request_chars).toBe(staged.source.content_chars);
@@ -246,7 +251,7 @@ describe('artifact exporter failure contract', () => {
     'rejects %s without completion or scalar publication',
     async (mode) => {
       const active = config();
-      initializeTelemetry(active);
+      await initializeTelemetry(active);
       try {
         const staged = await artifact();
         const controller = new AbortController();
@@ -270,7 +275,7 @@ describe('artifact exporter failure contract', () => {
         await expect(send(input, active, controller.signal)).rejects.toThrow(
           messages[mode],
         );
-        await flushTelemetry();
+        await flushTelemetry(active);
         expect(
           await readFile(join(root(), 'runtime.jsonl'), 'utf8').catch(() => ''),
         ).not.toContain('api_request');
@@ -280,7 +285,6 @@ describe('artifact exporter failure contract', () => {
     },
   );
   it('rejects an ordinary external exporter without changing its schema', async () => {
-    const active = config();
     const records: unknown[] = [];
     const exporter: LogRecordExporter = {
       export(batch, callback): void {
@@ -290,8 +294,8 @@ describe('artifact exporter failure contract', () => {
       shutdown: async (): Promise<void> => undefined,
       forceFlush: async (): Promise<void> => undefined,
     };
-    await shutdownTelemetry(active);
-    initializeTelemetry(active, exporter);
+    const active = config(4000, true, exporter);
+    await initializeTelemetry(active);
     try {
       await expect(send(await artifact(), active)).rejects.toThrow(
         'does not support request artifact schema 4',
@@ -302,15 +306,15 @@ describe('artifact exporter failure contract', () => {
     }
   });
   it('rejects acknowledged exporter write failure rather than claiming completion', async () => {
+    // The helper asserts the closed root is no longer initialized.
     await runtimeWriteFailure(root());
-    expect(isTelemetrySdkInitialized()).toBe(false);
   });
 });
 
 describe('actual runtime artifact release', () => {
   it('releases its >10MiB reader and bounded chunks below unchanged 1MiB', async () => {
+    // The helper asserts the closed root is no longer initialized.
     await runtimeRelease(root());
-    expect(isTelemetrySdkInitialized()).toBe(false);
   }, 60000);
 });
 
@@ -341,13 +345,13 @@ class AbortingFileExporter extends FileLogExporter {
 
 describe('runtime artifact cancellation and legacy identity', () => {
   it('aborts between acknowledged chunks with one scalar request and no completion', async () => {
-    const active = config(50000);
     const controller = new AbortController();
-    await shutdownTelemetry(active);
-    initializeTelemetry(
-      active,
+    const active = config(
+      50000,
+      true,
       new AbortingFileExporter(join(root(), 'runtime.jsonl'), controller),
     );
+    await initializeTelemetry(active);
     try {
       await expect(
         send(await artifact(), active, controller.signal),
@@ -373,7 +377,7 @@ describe('runtime artifact cancellation and legacy identity', () => {
   });
   it('preserves shared-row identity when the artifact is the existing legacy request text', async () => {
     const active = config(50000);
-    initializeTelemetry(active);
+    await initializeTelemetry(active);
     try {
       const shared = diskTextRow(0, false);
       const text = getRequestTextFromContents([shared, shared]);
@@ -408,11 +412,11 @@ describe('runtime artifact cancellation and legacy identity', () => {
 describe('unambiguous runtime artifact observation', () => {
   it('rejects ambiguous text plus artifact rather than choosing one observation', async () => {
     const active = config();
-    initializeTelemetry(active);
+    await initializeTelemetry(active);
     try {
       const staged = await artifact();
       expect(() =>
-        createTelemetryAdapterFromConfig(active).logApiRequest({
+        createTelemetryAdapter(sessionIdentity, active).logApiRequest({
           model: 'gpt-5.6',
           requestText: 'conflicting input',
           requestArtifact: staged,

@@ -2,7 +2,12 @@
 import { expect } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { LogRecordExporter } from '@opentelemetry/sdk-logs';
 import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import {
+  FileMetricExporter,
+  FileSpanExporter,
+} from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
 import { createTelemetryAdapter } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
 import {
   initializeTelemetry,
@@ -18,20 +23,31 @@ export function runtimeConfig(
   directory: string,
   cap = 4000,
   enabled = true,
+  logger?: LogRecordExporter,
 ): RootTelemetry {
-  return RootTelemetry.prepare({
-    enabled: true,
-    sessionId: 'artifact-runtime',
-    outfile: join(directory, 'runtime.jsonl'),
-    maxBytes: 104857600,
-    maxFiles: 10,
-    readPrivacySettings: () => ({
-      logPrompts: enabled,
-      logConversations: false,
-      logApiBodies: enabled,
-      maxChars: cap,
-    }),
-  });
+  const outfile = join(directory, 'runtime.jsonl');
+  return RootTelemetry.prepare(
+    {
+      enabled: true,
+      sessionId: 'artifact-runtime',
+      outfile,
+      maxBytes: 104857600,
+      maxFiles: 10,
+      readPrivacySettings: () => ({
+        logPrompts: enabled,
+        logConversations: false,
+        logApiBodies: enabled,
+        maxChars: cap,
+      }),
+    },
+    logger === undefined
+      ? undefined
+      : () => ({
+          tracer: new FileSpanExporter(outfile),
+          logger,
+          meter: new FileMetricExporter(outfile),
+        }),
+  );
 }
 export async function runtimeArtifact(
   directory: string,
@@ -88,7 +104,12 @@ export async function runtimeWriteFailure(parent: string): Promise<void> {
       sendRuntimeArtifact(await runtimeArtifact(directory), active),
     ).rejects.toThrow('EISDIR');
   } finally {
-    await shutdownTelemetry(active);
+    // The blocked outfile fails every transport write, and the root reports that when it closes.
+    const closeFailure = await shutdownTelemetry(active).catch(
+      (error: unknown) => error,
+    );
+    if (!(closeFailure instanceof AggregateError)) throw closeFailure;
+    expect(closeFailure.errors.map(String).join('\n')).toContain('EISDIR');
     expect(isTelemetrySdkInitialized(active)).toBe(false);
     expectNoOpenFixtureFiles(directory);
     await rm(directory, { recursive: true });

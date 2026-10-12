@@ -14,7 +14,7 @@ import {
 import {
   createRootTelemetry,
   type RootTelemetry,
-} from '@vybestack/llxprt-code-telemetry/telemetry/root-telemetry.js';
+} from '@vybestack/llxprt-code-telemetry';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import { stageTurnRequestArtifact } from './turn-request-artifact.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
@@ -30,12 +30,18 @@ type Fault =
   | 'no-ack';
 class FaultExporter extends FileLogExporter {
   private changed = false;
+  private held: (() => void) | undefined;
   constructor(
     path: string,
     private readonly fault: Fault,
     private readonly controller: AbortController,
   ) {
     super(path);
+  }
+  /** Completes a transport callback the test withheld, so teardown can join it. */
+  releaseHeld(): void {
+    this.held?.();
+    this.held = undefined;
   }
   override export(
     records: ReadableLogRecord[],
@@ -51,7 +57,9 @@ class FaultExporter extends FileLogExporter {
     }
     this.changed = true;
     if (this.fault === 'no-ack') {
-      super.export(records, () => undefined);
+      super.export(records, (result) => {
+        this.held = () => callback(result);
+      });
       return;
     }
     if (this.fault === 'drop') {
@@ -151,10 +159,21 @@ describe('actual FileLogExporter acknowledges only verified chunk protocol', () 
     async (fault) => {
       const config = active();
       const controller = new AbortController();
-      const telemetry = await activeRoot(
-        config,
-        new FaultExporter(join(root(), 'fault.jsonl'), fault, controller),
+      const exporter = new FaultExporter(
+        join(root(), 'fault.jsonl'),
+        fault,
+        controller,
       );
+      const telemetry = await activeRoot(config, exporter);
+      const failure = {
+        corrupt: 'digest',
+        drop: 'sequence',
+        sequence: 'sequence',
+        oversize: 'size',
+        write: 'disk rejected chunk',
+        abort: 'abort after ACK',
+        'no-ack': 'acknowledgement',
+      }[fault];
       try {
         const source = await stageTurnRequestArtifact(
           root(),
@@ -174,21 +193,14 @@ describe('actual FileLogExporter acknowledges only verified chunk protocol', () 
             },
             signal: controller.signal,
           }),
-        ).rejects.toThrow(
-          {
-            corrupt: 'digest',
-            drop: 'sequence',
-            sequence: 'sequence',
-            oversize: 'size',
-            write: 'disk rejected chunk',
-            abort: 'abort after ACK',
-            'no-ack': 'acknowledgement',
-          }[fault],
-        );
+        ).rejects.toThrow(failure);
         const text = await readFile(join(root(), 'fault.jsonl'), 'utf8');
         expect(text).not.toContain('api_request_complete');
       } finally {
-        await telemetry.close();
+        exporter.releaseHeld();
+        // Transport failures stay visible: the root reports a rejected export when it closes.
+        if (['abort', 'no-ack'].includes(fault)) await telemetry.close();
+        else await expect(telemetry.close()).rejects.toThrow(failure);
       }
     },
     120000,

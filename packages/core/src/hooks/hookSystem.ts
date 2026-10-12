@@ -567,12 +567,16 @@ export class HookSystem implements HookModelSnapshotCallbacks {
     this.unsubscribeTrustPolicy();
     this.unsubscribeTrustTransition();
     const accepted = [...this.accepted];
-    this.closing = this.joinDisposal(accepted);
+    // The handler's lifetime must end synchronously: open final-output readers
+    // and their scratch are bound to it and may not outlive system disposal.
+    const handlerDisposal = Promise.allSettled([this.eventHandler?.dispose()]);
+    this.closing = this.joinDisposal(accepted, handlerDisposal);
     return this.closing;
   }
 
   private async joinDisposal(
     accepted: ReadonlyArray<Promise<unknown>>,
+    handlerDisposal: Promise<PromiseSettledResult<void | undefined>[]>,
   ): Promise<void> {
     const results = await Promise.allSettled([
       ...accepted,
@@ -580,7 +584,7 @@ export class HookSystem implements HookModelSnapshotCallbacks {
         ? []
         : [this.initializationPromise]),
     ]);
-    const handler = await Promise.allSettled([this.eventHandler?.dispose()]);
+    const handler = await handlerDisposal;
     this.eventHandler = null;
     const failures = [...results, ...handler].flatMap((result) =>
       result.status === 'rejected' &&

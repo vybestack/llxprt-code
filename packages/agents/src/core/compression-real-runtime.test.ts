@@ -23,6 +23,7 @@ import {
 } from '@vybestack/llxprt-code-providers';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition/index.js';
 import type { RuntimeProvider } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProvider.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import {
   loggingChatSession,
@@ -145,7 +146,12 @@ describe('compression through the CLI runtime wiring on OpenAI chat', () => {
       trustedFolder: true,
       telemetry: { enabled: false },
     });
-    const manager = new ProviderManager({ settingsService: settings, config });
+    const { settingsOwner } = createSessionSettingsFixture(config, settings);
+    const manager = new ProviderManager({
+      settingsService: settings,
+      config,
+      sessionSettings: settingsOwner,
+    });
     const { tokenizerFactory: factory } = configureProviderRuntimeFactories(
       config,
       manager,
@@ -166,6 +172,8 @@ describe('compression through the CLI runtime wiring on OpenAI chat', () => {
     const runtime = createAgentRuntimeContext({
       prepareProviderInvocation: (name, parameters, signal) =>
         captureProviderInvocation(providerRuntime, name, parameters, signal),
+      promptEstimator: factory,
+      readRuntimeSettings: () => settingsOwner.readRuntimePolicy(),
       state: {
         runtimeId,
         sessionId: config.getSessionId(),

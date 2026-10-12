@@ -36,7 +36,7 @@ import { LoggingProviderWrapper } from '../../../../../providers/src/LoggingProv
 import { LOGICAL_REQUEST_ID_KEY } from '@vybestack/llxprt-code-providers/logging/attemptLifecycle.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
-import { assembleStrict } from './source-strict-logger-fixture.js';
+import { assembleStrictBase } from './source-strict-logger-fixture.js';
 import {
   barrier,
   preflightDisk,
@@ -123,7 +123,9 @@ class CorrelatedFileExporter extends FileLogExporter {
     this.delayed = undefined;
   }
 }
-type Input = Awaited<ReturnType<typeof assembleStrict>>;
+type Input = Awaited<ReturnType<typeof assembleStrictBase>> & {
+  readonly wrapper: LoggingProviderWrapper;
+};
 type Disk = Awaited<ReturnType<typeof preflightDisk>>;
 interface Result {
   output: string;
@@ -211,6 +213,7 @@ async function send(
       },
       onPrepared: meet,
       shouldRetryOnError: () => false,
+      tokenizerFactory: input.setup.tokenizerFactory,
     });
     return await consume(stream);
   } catch (error: unknown) {
@@ -230,7 +233,7 @@ async function prepareCorrelated(
 ) {
   const uploaded = barrier();
   let uploadCount = 0;
-  const assembled = await assembleStrict(root, 'none', async () => {
+  const assembled = await assembleStrictBase(root, 'none', async () => {
     if (!fault.startsWith('post')) return;
     if (++uploadCount === 2) uploaded.release();
     await uploaded.wait;

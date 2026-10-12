@@ -28,6 +28,7 @@ describe('child facade real launch', () => {
       directory,
       'http://127.0.0.1:1/v1',
     );
+    const chats = fixture.config.projectChatsDir;
     try {
       const history = fixture.child.runtime.history;
       expect(history).toBeInstanceOf(HistoryService);
@@ -37,7 +38,6 @@ describe('child facade real launch', () => {
         blocks: [{ type: 'text', text: 'child-only' }],
       });
       await history.waitForCommit();
-      const chats = fixture.config.projectChatsDir;
       const files = await readdir(chats);
       expect(files.filter((file) => file.endsWith('.lock'))).toHaveLength(1);
       const journals = files.filter((file) => file.endsWith('.jsonl'));
@@ -49,7 +49,7 @@ describe('child facade real launch', () => {
     } finally {
       await fixture.close();
     }
-    expect(await readdir(resolve(directory, 'chats'))).toStrictEqual([]);
+    expect(await readdir(chats)).toStrictEqual([]);
   }, 180000);
 
   it('sends the child curated journal through its real provider to local HTTP', async () => {

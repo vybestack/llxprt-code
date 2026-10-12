@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   flushTelemetry,
-  shutdownTelemetry,
+  initializeTelemetry,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import { resetConversationFileWriterForTesting } from '@vybestack/llxprt-code-storage/testing';
@@ -137,11 +137,10 @@ export async function mixedPreSendProbe(
   if (fault === 'conversation-request' || fault === 'api-durable-request')
     setupFault = 'conversation-request';
   if (fault === 'api-request') setupFault = 'api-request';
-  const input = await assembleStrict(root, setupFault);
-  if (fault === 'api-durable-request')
-    await input.settingsOwner.updateTelemetrySettings({
-      logConversations: false,
-    });
+  const input = await assembleStrict(root, setupFault, undefined, {
+    logConversations: fault !== 'api-durable-request',
+  });
+  await initializeTelemetry(input.telemetry);
   const eagerRoot = join(root, 'eager-disk');
   mkdirSync(eagerRoot);
   const disk = await preflightDisk(eagerRoot, false);
@@ -179,7 +178,7 @@ export async function mixedPreSendProbe(
     return receipt;
   } finally {
     await input.http.server.stop(true);
-    await shutdownTelemetry(input.telemetry);
+    await input.cleanup();
     await input.setup.config.dispose();
     resetConversationFileWriterForTesting();
   }

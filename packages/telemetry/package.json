@@ -115,6 +115,10 @@
     "./telemetry/file-exporters.js": {
       "bun": "./src/telemetry/file-exporters.ts",
       "import": "./dist/src/telemetry/file-exporters.js"
+    },
+    "./telemetry/log-record-emission.js": {
+      "bun": "./src/telemetry/log-record-emission.ts",
+      "import": "./dist/src/telemetry/log-record-emission.js"
     }
   },
   "scripts": {

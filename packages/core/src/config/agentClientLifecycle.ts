@@ -217,7 +217,9 @@ export async function prepareProfileClient(
     discard: () => Promise<void>;
   }
 > {
-  const history = structuredClone(await previousClient.getHistory());
+  // A cold row stream: the replacement client's deferred admission pulls
+  // rows from the live journal, so no context-sized copy exists here.
+  const history = previousClient.streamHistory();
   const prepared = buildNewContentGeneratorConfig(
     contentGeneratorFactory,
     selectedState,

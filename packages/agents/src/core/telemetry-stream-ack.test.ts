@@ -3,14 +3,13 @@ import { describe, expect, it } from 'bun:test';
 import { join } from 'node:path';
 import type { ReadableLogRecord } from '@opentelemetry/sdk-logs';
 import type { ExportResult } from '@opentelemetry/core';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { createTelemetryAdapterFromConfig } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
-import { FileLogExporter } from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
+import { createTelemetryAdapter } from '@vybestack/llxprt-code-core/runtime/runtimeAdapters.js';
+import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import {
-  initializeTelemetry,
-  shutdownTelemetry,
-  flushTelemetry,
-} from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
+  FileLogExporter,
+  FileMetricExporter,
+  FileSpanExporter,
+} from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import { stageTurnRequestArtifact } from './turn-request-artifact.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
@@ -51,23 +50,28 @@ class PausedExporter extends FileLogExporter {
 }
 describe('real SDK concurrent per-chunk acknowledgement', () => {
   it('does not resolve either attempt or a legacy flush while an actual chunk ACK is held', async () => {
-    const active = new Config({
-      cwd: root(),
-      targetDir: root(),
-      sessionId: 'ack',
-      model: 'gpt-5.6',
-      debugMode: false,
-      telemetry: {
+    const outfile = join(root(), 'ack.jsonl');
+    const exporter = new PausedExporter(outfile);
+    const telemetry = await RootTelemetry.create(
+      {
+        sessionId: 'ack',
         enabled: true,
-        logPrompts: true,
-        logApiBodies: true,
-        logApiBodyMaxChars: 32 * 1024 * 1024,
-        outfile: join(root(), 'ack.jsonl'),
+        outfile,
+        maxBytes: 104857600,
+        maxFiles: 10,
+        readPrivacySettings: () => ({
+          logPrompts: true,
+          logConversations: false,
+          logApiBodies: true,
+          maxChars: 32 * 1024 * 1024,
+        }),
       },
-    });
-    await shutdownTelemetry(active);
-    const exporter = new PausedExporter(join(root(), 'ack.jsonl'));
-    initializeTelemetry(active, exporter);
+      () => ({
+        tracer: new FileSpanExporter(outfile),
+        logger: exporter,
+        meter: new FileMetricExporter(outfile),
+      }),
+    );
     const source = await stageTurnRequestArtifact(
       root(),
       (async function* () {
@@ -75,7 +79,7 @@ describe('real SDK concurrent per-chunk acknowledgement', () => {
           yield diskTextRow(index, false);
       })(),
     );
-    const adapter = createTelemetryAdapterFromConfig(active);
+    const adapter = createTelemetryAdapter({ getSessionId: () => 'ack' }, telemetry);
     let completed = 0;
     const attempts = ['first', 'second'].map((promptId) =>
       Promise.resolve(
@@ -95,7 +99,7 @@ describe('real SDK concurrent per-chunk acknowledgement', () => {
     try {
       await exporter.arrived;
       let flushed = false;
-      const legacyFlush = flushTelemetry().then(() => {
+      const legacyFlush = telemetry.flush().then(() => {
         flushed = true;
       });
       await Bun.sleep(100);
@@ -106,7 +110,7 @@ describe('real SDK concurrent per-chunk acknowledgement', () => {
       expect(completed).toBe(2);
     } finally {
       exporter.release();
-      await shutdownTelemetry(active);
+      await telemetry.close();
     }
   }, 30000);
 });

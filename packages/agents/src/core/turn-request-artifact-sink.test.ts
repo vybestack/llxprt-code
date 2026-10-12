@@ -10,7 +10,7 @@ import type { ApiRequestEvent as RuntimeApiRequestEvent } from '@vybestack/llxpr
 import { ApiRequestEvent } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
 import { logApiRequest } from '@vybestack/llxprt-code-telemetry/telemetry/loggers.js';
 import { emitRequestArtifact } from '../../../telemetry/src/telemetry/request-artifact.js';
-import { recordEmitter } from '../../../telemetry/src/telemetry/log-record-emission.js';
+import { recordEmitter } from '@vybestack/llxprt-code-telemetry/telemetry/log-record-emission.js';
 import {
   initializeTelemetry,
   flushTelemetry,
