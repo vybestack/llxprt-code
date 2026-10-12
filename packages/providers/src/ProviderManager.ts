@@ -43,7 +43,10 @@ import {
   buildEphemeralsSnapshot,
   normalizeRuntimeInputs,
 } from './runtimeNormalizer.js';
-import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import {
+  captureProviderInvocation,
+  type ProviderInvocationData,
+} from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import { resolveAvailableModels } from './modelResolver.js';
 
 const logger = new DebugLogger('llxprt:provider:manager');
@@ -419,8 +422,11 @@ export class ProviderManager implements IProviderManager {
     const runtimeAware = provider as IProvider & {
       setRuntimeSettingsService?: (settingsService: SettingsService) => void;
       setConfig?: (config: Config) => void;
-      setRuntimeContextResolver?: (
-        resolver: () => ProviderRuntimeContext,
+      setInvocationDataReader?: (
+        reader: (providerName: string) => ProviderInvocationData,
+      ) => void;
+      setRuntimeKindReader?: (
+        reader: () => ProviderRuntimeContext['runtimeKind'],
       ) => void;
       setOptionsNormalizer?: (
         normalizer: (
@@ -433,14 +439,13 @@ export class ProviderManager implements IProviderManager {
     if (this.config && runtimeAware.setConfig) {
       runtimeAware.setConfig(this.config);
     }
-    if (
-      runtimeAware.setRuntimeContextResolver &&
-      typeof runtimeAware.setRuntimeContextResolver === 'function'
-    ) {
-      runtimeAware.setRuntimeContextResolver(() =>
-        this.snapshotRuntimeContext('ProviderManager.syncProviderRuntime'),
-      );
-    }
+    runtimeAware.setInvocationDataReader?.((providerName) =>
+      this.snapshotInvocationData(
+        'ProviderManager.syncProviderRuntime',
+        providerName,
+      ),
+    );
+    runtimeAware.setRuntimeKindReader?.(() => this.runtime?.runtimeKind);
     if (
       runtimeAware.setOptionsNormalizer &&
       typeof runtimeAware.setOptionsNormalizer === 'function'
@@ -463,49 +468,12 @@ export class ProviderManager implements IProviderManager {
    * @requirement:REQ-SP4-001
    * @pseudocode provider-runtime-handling.md lines 10-15
    */
-  private snapshotRuntimeContext(source: string): ProviderRuntimeContext {
-    const baseRuntime: ProviderRuntimeContext = this.runtime ?? {
-      settingsService: this.settingsService,
-      config: this.config,
-      runtimeId: 'provider-manager.default-runtime',
-      metadata: { source: 'ProviderManager', requirement: 'REQ-SP4-001' },
-    };
-
-    if (!this.runtime) {
-      this.runtime = baseRuntime;
-    } else if (!this.runtime.config && baseRuntime.config) {
-      this.runtime = { ...this.runtime, config: baseRuntime.config };
-    }
-
-    const settingsService = (
-      baseRuntime as { settingsService?: SettingsService | null }
-    ).settingsService;
-    if (settingsService === null || settingsService === undefined) {
-      throw new MissingProviderRuntimeError({
-        providerKey: 'ProviderManager',
-        missingFields: ['settings'],
-        stage: source,
-        metadata: {
-          requirement: 'REQ-SP4-001',
-          hint: 'ProviderManager requires a SettingsService to construct runtime contexts.',
-        },
-      });
-    }
-
-    const config = baseRuntime.config ?? this.config;
-    if (!config) {
-      throw new MissingProviderRuntimeError({
-        providerKey: 'ProviderManager',
-        missingFields: ['config'],
-        stage: source,
-        metadata: {
-          requirement: 'REQ-SP4-001',
-          hint: 'Call ProviderManager.setConfig before invoking providers.',
-        },
-      });
-    }
-
-    const baseMetadata = baseRuntime.metadata ?? {};
+  private snapshotInvocationData(
+    source: string,
+    providerName: string,
+  ): ProviderInvocationData {
+    const baseRuntime = this.runtime;
+    const baseMetadata = baseRuntime?.metadata ?? {};
     const callMetadata: Record<string, unknown> = {
       ...baseMetadata,
       source,
@@ -513,18 +481,17 @@ export class ProviderManager implements IProviderManager {
       generatedAt: new Date().toISOString(),
     };
 
-    const baseId = baseRuntime.runtimeId;
+    const baseId = baseRuntime?.runtimeId;
     const callRuntimeId =
       typeof baseId === 'string' && baseId.trim() !== ''
         ? `${baseId}:${Math.random().toString(36).slice(2, 10)}`
         : `provider-manager:${source}:${Date.now().toString(36)}`;
 
     return {
-      settingsService,
-      config,
       runtimeId: callRuntimeId,
-      runtimeKind: baseRuntime.runtimeKind,
       metadata: callMetadata,
+      globalSettings: this.settingsService.getAllGlobalSettings(),
+      providerSettings: this.settingsService.getProviderSettings(providerName),
     };
   }
 
@@ -549,23 +516,20 @@ export class ProviderManager implements IProviderManager {
         getProvider: (name) => this.providers.get(name),
         composeRetryOperations: this.retryOperationsFactory,
         admitRequest: (options, name) => {
-          const owner = this.runtime ?? {
-            settingsService: this.settingsService,
-            config: this.config,
-          };
+          const owner = this.runtime;
           return {
             ...options,
-            runtimeKind: options.runtimeKind ?? owner.runtimeKind,
+            runtimeKind: options.runtimeKind ?? owner?.runtimeKind,
             userMemory: options.userMemory,
             invocation:
               options.invocation ??
               captureProviderInvocation(
                 {
-                  runtimeId: owner.runtimeId,
-                  metadata: owner.metadata,
-                  globalSettings: owner.settingsService.getAllGlobalSettings(),
+                  runtimeId: owner?.runtimeId,
+                  metadata: owner?.metadata,
+                  globalSettings: this.settingsService.getAllGlobalSettings(),
                   providerSettings:
-                    owner.settingsService.getProviderSettings(name),
+                    this.settingsService.getProviderSettings(name),
                 },
                 name,
                 options.modelParameters,

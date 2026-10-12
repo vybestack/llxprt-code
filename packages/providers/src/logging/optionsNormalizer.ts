@@ -1,4 +1,3 @@
-import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -16,14 +15,18 @@ import {
   type IContent,
   type UsageStats,
 } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import {
+  captureProviderInvocation,
+  type ProviderInvocationData,
+} from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
+import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type { GenerateChatOptions, ProviderToolset } from '../IProvider.js';
 import { MissingProviderRuntimeError } from '../errors.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 
 export interface NormalizerContext {
-  runtimeContextResolver?: () => ProviderRuntimeContext;
+  readInvocationData?: (providerName: string) => ProviderInvocationData;
+  readRuntimeKind?: () => RuntimeKind | undefined;
   statelessRuntimeMetadata: Record<string, unknown> | null;
   optionsNormalizer:
     | ((
@@ -44,36 +47,28 @@ export function normalizeChatCompletionOptions(
     ? { contents: contentOrOptions, tools: maybeTools }
     : copyProviderRequestOptions(contentOrOptions);
 
-  const injectedRuntime = ctx.runtimeContextResolver?.();
+  const injectedData = ctx.readInvocationData?.(ctx.providerName);
 
-  if (injectedRuntime) {
+  if (injectedData) {
     const mergedMetadata: Record<string, unknown> = {
       ...(ctx.statelessRuntimeMetadata ?? {}),
-      ...(injectedRuntime.metadata ?? {}),
+      ...(injectedData.metadata ?? {}),
       ...(normalizedOptions.metadata ?? {}),
       source: 'LoggingProviderWrapper.generateChatCompletion',
       requirement: 'REQ-SP4-001',
     };
 
-    normalizedOptions.runtimeKind ??= injectedRuntime.runtimeKind;
+    normalizedOptions.runtimeKind ??= ctx.readRuntimeKind?.();
     normalizedOptions.invocation ??= captureProviderInvocation(
-      {
-        runtimeId: injectedRuntime.runtimeId,
-        metadata: injectedRuntime.metadata,
-        globalSettings: injectedRuntime.settingsService.getAllGlobalSettings(),
-        providerSettings: injectedRuntime.settingsService.getProviderSettings(
-          ctx.providerName,
-        ),
-      },
+      injectedData,
       ctx.providerName,
       normalizedOptions.modelParameters,
     );
-    applyInjectedRetryOperations(normalizedOptions, injectedRuntime);
 
     normalizedOptions.metadata = mergedMetadata;
   }
 
-  if (!injectedRuntime && ctx.statelessRuntimeMetadata) {
+  if (!injectedData && ctx.statelessRuntimeMetadata) {
     normalizedOptions.metadata = {
       ...ctx.statelessRuntimeMetadata,
       ...(normalizedOptions.metadata ?? {}),
@@ -126,16 +121,3 @@ export function buildMissingRuntimeError(
 
 // UsageStats re-export for type consumers
 export type { UsageStats };
-
-function applyInjectedRetryOperations(
-  options: GenerateChatOptions,
-  injectedRuntime: ProviderRetryOperations,
-): void {
-  options.readRetryAuthToken ??= injectedRuntime.readRetryAuthToken;
-  options.handleAuthError ??= injectedRuntime.handleAuthError;
-  options.tryBucketFailover ??= injectedRuntime.tryBucketFailover;
-  options.readFailoverBuckets ??= injectedRuntime.readFailoverBuckets;
-  options.readCurrentBucket ??= injectedRuntime.readCurrentBucket;
-  options.readFailoverReasons ??= injectedRuntime.readFailoverReasons;
-  options.resetBucketSession ??= injectedRuntime.resetBucketSession;
-}

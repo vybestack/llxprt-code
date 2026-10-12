@@ -123,10 +123,10 @@ describe('Focused lifecycle review findings', () => {
         ),
         { metrics: wrapperSettings1.telemetry.localMetrics },
       );
-      wrapper.setRuntimeContextResolver(() => ({
+      wrapper.setInvocationDataReader(() => ({
         runtimeId: 'test-exact',
-        settingsService: { getConfig: () => config } as never,
-        config,
+        globalSettings: {},
+        providerSettings: {},
         metadata: {},
       }));
       await expect(
@@ -160,10 +160,10 @@ describe('Focused lifecycle review findings', () => {
         ),
         { metrics: wrapperSettings2.telemetry.localMetrics },
       );
-      wrapper.setRuntimeContextResolver(() => ({
+      wrapper.setInvocationDataReader(() => ({
         runtimeId: 'test-exact',
-        settingsService: { getConfig: () => config } as never,
-        config,
+        globalSettings: {},
+        providerSettings: {},
         metadata: {},
       }));
 

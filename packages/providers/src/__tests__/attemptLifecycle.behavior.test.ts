@@ -300,10 +300,10 @@ function buildStack(
     ),
     { metrics: wrapperSettings1.telemetry.localMetrics },
   );
-  wrapper.setRuntimeContextResolver(() => ({
+  wrapper.setInvocationDataReader(() => ({
     runtimeId: 'test',
-    settingsService: { getConfig: () => config } as never,
-    config,
+    globalSettings: {},
+    providerSettings: {},
     metadata: {},
   }));
   return Object.assign(wrapper, {
