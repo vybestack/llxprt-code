@@ -300,6 +300,9 @@ async function registerLifecycleCase0(): Promise<void> {
     async clearHistory(): Promise<void> {
       retainedHistory = [];
     },
+    async clearHistoryForDisposal(): Promise<void> {
+      retainedHistory = [];
+    },
   };
   client['chat'] = mockChat as unknown as ChatSession;
 
@@ -357,6 +360,9 @@ async function registerLifecycleCase1(): Promise<void> {
     },
     getHistoryService: () => fixtureHistory,
     async clearHistory(): Promise<void> {
+      retainedHistory = [];
+    },
+    async clearHistoryForDisposal(): Promise<void> {
       retainedHistory = [];
     },
   };
@@ -435,6 +441,9 @@ async function registerLifecycleCase3(): Promise<void> {
     async clearHistory(): Promise<void> {
       retainedHistory = [];
     },
+    async clearHistoryForDisposal(): Promise<void> {
+      retainedHistory = [];
+    },
   };
   client['chat'] = mockChat as unknown as ChatSession;
 
@@ -467,6 +476,9 @@ async function registerLifecycleCase4(): Promise<void> {
     },
     getHistoryService: () => fixtureHistory,
     async clearHistory(): Promise<void> {
+      retainedHistory = [];
+    },
+    async clearHistoryForDisposal(): Promise<void> {
       retainedHistory = [];
     },
   };
