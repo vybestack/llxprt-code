@@ -10,10 +10,7 @@ import { fromConfig } from '../fromConfig.js';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
+import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
 import { advanceTimersByTimeAsync } from '@vybestack/llxprt-code-test-utils';
 import {
   MemoryTokenStore,
@@ -33,8 +30,12 @@ describe('profile-commit-publication', () => {
     'retains committed state and retires both old subscriptions (removal throws: %s)',
     async (removalThrows) => {
       const built = await buildCliStyleConfig('multi-turn-text.jsonl');
-      const ownerModels = coreEvents.listeners(CoreEvent.ModelChanged);
-      const ownerProfiles = coreEvents.listeners(CoreEvent.ModelProfileChanged);
+      const ownerModels = built.settingsOwner['modelNotifications'].listeners(
+        CoreEvent.ModelChanged,
+      );
+      const ownerProfiles = built.settingsOwner['modelNotifications'].listeners(
+        CoreEvent.ModelProfileChanged,
+      );
       const agent = await fromConfig({
         oauthManager: built.runtime.oauthManager,
         providerFileLifecycle: built.runtime.providerFileLifecycle,
@@ -58,10 +59,10 @@ describe('profile-commit-publication', () => {
         baseURL: 'https://alternative.invalid',
       };
       manager.registerProvider(alternative);
-      const oldModels = coreEvents
+      const oldModels = built.settingsOwner['modelNotifications']
         .listeners(CoreEvent.ModelChanged)
         .filter((listener) => !ownerModels.includes(listener));
-      const oldProfiles = coreEvents
+      const oldProfiles = built.settingsOwner['modelNotifications']
         .listeners(CoreEvent.ModelProfileChanged)
         .filter((listener) => !ownerProfiles.includes(listener));
       await agent.agentClient.startChat();
@@ -91,9 +92,18 @@ describe('profile-commit-publication', () => {
           throw removalError;
         }
       };
-      coreEvents.on(CoreEvent.ModelChanged, onModel);
-      coreEvents.on(CoreEvent.ModelProfileChanged, onProfile);
-      coreEvents.addListener('removeListener', onRemove);
+      built.settingsOwner['modelNotifications'].on(
+        CoreEvent.ModelChanged,
+        onModel,
+      );
+      built.settingsOwner['modelNotifications'].on(
+        CoreEvent.ModelProfileChanged,
+        onProfile,
+      );
+      built.settingsOwner['modelNotifications'].addListener(
+        'removeListener',
+        onRemove,
+      );
       try {
         const outcome = await agent.profiles
           .applySnapshot({
@@ -120,20 +130,33 @@ describe('profile-commit-publication', () => {
           removalThrows,
         );
         for (const listener of oldModels)
-          expect(coreEvents.listeners(CoreEvent.ModelChanged)).not.toContain(
-            listener,
-          );
+          expect(
+            built.settingsOwner['modelNotifications'].listeners(
+              CoreEvent.ModelChanged,
+            ),
+          ).not.toContain(listener);
         for (const listener of oldProfiles)
           expect(
-            coreEvents.listeners(CoreEvent.ModelProfileChanged),
+            built.settingsOwner['modelNotifications'].listeners(
+              CoreEvent.ModelProfileChanged,
+            ),
           ).not.toContain(listener);
         expect(agent.agentClient).not.toBe(priorClient);
         expect(agent.agentClient.getHistoryService()).toBe(history);
         expect(agent.getModel()).toBe('committed-after-listener-error');
         expect(agent.profiles.isApplying()).toBe(false);
-        coreEvents.off(CoreEvent.ModelChanged, onModel);
-        coreEvents.off(CoreEvent.ModelProfileChanged, onProfile);
-        coreEvents.removeListener('removeListener', onRemove);
+        built.settingsOwner['modelNotifications'].off(
+          CoreEvent.ModelChanged,
+          onModel,
+        );
+        built.settingsOwner['modelNotifications'].off(
+          CoreEvent.ModelProfileChanged,
+          onProfile,
+        );
+        built.settingsOwner['modelNotifications'].removeListener(
+          'removeListener',
+          onRemove,
+        );
         await agent.profiles.applySnapshot({
           version: 1,
           provider: 'alternative',
@@ -154,9 +177,18 @@ describe('profile-commit-publication', () => {
           { type: 'done', reason: 'stop' },
         ]);
       } finally {
-        coreEvents.off(CoreEvent.ModelChanged, onModel);
-        coreEvents.off(CoreEvent.ModelProfileChanged, onProfile);
-        coreEvents.removeListener('removeListener', onRemove);
+        built.settingsOwner['modelNotifications'].off(
+          CoreEvent.ModelChanged,
+          onModel,
+        );
+        built.settingsOwner['modelNotifications'].off(
+          CoreEvent.ModelProfileChanged,
+          onProfile,
+        );
+        built.settingsOwner['modelNotifications'].removeListener(
+          'removeListener',
+          onRemove,
+        );
         await agent.dispose();
         await built.config.dispose();
         await built.cleanup();
@@ -288,8 +320,14 @@ describe('profile-commit-publication', () => {
     const onProfile = (profile: unknown): void => {
       profiles.push(profile);
     };
-    coreEvents.on(CoreEvent.ModelChanged, onModel);
-    coreEvents.on(CoreEvent.ModelProfileChanged, onProfile);
+    built.settingsOwner['modelNotifications'].on(
+      CoreEvent.ModelChanged,
+      onModel,
+    );
+    built.settingsOwner['modelNotifications'].on(
+      CoreEvent.ModelProfileChanged,
+      onProfile,
+    );
     const initialModel = agent.getModel();
     try {
       const initialEvents = [];
@@ -369,8 +407,14 @@ describe('profile-commit-publication', () => {
       expect(profiles).toHaveLength(1);
       expect(models).toStrictEqual(['committed-model']);
     } finally {
-      coreEvents.off(CoreEvent.ModelChanged, onModel);
-      coreEvents.off(CoreEvent.ModelProfileChanged, onProfile);
+      built.settingsOwner['modelNotifications'].off(
+        CoreEvent.ModelChanged,
+        onModel,
+      );
+      built.settingsOwner['modelNotifications'].off(
+        CoreEvent.ModelProfileChanged,
+        onProfile,
+      );
       vi.useRealTimers();
       await agent.dispose();
       await built.cleanup();

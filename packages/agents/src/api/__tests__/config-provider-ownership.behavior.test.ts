@@ -5,10 +5,7 @@
  */
 import { transferHistoryToNewClient } from '@vybestack/llxprt-code-core/config/agentClientLifecycle.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
-import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
+import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { createTestAgentClient } from '@vybestack/llxprt-code-test-utils/core/config.js';
 import {
@@ -432,11 +429,13 @@ describe('explicit session authentication lifecycle', () => {
   it('disposes the retired client without disposing the replacement', async () => {
     await withSession(async (built) => {
       const previous = built.agentClient;
-      const previousListeners = coreEvents.listeners(CoreEvent.ModelChanged);
+      const previousListeners = built.settingsOwner[
+        'modelNotifications'
+      ].listeners(CoreEvent.ModelChanged);
       await built.sessionClient.refreshAuth();
       expect(previous).not.toBe(built.agentClient);
       expect(
-        coreEvents
+        built.settingsOwner['modelNotifications']
           .listeners(CoreEvent.ModelChanged)
           .filter((listener) => previousListeners.includes(listener)),
       ).toStrictEqual([]);

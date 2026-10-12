@@ -20,7 +20,7 @@ import {
   type ServerAgentStreamEvent,
   type ModelInfo,
 } from './turn.js';
-import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
+import { createSessionPolicyFixture } from './__tests__/session-policy-fixture.js';
 import {
   fromAsync,
   setupAgentClient,
@@ -208,6 +208,7 @@ void vi.mock('@vybestack/llxprt-code-core/telemetry/uiTelemetry.js', () => ({
 
 describe('AgentClient (client.ts)', () => {
   let client: AgentClient;
+  let notifications: ReturnType<typeof createSessionPolicyFixture>;
 
   beforeEach(async () => {
     const ctx = await setupAgentClient({
@@ -216,6 +217,11 @@ describe('AgentClient (client.ts)', () => {
       mockEmbedContentFn,
     });
     client = ctx.client;
+    notifications = createSessionPolicyFixture();
+    notifications.owner.initializeProviderSelection('gemini', 'initial-model');
+    client.bindModelNotifications((listener) =>
+      notifications.owner.subscribeModelChanges(listener),
+    );
 
     mockTodoStoreConstructor.mockImplementation(() => ({
       readTodos: todoStoreReadMock,
@@ -239,7 +245,7 @@ describe('AgentClient (client.ts)', () => {
       expect(client.getCurrentSequenceModel()).toBe('sticky-model');
 
       // Emit ModelProfileChanged — should reset the sticky model
-      coreEvents.emitModelProfileChanged({
+      notifications.owner.publishModelProfile({
         model: 'new-model',
         providerName: 'anthropic',
         profileName: null,
@@ -272,7 +278,7 @@ describe('AgentClient (client.ts)', () => {
 
       expect(client.hasChatInitialized()).toBe(true);
 
-      coreEvents.emitModelProfileChanged({
+      notifications.owner.publishModelProfile({
         model: 'claude-opus-4-8',
         providerName: 'anthropic',
         profileName: 'opusthinking',
@@ -307,7 +313,7 @@ describe('AgentClient (client.ts)', () => {
       const executeSpy = vi
         .spyOn(client['messageStreamOrchestrator'], 'execute')
         .mockImplementation(async function* () {
-          coreEvents.emitModelProfileChanged({
+          notifications.owner.publishModelProfile({
             model: 'claude-opus-4-8',
             providerName: 'anthropic',
             profileName: 'opusthinking',
@@ -399,7 +405,9 @@ describe('AgentClient (client.ts)', () => {
     });
     it('also resets currentSequenceModel on ModelChanged', () => {
       client['currentSequenceModel'] = 'sticky-model';
-      coreEvents.emitModelChanged('other-model');
+      const publication = notifications.owner.beginModelPublication();
+      notifications.owner.chooseModel('other-model');
+      publication.commit();
       expect(client.getCurrentSequenceModel()).toBeNull();
     });
   });
@@ -482,7 +490,7 @@ describe('AgentClient (client.ts)', () => {
             yield { type: AgentEventType.InvalidStream };
           })();
           // Simulate model change before continuation
-          coreEvents.emitModelProfileChanged({
+          notifications.owner.publishModelProfile({
             model: 'changed-model',
             providerName: 'anthropic',
             profileName: null,
@@ -582,7 +590,7 @@ describe('AgentClient (client.ts)', () => {
             },
           } as unknown as ContentGeneratorConfig);
           // Reset sequence model so orchestrator re-reads
-          coreEvents.emitModelProfileChanged({
+          notifications.owner.publishModelProfile({
             model: 'test-model',
             providerName: 'anthropic',
             profileName: null,

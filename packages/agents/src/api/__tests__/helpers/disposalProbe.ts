@@ -39,10 +39,6 @@ import { buildCliStyleConfig } from './buildCliStyleConfig.js';
  */
 
 import type { Agent } from '@vybestack/llxprt-code-agents';
-import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
 
 // ─── Internal record narrowing (cast-exempt in the helper) ──────────────────
 
@@ -140,38 +136,16 @@ function readField(rec: RecordLike, key: string): unknown {
 // real flipped `true`.
 
 /**
- * Reads the agentClient disposed state by observing the GENUINE
- * listener-membership transition of its model-change handler. The real
- * `AgentClient` constructor (client.ts) registers
- * `coreEvents.on(CoreEvent.ModelChanged, this.handleModelChanged)` (plus the
- * ModelProfileChanged twin) and `AgentClient.dispose()` unconditionally calls
- * the matching `coreEvents.off(...)` for both. There is NO
- * `disposed`/`isDisposed` boolean on AgentClient — the genuine observable is
- * the handler reference (an instance arrow-function field, stable across
- * dispose) being present in `coreEvents.listeners(CoreEvent.ModelChanged)`
- * before dispose and absent after.
- *
- * This reader returns `true` when the captured client's handler is no longer
- * registered (disposed) and `false` while it is still registered (alive).
- * The headless fake client IS constructed by Config.refreshAuth and its
- * constructor DOES register the handler, so the pre-dispose state is genuinely
- * "registered" and the post-dispose state is genuinely "removed" — a real
- * transition. Handler references are per-instance, so coexisting clients in
- * one spec observe independently.
+ * Observes release of the captured client's owner-local notification subscription.
+ * Each real session client receives its own release operation during binding;
+ * disposal releases that subscription and clears the operation.
  */
 export function agentClientDisposed(probe: DisposalProbe): boolean {
   const client = asRecord(probe.agentClient);
   if (client === null) {
     return false;
   }
-  const handler = client['handleModelChanged'];
-  if (typeof handler !== 'function') {
-    return false;
-  }
-  const listeners = coreEvents.listeners(CoreEvent.ModelChanged);
-  // Pre-dispose: the constructor-registered handler is still on the emitter
-  // → false (alive). Post-dispose: dispose() removed it → true (disposed).
-  return !listeners.includes(handler);
+  return client['releaseModelNotifications'] === undefined;
 }
 
 /**

@@ -85,6 +85,8 @@ void vi.mock('../hooks/useHistoryManager.js', () => ({
 // Don't mock AppDispatchContext - use the real implementation
 
 import React from 'react';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { Text } from 'ink';
 import { render } from 'ink-testing-library';
 import {
@@ -133,6 +135,7 @@ void vi.mock('@vybestack/llxprt-code-core', () => {
 
 describe('SessionController', () => {
   let mockConfig: Partial<Config>;
+  let modelOwner: SessionSettingsOwner;
   let mockAddItem: ReturnType<typeof vi.fn>;
   let mockUpdateItem: ReturnType<typeof vi.fn>;
   let mockClearItems: ReturnType<typeof vi.fn>;
@@ -195,10 +198,16 @@ describe('SessionController', () => {
 
       getFileFilteringOptions: vi.fn(() => ({})),
     } as unknown as Partial<Config>;
-    memoryRuntime = composeFixtureRuntime(mockConfig as Config);
+    modelOwner = new SessionSettingsOwner(new SettingsService());
+    memoryRuntime = {
+      ...composeFixtureRuntime(mockConfig as Config),
+      subscribeModelSelection: (listener) =>
+        modelOwner.subscribeModelChanges(listener),
+    };
   });
 
   afterEach(async () => {
+    await modelOwner.dispose();
     await composeFixtureRuntime.dispose();
     await rm(fixtureDirectory, { recursive: true, force: true });
     if (priorConfigHome === undefined) delete process.env.LLXPRT_CONFIG_HOME;
@@ -491,8 +500,6 @@ describe('SessionController', () => {
   });
 
   it('should handle model changes via events (not polling)', async () => {
-    const { coreEvents } = await import('@vybestack/llxprt-code-core');
-
     let contextValue: SessionContextType | undefined;
 
     const TestComponent = () => {
@@ -529,7 +536,13 @@ describe('SessionController', () => {
     });
 
     // Emit event instead of advancing timer
-    coreEvents.emitModelChanged('new-model');
+    React.act(() => {
+      modelOwner.publishModelProfile({
+        model: 'new-model',
+        providerName: 'new-provider',
+        displayLabel: 'new-model',
+      });
+    });
 
     // Re-render to get updated state
     rerender(

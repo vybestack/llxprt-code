@@ -31,7 +31,6 @@ import {
 } from '@vybestack/llxprt-code-providers/runtime.js';
 import type { TokenStore, OAuthToken } from '@vybestack/llxprt-code-auth';
 import {
-  coreEvents,
   CoreEvent,
   type ModelProfileInfoPayload,
 } from '@vybestack/llxprt-code-core/utils/events.js';
@@ -374,12 +373,18 @@ describe('public profile application ownership outside ALS', () => {
     const onModel = (model: string): void => {
       models.push(model);
     };
-    coreEvents.on(CoreEvent.ModelChanged, onModel);
+    b.built.settingsOwner['modelNotifications'].on(
+      CoreEvent.ModelChanged,
+      onModel,
+    );
     const publications: ModelProfileInfoPayload[] = [];
     const onPublication = (event: ModelProfileInfoPayload): void => {
       publications.push(event);
     };
-    coreEvents.on(CoreEvent.ModelProfileChanged, onPublication);
+    b.built.settingsOwner['modelNotifications'].on(
+      CoreEvent.ModelProfileChanged,
+      onPublication,
+    );
     const pendingA = a.agent.profiles.load('failing');
     const rejectedA = pendingA.then(
       () => undefined,
@@ -435,8 +440,14 @@ describe('public profile application ownership outside ALS', () => {
         a.built.settingsOwner.readNamedParameter('reasoning.enabled'),
       ).toBeUndefined();
     } finally {
-      coreEvents.off(CoreEvent.ModelProfileChanged, onPublication);
-      coreEvents.off(CoreEvent.ModelChanged, onModel);
+      b.built.settingsOwner['modelNotifications'].off(
+        CoreEvent.ModelProfileChanged,
+        onPublication,
+      );
+      b.built.settingsOwner['modelNotifications'].off(
+        CoreEvent.ModelChanged,
+        onModel,
+      );
       release.reject(failure);
       await rejectedA;
     }

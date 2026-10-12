@@ -590,6 +590,10 @@ export function createSession(
       agent,
       fixtureFilesystem().files,
       fixtureFilesystem().ignore,
+      (listener) =>
+        new SessionSettingsOwner(new SettingsService()).subscribeModelChanges(
+          listener,
+        ),
     ),
     connection as unknown as acp.AgentSideConnection,
   );

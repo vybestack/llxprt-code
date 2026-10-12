@@ -13,6 +13,7 @@ import {
   type RuntimeModel,
 } from '@vybestack/llxprt-code-core';
 import { parseEphemeralSettingValue } from '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js';
+import type { SubscribeModelChanges } from '@vybestack/llxprt-code-core/utils/events.js';
 import type { ClientCapabilitiesWithSession } from './acp-types.js';
 
 export function projectZedModelReads(
@@ -234,6 +235,7 @@ export function observeZedConfigOptions(
   config: Pick<Agent, 'getEphemeralSetting' | 'setEphemeralSetting'>,
   sendUpdate: (update: acp.SessionUpdate) => Promise<void>,
   onError: (error: unknown) => void,
+  subscribeModelChanges: SubscribeModelChanges,
 ): () => void {
   let stopped = false;
   let running = false;
@@ -264,13 +266,11 @@ export function observeZedConfigOptions(
       running = false;
     }
   }
-  coreEvents.on(CoreEvent.ModelChanged, refresh);
-  coreEvents.on(CoreEvent.ModelProfileChanged, refresh);
+  const releaseModelChanges = subscribeModelChanges(refresh);
   coreEvents.on(CoreEvent.SettingsChanged, refresh);
   return () => {
     stopped = true;
-    coreEvents.off(CoreEvent.ModelChanged, refresh);
-    coreEvents.off(CoreEvent.ModelProfileChanged, refresh);
+    releaseModelChanges();
     coreEvents.off(CoreEvent.SettingsChanged, refresh);
   };
 }

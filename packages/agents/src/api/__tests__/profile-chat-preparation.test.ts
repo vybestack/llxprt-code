@@ -11,10 +11,7 @@ import type { Profile } from '@vybestack/llxprt-code-settings';
 import { fileURLToPath } from 'node:url';
 
 import { ideContext } from '@vybestack/llxprt-code-ide-integration';
-import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
+import { CoreEvent } from '@vybestack/llxprt-code-core/utils/events.js';
 describe('profile-chat-preparation', () => {
   it.each([false, true])(
     'preserves chat, history and IDE view after failed replacement (initialized: %s)',
@@ -76,7 +73,9 @@ describe('profile-chat-preparation', () => {
       }
       const history = await agent.getHistory();
       const visibleHistory = client.getHistoryService();
-      const listeners = coreEvents.listeners(CoreEvent.ModelChanged);
+      const listeners = built.settingsOwner['modelNotifications'].listeners(
+        CoreEvent.ModelChanged,
+      );
       const beforeB = ownerB.captureProfile();
       const profile: Profile = {
         version: 1,
@@ -102,9 +101,11 @@ describe('profile-chat-preparation', () => {
         expect(agent.agentClient).toBe(client);
         expect(client.hasChatInitialized()).toBe(initialized);
         expect(client.getHistoryService()).toBe(visibleHistory);
-        expect(coreEvents.listeners(CoreEvent.ModelChanged)).toStrictEqual(
-          listeners,
-        );
+        expect(
+          built.settingsOwner['modelNotifications'].listeners(
+            CoreEvent.ModelChanged,
+          ),
+        ).toStrictEqual(listeners);
         expect(await agent.getHistory()).toStrictEqual(history);
         expect(ownerB.captureProfile()).toStrictEqual(beforeB);
         const eventsB = [];
@@ -164,7 +165,9 @@ describe('profile-chat-preparation', () => {
       },
     ]);
     const history = await agent.getHistory();
-    const listeners = coreEvents.listeners(CoreEvent.ModelChanged);
+    const listeners = built.settingsOwner['modelNotifications'].listeners(
+      CoreEvent.ModelChanged,
+    );
     let reads = 0;
     let disposal: Promise<void> | undefined;
     const boundary = vi
@@ -189,9 +192,11 @@ describe('profile-chat-preparation', () => {
       expect(built.sessionClient.getAgentClient()).toBe(client);
       expect(client.hasChatInitialized()).toBe(true);
       expect(await client.getHistory()).toStrictEqual(history);
-      expect(coreEvents.listeners(CoreEvent.ModelChanged)).toStrictEqual(
-        listeners,
-      );
+      expect(
+        built.settingsOwner['modelNotifications'].listeners(
+          CoreEvent.ModelChanged,
+        ),
+      ).toStrictEqual(listeners);
       const nextOwner = await fromConfig({
         settingsOwner: built.settingsOwner,
         settingsService: built.settingsService,

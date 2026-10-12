@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'bun:test';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
+import { SessionSettingsOwner } from '../session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   CoreEventEmitter,
   CoreEvent,
@@ -171,10 +173,17 @@ describe('CoreEventEmitter', () => {
     expect(listener.mock.calls[2][0]).toMatchObject({ message: 'Buffered 2' });
   });
 
-  describe('ModelProfileChanged event', () => {
+  describe('session model profile notifications', () => {
+    let owner: SessionSettingsOwner;
+    beforeEach(() => {
+      owner = new SessionSettingsOwner(new SettingsService());
+    });
+    afterEach(async () => {
+      await owner.dispose();
+    });
     it('emits ModelProfileChanged with model, provider, profile, and display label', () => {
       const listener = vi.fn();
-      events.on(CoreEvent.ModelProfileChanged, listener);
+      owner['modelNotifications'].on(CoreEvent.ModelProfileChanged, listener);
 
       const payload: ModelProfileInfoPayload = {
         model: 'gpt-4o',
@@ -183,7 +192,7 @@ describe('CoreEventEmitter', () => {
         displayLabel: 'production',
       };
 
-      events.emitModelProfileChanged(payload);
+      owner.publishModelProfile(payload);
 
       expect(listener).toHaveBeenCalledTimes(1);
       expect(listener).toHaveBeenCalledWith(payload);
@@ -191,14 +200,14 @@ describe('CoreEventEmitter', () => {
 
     it('emits ModelProfileChanged with only model when profile/provider unknown', () => {
       const listener = vi.fn();
-      events.on(CoreEvent.ModelProfileChanged, listener);
+      owner['modelNotifications'].on(CoreEvent.ModelProfileChanged, listener);
 
       const payload: ModelProfileInfoPayload = {
         model: 'gemini-2.0-flash',
         displayLabel: 'gemini-2.0-flash',
       };
 
-      events.emitModelProfileChanged(payload);
+      owner.publishModelProfile(payload);
 
       expect(listener).toHaveBeenCalledTimes(1);
       expect(listener).toHaveBeenCalledWith(payload);
@@ -206,7 +215,7 @@ describe('CoreEventEmitter', () => {
 
     it('carries optional displayName for profile-aware UI', () => {
       const listener = vi.fn();
-      events.on(CoreEvent.ModelProfileChanged, listener);
+      owner['modelNotifications'].on(CoreEvent.ModelProfileChanged, listener);
 
       const payload: ModelProfileInfoPayload = {
         model: 'claude-sonnet',
@@ -216,7 +225,7 @@ describe('CoreEventEmitter', () => {
         displayLabel: 'Work Profile',
       };
 
-      events.emitModelProfileChanged(payload);
+      owner.publishModelProfile(payload);
 
       expect(listener).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -228,9 +237,9 @@ describe('CoreEventEmitter', () => {
 
     it('allows null profileName for no-profile state', () => {
       const listener = vi.fn();
-      events.on(CoreEvent.ModelProfileChanged, listener);
+      owner['modelNotifications'].on(CoreEvent.ModelProfileChanged, listener);
 
-      events.emitModelProfileChanged({
+      owner.publishModelProfile({
         model: 'llama3',
         providerName: 'ollama',
         profileName: null,
@@ -244,16 +253,16 @@ describe('CoreEventEmitter', () => {
 
     it('stop receiving ModelProfileChanged after off()', () => {
       const listener = vi.fn();
-      events.on(CoreEvent.ModelProfileChanged, listener);
+      owner['modelNotifications'].on(CoreEvent.ModelProfileChanged, listener);
 
-      events.emitModelProfileChanged({
+      owner.publishModelProfile({
         model: 'm1',
         displayLabel: 'm1',
       });
       expect(listener).toHaveBeenCalledTimes(1);
 
-      events.off(CoreEvent.ModelProfileChanged, listener);
-      events.emitModelProfileChanged({
+      owner['modelNotifications'].off(CoreEvent.ModelProfileChanged, listener);
+      owner.publishModelProfile({
         model: 'm2',
         displayLabel: 'm2',
       });

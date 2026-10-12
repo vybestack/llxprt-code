@@ -1,3 +1,5 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -399,6 +401,10 @@ describe('Zed terminal execution', () => {
         agent,
         fixtureFilesystem().files,
         fixtureFilesystem().ignore,
+        (listener) =>
+          new SessionSettingsOwner(new SettingsService()).subscribeModelChanges(
+            listener,
+          ),
       ),
       connection as unknown as acp.AgentSideConnection,
       false,
@@ -481,6 +487,10 @@ describe('Zed terminal execution', () => {
         agent,
         fixtureFilesystem().files,
         fixtureFilesystem().ignore,
+        (listener) =>
+          new SessionSettingsOwner(new SettingsService()).subscribeModelChanges(
+            listener,
+          ),
       ),
       connection as unknown as acp.AgentSideConnection,
     );

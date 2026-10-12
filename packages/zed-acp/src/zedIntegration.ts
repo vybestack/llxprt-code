@@ -8,8 +8,6 @@ import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core';
 import { authenticateZedAgent, initializeZedAgent } from './zed-initialize.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
-import type { WorkspaceTextOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-
 import {
   type RuntimeProviderManager,
   type Config,
@@ -21,7 +19,6 @@ import {
 
 import type {
   AgentProfileApplication,
-  Agent,
   AgentEvent,
 } from '@vybestack/llxprt-code-agents';
 
@@ -39,6 +36,7 @@ import {
 } from './zed-helpers.js';
 import { ZedPathResolver } from './zed-path-resolver.js';
 import {
+  buildProjectedZedSession,
   projectZedSessionAgent,
   projectZedSessionSettings,
   type ZedSessionAgentPort,
@@ -87,10 +85,7 @@ import {
   zedConfigOptionsForClient,
   zedSessionConfigOptions,
 } from './zed-config-options.js';
-import {
-  buildZedSession,
-  enableZedSessionRecording,
-} from './zed-agent-setup.js';
+import { enableZedSessionRecording } from './zed-agent-setup.js';
 import {
   runPromptTurn as executePromptTurn,
   type SessionStreamDeps,
@@ -170,6 +165,7 @@ export class ZedAgent {
         terminals,
         files,
         disposeConfig,
+        settingsOwner,
       } = await this.buildSessionAgent(sessionId, cwd);
       let session: Session;
       try {
@@ -178,13 +174,23 @@ export class ZedAgent {
             () => `Recording failed for ${sessionId}: ${error}`,
           ),
         );
-        session = await this.createSession(
-          sessionId,
+        session = await buildProjectedZedSession(
           agent,
           sessionConfig,
-          terminals,
-          disposeConfig,
           files,
+          settingsOwner.subscribeModelChanges.bind(settingsOwner),
+          (sessionAgent, settings) =>
+            new Session(
+              sessionId,
+              sessionAgent,
+              settings,
+              this.connection,
+              this.supportsConfigOptions(),
+              terminals,
+              disposeConfig,
+            ),
+          (error) =>
+            this.logger.debug(() => `Session cleanup failed: ${error}`),
         );
       } catch (error) {
         await agent.dispose().catch(() => undefined);
@@ -227,29 +233,6 @@ export class ZedAgent {
   }
   private supportsConfigOptions(): boolean {
     return this.clientCapabilities?.session?.configOptions === true;
-  }
-  private createSession(
-    id: string,
-    agent: Agent,
-    config: Config,
-    terminals: TerminalManager | null,
-    disposeConfig: () => Promise<void>,
-    files: WorkspaceTextOperations,
-  ) {
-    return buildZedSession(
-      agent,
-      () =>
-        new Session(
-          id,
-          projectZedSessionAgent(agent),
-          projectZedSessionSettings(config, agent, files, agent.workspace),
-          this.connection,
-          this.supportsConfigOptions(),
-          terminals,
-          disposeConfig,
-        ),
-      (error) => this.logger.debug(() => `Session cleanup failed: ${error}`),
-    );
   }
   async loadSession(
     params: acp.LoadSessionRequest,
@@ -361,6 +344,7 @@ export class ZedAgent {
       terminals,
       files,
       disposeConfig,
+      settingsOwner,
     } = await this.buildSessionAgent(sessionId, cwd);
     try {
       const history = await resumeAgentHistory(
@@ -372,7 +356,13 @@ export class ZedAgent {
       const session = new Session(
         sessionId,
         projectZedSessionAgent(agent),
-        projectZedSessionSettings(sessionConfig, agent, files, agent.workspace),
+        projectZedSessionSettings(
+          sessionConfig,
+          agent,
+          files,
+          agent.workspace,
+          settingsOwner.subscribeModelChanges.bind(settingsOwner),
+        ),
         this.connection,
         this.supportsConfigOptions(),
         terminals,
@@ -496,6 +486,7 @@ export class Session {
           projectZedOptionSettings(this.config),
           (update) => this.sendUpdateStrict(update),
           (error) => this.logger.debug(() => `Config update failed: ${error}`),
+          this.config.subscribeModelChanges,
         )
       : () => undefined;
   }

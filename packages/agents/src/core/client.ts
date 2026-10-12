@@ -1,3 +1,4 @@
+import { subscribeClientModelChanges } from './client-model-subscriptions.js';
 /**
  * @license
  * Copyright 2025 Google LLC
@@ -21,7 +22,6 @@ import {
   assertSessionClientProvider,
   assertClientRuntimeState,
 } from './client-tool-selection.js';
-import { releaseClientModelSubscriptions } from './client-model-subscriptions.js';
 import { publishClientPromptTokens } from './client-telemetry.js';
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderManager.js';
@@ -62,10 +62,7 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import { BaseLLMClient } from './baseLlmClient.js';
 import { Storage } from '@vybestack/llxprt-code-settings/storage/Storage.js';
 
-import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
+import type { SubscribeModelChanges } from '@vybestack/llxprt-code-core/utils/events.js';
 export {
   isThinkingSupported,
   findCompressSplitPoint,
@@ -245,12 +242,6 @@ export class AgentClient
     this.messageStreamOrchestrator = new MessageStreamOrchestrator(
       this._buildOrchestratorDeps(createTurn),
     );
-
-    coreEvents.on(CoreEvent.ModelChanged, this.handleModelChanged);
-    coreEvents.on(
-      CoreEvent.ModelProfileChanged,
-      this.handleModelProfileChanged,
-    );
   }
 
   private _buildOrchestratorDeps(
@@ -298,6 +289,18 @@ export class AgentClient
     };
   }
 
+  private releaseModelNotifications: (() => void) | undefined;
+
+  bindModelNotifications(subscribe: SubscribeModelChanges): void {
+    if (this.releaseModelNotifications !== undefined)
+      throw new Error('Client model notifications are already bound');
+    this.releaseModelNotifications = subscribeClientModelChanges(
+      subscribe,
+      this.handleModelChanged,
+      this.handleModelProfileChanged,
+    );
+  }
+
   private handleModelChanged = () => {
     this.currentSequenceModel = null;
   };
@@ -323,10 +326,13 @@ export class AgentClient
   }
 
   async dispose(): Promise<void> {
-    const failures = releaseClientModelSubscriptions(
-      this.handleModelChanged,
-      this.handleModelProfileChanged,
-    );
+    const failures: unknown[] = [];
+    try {
+      this.releaseModelNotifications?.();
+    } catch (error) {
+      failures.push(error);
+    }
+    this.releaseModelNotifications = undefined;
     const hasChatHistoryMedia = this._previousHistory?.some((content) =>
       content.blocks.some(
         (block) => block.type === 'media' && block.encoding === 'reference',

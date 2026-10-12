@@ -1,3 +1,5 @@
+import { AgentClient } from '../../core/client.js';
+import { createAgentRuntimeFactoryBindings } from '../runtimeFactories.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -18,10 +20,6 @@ import {
 } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
 import { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import {
-  coreEvents,
-  CoreEvent,
-} from '@vybestack/llxprt-code-core/utils/events.js';
-import {
   SubagentOrchestrator,
   type SubagentOrchestratorOptions,
 } from '../../core/subagentOrchestrator.js';
@@ -30,15 +28,25 @@ import {
   type SessionClientEngineFixture,
 } from './helpers/session-client-engine-fixture.js';
 
+class TrackedChildClient extends AgentClient {
+  disposed = false;
+  override async dispose(): Promise<void> {
+    await super.dispose();
+    this.disposed = true;
+  }
+}
+
 async function withChildOwner(
   scenario: (
     orchestrator: SubagentOrchestrator,
     parent: SessionClientEngineFixture,
     childSettings: () => SettingsService,
+    clients: readonly TrackedChildClient[],
   ) => Promise<void>,
   runtimeLoader?: SubagentOrchestratorOptions['runtimeLoader'],
 ): Promise<void> {
   const built = await createSessionClientEngineFixture();
+  const clients: TrackedChildClient[] = [];
   const directory = join(
     built.config.projectTempDir,
     `child-owner-${randomUUID()}`,
@@ -60,6 +68,36 @@ async function withChildOwner(
     );
     let adoptedChildSettings: SettingsService | undefined;
     const orchestrator = new SubagentOrchestrator({
+      runtimeFactoryBindings: {
+        ...createAgentRuntimeFactoryBindings(),
+        agentClientFactory: (
+          config,
+          state,
+          instructions,
+          store,
+          paths,
+          reads,
+        ) => {
+          if (
+            store === undefined ||
+            paths === undefined ||
+            instructions === undefined
+          )
+            throw new Error('Missing child client factory inputs');
+          const client = new TrackedChildClient(
+            config,
+            state,
+            instructions,
+            store,
+            paths,
+            undefined,
+            undefined,
+            reads,
+          );
+          clients.push(client);
+          return client;
+        },
+      },
       workspaceTrust: built.mcp.trust,
       instructions: emptyInstructionReads,
       toolRegistry: built.owner.getAgentClient().tools,
@@ -76,11 +114,16 @@ async function withChildOwner(
       readMcpInstructions: built.mcp.readInstructions,
       runtimeLoader,
     });
-    await scenario(orchestrator, built, () => {
-      if (adoptedChildSettings === undefined)
-        throw new Error('Child store has not been adopted');
-      return adoptedChildSettings;
-    });
+    await scenario(
+      orchestrator,
+      built,
+      () => {
+        if (adoptedChildSettings === undefined)
+          throw new Error('Child store has not been adopted');
+        return adoptedChildSettings;
+      },
+      clients,
+    );
   } finally {
     await built.cleanup();
   }
@@ -139,44 +182,43 @@ describe('Isolated child session client ownership', () => {
     });
   }, 30000);
   it('closes the child client after success without closing its parent', async () => {
-    await withChildOwner(async (orchestrator, parent) => {
-      const baseline = new Set(coreEvents.listeners(CoreEvent.ModelChanged));
-      const child = await orchestrator.launch({ name: 'child' });
-      expect(
-        coreEvents
-          .listeners(CoreEvent.ModelChanged)
-          .filter((listener) => !baseline.has(listener)),
-      ).not.toHaveLength(0);
-      await child.dispose();
-      expect(
-        coreEvents
-          .listeners(CoreEvent.ModelChanged)
-          .filter((listener) => !baseline.has(listener)),
-      ).toHaveLength(0);
-      await parent.mcp.refreshContext();
-      await parent.owner.getAgentClient().addHistory({
-        speaker: 'human',
-        blocks: [{ type: 'text', text: 'parent continues' }],
-      });
-      expect(
-        (await parent.owner.getAgentClient().getHistory()).filter(
-          (item) => item.speaker === 'human',
-        ),
-      ).toHaveLength(1);
-    });
+    await withChildOwner(
+      async (orchestrator, parent, _childSettings, clients) => {
+        const baseline =
+          parent.settingsService.listenerCount('provider-change');
+        const child = await orchestrator.launch({ name: 'child' });
+        expect(clients.length).toBeGreaterThan(0);
+        expect(clients.some((client) => !client.disposed)).toBe(true);
+        await child.dispose();
+        expect(clients.every((client) => client.disposed)).toBe(true);
+        expect(parent.settingsService.listenerCount('provider-change')).toBe(
+          baseline,
+        );
+        await parent.mcp.refreshContext();
+        await parent.owner.getAgentClient().addHistory({
+          speaker: 'human',
+          blocks: [{ type: 'text', text: 'parent continues' }],
+        });
+        expect(
+          (await parent.owner.getAgentClient().getHistory()).filter(
+            (item) => item.speaker === 'human',
+          ),
+        ).toHaveLength(1);
+      },
+    );
   }, 30000);
   it('closes the child client after loader failure without closing its parent', async () => {
     await withChildOwner(
-      async (orchestrator, parent) => {
-        const baseline = new Set(coreEvents.listeners(CoreEvent.ModelChanged));
+      async (orchestrator, parent, _childSettings, clients) => {
+        const baseline =
+          parent.settingsService.listenerCount('provider-change');
         await expect(orchestrator.launch({ name: 'child' })).rejects.toThrow(
           'Child loader failure',
         );
-        expect(
-          coreEvents
-            .listeners(CoreEvent.ModelChanged)
-            .filter((listener) => !baseline.has(listener)),
-        ).toHaveLength(0);
+        expect(clients.every((client) => client.disposed)).toBe(true);
+        expect(parent.settingsService.listenerCount('provider-change')).toBe(
+          baseline,
+        );
         await parent.mcp.refreshContext();
         await parent.owner.getAgentClient().addHistory({
           speaker: 'human',

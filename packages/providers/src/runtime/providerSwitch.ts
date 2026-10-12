@@ -125,6 +125,7 @@ function switchActivationOperations(
   owner: SessionSettingsOwner,
 ): SwitchActivationOperations {
   return {
+    publishModelProfile: (profile) => owner.publishModelProfile(profile),
     resetFailover: () => oauth?.clearRetryHandlers(),
     activate: async (name) => {
       await manager.setActiveProvider(name);

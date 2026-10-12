@@ -54,6 +54,8 @@ function assembleProfileParameterCommands(owner: SessionSettingsOwner): {
   };
 }
 
+type PreparedProfile = Awaited<ReturnType<typeof finishProfileApplication>>;
+
 export function assembleProfileApplication(
   config: Config,
   settings: SettingsService,
@@ -68,9 +70,7 @@ export function assembleProfileApplication(
   ) => Promise<PreparedProfileFacade | void> = async () => {},
   assertAdmission: () => void = () => {},
 ): AgentProfileApplication {
-  let installed:
-    | Awaited<ReturnType<typeof finishProfileApplication>>
-    | undefined;
+  let installed: PreparedProfile | undefined;
   return queueProfileApplications(
     profiles,
     async (profile, options, signal) => {
@@ -82,7 +82,7 @@ export function assembleProfileApplication(
         oauth?.checkpointRetryHandlers() ?? (() => {}),
       );
       const modelPublication = settingsOwner.beginModelPublication();
-      let prepared: Awaited<ReturnType<typeof finishProfileApplication>>;
+      let prepared: PreparedProfile;
       let facade: PreparedProfileFacade | void = undefined;
       try {
         const application = await applyProfileCascade(
@@ -104,6 +104,7 @@ export function assembleProfileApplication(
           settings,
           oauth,
           profiles,
+          settingsOwner.publishModelProfile.bind(settingsOwner),
           signal,
         );
         signal.throwIfAborted();

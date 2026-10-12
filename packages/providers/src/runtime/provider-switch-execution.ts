@@ -3,7 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { coreEvents } from '@vybestack/llxprt-code-core/utils/events.js';
+import type { ModelProfileInfoPayload } from '@vybestack/llxprt-code-core/utils/events.js';
 import type { ProviderAliasConfig } from '../composition/providerAliases.js';
 import type { ProviderSwitchResult } from './providerSwitch.js';
 import {
@@ -32,6 +32,7 @@ export interface SwitchProviderSettingWrites {
 }
 
 export interface SwitchActivationOperations {
+  publishModelProfile(profile: ModelProfileInfoPayload): void;
   resetFailover(): void;
   activate(name: string): Promise<string | undefined>;
   setModel(model: string): void;
@@ -85,11 +86,14 @@ function publishSwitch(
   request: SwitchRequest,
   selection: SwitchDefaultSelection,
   profileName: string | null,
-  fallbackModel: string,
+  activation: Pick<
+    SwitchActivationOperations,
+    'getModel' | 'publishModelProfile'
+  >,
 ): void {
   if (request.publication === 'deferred') return;
-  const model = selection.model || fallbackModel || request.name;
-  coreEvents.emitModelProfileChanged({
+  const model = selection.model || activation.getModel() || request.name;
+  activation.publishModelProfile({
     model,
     providerName: request.name,
     profileName,
@@ -181,7 +185,7 @@ export async function executeProviderSwitch(
     request,
     selection,
     settings.getCurrentProfileName(),
-    activation.getModel(),
+    activation,
   );
   return {
     changed: true,

@@ -1,3 +1,4 @@
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import {
   RootTelemetry,
   logUserPrompt,
@@ -9,7 +10,7 @@ import {
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Storage } from '@vybestack/llxprt-code-settings';
+import { Storage, SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
   WorkspacePromptSelection,
   WorkspaceCheckpointOperations,
@@ -26,8 +27,6 @@ import type {
   TelemetrySettings,
 } from '@vybestack/llxprt-code-core';
 import {
-  coreEvents,
-  CoreEvent,
   WorkspaceMcpCatalogOwner,
   WorkspaceCheckpointOwner,
   LocalMediaStore,
@@ -355,6 +354,7 @@ function makeSettingsRuntime(
   source: LegacyRuntimeSource,
   override: StreamRuntimeTestOverrides['settings'],
 ): StreamRuntime['settings'] {
+  const settingsOwner = new SessionSettingsOwner(new SettingsService());
   const telemetry = RootTelemetry.prepare({
     enabled: false,
     sessionId: 'stream-fixture',
@@ -382,10 +382,8 @@ function makeSettingsRuntime(
       call(source, 'readProfileName', null as string | null),
     readSelectedProvider: () =>
       call(source, 'readSelectedProvider', undefined as string | undefined),
-    subscribeModelSelection: (listener) => {
-      coreEvents.on(CoreEvent.ModelChanged, listener);
-      return () => coreEvents.off(CoreEvent.ModelChanged, listener);
-    },
+    subscribeModelSelection: (listener) =>
+      settingsOwner.subscribeModelChanges(listener),
     getProxy: () => call(source, 'getProxy', undefined as string | undefined),
     getBugCommand: () => call(source, 'getBugCommand', undefined),
     getTelemetrySettings: () =>
