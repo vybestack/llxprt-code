@@ -1,11 +1,11 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { parseEphemeralSettingValue } from './ephemeralSettings.js';
-import { parseModelParamValue } from './modelParamParser.js';
+import { parseEphemeralSettingValue } from './ephemeral-settings.js';
+import { parseModelParamValue } from './model-param-parser.js';
 
 export interface EphemeralSettingTarget {
   setEphemeralSetting(key: string, value: unknown): void;

@@ -101,8 +101,6 @@ export const PUBLIC_SUBPATHS_BY_PACKAGE: {
     'composition.js',
     'runtime/assembleCliProviderRuntime.js',
     'runtime/cliForegroundRuntime.js',
-    'runtime/cliEphemeralSettings.js',
-    'runtime/ephemeralSettings.js',
     'runtime/ownerSettingsOperations.js',
     'runtime/profileSnapshot.js',
     'runtime/providerModelParameters.js',
@@ -115,7 +113,10 @@ export const PUBLIC_SUBPATHS_BY_PACKAGE: {
   ],
   '@vybestack/llxprt-code-core': [],
   '@vybestack/llxprt-code-agents': [],
-  '@vybestack/llxprt-code-settings': [],
+  '@vybestack/llxprt-code-settings': [
+    'settings/ephemeral-settings.js',
+    'settings/cli-ephemeral-settings.js',
+  ],
   '@vybestack/llxprt-code-mcp': [
     'host/hostServices.js',
     'auth/mcp-auth-factory.js',

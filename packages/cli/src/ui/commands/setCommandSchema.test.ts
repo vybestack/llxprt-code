@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect } from 'bun:test';
+import { beforeEach, describe, it, expect } from 'bun:test';
 import { buildSetSchema } from './setCommandSchema.js';
 import { createCompletionHandler } from './schema/index.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
@@ -19,7 +19,11 @@ import { createMockCommandContext } from '../../__tests__/mockCommandContext.js'
 // an autocomplete-excluded category.
 describe('/set timeout settings autocomplete (issue #1050)', () => {
   const handler = createCompletionHandler(buildSetSchema());
-  const ctx = createMockCommandContext();
+  let ctx: ReturnType<typeof createMockCommandContext>;
+
+  beforeEach(() => {
+    ctx = createMockCommandContext();
+  });
 
   const collectValues = async (
     fullLine: string,

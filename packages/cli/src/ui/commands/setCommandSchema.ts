@@ -11,7 +11,7 @@ import type {
   ValueArgument,
 } from './schema/types.js';
 import type { CommandContext } from './types.js';
-import { ephemeralSettingHelp } from '@vybestack/llxprt-code-providers/runtime/ephemeralSettings.js';
+import { ephemeralSettingHelp } from '@vybestack/llxprt-code-settings/settings/ephemeral-settings.js';
 import { getDirectSettingSpecs } from '@vybestack/llxprt-code-settings';
 import {
   filterStrings,

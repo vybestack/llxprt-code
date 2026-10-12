@@ -141,9 +141,6 @@ const runtimeSettingsState = {
   oauthManager: null as unknown,
 };
 
-const actual = {
-  ...(await import('@vybestack/llxprt-code-providers/runtime.js')),
-};
 void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
   const getProviderManager = () =>
     runtimeSettingsState.providerManager ??
@@ -160,9 +157,6 @@ void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => {
     } as unknown as ServerConfig.RuntimeProviderManager);
 
   return {
-    ephemeralSettingHelp: actual.ephemeralSettingHelp,
-    parseEphemeralSettingValue: vi.fn(actual.parseEphemeralSettingValue),
-    applyCliSetArguments: vi.fn(actual.applyCliSetArguments),
     applyProfileSnapshot: vi.fn(
       async (profile: {
         provider?: string;

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,8 +9,7 @@ import { describe, it, expect } from 'bun:test';
 import {
   isValidEphemeralSetting,
   ephemeralSettingHelp,
-} from './ephemeralSettings.js';
-import { loadProviderAliasEntries } from '../composition/providerAliases.js';
+} from './ephemeral-settings.js';
 
 function mediaPdfHelpText(): string {
   return ephemeralSettingHelp['media.pdf.enabled'] ?? '';
@@ -43,17 +42,6 @@ describe('media.pdf.enabled ephemeral setting @issue:2608', () => {
     it('mentions PDF in the description', () => {
       const description = mediaPdfHelpText();
       expect(description.toLowerCase()).toContain('pdf');
-    });
-  });
-
-  describe('Codex alias pins media.pdf.enabled=false', () => {
-    it('sets media.pdf.enabled=false in ephemeralSettings', () => {
-      const aliases = loadProviderAliasEntries();
-      const codexAlias = aliases.find((a) => a.alias === 'codex');
-
-      expect(codexAlias?.config.ephemeralSettings['media.pdf.enabled']).toBe(
-        false,
-      );
     });
   });
 });

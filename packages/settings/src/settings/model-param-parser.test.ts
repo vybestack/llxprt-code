@@ -1,11 +1,11 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { describe, expect, it } from 'bun:test';
-import { parseModelParamValue } from './modelParamParser.js';
+import { parseModelParamValue } from './model-param-parser.js';
 
 describe('parseModelParamValue', () => {
   it('parses finite numeric strings as numbers', () => {

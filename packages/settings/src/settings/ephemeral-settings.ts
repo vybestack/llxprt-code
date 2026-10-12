@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2025 Vybestack LLC
+ * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,11 +9,13 @@ import {
   parseSetting,
   SETTINGS_REGISTRY,
   validateSetting,
-} from '@vybestack/llxprt-code-settings/settings/settingsRegistry.js';
+} from './settingsRegistry.js';
 
-export const ephemeralSettingHelp: Record<string, string> = getSettingHelp();
+export const ephemeralSettingHelp = Object.freeze(getSettingHelp());
 
-const validEphemeralKeys = SETTINGS_REGISTRY.map((s: { key: string }) => s.key);
+const validEphemeralKeys = Object.freeze(
+  SETTINGS_REGISTRY.map((s: { key: string }) => s.key),
+);
 
 export type EphemeralSettingKey = keyof typeof ephemeralSettingHelp;
 
