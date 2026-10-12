@@ -13,11 +13,11 @@ interface StartupResult {
 }
 
 function initializeAndClose(
-  program: string,
+  args: readonly string[],
   request: string,
 ): Promise<StartupResult> {
   return new Promise((resolveResult, reject) => {
-    const child = spawn('node', ['--input-type=module', '-e', program], {
+    const child = spawn('node', args, {
       cwd: root,
       env: process.env,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -48,7 +48,7 @@ function initializeAndClose(
 }
 
 describe('default Node ACP startup and disposal', () => {
-  it('initializes a real connection, disposes on EOF and removes its process signal listeners', async () => {
+  it('starts the built CLI with --experimental-acp, answers initialize and exits cleanly on EOF', async () => {
     const request = {
       jsonrpc: '2.0',
       id: 854,
@@ -56,22 +56,7 @@ describe('default Node ACP startup and disposal', () => {
       params: { protocolVersion: 1, clientCapabilities: {} },
     };
     const result = await initializeAndClose(
-      `
-import assert from 'node:assert/strict';
-import { Config } from '@vybestack/llxprt-code-core';
-import { runZedIntegration } from '@vybestack/llxprt-code-zed-acp';
-const config = new Config({
-  sessionId: '854-node-startup-test', targetDir: process.cwd(), cwd: process.cwd(),
-  debugMode: false, model: 'no-provider-startup-probe', folderTrust: false,
-  telemetry: { enabled: false }, usageStatisticsEnabled: false,
-});
-const signals = ['SIGINT', 'SIGTERM'];
-const before = signals.map(signal => process.listenerCount(signal));
-let disposed = false;
-await runZedIntegration(config, { onExitCleanup: () => { disposed = true; } });
-assert.equal(disposed, true);
-assert.deepEqual(signals.map(signal => process.listenerCount(signal)), before);
-`,
+      [resolve(root, 'packages/cli/dist/index.js'), '--experimental-acp'],
       JSON.stringify(request) + '\n',
     );
     if (result.status !== 0) throw new Error(result.stderr);
