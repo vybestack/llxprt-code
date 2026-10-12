@@ -55,6 +55,7 @@ describe('CLI profile operation projection', () => {
           owner.settingsService,
           agent.workspace,
         ),
+        agent.sessionClient.fetch,
       );
       api.setEphemeralSetting('context-limit', 8192);
       expect(agent.getEphemeralSetting('context-limit')).toBe(8192);

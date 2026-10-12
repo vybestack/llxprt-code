@@ -25,13 +25,16 @@ describe('usageInfo', () => {
     });
 
     it('should return null for empty API key', async () => {
-      const result = await fetchZaiUsage('');
+      const result = await fetchZaiUsage(globalThis.fetch, '');
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it('should return null for non-string API key', async () => {
-      const result = await fetchZaiUsage(undefined as unknown as string);
+      const result = await fetchZaiUsage(
+        globalThis.fetch,
+        undefined as unknown as string,
+      );
       expect(result).toBeNull();
       expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -60,7 +63,7 @@ describe('usageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchZaiUsage('zai-test-key-123');
+      const result = await fetchZaiUsage(globalThis.fetch, 'zai-test-key-123');
 
       expect(fetchMock).toHaveBeenCalledWith(
         'https://api.z.ai/api/monitor/usage/quota/limit',
@@ -93,7 +96,7 @@ describe('usageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      await fetchZaiUsage('my-api-key');
+      await fetchZaiUsage(globalThis.fetch, 'my-api-key');
 
       const callArgs = fetchMock.mock.calls[0] as [
         string,
@@ -143,7 +146,7 @@ describe('usageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchZaiUsage('test-key');
+      const result = await fetchZaiUsage(globalThis.fetch, 'test-key');
       expect(result).toStrictEqual(mockResponse);
       expect(result?.data.limits).toHaveLength(2);
       expect(result?.data.level).toBe('max');
@@ -156,14 +159,14 @@ describe('usageInfo', () => {
         statusText: 'Unauthorized',
       } as Response);
 
-      const result = await fetchZaiUsage('bad-key');
+      const result = await fetchZaiUsage(globalThis.fetch, 'bad-key');
       expect(result).toBeNull();
     });
 
     it('should handle network errors', async () => {
       fetchMock.mockRejectedValueOnce(new Error('Network error'));
 
-      const result = await fetchZaiUsage('test-key');
+      const result = await fetchZaiUsage(globalThis.fetch, 'test-key');
       expect(result).toBeNull();
     });
 
@@ -175,7 +178,7 @@ describe('usageInfo', () => {
         },
       } as unknown as Response);
 
-      const result = await fetchZaiUsage('test-key');
+      const result = await fetchZaiUsage(globalThis.fetch, 'test-key');
       expect(result).toBeNull();
     });
 
@@ -197,7 +200,7 @@ describe('usageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      const result = await fetchZaiUsage('test-key');
+      const result = await fetchZaiUsage(globalThis.fetch, 'test-key');
       expect(result).toStrictEqual(mockResponse);
     });
 
@@ -217,7 +220,11 @@ describe('usageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      await fetchZaiUsage('test-key', 'https://custom.z.ai/v1');
+      await fetchZaiUsage(
+        globalThis.fetch,
+        'test-key',
+        'https://custom.z.ai/v1',
+      );
 
       const callArgs = fetchMock.mock.calls[0] as [string, unknown];
       expect(callArgs[0]).toBe(
@@ -241,7 +248,7 @@ describe('usageInfo', () => {
         json: async () => mockResponse,
       } as Response);
 
-      await fetchZaiUsage('test-key');
+      await fetchZaiUsage(globalThis.fetch, 'test-key');
 
       const secondArg = fetchMock.mock.calls[0]?.[1] as {
         signal?: unknown;

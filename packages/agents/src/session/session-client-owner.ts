@@ -1,7 +1,9 @@
+import { ModelRegistry } from '@vybestack/llxprt-code-core/models/registry.js';
 import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
 import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import {
   OwnedClientLedger,
+  cleanupProviderScope,
   finishCleanup,
   rethrowAfterClientCleanup,
 } from './session-client-cleanup.js';
@@ -28,7 +30,6 @@ import {
 
 import type { ImageOperationRunner } from '@vybestack/llxprt-code-core/services/image/imageCapability.js';
 import type { HostGitHubBrokerOwner } from '../api/host-github-broker-owner.js';
-import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { ProviderRetryOperations } from '@vybestack/llxprt-code-core/runtime/contracts/ProviderRetryOperations.js';
 import type {
   RuntimeContentGeneratorFactory,
@@ -84,17 +85,7 @@ import {
 } from '@vybestack/llxprt-code-core/hooks/hook-configuration.js';
 
 export class SessionClientOwner {
-  static async cleanupProviderScope(
-    files: ProviderFileLifecycle,
-    scope: string,
-  ): Promise<void> {
-    const result = await files.cleanupScope('session', scope);
-    if (result.failed > 0)
-      throw new Error(
-        `Provider file cleanup incomplete for scope ${scope}: ${JSON.stringify(files.snapshot().deletionFailures)}`,
-      );
-    if (result.deferred > 0) await files.waitForScopeCleanup('session', scope);
-  }
+  static readonly cleanupProviderScope = cleanupProviderScope;
   private providerFileLifecycle: object | undefined;
   private cleanupProviderFiles?: (scopeId: string) => Promise<void>;
   get providerFiles(): object | undefined {
@@ -246,18 +237,17 @@ export class SessionClientOwner {
     this.toolCatalog.bindImageOperation((input) => this.images.run(input));
   }
 
-  runImageOperation(
-    input: Parameters<ImageOperationRunner>[0],
-  ): ReturnType<ImageOperationRunner> {
+  readonly runImageOperation: ImageOperationRunner = (input) => {
     this.getAgentClient();
     return this.images.run(input);
-  }
+  };
 
   closeImageAdmission(): Promise<void> {
     return this.images.close();
   }
 
   readonly operations: Agent['sessionClient'] = {
+    fetch: (input, init) => this.network.fetch(input, init),
     refreshAuth: (method) => this.refreshAuth(method),
     publishTools: () => this.publishTools(),
     createDetachedAgentClient: (id) => this.createDetachedAgentClient(id),
@@ -278,6 +268,7 @@ export class SessionClientOwner {
   }
 
   private readonly network: OwnedFetch;
+  readonly modelRegistry: ModelRegistry;
 
   constructor(
     private readonly config: Config,
@@ -306,6 +297,8 @@ export class SessionClientOwner {
         );
     }
     this.network = new OwnedFetch(config.getProxy());
+    this.modelRegistry = new ModelRegistry(this.network.fetch);
+    manager.bindModelRegistry?.(this.modelRegistry);
     manager.bindNetworkFetch?.(this.network.fetch);
     this.toolCatalog = new SessionToolCatalogOwner(
       config,
@@ -341,7 +334,10 @@ export class SessionClientOwner {
         await rethrowAfterClientCleanup(
           error,
           () => owner.ownedClients.dispose(owner.client),
-          () => owner.network.dispose(),
+          () => {
+            owner.modelRegistry.dispose();
+            return owner.network.dispose();
+          },
         );
       }
       owner.initialBindingComplete = true;
@@ -837,6 +833,7 @@ export class SessionClientOwner {
             .clients()
             .map((client) => this.ownedClients.dispose(client)),
         );
+        this.modelRegistry.dispose();
         const network = await Promise.allSettled([this.network.dispose()]);
         const writes = await Promise.allSettled([...this.policyWrites]);
         const policy = await Promise.allSettled([

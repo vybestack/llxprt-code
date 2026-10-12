@@ -50,13 +50,18 @@ describe('Issue #1468 getProfileBuckets case 11', () => {
     // The fetch implementation derives its response from the token it
     // receives, so the asserted value can only match if the manager
     // selected the foreground session bucket's token.
-    mockFetchAnthropicUsage.mockImplementation(async (token: string) => ({
-      fetchedToken: token,
-    }));
+    mockFetchAnthropicUsage.mockImplementation(
+      async (_requestFetch: unknown, token: string) => ({
+        fetchedToken: token,
+      }),
+    );
 
-    const usage = await manager.getAnthropicUsageInfo();
+    const usage = await manager.getAnthropicUsageInfo(globalThis.fetch);
 
-    expect(mockFetchAnthropicUsage).toHaveBeenCalledWith('bucket-b-token');
+    expect(mockFetchAnthropicUsage).toHaveBeenCalledWith(
+      globalThis.fetch,
+      'bucket-b-token',
+    );
     expect(usage).toStrictEqual({ fetchedToken: 'bucket-b-token' });
   });
 });

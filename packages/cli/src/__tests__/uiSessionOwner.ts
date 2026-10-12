@@ -323,6 +323,7 @@ function projectUiSessionOwner(
     workspace: uiWorkspace(config, filesystem, runtime.checkpoints),
     providerManager: manager,
     sessionClient: {
+      fetch: sessionClient.operations.fetch,
       runImageOperation: (input) => sessionClient.runImageOperation(input),
       refreshAuth: (method) => sessionClient.refreshAuth(method),
       publishTools: () => sessionClient.publishTools(),

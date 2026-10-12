@@ -166,6 +166,7 @@ describe('interactive runtime owner bridge', () => {
     const captured: { left?: RuntimeApi; right?: RuntimeApi } = {};
     const left = render(
       <RuntimeContextProvider
+        requestFetch={a.sessionClient.fetch}
         agent={a}
         owner={createRuntimeOwnerFeatures(
           first.config,
@@ -192,6 +193,7 @@ describe('interactive runtime owner bridge', () => {
     );
     const right = render(
       <RuntimeContextProvider
+        requestFetch={b.sessionClient.fetch}
         agent={b}
         owner={createRuntimeOwnerFeatures(
           second.config,
@@ -258,6 +260,7 @@ describe('interactive runtime owner bridge', () => {
       );
       right.rerender(
         <RuntimeContextProvider
+          requestFetch={b.sessionClient.fetch}
           agent={b}
           owner={createRuntimeOwnerFeatures(
             second.config,
@@ -317,6 +320,7 @@ describe('interactive runtime owner bridge', () => {
     const captured: { left?: RuntimeApi; right?: RuntimeApi } = {};
     const left = render(
       <RuntimeContextProvider
+        requestFetch={a.sessionClient.fetch}
         agent={a}
         owner={createRuntimeOwnerFeatures(
           first.config,
@@ -338,6 +342,7 @@ describe('interactive runtime owner bridge', () => {
     );
     const right = render(
       <RuntimeContextProvider
+        requestFetch={b.sessionClient.fetch}
         agent={b}
         owner={createRuntimeOwnerFeatures(
           second.config,
@@ -549,6 +554,7 @@ describe('interactive runtime owner bridge', () => {
         refresh={createProviderAliasRefresh(a.providerManager)}
       >
         <RuntimeContextProvider
+          requestFetch={a.sessionClient.fetch}
           agent={a}
           owner={createRuntimeOwnerFeatures(
             first.config,
@@ -572,6 +578,7 @@ describe('interactive runtime owner bridge', () => {
         refresh={createProviderAliasRefresh(b.providerManager)}
       >
         <RuntimeContextProvider
+          requestFetch={b.sessionClient.fetch}
           agent={b}
           owner={createRuntimeOwnerFeatures(
             second.config,

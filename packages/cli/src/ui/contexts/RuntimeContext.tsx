@@ -1,3 +1,4 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -124,6 +125,7 @@ export type RuntimeOwnerFeatures = RuntimeFunctions & {
 
 export type RuntimeApi = RuntimeOwnerFeatures &
   ProfileRuntimeApi & {
+    fetch: NetworkFetch;
     setProvider: AgentSetProvider;
     loadProfileByName: (name: string) => ReturnType<Agent['profiles']['load']>;
     updateActiveProviderBaseUrl: (
@@ -160,9 +162,11 @@ function makeBaseUrlUpdater(
 function makeRuntimeApi(
   agent: RuntimeProfileAgent,
   owner: RuntimeOwnerFeatures,
+  requestFetch: NetworkFetch,
 ): RuntimeApi {
   return {
     ...owner,
+    fetch: requestFetch,
     setProvider: (provider, model, options) =>
       agent.setProvider(provider, model, options),
     getActiveProfileName: () => agent.getActiveProfileName(),
@@ -179,19 +183,27 @@ function makeRuntimeApi(
 function createBridge(
   agent: RuntimeProfileAgent,
   owner: RuntimeOwnerFeatures,
+  requestFetch: NetworkFetch,
 ): RuntimeContextBridge {
-  return { runtimeId: agent.getRuntimeId(), api: makeRuntimeApi(agent, owner) };
+  return {
+    runtimeId: agent.getRuntimeId(),
+    api: makeRuntimeApi(agent, owner, requestFetch),
+  };
 }
 
 export interface RuntimeContextProviderProps {
   agent: RuntimeProfileAgent;
   owner: RuntimeOwnerFeatures;
+  requestFetch: NetworkFetch;
 }
 
 export const RuntimeContextProvider: React.FC<
   PropsWithChildren<RuntimeContextProviderProps>
-> = ({ children, agent, owner }) => {
-  const bridge = useMemo(() => createBridge(agent, owner), [agent, owner]);
+> = ({ children, agent, owner, requestFetch }) => {
+  const bridge = useMemo(
+    () => createBridge(agent, owner, requestFetch),
+    [agent, owner, requestFetch],
+  );
   return (
     <RuntimeContext.Provider value={bridge}>{children}</RuntimeContext.Provider>
   );
@@ -214,6 +226,7 @@ export function useRuntimeApi(): RuntimeApi {
 export function createRuntimeApi(
   agent: RuntimeProfileAgent,
   owner: RuntimeOwnerFeatures,
+  requestFetch: NetworkFetch,
 ): RuntimeApi {
-  return makeRuntimeApi(agent, owner);
+  return makeRuntimeApi(agent, owner, requestFetch);
 }

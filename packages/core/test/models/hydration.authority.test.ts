@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import type { RuntimeModel } from '../../src/runtime/contracts/RuntimeModel.js';
 import { hydrateModelsWithRegistry } from '../../src/models/hydration.js';
-import { getModelRegistry } from '../../src/models/registry.js';
+import { ModelRegistry } from '../../src/models/registry.js';
 import type { LlxprtModel } from '../../src/models/schema.js';
 
 function makeBaseModel(
@@ -53,8 +53,9 @@ function makeRegistryModel(id: string, contextWindow: number): LlxprtModel {
 }
 
 describe('hydrateModelsWithRegistry — provider geometry authority @issue:2483', () => {
+  let registry: ModelRegistry;
   beforeEach(() => {
-    const registry = getModelRegistry();
+    registry = new ModelRegistry(globalThis.fetch);
 
     // Force the registry to appear initialized
     vi.spyOn(registry, 'isInitialized').mockReturnValue(true);
@@ -65,7 +66,6 @@ describe('hydrateModelsWithRegistry — provider geometry authority @issue:2483'
   });
 
   it('preserves static-model contextWindow (geometryAuthority) over registry data', async () => {
-    const registry = getModelRegistry();
     vi.spyOn(registry, 'getByProvider').mockReturnValue([
       makeRegistryModel('gpt-5.6-sol', 1048576),
     ]);
@@ -77,7 +77,9 @@ describe('hydrateModelsWithRegistry — provider geometry authority @issue:2483'
       }),
     ];
 
-    const result = await hydrateModelsWithRegistry(baseModels, ['openai']);
+    const result = await hydrateModelsWithRegistry(registry, baseModels, [
+      'openai',
+    ]);
 
     expect(result).toHaveLength(1);
     expect(result[0]?.contextWindow).toBe(262144);
@@ -85,7 +87,6 @@ describe('hydrateModelsWithRegistry — provider geometry authority @issue:2483'
   });
 
   it('refreshes ordinary provider-fallback contextWindow from registry (no marker)', async () => {
-    const registry = getModelRegistry();
     vi.spyOn(registry, 'getByProvider').mockReturnValue([
       makeRegistryModel('gpt-4o', 128000),
     ]);
@@ -93,28 +94,30 @@ describe('hydrateModelsWithRegistry — provider geometry authority @issue:2483'
     // Ordinary provider model WITHOUT geometryAuthority — registry wins
     const baseModels = [makeBaseModel('gpt-4o', { contextWindow: 8000 })];
 
-    const result = await hydrateModelsWithRegistry(baseModels, ['openai']);
+    const result = await hydrateModelsWithRegistry(registry, baseModels, [
+      'openai',
+    ]);
 
     expect(result).toHaveLength(1);
     expect(result[0]?.contextWindow).toBe(128000);
   });
 
   it('falls back to registry contextWindow when provider does not supply one', async () => {
-    const registry = getModelRegistry();
     vi.spyOn(registry, 'getByProvider').mockReturnValue([
       makeRegistryModel('gpt-4o', 128000),
     ]);
 
     const baseModels = [makeBaseModel('gpt-4o')];
 
-    const result = await hydrateModelsWithRegistry(baseModels, ['openai']);
+    const result = await hydrateModelsWithRegistry(registry, baseModels, [
+      'openai',
+    ]);
 
     expect(result).toHaveLength(1);
     expect(result[0]?.contextWindow).toBe(128000);
   });
 
   it('preserves static-model contextWindow for multiple codex tiers', async () => {
-    const registry = getModelRegistry();
     vi.spyOn(registry, 'getByProvider').mockReturnValue([
       makeRegistryModel('gpt-5.6-sol', 1048576),
       makeRegistryModel('gpt-5.6-terra', 1048576),
@@ -141,7 +144,9 @@ describe('hydrateModelsWithRegistry — provider geometry authority @issue:2483'
       }),
     ];
 
-    const result = await hydrateModelsWithRegistry(baseModels, ['openai']);
+    const result = await hydrateModelsWithRegistry(registry, baseModels, [
+      'openai',
+    ]);
 
     const sol = result.find((m) => m.id === 'gpt-5.6-sol');
     const terra = result.find((m) => m.id === 'gpt-5.6-terra');
@@ -155,7 +160,6 @@ describe('hydrateModelsWithRegistry — provider geometry authority @issue:2483'
   });
 
   it('preserves Spark explicit context geometry (131072) with marker', async () => {
-    const registry = getModelRegistry();
     vi.spyOn(registry, 'getByProvider').mockReturnValue([
       makeRegistryModel('gpt-5.3-codex-spark', 1048576),
     ]);
@@ -167,14 +171,15 @@ describe('hydrateModelsWithRegistry — provider geometry authority @issue:2483'
       }),
     ];
 
-    const result = await hydrateModelsWithRegistry(baseModels, ['openai']);
+    const result = await hydrateModelsWithRegistry(registry, baseModels, [
+      'openai',
+    ]);
 
     expect(result).toHaveLength(1);
     expect(result[0]?.contextWindow).toBe(131072);
   });
 
   it('allows registry to override maxOutputTokens when only contextWindow has authority', async () => {
-    const registry = getModelRegistry();
     const registryModel = makeRegistryModel('gpt-5.6-sol', 1048576);
     registryModel.maxOutputTokens = 65536;
     vi.spyOn(registry, 'getByProvider').mockReturnValue([registryModel]);
@@ -189,7 +194,9 @@ describe('hydrateModelsWithRegistry — provider geometry authority @issue:2483'
       }),
     ];
 
-    const result = await hydrateModelsWithRegistry(baseModels, ['openai']);
+    const result = await hydrateModelsWithRegistry(registry, baseModels, [
+      'openai',
+    ]);
 
     expect(result).toHaveLength(1);
     const hydrated = result[0];
@@ -198,7 +205,6 @@ describe('hydrateModelsWithRegistry — provider geometry authority @issue:2483'
   });
 
   it('preserves model maxOutputTokens when geometryAuthority marks it', async () => {
-    const registry = getModelRegistry();
     const registryModel = makeRegistryModel('gpt-5.6-sol', 1048576);
     registryModel.maxOutputTokens = 65536;
     vi.spyOn(registry, 'getByProvider').mockReturnValue([registryModel]);
@@ -214,7 +220,9 @@ describe('hydrateModelsWithRegistry — provider geometry authority @issue:2483'
       }),
     ];
 
-    const result = await hydrateModelsWithRegistry(baseModels, ['openai']);
+    const result = await hydrateModelsWithRegistry(registry, baseModels, [
+      'openai',
+    ]);
 
     expect(result).toHaveLength(1);
     const hydrated = result[0];

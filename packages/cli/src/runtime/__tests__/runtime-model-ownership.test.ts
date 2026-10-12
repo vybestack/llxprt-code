@@ -64,6 +64,7 @@ describe('CLI retained session model commands', () => {
           first.settingsService,
           agentA.workspace,
         ),
+        agentA.sessionClient.fetch,
       );
       const secondApi = createRuntimeApi(
         agentB,
@@ -76,6 +77,7 @@ describe('CLI retained session model commands', () => {
           second.settingsService,
           agentB.workspace,
         ),
+        agentB.sessionClient.fetch,
       );
       expect(
         readActiveProviderName(first.settingsService, first.providerManager),

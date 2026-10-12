@@ -1,3 +1,4 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -106,6 +107,7 @@ function buildZaiUsageEndpoint(baseUrl?: string): string {
  * @returns Usage info if available, null on error
  */
 export async function fetchZaiUsage(
+  requestFetch: NetworkFetch,
   apiKey: string,
   baseUrl?: string,
 ): Promise<ZaiUsageInfo | null> {
@@ -117,7 +119,7 @@ export async function fetchZaiUsage(
   const endpoint = buildZaiUsageEndpoint(baseUrl);
 
   try {
-    const response = await fetch(endpoint, {
+    const response = await requestFetch(endpoint, {
       method: 'GET',
       headers: {
         Authorization: apiKey,

@@ -1,3 +1,4 @@
+import type { ModelRegistry } from '@vybestack/llxprt-code-core/models/registry.js';
 import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
@@ -543,6 +544,12 @@ export class ProviderManager implements IProviderManager {
    */
   private requestFetch: NetworkFetch = globalThis.fetch;
 
+  private modelRegistry?: ModelRegistry;
+
+  bindModelRegistry(registry: ModelRegistry): void {
+    this.modelRegistry = registry;
+  }
+
   bindNetworkFetch(requestFetch: NetworkFetch): void {
     this.requestFetch = requestFetch;
   }
@@ -700,7 +707,9 @@ export class ProviderManager implements IProviderManager {
       }
     }
 
-    return resolveAvailableModels(provider);
+    if (this.modelRegistry === undefined)
+      throw new Error('Model listing requires an owning root registry');
+    return resolveAvailableModels(this.modelRegistry, provider);
   }
 
   listProviders(): string[] {

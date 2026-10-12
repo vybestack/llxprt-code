@@ -274,6 +274,7 @@ async function resolveSlashQuery(
             runtimeSettings.store,
             agent.workspace,
           ),
+          agent.sessionClient.fetch,
         )
       : undefined,
     providerManager,

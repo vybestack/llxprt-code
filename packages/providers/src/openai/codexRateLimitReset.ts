@@ -1,3 +1,4 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -142,6 +143,7 @@ function normalizeResetCredits(
  * @returns Reset-credits response if available, null on error
  */
 export async function fetchCodexRateLimitResetCredits(
+  requestFetch: NetworkFetch,
   accessToken: string,
   accountId: string,
   baseUrl?: string,
@@ -159,7 +161,7 @@ export async function fetchCodexRateLimitResetCredits(
   const endpoints = buildResetEndpoints(baseUrl);
 
   try {
-    const response = await fetch(endpoints.list, {
+    const response = await requestFetch(endpoints.list, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -219,6 +221,7 @@ export async function fetchCodexRateLimitResetCredits(
  * @returns Consume response if successful, null on error
  */
 export async function consumeCodexRateLimitResetCredit(
+  requestFetch: NetworkFetch,
   accessToken: string,
   accountId: string,
   creditId: string,
@@ -248,7 +251,7 @@ export async function consumeCodexRateLimitResetCredit(
   const endpoints = buildResetEndpoints(baseUrl);
 
   try {
-    const response = await fetch(endpoints.consume, {
+    const response = await requestFetch(endpoints.consume, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,

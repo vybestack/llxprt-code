@@ -1,3 +1,4 @@
+import type { ModelRegistry } from '../../models/registry.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -74,6 +75,7 @@ export interface RuntimeProviderManager {
   getSessionTokenUsage(): RuntimeSessionTokenUsage;
   setConfig(config: Config): void;
   setRuntimeContext(runtimeContext: ProviderRuntimeContext): void;
+  bindModelRegistry?(registry: ModelRegistry): void;
   bindNetworkFetch?(
     requestFetch: (
       input: RequestInfo | URL,

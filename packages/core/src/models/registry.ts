@@ -1,3 +1,4 @@
+import type { NetworkFetch } from '../utils/fetch.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -58,6 +59,8 @@ export class ModelRegistry {
   private listeners = new Map<string, EventCallback[]>();
   private initialized = false;
   private initPromise: Promise<void> | null = null;
+
+  constructor(private readonly requestFetch: NetworkFetch) {}
 
   /**
    * Get the cache file path
@@ -144,7 +147,7 @@ export class ModelRegistry {
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
     try {
-      const response = await fetch(MODELS_DEV_API_URL, {
+      const response = await this.requestFetch(MODELS_DEV_API_URL, {
         headers: {
           'User-Agent': 'llxprt/1.0',
         },
@@ -380,24 +383,4 @@ export class ModelRegistry {
     const callbacks = this.listeners.get(event) ?? [];
     callbacks.forEach((cb) => cb());
   }
-}
-
-// Singleton instance
-let registryInstance: ModelRegistry | null = null;
-
-/**
- * Get the global ModelRegistry instance
- */
-export function getModelRegistry(): ModelRegistry {
-  registryInstance ??= new ModelRegistry();
-  return registryInstance;
-}
-
-/**
- * Initialize the global ModelRegistry
- */
-export async function initializeModelRegistry(): Promise<ModelRegistry> {
-  const registry = getModelRegistry();
-  await registry.initialize();
-  return registry;
 }

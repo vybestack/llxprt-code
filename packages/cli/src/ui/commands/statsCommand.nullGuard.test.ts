@@ -32,6 +32,10 @@ describe('statsCommand null sessionStartTime guard', () => {
 
     mockContext = createMockCommandContext({
       runtimeApi: {
+        fetch: (
+          input: RequestInfo | URL,
+          init?: RequestInit,
+        ): Promise<Response> => globalThis.fetch(input, init),
         getEphemeralSetting: getEphemeralSettingMock,
         getActiveProviderName: getActiveProviderNameMock,
         detectProviderQuota: (name: string) => {

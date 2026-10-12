@@ -1,3 +1,4 @@
+import type { NetworkFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -136,7 +137,7 @@ async function fetchApiKeyProviderQuota(
     return null;
   }
 
-  return fetchApiKeyQuota(provider, apiKey, baseUrlForFetch);
+  return fetchApiKeyQuota(runtimeApi.fetch, provider, apiKey, baseUrlForFetch);
 }
 
 function appendBucketLines(
@@ -226,12 +227,13 @@ function formatCodexLines(codexUsageInfo: UsageMap): string[] {
 
 async function fetchOAuthQuotaLines(
   oauthManager: OAuthUsage,
+  requestFetch: NetworkFetch,
 ): Promise<string[]> {
   const output: string[] = [];
 
   const [anthropicResult, codexResult] = await Promise.allSettled([
-    oauthManager.getAllAnthropicUsageInfo(),
-    oauthManager.getAllCodexUsageInfo(),
+    oauthManager.getAllAnthropicUsageInfo(requestFetch),
+    oauthManager.getAllCodexUsageInfo(requestFetch),
   ]);
 
   if (anthropicResult.status === 'rejected') {
@@ -284,7 +286,10 @@ export async function fetchAllQuotaInfo(
   try {
     const oauthManager = oauthControl;
     if (oauthManager.isAvailable()) {
-      const oauthLines = await fetchOAuthQuotaLines(oauthManager);
+      const oauthLines = await fetchOAuthQuotaLines(
+        oauthManager,
+        runtimeApi.fetch,
+      );
       output.push(...oauthLines);
     }
 
