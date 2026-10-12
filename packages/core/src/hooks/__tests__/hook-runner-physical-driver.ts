@@ -6,9 +6,9 @@
 
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { HookRunner } from './hookRunner.js';
-import { HookEventName, HookType } from './types.js';
-import { physicalHookCommand } from './__tests__/physical-hook-command.js';
+import { HookRunner } from '../hookRunner.js';
+import { HookEventName, HookType } from '../types.js';
+import { physicalHookCommand } from './physical-hook-command.js';
 
 const directory = process.argv[2];
 if (process.argv.length < 3) throw new Error('Missing hook project directory');

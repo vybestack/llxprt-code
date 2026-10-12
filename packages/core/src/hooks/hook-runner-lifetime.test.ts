@@ -173,7 +173,10 @@ process.stdin.resume();
         process.execPath,
         [
           fileURLToPath(
-            new URL('./hook-runner-physical-driver.ts', import.meta.url),
+            new URL(
+              './__tests__/hook-runner-physical-driver.ts',
+              import.meta.url,
+            ),
           ),
           directory,
         ],
