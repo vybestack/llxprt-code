@@ -41,22 +41,3 @@ export {
   switchActiveProvider,
   DEFAULT_PRESERVE_EPHEMERALS,
 } from './providerSwitch.js';
-
-export {
-  updateActiveProviderApiKey,
-  updateActiveProviderBaseUrl,
-  setActiveModel,
-} from './providerMutations.js';
-
-export {
-  applyCliArgumentOverrides,
-  resolveNamedKey,
-} from './settingsResolver.js';
-
-// Provider config utilities (re-exported so the zed/ACP integration and other
-// bootstrap clients reach them via the public runtime.js barrel).
-export {
-  setProviderApiKey,
-  setProviderBaseUrl,
-} from './providerConfigUtils.js';
-export type { ProviderConfigResult } from './providerConfigUtils.js';

@@ -1,6 +1,6 @@
 import { createTaskRegistration } from './runtimeFactories.js';
 import { HostCredentialOwner } from '@vybestack/llxprt-code-providers/auth.js';
-import { setActiveModel } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { setActiveModel } from './providerMutations.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC

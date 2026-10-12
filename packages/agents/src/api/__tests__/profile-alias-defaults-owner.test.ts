@@ -10,7 +10,7 @@ import {
   writeProviderAliasConfig,
   loadProviderAliasEntries,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import { setActiveModel } from '@vybestack/llxprt-code-providers/runtime.js';
+import { setActiveModel } from '../providerMutations.js';
 import {
   standardProfile,
   useProfileOwner,

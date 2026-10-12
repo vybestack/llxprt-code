@@ -7,11 +7,26 @@ import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { buildAgent } from './helpers/agentHarness.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { updateActiveProviderApiKey } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+import { updateActiveProviderApiKey } from '../providerMutations.js';
 import { AuthKeysControl } from '../control/authKeysControl.js';
 import { createAgentAuthState } from '../control/authState.js';
 
 describe('agent raw credential mutations', () => {
+  it.each([
+    'agentImpl.ts',
+    'profileApplication.ts',
+    'providerMutations.ts',
+    'providerConfigUtils.ts',
+    'settingsResolver.ts',
+    'keyResolution.ts',
+  ])('keeps %s independent of provider runtime policy', async (file) => {
+    const source = await readFile(
+      new URL(`../${file}`, import.meta.url),
+      'utf8',
+    );
+    expect(source).not.toContain('@vybestack/llxprt-code-providers/runtime');
+  });
+
   it('returns Gemini paid-mode transitions from the real credential mutation', async () => {
     const settings = new SettingsService();
     const state = createAgentAuthState();

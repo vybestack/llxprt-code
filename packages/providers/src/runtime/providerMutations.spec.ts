@@ -11,7 +11,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { computeModelDefaults } from '../model-defaults.js';
-import { normalizeProviderBaseUrl } from './providerMutations.js';
+import { normalizeProviderBaseUrl } from '../baseUrlResolver.js';
 import type { ModelDefaultRule } from '../composition/index.js';
 import { loadProviderAliasEntries } from '../composition/providerAliases.js';
 

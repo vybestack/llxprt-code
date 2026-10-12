@@ -12,9 +12,9 @@ import { OAuthManager } from '../../auth/oauth-manager.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { switchActiveProvider } from '../index.js';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
-import { type setActiveModel } from '../providerMutations.js';
+import { type setActiveModel } from '../../../../agents/src/api/providerMutations.js';
 import { assembleModelSelection } from '../../../../agents/src/api/model-selection.js';
-import type { setProviderApiKey } from '../providerConfigUtils.js';
+import type { setProviderApiKey } from '../../../../agents/src/api/providerConfigUtils.js';
 
 interface ProviderFixtureRoot {
   readonly oauthManager?: OAuthManager;

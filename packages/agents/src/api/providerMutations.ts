@@ -24,133 +24,13 @@ import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
 
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { DebugLogger } from '@vybestack/llxprt-code-core';
-import type { ModelDefaultRule } from '../composition/index.js';
+import { loadProviderAliasEntries } from '@vybestack/llxprt-code-providers/composition.js';
 
 function logger(): DebugLogger {
   return new DebugLogger('llxprt:runtime:providerMutations');
 }
 
-/**
- * Normalize a provider base URL by trimming whitespace and handling 'none' keyword.
- * Returns undefined for empty/none URLs.
- */
-export function normalizeProviderBaseUrl(
-  baseUrl?: string | null,
-): string | undefined {
-  if (!baseUrl) {
-    return undefined;
-  }
-  const trimmed = baseUrl.trim();
-  if (!trimmed || trimmed.toLowerCase() === 'none') {
-    return undefined;
-  }
-  return trimmed;
-}
-
-function isInspectableProvider(
-  provider: unknown,
-): provider is Record<string, unknown> {
-  return (
-    (typeof provider === 'object' || typeof provider === 'function') &&
-    provider !== null
-  );
-}
-
-function extractWrappedProviderBaseUrl(
-  provider: Record<string, unknown>,
-  visited: Set<unknown>,
-): string | undefined {
-  const wrappedProvider = (provider as { wrappedProvider?: unknown })
-    .wrappedProvider;
-  if (wrappedProvider == null) {
-    return undefined;
-  }
-  return extractProviderBaseUrl(wrappedProvider, visited);
-}
-
-function extractDirectProviderBaseUrl(
-  provider: Record<string, unknown>,
-): string | undefined {
-  return normalizeProviderBaseUrl(
-    (provider as { baseURL?: string | null }).baseURL,
-  );
-}
-
-function extractConfiguredProviderBaseUrl(
-  provider: Record<string, unknown>,
-): string | undefined {
-  const configCandidate = (
-    provider as { providerConfig?: { baseURL?: string } }
-  ).providerConfig;
-  if (!configCandidate) {
-    return undefined;
-  }
-  return normalizeProviderBaseUrl(configCandidate.baseURL);
-}
-
-function extractBaseProviderConfigUrl(
-  provider: Record<string, unknown>,
-): string | undefined {
-  const baseProviderConfig = (
-    provider as { baseProviderConfig?: { baseURL?: string } }
-  ).baseProviderConfig;
-  if (!baseProviderConfig) {
-    return undefined;
-  }
-  return normalizeProviderBaseUrl(baseProviderConfig.baseURL);
-}
-
-function extractProviderGetBaseUrl(
-  provider: Record<string, unknown>,
-): string | undefined {
-  const getter = (provider as { getBaseURL?: () => string | undefined })
-    .getBaseURL;
-  if (typeof getter !== 'function') {
-    return undefined;
-  }
-  try {
-    return normalizeProviderBaseUrl(getter());
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Extract base URL from a provider object by checking the canonical baseURL
- * field on the provider, its providerConfig/baseProviderConfig containers,
- * and the getBaseURL() accessor, following wrapped providers. Provider
- * objects are LLxprt-owned IProvider instances; legacy spellings are
- * migrated at settings load and never appear here (issue #2533).
- */
-export function extractProviderBaseUrl(
-  provider: unknown,
-  visited = new Set<unknown>(),
-): string | undefined {
-  if (!isInspectableProvider(provider) || visited.has(provider)) {
-    return undefined;
-  }
-  visited.add(provider);
-
-  for (const extractor of [
-    () => extractWrappedProviderBaseUrl(provider, visited),
-    () => extractDirectProviderBaseUrl(provider),
-    () => extractConfiguredProviderBaseUrl(provider),
-    () => extractBaseProviderConfigUrl(provider),
-    () => extractProviderGetBaseUrl(provider),
-  ]) {
-    const baseUrl = extractor();
-    if (baseUrl !== undefined) {
-      return baseUrl;
-    }
-  }
-
-  return undefined;
-}
-
-export interface ModelSelectionOperations {
-  readModel(): string | undefined;
-  selectModel(model: string, rules: readonly ModelDefaultRule[]): void;
-}
+import type { ModelSelectionOperations } from './model-selection.js';
 
 export async function updateActiveProviderApiKey(
   apiKey: string | null,
@@ -302,7 +182,6 @@ export async function setActiveModel(
   // store keys this transition owns.
 
   // Load alias config for the current provider to apply model defaults
-  const { loadProviderAliasEntries } = await import('../composition/index.js');
   let aliasConfig;
   try {
     aliasConfig = loadProviderAliasEntries().find(

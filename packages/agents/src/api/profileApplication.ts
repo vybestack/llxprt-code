@@ -27,7 +27,7 @@ import {
   setActiveModel,
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
-} from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
+} from './providerMutations.js';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 import {
   getProfileEphemeralSettings,

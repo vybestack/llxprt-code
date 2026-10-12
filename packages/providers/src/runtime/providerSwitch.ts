@@ -18,7 +18,7 @@ import type {
   ProviderSwitchResult,
 } from '@vybestack/llxprt-code-core';
 import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
-import { extractProviderBaseUrl } from './providerMutations.js';
+import { extractProviderBaseUrl } from '../baseUrlResolver.js';
 import {
   loadProviderAliasEntries,
   type ProviderAliasConfig,

@@ -12,7 +12,7 @@ import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import {
   setProviderApiKey,
   setProviderBaseUrl,
-} from './providerConfigUtils.js';
+} from '../../../agents/src/api/providerConfigUtils.js';
 
 describe('providerConfigUtils owner mutations', () => {
   let settings: SettingsService;

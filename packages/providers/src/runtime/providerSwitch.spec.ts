@@ -19,9 +19,9 @@ function observeModelProfiles(): ModelProfileInfoPayload[] {
 }
 
 const realProviderMutationsModule = {
-  ...(await import('./providerMutations.js')),
+  ...(await import('../../../agents/src/api/providerMutations.js')),
 };
-void vi.mock('./providerMutations.js', () => ({
+void vi.mock('../../../agents/src/api/providerMutations.js', () => ({
   ...realProviderMutationsModule,
   computeModelDefaults: vi.fn(() => ({})),
   normalizeProviderBaseUrl: vi.fn(),

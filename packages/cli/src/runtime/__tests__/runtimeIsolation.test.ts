@@ -33,11 +33,13 @@ import { setActiveModelParam } from '../../../../agents/src/api/model-parameters
 import {
   activateIsolatedRuntimeContext,
   createIsolatedRuntimeContext,
-  setActiveModel,
   switchActiveProvider,
+} from '@vybestack/llxprt-code-providers/runtime.js';
+import {
+  setActiveModel,
   updateActiveProviderApiKey,
   updateActiveProviderBaseUrl,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+} from '../../../../agents/src/api/providerMutations.js';
 import { Config } from '@vybestack/llxprt-code-core';
 import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeContextFactory.js';
 import { createProviderSessionOwner } from '../../integration-tests/__tests__/session-client-owner-fixture.js';

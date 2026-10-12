@@ -31,6 +31,18 @@ const AGENT_FACTORY_SEAM_PATTERN =
   /(register|reset|attach)AgentRuntime|AgentRuntimeFactor(y|ies)/;
 
 describe('providers runtime export surface @plan:ISSUE-3222 @requirement:REQ-3222-AC4', () => {
+  it.each([
+    'updateActiveProviderApiKey',
+    'updateActiveProviderBaseUrl',
+    'setActiveModel',
+    'applyCliArgumentOverrides',
+    'resolveNamedKey',
+    'setProviderApiKey',
+    'setProviderBaseUrl',
+  ])('does not expose agent-owned %s policy', (name) => {
+    expect(name in runtimeApi).toBe(false);
+  });
+
   it('exports no agent-runtime factory registration seam @requirement:REQ-3222-AC4 @scenario:deleted-seam @given:the public runtime barrel @when:its export shape is inspected @then:no export name matches the registration/reset/attach agent-runtime-factory seam pattern', () => {
     const seamExports = Object.keys(surface).filter((name) =>
       AGENT_FACTORY_SEAM_PATTERN.test(name),

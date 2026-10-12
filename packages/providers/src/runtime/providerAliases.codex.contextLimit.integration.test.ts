@@ -12,7 +12,7 @@ import type { AgentRuntimeProviderAdapter } from '@vybestack/llxprt-code-core/ru
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { assembleCliProviderRuntime } from './assembleCliProviderRuntime.js';
-import { setActiveModel } from './providerMutations.js';
+import { setActiveModel } from '../../../agents/src/api/providerMutations.js';
 import { assembleModelSelection } from '../../../agents/src/api/model-selection.js';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { switchActiveProvider } from './providerSwitch.js';

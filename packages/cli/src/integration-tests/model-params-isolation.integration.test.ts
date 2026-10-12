@@ -36,10 +36,8 @@ import {
   setActiveModelParam,
   clearActiveModelParam,
 } from '../../../agents/src/api/model-parameters.js';
-import {
-  switchActiveProvider,
-  setActiveModel,
-} from '@vybestack/llxprt-code-providers/runtime.js';
+import { switchActiveProvider } from '@vybestack/llxprt-code-providers/runtime.js';
+import { setActiveModel } from '../../../agents/src/api/providerMutations.js';
 import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
 import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
 import {
