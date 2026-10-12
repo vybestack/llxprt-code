@@ -882,8 +882,13 @@ setInterval(() => {}, 1000);
 
         const count = reapStaleBunTestProcesses(
           (cmd) => {
+            // A narrow COLUMNS makes ps truncate piped output to that width
+            // unless the reaper asks for unlimited width; the owner token is
+            // the final args token, so truncation would hide this checkout's
+            // own orphan.
             const result = Bun.spawnSync({
               cmd: [...cmd],
+              env: { ...process.env, COLUMNS: '40' },
               stdout: 'pipe',
               stderr: 'pipe',
             });

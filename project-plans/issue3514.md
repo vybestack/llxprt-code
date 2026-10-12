@@ -61,6 +61,12 @@ kill.
   job objects or handles on Windows) and is deferred.
 - Legacy unmarked orphans fail closed (see above): they are never reaped by the
   new runner and need a one-time manual kill.
+- The args `ps` runs with `-ww` because procps `ps` truncates piped output to
+  `COLUMNS`, which would cut off the final owner token. The real-process test
+  runs the reaper with `COLUMNS=40`. Apple `ps` ignores `COLUMNS` for piped
+  output, so the test could not be RED on macOS (`tmp/verify3514/red-columns.log`
+  records the attempt and the measurement); it only fails without `-ww` under
+  procps. GREEN: `tmp/verify3514/green-columns.log`.
 
 ## Acceptance criteria and tests
 

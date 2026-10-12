@@ -105,7 +105,9 @@ function findOwnedOrphans(
   let output: string;
   try {
     commOutput = spawnSync(['ps', '-eo', 'pid=,comm=']).stdout ?? '';
-    output = spawnSync(['ps', '-eo', 'pid=,ppid=,args=']).stdout ?? '';
+    // -ww lifts the width limit: procps ps truncates piped output to
+    // COLUMNS, and the owner token is the final args token.
+    output = spawnSync(['ps', '-ww', '-eo', 'pid=,ppid=,args=']).stdout ?? '';
   } catch {
     return [];
   }
