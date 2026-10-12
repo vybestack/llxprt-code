@@ -25,7 +25,6 @@ import type {
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { getOpenAIProviderInfo } from '@vybestack/llxprt-code-providers';
 import { refreshAliasProviders } from '@vybestack/llxprt-code-providers/composition.js';
-import { updateActiveProviderApiKey } from '@vybestack/llxprt-code-providers/runtime/providerMutations.js';
 import { assembleProfileDefinitions } from '@vybestack/llxprt-code-agents';
 import type { RuntimeOwnerFeatures } from '../ui/contexts/RuntimeContext.js';
 import type { ProviderAliasRefresh } from '../ui/contexts/ProviderAliasRefreshContext.js';
@@ -41,14 +40,9 @@ export function createProviderAliasRefresh(
 }
 
 function bindProviderMutations(
-  settingsOwner: SessionSettingsOwner,
-  settingsService: Pick<
-    SettingsService,
-    'getProviderSettings' | 'setProviderSetting'
-  >,
-  manager: RuntimeProviderManager,
   changeModel: RuntimeOwnerFeatures['setActiveModel'],
   modelParameters: Agent['modelParameters'],
+  keys: Pick<Agent['auth']['keys'], 'setRaw'>,
 ): Pick<
   RuntimeOwnerFeatures,
   | 'setActiveModel'
@@ -60,16 +54,7 @@ function bindProviderMutations(
     setActiveModel: changeModel,
     setActiveModelParam: (key, value) => modelParameters.set(key, value),
     clearActiveModelParam: (key) => modelParameters.clear(key),
-    updateActiveProviderApiKey: (key) =>
-      updateActiveProviderApiKey(
-        key,
-        {
-          setEphemeralSetting: (name, value) =>
-            settingsOwner.writeUserParameter(name, value),
-        },
-        settingsService,
-        manager.getActiveProvider(),
-      ),
+    updateActiveProviderApiKey: (key) => keys.setRaw(key),
   };
 }
 
@@ -96,6 +81,7 @@ export function createRuntimeOwnerFeatures(
     | 'getSessionTokenUsage'
     | 'getActiveModelParams'
   >,
+  keys: Pick<Agent['auth']['keys'], 'setRaw'>,
 ): RuntimeOwnerFeatures {
   sessionSettings.assertSettingsIdentity(settingsService);
   return {
@@ -126,13 +112,7 @@ export function createRuntimeOwnerFeatures(
     getSessionSetting: (key) => settings.getSessionSetting(key),
     setSessionSetting: (key, value) => settings.setSessionSetting(key, value),
     clearSessionSetting: (key) => settings.clearSessionSetting(key),
-    ...bindProviderMutations(
-      sessionSettings,
-      settingsService,
-      manager,
-      changeModel,
-      modelParameters,
-    ),
+    ...bindProviderMutations(changeModel, modelParameters, keys),
     getWorkspaceDirectories: () => [...directories()],
     getDefaultProfileName: () =>
       typeof settingsService.get('defaultProfile') === 'string'

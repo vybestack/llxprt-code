@@ -106,6 +106,7 @@ describe('interactive runtime owner bridge', () => {
           a.settings,
           a.toolFormat,
           a.providerReads,
+          a.auth.keys,
         )}
       >
         <SessionController
@@ -137,6 +138,7 @@ describe('interactive runtime owner bridge', () => {
           b.settings,
           b.toolFormat,
           b.providerReads,
+          b.auth.keys,
         )}
       >
         <SessionController
@@ -208,6 +210,7 @@ describe('interactive runtime owner bridge', () => {
             b.settings,
             b.toolFormat,
             b.providerReads,
+            b.auth.keys,
           )}
         >
           <SessionController
@@ -272,6 +275,7 @@ describe('interactive runtime owner bridge', () => {
           a.settings,
           a.toolFormat,
           a.providerReads,
+          a.auth.keys,
         )}
       >
         <OwnerView
@@ -298,6 +302,7 @@ describe('interactive runtime owner bridge', () => {
           b.settings,
           b.toolFormat,
           b.providerReads,
+          b.auth.keys,
         )}
       >
         <OwnerView
@@ -529,6 +534,7 @@ describe('interactive runtime owner bridge', () => {
             a.settings,
             a.toolFormat,
             a.providerReads,
+            a.auth.keys,
           )}
         >
           <OwnerView label="left" onApi={(api) => (captured.left = api)} />
@@ -557,6 +563,7 @@ describe('interactive runtime owner bridge', () => {
             b.settings,
             b.toolFormat,
             b.providerReads,
+            b.auth.keys,
           )}
         >
           <OwnerView label="right" onApi={(api) => (captured.right = api)} />

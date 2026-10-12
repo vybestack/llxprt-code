@@ -68,6 +68,7 @@ describe('CLI retained session model commands', () => {
           agentA.settings,
           agentA.toolFormat,
           agentA.providerReads,
+          agentA.auth.keys,
         ),
         agentA.sessionClient.fetch,
       );
@@ -85,6 +86,7 @@ describe('CLI retained session model commands', () => {
           agentB.settings,
           agentB.toolFormat,
           agentB.providerReads,
+          agentB.auth.keys,
         ),
         agentB.sessionClient.fetch,
       );
@@ -108,9 +110,17 @@ describe('CLI retained session model commands', () => {
       secondApi.setActiveModelParam('temperature', 0.8);
       expect(agentA.getModelParams().temperature).toBe(0.2);
       expect(agentB.getModelParams().temperature).toBe(0.8);
-      await Promise.all([
+      const credentialResults = await Promise.all([
         firstApi.updateActiveProviderApiKey('first-key'),
         secondApi.updateActiveProviderApiKey('second-key'),
+      ]);
+      expect(credentialResults.map((result) => result.message)).toStrictEqual([
+        "API key updated for provider 'fake'",
+        "API key updated for provider 'fake'",
+      ]);
+      expect([agentA.auth.status(), agentB.auth.status()]).toStrictEqual([
+        'authenticated',
+        'authenticated',
       ]);
       expect(agentA.getModel()).toBe('first-selected');
       expect(agentB.getModel()).toBe('second-selected');
@@ -150,6 +160,18 @@ describe('CLI retained session model commands', () => {
         first.settingsOwner.readNamedParameter('auth-key'),
         second.settingsOwner.readNamedParameter('auth-key'),
       ]).toStrictEqual([undefined, 'second-key']);
+      expect([agentA.auth.status(), agentB.auth.status()]).toStrictEqual([
+        'unauthenticated',
+        'authenticated',
+      ]);
+      await agentA.dispose();
+      await expect(
+        firstApi.updateActiveProviderApiKey('retired-owner-key'),
+      ).rejects.toThrow('Session settings owner is closed');
+      await secondApi.updateActiveProviderApiKey('rotated-second-key');
+      expect(second.settingsOwner.readNamedParameter('auth-key')).toBe(
+        'rotated-second-key',
+      );
     } finally {
       await agentA.dispose();
       await agentB.dispose();

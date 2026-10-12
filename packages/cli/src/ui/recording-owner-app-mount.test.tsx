@@ -70,6 +70,7 @@ describe('interactive Agent owner AppWrapper', () => {
                   agent.settings,
                   agent.toolFormat,
                   agent.providerReads,
+                  agent.auth.keys,
                 ),
             }}
             providerAliasRefresh={createProviderAliasRefresh(

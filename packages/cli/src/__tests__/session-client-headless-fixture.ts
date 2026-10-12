@@ -6,6 +6,9 @@ import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
  */
 import { createSessionModelCommand } from '../runtime/session-model-command.js';
 
+import type { Config } from '@vybestack/llxprt-code-core';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -114,6 +117,28 @@ async function record() {
   }
 }
 
+function createFixtureRuntime(
+  agent: Agent,
+  config: Config,
+  settingsOwner: SessionSettingsOwner,
+  settingsService: SettingsService,
+): ReturnType<typeof createRuntimeOwnerFeatures> {
+  return createRuntimeOwnerFeatures(
+    config,
+    agent.providerManager,
+    () => agent.workspace.getDirectories(),
+    createSessionModelCommand(agent),
+    settingsOwner,
+    settingsService,
+    agent.workspace,
+    agent.modelParameters,
+    agent.settings,
+    agent.toolFormat,
+    agent.providerReads,
+    agent.auth.keys,
+  );
+}
+
 async function profile() {
   const { boot, argv } = await bootstrap();
   try {
@@ -154,18 +179,11 @@ async function profile() {
         'getAgentClient',
       ].filter((key) => key in agent.sessionClient);
       await agent.sessionClient.publishTools();
-      const runtime = createRuntimeOwnerFeatures(
+      const runtime = createFixtureRuntime(
+        agent,
         boot.config,
-        agent.providerManager,
-        () => agent.workspace.getDirectories(),
-        createSessionModelCommand(agent),
         boot.runtimeSettingsOwner,
         boot.runtimeSettingsService,
-        agent.workspace,
-        agent.modelParameters,
-        agent.settings,
-        agent.toolFormat,
-        agent.providerReads,
       );
       await setupOwnerSessionRecording(boot.config, agent, argv, null);
       const events = await stream(agent, 'profile-controlled prompt');

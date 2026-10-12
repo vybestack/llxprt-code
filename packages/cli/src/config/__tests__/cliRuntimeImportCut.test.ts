@@ -75,9 +75,7 @@ describe('CLI provider bootstrap across owners', () => {
     ];
     for (const file of files) {
       const source = await readFile(new URL(file, import.meta.url), 'utf8');
-      expect(source).not.toContain(
-        '@vybestack/llxprt-code-providers/runtime.js',
-      );
+      expect(source).not.toContain('@vybestack/llxprt-code-providers/runtime');
     }
   });
 
@@ -269,6 +267,11 @@ describe('CLI provider bootstrap across owners', () => {
               () => config.getModel(),
               (provider) => item.settingsService.getProviderSettings(provider),
             ),
+            {
+              setRaw: async () => {
+                throw new Error('Unexpected credential mutation');
+              },
+            },
           ).getActiveModelName(),
         ).toBe(item.model);
       }
