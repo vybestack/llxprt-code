@@ -12,15 +12,18 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PromptService } from '@vybestack/llxprt-code-core/prompt-config/index.js';
-import { fromConfig, type Agent } from '@vybestack/llxprt-code-agents';
+import {
+  fromConfig,
+  type Agent,
+  type AgentProfilePreflight,
+} from '@vybestack/llxprt-code-agents';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { Config } from '@vybestack/llxprt-code-core';
-import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { loadCliConfig } from './config.js';
 import { parseArguments } from './cliArgParser.js';
 import { ExtensionEnablementManager } from './extensions/extensionEnablement.js';
 import type { Settings } from './settings.js';
-import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 
 function streamReply(text: string): string {
   const chunk = {
@@ -45,7 +48,7 @@ async function loadOwner(
 ): Promise<{
   config: Config;
   agent: Agent;
-  registration: CliRuntimeRegistrationHandle;
+  registration: AgentProfilePreflight;
 }> {
   process.argv = [
     'bun',
@@ -60,7 +63,7 @@ async function loadOwner(
     endpoint,
   ];
   const argv = await parseArguments({} as Settings);
-  let registration: CliRuntimeRegistrationHandle | undefined;
+  let registration: AgentProfilePreflight | undefined;
   const credentialAuthority = new CredentialAuthority();
   const settingsService = new SettingsService();
   const settingsOwner = new SessionSettingsOwner(settingsService);
@@ -77,7 +80,7 @@ async function loadOwner(
       sessionSettingsOwner: settingsOwner,
       onActivationBootstrapReady: (operation) =>
         operation.takeSettingsOwner(settingsService),
-      onRuntimeRegistrationReady: (owner) => {
+      onPreflightReady: (owner) => {
         registration = owner;
       },
     },
@@ -152,8 +155,10 @@ describe('same-label CLI Kimi HTTP ownership', () => {
       expect(await first).toBe('first');
       await owners[0].agent.dispose();
       await owners[0].config.dispose();
-      owners[0].registration.dispose();
-      expect(owners[1].registration.config).toBe(owners[1].config);
+      await owners[0].registration.dispose();
+      expect(owners[1].registration.captureInput().runtimeId).toBe(
+        'cli.runtime.bootstrap',
+      );
       releaseHeld();
       expect(await second).toBe('second');
       expect([...credentials].sort()).toStrictEqual([
@@ -168,7 +173,7 @@ describe('same-label CLI Kimi HTTP ownership', () => {
       for (const owner of owners) {
         await owner.agent.dispose();
         await owner.config.dispose();
-        owner.registration.dispose();
+        await owner.registration.dispose();
       }
       await new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));

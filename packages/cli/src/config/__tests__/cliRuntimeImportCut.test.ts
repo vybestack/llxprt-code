@@ -1,3 +1,5 @@
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import type { AgentActivationOperation } from '@vybestack/llxprt-code-agents';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { assembleSettingsControl } from '../../../../agents/src/api/control/settings-control.js';
 import { assembleToolFormatControl } from '../../../../agents/src/api/control/tool-format-control.js';
@@ -108,7 +110,12 @@ describe('CLI provider bootstrap across owners', () => {
           settingsService,
         }),
       );
+      const foreground: {
+        manager?: RuntimeProviderManager;
+        activation?: AgentActivationOperation;
+      } = {};
       bootstraps.push({
+        foreground,
         provider,
         model,
         key,
@@ -177,14 +184,20 @@ describe('CLI provider bootstrap across owners', () => {
             credentialAuthority: new CredentialAuthority(),
             settingsService: item.settingsService,
             sessionSettingsOwner: item.settingsOwner,
+            onProviderManagerReady: (manager) => {
+              item.foreground.manager = manager;
+            },
             onActivationBootstrapReady: (operation) => {
-              operation.takeSettingsOwner(item.settingsService);
+              item.foreground.activation = operation;
             },
           },
           approvalMode: ApprovalMode.YOLO,
           interactive: true,
         });
-        expect(item.runtimeState.registration?.config).toBe(config);
+        const manager = item.foreground.manager;
+        if (manager === undefined)
+          throw new Error('Missing selected foreground manager');
+        expect('registration' in item.runtimeState).toBe(false);
         expect('providerManager' in config).toBe(false);
         expect(item.settingsOwner.readNamedParameter('auth-key')).toBe(
           item.key,
@@ -195,7 +208,7 @@ describe('CLI provider bootstrap across owners', () => {
         expect(
           createRuntimeOwnerFeatures(
             config,
-            item.runtimeState.providerManager,
+            manager,
             fixturePaths().directories,
             async () => {
               throw new Error(
@@ -228,21 +241,21 @@ describe('CLI provider bootstrap across owners', () => {
             assembleToolFormatControl(
               item.settingsOwner.readToolFormat.bind(item.settingsOwner),
               item.settingsOwner.writeToolFormat.bind(item.settingsOwner),
-              () => item.runtimeState.providerManager.getActiveProvider(),
+              () => manager.getActiveProvider(),
               () => {},
               () => {},
             ),
             new SessionProviderReads(
               item.settingsOwner,
-              item.runtimeState.providerManager,
+              manager,
               () => config.getModel(),
               (provider) => item.settingsService.getProviderSettings(provider),
             ),
           ).getActiveModelName(),
         ).toBe(item.model);
       }
-      expect(bootstraps[0].runtimeState.providerManager).not.toBe(
-        bootstraps[1].runtimeState.providerManager,
+      expect(bootstraps[0].foreground.manager).not.toBe(
+        bootstraps[1].foreground.manager,
       );
       expect(
         bootstraps[0].settingsService.getProviderSettings('openai')['auth-key'],
@@ -252,12 +265,13 @@ describe('CLI provider bootstrap across owners', () => {
           'auth-key'
         ],
       ).toBe('second-key');
-      expect(bootstraps[0].runtimeState.runtimeMessageBus).not.toBe(
-        bootstraps[1].runtimeState.runtimeMessageBus,
+      expect(bootstraps[0].foreground.activation?.messageBus).not.toBe(
+        bootstraps[1].foreground.activation?.messageBus,
       );
     } finally {
       for (const item of bootstraps) {
-        item.runtimeState.registration?.dispose();
+        await item.foreground.activation?.dispose();
+        await item.runtimeState.dispose();
         await item.settingsOwner.dispose();
       }
     }

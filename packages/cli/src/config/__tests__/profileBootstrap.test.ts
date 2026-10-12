@@ -3,156 +3,53 @@
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-  type Mock,
-} from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   DEFAULT_RUNTIME_ID,
   parseBootstrapArgs,
   prepareRuntimeForProfile,
   createBootstrapResult,
 } from '../profileBootstrap.js';
-import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime.js';
-import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 
-// The pre-Config provider-runtime assembly (identity binding → session
-// MessageBus construction → provider/OAuth manager → CLI infra registration,
-// with the issue-#2300 ordering) is OWNED by the providers package
-// (#2378). It is behaviorally tested at that boundary in
-// packages/providers/src/runtime/assembleCliProviderRuntime.test.ts. Here it
-// is the external boundary: stub it so prepareRuntimeForProfile is exercised
-// as a thin client that supplies declarative context and adopts the result.
-void vi.mock('@vybestack/llxprt-code-providers/runtime.js', () => ({
-  ephemeralSettingHelp: {},
-  parseEphemeralSettingValue: vi.fn((_key: string, rawValue: string) => ({
-    success: true,
-    value: rawValue,
-  })),
-  applyCliSetArguments: vi.fn(() => ({ modelParams: {} })),
-  assembleCliProviderRuntime: vi.fn(
-    (input: {
-      settingsService: unknown;
-      config: unknown;
-      runtimeId: string;
-      metadata?: Record<string, unknown>;
-    }) => ({
-      runtime: {
-        settingsService: input.settingsService,
-        config: input.config,
-        runtimeId: input.runtimeId,
-        metadata: input.metadata,
-      },
-      runtimeMessageBus: { kind: 'session-bus' },
-      providerManager: { id: 'provider-manager' },
-      oauthManager: { id: 'oauth-manager' },
-    }),
-  ),
-}));
-
-type BootstrapProfileArgs = {
-  profileName: string | null;
-  profileJson: string | null;
-  providerOverride: string | null;
-  modelOverride: string | null;
-  keyOverride: string | null;
-  keyfileOverride: string | null;
-  keyNameOverride: string | null;
-  baseurlOverride: string | null;
-  setOverrides: string[] | null;
-  debug: string | boolean | null;
-};
-
-type MockSettingsService = {
-  listProfiles: ReturnType<typeof vi.fn>;
-  getProfile: ReturnType<typeof vi.fn>;
-  getProfileByID: ReturnType<typeof vi.fn>;
-  isLoaded: ReturnType<typeof vi.fn>;
-};
-
-type MockConfig = {
-  profiles: unknown[];
-};
-
-type RuntimeMetadata = {
-  credentialAuthority?: CredentialAuthority;
-  settingsService?: MockSettingsService;
-  config?: MockConfig;
-  runtimeId?: string;
-  metadata?: Record<string, unknown>;
-  oauthManager?: Record<string, unknown>;
-};
-
-type ParsedBootstrapArgs = {
-  bootstrapArgs: BootstrapProfileArgs;
-  runtimeMetadata: RuntimeMetadata;
-};
-
-type BootstrapRuntimeState = {
-  runtime: RuntimeMetadata & { settingsService: unknown };
-  runtimeMessageBus: unknown;
-  providerManager: unknown;
-  oauthManager?: unknown;
-};
-
-type ProfileApplicationResult = {
-  providerName: string;
-  modelName: string;
-  baseUrl?: string;
-  warnings: string[];
-};
-
-const parseArgs = parseBootstrapArgs as unknown as () => ParsedBootstrapArgs;
-const prepareRuntime = prepareRuntimeForProfile as unknown as (
-  parsed: ParsedBootstrapArgs,
-) => Promise<BootstrapRuntimeState>;
-const finalizeBootstrap = createBootstrapResult as unknown as (input: {
-  runtime: BootstrapRuntimeState['runtime'];
-  providerManager: BootstrapRuntimeState['providerManager'];
-  oauthManager?: BootstrapRuntimeState['oauthManager'];
-  bootstrapArgs: BootstrapProfileArgs;
-  profileApplication: ProfileApplicationResult;
-}) => {
-  runtime: BootstrapRuntimeState['runtime'];
-  providerManager: BootstrapRuntimeState['providerManager'];
-  oauthManager?: BootstrapRuntimeState['oauthManager'];
-  profile: ProfileApplicationResult;
-};
+function profileArgs() {
+  return {
+    profileName: null,
+    profileJson: null,
+    providerOverride: null,
+    modelOverride: null,
+    keyOverride: null,
+    keyfileOverride: null,
+    keyNameOverride: null,
+    baseurlOverride: null,
+    setOverrides: null,
+    debug: null,
+  };
+}
 
 describe('profileBootstrap helpers', () => {
-  const originalArgv = process.argv.slice();
-
+  const originalArgv = process.argv;
   beforeEach(() => {
-    process.argv = originalArgv.slice();
+    process.argv = [...originalArgv];
   });
-
   afterEach(() => {
-    process.argv = originalArgv.slice();
+    process.argv = originalArgv;
   });
 
-  it('parses CLI args without --profile-load @plan:PLAN-20251020-STATELESSPROVIDER3.P05 @requirement:REQ-SP3-001', () => {
-    process.argv = ['node', 'llxprt', '--sandbox'];
-    // @pseudocode bootstrap-order.md lines 1-9
-    const parsed = parseArgs();
-    expect(parsed.bootstrapArgs.profileName).toBeNull();
-    expect(parsed.bootstrapArgs).toMatchObject({
+  it('parses CLI args without --profile-load', () => {
+    process.argv = ['bun', 'llxprt', '--sandbox'];
+    expect(parseBootstrapArgs().bootstrapArgs).toMatchObject({
+      profileName: null,
       providerOverride: null,
       modelOverride: null,
     });
   });
 
-  it('parses CLI args with --profile-load @plan:PLAN-20251020-STATELESSPROVIDER3.P05 @requirement:REQ-SP3-001', () => {
-    process.argv = ['node', 'llxprt', '--profile-load', 'synthetic'];
-    // @pseudocode bootstrap-order.md lines 1-9
-    const parsed = parseArgs();
-    expect(parsed.bootstrapArgs.profileName).toBe('synthetic');
-    expect(parsed.bootstrapArgs).toMatchObject({
+  it('parses CLI args with --profile-load', () => {
+    process.argv = ['bun', 'llxprt', '--profile-load', 'synthetic'];
+    expect(parseBootstrapArgs().bootstrapArgs).toMatchObject({
+      profileName: 'synthetic',
       providerOverride: null,
       modelOverride: null,
     });
@@ -160,7 +57,7 @@ describe('profileBootstrap helpers', () => {
 
   it('merges repeated --set arguments while preserving their order', () => {
     process.argv = [
-      'node',
+      'bun',
       'llxprt',
       '--set',
       'modelparam.temperature=1',
@@ -168,154 +65,100 @@ describe('profileBootstrap helpers', () => {
       'context-limit=190000',
       '--set=shell-replacement=true',
     ];
-    const parsed = parseArgs();
-    expect(parsed.bootstrapArgs.setOverrides).toStrictEqual([
+    expect(parseBootstrapArgs().bootstrapArgs.setOverrides).toStrictEqual([
       'modelparam.temperature=1',
       'context-limit=190000',
       'shell-replacement=true',
     ]);
   });
 
-  it('prepares runtime before applying profile state @plan:PLAN-20251020-STATELESSPROVIDER3.P05 @requirement:REQ-SP3-001', async () => {
-    process.argv = ['node', 'llxprt', '--profile-load', 'workspace'];
-    const parsed = parseArgs();
-    parsed.runtimeMetadata.credentialAuthority = new CredentialAuthority();
-    const runtimeState = await prepareRuntime(parsed);
-    const bootstrapResult = finalizeBootstrap({
-      runtime: runtimeState.runtime,
-      providerManager: runtimeState.providerManager,
-      oauthManager: runtimeState.oauthManager,
-      bootstrapArgs: parsed.bootstrapArgs,
-      profileApplication: {
-        providerName: 'openai',
-        modelName: 'gpt-4.1-mini',
-        warnings: [],
-      },
+  it('prepares runtime before applying profile state', async () => {
+    const parsed = parseBootstrapArgs(profileArgs(), {
+      credentialAuthority: new CredentialAuthority(),
+      settingsService: new SettingsService(),
     });
-    // @pseudocode bootstrap-order.md lines 1-9
-    expect(bootstrapResult.runtime.metadata).toMatchObject(
-      Object.assign({}, parsed.runtimeMetadata.metadata),
-    );
+    const operation = await prepareRuntimeForProfile(parsed);
+    try {
+      operation.chooseProviderModel('openai', 'selected-model');
+      const result = createBootstrapResult(
+        {
+          ...parsed.bootstrapArgs,
+          profileJson: '{"provider":"openai","model":"profile-model"}',
+        },
+        parsed.runtimeMetadata,
+      );
+      expect(result).toMatchObject({
+        providerName: 'openai',
+        modelName: 'profile-model',
+      });
+      expect('runtime' in operation).toBe(false);
+      expect('providerManager' in operation).toBe(false);
+    } finally {
+      await operation.dispose();
+    }
   });
 
-  it('includes runtime metadata in bootstrap result @plan:PLAN-20251020-STATELESSPROVIDER3.P05 @requirement:REQ-SP3-001', async () => {
-    const parsed: ParsedBootstrapArgs = {
-      bootstrapArgs: {
-        profileName: 'synthetic',
-        profileJson: null,
-        providerOverride: null,
-        modelOverride: null,
-        keyOverride: null,
-        keyfileOverride: null,
-        keyNameOverride: null,
-        baseurlOverride: null,
-        setOverrides: null,
-        debug: null,
-      },
-      runtimeMetadata: {
+  it('includes runtime metadata in the preflight data', async () => {
+    const operation = await prepareRuntimeForProfile(
+      parseBootstrapArgs(profileArgs(), {
         credentialAuthority: new CredentialAuthority(),
         runtimeId: 'cli-runtime',
         metadata: { sessionId: 'bootstrap-session', source: 'test' },
-      },
-    };
-
-    const runtimeState = await prepareRuntime(parsed);
-    const bootstrapResult = finalizeBootstrap({
-      runtime: runtimeState.runtime,
-      providerManager: runtimeState.providerManager,
-      oauthManager: runtimeState.oauthManager,
-      bootstrapArgs: parsed.bootstrapArgs,
-      profileApplication: {
-        providerName: 'openai',
-        modelName: 'gpt-4o-mini',
-        baseUrl: 'https://api.example.com',
-        warnings: ['profile applied after runtime ready'],
-      },
-    });
-    // @pseudocode bootstrap-order.md lines 1-9
-    expect(bootstrapResult.profile.providerName).toBe('openai');
-    expect(bootstrapResult.runtime.runtimeId).toBe('cli-runtime');
-    expect(bootstrapResult.runtime.metadata).toMatchObject({
-      sessionId: 'bootstrap-session',
-      source: 'test',
-    });
+      }),
+    );
+    try {
+      expect(operation.captureInput()).toMatchObject({
+        runtimeId: 'cli-runtime',
+        metadata: {
+          sessionId: 'bootstrap-session',
+          source: 'test',
+          stage: 'prepareRuntimeForProfile',
+        },
+      });
+    } finally {
+      await operation.dispose();
+    }
   });
 });
 
-describe('prepareRuntimeForProfile delegates assembly to the providers boundary (#2378, issue #2300)', () => {
-  const mockedAssemble = assembleCliProviderRuntime as Mock<
-    typeof assembleCliProviderRuntime
-  >;
-
-  beforeEach(() => {
-    mockedAssemble.mockClear();
-  });
-
-  it('supplies the resolved runtimeId + declarative context to the owned assembly and adopts its result', async () => {
-    const explicitRuntimeId = 'cli.runtime.bootstrap.ordering-test';
-    const parsed: ParsedBootstrapArgs = {
-      bootstrapArgs: {
-        profileName: 'workspace',
-        profileJson: null,
-        providerOverride: null,
-        modelOverride: null,
-        keyOverride: null,
-        keyfileOverride: null,
-        keyNameOverride: null,
-        baseurlOverride: null,
-        setOverrides: null,
-        debug: null,
-      },
-      runtimeMetadata: {
+describe('prepareRuntimeForProfile agents preflight', () => {
+  it('supplies the resolved runtimeId and declarative context without returning services', async () => {
+    const operation = await prepareRuntimeForProfile(
+      parseBootstrapArgs(profileArgs(), {
         credentialAuthority: new CredentialAuthority(),
-        runtimeId: explicitRuntimeId,
+        runtimeId: 'cli.runtime.bootstrap.ordering-test',
         metadata: { source: 'ordering-test' },
-      },
-    };
-
-    const result = await prepareRuntime(parsed);
-
-    // The identity-binding-before-registration ordering (issue #2300) now lives
-    // inside assembleCliProviderRuntime; prepareRuntimeForProfile's contract is
-    // that it forwards the resolved runtimeId + declarative context ONCE and
-    // adopts the returned runtime state (no CLI-side bus construction).
-    expect(mockedAssemble).toHaveBeenCalledTimes(1);
-    const assembleArg = mockedAssemble.mock.calls[0][0];
-    expect(assembleArg.runtimeId).toBe(explicitRuntimeId);
-    expect(assembleArg.metadata).toMatchObject({ source: 'ordering-test' });
-    expect(assembleArg.settingsService).toBeDefined();
-
-    expect(result.runtime.runtimeId).toBe(explicitRuntimeId);
-    // The adopted runtime state comes straight from the owned assembly result.
-    expect(result.runtimeMessageBus).toMatchObject({ kind: 'session-bus' });
-    expect(result.providerManager).toMatchObject({ id: 'provider-manager' });
+      }),
+    );
+    try {
+      expect(operation.captureInput()).toMatchObject({
+        runtimeId: 'cli.runtime.bootstrap.ordering-test',
+        metadata: { source: 'ordering-test' },
+      });
+      expect('registration' in operation).toBe(false);
+      expect('runtimeMessageBus' in operation).toBe(false);
+    } finally {
+      await operation.dispose();
+    }
   });
 
-  it('supplies a deterministic default runtimeId to the assembly when metadata omits one', async () => {
-    const parsed: ParsedBootstrapArgs = {
-      bootstrapArgs: {
-        profileName: null,
-        profileJson: null,
-        providerOverride: null,
-        modelOverride: null,
-        keyOverride: null,
-        keyfileOverride: null,
-        keyNameOverride: null,
-        baseurlOverride: null,
-        setOverrides: null,
-        debug: null,
-      },
-      runtimeMetadata: {
+  it('supplies a deterministic default runtimeId when metadata omits one', async () => {
+    const operation = await prepareRuntimeForProfile(
+      parseBootstrapArgs(profileArgs(), {
         credentialAuthority: new CredentialAuthority(),
-        // No runtimeId supplied — prepareRuntimeForProfile must choose a
-        // deterministic default rather than a process-derived random id.
-      },
-    };
+      }),
+    );
+    try {
+      expect(operation.captureInput().runtimeId).toBe(DEFAULT_RUNTIME_ID);
+    } finally {
+      await operation.dispose();
+    }
+  });
 
-    await prepareRuntime(parsed);
-
-    expect(mockedAssemble).toHaveBeenCalledTimes(1);
-    expect(mockedAssemble.mock.calls[0][0].runtimeId).toBe(DEFAULT_RUNTIME_ID);
+  it('fails before provider construction without a credential authority', async () => {
+    await expect(
+      prepareRuntimeForProfile(parseBootstrapArgs(profileArgs(), {})),
+    ).rejects.toThrow('requires a credential authority');
   });
 });
 
