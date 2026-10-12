@@ -56,6 +56,8 @@ export async function buildCompressionMetadata(
   options?: {
     targetTokenCount?: number;
     modelParameters?: AdmittedModelParameters;
+    /** The owner whose journal receives the published summary rows. */
+    historyOrigin?: object;
   },
 ): Promise<Omit<CompressionAttemptContext, 'history'>> {
   const modelParameters = runtimeContext.ephemerals.compressionProfile()

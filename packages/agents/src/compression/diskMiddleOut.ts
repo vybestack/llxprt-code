@@ -22,6 +22,7 @@ export async function fallbackDisk(
   history: HistoryService,
   previous: HistoryDumpSource,
   primaryError: unknown,
+  origin?: object,
 ): Promise<{
   readonly outcome: 'applied' | 'noop' | 'failed';
   readonly summary?: IContent;
@@ -37,6 +38,8 @@ export async function fallbackDisk(
       context.history,
       fallback.start,
       context.runtimeState.model,
+      0,
+      { origin },
     );
     return { outcome: 'applied', summary };
   } catch (fallbackError) {
@@ -71,6 +74,7 @@ async function runDiskSummary(
 ): Promise<DiskSummaryOutcome> {
   const metadata = await buildCompressionMetadata(...args);
   const history = args[2];
+  const origin = args[7]?.historyOrigin;
   const previous = await history.openDumpSnapshot();
   const curated = new HistoryDensityRows();
   const candidate = new HistoryDensityRows();
@@ -99,7 +103,13 @@ async function runDiskSummary(
         'Primary disk compression failed, attempting fallback truncation',
         primaryError,
       );
-      return await fallbackDisk(context, history, previous, primaryError);
+      return await fallbackDisk(
+        context,
+        history,
+        previous,
+        primaryError,
+        origin,
+      );
     }
     if (result.kind === 'noop') return { outcome: 'noop' };
     const summary = await applyCompressionValuesWithAnchor(
@@ -109,6 +119,7 @@ async function runDiskSummary(
       0,
       metadata.runtimeState.model,
       result.top,
+      { origin },
     );
     return { outcome: 'applied', summary };
   } finally {

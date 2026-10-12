@@ -25,6 +25,7 @@ async function compressPinned(
   },
   history: HistoryService,
   previous: HistoryDumpSource,
+  origin?: object,
 ): Promise<Outcome> {
   const strategy = new HighDensityStrategy();
   let candidate: HistoryDensityRows | undefined;
@@ -51,7 +52,7 @@ async function compressPinned(
         'Primary disk high-density compression failed, attempting disk truncation',
         error,
       );
-      return await fallbackDisk(context, history, previous, error);
+      return await fallbackDisk(context, history, previous, error, origin);
     }
     if (result.kind === 'noop') return { outcome: 'noop' };
     if (candidate === undefined)
@@ -62,6 +63,8 @@ async function compressPinned(
       candidate,
       result.start,
       context.runtimeState.model,
+      0,
+      { origin },
     );
     return { outcome: 'applied', summary };
   } finally {
@@ -95,6 +98,7 @@ export async function runDiskHighDensity(
         { ...metadata, history: curated },
         history,
         previous,
+        args[7]?.historyOrigin,
       );
     } finally {
       curated.close();

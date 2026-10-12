@@ -146,6 +146,7 @@ export async function runDiskTruncation(
 }> {
   const metadata = await buildCompressionMetadata(...args);
   const history = args[2];
+  const origin = args[7]?.historyOrigin;
   return history.detachedValues.withCheckpoint(async (previous) => {
     const curated = new DetachedHistoryJournal();
     try {
@@ -172,6 +173,8 @@ export async function runDiskTruncation(
         curated,
         result.start,
         metadata.runtimeState.model,
+        0,
+        { origin },
       );
       return { outcome: 'applied', summary };
     } finally {

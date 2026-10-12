@@ -7,11 +7,10 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { collectRawHistory } from '@vybestack/llxprt-code-test-utils/core/collect-raw-history.js';
-import {
-  EmptySummaryError,
-  type CompressionStrategy,
-} from '@vybestack/llxprt-code-core/core/compression/types.js';
-import * as compressionFactory from '../../compression/compressionStrategyFactory.js';
+import { HistoryDensityRows } from '@vybestack/llxprt-code-core/services/history/historyDensityRows.js';
+import { EmptySummaryError } from '@vybestack/llxprt-code-core/core/compression/types.js';
+import { OneShotStrategy } from '../../compression/OneShotStrategy.js';
+import { TopDownTruncationStrategy } from '../../compression/TopDownTruncationStrategy.js';
 import { withRecordingLifetimeFixture } from './helpers/recording-owner-lifetime-fixture.js';
 import { drain } from './helpers/agentHarness.js';
 
@@ -20,36 +19,24 @@ function recordingPath(state: { readonly path?: string }): string {
   return state.path;
 }
 
+/**
+ * Compression publishes through the disk runners, so the summary the provider
+ * would write is injected at the strategy's disk entry point.
+ */
 function useSummaryStrategy(fails = false): () => void {
   let index = 0;
-  const strategy: CompressionStrategy = {
-    name: 'one-shot',
-    requiresLLM: false,
-    trigger: { mode: 'threshold', defaultThreshold: 0.8 },
-    compress: async (context) => {
-      if (fails) throw new Error('compression rejected');
-      return {
-        kind: 'applied',
-        newHistory: [
-          {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: `owned-summary-${++index}` }],
-            metadata: { reason: 'compression-state-snapshot' },
-          },
-        ],
-        metadata: {
-          originalMessageCount: context.history.length,
-          compressedMessageCount: 1,
-          strategyUsed: 'one-shot',
-          llmCallMade: false,
-        },
-      };
-    },
-  };
   const spy = spyOn(
-    compressionFactory,
-    'getCompressionStrategy',
-  ).mockReturnValue(strategy);
+    OneShotStrategy.prototype,
+    'compressDisk',
+  ).mockImplementation(async (_context, candidate) => {
+    if (fails) throw new Error('compression rejected');
+    candidate.append({
+      speaker: 'ai',
+      blocks: [{ type: 'text', text: `owned-summary-${++index}` }],
+      metadata: { reason: 'compression-state-snapshot' },
+    });
+    return { kind: 'applied', top: 0 };
+  });
   return () => spy.mockRestore();
 }
 
@@ -102,11 +89,14 @@ describe('shared history compression recording origin', () => {
       await sibling.session.setRecording({ enabled: true });
       const history = agent.agentClient.getHistoryService();
       if (!history) throw new Error('Missing shared history');
+      const summary = {
+        speaker: 'ai' as const,
+        blocks: [{ type: 'text' as const, text: 'external-summary' }],
+        metadata: { reason: 'compression-state-snapshot' as const },
+      };
       history.startCompression();
-      history.endCompression(
-        { speaker: 'ai', blocks: [{ type: 'text', text: 'external-summary' }] },
-        2,
-      );
+      await history.detachedValues.replace([summary]);
+      history.endCompression(summary, 2);
       const aPath = recordingPath(agent.session.getRecording());
       const bPath = recordingPath(sibling.session.getRecording());
       await agent.session.setRecording({ enabled: false });
@@ -191,40 +181,34 @@ describe('shared history compression recording origin', () => {
   }, 30000);
 
   it('keeps a fallback summary with its originating facade after a primary error', async () => {
-    const fallback: CompressionStrategy = {
-      name: 'top-down-truncation',
-      requiresLLM: false,
-      trigger: { mode: 'threshold', defaultThreshold: 0.8 },
-      compress: async (context) => ({
+    const primary = spyOn(
+      OneShotStrategy.prototype,
+      'compressDisk',
+    ).mockRejectedValue(new EmptySummaryError('one-shot'));
+    const fallback = spyOn(
+      TopDownTruncationStrategy.prototype,
+      'compressDisk',
+    ).mockImplementation(async (context) => {
+      const rows = context.history;
+      if (!(rows instanceof HistoryDensityRows))
+        throw new Error('Expected disk compression rows');
+      const start = rows.length;
+      rows.append({
+        speaker: 'ai',
+        blocks: [{ type: 'text', text: 'A-fallback-summary' }],
+        metadata: { reason: 'compression-state-snapshot' },
+      });
+      return {
         kind: 'applied',
-        newHistory: [
-          {
-            speaker: 'ai',
-            blocks: [{ type: 'text', text: 'A-fallback-summary' }],
-            metadata: { reason: 'compression-state-snapshot' },
-          },
-        ],
+        start,
         metadata: {
-          originalMessageCount: context.history.length,
+          originalMessageCount: start,
           compressedMessageCount: 1,
           strategyUsed: 'top-down-truncation',
           llmCallMade: false,
         },
-      }),
-    };
-    const primary: CompressionStrategy = {
-      ...fallback,
-      name: 'one-shot',
-      compress: async () => {
-        throw new EmptySummaryError('one-shot');
-      },
-    };
-    const spy = spyOn(
-      compressionFactory,
-      'getCompressionStrategy',
-    ).mockImplementation((name) =>
-      name === 'top-down-truncation' ? fallback : primary,
-    );
+      };
+    });
     try {
       await withRecordingLifetimeFixture(async ({ agent, borrow }) => {
         const sibling = await borrow();
@@ -243,7 +227,8 @@ describe('shared history compression recording origin', () => {
         );
       });
     } finally {
-      spy.mockRestore();
+      fallback.mockRestore();
+      primary.mockRestore();
     }
   }, 30000);
 
@@ -279,14 +264,19 @@ describe('shared history compression recording origin', () => {
           }),
         ).rejects.toThrow('reject summary replacement');
         expect(await collectRawHistory(history)).toContainEqual(summary);
-        expect(history.getContentOrigin(summary)).toBe(agent.session);
-        expect(history.getContentOrigin(candidate)).toBeUndefined();
         const aPath = recordingPath(agent.session.getRecording());
         const bPath = recordingPath(sibling.session.getRecording());
         await agent.session.setRecording({ enabled: false });
         await sibling.session.setRecording({ enabled: false });
-        expect(await readFile(aPath, 'utf8')).not.toContain('rejected-summary');
-        expect(await readFile(bPath, 'utf8')).not.toContain('rejected-summary');
+        // The journal rows carry the publishing owner: the committed summary
+        // stays in the compressing owner's journal only, and the rejected
+        // candidate reached neither.
+        const a = await readFile(aPath, 'utf8');
+        const b = await readFile(bPath, 'utf8');
+        expect(a).toContain('owned-summary-1');
+        expect(b).not.toContain('owned-summary-1');
+        expect(a).not.toContain('rejected-summary');
+        expect(b).not.toContain('rejected-summary');
       });
     } finally {
       restore();

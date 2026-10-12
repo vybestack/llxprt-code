@@ -447,7 +447,12 @@ export class CompressionHandler {
       logger: this.logger,
       model: this.runtimeContext.state.model,
       performFallbackCompression: (promptId, applyResult, targetTokenCount) =>
-        this.suppressedFallback(promptId, applyResult, targetTokenCount, owners),
+        this.suppressedFallback(
+          promptId,
+          applyResult,
+          targetTokenCount,
+          owners,
+        ),
       getPromptTokenBaseline: () => this.lastPromptTokenCount,
       resetPromptTokenBaseline: () => {
         this.lastPromptTokenCount = null;
@@ -680,6 +685,7 @@ export class CompressionHandler {
         prompt_id,
         options?.transcriptPathProvider,
         options?.modelParameters,
+        options?.historyOrigin,
       );
     } finally {
       this.setSuppressDensityDirty(false);
@@ -787,6 +793,7 @@ export class CompressionHandler {
     promptId: string,
     transcriptPathProvider?: () => string | undefined,
     modelParameters?: AdmittedModelParameters,
+    historyOrigin?: object,
   ): Promise<'applied' | 'noop' | 'failed'> {
     const strategyName = parseCompressionStrategyName(
       this.runtimeContext.ephemerals.compressionStrategy(),
@@ -799,7 +806,7 @@ export class CompressionHandler {
       this.activeTodosProvider,
       transcriptPathProvider ?? this.transcriptPathProvider,
       this.logger,
-      { modelParameters },
+      { modelParameters, historyOrigin },
     );
     if (outcome === 'applied') {
       this.lastPromptTokenCount = null;
