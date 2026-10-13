@@ -8,11 +8,11 @@ import { GitService } from '@vybestack/llxprt-code-core/services/gitService.js';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import {
   withCheckpoint,
   checkpointUiHistory,
   checkpointTool,
+  failDurableWrite,
 } from '../hooks/agentStream/checkpoint-disk-test-helpers.js';
 import { restoreCommand } from './restoreCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
@@ -40,35 +40,6 @@ type Fault =
   | 'corrupt'
   | 'missing-ui'
   | 'truncated';
-function failDurableWrite(): void {
-  // Durable acknowledgement is awaited by sequence, so remember the sequence
-  // of the enqueued candidate row and refuse only that row's commit ack.
-  const enqueue = SessionRecordingService.prototype.enqueue;
-  const waitForSequence =
-    SessionRecordingService.prototype.waitForCommitSequence;
-  let candidateSeq: number | null = null;
-  vi.spyOn(SessionRecordingService.prototype, 'enqueue').mockImplementation(
-    function (this: SessionRecordingService, ...args) {
-      const line = enqueue.call(this, ...args);
-      if (
-        line !== null &&
-        candidateSeq === null &&
-        JSON.stringify(args[1]).includes('checkpoint-candidate')
-      )
-        candidateSeq = line.seq;
-      return line;
-    },
-  );
-  vi.spyOn(
-    SessionRecordingService.prototype,
-    'waitForCommitSequence',
-  ).mockImplementation(async function (this: SessionRecordingService, seq) {
-    if (candidateSeq !== null && seq === candidateSeq)
-      throw new Error('checkpoint durable write failure');
-    return waitForSequence.call(this, seq);
-  });
-}
-
 async function failure(fault: Fault, active: boolean): Promise<boolean> {
   return withCheckpoint(2, active, async (fixture, dir) => {
     const client = fixture.client;
@@ -123,8 +94,12 @@ async function failure(fault: Fault, active: boolean): Promise<boolean> {
         fixture.root,
         fixture.config.projectHistoryDir,
       );
+      vi.spyOn(git, 'createFileSnapshot').mockResolvedValue(
+        'project-before-restore',
+      );
       vi.spyOn(git, 'restoreProjectFromSnapshot').mockImplementation(
-        async () => {
+        async (hash) => {
+          if (hash !== 'snapshot-before-tool') return;
           if (fault === 'abort') abort.abort(new Error('checkpoint abort'));
           else throw new Error('snapshot recovery failure');
         },

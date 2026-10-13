@@ -117,6 +117,9 @@ async function compatibleRestore(active: boolean): Promise<string> {
     };
     const snapshots: string[] = [];
     const git = new GitService(fixture.root, fixture.config.projectHistoryDir);
+    vi.spyOn(git, 'createFileSnapshot').mockResolvedValue(
+      'project-before-restore',
+    );
     vi.spyOn(git, 'restoreProjectFromSnapshot').mockImplementation(
       async (hash) => {
         snapshots.push(hash);

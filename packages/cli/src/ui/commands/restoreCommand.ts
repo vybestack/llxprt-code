@@ -89,6 +89,54 @@ function listCheckpoints(jsonFiles: string[]): SlashCommandActionReturn {
   };
 }
 
+type CheckpointGit = NonNullable<CommandContext['services']['git']>;
+
+/**
+ * Rewrites the project files from a snapshot and can put them back.
+ *
+ * The history replacement is the step that can still fail after the files
+ * change, and the replaced history cannot be recovered once published. The
+ * files are therefore the side that rolls back: the working tree is captured
+ * in a snapshot before the restore touches it, and `rollback` restores that
+ * snapshot.
+ */
+interface ProjectFileRestore {
+  restore(): Promise<void>;
+  /** Returns the failure to report, joined with any rollback failure. */
+  rollback(failure: unknown): Promise<unknown>;
+}
+
+function createProjectFileRestore(
+  git: CheckpointGit | undefined,
+  snapshot: string | undefined,
+  signal: AbortSignal,
+): ProjectFileRestore {
+  let priorState: string | undefined;
+  return {
+    async restore() {
+      signal.throwIfAborted();
+      if (git === undefined || snapshot === undefined) return;
+      const created = await git.createFileSnapshot('Project before /restore');
+      // A snapshot of a tree identical to HEAD commits nothing and returns ''.
+      priorState = created === '' ? await git.getCurrentCommitHash() : created;
+      await git.restoreProjectFromSnapshot(snapshot);
+      signal.throwIfAborted();
+    },
+    async rollback(failure) {
+      if (git === undefined || priorState === undefined) return failure;
+      try {
+        await git.restoreProjectFromSnapshot(priorState);
+      } catch (rollbackError) {
+        return new AggregateError(
+          [failure, rollbackError],
+          `Restore failed and the project files could not be rolled back: ${String(failure)}; ${String(rollbackError)}`,
+        );
+      }
+      return failure;
+    },
+  };
+}
+
 async function applyCheckpointRestoration(
   context: CommandContext,
   checkpoint: DiskCheckpoint,
@@ -101,27 +149,31 @@ async function applyCheckpointRestoration(
     typeof data.commitHash === 'string' && data.commitHash.length > 0
       ? data.commitHash
       : undefined;
-  const restoreProject = async (): Promise<void> => {
-    context.signal.throwIfAborted();
-    if (snapshot !== undefined)
-      await context.services.git?.restoreProjectFromSnapshot(snapshot);
-    context.signal.throwIfAborted();
-  };
-  if (rows !== undefined) {
-    const agent = context.services.agent;
-    if (!agent) throw new Error('Session agent is unavailable');
-    // Snapshot failure rejects the admission source before durable publication.
-    await agent.agentClient.setHistoryFromSource(
-      (async function* () {
-        yield* rows;
-        await checkpoint.close();
-        await restoreProject();
-      })(),
-      { signal: context.signal },
-    );
-  } else {
-    await checkpoint.close();
-    await restoreProject();
+  const files = createProjectFileRestore(
+    context.services.git,
+    snapshot,
+    context.signal,
+  );
+  try {
+    if (rows !== undefined) {
+      const agent = context.services.agent;
+      if (!agent) throw new Error('Session agent is unavailable');
+      // The files change at the end of the admission source, before the
+      // history is published; a later failure rolls them back below.
+      await agent.agentClient.setHistoryFromSource(
+        (async function* () {
+          yield* rows;
+          await checkpoint.close();
+          await files.restore();
+        })(),
+        { signal: context.signal },
+      );
+    } else {
+      await checkpoint.close();
+      await files.restore();
+    }
+  } catch (error) {
+    throw await files.rollback(error);
   }
   if (Array.isArray(data.history)) loadHistory?.(data.history);
   if (snapshot !== undefined)

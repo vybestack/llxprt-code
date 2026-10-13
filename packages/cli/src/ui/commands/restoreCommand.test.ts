@@ -51,6 +51,8 @@ describe('restoreCommand', () => {
       for await (const row of source) restoredRows.push(row);
     });
     mockGitService = {
+      createFileSnapshot: vi.fn().mockResolvedValue('project-before-restore'),
+      getCurrentCommitHash: vi.fn().mockResolvedValue('head'),
       restoreProjectFromSnapshot: vi.fn().mockResolvedValue(undefined),
     } as unknown as GitService;
 

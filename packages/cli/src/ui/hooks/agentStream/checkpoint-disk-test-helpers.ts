@@ -1,6 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdir, rename, rm, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { vi } from 'bun:test';
+import { SessionRecordingService } from '@vybestack/llxprt-code-core/recording/SessionRecordingService.js';
 import type { GitService } from '@vybestack/llxprt-code-core';
 import { withCleanupHistory } from '../../../utils/__tests__/support/cleanup-history-test-helpers.js';
 import { createToolCheckpoint } from './checkpointPersistence.js';
@@ -124,4 +126,33 @@ export async function saveCheckpoint(
     ops,
     signal,
   );
+}
+
+export function failDurableWrite(): void {
+  // Durable acknowledgement is awaited by sequence, so remember the sequence
+  // of the enqueued candidate row and refuse only that row's commit ack.
+  const enqueue = SessionRecordingService.prototype.enqueue;
+  const waitForSequence =
+    SessionRecordingService.prototype.waitForCommitSequence;
+  let candidateSeq: number | null = null;
+  vi.spyOn(SessionRecordingService.prototype, 'enqueue').mockImplementation(
+    function (this: SessionRecordingService, ...args) {
+      const line = enqueue.call(this, ...args);
+      if (
+        line !== null &&
+        candidateSeq === null &&
+        JSON.stringify(args[1]).includes('checkpoint-candidate')
+      )
+        candidateSeq = line.seq;
+      return line;
+    },
+  );
+  vi.spyOn(
+    SessionRecordingService.prototype,
+    'waitForCommitSequence',
+  ).mockImplementation(async function (this: SessionRecordingService, seq) {
+    if (candidateSeq !== null && seq === candidateSeq)
+      throw new Error('checkpoint durable write failure');
+    return waitForSequence.call(this, seq);
+  });
 }
