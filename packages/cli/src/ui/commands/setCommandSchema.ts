@@ -11,13 +11,10 @@ import type {
   ValueArgument,
 } from './schema/types.js';
 import type { CommandContext } from './types.js';
+import type { SetCommandOperations } from './setCommand.js';
 import { ephemeralSettingHelp } from '@vybestack/llxprt-code-settings/settings/ephemeral-settings.js';
 import { getDirectSettingSpecs } from '@vybestack/llxprt-code-settings';
-import {
-  filterStrings,
-  filterCompletions,
-  getFuzzyEnabled,
-} from '../utils/fuzzyFilter.js';
+import { filterStrings, filterCompletions } from '../utils/fuzzyFilter.js';
 
 const toTitleCase = (input: string): string =>
   input
@@ -88,7 +85,9 @@ const createSettingLiteral = (spec: SettingLiteralSpec): LiteralArgument => ({
 const directSettingLiterals = directSettingSpecs.map(createSettingLiteral);
 const directSettingKeys = new Set(directSettingSpecs.map((spec) => spec.value));
 
-function buildModelParamSchemaNext(): CommandArgumentSchema {
+function buildModelParamSchemaNext(
+  operations: SetCommandOperations,
+): CommandArgumentSchema {
   return [
     {
       kind: 'value',
@@ -96,9 +95,9 @@ function buildModelParamSchemaNext(): CommandArgumentSchema {
       description: 'parameter name',
       hint: 'parameter name',
       options: commonParamOptions,
-      completer: async (ctx, partial) => {
-        const enableFuzzy = getFuzzyEnabled(ctx);
-        const modelParams = ctx.runtimeApi.getActiveModelParams();
+      completer: async (_ctx, partial) => {
+        const enableFuzzy = operations.isFuzzyFilteringEnabled();
+        const modelParams = operations.getActiveModelParams();
         const paramNames = Object.keys(modelParams);
         if (paramNames.length > 0) {
           const matches = filterStrings(paramNames, partial, { enableFuzzy });
@@ -168,10 +167,12 @@ function buildSettingValueHint(
   return Promise.resolve(result);
 }
 
-function buildSettingValueCompleter(): NonNullable<ValueArgument['completer']> {
-  return async (ctx, partial, tokens) => {
+function buildSettingValueCompleter(
+  operations: SetCommandOperations,
+): NonNullable<ValueArgument['completer']> {
+  return async (_ctx, partial, tokens) => {
     const setting = tokens.tokens[0] || tokens.partialToken;
-    const enableFuzzy = getFuzzyEnabled(ctx);
+    const enableFuzzy = operations.isFuzzyFilteringEnabled();
 
     const registryOptions = directSettingSpecByValue.get(setting)?.options;
 
@@ -180,9 +181,9 @@ function buildSettingValueCompleter(): NonNullable<ValueArgument['completer']> {
     }
 
     if (setting === 'custom-headers') {
-      const headers = ctx.runtimeApi.getEphemeralSettings()[
-        'custom-headers'
-      ] as Record<string, string> | undefined;
+      const headers = operations.getEphemeralSettings()['custom-headers'] as
+        | Record<string, string>
+        | undefined;
       if (headers) {
         const headerNames = Object.keys(headers);
         const filtered = filterStrings(headerNames, partial, {
@@ -201,13 +202,15 @@ function buildSettingValueCompleter(): NonNullable<ValueArgument['completer']> {
 
 export { directSettingKeys, directSettingSpecByValue };
 
-function buildUnsetSubkeyCompleter(): NonNullable<ValueArgument['completer']> {
-  return async (ctx, partial, tokens) => {
+function buildUnsetSubkeyCompleter(
+  operations: SetCommandOperations,
+): NonNullable<ValueArgument['completer']> {
+  return async (_ctx, partial, tokens) => {
     const key = tokens.tokens[1];
-    const enableFuzzy = getFuzzyEnabled(ctx);
+    const enableFuzzy = operations.isFuzzyFilteringEnabled();
 
     if (key === 'modelparam') {
-      const params = ctx.runtimeApi.getActiveModelParams();
+      const params = operations.getActiveModelParams();
       const paramNames = Object.keys(params);
       const filtered = filterStrings(paramNames, partial, {
         enableFuzzy,
@@ -219,9 +222,9 @@ function buildUnsetSubkeyCompleter(): NonNullable<ValueArgument['completer']> {
     }
 
     if (key === 'custom-headers') {
-      const headers = ctx.runtimeApi.getEphemeralSettings()[
-        'custom-headers'
-      ] as Record<string, string> | undefined;
+      const headers = operations.getEphemeralSettings()['custom-headers'] as
+        | Record<string, string>
+        | undefined;
       if (headers) {
         const headerNames = Object.keys(headers);
         const filtered = filterStrings(headerNames, partial, {
@@ -238,9 +241,11 @@ function buildUnsetSubkeyCompleter(): NonNullable<ValueArgument['completer']> {
   };
 }
 
-function buildUnsetKeyCompleter(): NonNullable<ValueArgument['completer']> {
-  return async (ctx, partial) => {
-    const ephemeralSettings = ctx.runtimeApi.getEphemeralSettings();
+function buildUnsetKeyCompleter(
+  operations: SetCommandOperations,
+): NonNullable<ValueArgument['completer']> {
+  return async (_ctx, partial) => {
+    const ephemeralSettings = operations.getEphemeralSettings();
     const ephemeralKeys = Object.keys(ephemeralSettings).filter(
       (key) => ephemeralSettings[key] !== undefined,
     );
@@ -252,7 +257,7 @@ function buildUnsetKeyCompleter(): NonNullable<ValueArgument['completer']> {
     ];
     const allKeys = Array.from(new Set([...ephemeralKeys, ...specialKeys]));
 
-    const enableFuzzy = getFuzzyEnabled(ctx);
+    const enableFuzzy = operations.isFuzzyFilteringEnabled();
     const filtered = filterStrings(allKeys, partial, { enableFuzzy });
     return filtered.map((key) => ({
       value: key,
@@ -261,7 +266,9 @@ function buildUnsetKeyCompleter(): NonNullable<ValueArgument['completer']> {
   };
 }
 
-function buildUnsetLiteral(): CommandArgumentSchema[number] {
+function buildUnsetLiteral(
+  operations: SetCommandOperations,
+): CommandArgumentSchema[number] {
   return {
     kind: 'literal',
     value: 'unset',
@@ -272,7 +279,7 @@ function buildUnsetLiteral(): CommandArgumentSchema[number] {
         kind: 'value',
         name: 'key',
         description: 'setting key to remove',
-        completer: buildUnsetKeyCompleter(),
+        completer: buildUnsetKeyCompleter(operations),
         next: [
           {
             kind: 'value',
@@ -288,7 +295,7 @@ function buildUnsetLiteral(): CommandArgumentSchema[number] {
               }
               return 'subkey (optional)';
             },
-            completer: buildUnsetSubkeyCompleter(),
+            completer: buildUnsetSubkeyCompleter(operations),
           },
         ],
       },
@@ -296,7 +303,9 @@ function buildUnsetLiteral(): CommandArgumentSchema[number] {
   };
 }
 
-function buildSettingFallback(): CommandArgumentSchema[number] {
+function buildSettingFallback(
+  operations: SetCommandOperations,
+): CommandArgumentSchema[number] {
   return {
     kind: 'value',
     name: 'setting',
@@ -313,7 +322,7 @@ function buildSettingFallback(): CommandArgumentSchema[number] {
         name: 'setting-value',
         description: 'setting value',
         hint: buildSettingValueHint,
-        completer: buildSettingValueCompleter(),
+        completer: buildSettingValueCompleter(operations),
       },
     ],
   };
@@ -324,15 +333,17 @@ function buildSettingFallback(): CommandArgumentSchema[number] {
  * so the large schema definition and its completers are independently
  * maintainable and the command file stays under complexity limits.
  */
-export function buildSetSchema(): CommandArgumentSchema {
+export function buildSetSchema(
+  operations: SetCommandOperations,
+): CommandArgumentSchema {
   return [
-    buildUnsetLiteral(),
+    buildUnsetLiteral(operations),
     {
       kind: 'literal',
       value: 'modelparam',
       description: 'Model parameter option',
       stopPropagation: true,
-      next: buildModelParamSchemaNext(),
+      next: buildModelParamSchemaNext(operations),
     },
     {
       kind: 'literal',
@@ -352,6 +363,6 @@ export function buildSetSchema(): CommandArgumentSchema {
     ...directSettingLiterals.filter(
       (literal) => literal.value !== 'emojifilter',
     ),
-    buildSettingFallback(),
+    buildSettingFallback(operations),
   ];
 }

@@ -7,7 +7,7 @@
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { CommandContext } from './types.js';
-import { setCommand } from './setCommand.js';
+import { createSetCommandForTest } from '../../__tests__/set-command-test-owner.js';
 
 const mockRuntime = {
   getActiveModelParams: vi.fn(() => ({})),
@@ -17,6 +17,7 @@ const mockRuntime = {
   clearActiveModelParam: vi.fn(),
 };
 
+const setCommand = createSetCommandForTest(mockRuntime);
 describe('setCommand user-agent ephemeral', () => {
   let context: CommandContext;
 

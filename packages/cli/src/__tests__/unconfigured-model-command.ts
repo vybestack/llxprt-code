@@ -5,9 +5,10 @@
  */
 
 import { createModelCommand } from '../ui/commands/modelCommand.js';
+import { createSetCommand } from '../ui/commands/setCommand.js';
 import type { SlashCommand } from '../ui/commands/types.js';
-
 import { createToolFormatCommand } from '../ui/commands/toolformatCommand.js';
+
 export function createUnconfiguredModelCommand(): SlashCommand {
   return createModelCommand(
     async () => {
@@ -34,4 +35,18 @@ export function createUnconfiguredToolFormatCommand(): SlashCommand {
       );
     },
   );
+}
+
+export function createUnconfiguredSetCommand(): SlashCommand {
+  const unavailable = (): never => {
+    throw new Error('Set operations are unavailable in this registry fixture');
+  };
+  return createSetCommand({
+    getEphemeralSettings: unavailable,
+    setEphemeralSetting: unavailable,
+    getActiveModelParams: unavailable,
+    setActiveModelParam: unavailable,
+    clearActiveModelParam: unavailable,
+    isFuzzyFilteringEnabled: () => false,
+  });
 }

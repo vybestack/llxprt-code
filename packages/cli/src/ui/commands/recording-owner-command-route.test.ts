@@ -10,6 +10,7 @@ import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import {
   createUnconfiguredModelCommand,
   createUnconfiguredToolFormatCommand,
+  createUnconfiguredSetCommand,
 } from '../../__tests__/unconfigured-model-command.js';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
@@ -28,6 +29,7 @@ async function saveCheckpoint(mode?: 'agent' | 'raw'): Promise<string> {
     const command = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
       createUnconfiguredToolFormatCommand(),
+      createUnconfiguredSetCommand(),
       null,
       mode,
     )
@@ -55,6 +57,7 @@ describe('interactive /chat command registry', () => {
         await new BuiltinCommandLoader(
           createUnconfiguredModelCommand(),
           createUnconfiguredToolFormatCommand(),
+          createUnconfiguredSetCommand(),
           null,
           'agent',
         ).loadCommands(new AbortController().signal)
@@ -67,6 +70,7 @@ describe('interactive /chat command registry', () => {
     const command = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
       createUnconfiguredToolFormatCommand(),
+      createUnconfiguredSetCommand(),
       null,
     )
       .loadCommandsSync()

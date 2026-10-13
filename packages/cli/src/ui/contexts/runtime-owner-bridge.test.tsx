@@ -53,7 +53,7 @@ import {
 } from './OAuthControlContext.js';
 import { authCommand } from '../commands/authCommand.js';
 import { ProviderAliasRefreshProvider } from './ProviderAliasRefreshContext.js';
-import { setCommand } from '../commands/setCommand.js';
+import { createSetCommandForTest } from '../../__tests__/set-command-test-owner.js';
 import { createModelCommand } from '../commands/modelCommand.js';
 import { keyCommand } from '../commands/keyCommand.js';
 import { providerCommand } from '../commands/providerCommand.js';
@@ -314,10 +314,12 @@ describe('interactive runtime owner bridge', () => {
       </RuntimeContextProvider>,
     );
     try {
-      if (!captured.left || !captured.right || !setCommand.action)
-        throw new Error('Commands or owners unavailable');
+      if (!captured.left || !captured.right)
+        throw new Error('Runtime owners unavailable');
       const leftApi = captured.left;
       const rightApi = captured.right;
+      const leftSet = createSetCommandForTest(leftApi);
+      const rightSet = createSetCommandForTest(rightApi);
       const leftModel = createModelCommand(
         (model) => leftApi.setActiveModel(model),
         async (provider, model) =>
@@ -345,8 +347,8 @@ describe('interactive runtime owner bridge', () => {
         runtimeApi: captured.right,
       });
       await Promise.all([
-        setCommand.action(leftContext, 'context-limit 17001'),
-        setCommand.action(rightContext, 'context-limit 27002'),
+        leftSet.action!(leftContext, 'context-limit 17001'),
+        rightSet.action!(rightContext, 'context-limit 27002'),
       ]);
       expect(first.settingsOwner.readNamedParameter('context-limit')).toBe(
         17001,
@@ -404,17 +406,22 @@ describe('interactive runtime owner bridge', () => {
       second.settingsOwner.writeUserParameter('custom-headers', {
         'X-Right': 'two',
       });
-      const unset = setCommand.schema?.find(
-        (node) => node.kind === 'literal' && node.value === 'unset',
-      );
-      if (unset?.kind !== 'literal')
-        throw new Error('Unset schema unavailable');
-      const keyNode = unset.next?.[0];
-      if (keyNode?.kind !== 'value')
-        throw new Error('Unset key schema unavailable');
-      const headerNode = keyNode.next?.[0];
-      if (headerNode?.kind !== 'value' || !headerNode.completer)
-        throw new Error('Header completer unavailable');
+      const headerCompleterFor = (command: typeof leftSet) => {
+        const unset = command.schema?.find(
+          (node) => node.kind === 'literal' && node.value === 'unset',
+        );
+        if (unset?.kind !== 'literal')
+          throw new Error('Unset schema unavailable');
+        const keyNode = unset.next?.[0];
+        if (keyNode?.kind !== 'value')
+          throw new Error('Unset key schema unavailable');
+        const headerNode = keyNode.next?.[0];
+        if (headerNode?.kind !== 'value' || !headerNode.completer)
+          throw new Error('Header completer unavailable');
+        return headerNode.completer;
+      };
+      const leftCompleter = headerCompleterFor(leftSet);
+      const rightCompleter = headerCompleterFor(rightSet);
       const tokens = {
         tokens: ['unset', 'custom-headers'],
         partialToken: 'X-',
@@ -422,8 +429,8 @@ describe('interactive runtime owner bridge', () => {
         position: 2,
       };
       const [leftHeaders, rightHeaders] = await Promise.all([
-        headerNode.completer(leftContext, 'X-', tokens),
-        headerNode.completer(rightContext, 'X-', tokens),
+        leftCompleter(leftContext, 'X-', tokens),
+        rightCompleter(rightContext, 'X-', tokens),
       ]);
       expect(leftHeaders.map((header) => header.value)).toStrictEqual([
         'X-Left',

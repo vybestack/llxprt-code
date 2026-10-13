@@ -8,6 +8,7 @@ import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useCallback, useMemo, useState } from 'react';
 import { createToolFormatCommand } from '../commands/toolformatCommand.js';
 import { createModelCommand } from '../commands/modelCommand.js';
+import { createSetCommand } from '../commands/setCommand.js';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type {
   RecordingIntegration,
@@ -43,6 +44,7 @@ import {
   type SlashCommandProcessorActions,
 } from './slashCommandProcessor.js';
 import {
+  type BuiltinCommandOwners,
   loadBuiltinSlashCommands,
   useCommandContext,
   useCommandReload,
@@ -96,8 +98,7 @@ export interface UseSlashCommandProcessorCoreArgs {
 }
 
 interface SlashCommandProcessorState {
-  modelCommand: SlashCommand;
-  toolFormatCommand: SlashCommand;
+  builtins: BuiltinCommandOwners;
   commands: readonly SlashCommand[] | undefined;
   setCommands: (commands: readonly SlashCommand[]) => void;
   reloadTrigger: number;
@@ -114,6 +115,7 @@ function useCommandState(
   writeToolFormat: (
     format: ToolFormatOverrideLiteral | null,
   ) => Promise<ToolFormatState>,
+  settings: LoadedSettings,
   ownedRecording: Pick<Agent['session'], 'recordRecordingEvent'> | null,
   rawRecording: Pick<RecordingIntegration, 'recordProviderSwitch'> | undefined,
   recordingOwner: 'agent' | 'raw' | undefined,
@@ -129,12 +131,14 @@ function useCommandState(
     () => createToolFormatCommand(readToolFormat, writeToolFormat),
     [readToolFormat, writeToolFormat],
   );
+  const setCommand = useSetCommand(settings);
   const [commands, setCommands] = useState<readonly SlashCommand[] | undefined>(
     () =>
       process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY === 'true'
         ? loadBuiltinSlashCommands(
             modelCommand,
             toolFormatCommand,
+            setCommand,
             config,
             recordingOwner,
           )
@@ -149,8 +153,7 @@ function useCommandState(
     setReloadTrigger((v) => v + 1);
   }, []);
   return {
-    modelCommand,
-    toolFormatCommand,
+    builtins: { modelCommand, toolFormatCommand, setCommand },
     commands,
     setCommands,
     reloadTrigger,
@@ -218,6 +221,25 @@ function useRegisteredModelCommand(
   );
 }
 
+function useSetCommand(settings: LoadedSettings): SlashCommand {
+  const api = useRuntimeApi();
+  const enableFuzzyFiltering = settings.merged.enableFuzzyFiltering ?? true;
+  return useMemo(
+    () =>
+      createSetCommand({
+        getEphemeralSettings: () => api.getEphemeralSettings(),
+        setEphemeralSetting: (key, value) =>
+          api.setEphemeralSetting(key, value),
+        getActiveModelParams: () => api.getActiveModelParams(),
+        setActiveModelParam: (key, value) =>
+          api.setActiveModelParam(key, value),
+        clearActiveModelParam: (key) => api.clearActiveModelParam(key),
+        isFuzzyFilteringEnabled: () => enableFuzzyFiltering,
+      }),
+    [api, enableFuzzyFiltering],
+  );
+}
+
 export function useSlashCommandProcessorCore(
   args: UseSlashCommandProcessorCoreArgs,
 ): SlashCommandProcessorCoreResult {
@@ -229,6 +251,7 @@ export function useSlashCommandProcessorCore(
     useMemo(() => api.setActiveModel.bind(api), [api]),
     useMemo(() => api.getActiveToolFormatState.bind(api), [api]),
     useMemo(() => api.setActiveToolFormatOverride.bind(api), [api]),
+    args.settings,
     args.agent?.session ?? null,
     args.recordingIntegration,
     args.recordingOwner,
@@ -267,8 +290,7 @@ export function useSlashCommandProcessorCore(
     stats: session,
   });
   useCommandReload(
-    state.modelCommand,
-    state.toolFormatCommand,
+    state.builtins,
     args.config,
     state.reloadTrigger,
     args.isConfigInitialized,

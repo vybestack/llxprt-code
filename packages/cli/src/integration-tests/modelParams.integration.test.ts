@@ -21,7 +21,8 @@ import {
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IProvider } from '@vybestack/llxprt-code-providers';
 import { createMockCommandContext } from '../__tests__/mockCommandContext.js';
-import { setCommand } from '../ui/commands/setCommand.js';
+import { createSetCommand } from '../ui/commands/setCommand.js';
+import type { SlashCommand } from '../ui/commands/types.js';
 import {
   setActiveModelParam,
   clearActiveModelParam,
@@ -69,6 +70,7 @@ describe('CLI model parameter command integration', () => {
   let registration: CliRuntimeRegistrationHandle;
   let providerManager: RuntimeProviderManager;
   let context: ReturnType<typeof createMockCommandContext>;
+  let setCommand: SlashCommand;
 
   const runSetCommand = async (args: string) => {
     assertDefined(setCommand.action);
@@ -126,6 +128,17 @@ describe('CLI model parameter command integration', () => {
         settings:
           settingsService as unknown as typeof context.services.settings,
       },
+    });
+    const agent = sessionRoot.agent;
+    setCommand = createSetCommand({
+      getEphemeralSettings: () => agent.getEphemeralSettings(),
+      setEphemeralSetting: (key, value) =>
+        agent.setEphemeralSetting(key, value),
+      getActiveModelParams: () => agent.providerReads.getActiveModelParams(),
+      setActiveModelParam: (key, value) =>
+        agent.modelParameters.set(key, value),
+      clearActiveModelParam: (key) => agent.modelParameters.clear(key),
+      isFuzzyFilteringEnabled: () => true,
     });
   });
 

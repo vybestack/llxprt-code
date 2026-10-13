@@ -7,7 +7,7 @@
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { CommandContext } from './types.js';
-import { setCommand } from './setCommand.js';
+import { createSetCommandForTest } from '../../__tests__/set-command-test-owner.js';
 import { coreEvents } from '@vybestack/llxprt-code-core';
 
 const mockRuntime = {
@@ -17,6 +17,7 @@ const mockRuntime = {
   setActiveModelParam: vi.fn(),
   clearActiveModelParam: vi.fn(),
 };
+const setCommand = createSetCommandForTest(mockRuntime);
 
 describe('setCommand runtime integration', () => {
   let context: CommandContext;

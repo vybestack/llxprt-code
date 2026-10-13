@@ -31,6 +31,7 @@ import { BuiltinCommandLoader } from './BuiltinCommandLoader.js';
 import {
   createUnconfiguredModelCommand,
   createUnconfiguredToolFormatCommand,
+  createUnconfiguredSetCommand,
 } from '../__tests__/unconfigured-model-command.js';
 
 /**
@@ -119,6 +120,7 @@ describe('Command-map completeness (#2203 / REQ-021)', () => {
   const loader = new BuiltinCommandLoader(
     createUnconfiguredModelCommand(),
     createUnconfiguredToolFormatCommand(),
+    createUnconfiguredSetCommand(),
     null,
   );
   const registeredCommands = loader.loadCommandsSync();

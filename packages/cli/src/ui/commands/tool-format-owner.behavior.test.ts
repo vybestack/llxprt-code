@@ -7,7 +7,10 @@ import { describe, expect, it } from 'bun:test';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { createUnconfiguredModelCommand } from '../../__tests__/unconfigured-model-command.js';
+import {
+  createUnconfiguredModelCommand,
+  createUnconfiguredSetCommand,
+} from '../../__tests__/unconfigured-model-command.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { CommandService } from '../../services/CommandService.js';
 import { createToolFormatCommand } from './toolformatCommand.js';
@@ -23,6 +26,7 @@ describe('registered tool-format command ownership', () => {
         () => agent.toolFormat.getState(),
         (format) => agent.toolFormat.setOverride(format),
       ),
+      createUnconfiguredSetCommand(),
       null,
       'agent',
     );

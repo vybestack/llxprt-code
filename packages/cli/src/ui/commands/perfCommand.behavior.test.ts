@@ -18,6 +18,7 @@ import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import {
   createUnconfiguredModelCommand,
   createUnconfiguredToolFormatCommand,
+  createUnconfiguredSetCommand,
 } from '../../__tests__/unconfigured-model-command.js';
 import type { PerfOperationRecord } from '@vybestack/llxprt-code-telemetry/perf/perfRecords.js';
 
@@ -517,6 +518,7 @@ describe('PerfCommand (P11, AC-9)', () => {
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
       createUnconfiguredToolFormatCommand(),
+      createUnconfiguredSetCommand(),
       null,
     );
     const commands = loader.loadCommandsSync();
@@ -548,6 +550,7 @@ describe('PerfCommand (P11, AC-9)', () => {
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
       createUnconfiguredToolFormatCommand(),
+      createUnconfiguredSetCommand(),
       {
         getPerfSnapshotCapability: () => capability,
         getProjectTempDir: () => join(tmpdir(), 'token-usage'),
@@ -570,6 +573,7 @@ describe('PerfCommand (P11, AC-9)', () => {
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
       createUnconfiguredToolFormatCommand(),
+      createUnconfiguredSetCommand(),
       null,
     );
     const commands = loader.loadCommandsSync();
