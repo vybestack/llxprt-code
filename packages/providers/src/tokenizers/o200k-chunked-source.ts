@@ -31,18 +31,16 @@ const CONTRACTION =
  * pieces it produces, so a text cut only at piece boundaries counts to the
  * sum of its parts.
  */
-const O200K_PIECES = new RegExp(
-  [
-    `[^\\r\\n\\p{L}\\p{N}]?[${UPPER}]*[${LOWER}]+${CONTRACTION}`,
-    `[^\\r\\n\\p{L}\\p{N}]?[${UPPER}]+[${LOWER}]*${CONTRACTION}`,
-    '\\p{N}{1,3}',
-    ` ?[^${SPACE}\\p{L}\\p{N}]+[\\r\\n/]*`,
-    `${SPACE}*[\\r\\n]+`,
-    `${SPACE}+(?![^${SPACE}])`,
-    `${SPACE}+`,
-  ].join('|'),
-  'gu',
-);
+const O200K_PIECES_SOURCE = [
+  `[^\\r\\n\\p{L}\\p{N}]?[${UPPER}]*[${LOWER}]+${CONTRACTION}`,
+  `[^\\r\\n\\p{L}\\p{N}]?[${UPPER}]+[${LOWER}]*${CONTRACTION}`,
+  '\\p{N}{1,3}',
+  ` ?[^${SPACE}\\p{L}\\p{N}]+[\\r\\n/]*`,
+  `${SPACE}*[\\r\\n]+`,
+  `${SPACE}+(?![^${SPACE}])`,
+  `${SPACE}+`,
+].join('|');
+const O200K_PIECES_FLAGS = 'gu';
 
 /** Characters after a match end that can still change where it ends. */
 const LOOKAHEAD = 8;
@@ -79,6 +77,7 @@ class ChunkedCounter {
   #chunkChars = 0;
   #fallbackDirectory: string | undefined;
   #fallbackIndex = 0;
+  readonly #pieces = new RegExp(O200K_PIECES_SOURCE, O200K_PIECES_FLAGS);
 
   constructor(
     private readonly encoder: O200kBaseEncoder,
@@ -89,9 +88,9 @@ class ChunkedCounter {
   /** Counts the whole pieces of `text`, returning the length consumed. */
   async consume(text: string, final: boolean): Promise<number> {
     const limit = final ? text.length : text.length - LOOKAHEAD;
-    O200K_PIECES.lastIndex = 0;
+    this.#pieces.lastIndex = 0;
     let position = 0;
-    let match = O200K_PIECES.exec(text);
+    let match = this.#pieces.exec(text);
     while (match && position + match[0].length <= limit) {
       if (match.index !== position || match[0].length === 0)
         throw new Error(
@@ -99,7 +98,7 @@ class ChunkedCounter {
         );
       await this.#add(match[0]);
       position += match[0].length;
-      match = position < text.length ? O200K_PIECES.exec(text) : null;
+      match = position < text.length ? this.#pieces.exec(text) : null;
     }
     if (final && position !== text.length)
       throw new Error('Pinned regex did not consume the final source text');

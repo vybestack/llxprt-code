@@ -209,6 +209,21 @@ describe('o200k chunked source counting', () => {
       expect(await chunked('', DEFAULT_CHUNKED_TUNING)).toBe(0);
     });
 
+    it('counts concurrent sources exactly like their sequential counts', async () => {
+      const texts = Array.from({ length: 8 }, (_, index) =>
+        mixedText(150_000 + index * 9_001, 100 + index),
+      );
+      const sequential: number[] = [];
+      for (const text of texts)
+        sequential.push(await chunked(text, DEFAULT_CHUNKED_TUNING));
+
+      const concurrent = await Promise.all(
+        texts.map((text) => chunked(text, DEFAULT_CHUNKED_TUNING)),
+      );
+
+      expect(concurrent).toStrictEqual(sequential);
+    }, 60000);
+
     it('rejects when the signal is already aborted', async () => {
       const path = join(root, 'aborted');
       writeFileSync(path, 'text');
