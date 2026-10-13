@@ -17,7 +17,7 @@ import {
   LocalMediaStore,
   requireMediaStore,
 } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { createRuntimeActivationBindings } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { fromConfig } from '../fromConfig.js';
 import type { Agent } from '../agent.js';
 
@@ -26,12 +26,14 @@ async function withSameLabelAgents(
 ): Promise<void> {
   const workingDir = await mkdtemp(join(tmpdir(), 'session-media-owner-'));
   const first = await buildAgent('multi-turn-text.jsonl', {
+    credentialAuthority: new CredentialAuthority(),
     workingDir,
     sessionId: 'identical-session-label',
   });
   const projectTemp = internalConfig(first.agent).projectTempDir;
   try {
     const second = await buildAgent('multi-turn-text.jsonl', {
+      credentialAuthority: new CredentialAuthority(),
       workingDir,
       sessionId: 'identical-session-label',
     });
@@ -218,14 +220,22 @@ describe('public Agent session media ownership closure', () => {
     await withSameLabelAgents(async (first, second) => {
       await ingest(first, 'AQIDBA==');
       await ingest(second, 'BQYHCA==');
-      const real = createRuntimeActivationBindings();
       const failedOwner = new SessionMediaOwner(
         internalConfig(first).projectTempDir,
         1024 * 1024,
       );
-      let failedStore: LocalMediaStore | undefined;
+      const failedStore = failedOwner.store;
+      const admitted = await failedStore.admit({
+        bytes: new Uint8Array([9, 10, 11, 12]),
+        mimeType: 'image/png',
+        semanticMetadata: {},
+      });
+      expect(await failedStore.readVerified(admitted)).toStrictEqual(
+        new Uint8Array([9, 10, 11, 12]),
+      );
       await expect(
         buildAgent('multi-turn-text.jsonl', {
+          credentialAuthority: new CredentialAuthority(),
           workingDir: internalConfig(first).getWorkingDir(),
           sessionId: 'identical-session-label',
           mediaOwner: failedOwner,
@@ -233,23 +243,12 @@ describe('public Agent session media ownership closure', () => {
             provider: 'unregistered-failure-provider',
             providerSwitchPolicy: 'strict',
           },
-          runtimeActivationBindings: {
-            ...real,
-            registerInfrastructure: async (manager, oauth, options) => {
-              await real.registerInfrastructure(manager, oauth, options);
-              if (!options.config) throw new Error('Missing activation Config');
-              failedStore = failedOwner.store;
-              await failedStore.admit({
-                bytes: new Uint8Array([9, 10, 11, 12]),
-                mimeType: 'image/png',
-                semanticMetadata: {},
-              });
-            },
-          },
         }),
       ).rejects.toThrow('createAgent activation failed');
-      if (failedStore === undefined) throw new Error('Missing failed owner');
       await expect(failedStore.getStoredByteLength()).rejects.toThrow(
+        /closed/i,
+      );
+      await expect(failedStore.readVerified(admitted)).rejects.toThrow(
         /closed/i,
       );
       await second.setHistory(await second.getHistory());
