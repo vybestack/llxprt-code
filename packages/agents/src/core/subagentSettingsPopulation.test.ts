@@ -48,9 +48,15 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
       const service = createRuntimeSettingsService();
 
       const profile = createProfile({ 'auth-keyfile': keyPath });
-      populatePreActivationSettings(service, profile, 'keyfile-profile');
+      populatePreActivationSettings(
+        service.set.bind(service),
+        service.setCurrentProfileName.bind(service),
+        profile,
+        'keyfile-profile',
+      );
       populatePostActivationSettings(
-        service,
+        service.set.bind(service),
+        service.setCurrentProfileName.bind(service),
         profile,
         'keyfile-profile',
         new Set(),
@@ -75,9 +81,15 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
         'auth-key': 'explicit-key',
         'auth-keyfile': keyPath,
       });
-      populatePreActivationSettings(service, profile, 'auth-profile');
+      populatePreActivationSettings(
+        service.set.bind(service),
+        service.setCurrentProfileName.bind(service),
+        profile,
+        'auth-profile',
+      );
       populatePostActivationSettings(
-        service,
+        service.set.bind(service),
+        service.setCurrentProfileName.bind(service),
         profile,
         'auth-profile',
         new Set(),
@@ -104,12 +116,14 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
 
         const profile = createProfile({ 'auth-keyfile': keyPath });
         populatePreActivationSettings(
-          service,
+          service.set.bind(service),
+          service.setCurrentProfileName.bind(service),
           profile,
           'empty-keyfile-profile',
         );
         populatePostActivationSettings(
-          service,
+          service.set.bind(service),
+          service.setCurrentProfileName.bind(service),
           profile,
           'empty-keyfile-profile',
           new Set(),
@@ -137,12 +151,14 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
 
     try {
       populatePreActivationSettings(
-        service,
+        service.set.bind(service),
+        service.setCurrentProfileName.bind(service),
         profile,
         'missing-keyfile-profile',
       );
       populatePostActivationSettings(
-        service,
+        service.set.bind(service),
+        service.setCurrentProfileName.bind(service),
         profile,
         'missing-keyfile-profile',
         new Set(),
@@ -170,12 +186,14 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
 
     try {
       populatePreActivationSettings(
-        service,
+        service.set.bind(service),
+        service.setCurrentProfileName.bind(service),
         profile,
         'relative-missing-keyfile-profile',
       );
       populatePostActivationSettings(
-        service,
+        service.set.bind(service),
+        service.setCurrentProfileName.bind(service),
         profile,
         'relative-missing-keyfile-profile',
         new Set(),
@@ -202,12 +220,14 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
       const profile = createProfile({ 'auth-keyfile': relativeKeyfile });
       const service = createRuntimeSettingsService();
       populatePreActivationSettings(
-        service,
+        service.set.bind(service),
+        service.setCurrentProfileName.bind(service),
         profile,
         'relative-empty-keyfile-profile',
       );
       populatePostActivationSettings(
-        service,
+        service.set.bind(service),
+        service.setCurrentProfileName.bind(service),
         profile,
         'relative-empty-keyfile-profile',
         new Set(),
@@ -225,9 +245,15 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
     const service = createRuntimeSettingsService();
     const profile = createProfile({ 'auth-key-name': 'MY_API_KEY' });
 
-    populatePreActivationSettings(service, profile, 'keyname-profile');
+    populatePreActivationSettings(
+      service.set.bind(service),
+      service.setCurrentProfileName.bind(service),
+      profile,
+      'keyname-profile',
+    );
     populatePostActivationSettings(
-      service,
+      service.set.bind(service),
+      service.setCurrentProfileName.bind(service),
       profile,
       'keyname-profile',
       new Set(),
@@ -256,9 +282,15 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
       },
     };
 
-    populatePreActivationSettings(service, profile, 'specialized-profile');
+    populatePreActivationSettings(
+      service.set.bind(service),
+      service.setCurrentProfileName.bind(service),
+      profile,
+      'specialized-profile',
+    );
     populatePostActivationSettings(
-      service,
+      service.set.bind(service),
+      service.setCurrentProfileName.bind(service),
       profile,
       'specialized-profile',
       new Set(),
@@ -282,9 +314,15 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
     const service = createRuntimeSettingsService();
     const profile = createProfile({ 'tools.disabled': ['write_file'] });
 
-    populatePreActivationSettings(service, profile, 'tool-profile');
+    populatePreActivationSettings(
+      service.set.bind(service),
+      service.setCurrentProfileName.bind(service),
+      profile,
+      'tool-profile',
+    );
     populatePostActivationSettings(
-      service,
+      service.set.bind(service),
+      service.setCurrentProfileName.bind(service),
       profile,
       'tool-profile',
       new Set(['read_file']),
@@ -302,9 +340,15 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
       'tools.disabled': ['write_file', 'read_file'],
     });
 
-    populatePreActivationSettings(service, profile, 'dedup-tool-profile');
+    populatePreActivationSettings(
+      service.set.bind(service),
+      service.setCurrentProfileName.bind(service),
+      profile,
+      'dedup-tool-profile',
+    );
     populatePostActivationSettings(
-      service,
+      service.set.bind(service),
+      service.setCurrentProfileName.bind(service),
       profile,
       'dedup-tool-profile',
       new Set(['read_file']),
@@ -323,9 +367,15 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
       'tools.disabled': ['write_file'],
     });
 
-    populatePreActivationSettings(service, profile, 'allow-tool-profile');
+    populatePreActivationSettings(
+      service.set.bind(service),
+      service.setCurrentProfileName.bind(service),
+      profile,
+      'allow-tool-profile',
+    );
     populatePostActivationSettings(
-      service,
+      service.set.bind(service),
+      service.setCurrentProfileName.bind(service),
       profile,
       'allow-tool-profile',
       new Set(['read_file']),
@@ -345,9 +395,15 @@ describe('populatePreActivationSettings and populatePostActivationSettings', () 
           'custom.valid': { enabled: true },
           'custom.uncloneable': { fn: () => 'not cloneable' },
         });
-        populatePreActivationSettings(service, profile, 'custom-profile');
+        populatePreActivationSettings(
+          service.set.bind(service),
+          service.setCurrentProfileName.bind(service),
+          profile,
+          'custom-profile',
+        );
         populatePostActivationSettings(
-          service,
+          service.set.bind(service),
+          service.setCurrentProfileName.bind(service),
           profile,
           'custom-profile',
           new Set(),
