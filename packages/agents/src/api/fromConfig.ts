@@ -112,9 +112,15 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
         options.settingsService,
       );
     }
-    const runtimeId = validateAdoption(options);
+    const messageBus = resolveAdoptionMessageBus(
+      options.messageBus,
+      options.activationPreflight?.operation.messageBus,
+      options.mcpRuntime?.messageBus,
+      options.policyOwner?.session.messageBus,
+    );
+    const runtimeId = validateAdoption(options, messageBus);
     agent = await adoptConfig(
-      { ...options, imageOperation: images.selection },
+      { ...options, messageBus, imageOperation: images.selection },
       github,
       runtimeId,
     );
@@ -168,7 +174,19 @@ function bindAdoptedSessionHooks(
   }
 }
 
-function validateAdoption(options: FromConfigOptions): string {
+function resolveAdoptionMessageBus(
+  callerBus: MessageBus | undefined,
+  preflightBus: MessageBus | undefined,
+  mcpBus: MessageBus | undefined,
+  policyBus: MessageBus | undefined,
+): MessageBus | undefined {
+  return callerBus ?? preflightBus ?? mcpBus ?? policyBus;
+}
+
+function validateAdoption(
+  options: FromConfigOptions,
+  messageBus: MessageBus | undefined,
+): string {
   FromConfigValidatableSchema.parse({
     sessionId: options.sessionId,
     activation: options.activation,
@@ -179,15 +197,12 @@ function validateAdoption(options: FromConfigOptions): string {
   options.settingsOwner?.assertSettingsIdentity(options.settingsService);
   if (options.mcpRuntime !== undefined)
     assertAdoptedMcpConfig(options, options.mcpRuntime);
-  const messageBus =
-    options.messageBus ??
-    options.activationPreflight?.operation.messageBus ??
-    options.mcpRuntime?.messageBus;
   const oauth =
     options.oauthManager ?? options.activationPreflight?.operation.oauthManager;
   if (
-    oauth !== undefined &&
-    (messageBus === undefined || oauth.runtimeMessageBus !== messageBus)
+    oauth?.runtimeMessageBus !== undefined &&
+    messageBus !== undefined &&
+    oauth.runtimeMessageBus !== messageBus
   )
     throw new AgentBootstrapError(
       'Borrowed OAuth must retain its selected runtime message bus',
@@ -202,7 +217,7 @@ async function adoptConfig(
 ): Promise<Agent> {
   // Adopt an explicit caller bus first, then the Config's assembled runtime bus.
   // Only non-CLI consumers without either seam receive a newly owned bus.
-  const mcp = await resolveAdoptedMcpRuntime(options);
+  const mcp = await resolveAdoptedMcpRuntime(options, options.messageBus);
   // @pseudocode line 18 (CRIT-1): adopt the Config's existing manager.
 
   // @pseudocode lines 20-28: adopt the runtime context (NOT a second manager).
@@ -506,9 +521,7 @@ async function prepareAdoptionRuntime(
   try {
     return await createAdoptedRuntime(
       options.config,
-      options.messageBus ??
-        options.activationPreflight?.operation.messageBus ??
-        mcp.messageBus,
+      mcp.messageBus,
       runtimeId,
       options.providerManager,
       options.settingsService,
@@ -568,6 +581,7 @@ function assertBorrowedClient(options: FromConfigOptions): void {
 
 async function resolveAdoptedMcpRuntime(
   options: FromConfigOptions,
+  messageBus: MessageBus | undefined,
 ): Promise<McpRuntimeOwner> {
   if (
     options.mcpRuntime !== undefined &&
@@ -590,7 +604,7 @@ async function resolveAdoptedMcpRuntime(
     options.mcpRuntime ??
     (await assembleMcpRuntime(
       options.config,
-      options.messageBus ?? options.activationPreflight?.operation.messageBus,
+      messageBus,
       {
         ...options,
         trustPort:

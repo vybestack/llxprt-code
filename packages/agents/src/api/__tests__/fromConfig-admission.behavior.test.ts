@@ -123,6 +123,53 @@ describe('fromConfig admission before resource effects', () => {
     expect(oauth.runtimeMessageBus).toBe(other.messageBus);
   });
 
+  it('adopts the policy owner bus when no explicit bus is supplied', async () => {
+    const built = await fixture();
+    const oauth = new OAuthManager(new MemoryTokenStore(), undefined, {
+      messageBus: built.messageBus,
+    });
+    cleanups.push(() => oauth.dispose());
+    const agent = await fromConfig({
+      ...built,
+      messageBus: undefined,
+      oauthManager: oauth,
+      credentialAuthority: credentials().authority,
+    });
+    cleanups.push(() => agent.dispose());
+    expect(agent.getMessageBus()).toBe(built.messageBus);
+    expect(oauth.runtimeMessageBus).toBe(built.messageBus);
+  });
+
+  it('accepts an unbound borrowed OAuth manager without replacing its binding', async () => {
+    const built = await fixture();
+    const oauth = new OAuthManager(new MemoryTokenStore());
+    cleanups.push(() => oauth.dispose());
+    const agent = await fromConfig({
+      ...built,
+      oauthManager: oauth,
+      credentialAuthority: credentials().authority,
+    });
+    cleanups.push(() => agent.dispose());
+    expect(agent.getMessageBus()).toBe(built.messageBus);
+    expect(oauth.runtimeMessageBus).toBeUndefined();
+  });
+
+  it('retains borrowed OAuth when adoption must create its own bus', async () => {
+    const built = await fixture();
+    const oauth = new OAuthManager(new MemoryTokenStore(), undefined, {
+      messageBus: built.messageBus,
+    });
+    cleanups.push(() => oauth.dispose());
+    const agent = await fromConfig({
+      config: built.config,
+      settingsService: built.settingsService,
+      oauthManager: oauth,
+      credentialAuthority: credentials().authority,
+    });
+    cleanups.push(() => agent.dispose());
+    expect(agent.getMessageBus()).not.toBe(built.messageBus);
+    expect(oauth.runtimeMessageBus).toBe(built.messageBus);
+  });
   it('rejects an MCP handoff on another bus before media or provider acquisition', async () => {
     const built = await fixture(true);
     const other = await fixture();
