@@ -5,6 +5,19 @@
  */
 
 import { AggregateDisposeError } from '../api/disposeErrors.js';
+export async function closeSubagentScope(
+  closeScope: () => void,
+  primaryHistory: unknown,
+  fallbackHistory: unknown,
+  closeRuntime: () => Promise<void>,
+): Promise<void> {
+  const history = firstDefinedHistory(primaryHistory, fallbackHistory);
+  await runCleanupSteps([
+    closeScope,
+    () => disposeHistoryLike(history),
+    closeRuntime,
+  ]);
+}
 
 export async function cleanupAfterFailure(
   primary: unknown,

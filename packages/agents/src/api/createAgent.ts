@@ -56,7 +56,9 @@ import type { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtim
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { type IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
+import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type {
+  SessionSettingsOwner,
   AgentRuntimeFactoryBindings,
   RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
@@ -262,8 +264,7 @@ async function finishCreatedAgent(
     );
     disposeMcpRuntime = () => mcpRuntime.dispose();
     sessionClient = ownedSessionClient;
-    sessionClient.bindHostGitHub(github);
-    await ownedSessionClient.initializeTools();
+    await initializeCreatedClient(ownedSessionClient, github);
     const activationOutcome = await activateCreatedSession(
       parsed,
       resolvedAuth,
@@ -281,8 +282,9 @@ async function finishCreatedAgent(
       handle.oauthManager,
       handle.settingsService,
       runtimeId,
-      handle,
-      messageBus,
+      handle.settingsOwner,
+      () => handle.readRuntimeKind(),
+      () => handle.cleanup(),
       onApproval,
       onOAuthPrompt,
       editorCallbacks,
@@ -307,6 +309,14 @@ async function finishCreatedAgent(
     );
   }
   return startAgentSession(agent);
+}
+
+async function initializeCreatedClient(
+  client: SessionClientOwner,
+  github: ReturnType<typeof assembleHostGitHubBroker>,
+): Promise<void> {
+  client.bindHostGitHub(github);
+  await client.initializeTools();
 }
 
 async function activateCreatedSession(
@@ -408,8 +418,9 @@ export async function finalizeAgent(
   oauthManager: OAuthManager,
   settings: SettingsService,
   runtimeId: string,
-  handle: IsolatedRuntimeContextHandle,
-  messageBus: MessageBus,
+  settingsOwner: SessionSettingsOwner,
+  readRuntimeKind: () => RuntimeKind,
+  closeRuntime: () => Promise<void> | void,
   onApproval: Parameters<typeof wrapApprovalHandler>[0] | undefined,
   onOAuthPrompt: unknown,
   editorCallbacks: EditorCallbacks | undefined,
@@ -442,7 +453,7 @@ export async function finalizeAgent(
     ? wrapApprovalHandler(onApproval)
     : undefined;
   try {
-    return await assembleFacade({
+    return await assembleFacade(settingsOwner, readRuntimeKind, closeRuntime, {
       taskLaunchOwner,
       shellOwner,
       sessionClient,
@@ -452,7 +463,6 @@ export async function finalizeAgent(
       oauthManager,
       sharedSettingsService: settings,
       runtimeId,
-      handle,
       messageBus: sessionClient.messageBus,
       loopHolder,
       runtimeState: buildFacadeState(parsed, resolvedAuth.baseUrl, runtimeId),
@@ -497,7 +507,6 @@ interface AssembleFacadeDeps {
   readonly oauthManager: OAuthManager;
   readonly sharedSettingsService: SettingsService;
   readonly runtimeId: string;
-  readonly handle: IsolatedRuntimeContextHandle;
   readonly messageBus: MessageBus;
   readonly loopHolder: LoopHolder;
   readonly runtimeState: ReturnType<typeof createAgentRuntimeState>;
@@ -529,9 +538,14 @@ interface AssembleFacadeDeps {
  * @requirement:REQ-015
  * @pseudocode createAgent.md steps 150-166
  */
-async function assembleFacade(deps: AssembleFacadeDeps): Promise<Agent> {
+async function assembleFacade(
+  settingsOwner: SessionSettingsOwner,
+  readRuntimeKind: () => RuntimeKind,
+  closeRuntime: () => Promise<void> | void,
+  deps: AssembleFacadeDeps,
+): Promise<Agent> {
   rebuildLoop({
-    telemetry: deps.handle.settingsOwner.telemetry,
+    telemetry: settingsOwner.telemetry,
     loopHolder: deps.loopHolder,
     resolveClient: deps.resolveClient,
     toolSelection: deps.sessionClient.toolCatalog.selection,
@@ -539,8 +553,7 @@ async function assembleFacade(deps: AssembleFacadeDeps): Promise<Agent> {
       deps.mcpOperations.trust.isTrustedFolder()
         ? deps.config.getApprovalMode()
         : ApprovalMode.DEFAULT,
-    readExecutionPolicy: () =>
-      deps.handle.settingsOwner.readToolExecutionPolicy(),
+    readExecutionPolicy: () => settingsOwner.readToolExecutionPolicy(),
     getToolGovernance: () => deps.sessionClient.toolCatalog.readGovernance(),
     config: deps.config,
     messageBus: deps.messageBus,
@@ -548,8 +561,9 @@ async function assembleFacade(deps: AssembleFacadeDeps): Promise<Agent> {
     displayCallbacks: deps.displayCallbacks,
     AgenticLoopCtor: AgenticLoop,
   });
+  const runtimeHandle = { cleanup: closeRuntime };
   const ownership = recordOwnership({
-    runtimeHandle: deps.handle,
+    runtimeHandle,
     config: deps.config,
     messageBus: deps.messageBus,
     loopHolder: deps.loopHolder,
@@ -574,14 +588,14 @@ async function assembleFacade(deps: AssembleFacadeDeps): Promise<Agent> {
         deps.sharedSettingsService,
         deps.manager,
         deps.oauthManager,
-        () => deps.handle.readRuntimeKind(),
+        readRuntimeKind,
         () => deps.sessionClient.refreshAuth(),
-        deps.handle.settingsOwner,
+        settingsOwner,
       ),
       settingsService: deps.sharedSettingsService,
-      settingsOwner: deps.handle.settingsOwner,
+      settingsOwner,
       runtimeId: deps.runtimeId,
-      runtimeHandle: deps.handle,
+      runtimeHandle,
       messageBus: deps.messageBus,
       loopHolder: deps.loopHolder,
       runtimeState: deps.runtimeState,
@@ -599,18 +613,26 @@ async function assembleFacade(deps: AssembleFacadeDeps): Promise<Agent> {
       onOAuthPrompt: deps.onOAuthPrompt,
       initialAuth: deps.initialAuth,
     },
-    async (model) => {
-      await setActiveModel(
-        model,
-        assembleModelSelection(deps.handle.settingsOwner),
-        deps.sharedSettingsService,
-        deps.manager.getActiveProvider(),
-      );
-    },
+    bindModelSelection(settingsOwner, deps.sharedSettingsService, deps.manager),
   );
 
   // SessionStart is driven by the frontend after it has installed observers
   // and is ready to consume the hook's system message and additional context.
+}
+
+function bindModelSelection(
+  settingsOwner: SessionSettingsOwner,
+  settings: SettingsService,
+  manager: RuntimeProviderManager,
+): (model: string) => Promise<void> {
+  return async (model) => {
+    await setActiveModel(
+      model,
+      assembleModelSelection(settingsOwner),
+      settings,
+      manager.getActiveProvider(),
+    );
+  };
 }
 
 function initializeAgentHistory(

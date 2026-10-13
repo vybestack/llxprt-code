@@ -29,7 +29,6 @@ import { SessionClientOwner } from '../session/session-client-owner.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
-import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
 import { buildAgentClientFactory } from './agentBootstrap.js';
 import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { Agent } from './agent.js';
@@ -113,7 +112,7 @@ export interface FailedBootstrapTeardown {
  * neither is swallowed.
  */
 export async function cleanupFailedRuntimeBootstrap(
-  handle: IsolatedRuntimeContextHandle,
+  closeRuntime: () => void | Promise<void>,
   primaryError: unknown,
   source: string,
   teardown: FailedBootstrapTeardown = {},
@@ -127,7 +126,7 @@ export async function cleanupFailedRuntimeBootstrap(
     }
   } else {
     try {
-      await handle.cleanup();
+      await closeRuntime();
     } catch (cleanupError) {
       cleanupErrors.push(cleanupError);
     }
@@ -175,16 +174,14 @@ export async function disposeIsolatedMediaConfig(
 }
 
 export async function disposeIsolatedMediaRuntime(
-  handle: IsolatedRuntimeContextHandle,
-  mediaOwner: SessionMediaOwner,
-  sessionClient: SessionClientOwner | undefined,
+  closeRuntime: () => void | Promise<void>,
+  closeConfig: () => Promise<void>,
+  closeMedia: () => Promise<void>,
+  closeClient: (() => Promise<void>) | undefined,
 ): Promise<void> {
-  const clients = await Promise.allSettled([sessionClient?.dispose()]);
-  const results = await Promise.allSettled([
-    handle.cleanup(),
-    handle.config.dispose(),
-  ]);
-  const mediaResults = await Promise.allSettled([mediaOwner.dispose()]);
+  const clients = await Promise.allSettled([closeClient?.()]);
+  const results = await Promise.allSettled([closeRuntime(), closeConfig()]);
+  const mediaResults = await Promise.allSettled([closeMedia()]);
   const failures = [...clients, ...results, ...mediaResults].flatMap(
     (result) => (result.status === 'rejected' ? [result.reason] : []),
   );
@@ -247,14 +244,15 @@ export async function createIsolatedSessionClient(
 }
 
 export function closeIsolatedSessionRuntime(
-  handle: IsolatedRuntimeContextHandle & {
-    readonly mediaOwner: SessionMediaOwner;
-    readonly sessionClient: SessionClientOwner;
-  },
+  closeRuntime: () => void | Promise<void>,
+  closeConfig: () => Promise<void>,
+  closeMedia: () => Promise<void>,
+  closeClient: () => Promise<void>,
 ): Promise<void> {
   return disposeIsolatedMediaRuntime(
-    handle,
-    handle.mediaOwner,
-    handle.sessionClient,
+    closeRuntime,
+    closeConfig,
+    closeMedia,
+    closeClient,
   );
 }

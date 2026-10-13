@@ -18,7 +18,7 @@ import {
   cleanupAfterFailure,
   runCleanupSteps,
   disposeHistoryLike,
-  firstDefinedHistory,
+  closeSubagentScope,
 } from './subagent-cleanup.js';
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 import type { SessionClientOwner } from '../session/session-client-owner.js';
@@ -201,21 +201,21 @@ export class SubagentOrchestrator {
     runtimeResult: AgentRuntimeLoaderResult,
     isolatedHandle: IsolatedRuntimeContextHandle,
   ): () => Promise<void> {
-    return async () => {
-      const history = firstDefinedHistory(
+    return () =>
+      closeSubagentScope(
+        () => {
+          if (typeof scope.dispose === 'function') scope.dispose();
+        },
         runtimeResult.history,
         scope.runtimeContext.history,
+        () =>
+          closeIsolatedSessionRuntime(
+            () => isolatedHandle.cleanup(),
+            () => isolatedHandle.config.dispose(),
+            () => isolatedHandle.mediaOwner.dispose(),
+            () => isolatedHandle.sessionClient.dispose(),
+          ),
       );
-      await runCleanupSteps([
-        () => {
-          if (typeof scope.dispose === 'function') {
-            scope.dispose();
-          }
-        },
-        () => disposeHistoryLike(history),
-        () => closeIsolatedSessionRuntime(isolatedHandle),
-      ]);
-    };
   }
 
   private async createScopeWithEnvironment(
@@ -407,7 +407,13 @@ export class SubagentOrchestrator {
     // AgentClient and needs the same children-first dispose.
     await runCleanupSteps([
       () => disposeHistoryLike(runtimeResult.history),
-      () => closeIsolatedSessionRuntime(isolatedHandle),
+      () =>
+        closeIsolatedSessionRuntime(
+          () => isolatedHandle.cleanup(),
+          () => isolatedHandle.config.dispose(),
+          () => isolatedHandle.mediaOwner.dispose(),
+          () => isolatedHandle.sessionClient.dispose(),
+        ),
     ]);
   }
 
@@ -644,7 +650,15 @@ export class SubagentOrchestrator {
       return { runtimeResult, isolatedHandle };
     } catch (error) {
       return cleanupAfterFailure(error, () =>
-        runCleanupSteps([() => closeIsolatedSessionRuntime(isolatedHandle)]),
+        runCleanupSteps([
+          () =>
+            closeIsolatedSessionRuntime(
+              () => isolatedHandle.cleanup(),
+              () => isolatedHandle.config.dispose(),
+              () => isolatedHandle.mediaOwner.dispose(),
+              () => isolatedHandle.sessionClient.dispose(),
+            ),
+        ]),
       );
     }
   }
@@ -800,19 +814,6 @@ export class SubagentOrchestrator {
     return client;
   }
 
-  private populateChildSettings(
-    settings: SettingsService,
-    profile: Profile,
-    profileName: string,
-  ): void {
-    populatePostActivationSettings(
-      settings,
-      profile,
-      profileName,
-      this.defaultDisabledTools,
-    );
-  }
-
   private async createIsolatedRuntime(
     settingsService: SettingsService,
     activationProfile: Profile,
@@ -879,15 +880,21 @@ export class SubagentOrchestrator {
         profileName,
         isLoadBalancerActivation,
       );
-      this.populateChildSettings(
+      populatePostActivationSettings(
         settingsService,
         runtimeStateProfile,
         profileName,
+        this.defaultDisabledTools,
       );
       return { ...handle, mediaOwner, sessionClient: childClient };
     } catch (error) {
       return cleanupAfterFailure(error, () =>
-        disposeIsolatedMediaRuntime(handle, mediaOwner, sessionClient),
+        disposeIsolatedMediaRuntime(
+          () => handle.cleanup(),
+          () => handle.config.dispose(),
+          () => mediaOwner.dispose(),
+          sessionClient?.dispose.bind(sessionClient),
+        ),
       );
     }
   }
