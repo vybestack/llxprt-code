@@ -6,21 +6,13 @@ import {
   closePreflightAfterAdoption,
   rethrowPrimaryAfterCleanup,
 } from './fromConfig-cleanup.js';
-import {
-  assembleSessionImages,
-  prepareImageConstruction,
-} from './session-image-assembly.js';
+import { prepareImageConstruction } from './session-image-assembly.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
 import {
   assembleAdoptedDefinitionOperations,
   adoptedDefinitionCleanup,
 } from './adopted-definition-assembly.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import {
-  assembleModelSelection,
-  type ModelSelectionOperations,
-} from './model-selection.js';
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
 /**
  * @plan:PLAN-20260621-COREAPIREMED.P09
  * @requirement:REQ-001,REQ-005,REQ-INT-001
@@ -32,15 +24,17 @@ import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/tas
  */
 
 import { admittedEndpoint } from '../core/admittedRouteSecurity.js';
-import { SessionClientOwner } from '../session/session-client-owner.js';
-import { buildAgentClientFactory } from './agentBootstrap.js';
+import type { SessionClientOwner } from '../session/session-client-owner.js';
+import {
+  activateAdoptedSession,
+  initializeAdoptedClient,
+} from './fromConfig-session.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 import { assembleMcpRuntime } from './mcpOAuthAssembly.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import {
   createIsolatedRuntimeContext,
@@ -58,9 +52,6 @@ import {
   AgentBootstrapError,
   validateAgentRuntimeId,
 } from './agentBootstrap.js';
-import { assembleProviderSwitch } from './providerSwitchAssembly.js';
-import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
-import { executeProviderActivation } from './providerActivationExecutor.js';
 import { AgentActivationBootstrap } from './activationPreflightState.js';
 import {
   finalizeAgent,
@@ -163,6 +154,17 @@ function bindAdoptedSessionHooks(
   }
 }
 
+function validateAdoption(options: FromConfigOptions): string {
+  FromConfigValidatableSchema.parse({
+    sessionId: options.sessionId,
+    activation: options.activation,
+  });
+  assertBorrowedClient(options);
+  const runtimeId = options.sessionId ?? generateRuntimeId();
+  validateAgentRuntimeId(runtimeId);
+  return runtimeId;
+}
+
 async function adoptConfig(
   options: FromConfigOptions,
   github: HostGitHubBrokerOwner | undefined,
@@ -171,68 +173,65 @@ async function adoptConfig(
   // The FromConfigOptions type marks config as required, but at runtime callers
   // may omit it (T1d); read through a generic presence check so the lint
   // accepts the runtime-undefined check without an unsafe assertion.
-  FromConfigValidatableSchema.parse({
-    sessionId: options.sessionId,
-    activation: options.activation,
-  });
-
-  // @pseudocode line 14: ADOPT — never construct.
-  const config: Config = options.config;
-  assertBorrowedClient(options);
-
-  // @pseudocode line 15: runtimeId (sessionId takes precedence; otherwise generate).
-  const runtimeId = options.sessionId ?? generateRuntimeId();
-  validateAgentRuntimeId(runtimeId);
-
-  // @pseudocode line 16: reach the Config's SettingsService (no second store).
-  const settingsService = options.settingsService;
+  const config = options.config;
+  const runtimeId = validateAdoption(options);
 
   // Adopt an explicit caller bus first, then the Config's assembled runtime bus.
   // Only non-CLI consumers without either seam receive a newly owned bus.
-  const mcpRuntime = await resolveAdoptedMcpRuntime(options);
-  const messageBus =
-    options.messageBus ??
-    options.activationPreflight?.operation.messageBus ??
-    mcpRuntime.messageBus;
-  mcpRuntime.assertConfig(config, messageBus);
-
+  const mcp = await resolveAdoptedMcpRuntime(options);
   // @pseudocode line 18 (CRIT-1): adopt the Config's existing manager.
 
   // @pseudocode lines 20-28: adopt the runtime context (NOT a second manager).
-  const mediaOwner = await assembleAdoptedMedia(options);
-  const handle = await prepareAdoptedMediaRuntime(
-    options,
-    runtimeId,
-    mediaOwner,
-    mcpRuntime,
-  );
+  const media = await assembleAdoptedMedia(options);
+  const handle = await prepareAdoptionRuntime(options, runtimeId, media, mcp);
 
   let sessionClient: SessionClientOwner | undefined;
   try {
     sessionClient = await initializeAdoptedClient(
-      options,
-      handle,
-      mediaOwner,
-      mcpRuntime,
+      config,
+      handle.settingsService,
+      handle.settingsOwner,
+      handle.providerManager,
+      handle.oauthManager,
+      handle.contentGeneratorFactory,
+      handle.tokenizerFactory,
+      handle.providerFileLifecycle,
+      media,
+      mcp.readInstructions,
+      mcp.workspacePaths,
+      options.activation,
+      options.activationPreflight,
+      options.runtimeFactoryBindings?.agentClientFactory,
+      options.agentClient,
+      adoptedClientBus(options),
+      options.imageOperation,
     );
     sessionClient.bindHostGitHub(github);
-    bindAdoptedSessionHooks(sessionClient, mcpRuntime, options);
+    bindAdoptedSessionHooks(sessionClient, mcp, options);
 
-    const activeSessionClient = sessionClient;
     // @pseudocode line 29: activate infrastructure for the supplied Config.
     await handle.activate();
 
     // @pseudocode line 37-48 (createAgent.ts:178-180 mirror): derive managers.
-    const oauthManager = handle.oauthManager;
 
     // @plan:PLAN-20270110-ISSUE2378.P02 @requirement:REQ-2378-002
     // The adopted Config's SettingsService is carried by the isolated runtime
     // handle; every consumer below reads it from that explicit owner.
 
-    await initializeAdoptedSession(options, mcpRuntime, activeSessionClient);
+    await initializeAdoptedSession(options, mcp, sessionClient);
 
     // @plan:PLAN-20270104-ISSUE2374.P03 @requirement:REQ-001
-    await activateAdoptedSession(options, handle, activeSessionClient);
+    await activateAdoptedSession(
+      config,
+      options.settingsService,
+      handle.settingsOwner,
+      handle.providerManager,
+      handle.oauthManager,
+      () => handle.readRuntimeKind(),
+      sessionClient,
+      options.activation,
+      options.activationPreflight,
+    );
 
     // @pseudocode lines 37-48 (Mismatch 1): synthesize parsed + resolvedAuth.
 
@@ -249,98 +248,29 @@ async function adoptConfig(
       ),
       config,
       handle.providerManager,
-      oauthManager,
-      settingsService,
+      handle.oauthManager,
+      options.settingsService,
       runtimeId,
       handle,
-      mcpRuntime,
-      mediaOwner,
+      mcp,
+      media,
       sessionClient,
     );
   } catch (primaryError) {
     return cleanupFailedAdoption(
       primaryError,
       handle,
-      mcpRuntime,
+      mcp,
       adoptedDefinitionCleanup(
-        mcpRuntime,
+        mcp,
         options.definitionOwner,
         options.definitionOwnership,
         ownsMcpRuntime(options),
       ),
-      mediaOwner,
+      media,
       sessionClient,
     );
   }
-}
-
-async function activateAdoptedSession(
-  options: FromConfigOptions,
-  handle: IsolatedRuntimeContextHandle,
-  activeSessionClient: SessionClientOwner,
-): Promise<void> {
-  const config = options.config;
-  const settingsService = options.settingsService;
-  const oauthManager = handle.oauthManager;
-  await resolveActivation(
-    config,
-    options,
-    adoptedProviderSwitch(
-      config,
-      settingsService,
-      handle.providerManager,
-      oauthManager,
-      handle,
-      () => activeSessionClient.refreshAuth(),
-    ),
-    settingsService,
-    handle.providerManager,
-    () => activeSessionClient.getAgentClient(),
-    (method) => activeSessionClient.refreshAuth(method),
-    assembleModelSelection(handle.settingsOwner),
-  );
-}
-
-async function initializeAdoptedClient(
-  options: FromConfigOptions,
-  handle: IsolatedRuntimeContextHandle,
-  mediaOwner: SessionMediaOwner | undefined,
-  mcpRuntime: McpRuntimeOwner,
-): Promise<SessionClientOwner> {
-  handle.settingsOwner.initializeProviderSelection(
-    options.activation?.provider ?? options.config.getProvider(),
-    options.activation?.model ?? options.config.getModel(),
-  );
-  const client = await adoptSessionClient(
-    options,
-    handle,
-    mediaOwner,
-    mcpRuntime,
-  );
-  client.bindInteractiveAuthRequests((prompt) =>
-    handle.oauthManager.requestInteractiveAuth(prompt),
-  );
-  assembleSessionImages(
-    client,
-    options.config.getTargetDir(),
-    handle.providerManager,
-    handle.oauthManager,
-    handle.settingsService,
-    options.imageOperation,
-  );
-  const mainScope = options.config.getSessionId();
-  client.bindProviderFiles(
-    handle.providerFileLifecycle,
-    (provider) => handle.oauthManager.composeRetryOperations(provider),
-    (scope) =>
-      scope === mainScope
-        ? Promise.resolve()
-        : SessionClientOwner.cleanupProviderScope(
-            handle.providerFileLifecycle,
-            scope,
-          ),
-  );
-  return client;
 }
 
 async function createAdoptedRuntime(
@@ -484,49 +414,6 @@ async function initializeAdoptedConfig(
  *
  * @plan:PLAN-20270104-ISSUE2374.P03 @requirement:REQ-001
  */
-async function resolveActivation(
-  config: Config,
-  options: FromConfigOptions,
-  switchProvider: ProviderSwitcher,
-  settingsService: SettingsService,
-  manager: RuntimeProviderManager,
-  readClient: () => AgentClientContract,
-  refreshAuth: (method?: string) => Promise<void>,
-  selection: ModelSelectionOperations,
-): Promise<void> {
-  if (options.activation !== undefined) {
-    const activationResult =
-      options.activationPreflight !== undefined
-        ? AgentActivationBootstrap.consume(
-            options.activationPreflight,
-            config,
-            options.activation,
-            manager,
-          )
-        : await executeProviderActivation(
-            config,
-            options.activation,
-            switchProvider,
-            settingsService,
-            manager,
-            refreshAuth,
-            selection,
-          );
-    if (activationResult.authFailed) {
-      const underlying = activationResult.authError;
-      throw new AgentBootstrapError(
-        `fromConfig activation failed: ${
-          underlying instanceof Error ? underlying.message : String(underlying)
-        }`,
-        { cause: underlying },
-      );
-    }
-  } else if (!readClient().isInitialized()) {
-    // Construct the auth client for an already-activated Config.
-    await refreshAuth(undefined);
-  }
-}
-
 /**
  * Derive the provider from the post-activation runtime truth, falling back to
  * the Config only when the adopted manager has no active provider.
@@ -661,7 +548,7 @@ async function assembleAdoptedMedia(
   }
 }
 
-async function prepareAdoptedMediaRuntime(
+async function prepareAdoptionRuntime(
   options: FromConfigOptions,
   runtimeId: string,
   owner: SessionMediaOwner | undefined,
@@ -680,25 +567,6 @@ async function prepareAdoptedMediaRuntime(
   } catch (error) {
     return cleanupFailedMediaAssembly(error, options, owner, mcp);
   }
-}
-
-function adoptedProviderSwitch(
-  config: Config,
-  settings: SettingsService,
-  manager: RuntimeProviderManager,
-  oauth: OAuthManager,
-  handle: IsolatedRuntimeContextHandle,
-  refreshAuth: () => Promise<void>,
-): ProviderSwitcher {
-  return assembleProviderSwitch(
-    config,
-    settings,
-    manager,
-    oauth,
-    () => handle.readRuntimeKind(),
-    refreshAuth,
-    handle.settingsOwner,
-  );
 }
 
 async function finalizeAdoptedAgent(
@@ -751,58 +619,6 @@ async function finalizeAdoptedAgent(
     mediaOwner,
     sessionClient,
     mcpRuntime.workspaceSkills.operations,
-  );
-}
-
-function requireAdoptedStore(
-  options: FromConfigOptions,
-  owner: SessionMediaOwner | undefined,
-) {
-  const store = options.agentClient?.mediaStore ?? owner?.store;
-  if (store === undefined)
-    throw new AgentBootstrapError(
-      'Missing explicit session client media store',
-    );
-  return store;
-}
-
-function adoptSessionClient(
-  options: FromConfigOptions,
-  handle: IsolatedRuntimeContextHandle,
-  mediaOwner: SessionMediaOwner | undefined,
-  mcp: McpRuntimeOwner,
-): Promise<SessionClientOwner> {
-  if (options.activationPreflight !== undefined) {
-    const operation = options.activationPreflight.operation;
-    if (
-      operation.tokenizerFactory !== handle.tokenizerFactory ||
-      operation.contentGeneratorFactory !== handle.contentGeneratorFactory
-    )
-      throw new AgentBootstrapError(
-        'Preflight factories cannot be replaced during adoption',
-      );
-    const client = operation.takeSessionClient(options.config);
-    client.bindProviderFiles(handle.providerFileLifecycle, (provider) =>
-      handle.oauthManager.composeRetryOperations(provider),
-    );
-    return Promise.resolve(client);
-  }
-  return SessionClientOwner.create(
-    options.config,
-    assembleTaskSchemaPolicy(handle.settingsService),
-    handle.providerManager,
-    options.runtimeFactoryBindings?.agentClientFactory ??
-      buildAgentClientFactory(),
-    requireAdoptedStore(options, mediaOwner),
-    mcp.readInstructions,
-    mcp.workspacePaths,
-    handle.settingsOwner,
-    handle.contentGeneratorFactory,
-    handle.tokenizerFactory,
-    options.agentClient,
-    options.policyOwner === undefined && options.mcpRuntime !== undefined
-      ? undefined
-      : options.messageBus,
   );
 }
 
@@ -872,9 +688,9 @@ async function resolveAdoptedMcpRuntime(
     throw new AgentBootstrapError(
       'Caller-owned LSP requires an explicit workspace root',
     );
-  return (
+  const mcp =
     options.mcpRuntime ??
-    assembleMcpRuntime(
+    (await assembleMcpRuntime(
       options.config,
       options.messageBus ?? options.activationPreflight?.operation.messageBus,
       {
@@ -911,6 +727,25 @@ async function resolveAdoptedMcpRuntime(
       options.policyOwner,
       options.policyOwner === undefined ? 'runtime' : 'caller',
       options.settingsOwner,
-    )
+    ));
+  assertAdoptedMcpConfig(options, mcp);
+  return mcp;
+}
+
+function assertAdoptedMcpConfig(
+  options: FromConfigOptions,
+  mcp: McpRuntimeOwner,
+): void {
+  mcp.assertConfig(
+    options.config,
+    options.messageBus ??
+      options.activationPreflight?.operation.messageBus ??
+      mcp.messageBus,
   );
+}
+
+function adoptedClientBus(options: FromConfigOptions): MessageBus | undefined {
+  return options.policyOwner === undefined && options.mcpRuntime !== undefined
+    ? undefined
+    : options.messageBus;
 }

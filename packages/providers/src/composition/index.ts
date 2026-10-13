@@ -118,5 +118,6 @@ export { extractProviderBaseUrl } from '../baseUrlResolver.js';
 export { createOwnerOAuthManager } from './owner-oauth-construction.js';
 export { createSessionAuthPolicyReader } from '../auth/session-auth-policy.js';
 export { createOAuthProfileReads } from '../auth/oauth-profile-reads.js';
+export { createPreflightOAuthProfileReads } from '../auth/preflight-oauth-profile-reads.js';
 export { createOwnerAuthCacheInvalidator } from '../auth/owner-cache-invalidation.js';
 export { createOwnedTokenStoreClose } from '../auth/proxy/credential-store-factory.js';

@@ -10,7 +10,8 @@ import type {
   MessageBus,
 } from '@vybestack/llxprt-code-core';
 import { createSessionMessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { PolicyEngine } from '@vybestack/llxprt-code-core';
+import type { PolicyEngine } from '@vybestack/llxprt-code-core';
+import { createOwnerPolicyEvaluation } from '@vybestack/llxprt-code-core/policy/owner-policy-evaluation.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { configureProviderRuntimeFactories } from '../composition/index.js';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
@@ -44,7 +45,8 @@ export function beginCliRuntimeRegistration(
     maxFiles: 100,
     maxBytes: 512 * 1024 * 1024,
   });
-  const { messageBus, decisions, bind } = createRegistrationPolicy();
+  const decisions = createOwnerPolicyEvaluation();
+  const messageBus = createSessionMessageBus(decisions);
   let owner = config;
   let failedOwner: Config | undefined;
   let manager: RuntimeProviderManager | undefined;
@@ -55,7 +57,7 @@ export function beginCliRuntimeRegistration(
     bindPolicyEvaluation: (next) => {
       if (disposed)
         throw new Error('Cannot update a disposed runtime registration');
-      bind(next);
+      decisions.bindPolicyEvaluation(next);
     },
     runtimeId: options.runtimeId,
     settingsService,
@@ -108,26 +110,6 @@ export function beginCliRuntimeRegistration(
       disposed = true;
       owner = undefined;
       manager = undefined;
-    },
-  };
-}
-
-function createRegistrationPolicy(): {
-  readonly messageBus: MessageBus;
-  readonly decisions: PolicyDecisionPort;
-  readonly bind: (evaluate: PolicyDecisionPort['evaluate']) => void;
-} {
-  const initialPolicy = new PolicyEngine();
-  let evaluate: PolicyDecisionPort['evaluate'] = (name, args, server) =>
-    initialPolicy.evaluate(name, args, server);
-  const decisions: PolicyDecisionPort = {
-    evaluate: (name, args, server) => evaluate(name, args, server),
-  };
-  return {
-    messageBus: createSessionMessageBus(decisions),
-    decisions,
-    bind: (next) => {
-      evaluate = next;
     },
   };
 }
