@@ -1,12 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { createReadStream } from 'node:fs';
-import { createInterface } from 'node:readline';
 import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 import type {
   SessionEventType,
   SessionRecordLine,
 } from '../../recording/types.js';
 import { acceptsHistoryOrigin } from './historyOriginId.js';
+import {
+  scanJournalRecords,
+  type ScannedJournalRecord,
+} from './historyJournalRecordScan.js';
 
 interface FanoutBinding {
   readonly origin: string;
@@ -81,17 +83,29 @@ export class HistoryRecorderFanout {
 }
 
 /**
+ * How the pump treats the records up to a sequence:
+ * - `deliver`: hand them to the mirrors;
+ * - `advance`: they already reached the mirrors directly, only move past them;
+ * - `drop`: their publication failed, so neither they nor the compensation
+ *   that undid them may reach a mirror.
+ */
+export type FanoutFeedMode = 'deliver' | 'advance' | 'drop';
+
+/**
  * Publish-time pump from the hidden primary journal to the bindings.
  *
- * Nothing is staged in memory. After a publication succeeds, `schedule('feed')`
- * waits for the primary's commit watermark and re-reads the committed byte
- * range [cursor, watermark) line by line, so the cost does not grow with the
- * size of the publication. A failed publication calls `schedule('skip')`,
- * which advances the cursor past the range without delivering it: neither
- * recording sees the rolled-back rows nor the compensation that undid them.
+ * Nothing is staged in memory. After a publication succeeds,
+ * `schedule(..., 'deliver')` waits until the primary has committed the
+ * publication's last record, then streams the committed records after the
+ * cursor one at a time, up to and including that record and no further. The
+ * bound is the record sequence, never the commit watermark: the watermark of
+ * an already acknowledged sequence is the latest one, which may already cover
+ * later records of other publications. A failed publication schedules
+ * `drop`, which moves the cursor past its records without delivering them.
  */
 export class HistoryFanoutFeed {
   private cursor = 0;
+  private consumedSeq = 0;
   private primary: SessionRecordingService | undefined;
   private chain: Promise<void> = Promise.resolve();
   private failures: unknown[] = [];
@@ -103,6 +117,7 @@ export class HistoryFanoutFeed {
   reset(primary: SessionRecordingService, cursor: number): void {
     this.primary = primary;
     this.cursor = cursor;
+    this.consumedSeq = 0;
   }
 
   /** True when no scheduled delivery is pending, so direct delivery keeps row order. */
@@ -131,25 +146,22 @@ export class HistoryFanoutFeed {
         this.failures.push(error);
       }
     }
-    this.schedule(primary, last.seq, 'skip');
+    this.schedule(primary, last.seq, 'advance');
   }
 
   schedule(
     primary: SessionRecordingService,
     seq: number,
-    mode: 'feed' | 'skip',
+    mode: FanoutFeedMode,
   ): void {
     this.scheduled++;
     this.chain = this.chain.then(async () => {
       try {
         if (primary !== this.primary)
           throw new Error('History fan-out primary changed before delivery');
+        if (seq <= this.consumedSeq) return;
         const { byteOffset } = await primary.waitForCommitSequence(seq);
-        const start = this.cursor;
-        if (byteOffset <= start) return;
-        this.cursor = byteOffset;
-        if (mode === 'feed')
-          await this.deliverRange(primary, start, byteOffset);
+        await this.consume(primary, seq, byteOffset, mode);
       } catch (error) {
         this.failures.push(error);
       } finally {
@@ -158,34 +170,45 @@ export class HistoryFanoutFeed {
     });
   }
 
-  private async deliverRange(
+  /** Consume the records from the cursor through `seq`; `limit` bounds the read. */
+  private async consume(
     primary: SessionRecordingService,
-    start: number,
-    end: number,
+    seq: number,
+    limit: number,
+    mode: FanoutFeedMode,
   ): Promise<void> {
     const filePath = primary.getFilePath();
-    if (filePath === null) return;
-    const stream = createReadStream(filePath, { start, end: end - 1 });
-    const lines = createInterface({ input: stream, crlfDelay: Infinity });
+    if (filePath === null)
+      throw new Error('History fan-out primary has no journal file');
     const failures: unknown[] = [];
-    try {
-      for await (const line of lines) {
-        if (line.length === 0) continue;
-        const record = JSON.parse(line) as {
-          type: SessionEventType;
-          payload: unknown;
-        };
-        try {
-          this.fanout.deliver(record.type, record.payload);
-        } catch (error) {
-          failures.push(error);
-        }
+    for await (const record of scanJournalRecords(
+      filePath,
+      this.cursor,
+      limit,
+    )) {
+      if (record.seq <= seq) {
+        this.cursor = record.end;
+        this.consumedSeq = record.seq;
+        if (mode === 'deliver') this.deliverRecord(record, failures);
       }
-    } finally {
-      lines.close();
-      stream.destroy();
+      if (record.seq >= seq) break;
     }
+    if (this.consumedSeq < seq)
+      throw new Error(
+        `History fan-out primary record ${seq} was not found after byte ${this.cursor}`,
+      );
     rethrow(failures, 'Recorder fan-out failed');
+  }
+
+  private deliverRecord(
+    record: ScannedJournalRecord,
+    failures: unknown[],
+  ): void {
+    try {
+      this.fanout.deliver(record.type, record.payload);
+    } catch (error) {
+      failures.push(error);
+    }
   }
 
   /** Resolve once every scheduled delivery ran; rethrow what failed. */

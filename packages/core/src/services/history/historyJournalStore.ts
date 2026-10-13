@@ -318,7 +318,7 @@ export class HistoryJournalStore {
     if (!this.fanout.active) return;
     if (this.publicationDepth === 0) {
       if (this.fanoutFeed.idle) this.fanoutFeed.deliverNow(recorder, [line]);
-      else this.fanoutFeed.schedule(recorder, line.seq, 'feed');
+      else this.fanoutFeed.schedule(recorder, line.seq, 'deliver');
     } else if (this.scopeLines.length < DIRECT_DELIVERY_LINE_LIMIT) {
       this.scopeLines.push(line);
     } else {
@@ -348,10 +348,10 @@ export class HistoryJournalStore {
         const seq = this.binding.lastSeq;
         if (!this.fanout.active || recorder === undefined || seq === null)
           return;
-        if (!published) this.fanoutFeed.schedule(recorder, seq, 'skip');
+        if (!published) this.fanoutFeed.schedule(recorder, seq, 'drop');
         else if (!overflow && this.fanoutFeed.idle)
           this.fanoutFeed.deliverNow(recorder, lines);
-        else this.fanoutFeed.schedule(recorder, seq, 'feed');
+        else this.fanoutFeed.schedule(recorder, seq, 'deliver');
       },
     };
   }
