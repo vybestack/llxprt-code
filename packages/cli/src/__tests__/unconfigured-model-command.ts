@@ -11,6 +11,8 @@ import { createBaseurlCommand } from '../ui/commands/baseurlCommand.js';
 import { createKeyCommand } from '../ui/commands/keyCommand.js';
 import { createKeyfileCommand } from '../ui/commands/keyfileCommand.js';
 import { createLogoutCommand } from '../ui/commands/logoutCommand.js';
+import { createToolkeyCommand } from '../ui/commands/toolkeyCommand.js';
+import { createToolkeyfileCommand } from '../ui/commands/toolkeyfileCommand.js';
 import type { BuiltinCommandOwners } from '../services/BuiltinCommandLoader.js';
 import type { SlashCommand } from '../ui/commands/types.js';
 import { createToolFormatCommand } from '../ui/commands/toolformatCommand.js';
@@ -76,7 +78,12 @@ export function createUnconfiguredProviderCommand(): SlashCommand {
 
 export function createUnconfiguredCredentialCommands(): Pick<
   BuiltinCommandOwners,
-  'keyCommand' | 'keyfileCommand' | 'baseurlCommand' | 'logoutCommand'
+  | 'keyCommand'
+  | 'keyfileCommand'
+  | 'baseurlCommand'
+  | 'logoutCommand'
+  | 'toolkeyCommand'
+  | 'toolkeyfileCommand'
 > {
   const unavailable = (): never => {
     throw new Error(
@@ -107,6 +114,16 @@ export function createUnconfiguredCredentialCommands(): Pick<
       updateBaseUrl: unavailable,
     }),
     logoutCommand: createLogoutCommand({ logout: unavailable }),
+    toolkeyCommand: createToolkeyCommand({
+      getKey: unavailable,
+      saveKey: unavailable,
+      deleteKey: unavailable,
+    }),
+    toolkeyfileCommand: createToolkeyfileCommand({
+      getKeyfilePath: unavailable,
+      setKeyfilePath: unavailable,
+      clearKeyfilePath: unavailable,
+    }),
   };
 }
 

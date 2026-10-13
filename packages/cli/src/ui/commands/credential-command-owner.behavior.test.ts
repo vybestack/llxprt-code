@@ -7,7 +7,10 @@ import { describe, expect, it } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ApiKeyUpdateResult } from '@vybestack/llxprt-code-core';
+import {
+  ToolKeyStorage,
+  type ApiKeyUpdateResult,
+} from '@vybestack/llxprt-code-core';
 import {
   ProviderKeyStorage,
   SecureStore,
@@ -27,6 +30,8 @@ import {
 import { createKeyCommand } from './keyCommand.js';
 import { createKeyfileCommand } from './keyfileCommand.js';
 import { createLogoutCommand } from './logoutCommand.js';
+import { createToolkeyCommand } from './toolkeyCommand.js';
+import { createToolkeyfileCommand } from './toolkeyfileCommand.js';
 import type { SlashCommand } from './types.js';
 
 function unusedRuntimeApi(): RuntimeApi {
@@ -276,6 +281,61 @@ describe('registered credential command ownership', () => {
       ]);
     } finally {
       await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps each registry tool-key owner separate for /toolkey and /toolkeyfile', async () => {
+    const [leftDir, rightDir] = await Promise.all([
+      mkdtemp(join(tmpdir(), 'toolkey-owner-left-')),
+      mkdtemp(join(tmpdir(), 'toolkey-owner-right-')),
+    ]);
+    try {
+      const storage = (dir: string): ToolKeyStorage =>
+        new ToolKeyStorage({
+          toolsDir: join(dir, 'tools'),
+          keyringLoader: async () => memoryKeyring(),
+          machineSecretLoader: async () => null,
+        });
+      const leftStorage = storage(leftDir);
+      const rightStorage = storage(rightDir);
+      const toolkey = await registered('toolkey', {
+        toolkeyCommand: createToolkeyCommand(leftStorage),
+      });
+      const toolkeyfile = await registered('toolkeyfile', {
+        toolkeyfileCommand: createToolkeyfileCommand(leftStorage),
+      });
+      const keyfile = join(leftDir, 'exa.key');
+      await writeFile(keyfile, 'exa-from-file\n');
+      const decoy = createMockCommandContext();
+
+      expect(await toolkey.action!(decoy, 'exa sk-left-secret')).toMatchObject({
+        messageType: 'info',
+        content: expect.stringContaining("API key set for 'Exa Search'"),
+      });
+      expect(await leftStorage.getKey('exa')).toBe('sk-left-secret');
+      expect(await rightStorage.getKey('exa')).toBeNull();
+
+      expect(await toolkeyfile.action!(decoy, `exa ${keyfile}`)).toStrictEqual({
+        type: 'message',
+        messageType: 'info',
+        content: `Keyfile set for 'Exa Search': ${keyfile}`,
+      });
+      expect(await leftStorage.getKeyfilePath('exa')).toBe(keyfile);
+      expect(await rightStorage.getKeyfilePath('exa')).toBeNull();
+
+      expect(await toolkeyfile.action!(decoy, 'exa none')).toMatchObject({
+        content: "Cleared keyfile for 'Exa Search'",
+      });
+      expect(await leftStorage.getKeyfilePath('exa')).toBeNull();
+      expect(await toolkey.action!(decoy, 'exa none')).toMatchObject({
+        content: "Cleared API key for 'Exa Search'",
+      });
+      expect(await leftStorage.getKey('exa')).toBeNull();
+    } finally {
+      await Promise.all([
+        rm(leftDir, { recursive: true, force: true }),
+        rm(rightDir, { recursive: true, force: true }),
+      ]);
     }
   });
 });

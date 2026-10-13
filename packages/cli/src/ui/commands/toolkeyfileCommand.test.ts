@@ -12,7 +12,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { toolkeyfileCommand } from './toolkeyfileCommand.js';
+import { createToolkeyfileCommand } from './toolkeyfileCommand.js';
+import { ToolKeyStorage } from '@vybestack/llxprt-code-core';
 import { createCompletionHandler } from './schema/index.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { CommandKind } from './types.js';
@@ -49,6 +50,7 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
 }));
 
 describe('toolkeyfileCommand', () => {
+  const toolkeyfileCommand = createToolkeyfileCommand(new ToolKeyStorage());
   let context: CommandContext;
   let tmpDir: string;
 
