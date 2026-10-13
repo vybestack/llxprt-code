@@ -56,11 +56,12 @@ export interface RecordingSwapCallbacks {
   getCurrentRecording: () => SessionRecordingService | null;
   getCurrentIntegration: () => RecordingIntegration | null;
   getCurrentLockHandle: () => LockHandle | null;
+  getCurrentMetadata: () => SessionMetadata | null;
   setRecording: (
-    recording: SessionRecordingService,
-    integration: RecordingIntegration,
+    recording: SessionRecordingService | null,
+    integration: RecordingIntegration | null,
     lock: LockHandle | null,
-    metadata: SessionMetadata,
+    metadata: SessionMetadata | null,
   ) => void;
 }
 
@@ -228,6 +229,7 @@ async function commitResumeBoot(
   const oldRecording = callbacks.getCurrentRecording();
   const oldIntegration = callbacks.getCurrentIntegration();
   const oldLock = callbacks.getCurrentLockHandle();
+  const oldMetadata = callbacks.getCurrentMetadata();
   const integration = new RecordingIntegration(
     result.recording,
     context.persistenceFactory?.(result.recording.getSessionId()),
@@ -256,6 +258,17 @@ async function commitResumeBoot(
     }
   } catch (error) {
     const failures: unknown[] = [];
+    // Hand the previous state back before the new one is disposed, so the
+    // callbacks never hold a disposed recording.
+    if (callbacks.getCurrentRecording() === result.recording)
+      await runRollbackStep(failures, () =>
+        callbacks.setRecording(
+          oldRecording,
+          oldIntegration,
+          oldLock,
+          oldMetadata,
+        ),
+      );
     await runRollbackStep(failures, () =>
       withRecordingFailureReport(integration.dispose()),
     );

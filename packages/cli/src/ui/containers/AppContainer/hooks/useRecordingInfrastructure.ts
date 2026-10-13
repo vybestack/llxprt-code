@@ -9,6 +9,7 @@ import type {
   RecordingIntegration,
   SessionRecordingService,
   LockHandle,
+  SessionMetadata,
 } from '@vybestack/llxprt-code-core';
 import type { RecordingSwapCallbacks } from '../../../../services/performResume.js';
 
@@ -26,14 +27,17 @@ function createRawResources(
   const recordingServiceRef = { current: initialRecordingService ?? null };
   const recordingIntegrationRef = { current: recordingIntegration ?? null };
   const lockHandleRef = { current: initialLockHandle ?? null };
+  const metadataRef: { current: SessionMetadata | null } = { current: null };
   const recordingSwapCallbacks: RecordingSwapCallbacks = {
     getCurrentRecording: () => recordingServiceRef.current,
     getCurrentIntegration: () => recordingIntegrationRef.current,
     getCurrentLockHandle: () => lockHandleRef.current,
-    setRecording: (recording, integration, lock) => {
+    getCurrentMetadata: () => metadataRef.current,
+    setRecording: (recording, integration, lock, metadata) => {
       recordingServiceRef.current = recording;
       recordingIntegrationRef.current = integration;
       lockHandleRef.current = lock;
+      metadataRef.current = metadata;
       onRecordingSwapped?.();
     },
   };

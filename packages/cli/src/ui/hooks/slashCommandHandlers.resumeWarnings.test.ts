@@ -151,6 +151,7 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
         getCurrentRecording: () => null,
         getCurrentIntegration: () => null,
         getCurrentLockHandle: () => null,
+        getCurrentMetadata: () => null,
         setRecording: (recording, _integration, lock) => {
           committed = recording;
           committedLock = lock;

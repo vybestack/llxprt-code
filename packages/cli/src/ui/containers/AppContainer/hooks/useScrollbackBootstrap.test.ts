@@ -122,6 +122,7 @@ function makeSwapCallbacks(
     getCurrentRecording: () => recording,
     getCurrentIntegration: () => null,
     getCurrentLockHandle: () => null,
+    getCurrentMetadata: () => null,
     setRecording: () => undefined,
   };
 }

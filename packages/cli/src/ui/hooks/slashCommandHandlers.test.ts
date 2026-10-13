@@ -764,6 +764,7 @@ describe('slashCommandHandlers', () => {
           getCurrentRecording: () => null,
           getCurrentIntegration: () => null,
           getCurrentLockHandle: () => null,
+          getCurrentMetadata: () => null,
           setRecording: () => {
             throw new Error('Mocked resume must not swap recordings');
           },

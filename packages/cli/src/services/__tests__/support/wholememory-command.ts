@@ -126,7 +126,10 @@ export class MemoryCommand {
         getCurrentRecording: () => this.recording,
         getCurrentIntegration: () => this.integration,
         getCurrentLockHandle: () => this.lock,
+        getCurrentMetadata: () => null,
         setRecording: (next, bridge, handle, metadata) => {
+          if (metadata === null)
+            throw new Error('Resume adoption published no session metadata');
           this.metadataDirectories = metadata.workspaceDirs.length;
           this.metadataDirectoryCharacters = metadata.workspaceDirs.reduce(
             (sum, directory) => sum + directory.length,

@@ -50,6 +50,7 @@ export async function withChatMutationFixture<T>(
           getCurrentRecording: () => recording,
           getCurrentIntegration: () => null,
           getCurrentLockHandle: () => null,
+          getCurrentMetadata: () => null,
           setRecording: () => {},
         };
         await history.attachJournal(recording);

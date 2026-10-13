@@ -351,6 +351,7 @@ function createRecordingCallbacks(
     getCurrentRecording: () => state.recording,
     getCurrentIntegration: () => state.integration,
     getCurrentLockHandle: () => state.lock,
+    getCurrentMetadata: () => state.metadata,
     setRecording: (recording, integration, lock, metadata) => {
       if (failActivation) throw new Error('resume activation rejected');
       state.recording = recording;
