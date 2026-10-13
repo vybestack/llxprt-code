@@ -21,8 +21,10 @@ import { stringOrDefault } from '../utils/stringCoalescing.js';
 import {
   processSingleFileContent,
   getSpecificMimeType,
+  type ClippedLine,
   type ProcessedFileReadResult,
 } from '../utils/fileUtils.js';
+import { formatClippedLineGuidance } from '../utils/clippedLineGuidance.js';
 import { validatePathWithinWorkspace } from '../utils/pathValidation.js';
 import type { GitLineChangeMarker } from '../utils/gitLineChanges.js';
 import { getGitLineChanges } from '../utils/gitLineChanges.js';
@@ -221,7 +223,7 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
   private buildRangeLlmContent(
     content: string,
     range: LineRangeResult,
-    shortened: boolean,
+    clippedLines: readonly ClippedLine[],
     gitWarning: string | undefined,
     markersByLine: Map<number, Exclude<GitLineChangeMarker, '░'>> | undefined,
     deletionAfterLines: Set<number> | undefined,
@@ -247,9 +249,9 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
         'Git changes legend: ░ unchanged, N new, M modified, D deletion after line.',
       );
     }
-    if (shortened) {
+    if (clippedLines.length > 0) {
       headerParts.push(
-        'NOTE: Some lines were shortened because they exceed the maximum line length.',
+        `NOTE: Some lines were shortened because they exceed the maximum line length.\n${formatClippedLineGuidance(this.params.absolute_path, 0, clippedLines)}`,
       );
     }
     headerParts.push(
@@ -315,7 +317,7 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
       return this.buildRangeLlmContent(
         content,
         result,
-        result.linesShortened === true,
+        result.clippedLines ?? [],
         gitWarning,
         markersByLine,
         deletionAfterLines,
@@ -338,6 +340,10 @@ class ReadLineRangeToolInvocation extends BaseToolInvocation<
       this.host.getTargetDir(),
       offset,
       limit,
+      undefined,
+      undefined,
+      undefined,
+      0,
     );
 
     if (result.error) {

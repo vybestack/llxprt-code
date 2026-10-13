@@ -218,6 +218,8 @@ describe('resolveTsconfigOverride', () => {
 /** Global setup loader stub for runs whose entries declare none. */
 const noGlobalSetup = async (): Promise<BunGlobalSetupModule> => ({});
 
+const OWNER_MARKER_PATTERN = /^llxprt-bun-runner-owner-[0-9a-f]{16}$/;
+
 describe('runBunTests', () => {
   it('executes every entry with exact argv, cwd, and env and reports all failure modes', async () => {
     const environment = { RUNNER_TEST: '1' };
@@ -302,7 +304,7 @@ describe('runBunTests', () => {
           '--timeout',
           '1234',
           file,
-        ] as const,
+        ],
         options: {
           cwd,
           stdin: 'inherit',
@@ -313,7 +315,7 @@ describe('runBunTests', () => {
       });
       expect(
         calls.map((call) => ({
-          command: call.command,
+          command: call.command.slice(0, -1),
           options: {
             cwd: call.options.cwd,
             stdin: call.options.stdin,
@@ -329,6 +331,10 @@ describe('runBunTests', () => {
         expectedSpawn(entries[2]!.file, entries[2]!.cwd),
         expectedSpawn(entries[2]!.file, entries[2]!.cwd),
       ]);
+      // Every attempt, retries included, ends with the same owner marker
+      // (issue #3514).
+      expect(new Set(calls.map((call) => call.command.at(-1))).size).toBe(1);
+      expect(calls.at(0)?.command.at(-1)).toMatch(OWNER_MARKER_PATTERN);
       // Every spawn runs with the run's session env (issue #3622) while the
       // runner's own environment stays untouched.
       const sessionRoots = new Set(
@@ -476,7 +482,7 @@ describe('runBunTests', () => {
 
     await runBunTests([], dependencies);
 
-    expect(calls[0]).toEqual([
+    expect(calls[0]?.slice(0, -1)).toEqual([
       '/bin/bun',
       'test',
       '--tsconfig-override',
