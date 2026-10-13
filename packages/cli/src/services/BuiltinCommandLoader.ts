@@ -54,7 +54,6 @@ import { keyfileCommand } from '../ui/commands/keyfileCommand.js';
 import { toolkeyCommand } from '../ui/commands/toolkeyCommand.js';
 import { toolkeyfileCommand } from '../ui/commands/toolkeyfileCommand.js';
 import { baseurlCommand } from '../ui/commands/baseurlCommand.js';
-import { toolformatCommand } from '../ui/commands/toolformatCommand.js';
 import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
 import { setCommand } from '../ui/commands/setCommand.js';
 import { profileCommand } from '../ui/commands/profileCommand.js';
@@ -85,6 +84,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
 
   constructor(
     private readonly modelCommand: SlashCommand,
+    private readonly toolFormatCommand: SlashCommand,
     private config: CliUiRuntime | null,
     private recordingOwner: 'agent' | 'raw' = 'raw',
   ) {
@@ -177,7 +177,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       toolkeyCommand, // @plan PLAN-20260206-TOOLKEY.P09 @requirement REQ-002
       toolkeyfileCommand, // @plan PLAN-20260206-TOOLKEY.P09 @requirement REQ-003
       baseurlCommand,
-      toolformatCommand,
+      this.toolFormatCommand,
       setupGithubCommand,
       setCommand,
       profileCommand,

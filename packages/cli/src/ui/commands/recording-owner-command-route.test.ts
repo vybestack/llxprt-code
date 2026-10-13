@@ -7,7 +7,10 @@
 import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
-import { createUnconfiguredModelCommand } from '../../__tests__/unconfigured-model-command.js';
+import {
+  createUnconfiguredModelCommand,
+  createUnconfiguredToolFormatCommand,
+} from '../../__tests__/unconfigured-model-command.js';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { chatCommand } from './chatCommand.js';
@@ -24,6 +27,7 @@ async function saveCheckpoint(mode?: 'agent' | 'raw'): Promise<string> {
     if (!path) throw new Error('No owner recording');
     const command = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
+      createUnconfiguredToolFormatCommand(),
       null,
       mode,
     )
@@ -50,6 +54,7 @@ describe('interactive /chat command registry', () => {
       const command = (
         await new BuiltinCommandLoader(
           createUnconfiguredModelCommand(),
+          createUnconfiguredToolFormatCommand(),
           null,
           'agent',
         ).loadCommands(new AbortController().signal)
@@ -61,6 +66,7 @@ describe('interactive /chat command registry', () => {
   it('keeps the raw /chat handler by default', async () => {
     const command = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
+      createUnconfiguredToolFormatCommand(),
       null,
     )
       .loadCommandsSync()

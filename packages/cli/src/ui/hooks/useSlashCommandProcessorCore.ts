@@ -6,6 +6,7 @@
 
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useCallback, useMemo, useState } from 'react';
+import { createToolFormatCommand } from '../commands/toolformatCommand.js';
 import { createModelCommand } from '../commands/modelCommand.js';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type {
@@ -14,7 +15,11 @@ import type {
   Todo,
   AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type {
+  Agent,
+  ToolFormatState,
+  ToolFormatOverrideLiteral,
+} from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import { useSessionStats } from '../contexts/SessionContext.js';
@@ -91,6 +96,8 @@ export interface UseSlashCommandProcessorCoreArgs {
 }
 
 interface SlashCommandProcessorState {
+  modelCommand: SlashCommand;
+  toolFormatCommand: SlashCommand;
   commands: readonly SlashCommand[] | undefined;
   setCommands: (commands: readonly SlashCommand[]) => void;
   reloadTrigger: number;
@@ -102,14 +109,35 @@ interface SlashCommandProcessorState {
 }
 
 function useCommandState(
-  modelCommand: SlashCommand,
+  selectModel: (model: string) => Promise<ModelChangeResult>,
+  readToolFormat: () => Promise<ToolFormatState>,
+  writeToolFormat: (
+    format: ToolFormatOverrideLiteral | null,
+  ) => Promise<ToolFormatState>,
+  ownedRecording: Pick<Agent['session'], 'recordRecordingEvent'> | null,
+  rawRecording: Pick<RecordingIntegration, 'recordProviderSwitch'> | undefined,
+  recordingOwner: 'agent' | 'raw' | undefined,
   config: CliUiRuntime | null,
-  recordingOwner?: 'agent' | 'raw',
 ): SlashCommandProcessorState {
+  const modelCommand = useRegisteredModelCommand(
+    selectModel,
+    ownedRecording,
+    rawRecording,
+    recordingOwner,
+  );
+  const toolFormatCommand = useMemo(
+    () => createToolFormatCommand(readToolFormat, writeToolFormat),
+    [readToolFormat, writeToolFormat],
+  );
   const [commands, setCommands] = useState<readonly SlashCommand[] | undefined>(
     () =>
       process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY === 'true'
-        ? loadBuiltinSlashCommands(modelCommand, config, recordingOwner)
+        ? loadBuiltinSlashCommands(
+            modelCommand,
+            toolFormatCommand,
+            config,
+            recordingOwner,
+          )
         : undefined,
   );
   const [reloadTrigger, setReloadTrigger] = useState(0);
@@ -121,6 +149,8 @@ function useCommandState(
     setReloadTrigger((v) => v + 1);
   }, []);
   return {
+    modelCommand,
+    toolFormatCommand,
     commands,
     setCommands,
     reloadTrigger,
@@ -191,22 +221,24 @@ function useRegisteredModelCommand(
 export function useSlashCommandProcessorCore(
   args: UseSlashCommandProcessorCoreArgs,
 ): SlashCommandProcessorCoreResult {
-  const runtimeApi = useRuntimeApi();
+  const api = useRuntimeApi();
   const refreshProviderAliases = useProviderAliasRefresh();
   const oauthControl = useOAuthControl();
   const session = useSessionStats();
-  const modelCommand = useRegisteredModelCommand(
-    runtimeApi.setActiveModel,
+  const state = useCommandState(
+    useMemo(() => api.setActiveModel.bind(api), [api]),
+    useMemo(() => api.getActiveToolFormatState.bind(api), [api]),
+    useMemo(() => api.setActiveToolFormatOverride.bind(api), [api]),
     args.agent?.session ?? null,
     args.recordingIntegration,
     args.recordingOwner,
+    args.config,
   );
-  const state = useCommandState(modelCommand, args.config, args.recordingOwner);
   const cancellation = useSlashCommandCancellation();
   const managers = useManagers(args.config, args.agent ?? undefined);
   const pending = usePendingHistory(args.addItem);
   const commandContext = useCommandContext({
-    runtimeApi,
+    runtimeApi: api,
     refreshProviderAliases,
     oauthControl,
     config: args.config,
@@ -235,7 +267,8 @@ export function useSlashCommandProcessorCore(
     stats: session,
   });
   useCommandReload(
-    modelCommand,
+    state.modelCommand,
+    state.toolFormatCommand,
     args.config,
     state.reloadTrigger,
     args.isConfigInitialized,
@@ -246,17 +279,13 @@ export function useSlashCommandProcessorCore(
   );
   const handleSlashCommand = useCallback(
     (
-      rawQuery: AgentRequestInput,
-      oneTimeShellAllowlist?: Set<string>,
-      overwriteConfirmed: boolean | undefined = undefined,
-      addToHistory: boolean = true,
+      ...input: Parameters<
+        SlashCommandProcessorCoreResult['handleSlashCommand']
+      >
     ): Promise<SlashCommandProcessorResult | false> =>
       processSlashCommand(
         buildHandlerDeps(args, state, pending, commandContext, cancellation),
-        rawQuery,
-        oneTimeShellAllowlist,
-        overwriteConfirmed,
-        addToHistory,
+        ...input,
       ),
     [args, commandContext, pending, state, cancellation],
   );
