@@ -7,7 +7,10 @@ import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
-import { createUnconfiguredToolFormatCommand } from '../../__tests__/unconfigured-model-command.js';
+import {
+  createUnconfiguredSetCommand,
+  createUnconfiguredToolFormatCommand,
+} from '../../__tests__/unconfigured-model-command.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { CommandService } from '../../services/CommandService.js';
@@ -28,6 +31,7 @@ describe('registered model command ownership', () => {
         }),
       ),
       createUnconfiguredToolFormatCommand(),
+      createUnconfiguredSetCommand(),
       null,
       'agent',
     );

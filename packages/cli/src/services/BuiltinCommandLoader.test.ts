@@ -58,6 +58,7 @@ import { BuiltinCommandLoader } from './BuiltinCommandLoader.js';
 import {
   createUnconfiguredModelCommand,
   createUnconfiguredToolFormatCommand,
+  createUnconfiguredSetCommand,
 } from '../__tests__/unconfigured-model-command.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { CommandKind } from '../ui/commands/types.js';
@@ -145,6 +146,7 @@ describe('BuiltinCommandLoader', () => {
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
       createUnconfiguredToolFormatCommand(),
+      createUnconfiguredSetCommand(),
       runtime,
     );
     await loader.loadCommands(new AbortController().signal);
@@ -160,6 +162,7 @@ describe('BuiltinCommandLoader', () => {
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
       createUnconfiguredToolFormatCommand(),
+      createUnconfiguredSetCommand(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -177,6 +180,7 @@ describe('BuiltinCommandLoader', () => {
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
       createUnconfiguredToolFormatCommand(),
+      createUnconfiguredSetCommand(),
       null,
     );
     await loader.loadCommands(new AbortController().signal);
@@ -190,6 +194,7 @@ describe('BuiltinCommandLoader', () => {
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
       createUnconfiguredToolFormatCommand(),
+      createUnconfiguredSetCommand(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -210,6 +215,7 @@ describe('BuiltinCommandLoader', () => {
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
       createUnconfiguredToolFormatCommand(),
+      createUnconfiguredSetCommand(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -222,6 +228,7 @@ describe('BuiltinCommandLoader', () => {
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
       createUnconfiguredToolFormatCommand(),
+      createUnconfiguredSetCommand(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -238,6 +245,7 @@ describe('BuiltinCommandLoader', () => {
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
       createUnconfiguredToolFormatCommand(),
+      createUnconfiguredSetCommand(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -255,6 +263,7 @@ describe('BuiltinCommandLoader', () => {
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
       createUnconfiguredToolFormatCommand(),
+      createUnconfiguredSetCommand(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -272,6 +281,7 @@ describe('BuiltinCommandLoader', () => {
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
       createUnconfiguredToolFormatCommand(),
+      createUnconfiguredSetCommand(),
       composeFixtureRuntime(mockConfigWithMessageBus),
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -302,6 +312,7 @@ describe('BuiltinCommandLoader profile', () => {
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
       createUnconfiguredToolFormatCommand(),
+      createUnconfiguredSetCommand(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -321,6 +332,7 @@ describe('BuiltinCommandLoader profile', () => {
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
       createUnconfiguredToolFormatCommand(),
+      createUnconfiguredSetCommand(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);

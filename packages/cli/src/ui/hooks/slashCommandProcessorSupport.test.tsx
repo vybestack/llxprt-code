@@ -14,9 +14,11 @@ import { useCommandReload } from './slashCommandProcessorSupport.js';
 import {
   createUnconfiguredModelCommand,
   createUnconfiguredToolFormatCommand,
+  createUnconfiguredSetCommand,
 } from '../../__tests__/unconfigured-model-command.js';
 const modelCommand = createUnconfiguredModelCommand();
 const toolFormatCommand = createUnconfiguredToolFormatCommand();
+const setCommand = createUnconfiguredSetCommand();
 
 const loaderState = {
   builtinCommands: [] as SlashCommand[],
@@ -26,6 +28,8 @@ const loaderState = {
 
 void vi.mock('../../services/BuiltinCommandLoader.js', () => ({
   BuiltinCommandLoader: class {
+    constructor(..._args: unknown[]) {}
+
     loadCommands(): Promise<readonly SlashCommand[]> {
       return Promise.resolve(loaderState.builtinCommands);
     }
@@ -66,8 +70,7 @@ function useCommandRegistry(config: CliUiRuntime): readonly SlashCommand[] {
     setReloadTrigger((value) => value + 1);
   }, []);
   useCommandReload(
-    modelCommand,
-    toolFormatCommand,
+    { modelCommand, toolFormatCommand, setCommand },
     config,
     reloadTrigger,
     true,

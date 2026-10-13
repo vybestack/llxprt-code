@@ -9,6 +9,8 @@ import * as fc from 'fast-check';
 import { createCompletionHandler } from '../schema/index.js';
 import type { CommandContext } from '../types.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
+import { createSetCommandForTest } from '../../../__tests__/set-command-test-owner.js';
+import { assertDefined } from '../../../__tests__/assertions.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 
 const mockRuntime = {
@@ -29,8 +31,7 @@ const mockRuntime = {
   clearActiveModelParam: vi.fn(),
 };
 
-import { setCommand } from '../setCommand.js';
-import { assertDefined } from '../../../__tests__/assertions.js';
+const setCommand = createSetCommandForTest(mockRuntime);
 
 /**
  * @plan:PLAN-20251013-AUTOCOMPLETE.P09

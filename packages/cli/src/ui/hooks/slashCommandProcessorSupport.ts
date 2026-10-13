@@ -257,9 +257,14 @@ function buildCommandContextUi(
   };
 }
 
+export interface BuiltinCommandOwners {
+  modelCommand: SlashCommand;
+  toolFormatCommand: SlashCommand;
+  setCommand: SlashCommand;
+}
+
 export function useCommandReload(
-  modelCommand: SlashCommand,
-  toolFormatCommand: SlashCommand,
+  { modelCommand, toolFormatCommand, setCommand }: BuiltinCommandOwners,
   config: CliUiRuntime | null,
   reloadTrigger: number,
   isConfigInitialized: boolean,
@@ -277,6 +282,7 @@ export function useCommandReload(
     void loadSlashCommands(
       modelCommand,
       toolFormatCommand,
+      setCommand,
       config,
       controller.signal,
       setCommands,
@@ -288,6 +294,7 @@ export function useCommandReload(
   }, [
     modelCommand,
     toolFormatCommand,
+    setCommand,
     config,
     reloadTrigger,
     isConfigInitialized,
@@ -323,12 +330,14 @@ function shouldUseBuiltinCommandsOnly(): boolean {
 export function loadBuiltinSlashCommands(
   modelCommand: SlashCommand,
   toolFormatCommand: SlashCommand,
+  setCommand: SlashCommand,
   config: CliUiRuntime | null,
   recordingOwner?: 'agent' | 'raw',
 ): readonly SlashCommand[] {
   return new BuiltinCommandLoader(
     modelCommand,
     toolFormatCommand,
+    setCommand,
     config,
     recordingOwner,
   ).loadCommandsSync();
@@ -337,6 +346,7 @@ export function loadBuiltinSlashCommands(
 async function loadSlashCommands(
   modelCommand: SlashCommand,
   toolFormatCommand: SlashCommand,
+  setCommand: SlashCommand,
   config: CliUiRuntime | null,
   signal: AbortSignal,
   setCommands: (commands: readonly SlashCommand[]) => void,
@@ -347,6 +357,7 @@ async function loadSlashCommands(
       new BuiltinCommandLoader(
         modelCommand,
         toolFormatCommand,
+        setCommand,
         config,
         recordingOwner,
       ),

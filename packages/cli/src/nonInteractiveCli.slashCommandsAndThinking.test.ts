@@ -23,7 +23,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import {} from '@vybestack/llxprt-code-providers/runtime.js';
 import { beginCliRuntimeRegistration } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
-import { setCommand } from './ui/commands/setCommand.js';
+import { createAgentSetCommand } from './__tests__/set-command-test-owner.js';
 import { buildCliStyleConfig } from '../../agents/src/api/__tests__/helpers/buildCliStyleConfig.js';
 import {
   type Agent,
@@ -403,7 +403,6 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       { runtimeId: 'headless-foreign-agent' },
     );
     foreignRegistration.expectManager(foreignManager);
-    mockGetCommands.mockReturnValue([setCommand]);
     const built = await buildCliStyleConfig('plain-text.jsonl');
     const agent = await original.fromConfig({
       settingsService: built.settingsService,
@@ -415,6 +414,7 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       policyOwner: built.policyOwner,
       sessionId: built.config.getSessionId(),
     });
+    mockGetCommands.mockReturnValue([createAgentSetCommand(agent)]);
     const { fromConfig } = await import('@vybestack/llxprt-code-agents');
     try {
       await expect(

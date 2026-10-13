@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
-import { setCommand } from '../setCommand.js';
+import { createSetCommandForTest } from '../../../__tests__/set-command-test-owner.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import type { CommandContext } from '../types.js';
 
@@ -16,6 +16,7 @@ const mockRuntime = {
   setActiveModelParam: vi.fn(),
   clearActiveModelParam: vi.fn(),
 };
+const setCommand = createSetCommandForTest(mockRuntime);
 
 describe('setCommand action mutation coverage', () => {
   let context: CommandContext;

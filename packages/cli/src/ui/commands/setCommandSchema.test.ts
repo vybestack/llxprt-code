@@ -18,8 +18,19 @@ import { createMockCommandContext } from '../../__tests__/mockCommandContext.js'
 // settings being removed, renamed back to snake_case, or recategorized into
 // an autocomplete-excluded category.
 describe('/set timeout settings autocomplete (issue #1050)', () => {
-  const handler = createCompletionHandler(buildSetSchema());
   let ctx: ReturnType<typeof createMockCommandContext>;
+  const handler = createCompletionHandler(
+    buildSetSchema({
+      getEphemeralSettings: () => ctx.runtimeApi.getEphemeralSettings(),
+      setEphemeralSetting: (key, value) =>
+        ctx.runtimeApi.setEphemeralSetting(key, value),
+      getActiveModelParams: () => ctx.runtimeApi.getActiveModelParams(),
+      setActiveModelParam: (key, value) =>
+        ctx.runtimeApi.setActiveModelParam(key, value),
+      clearActiveModelParam: (key) => ctx.runtimeApi.clearActiveModelParam(key),
+      isFuzzyFilteringEnabled: () => true,
+    }),
+  );
 
   beforeEach(() => {
     ctx = createMockCommandContext();
