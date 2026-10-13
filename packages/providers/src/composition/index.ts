@@ -114,3 +114,9 @@ export type { IFileSystem } from './IFileSystem.js';
 export { ContentGeneratorRole } from './types.js';
 
 export { extractProviderBaseUrl } from '../baseUrlResolver.js';
+
+export { createOwnerOAuthManager } from './owner-oauth-construction.js';
+export { createSessionAuthPolicyReader } from '../auth/session-auth-policy.js';
+export { createOAuthProfileReads } from '../auth/oauth-profile-reads.js';
+export { createOwnerAuthCacheInvalidator } from '../auth/owner-cache-invalidation.js';
+export { createOwnedTokenStoreClose } from '../auth/proxy/credential-store-factory.js';

@@ -46,7 +46,7 @@ import type {
 } from '@vybestack/llxprt-code-auth';
 import { ProactiveRenewalManager } from './proactive-renewal-manager.js';
 import { OAuthBucketManager } from './OAuthBucketManager.js';
-import { createProfileManager } from './profile-utils.js';
+import { createOAuthProfileReads } from './oauth-profile-reads.js';
 import { OAuthForegroundLifetime } from './oauth-foreground-lifetime.js';
 import { closeOwnedTokenStore } from './proxy/credential-store-factory.js';
 import { TokenAccessCoordinator } from './token-access-coordinator.js';
@@ -201,14 +201,9 @@ export class OAuthManager implements BucketFailoverOAuthManagerLike {
     private readonly tokenStoreOwnership: 'owned' | 'borrowed' = 'borrowed',
   ) {
     this.parentInteractiveAuth = runtimeDeps?.requestInteractiveAuth;
-    const directory = runtimeDeps?.config?.profileDirectory;
-    let profiles: ReturnType<typeof createProfileManager> | undefined;
-    this.profileReads = runtimeDeps?.profileReads ?? {
-      loadProfile: async (name) => {
-        profiles ??= createProfileManager(directory);
-        return (await profiles).loadProfile(name);
-      },
-    };
+    this.profileReads =
+      runtimeDeps?.profileReads ??
+      createOAuthProfileReads(runtimeDeps?.config?.profileDirectory);
     this.providerRegistry = new ProviderRegistry(settings);
     this.tokenStore = tokenStore;
     this.settings = settings;
