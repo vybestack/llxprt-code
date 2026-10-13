@@ -108,7 +108,7 @@ describe('performResume rollback after the new recording was published', () => {
   });
 
   afterEach(async () => {
-    history.dispose();
+    await history.dispose();
     await previous.integration?.dispose();
     await previous.recording?.dispose();
     await previous.lock?.release();

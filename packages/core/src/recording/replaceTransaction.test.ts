@@ -68,7 +68,7 @@ async function writeJournal(
   for (const op of ops) store.apply(op);
   await store.waitForDurable();
   const file = recorder.getFilePath();
-  store.dispose();
+  await store.dispose();
   await recorder.dispose();
   if (file === null) throw new Error('journal was not materialized');
   const lines = fs
@@ -328,7 +328,7 @@ describe('replace transactions', () => {
       await store.waitForDurable();
       expect(store.materialize().map(textOf)).toStrictEqual(NEW);
       expect(overlayRows(store)).toStrictEqual(NEW);
-      store.dispose();
+      await store.dispose();
       await recorder.dispose();
     } finally {
       fs.rmSync(written.root, { recursive: true, force: true });

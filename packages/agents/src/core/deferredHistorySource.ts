@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { randomUUID } from 'node:crypto';
+import { failureAfterDisposal } from './historyDisposalFailure.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -28,7 +29,7 @@ export async function clearClientHistoryForDisposal(
   if (streamed) {
     const history = chat.getHistoryService();
     await history.waitForOwnershipSettlement();
-    history.dispose();
+    await history.dispose();
   }
 }
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -98,8 +99,7 @@ export async function prepareDeferredHistorySource(
     );
     return { journal, release };
   } catch (error) {
-    journal.dispose();
-    throw error;
+    throw await failureAfterDisposal(journal, error);
   }
 }
 

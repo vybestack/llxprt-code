@@ -205,7 +205,7 @@ async function managementCase3(
         },
       );
     } finally {
-      newService.dispose();
+      await newService.dispose();
     }
   });
 }

@@ -116,7 +116,7 @@ for (const count of [512, 8192])
           try {
             expect(await fold.readRow(0)).toStrictEqual(expected[0]);
             await store.waitForDurable();
-            store.dispose();
+            await store.dispose();
             expect(fold.length).toBe(expected.length);
             expect(fold.metrics().residentBufferBytes).toBeLessThanOrEqual(
               64 * 1024,
@@ -129,7 +129,7 @@ for (const count of [512, 8192])
         } finally {
           trap.mockRestore();
           HistoryJournalStore.prototype.materialize = materialize;
-          store.dispose();
+          await store.dispose();
         }
       });
     });
@@ -150,7 +150,7 @@ describe('pending compression', () => {
         expect(await fold.readRow(0)).toStrictEqual(summary);
       } finally {
         await fold.close();
-        store.dispose();
+        await store.dispose();
       }
     });
   });

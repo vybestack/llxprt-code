@@ -92,7 +92,7 @@ describe('borrowed source pending selection', () => {
       expect(setup.source.count).toBe(3);
     } finally {
       await setup.source.close();
-      setup.history.dispose();
+      await setup.history.dispose();
     }
   });
 
@@ -110,7 +110,7 @@ describe('borrowed source pending selection', () => {
       ).rejects.toThrow('Provider request snapshot is closed');
     } finally {
       await setup.source.close();
-      setup.history.dispose();
+      await setup.history.dispose();
     }
   });
 
@@ -127,7 +127,7 @@ describe('borrowed source pending selection', () => {
       );
     } finally {
       await setup.source.close();
-      setup.history.dispose();
+      await setup.history.dispose();
     }
   });
 });

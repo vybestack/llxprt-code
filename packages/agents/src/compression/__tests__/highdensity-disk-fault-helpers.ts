@@ -50,7 +50,7 @@ export async function withFaultRollback<T>(
   try {
     return await action(history, recorder);
   } finally {
-    history.dispose();
+    await history.dispose();
     await recorder.dispose();
     rmSync(root, { recursive: true, force: true });
   }

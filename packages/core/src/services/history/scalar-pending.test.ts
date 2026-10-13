@@ -103,7 +103,7 @@ async function checkPendingScalarOwners(size: number): Promise<number> {
         return journal.getLength();
       } finally {
         releaseWriter();
-        journal.dispose();
+        await journal.dispose();
         expectNoScalarOwners(owners);
       }
     },

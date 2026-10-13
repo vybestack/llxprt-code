@@ -51,7 +51,7 @@ describe('clone sanitization and independent objects', () => {
         text: 'private text',
       });
     } finally {
-      service.dispose();
+      await service.dispose();
     }
   });
 });
@@ -80,7 +80,7 @@ describe('chronology projection parity', () => {
       });
       expect(JSON.stringify(trace)).not.toContain('private');
     } finally {
-      service.dispose();
+      await service.dispose();
     }
   });
 });

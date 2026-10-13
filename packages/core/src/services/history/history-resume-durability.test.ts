@@ -68,7 +68,7 @@ const expectedReopened = {
 describe('durable resume projection', () => {
   beforeEach(setupDurability);
   afterEach(async () => {
-    history.dispose();
+    await history.dispose();
     await history.waitForOwnershipSettlement();
     await boot.close();
     await recording.dispose();
@@ -215,7 +215,7 @@ async function preserveLiveMutations(): Promise<void> {
       expect(await rows(boot.filePath)).toStrictEqual([response('summary')]);
       const independent = new HistoryJournalStore(recording);
       expect(independent.materialize()).toStrictEqual([response('summary')]);
-      independent.dispose();
+      await independent.dispose();
     },
   );
 }
@@ -235,7 +235,7 @@ async function reopenFromCwd(cwd?: string): Promise<string> {
   const file = pathOf(history);
   const resultFile = join(project, 'reopen-result.json');
   await boot.close();
-  history.dispose();
+  await history.dispose();
   await history.waitForOwnershipSettlement();
   await recording.dispose();
   await store.close();
@@ -278,7 +278,7 @@ async function releaseTemporaryOwner(): Promise<void> {
       expect((await rows(pathOf(history)))[0].blocks[0]).toStrictEqual(
         reference,
       );
-      history.dispose();
+      await history.dispose();
       await history.waitForOwnershipSettlement();
       expect(await store.hasReservations(reference.contentId)).toBe(false);
       expect(
@@ -346,7 +346,7 @@ async function persistProjection(): Promise<void> {
   ]);
   const independent = new HistoryJournalStore(recording);
   expect(independent.materialize()).toStrictEqual(reopened);
-  independent.dispose();
+  await independent.dispose();
 }
 
 async function detachAndCopy(): Promise<void> {
@@ -370,7 +370,7 @@ async function detachAndCopy(): Promise<void> {
   );
   await history.attachJournal(recording, true);
   const file = pathOf(history);
-  history.dispose();
+  await history.dispose();
   await history.waitForOwnershipSettlement();
   expect(await rows(checkpoint)).toStrictEqual(await rows(file));
   expect((await rows(file))[2].metadata?.responsesStored).toBe(true);
@@ -385,7 +385,7 @@ async function protectPermanentMedia(): Promise<void> {
       if (reference.type !== 'media' || reference.encoding !== 'reference')
         throw new Error('Expected reference');
       await boot.close();
-      history.dispose();
+      await history.dispose();
       await history.waitForOwnershipSettlement();
       await recording.dispose();
       await store.close();

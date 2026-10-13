@@ -79,7 +79,7 @@ describe('journal persistence ownership', () => {
   });
   afterEach(async () => {
     await integration.dispose();
-    history.dispose();
+    await history.dispose();
     await old.dispose();
     await resumed?.recording.dispose();
     await resumed?.lockHandle.release();
@@ -268,7 +268,7 @@ async function verifyWaitForCommitIncludesAPrecedingAsynchronousSummaryAndSubseq
 }
 
 async function verifyDoesNotDisposeARecorderOwnedByItsCaller(): Promise<void> {
-  history.dispose();
+  await history.dispose();
   await old.commit('content', { content: row('caller still owns recorder') });
   const reopened = await reopen(old.getFilePath()!);
   expect(reopened[reopened.length - 1].blocks).toStrictEqual(

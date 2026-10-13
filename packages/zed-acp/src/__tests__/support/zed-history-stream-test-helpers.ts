@@ -31,7 +31,7 @@ export function replayClient(
   return {
     streamHistory: (signal) => history.streamRawHistory(signal),
     dispose: async () => {
-      history.dispose();
+      await history.dispose();
     },
   };
 }

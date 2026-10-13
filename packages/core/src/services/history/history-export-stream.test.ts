@@ -133,7 +133,7 @@ describe('history JSON export lifecycle', () => {
       });
       expect(output).toBe('[]');
     } finally {
-      empty.dispose();
+      await empty.dispose();
     }
     await withBatchFixture(async ({ history, recorder, owners }) => {
       const row = exportSummaryRow(0, 9 * 1024 * 1024);

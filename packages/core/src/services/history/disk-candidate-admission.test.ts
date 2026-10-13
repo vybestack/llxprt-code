@@ -85,7 +85,7 @@ async function compensationPressure(size: number): Promise<{
     return { pending, bytes };
   } finally {
     release?.();
-    history.dispose();
+    await history.dispose();
     await recorder.dispose();
     rmSync(root, { recursive: true, force: true });
   }

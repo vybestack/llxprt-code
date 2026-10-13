@@ -50,14 +50,17 @@ describe('closed history stream access and durable cleanup', () => {
       queueMicrotask(() => {
         microtaskRan = true;
       });
-      history.dispose();
+      // The history closes to readers in the call itself; only the durable
+      // cleanup it returns is asynchronous.
+      const disposal = history.dispose();
       expect(microtaskRan).toBe(false);
       expect(observeHistorySynchronouslyForTest(history)).toHaveLength(512);
       await expectClosed(cold);
       await expectClosed(history.streamRawHistory());
+      await disposal;
       await waitForRemoval(directory);
     } finally {
-      history.dispose();
+      await history.dispose();
       if (directory !== undefined)
         rmSync(directory, { recursive: true, force: true });
     }
@@ -85,7 +88,7 @@ describe('closed history stream access and durable cleanup', () => {
       for await (const row of history.streamRawHistory())
         expect(row.metadata?.chronology?.seq).toBe(++count);
       expect(count).toBe(512);
-      history.dispose();
+      await history.dispose();
       expect(observeHistorySynchronouslyForTest(history)).toHaveLength(512);
       await expectClosed(history.streamRawHistory());
       expect(counters.snapshot().rowsDecoded).toBe(512);
@@ -96,7 +99,7 @@ describe('closed history stream access and durable cleanup', () => {
       if (file === null) throw new Error('Missing injected durable journal');
       expect(existsSync(file)).toBe(true);
     } finally {
-      history.dispose();
+      await history.dispose();
       await recorder.dispose();
       rmSync(directory, { recursive: true, force: true });
     }

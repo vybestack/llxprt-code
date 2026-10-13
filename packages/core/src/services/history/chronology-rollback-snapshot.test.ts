@@ -58,7 +58,7 @@ describe('rollback snapshot lifetime and pending membership', () => {
         await store.waitForDurable();
         store.apply({ kind: 'rewind', itemsRemoved: before.length });
         await store.waitForDurable();
-        store.dispose();
+        await store.dispose();
         expect(snapshot.length).toBe(before.length);
         expect([...snapshot].map((row) => row.blocks)).toStrictEqual(
           before.map((row) => row.blocks),
@@ -100,7 +100,7 @@ describe('rollback snapshot lifetime and pending membership', () => {
       expectPhaseEmpty(ownership);
       expectPhaseEmpty(transaction);
       recordPhase('original-callback-after-ack', ownership, transaction);
-      store.dispose();
+      await store.dispose();
     }, true);
   });
 });

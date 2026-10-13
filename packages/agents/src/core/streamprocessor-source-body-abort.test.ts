@@ -56,7 +56,7 @@ describe('actual StreamProcessor abort during progressive BODY', () => {
       const stream = await started.catch(() => undefined);
       await stream?.return(undefined);
       observer.restore();
-      setup.history.dispose();
+      await setup.history.dispose();
       await http.server.stop(true);
       await setup.config.dispose();
     }

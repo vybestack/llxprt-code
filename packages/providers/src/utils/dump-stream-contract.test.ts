@@ -236,7 +236,7 @@ async function expectScale(
       await snapshot.close();
     }
   } finally {
-    history.dispose();
+    await history.dispose();
   }
 }
 async function expectVaried(
@@ -274,7 +274,7 @@ async function expectVaried(
       await snapshot.close();
     }
   } finally {
-    history.dispose();
+    await history.dispose();
   }
 }
 describe('bounded dump provider contract', () => {
@@ -317,7 +317,7 @@ describe('bounded dump provider contract', () => {
         await snapshot.close();
       }
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
   it('does not pull ahead of a paused writer and returns the source on abandonment', async () => {

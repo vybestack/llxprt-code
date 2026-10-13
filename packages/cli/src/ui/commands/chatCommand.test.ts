@@ -142,7 +142,7 @@ async function chatCommandCase0(): Promise<void> {
 
 async function chatCommandCase1(): Promise<void> {
   try {
-    mutationHistory?.dispose();
+    await mutationHistory?.dispose();
     mutationHistory = undefined;
     if (typeof recording !== 'undefined') await recording.dispose();
   } finally {

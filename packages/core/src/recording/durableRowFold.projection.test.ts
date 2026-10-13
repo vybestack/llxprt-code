@@ -225,7 +225,7 @@ async function checkParity(
     expect(fs.readdirSync(scratchRoot)).toStrictEqual([]);
     return expected.length;
   } finally {
-    store.dispose();
+    await store.dispose();
   }
 }
 
@@ -276,7 +276,7 @@ describe('projection ownership', () => {
         expect(await fold.readRow(0)).toStrictEqual({ ...expected, metadata });
       } finally {
         await fold.close();
-        store.dispose();
+        await store.dispose();
       }
       expect(fs.readdirSync(scratchRoot)).toStrictEqual([]);
     });
@@ -324,7 +324,7 @@ describe('projection promotion and failure cleanup', () => {
         expect(await fold.readRow(0)).toStrictEqual(expected[0]);
       } finally {
         await fold.close();
-        store.dispose();
+        await store.dispose();
       }
       expect(fs.readdirSync(scratchRoot)).toStrictEqual([]);
     });
@@ -423,7 +423,7 @@ describe('resume boundary edge cases', () => {
           scratchRoot,
         );
       } finally {
-        store.dispose();
+        await store.dispose();
       }
       expect(fs.readdirSync(scratchRoot)).toStrictEqual([]);
     });

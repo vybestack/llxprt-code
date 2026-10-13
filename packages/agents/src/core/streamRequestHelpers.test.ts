@@ -249,7 +249,7 @@ describe('request cursor cancellation', () => {
         ),
       ).rejects.toThrow('request cancelled');
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });
@@ -282,7 +282,7 @@ describe('request snapshot history override', () => {
         expect(result.contents[1].metadata?.id).toBeString();
         expect(result.contents[1].metadata?.turnId).toBeString();
       } finally {
-        history.dispose();
+        await history.dispose();
       }
     });
   });

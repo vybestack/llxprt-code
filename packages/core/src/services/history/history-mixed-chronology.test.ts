@@ -63,7 +63,7 @@ describe('mixed legacy chronology', () => {
     );
   });
   afterEach(async () => {
-    history.dispose();
+    await history.dispose();
     await boot.close();
     await recording.dispose();
     await rm(directory, { recursive: true, force: true });
@@ -104,6 +104,13 @@ async function verifyAllocatesLegacyMarkersAboveLaterMarkedRowsAndPreservesThemO
 }
 
 async function verifyRetainsPartiallyCommittedMarkersWhenRetryingAFailedBindingPublication(): Promise<void> {
+  // A resume records a binding only for rows it changes, so a second legacy
+  // row is what lets one binding commit before the next one fails.
+  await boot.close();
+  const later = await recording.commit('content', {
+    content: { speaker: 'ai', blocks: [{ type: 'text', text: 'later' }] },
+  });
+  boot = await ResumeCursorBoot.open(file, later.seq, later.byteOffset);
   const commit = recording.commit.bind(recording);
   let bindings = 0;
   const fault = spyOn(recording, 'commit').mockImplementation(
@@ -125,7 +132,7 @@ async function verifyRetainsPartiallyCommittedMarkersWhenRetryingAFailedBindingP
   });
   expect(
     (await reopened()).map((row) => row.metadata?.chronology?.seq),
-  ).toStrictEqual([2, 1]);
+  ).toStrictEqual([2, 1, undefined]);
   boot = await ResumeCursorBoot.open(file, 100, (await stat(file)).size);
   await history.adoptResumeBoot(recording, boot);
   expect(
@@ -136,5 +143,6 @@ async function verifyRetainsPartiallyCommittedMarkersWhenRetryingAFailedBindingP
   ).toStrictEqual([
     [2, [{ type: 'text', text: 'legacy' }]],
     [1, [{ type: 'text', text: 'marked' }]],
+    [3, [{ type: 'text', text: 'later' }]],
   ]);
 }

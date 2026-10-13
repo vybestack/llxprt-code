@@ -420,22 +420,23 @@ export class HistoryService extends HistoryServiceReads {
   }
 
   /**
-   * Release all listeners and internal buffers to allow GC
+   * Release all listeners and internal buffers to allow GC. Resolves once the
+   * journal's recorder is disposed and its scratch directory is removed, and
+   * rejects with the journal's disposal failure; callers must await it.
    */
-  dispose(): void {
-    this.runSynchronousHistoryMutation(() => this.disposeInternal());
+  dispose(): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      this.runSynchronousHistoryMutation(() => {
+        this.disposeInternal().then(resolve, reject);
+      });
+    });
   }
 
-  private disposeInternal(): void {
+  private async disposeInternal(): Promise<void> {
     this.invalidatePendingSyncs();
+    this.removeAllListeners();
 
-    try {
-      this.removeAllListeners();
-    } catch {
-      // Best-effort; listener removal is not critical
-    }
-
-    this.journal.dispose();
+    const journalDisposal = this.journal.dispose();
     this.tokenTickets.close();
     this.totalTokens = 0;
     this.baseTokenOffset = 0;
@@ -449,6 +450,7 @@ export class HistoryService extends HistoryServiceReads {
     }
     // Chronology counters are intentionally NOT reset: seq must never be reused
     // (NG8) so that items added after dispose() never collide with earlier ones.
+    await journalDisposal;
   }
 
   /**

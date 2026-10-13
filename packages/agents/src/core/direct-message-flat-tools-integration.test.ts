@@ -110,7 +110,7 @@ describe('direct-message flat tools and replayable contents', () => {
       expect(text).toBe('empty:1:1');
       expect(response.finishReason).toBe('stop');
     } finally {
-      history.dispose();
+      await history.dispose();
       await config.dispose();
     }
   });

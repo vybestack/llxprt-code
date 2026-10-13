@@ -413,7 +413,7 @@ async function run(
     );
   } finally {
     resetConversationFileWriterForTesting();
-    setup.history.dispose();
+    await setup.history.dispose();
     await http.server.stop(true);
     await shutdownTelemetry(telemetry);
     await hooks?.dispose();

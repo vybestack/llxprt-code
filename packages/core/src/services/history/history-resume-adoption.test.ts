@@ -54,7 +54,7 @@ describe('history resume adoption', () => {
     await service.waitForCommit();
   });
   afterEach(async () => {
-    service.dispose();
+    await service.dispose();
     await resumed?.recording.dispose();
     await rm(root, { recursive: true, force: true });
   });
@@ -202,14 +202,25 @@ async function verifyDefersDisposalUntilAdoptionHasCommitted(): Promise<void> {
   );
   await entered.promise;
   let failure: unknown;
+  let disposed = false;
+  const disposal = service.dispose().then(
+    () => {
+      disposed = true;
+    },
+    (error: unknown) => {
+      disposed = true;
+      failure = error;
+    },
+  );
   try {
-    service.dispose();
-  } catch (error) {
-    failure = error;
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(disposed).toBe(false);
   } finally {
     release.resolve();
   }
   await adoption;
+  await disposal;
+  expect(disposed).toBe(true);
   await service.waitForOwnershipSettlement();
   expect(failure).toBeUndefined();
   expect(service.getTotalTokens()).toBe(0);

@@ -35,7 +35,7 @@ describe('history merge accepted source rows', () => {
               expect(await rowsOf(target)).toStrictEqual(await rowsOf(oracle));
               expect(target.getTotalTokens()).toBe(oracle.getTotalTokens());
             } finally {
-              oracle.dispose();
+              await oracle.dispose();
             }
           },
           0,

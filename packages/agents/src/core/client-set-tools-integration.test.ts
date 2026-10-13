@@ -158,7 +158,7 @@ function makeHarness(names: string[], disabled: string[] = []) {
     todos,
     requests,
     async close(): Promise<void> {
-      history.dispose();
+      await history.dispose();
       await settingsOwner.dispose();
       await config.dispose();
     },

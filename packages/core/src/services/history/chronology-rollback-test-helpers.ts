@@ -156,7 +156,7 @@ export async function withRollbackFixture<T>(
     return await action(history, recorder, releaseWriter);
   } finally {
     releaseWriter();
-    history.dispose();
+    await history.dispose();
     await recorder.dispose();
     rmSync(root, { recursive: true, force: true });
   }

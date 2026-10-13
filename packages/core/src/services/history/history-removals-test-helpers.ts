@@ -28,7 +28,7 @@ export async function withRemovalFixture(
         await action(fixture, store);
       } finally {
         fixture.releaseWriter();
-        fixture.history.dispose();
+        await fixture.history.dispose();
         await fixture.history.waitForOwnershipSettlement();
         expect(fixture.owners.snapshot().liveRows).toBe(0);
         expect(fixture.owners.snapshot().liveSerializedBytes).toBe(0);

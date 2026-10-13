@@ -141,7 +141,7 @@ async function runCensusOnce(retention: RowRetention, tail: DiskTextTail) {
     input.observer.restore();
     input.restoreOwners();
     input.restoreLogging();
-    input.setup.history.dispose();
+    await input.setup.history.dispose();
     await input.http.server.stop(true);
     await input.setup.config.dispose();
     rmSync(input.root, { recursive: true, force: true });

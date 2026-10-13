@@ -10,7 +10,7 @@ import {
 import { forbidHistoryMaterializationForTest } from './history-materialization-test-guard.js';
 
 describe('independent curated test observations', () => {
-  it('samples detached pending values without yielding or moving the compression event point', () => {
+  it('samples detached pending values without yielding or moving the compression event point', async () => {
     const history = new HistoryService();
     const original = suffixRow(0);
     let yielded = false;
@@ -37,7 +37,7 @@ describe('independent curated test observations', () => {
       expect(curatedHistoryForTest(history)).toHaveLength(2);
       expect(yielded).toBe(false);
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 
@@ -105,11 +105,11 @@ describe('public curated observation boundary', () => {
       }
       expect(curatedHistoryForTest(history)).toStrictEqual([original]);
     } finally {
-      service.dispose();
+      await service.dispose();
     }
   });
 
-  it('rejects an imitation journal at the eager guard boundary', () => {
+  it('rejects an imitation journal at the eager guard boundary', async () => {
     const history = {
       async *streamRawHistory(): AsyncIterable<IContent> {
         yield suffixRow(0);

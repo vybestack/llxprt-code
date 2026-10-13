@@ -46,7 +46,7 @@ function harness(state: RecorderState, seedRows: boolean): Harness {
         const store = new HistoryJournalStore(recorder);
         store.apply({ kind: 'content', content: row('seed') });
         await store.waitForDurable();
-        store.dispose();
+        await store.dispose();
       }
       if (state === 'disposed') await recorder.dispose();
       if (state === 'inactive') {
@@ -86,7 +86,7 @@ describe('journal admission rejects a recorder that cannot accept records', () =
           expect(store.getLength()).toBe(seeded ? 1 : 0);
           await store.waitForDurable();
         } finally {
-          store.dispose();
+          await store.dispose();
           await h.close();
         }
       });
@@ -99,7 +99,7 @@ describe('journal admission rejects a recorder that cannot accept records', () =
           expect(() => service.add(row('x'))).toThrow(h.expected);
           expect(service.length()).toBe(seeded ? 1 : 0);
         } finally {
-          service.dispose();
+          await service.dispose();
           await h.close();
         }
       });
@@ -114,7 +114,7 @@ describe('journal admission rejects a recorder that cannot accept records', () =
           );
           expect(service.length()).toBe(seeded ? 1 : 0);
         } finally {
-          service.dispose();
+          await service.dispose();
           await h.close();
         }
       });

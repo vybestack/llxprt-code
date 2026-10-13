@@ -20,7 +20,7 @@ async function withSource(
   try {
     await action(source);
   } finally {
-    source.dispose();
+    await source.dispose();
   }
 }
 

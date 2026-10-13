@@ -117,7 +117,7 @@ export async function ladderAttempt(
     errorName: failureName(error),
     stages,
   };
-  setup.history.dispose();
+  await setup.history.dispose();
   await http.server.stop(true);
   await setup.config.dispose();
   return result;

@@ -77,7 +77,7 @@ export async function withDetachedFixture<T>(
     return await action({ history, recorder, owners, releaseWriter });
   } finally {
     releaseWriter();
-    history.dispose();
+    await history.dispose();
     await recorder.dispose();
     rmSync(root, { recursive: true, force: true });
   }

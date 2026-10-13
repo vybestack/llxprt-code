@@ -94,7 +94,7 @@ export async function withFallbackFixture(
     const before = await digestRows(history.streamRawHistory());
     await action({ history, recorder, reads, owners, before });
   } finally {
-    history.dispose();
+    await history.dispose();
     await recorder.dispose();
     rmSync(root, { recursive: true, force: true });
   }

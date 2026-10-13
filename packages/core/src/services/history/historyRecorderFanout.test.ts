@@ -59,7 +59,7 @@ describe('history recorder fan-out', () => {
   });
 
   afterEach(async () => {
-    for (const history of histories.splice(0)) history.dispose();
+    for (const history of histories.splice(0)) await history.dispose();
     for (const recorder of recorders.splice(0)) await recorder.dispose();
     await rm(dir, { recursive: true, force: true });
   });

@@ -21,7 +21,7 @@ describe('test-only history materialization guard', () => {
     });
   });
 
-  it('keeps same-turn detached values when a conditional guard permits reads and restores after rejection', () => {
+  it('keeps same-turn detached values when a conditional guard permits reads and restores after rejection', async () => {
     const history = new HistoryService();
     const row = suffixRow(0);
     let forbidden = false;
@@ -42,7 +42,7 @@ describe('test-only history materialization guard', () => {
       restore();
       expect(observeHistorySynchronouslyForTest(history)[0]).toStrictEqual(row);
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });

@@ -123,7 +123,7 @@ export async function withPendingFixture<T>(
     });
   } finally {
     writer.resolve();
-    history.dispose();
+    await history.dispose();
     await recorder.dispose();
     rmSync(root, { recursive: true, force: true });
   }

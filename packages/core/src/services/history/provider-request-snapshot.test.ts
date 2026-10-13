@@ -138,7 +138,7 @@ describe('normalized request snapshot isolation', () => {
             blocks: [{ type: 'text', text: 'later' }],
           });
           await history.waitForCommit();
-          history.dispose();
+          await history.dispose();
           expect(await digest(snapshot.openReader())).toBe(expected);
           expect(snapshot.count).toBe(513);
         } finally {

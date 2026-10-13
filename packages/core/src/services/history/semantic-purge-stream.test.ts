@@ -51,7 +51,7 @@ class NoArrayHistory extends HistoryService {
 }
 
 describe('journal materialization guard', () => {
-  it('NoArrayHistory rejects journal eager materialization', () => {
+  it('NoArrayHistory rejects journal eager materialization', async () => {
     const history = new NoArrayHistory();
 
     try {
@@ -59,7 +59,7 @@ describe('journal materialization guard', () => {
         'whole-history materializer seam',
       );
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });

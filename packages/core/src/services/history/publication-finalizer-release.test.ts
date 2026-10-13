@@ -137,7 +137,7 @@ for (const [size, bytes] of [
         } finally {
           finish.resolve();
           await held.completed;
-          history.dispose();
+          await history.dispose();
         }
       });
     }, 180_000);

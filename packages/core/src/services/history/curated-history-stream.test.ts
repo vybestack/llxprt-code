@@ -222,7 +222,7 @@ describe('curated reader errors', () => {
       await expect(stream.next()).rejects.toThrow('read failed');
       expect(active).toBe(0);
     } finally {
-      service.dispose();
+      await service.dispose();
     }
   });
 });

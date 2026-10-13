@@ -80,7 +80,7 @@ describe('independent provider cursor membership', () => {
     } finally {
       await first.return();
       await later.return();
-      history.dispose();
+      await history.dispose();
     }
   });
 });

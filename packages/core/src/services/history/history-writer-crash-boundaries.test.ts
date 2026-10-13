@@ -70,7 +70,7 @@ async function applyOps(
     for (const op of ops) store.apply(op);
     await store.waitForDurable();
   } finally {
-    store.dispose();
+    await store.dispose();
   }
 }
 

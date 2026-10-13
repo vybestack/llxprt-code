@@ -62,7 +62,7 @@ describe('held production dump snapshots release caller identities', () => {
       try {
         await fixture.history.waitForTokenUpdates();
         await fixture.history.waitForCommit();
-        fixture.history.dispose();
+        await fixture.history.dispose();
         await settle(fixture.probes);
         expect(
           fixture.probes.filter((probe) => probe.deref() !== undefined),
@@ -86,7 +86,7 @@ describe('held production dump snapshots release caller identities', () => {
         expect(fixture.ownership.snapshot().liveRows).toBe(0);
       } finally {
         await snapshot.close();
-        fixture.history.dispose();
+        await fixture.history.dispose();
       }
     }, 120_000);
   }

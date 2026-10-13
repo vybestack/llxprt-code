@@ -145,7 +145,7 @@ describe('publication ordinal lifetime and addressing', () => {
           journal.withReadRows((cursor) => [...cursor.rows()]),
         ).toStrictEqual([suffixRow(0)]);
       } finally {
-        journal.dispose();
+        await journal.dispose();
       }
     });
   });
@@ -180,7 +180,7 @@ describe('publication ordinal admission and foreign writes', () => {
           journal.withReadRows((cursor) => [...cursor.rows()]),
         ).toStrictEqual([suffixRow(0)]);
       } finally {
-        journal.dispose();
+        await journal.dispose();
       }
     });
   });
@@ -210,7 +210,7 @@ describe('publication ordinal admission and foreign writes', () => {
           journal.withReadRows((cursor) => [...cursor.rows()]),
         ).toStrictEqual([suffixRow(0), suffixRow(9)]);
       } finally {
-        journal.dispose();
+        await journal.dispose();
       }
     });
   });
@@ -252,7 +252,7 @@ describe('publication ordinal acquisition failure', () => {
         for (const fd of opened) originalClose(fd);
         open.mockRestore();
         close.mockRestore();
-        journal.dispose();
+        await journal.dispose();
       }
     });
   });

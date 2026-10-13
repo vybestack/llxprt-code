@@ -311,7 +311,7 @@ async function verifyAdoptsCopiedMediaReferencesAndReleasesLiveOwnershipOnDispos
       (await Array.fromAsync(result.boot.streamRows()))[0].blocks,
     ).toStrictEqual(admitted[0].blocks);
   } finally {
-    history.dispose();
+    await history.dispose();
     await history.waitForOwnershipSettlement();
   }
   expect(await store.hasReservations(block.contentId)).toBe(false);

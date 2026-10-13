@@ -37,7 +37,7 @@ export async function warmSourceProcessor(root: string): Promise<void> {
     await sourceHeap();
   } finally {
     observer.restore();
-    setup.history.dispose();
+    await setup.history.dispose();
     await http.server.stop(true);
     await setup.config.dispose();
   }

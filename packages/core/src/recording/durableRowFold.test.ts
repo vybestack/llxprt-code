@@ -263,7 +263,7 @@ async function buildCommittedCase(
   if (file === null) throw new Error('Recording did not create a journal');
   const eager = new HistoryJournalStore(recording);
   const expected = eager.materialize();
-  eager.dispose();
+  await eager.dispose();
   return {
     recording,
     file,
@@ -424,7 +424,7 @@ async function densityCase(
   if (file === null) throw new Error('Missing density journal');
   const eager = new HistoryJournalStore(recording);
   const expected = eager.materialize();
-  eager.dispose();
+  await eager.dispose();
   return { recording, file, watermark, expected };
 }
 
@@ -455,7 +455,7 @@ async function assertLiteralDensityParity(
   fs.appendFileSync(journal, raw);
   const store = new HistoryJournalStore(recording);
   const expected = store.materialize();
-  store.dispose();
+  await store.dispose();
   expect(expected[7]).toStrictEqual(content(applied ? 8 : 7));
   const scratch = path.join(root, 'scratch');
   fs.mkdirSync(scratch);

@@ -294,7 +294,7 @@ describe('RecordingIntegration duplicate content guard @issue:3132', () => {
   afterEach(async () => {
     await harness.integration.dispose();
     await harness.recordingService.dispose();
-    harness.historyService.dispose();
+    await harness.historyService.dispose();
     await fs.rm(harness.tempDir, { recursive: true, force: true });
   });
 
@@ -547,7 +547,7 @@ async function testRecordingCompressionBoundary07(): Promise<void> {
   } finally {
     await resumedIntegration.dispose();
     await resumedRecording.dispose();
-    resumedHistory.dispose();
+    await resumedHistory.dispose();
   }
 }
 
@@ -578,7 +578,7 @@ async function testRecordingCompressionBoundary09(): Promise<void> {
       'replacement-2',
     ]);
   } finally {
-    replacementService.dispose();
+    await replacementService.dispose();
   }
 }
 
@@ -627,7 +627,7 @@ async function resumeHarnessSession(
 async function closeResumedSession(resumed: ResumedSession): Promise<void> {
   await resumed.integration.dispose();
   await resumed.recording.dispose();
-  resumed.history.dispose();
+  await resumed.history.dispose();
 }
 
 async function liveTexts(history: HistoryService): Promise<string[]> {

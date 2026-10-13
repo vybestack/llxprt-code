@@ -106,7 +106,7 @@ async function checkPendingLength(): Promise<number> {
       expectScalarCharge(owners, 0, 0);
       return journal.getLength();
     } finally {
-      journal.dispose();
+      await journal.dispose();
     }
   }, true);
 }
@@ -206,7 +206,7 @@ describe('pending scalar identity and pinned membership', () => {
           await expectTicketDisk(recorder, ticket, size + 1, row);
           expectScalarCharge(owners, 0, 0);
         } finally {
-          journal.dispose();
+          await journal.dispose();
         }
       }, true);
     },

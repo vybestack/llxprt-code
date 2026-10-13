@@ -70,7 +70,7 @@ describe('invoked pinned disk high-density compression', () => {
       expect(await collectRows(history)).toHaveLength(0);
       expect(transport.requests).toHaveLength(0);
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });

@@ -68,7 +68,7 @@ async function withClearFixture(
     });
   } finally {
     gate.resolve();
-    history.dispose();
+    await history.dispose();
     await recorder.dispose();
     rmSync(directory, { recursive: true, force: true });
   }
@@ -87,7 +87,7 @@ async function withClearMediaFixture(
       try {
         await action(fixture, store);
       } finally {
-        fixture.history.dispose();
+        await fixture.history.dispose();
         await fixture.history.waitForOwnershipSettlement();
       }
     });

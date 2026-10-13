@@ -152,7 +152,7 @@ describe('context summary return migration', () => {
           expect(ownership.snapshot().liveRows).toBe(0);
           expect(read.snapshot().peakDecodedRows).toBeLessThanOrEqual(1);
         } finally {
-          service.dispose();
+          await service.dispose();
         }
       });
     },
@@ -194,7 +194,7 @@ describe('context summary cancellation and resume', () => {
         expect(ownership.snapshot().liveRows).toBe(0);
         expect(read.snapshot().peakDecodedRows).toBe(1);
       } finally {
-        service.dispose();
+        await service.dispose();
       }
     });
   });
@@ -227,7 +227,7 @@ describe('context summary cancellation and resume', () => {
           await Array.fromAsync(service.getContextSummaries()),
         ).toStrictEqual(eagerOracle([summary, row(41)]));
       } finally {
-        service.dispose();
+        await service.dispose();
       }
     } finally {
       if (resumed?.ok === true) {

@@ -75,7 +75,7 @@ describe('bounded request selection preserves semantic pending membership', () =
       expect(snapshot.pending.inputCount).toBe(3);
     } finally {
       snapshot.close();
-      history.dispose();
+      await history.dispose();
     }
     expect(history.owners.every((owner) => owner.closed)).toBe(true);
   });
@@ -94,7 +94,7 @@ describe('source selection cancellation', () => {
       ).toThrow('selection cancelled');
       expect(history.owners).toHaveLength(0);
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });

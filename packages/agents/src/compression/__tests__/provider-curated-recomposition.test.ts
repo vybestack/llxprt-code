@@ -18,7 +18,7 @@ class CursorOnlyHistory extends HistoryService {
 }
 
 describe('journal materialization guard', () => {
-  it('CursorOnlyHistory rejects journal eager materialization', () => {
+  it('CursorOnlyHistory rejects journal eager materialization', async () => {
     const history = new CursorOnlyHistory();
 
     try {
@@ -26,7 +26,7 @@ describe('journal materialization guard', () => {
         'eager recomposition',
       );
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });

@@ -79,7 +79,7 @@ async function withStore(
   try {
     await action(store, recorder);
   } finally {
-    store.dispose();
+    await store.dispose();
     await recorder.dispose();
     fs.rmSync(root, { recursive: true, force: true });
   }
@@ -307,7 +307,7 @@ describe('HistoryService scalars follow a replacement that cannot finish', () =>
         await history.waitForCommit();
         expect(await durableRowsOf(recorder)).toStrictEqual(rows);
       } finally {
-        history.dispose();
+        await history.dispose();
         await recorder.dispose();
         fs.rmSync(root, { recursive: true, force: true });
       }

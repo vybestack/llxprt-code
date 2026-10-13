@@ -63,7 +63,7 @@ describe('bounded curated journal queries', () => {
           }
         });
       } finally {
-        service.dispose();
+        await service.dispose();
       }
     });
   }
@@ -108,7 +108,7 @@ describe('curated journal query cursor ownership', () => {
       expect(activeRows).toBe(0);
       expect(counters.snapshot().peakDecodedRows).toBe(1);
     } finally {
-      service.dispose();
+      await service.dispose();
     }
   });
 });
@@ -138,7 +138,7 @@ describe('curated journal query failure and eager-read guards', () => {
       expect(decoded).toBe(2);
       expect(activeRows).toBe(0);
     } finally {
-      service.dispose();
+      await service.dispose();
     }
   });
 

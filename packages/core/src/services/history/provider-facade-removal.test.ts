@@ -44,7 +44,7 @@ describe('provider history stream facade', () => {
       expect((await rows.next()).done).toBe(true);
     } finally {
       await rows.return();
-      history.dispose();
+      await history.dispose();
     }
   });
 
@@ -67,7 +67,7 @@ describe('provider history stream facade', () => {
       expect((await rows.next()).done).toBe(true);
     } finally {
       await rows.return();
-      history.dispose();
+      await history.dispose();
     }
   });
 });
@@ -88,7 +88,7 @@ describe('request boundary validation', () => {
       expect((await rows.next()).done).toBe(true);
     } finally {
       await rows.return();
-      history.dispose();
+      await history.dispose();
     }
   });
 });

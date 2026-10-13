@@ -44,7 +44,7 @@ describe('partial attachment caller durability', () => {
     });
   });
   afterEach(async () => {
-    history.dispose();
+    await history.dispose();
     await destination.dispose();
     await rm(directory, { recursive: true, force: true });
   });
@@ -79,7 +79,7 @@ async function reportConcurrentFailure(): Promise<void> {
   expect(reopened.materialize().map((content) => content.blocks)).toStrictEqual(
     [row('existing destination').blocks],
   );
-  reopened.dispose();
+  await reopened.dispose();
 }
 
 async function reportPartialReplacement(): Promise<void> {
@@ -102,7 +102,7 @@ async function reportPartialReplacement(): Promise<void> {
     expect(
       reopened.materialize().map((content) => content.blocks),
     ).toStrictEqual([row('existing destination').blocks]);
-    reopened.dispose();
+    await reopened.dispose();
     await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
       expect(rows.map((content) => content.blocks)).toStrictEqual([
         row('accepted source').blocks,
@@ -130,7 +130,7 @@ async function reportPartialAppend(): Promise<void> {
   expect(reopened.materialize().map((content) => content.blocks)).toStrictEqual(
     [row('existing destination').blocks, row('accepted source').blocks],
   );
-  reopened.dispose();
+  await reopened.dispose();
   await collectRowsForAssertions(history.streamRawHistory(), (rows) => {
     expect(rows.map((content) => content.blocks)).toStrictEqual([
       row('accepted source').blocks,

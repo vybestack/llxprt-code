@@ -18,7 +18,7 @@ class CursorOnlyProviderHistory extends HistoryService {
 }
 
 describe('journal materialization guard', () => {
-  it('CursorOnlyProviderHistory rejects journal eager materialization', () => {
+  it('CursorOnlyProviderHistory rejects journal eager materialization', async () => {
     const history = new CursorOnlyProviderHistory();
 
     try {
@@ -26,7 +26,7 @@ describe('journal materialization guard', () => {
         'eager provider preparation',
       );
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });
@@ -102,7 +102,7 @@ describe('journal-backed provider normalization', () => {
       );
       expect(cycle.self).toBe(cycle);
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });
@@ -140,7 +140,7 @@ describe('pending block identity during adjacency', () => {
         await digest(buildProviderContent([], distinct, logger)),
       );
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });

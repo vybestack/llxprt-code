@@ -151,9 +151,9 @@ const success: SemanticMediaPurgeOutcome = {
   cachePrefixWritten: true,
 };
 
-function cleanupPurge(): void {
+async function cleanupPurge(): Promise<void> {
   for (const transaction of transactions.splice(0)) transaction.close();
-  for (const history of histories.splice(0)) history.dispose();
+  for (const history of histories.splice(0)) await history.dispose();
 }
 
 describe('SemanticMediaPurgeStreamCoordinator: is disabled unless explicitly enabled', () => {

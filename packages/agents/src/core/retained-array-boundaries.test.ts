@@ -78,7 +78,7 @@ async function earliestPendingFailure(size: number): Promise<number> {
     );
   } finally {
     release.resolve();
-    history.dispose();
+    await history.dispose();
     await recorder.dispose();
     await rm(root, { recursive: true, force: true });
   }

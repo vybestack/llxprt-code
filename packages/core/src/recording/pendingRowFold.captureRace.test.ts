@@ -206,7 +206,7 @@ describe('private pending fold capture/open race', () => {
           await verifyRows(fold, expected);
         } finally {
           await fold.close();
-          store.dispose();
+          await store.dispose();
         }
       } finally {
         await recorder.dispose();
@@ -225,7 +225,7 @@ describe('private pending fold capture/open race', () => {
         await store.waitForDurable();
         const expected = store.materialize();
         const snapshot = store.capturePendingFold();
-        store.dispose();
+        await store.dispose();
         expect(fs.existsSync(projected.filePath)).toBe(false);
         const fold = await foldPendingRows(snapshot, {
           scratchRoot: root,
@@ -269,7 +269,7 @@ describe('private pending fold retirement race', () => {
         } finally {
           await fold.close();
           await adoption.commit();
-          store.dispose();
+          await store.dispose();
         }
       } finally {
         await destination.dispose();
@@ -293,7 +293,7 @@ describe('private pending fold paused I/O races', () => {
         });
         await pause.entered;
         fs.rmSync(fixture.journalPath);
-        fixture.store.dispose();
+        await fixture.store.dispose();
         expect(fs.existsSync(fixture.journalPath)).toBe(false);
         expect(fs.existsSync(fixture.projected.directory)).toBe(false);
         pause.resume();
@@ -307,7 +307,7 @@ describe('private pending fold paused I/O races', () => {
         expect(() => fs.fstatSync(projectionFd)).toThrow(/EBADF/);
       } finally {
         pause.resume();
-        fixture.store.dispose();
+        await fixture.store.dispose();
         await fixture.recorder.dispose();
       }
     }));
@@ -344,7 +344,7 @@ describe('private pending fold paused I/O races', () => {
           pause.resume();
         }
       } finally {
-        store.dispose();
+        await store.dispose();
         await destination.dispose();
       }
     }));
@@ -371,7 +371,7 @@ describe('private pending fold paused I/O cleanup', () => {
         expect(() => fs.fstatSync(projectionFd)).toThrow(/EBADF/);
         expect(fs.readdirSync(scratch)).toStrictEqual([]);
       } finally {
-        fixture.store.dispose();
+        await fixture.store.dispose();
         await fixture.recorder.dispose();
       }
     }));
@@ -400,7 +400,7 @@ describe('private pending fold mutation after capture', () => {
           await fold.close();
         }
       } finally {
-        store.dispose();
+        await store.dispose();
         await recorder.dispose();
       }
     }));
@@ -427,7 +427,7 @@ describe('private pending fold descriptor cleanup', () => {
         const fold = await foldPendingRows(closing, { scratchRoot: root });
         await fold.close();
         expect(() => fs.fstatSync(closingFd)).toThrow(/EBADF/);
-        store.dispose();
+        await store.dispose();
       } finally {
         await recorder.dispose();
       }
@@ -465,7 +465,7 @@ describe('private pending fold descriptor cleanup', () => {
           );
         } finally {
           watched.mockRestore();
-          store.dispose();
+          await store.dispose();
         }
       } finally {
         await recorder.dispose();
@@ -488,7 +488,7 @@ for (const count of [512, 8192])
           fs.rmSync(fixture.projected.directory, { recursive: true });
           expect(fs.existsSync(fixture.journalPath)).toBe(false);
           await foldPinnedSnapshot(fixture.snapshot, root, fixture.expected);
-          fixture.store.dispose();
+          await fixture.store.dispose();
         } finally {
           await fixture.recorder.dispose();
         }
@@ -518,7 +518,7 @@ describe('private pending fold empty-source and ownership boundaries', () => {
           await fold.close();
         }
       } finally {
-        store.dispose();
+        await store.dispose();
         await recorder.dispose();
       }
     }));
@@ -542,7 +542,7 @@ describe('private pending fold empty-source and ownership boundaries', () => {
         await fold.close();
         expect(() => fs.fstatSync(fd)).toThrow(/EBADF/);
       } finally {
-        store.dispose();
+        await store.dispose();
         await recorder.dispose();
       }
     }));
@@ -554,17 +554,19 @@ describe('private pending fold empty-source and ownership boundaries', () => {
       const projectionFd = fixture.snapshot.pinnedProjection?.fd;
       if (projectionFd === undefined) throw new Error('Missing projection pin');
       try {
-        expect(() => {
-          try {
-            fixture.store.dispose();
-            expect(fs.fstatSync(journalFd).size).toBeGreaterThan(0);
-            expect(fs.fstatSync(projectionFd).size).toBeGreaterThan(0);
-            throw new Error('owner cancelled');
-          } finally {
-            fixture.snapshot.release();
-            fixture.snapshot.release();
-          }
-        }).toThrow('owner cancelled');
+        await expect(
+          (async () => {
+            try {
+              await fixture.store.dispose();
+              expect(fs.fstatSync(journalFd).size).toBeGreaterThan(0);
+              expect(fs.fstatSync(projectionFd).size).toBeGreaterThan(0);
+              throw new Error('owner cancelled');
+            } finally {
+              fixture.snapshot.release();
+              fixture.snapshot.release();
+            }
+          })(),
+        ).rejects.toThrow('owner cancelled');
         expect(() => fs.fstatSync(journalFd)).toThrow(/EBADF/);
         expect(() => fs.fstatSync(projectionFd)).toThrow(/EBADF/);
       } finally {
@@ -595,7 +597,7 @@ describe('private fold scratch cleanup failures', () => {
         expect(() => fs.fstatSync(projectionFd)).toThrow(/EBADF/);
       } finally {
         trap.mockRestore();
-        fixture.store.dispose();
+        await fixture.store.dispose();
         await fixture.recorder.dispose();
       }
     }));
@@ -623,7 +625,7 @@ describe('private fold scratch cleanup failures', () => {
         expect(() => fs.fstatSync(projectionFd)).toThrow(/EBADF/);
       } finally {
         trap.mockRestore();
-        fixture.store.dispose();
+        await fixture.store.dispose();
         await fixture.recorder.dispose();
       }
     }));

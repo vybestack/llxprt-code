@@ -120,7 +120,7 @@ describe('ConversationManager tool pairing cursor', () => {
           abandonedOwners: ownership.snapshot().liveRows,
         }).toStrictEqual({ drainedOwners: 0, abandonedOwners: 0 });
       } finally {
-        history.dispose();
+        await history.dispose();
       }
     });
   }
@@ -167,7 +167,7 @@ describe('ConversationManager neutral tool recording', () => {
         ).toStrictEqual([input.blocks, input.blocks]);
       });
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });
@@ -201,7 +201,7 @@ describe('ConversationManager tool cursor exhaustion', () => {
         value: undefined,
       });
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });
@@ -230,7 +230,7 @@ describe('ConversationManager tool cursor cleanup', () => {
       expect(ownership.snapshot().liveRows).toBe(0);
       expect(readdirSync(root)).toHaveLength(0);
     } finally {
-      history.dispose();
+      await history.dispose();
       rmSync(root, { recursive: true, force: true });
     }
   });

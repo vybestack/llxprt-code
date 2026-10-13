@@ -62,7 +62,7 @@ describe('private pending fold lifecycle', () => {
       const fold = await foldPendingRows(store.capturePendingFold(), {
         scratchRoot: root,
       });
-      store.dispose();
+      await store.dispose();
       expect(fs.existsSync(filePath)).toBe(false);
       expect(await fold.readRow(0)).toStrictEqual(row(2));
       await fold.close();
@@ -80,7 +80,7 @@ describe('private pending fold lifecycle', () => {
         foldPendingRows(store.capturePendingFold(), { scratchRoot: scratch }),
       ).rejects.toThrow('non_numeric_chronology');
       expect(fs.readdirSync(scratch)).toStrictEqual([]);
-      store.dispose();
+      await store.dispose();
     }));
 });
 
@@ -140,7 +140,7 @@ describe('private pending fold scanning', () => {
           value: iterator,
           configurable: true,
         });
-        store.dispose();
+        await store.dispose();
       }
     }));
 });

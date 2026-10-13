@@ -73,7 +73,7 @@ describe('media metrics and real ownership', () => {
         expect(empty.diskSpoolBytes).toBe(7);
         expect(await store.hasReservations(second.contentId)).toBe(false);
       } finally {
-        history.dispose();
+        await history.dispose();
       }
     });
   });

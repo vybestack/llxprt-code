@@ -401,7 +401,7 @@ async function verifyLiveHistory(): Promise<{ liveHistory: IContent[] }> {
     });
     return { liveHistory };
   } finally {
-    history.dispose();
+    await history.dispose();
     rmSync(root, { recursive: true, force: true });
   }
 }

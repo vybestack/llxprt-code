@@ -149,7 +149,7 @@ describe('actual StreamProcessor awaited disabled-source scalar telemetry', () =
         input.controller.abort(new Error('test cleanup'));
         input.held.release();
         await input.outcome;
-        input.setup.history.dispose();
+        await input.setup.history.dispose();
         await input.http.server.stop(true);
         await input.setup.config.dispose();
       }

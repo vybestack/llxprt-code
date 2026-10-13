@@ -42,10 +42,10 @@ describe('batch reader scope failures', () => {
       });
       expect(count).toBe(3);
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
-  it('releases a failed disk reader and preserves its exact error through dispatch', () => {
+  it('releases a failed disk reader and preserves its exact error through dispatch', async () => {
     const history = new HistoryService();
     const owners = new RowOwnership();
     const source = new FailedReaderJournal();
@@ -69,7 +69,7 @@ describe('batch reader scope failures', () => {
       expect(() => view?.withRows(() => undefined)).toThrow('closed');
     } finally {
       source.close();
-      history.dispose();
+      await history.dispose();
     }
   });
 });
@@ -97,10 +97,10 @@ describe('batch reader misuse and legacy producer', () => {
       expect(() => escaped?.next()).toThrow('closed');
     } finally {
       source.close();
-      history.dispose();
+      await history.dispose();
     }
   });
-  it('migrates the legacy batch producer without changing per-row and token publication order', () => {
+  it('migrates the legacy batch producer without changing per-row and token publication order', async () => {
     const history = new HistoryService();
     const source = new DetachedHistoryJournal();
     const next = new HistoryDensityRows();
@@ -136,7 +136,7 @@ describe('batch reader misuse and legacy producer', () => {
     } finally {
       next.close();
       source.close();
-      history.dispose();
+      await history.dispose();
     }
   });
 });

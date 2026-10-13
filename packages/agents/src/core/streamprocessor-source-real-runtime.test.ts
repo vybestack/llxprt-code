@@ -92,7 +92,7 @@ describe('default source send route under the CLI runtime wiring', () => {
         expect(http.bodies[0].bytes).toBeGreaterThan(0);
         expect(setup.history.owners.every((owner) => owner.closed)).toBe(true);
       } finally {
-        setup.history.dispose();
+        await setup.history.dispose();
         await http.server.stop(true);
         await setup.config.dispose();
       }

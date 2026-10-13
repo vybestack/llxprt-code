@@ -34,7 +34,7 @@ describe('dump snapshot scoped values', () => {
         await snapshot.close();
       }
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 
@@ -63,7 +63,7 @@ describe('dump snapshot scoped values', () => {
         await snapshot.close();
       }
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });
@@ -98,7 +98,7 @@ describe('dump snapshot scoped reader closure', () => {
         await snapshot.close();
       }
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });

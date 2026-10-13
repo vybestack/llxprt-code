@@ -82,7 +82,7 @@ describe('resume media lifecycle', () => {
     resumed = result;
   });
   afterEach(async () => {
-    history.dispose();
+    await history.dispose();
     await history.waitForOwnershipSettlement();
     await resumed.recording.dispose();
     await store.close();
@@ -193,7 +193,7 @@ async function verifyReportsCommittedRetirementFailureAndLeavesOwnershipAvailabl
   } finally {
     release.mockRestore();
   }
-  history.dispose();
+  await history.dispose();
   await history.waitForOwnershipSettlement();
   expect(await store.hasReservations(oldReference.contentId)).toBe(false);
 }

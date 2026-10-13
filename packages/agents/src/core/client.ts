@@ -368,7 +368,8 @@ export class AgentClient
     }
     try {
       await releaseDeferredSource(this.deferredHistory);
-      if (this.streamedDeferredHistory) this._storedHistoryService?.dispose();
+      if (this.streamedDeferredHistory)
+        await this._storedHistoryService?.dispose();
     } catch (error) {
       failures.push(error);
     }

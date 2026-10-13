@@ -34,7 +34,7 @@ async function fixture(): Promise<{
   });
   const attempt = await session.begin(false);
   if (!attempt) {
-    history.dispose();
+    await history.dispose();
     throw new Error('missing purge');
   }
   return { history, ownership, attempt };
@@ -65,7 +65,7 @@ describe('semantic request stream backpressure', () => {
     } finally {
       await rows.return?.();
       attempt.finalize();
-      history.dispose();
+      await history.dispose();
     }
   });
 });
@@ -118,7 +118,7 @@ describe('semantic request stream reader exits', () => {
         expect(ownership.snapshot().liveRows - before).toBe(0);
       } finally {
         attempt.finalize();
-        history.dispose();
+        await history.dispose();
       }
     },
   );

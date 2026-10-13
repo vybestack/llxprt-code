@@ -57,7 +57,7 @@ describe('bounded journal attachment', () => {
     histories = [];
   });
   afterEach(async () => {
-    for (const history of histories) history.dispose();
+    for (const history of histories) await history.dispose();
     await Promise.all(recorders.map((recording) => recording.dispose()));
     await rm(directory, { recursive: true, force: true });
   });
@@ -170,7 +170,7 @@ async function verifyRejectsAStaleDestinationRangeWithoutRemovingAConcurrentlyAc
   expect(reopened.materialize().map((content) => content.blocks)).toStrictEqual(
     [row('existing').blocks, row('concurrent accepted').blocks],
   );
-  reopened.dispose();
+  await reopened.dispose();
 }
 
 async function verifyReportsCommittedDestinationEffectsAfterAWriteFailureWithoutDiscardingTheSource(): Promise<void> {
@@ -207,7 +207,7 @@ async function verifyReportsCommittedDestinationEffectsAfterAWriteFailureWithout
   expect(reopened.materialize().map((content) => content.blocks)).toStrictEqual(
     [row('destination').blocks],
   );
-  reopened.dispose();
+  await reopened.dispose();
 }
 
 async function verifyKeepsTheOriginalJournalUsableWhenARetirementObserverRejectsPublication(): Promise<void> {
@@ -323,7 +323,7 @@ async function verifyCopiesOnlyTheSelectedSourceRangeNotALaterExternalTail(): Pr
   const destination = recorder('pinned-target');
   await store.attachJournal(destination);
   expect(store.materialize()).toStrictEqual([row('selected')]);
-  store.dispose();
+  await store.dispose();
 }
 
 async function verifyMakesProjectedMediaAndResponseStrippingDurableBeforeReleasingProjectionOwnership(): Promise<void> {
@@ -387,8 +387,8 @@ async function verifyMakesProjectedMediaAndResponseStrippingDurableBeforeReleasi
   if (block.type !== 'media' || block.encoding !== 'reference')
     throw new Error('Missing media reference');
   expect(await mediaStore.hasReservations(block.contentId)).toBe(true);
-  store.dispose();
-  reopened.dispose();
+  await store.dispose();
+  await reopened.dispose();
   await admission.releaseContents(admitted, context);
   await mediaStore.close();
 }
@@ -456,7 +456,7 @@ async function verifyPreservesChronologyAndContextMembershipAcrossAttachmentAndS
       expectedRows[0],
       replacement,
     ]);
-    reopened.dispose();
+    await reopened.dispose();
   });
 }
 

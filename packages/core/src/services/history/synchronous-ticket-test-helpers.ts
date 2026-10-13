@@ -81,7 +81,7 @@ export async function withSynchronousFixture<T>(
     });
   } finally {
     gate.resolve();
-    history.dispose();
+    await history.dispose();
     await recorder.dispose();
     rmSync(root, { recursive: true, force: true });
   }

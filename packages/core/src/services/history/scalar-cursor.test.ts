@@ -87,7 +87,7 @@ describe('pinned synchronous history cursor', () => {
             expect(owners.within(bound)).toBe(true);
           } finally {
             releaseWriter();
-            journal.dispose();
+            await journal.dispose();
           }
         },
       );
@@ -139,7 +139,7 @@ describe('scalar cursor callback lifecycle', () => {
         expect(journal.withReadRows((cursor) => cursor.length)).toBe(1);
         expect(reads.snapshot().peakDecodedRows).toBe(1);
       } finally {
-        journal.dispose();
+        await journal.dispose();
       }
     });
   });
@@ -179,7 +179,7 @@ describe('scalar cursor retaining controls', () => {
         } finally {
           for (const row of retained) owners.release(row);
           retained.length = 0;
-          journal.dispose();
+          await journal.dispose();
           expectNoScalarOwners(owners);
         }
       });

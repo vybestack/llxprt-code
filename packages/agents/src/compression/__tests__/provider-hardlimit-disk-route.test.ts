@@ -156,7 +156,7 @@ describe('actual provider hard-limit disk fallback', () => {
       expect(JSON.stringify(result[1]).length).toBeGreaterThan(8 * 1024 * 1024);
       expect(await collectRows(history)).toHaveLength(2);
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   }, 180000);
 });

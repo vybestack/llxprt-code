@@ -62,7 +62,7 @@ describe('completed pending owner iterator lifetime', () => {
             completed: reader.next().done,
           }).toStrictEqual({ survivors: 0, completed: true });
         } finally {
-          store.dispose();
+          await store.dispose();
         }
       }, true);
     }, 180_000);
@@ -83,7 +83,7 @@ describe('completed pending owner iterator lifetime', () => {
           await source.close();
         }
       } finally {
-        store.dispose();
+        await store.dispose();
       }
     }, true);
   });

@@ -306,7 +306,7 @@ async function createFixture(): Promise<Fixture> {
     observation,
     processor: buildProcessor(setup, history),
     async dispose(): Promise<void> {
-      history.dispose();
+      await history.dispose();
       await recording.dispose();
       await setup.hooks.dispose();
       await setup.config.dispose();

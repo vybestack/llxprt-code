@@ -57,7 +57,7 @@ describe('lazy chronological recent journal suffix', () => {
       expect(rowIndex(second.value)).toBe(1);
       expect((await stream.next()).done).toBe(true);
     } finally {
-      service.dispose();
+      await service.dispose();
     }
   });
 });
@@ -153,7 +153,7 @@ describe('token-budget suffix edge cases', () => {
         ),
       ).toStrictEqual([]);
     } finally {
-      service.dispose();
+      await service.dispose();
     }
   });
 });

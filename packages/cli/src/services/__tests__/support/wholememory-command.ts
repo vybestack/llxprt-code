@@ -174,7 +174,7 @@ export class MemoryCommand {
     this.uiHistory = [];
     await this.pager?.close();
     await this.integration?.dispose();
-    this.history.dispose();
+    await this.history.dispose();
     await this.history.waitForOwnershipSettlement();
     await this.recording?.dispose();
     await this.lock?.release();

@@ -73,8 +73,8 @@ describe('subagent cleanup error retention', () => {
                   const dispose = bundle.history.dispose.bind(bundle.history);
                   const history = vi
                     .spyOn(bundle.history, 'dispose')
-                    .mockImplementation(() => {
-                      dispose();
+                    .mockImplementation(async () => {
+                      await dispose();
                       throw historyFailure;
                     });
                   restoreHistory = () => history.mockRestore();

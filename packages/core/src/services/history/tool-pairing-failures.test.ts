@@ -63,7 +63,7 @@ describe('tool pairing payload ownership', () => {
         );
         for (const content of retained) trap.release(content);
       } finally {
-        service.dispose();
+        await service.dispose();
       }
     }
   });
@@ -84,7 +84,7 @@ describe('tool pairing disk read failure', () => {
       expect(ownership.snapshot().liveRows).toBe(0);
       expect(readdirSync(root)).toHaveLength(0);
     } finally {
-      service.dispose();
+      await service.dispose();
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -115,7 +115,7 @@ describe('tool pairing disk write failure', () => {
       expect(ownership.snapshot().liveRows).toBe(0);
       expect(readdirSync(root)).toHaveLength(0);
     } finally {
-      service.dispose();
+      await service.dispose();
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -147,7 +147,7 @@ describe('tool pairing empty cursors', () => {
         exhaustedDiskEntries: readdirSync(root).length,
       }).toStrictEqual({ unstartedDiskEntries: 0, exhaustedDiskEntries: 0 });
     } finally {
-      service.dispose();
+      await service.dispose();
       rmSync(root, { recursive: true, force: true });
     }
   });

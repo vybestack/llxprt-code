@@ -50,7 +50,7 @@ describe('startup journal restoration', () => {
     history = new HistoryService();
   });
   afterEach(async () => {
-    history.dispose();
+    await history.dispose();
     await resumed.recording.dispose();
     await rm(root, { recursive: true, force: true });
   });

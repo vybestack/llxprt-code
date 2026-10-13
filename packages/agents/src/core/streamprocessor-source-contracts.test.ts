@@ -104,7 +104,7 @@ async function dispose(
   setup: Awaited<ReturnType<typeof processorFixture>>,
   http: ReturnType<typeof projectionEndpoint>,
 ): Promise<void> {
-  setup.history.dispose();
+  await setup.history.dispose();
   await http.server.stop(true);
   await setup.config.dispose();
 }

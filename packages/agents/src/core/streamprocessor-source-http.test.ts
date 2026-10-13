@@ -113,7 +113,7 @@ async function acceptance(large: boolean) {
     const stream = await started.catch(() => undefined);
     await stream?.return(undefined);
     observer.restore();
-    setup.history.dispose();
+    await setup.history.dispose();
     await http.server.stop(true);
     await setup.config.dispose();
   }
@@ -180,7 +180,7 @@ describe('actual StreamProcessor disk history HTTP ownership', () => {
       expect(http.bodies).toHaveLength(1);
       expect(setup.history.owners.every((owner) => owner.closed)).toBe(true);
     } finally {
-      setup.history.dispose();
+      await setup.history.dispose();
       await http.server.stop(true);
       await setup.config.dispose();
     }
@@ -208,7 +208,7 @@ describe('actual StreamProcessor disk history HTTP ownership', () => {
       expect(activeRequestBodyCount()).toBe(0);
       expect(setup.history.owners.every((owner) => owner.closed)).toBe(true);
     } finally {
-      setup.history.dispose();
+      await setup.history.dispose();
       await http.server.stop(true);
       await setup.config.dispose();
     }

@@ -14,7 +14,7 @@ describe('relocated resume row values', () => {
       const collected = await collectResumeRows(history.streamRawHistory());
       history.clear();
       await history.waitForCommit();
-      history.dispose();
+      await history.dispose();
       gcAndSweep();
       expect(collected).toStrictEqual([suffixRow(0), suffixRow(1)]);
       const boot = displayBoot(collected);
@@ -22,7 +22,7 @@ describe('relocated resume row values', () => {
         collected,
       );
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 

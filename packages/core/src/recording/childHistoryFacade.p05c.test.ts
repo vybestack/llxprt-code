@@ -92,7 +92,7 @@ describe('P05c child facade is HistoryService over its own journal @plan:PLAN-20
     await history.waitForCommit();
     expect(history.journalPath()).toBe(recording.getFilePath());
     expect(history.journalPath()).not.toBeNull();
-    history.dispose();
+    await history.dispose();
     await recording.dispose();
   });
 
@@ -116,7 +116,7 @@ describe('P05c child facade is HistoryService over its own journal @plan:PLAN-20
           'pre-attach child row',
           'post-attach child row',
         ]);
-        history.dispose();
+        await history.dispose();
         await childRecording.dispose();
       },
     );
@@ -168,8 +168,8 @@ async function verifyChildFacadeCase1(): Promise<void> {
             childHistory.journalPath(),
           );
 
-          parentHistory.dispose();
-          childHistory.dispose();
+          await parentHistory.dispose();
+          await childHistory.dispose();
           await parentRecording.dispose();
           await childRecording.dispose();
         },

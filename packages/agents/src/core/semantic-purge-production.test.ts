@@ -23,7 +23,7 @@ class StreamOnlyHistory extends HistoryService {
 }
 
 describe('journal materialization guard', () => {
-  it('StreamOnlyHistory rejects journal eager materialization', () => {
+  it('StreamOnlyHistory rejects journal eager materialization', async () => {
     const history = new StreamOnlyHistory();
 
     try {
@@ -31,7 +31,7 @@ describe('journal materialization guard', () => {
         'production materializer trap',
       );
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });

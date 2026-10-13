@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { failureAfterDisposal } from './historyDisposalFailure.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -27,8 +28,8 @@ export async function replaceDeferredClientSource(
     replacement.existing,
     options,
   );
-  replacement.existing?.dispose();
   replacement.publish(admitted.journal, admitted.release);
+  await replacement.existing?.dispose();
   await replacement.priorRelease?.();
   await releaseDeferredArray(
     replacement.admissions,
@@ -134,20 +135,19 @@ export async function replaceClientHistorySource(
       runtime.model,
     );
   } catch (error) {
-    if (detached) {
-      journal.dispose();
-      if (error instanceof AggregateError) {
-        throw new AggregateError(
-          error.errors,
-          `${error.message}: ${error.errors.map(String).join('; ')}`,
-          { cause: error },
-        );
-      }
+    if (!detached) throw error;
+    const failure = await failureAfterDisposal(journal, error);
+    if (failure instanceof AggregateError) {
+      throw new AggregateError(
+        failure.errors,
+        `${failure.message}: ${failure.errors.map(String).join('; ')}`,
+        { cause: failure },
+      );
     }
-    throw error;
+    throw failure;
   }
-  if (detached) existing?.dispose();
   replacement.publish(journal, release);
+  if (detached) await existing?.dispose();
   await replacement.priorRelease?.();
   await releaseDeferredArray(
     replacement.admissions,

@@ -74,7 +74,7 @@ describe('dumpcontext real streaming command', () => {
         expect(Reflect.get(request.body, 'messages')).toHaveLength(count);
         expect(request.body).not.toHaveProperty('chronology');
       } finally {
-        history.dispose();
+        await history.dispose();
         cache.mockRestore();
         await fs.rm(root, { recursive: true, force: true });
       }

@@ -30,7 +30,7 @@ describe('bounded journal detachment', () => {
     history = new HistoryService({ recording });
   });
   afterEach(async () => {
-    history.dispose();
+    await history.dispose();
     await recording.dispose();
     await rm(directory, { recursive: true, force: true });
   });
@@ -155,7 +155,7 @@ async function verifyCancelsDetachmentWhenHistoryIsDisposedBeforeTheCopyComplete
   const store = new HistoryJournalStore(recording);
   const detachment = store.detachJournal(recording);
   await entered.promise;
-  store.dispose();
+  await store.dispose();
   release.resolve();
   try {
     await expect(detachment).rejects.toThrow('disposed');

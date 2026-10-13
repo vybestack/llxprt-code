@@ -41,7 +41,7 @@ describe('addBatch tool payload serialization', () => {
         );
         expect(stored[0].metadata?.chronology?.seq).toBe(1);
       } finally {
-        history.dispose();
+        await history.dispose();
       }
     });
   });

@@ -95,8 +95,8 @@ describe('request override curation diagnostics', () => {
             : 'Analyzing AI message:',
         );
       } finally {
-        eager.dispose();
-        streamed.dispose();
+        await eager.dispose();
+        await streamed.dispose();
       }
     },
   );
@@ -122,8 +122,8 @@ describe('pre-output diagnostics', () => {
       expect(take()).toStrictEqual([]);
     } finally {
       await cursor.return();
-      eager.dispose();
-      history.dispose();
+      await eager.dispose();
+      await history.dispose();
     }
   });
 });

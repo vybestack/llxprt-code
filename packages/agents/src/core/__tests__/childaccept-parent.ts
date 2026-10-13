@@ -49,7 +49,7 @@ export async function openParent(directory: string): Promise<{
     path,
     before: await readFile(path),
     close: async () => {
-      history.dispose();
+      await history.dispose();
       await recording.dispose();
     },
   };

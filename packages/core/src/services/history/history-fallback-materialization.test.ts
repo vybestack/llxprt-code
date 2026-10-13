@@ -21,7 +21,7 @@ class RestoreOnlyHistory extends HistoryService {
 }
 
 describe('journal materialization guard', () => {
-  it('RestoreOnlyHistory rejects journal eager materialization', () => {
+  it('RestoreOnlyHistory rejects journal eager materialization', async () => {
     const history = new RestoreOnlyHistory();
     history.forbidMaterialization = true;
     try {
@@ -29,7 +29,7 @@ describe('journal materialization guard', () => {
         'eager rollback materialization',
       );
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });
@@ -54,7 +54,7 @@ describe('pending fallback publication', () => {
       });
     } finally {
       history.forbidMaterialization = false;
-      history.dispose();
+      await history.dispose();
     }
   });
 });

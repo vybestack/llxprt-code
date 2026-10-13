@@ -194,7 +194,7 @@ describe('source enforcement owns the provider callback lifecycle', () => {
     setup.compression.clearProviderCompressionCallback(provider);
     expect(attached).toHaveLength(2);
     expect(attached[1]).toBeNull();
-    setup.history.dispose();
+    await setup.history.dispose();
     await setup.config.dispose();
   });
 
@@ -220,7 +220,7 @@ describe('source enforcement owns the provider callback lifecycle', () => {
         ),
       ).rejects.toBeDefined();
       expect(attached[attached.length - 1]).toBeNull();
-      setup.history.dispose();
+      await setup.history.dispose();
       await setup.config.dispose();
     },
   );

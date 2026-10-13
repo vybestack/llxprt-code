@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import type { DeferredHistorySourceOptions } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import { failureAfterDisposal } from './historyDisposalFailure.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { ChatSession } from './chatSession.js';
 import {
@@ -44,16 +45,16 @@ export async function transferReinitializedHistory(
     options.signal?.throwIfAborted();
     await chat.clearHistory();
   } catch (error) {
-    candidate.journal.dispose();
+    const failure = await failureAfterDisposal(candidate.journal, error);
     try {
       await candidate.release();
     } catch (cleanupError) {
       throw new AggregateError(
-        [error, cleanupError],
+        [failure, cleanupError],
         'Active history transfer cleanup failed',
       );
     }
-    throw error;
+    throw failure;
   }
   publication.publish(candidate);
   await publication.priorSource?.();

@@ -55,7 +55,7 @@ describe('cache anchor value publication', () => {
         responsesStored: true,
       });
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });

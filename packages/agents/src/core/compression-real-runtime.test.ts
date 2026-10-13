@@ -233,7 +233,7 @@ describe('compression through the CLI runtime wiring on OpenAI chat', () => {
       expect(next[0].body).toContain(SUMMARY_MARKER);
       expect(next[0].body).not.toContain('turn 1 question');
     } finally {
-      history.dispose();
+      await history.dispose();
       await endpoint.server.stop(true);
       await config.dispose();
     }

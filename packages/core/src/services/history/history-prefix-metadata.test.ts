@@ -26,7 +26,7 @@ describe('history journal marked-prefix mutations', () => {
         expect(rows[0].metadata).toMatchObject({ cacheAnchor: true });
       });
     });
-    history.dispose();
+    await history.dispose();
   });
 
   it('persists changes to retained metadata when truncating and after the journal commits', async () => {
@@ -50,6 +50,6 @@ describe('history journal marked-prefix mutations', () => {
         expect(rows[0].metadata).toMatchObject({ cacheAnchor: true });
       });
     });
-    history.dispose();
+    await history.dispose();
   });
 });

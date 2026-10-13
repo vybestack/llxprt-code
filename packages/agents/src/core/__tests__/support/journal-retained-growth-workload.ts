@@ -328,7 +328,7 @@ export async function createWorkload(
         throw new Error(`Turn ${turn} returned unexpected text`);
     },
     async dispose() {
-      history.dispose();
+      await history.dispose();
       await recording.dispose();
       await http.server.stop(true);
       await settingsOwner.dispose();

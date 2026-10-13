@@ -249,7 +249,7 @@ describe('HistoryJournalStore live row stream snapshot timing', () => {
           'row-2',
         ]);
       } finally {
-        store.dispose();
+        await store.dispose();
         await recording.dispose();
       }
     }));
@@ -343,7 +343,7 @@ async function verifyParity(root: string, count: number): Promise<number> {
       [Symbol.iterator]: { value: iterator, configurable: true },
     });
     fixture.gate.release();
-    fixture.store.dispose();
+    await fixture.store.dispose();
     await fixture.recording.dispose();
   }
 }
@@ -419,8 +419,8 @@ async function verifyCancelled(
     return ownership.snapshot().liveRows;
   } finally {
     resources.restore();
-    store.dispose();
-    fixture.store.dispose();
+    await store.dispose();
+    await fixture.store.dispose();
     await fixture.recording.dispose();
   }
 }
@@ -448,7 +448,7 @@ async function verifyRetirementRace(
       await source.store
         .adoptJournal(destination, destinationWatermark)
         .commit();
-    else source.store.dispose();
+    else await source.store.dispose();
     const remaining: IContent[] = [];
     for (;;) {
       const next = await iterator.next();
@@ -461,7 +461,7 @@ async function verifyRetirementRace(
     return texts;
   } finally {
     resources.restore();
-    source.store.dispose();
+    await source.store.dispose();
     await source.recording.dispose();
     await destination.dispose();
   }
@@ -503,7 +503,7 @@ async function verifyFailureCleanup(
     return resources.journalFds.length;
   } finally {
     resources.restore();
-    store.dispose();
+    await store.dispose();
     await recording.dispose();
   }
 }
@@ -549,7 +549,7 @@ describe('HistoryJournalStore live row failure cleanup', () => {
         return resources.journalFds.length;
       } finally {
         resources.restore();
-        store.dispose();
+        await store.dispose();
         await recording.dispose();
       }
     });
@@ -580,7 +580,7 @@ describe('HistoryJournalStore live row oversize boundary', () => {
         expectReleased(resources);
       } finally {
         resources.restore();
-        measured.store.dispose();
+        await measured.store.dispose();
         await recording.dispose();
       }
     });

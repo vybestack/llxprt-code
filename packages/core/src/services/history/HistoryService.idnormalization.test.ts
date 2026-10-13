@@ -305,7 +305,7 @@ async function facadeCallback10(): Promise<void> {
 
   await service.waitForTokenUpdates();
 
-  service.dispose();
+  await service.dispose();
 
   // Releasing the lock after dispose must not resurrect queued content.
   service.endCompression();

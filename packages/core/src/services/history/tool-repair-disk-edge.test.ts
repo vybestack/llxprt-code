@@ -26,7 +26,7 @@ describe('disk repair edge contracts', () => {
       expect(history.length()).toBe(2);
       await history.waitForTokenUpdates();
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 

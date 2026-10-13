@@ -7,6 +7,7 @@
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 
+import { failureAfterDisposal } from './historyDisposalFailure.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { DeferredHistorySourceOptions } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import {
@@ -63,16 +64,17 @@ async function publishDeferredArray(
     );
     return { journal, retained: admitted.retained };
   } catch (error) {
-    if (journal !== stored) journal.dispose();
+    const failure =
+      journal === stored ? error : await failureAfterDisposal(journal, error);
     try {
       await admitted.release();
     } catch (cleanupError) {
       throw new AggregateError(
-        [error, cleanupError],
+        [failure, cleanupError],
         'Deferred array admission cleanup failed',
       );
     }
-    throw error;
+    throw failure;
   } finally {
     admitted.discardInput();
   }

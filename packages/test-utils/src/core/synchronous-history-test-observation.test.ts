@@ -44,7 +44,7 @@ async function withPendingObservation(
     action(service, original);
   } finally {
     releaseWriter();
-    service.dispose();
+    await service.dispose();
     await recorder.dispose();
     rmSync(directory, { recursive: true, force: true });
   }
@@ -164,7 +164,7 @@ describe('test-only same-turn history observation', () => {
 });
 
 describe('public history observation boundary', () => {
-  it('observes a service through its public raw-history contract in the same turn', () => {
+  it('observes a service through its public raw-history contract in the same turn', async () => {
     const service = new HistoryService();
     const history: { streamRawHistory(): AsyncIterable<IContent> } = service;
     const original = suffixRow(3, 16);
@@ -180,11 +180,11 @@ describe('public history observation boundary', () => {
       expect(observed[0].blocks).not.toBe(original.blocks);
       expect(yielded).toBe(false);
     } finally {
-      service.dispose();
+      await service.dispose();
     }
   });
 
-  it('rejects an imitation journal even when the public stream contract is present', () => {
+  it('rejects an imitation journal even when the public stream contract is present', async () => {
     const history = {
       async *streamRawHistory(): AsyncIterable<IContent> {
         yield suffixRow(0);

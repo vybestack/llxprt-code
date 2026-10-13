@@ -86,7 +86,7 @@ describe('scalar cardinality across journal operations', () => {
         expectMembership(journal, []);
         expect(journal.getLength()).toBe(0);
       } finally {
-        journal.dispose();
+        await journal.dispose();
       }
     }, true);
   });
@@ -134,7 +134,7 @@ describe('scalar failures and cancellation', () => {
           expect(owners.snapshot().liveRows).toBe(0);
         } finally {
           releaseWriter();
-          journal.dispose();
+          await journal.dispose();
         }
       },
     );
@@ -165,8 +165,8 @@ describe('scalar failures and cancellation', () => {
           expectMembership(journal, [1]);
           expect(journal.getLength()).toBe(1);
         } finally {
-          journal.dispose();
-          destination.dispose();
+          await journal.dispose();
+          await destination.dispose();
         }
       }, true);
     }, true);
@@ -211,7 +211,7 @@ describe('scalar pending binding retirement', () => {
             0, 0,
           ]);
         } finally {
-          journal.dispose();
+          await journal.dispose();
         }
       }, true);
     }, true);

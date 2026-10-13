@@ -77,7 +77,7 @@ export function captureConfigHistory(): {
   };
 }
 
-export function disposeConfigHistoryJournals(): void {
-  for (const journal of configHistoryJournals) journal.dispose();
+export async function disposeConfigHistoryJournals(): Promise<void> {
+  for (const journal of configHistoryJournals) await journal.dispose();
   configHistoryJournals.clear();
 }

@@ -257,7 +257,7 @@ async function run(
   } finally {
     observer?.restore();
     DebugLogger.prototype.debug = debug;
-    setup.history.dispose();
+    await setup.history.dispose();
     await hooks?.dispose();
     await http.server.stop(true);
     await setup.config.dispose();

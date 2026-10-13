@@ -141,7 +141,7 @@ async function publishAndReplay(
       ...(failure === undefined ? {} : { failure }),
     };
   } finally {
-    store.dispose();
+    await store.dispose();
     await recorder.dispose();
     for (const journal of scratch.journals) journal.close();
     rmSync(root, { recursive: true, force: true });

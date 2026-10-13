@@ -61,7 +61,7 @@ async function resumeOnce(sessionId: string): Promise<JournalShape> {
       chronology,
     };
   } finally {
-    service.dispose();
+    await service.dispose();
     await result.recording.dispose();
   }
 }

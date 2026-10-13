@@ -50,7 +50,7 @@ describe('unmatched tool call cursor', () => {
         call(''),
       ]);
     } finally {
-      service.dispose();
+      await service.dispose();
     }
   });
 });
@@ -95,7 +95,7 @@ describe('unmatched tool call cursor ownership', () => {
           diskEntries: readdirSync(root).length,
         }).toStrictEqual({ liveRows: 0, diskEntries: 0 });
       } finally {
-        service.dispose();
+        await service.dispose();
         rmSync(root, { recursive: true, force: true });
       }
     });
@@ -119,7 +119,7 @@ describe('unmatched tool call cursor snapshot', () => {
         value: undefined,
       });
     } finally {
-      service.dispose();
+      await service.dispose();
     }
   });
 });
@@ -161,7 +161,7 @@ describe('unmatched tool call cursor lifecycle', () => {
         afterFailure: { liveRows: 0, diskEntries: 0 },
       });
     } finally {
-      service.dispose();
+      await service.dispose();
       rmSync(root, { recursive: true, force: true });
     }
   });
@@ -192,7 +192,7 @@ describe('unmatched tool call cursor failures', () => {
       expect(ownership.snapshot().liveRows).toBe(0);
       expect(readdirSync(root)).toHaveLength(0);
     } finally {
-      service.dispose();
+      await service.dispose();
       rmSync(root, { recursive: true, force: true });
     }
   });

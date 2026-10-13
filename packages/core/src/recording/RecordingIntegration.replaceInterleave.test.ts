@@ -225,8 +225,8 @@ describe('replace transaction interleaving', () => {
       } finally {
         await integration.dispose().catch(() => undefined);
         await recording.dispose();
-        first.dispose();
-        second.dispose();
+        await first.dispose();
+        await second.dispose();
       }
     });
   });
@@ -281,8 +281,8 @@ describe('replace transaction interleaving', () => {
       } finally {
         await integration.dispose().catch(() => undefined);
         await recording.dispose();
-        first.dispose();
-        second.dispose();
+        await first.dispose();
+        await second.dispose();
       }
     });
   });

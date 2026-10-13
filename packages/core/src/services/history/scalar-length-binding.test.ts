@@ -36,7 +36,7 @@ describe('scalar length external binding boundaries', () => {
         await journal.waitForDurable();
         expect([admittedLength, journal.getLength()]).toStrictEqual([3, 3]);
       } finally {
-        journal.dispose();
+        await journal.dispose();
       }
     }, true);
   });
@@ -58,7 +58,7 @@ describe('scalar length external binding boundaries', () => {
         await journal.waitForDurable();
         expect([admittedLength, journal.getLength()]).toStrictEqual([3, 3]);
       } finally {
-        journal.dispose();
+        await journal.dispose();
       }
     }, true);
   });
@@ -77,7 +77,7 @@ describe('scalar count across external record interleaving', () => {
         await journal.waitForDurable();
         expect(journal.getLength()).toBe(3);
       } finally {
-        journal.dispose();
+        await journal.dispose();
       }
     }, true);
   });
@@ -93,7 +93,7 @@ describe('scalar count across external record interleaving', () => {
         await journal.waitForDurable();
         expect(journal.getLength()).toBe(2);
       } finally {
-        journal.dispose();
+        await journal.dispose();
       }
     }, true);
   });
@@ -121,7 +121,7 @@ describe('scalar count-only rewind admission', () => {
         expectTicketCursorRows(journal, owners, 511, batchRow);
         expect(owners.snapshot().liveRows).toBe(0);
       } finally {
-        journal.dispose();
+        await journal.dispose();
       }
     }, true);
   });
@@ -151,7 +151,7 @@ describe('scalar cardinality-preserving density admission', () => {
         await journal.waitForDurable();
         expect(owners.snapshot().liveRows).toBe(0);
       } finally {
-        journal.dispose();
+        await journal.dispose();
       }
     }, true);
   });
@@ -180,7 +180,7 @@ describe('scalar count at partial foreign-prefix acknowledgements', () => {
         await journal.waitForDurable();
         expect([partial, journal.getLength()]).toStrictEqual([4, 5]);
       } finally {
-        journal.dispose();
+        await journal.dispose();
       }
     }, true);
   });
@@ -229,7 +229,7 @@ describe('scalar pending ownership after writer failure', () => {
       ]);
       expectScalarCharge(owners, 0, 0);
     } finally {
-      journal.dispose();
+      await journal.dispose();
       expect(owners.snapshot().liveRows).toBe(0);
       await recorder.dispose();
       rmSync(root, { recursive: true, force: true });

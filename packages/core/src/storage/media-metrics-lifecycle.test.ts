@@ -22,7 +22,7 @@ async function withRows<T>(
     for (const row of rows) history.add(row);
     return await action(history);
   } finally {
-    history.dispose();
+    await history.dispose();
   }
 }
 

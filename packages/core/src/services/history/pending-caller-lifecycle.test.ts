@@ -53,7 +53,7 @@ describe('pending caller write failure lifecycle', () => {
       const ackError = await rejectedValue(pendingAck);
       const beforeRetirement = fixture.owners.references;
       witness('append-failed-before-retirement', fixture, row);
-      fixture.store.dispose();
+      await fixture.store.dispose();
       witness('failed-admission-retired', fixture, row);
       expect(observation.error).toBe(primary);
       expect(ackError).toBe(failure);
@@ -84,7 +84,7 @@ describe('pending caller cancellation lifecycle', () => {
       );
       const beforeRetirement = fixture.owners.references;
       witness('cancelled-before-retirement', fixture, row);
-      fixture.store.dispose();
+      await fixture.store.dispose();
       fixture.releaseWriter();
       await fixture.recorder.flush();
       witness('cancelled-admission-retired-and-drained', fixture, row);

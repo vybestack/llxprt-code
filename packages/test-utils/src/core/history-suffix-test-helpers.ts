@@ -49,7 +49,7 @@ export interface SuffixFixtureGraph<Service, Ownership, Counters> {
 
 export async function withSuffixFixtureGraph<
   T,
-  Service extends { dispose(): void },
+  Service extends { dispose(): void | Promise<void> },
   Ownership,
   Counters,
 >(
@@ -76,7 +76,7 @@ export async function withSuffixFixtureGraph<
       }
       return await action(service, ownership, counters);
     } finally {
-      service.dispose();
+      await service.dispose();
       await recording.dispose();
     }
   } finally {

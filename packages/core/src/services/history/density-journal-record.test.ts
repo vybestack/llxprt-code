@@ -39,7 +39,7 @@ describe('HistoryService.applyDensityResult journal record', () => {
     history = new HistoryService({ recording });
   });
   afterEach(async () => {
-    history.dispose();
+    await history.dispose();
     await recording.dispose();
     await rm(directory, { recursive: true, force: true });
   });

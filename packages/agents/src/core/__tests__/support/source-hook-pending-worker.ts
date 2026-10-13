@@ -83,7 +83,7 @@ async function run(root: string): Promise<void> {
     }
   } finally {
     snapshot.close();
-    setup.history.dispose();
+    await setup.history.dispose();
     await hooks.dispose();
   }
 }

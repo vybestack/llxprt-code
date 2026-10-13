@@ -160,7 +160,7 @@ export async function withPhaseFixture(
     });
   } finally {
     releaseWriter();
-    store.dispose();
+    await store.dispose();
     await recorder.dispose();
     rmSync(root, { recursive: true, force: true });
   }

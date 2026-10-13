@@ -56,7 +56,7 @@ describe('scalar cursor pinned descriptor cleanup', () => {
           expectNoScalarOwners(owners);
         } finally {
           captured.release();
-          journal.dispose();
+          await journal.dispose();
         }
       });
     },
@@ -80,7 +80,7 @@ describe('scalar cursor pinned descriptor cleanup', () => {
         expectNoScalarOwners(owners);
       } finally {
         captured.release();
-        journal.dispose();
+        await journal.dispose();
       }
     });
   });

@@ -252,7 +252,7 @@ describe('HistoryService local-media ownership lifecycle', () => {
       adoptedOwners: reservations(second),
     });
     const secondBlock = referenceBlockOf(second[0]);
-    service.dispose();
+    await service.dispose();
     await service.waitForOwnershipSettlement();
 
     expect({

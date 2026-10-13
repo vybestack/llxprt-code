@@ -65,6 +65,7 @@ import {
   captureHistoryMutationSnapshot,
   type HistoryMutationSnapshot,
 } from './historyMutationSnapshot.js';
+import { DisposalSteps } from './historyJournalDisposal.js';
 import { createScratchDirSync } from '../../storage/scratch-root.js';
 export {
   planHistoryMutation,
@@ -214,6 +215,7 @@ export class HistoryJournalStore {
   private adoptionPending = false;
   private attachmentPending = false;
   private disposed = false;
+  private disposal: Promise<void> | undefined;
   private readonly publicationOrdinals = new HistoryPublicationOrdinals();
   private readonly foldCheckpoint = new DurableFoldCheckpoint();
 
@@ -809,30 +811,33 @@ export class HistoryJournalStore {
     this.fanoutFeed.reset(copy.recorder, copy.byteOffset);
   }
 
-  /** Flush and retire the journal; a self-owned temp store is removed. */
-  dispose(): void {
+  /**
+   * Flush and retire the journal; a self-owned temp store is removed. Resolves
+   * once the recorder is disposed and the scratch directories are gone, and
+   * rejects with whatever failed (an AggregateError when several steps did).
+   */
+  async dispose(): Promise<void> {
     this.assertNoAdoption();
-    if (this.disposed) return;
+    this.disposal ??= this.release();
+    return this.disposal;
+  }
+
+  private async release(): Promise<void> {
     this.disposed = true;
     this.foldCheckpoint.dispose();
-    removeTempDir(this.binding.projection?.directory ?? null);
-    retireHistoryPending(this.binding);
-    const recorder = this.binding.recorder;
-    const tempDir = this.binding.tempDir;
-    if (recorder === undefined || !this.binding.ownsRecorder) {
-      removeTempDir(tempDir);
-      return;
+    const binding = this.binding;
+    retireHistoryPending(binding);
+    const steps = new DisposalSteps();
+    const recorder = binding.recorder;
+    if (recorder !== undefined && binding.ownsRecorder) {
+      // Mirrors may still be reading the hidden primary's committed range.
+      await steps.run(() => this.fanoutFeed.settle());
+      await steps.run(() => this.fanoutFeed.dispose());
+      await steps.run(() => recorder.dispose());
     }
-    // Mirrors may still be reading the hidden primary's committed range.
-    void this.fanoutFeed
-      .settle()
-      .catch(() => undefined)
-      .then(() => this.fanoutFeed.dispose())
-      .then(() => recorder.dispose())
-      .catch(() => undefined)
-      .then(() => {
-        if (this.binding.ownsRecorder) removeTempDir(tempDir);
-      });
+    await steps.removeDirectory(binding.projection?.directory ?? null);
+    await steps.removeDirectory(binding.tempDir);
+    steps.throwIfFailed('History journal store disposal failed');
   }
 
   private ensureRecorder(): SessionRecordingService {

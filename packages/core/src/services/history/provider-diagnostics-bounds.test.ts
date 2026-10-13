@@ -65,8 +65,8 @@ describe('bounded diagnostic payloads', () => {
         expect(JSON.stringify(events)).not.toContain('PRIVATE_PAYLOAD');
         expect(JSON.stringify(events).length).toBeLessThan(8192);
       } finally {
-        history.dispose();
-        eager.dispose();
+        await history.dispose();
+        await eager.dispose();
       }
     },
   );
@@ -106,8 +106,8 @@ describe('bounded reconstruction diagnostics', () => {
         expect(JSON.stringify(events)).not.toContain('PRIVATE_RESULT');
         expect(JSON.stringify(events).length).toBeLessThan(4096);
       } finally {
-        history.dispose();
-        eager.dispose();
+        await history.dispose();
+        await eager.dispose();
       }
     },
     120_000,
@@ -130,7 +130,7 @@ describe('diagnostic publication lifecycle', () => {
         disabled: [],
       });
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 
@@ -173,7 +173,7 @@ describe('diagnostic publication lifecycle', () => {
         },
       ]);
     } finally {
-      history.dispose();
+      await history.dispose();
     }
   });
 });
@@ -228,8 +228,8 @@ describe('bounded tool identifiers', () => {
         );
         expect(JSON.stringify(reference.events).length).toBeLessThan(2048);
       } finally {
-        eager.dispose();
-        history.dispose();
+        await eager.dispose();
+        await history.dispose();
       }
     },
   );

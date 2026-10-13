@@ -33,7 +33,7 @@ describe('checkpoint resume adoption', () => {
     await source.dispose();
   });
   afterEach(async () => {
-    history.dispose();
+    await history.dispose();
     await context.recordingCallbacks.getCurrentIntegration()?.dispose();
     await context.recordingCallbacks.getCurrentRecording()?.dispose();
     await setup.afterEach();

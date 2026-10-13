@@ -42,7 +42,7 @@ export class FanoutHarness {
   }
 
   async teardown(): Promise<void> {
-    for (const history of this.histories.splice(0)) history.dispose();
+    for (const history of this.histories.splice(0)) await history.dispose();
     for (const recorder of this.recorders.splice(0)) await recorder.dispose();
     await rm(this.dir, { recursive: true, force: true });
   }
