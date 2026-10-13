@@ -9,7 +9,14 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { NodeFileSystem } from '@vybestack/llxprt-code-providers/composition.js';
 import { populateProviderManager } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import type {
+  RuntimeProviderManager,
+  RuntimeContentGeneratorFactory,
+  RuntimeTokenizerFactory,
+  ContentGenerator,
+} from '@vybestack/llxprt-code-core';
+import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { RuntimeSettingsState } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { rethrowAfterCleanup } from '../session/session-client-cleanup.js';
 import { AgentBootstrapError } from './agentBootstrap.js';
@@ -102,16 +109,30 @@ export async function assembleOwnedMcpRuntime(
 }
 
 async function bindCreatedSessionClient(
-  handle: IsolatedRuntimeContextHandle,
+  config: Config,
+  settings: SettingsService,
+  settingsOwner: SessionSettingsOwner,
+  providerManager: RuntimeProviderManager,
+  oauthManager: OAuthManager,
+  contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
+  tokenizerFactory: RuntimeTokenizerFactory,
+  providerFileLifecycle: ProviderFileLifecycle,
   media: SessionMediaOwner,
-  factory: Parameters<typeof createIsolatedSessionClient>[2],
+  factory: AgentClientFactory | undefined,
   mcp: McpRuntimeOwner,
   registration: Parameters<SessionClientOwner['bindMcpRuntime']>[1],
   forceConfirmations: boolean,
   imageOperation: AgentConfig['imageOperation'],
 ): Promise<SessionClientOwner> {
   const client = await createIsolatedSessionClient(
-    handle,
+    config,
+    settings,
+    settingsOwner,
+    providerManager,
+    oauthManager,
+    contentGeneratorFactory,
+    tokenizerFactory,
+    providerFileLifecycle,
     media,
     factory,
     mcp.readInstructions,
@@ -139,7 +160,7 @@ async function bindCreatedSessionClient(
 export async function createOwnedSessionRoots(
   handle: IsolatedRuntimeContextHandle,
   media: SessionMediaOwner,
-  factory: Parameters<typeof createIsolatedSessionClient>[2],
+  factory: AgentClientFactory | undefined,
   options: Pick<
     AgentConfig,
     | 'imageOperation'
@@ -170,7 +191,14 @@ export async function createOwnedSessionRoots(
     return [
       mcp,
       await bindCreatedSessionClient(
-        handle,
+        handle.config,
+        handle.settingsService,
+        handle.settingsOwner,
+        handle.providerManager,
+        handle.oauthManager,
+        handle.contentGeneratorFactory,
+        handle.tokenizerFactory,
+        handle.providerFileLifecycle,
         media,
         factory,
         mcp,

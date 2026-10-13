@@ -10,7 +10,7 @@ import { ApprovalMode } from '@vybestack/llxprt-code-core';
 
 import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core';
 
-import { assembleModelSelection } from '../api/model-selection.js';
+import { activateChildProvider } from './subagent-provider-activation.js';
 
 import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 
@@ -38,7 +38,6 @@ import {
 } from '@vybestack/llxprt-code-settings';
 import {
   resolveRuntimeProfile,
-  buildActivationCliOverrides,
   type RuntimeProfileResolution,
 } from './subagentProfileResolution.js';
 import { getStringSetting } from './subagentSettingsAccess.js';
@@ -65,7 +64,16 @@ import {
   createAgentRuntimeState,
   type AgentRuntimeState,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
+import type {
+  AgentRuntimeFactoryBindings,
+  RuntimeProviderManager,
+  RuntimeContentGeneratorFactory,
+  RuntimeTokenizerFactory,
+  ContentGenerator,
+} from '@vybestack/llxprt-code-core';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 import {
@@ -88,9 +96,6 @@ import {
 } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
 import { admitModelParameters } from '@vybestack/llxprt-code-core/runtime/admit-model-parameters.js';
 import { admitLoadBalancerModelParameters } from '../api/admit-load-balancer-model-parameters.js';
-import { assembleProfileApplication } from '../api/profileApplicationAssembly.js';
-import { assembleProviderSwitch } from '../api/providerSwitchAssembly.js';
-import { executeProviderActivation } from '../api/providerActivationExecutor.js';
 import {
   disposeIsolatedMediaRuntime,
   createIsolatedSessionClient,
@@ -758,11 +763,25 @@ export class SubagentOrchestrator {
   }
 
   private async createChildClient(
-    handle: Parameters<typeof createIsolatedSessionClient>[0],
+    config: Config,
+    settings: SettingsService,
+    settingsOwner: SessionSettingsOwner,
+    providerManager: RuntimeProviderManager,
+    oauthManager: OAuthManager,
+    contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
+    tokenizerFactory: RuntimeTokenizerFactory,
+    providerFileLifecycle: ProviderFileLifecycle,
     mediaOwner: SessionMediaOwner,
   ): Promise<SessionClientOwner> {
     const client = await createIsolatedSessionClient(
-      handle,
+      config,
+      settings,
+      settingsOwner,
+      providerManager,
+      oauthManager,
+      contentGeneratorFactory,
+      tokenizerFactory,
+      providerFileLifecycle,
       mediaOwner,
       this.options.runtimeFactoryBindings?.agentClientFactory,
       this.options.readMcpInstructions,
@@ -833,40 +852,33 @@ export class SubagentOrchestrator {
 
     let sessionClient: SessionClientOwner | undefined;
     try {
-      const childClient = await this.createChildClient(handle, mediaOwner);
+      const childClient = await this.createChildClient(
+        handle.config,
+        handle.settingsService,
+        handle.settingsOwner,
+        handle.providerManager,
+        handle.oauthManager,
+        handle.contentGeneratorFactory,
+        handle.tokenizerFactory,
+        handle.providerFileLifecycle,
+        mediaOwner,
+      );
       sessionClient = childClient;
       this.bindChildTools(childClient);
       await handle.activate();
-      const switchProvider = assembleProviderSwitch(
+      await activateChildProvider(
         handle.config,
         handle.settingsService,
         handle.providerManager,
         handle.oauthManager,
-        () => handle.readRuntimeKind(),
-        () => childClient.refreshAuth(),
         handle.settingsOwner,
+        () => handle.readRuntimeKind(),
+        (method) => childClient.refreshAuth(method),
+        this.options.profileManager,
+        activationProfile,
+        profileName,
+        isLoadBalancerActivation,
       );
-
-      if (isLoadBalancerActivation) {
-        await assembleProfileApplication(
-          handle.settingsService,
-          handle.providerManager,
-          handle.oauthManager,
-          switchProvider,
-          handle.settingsOwner,
-          this.options.profileManager,
-        ).applySnapshot(activationProfile, { profileName });
-      } else {
-        await executeProviderActivation(
-          handle.config,
-          buildChildActivationIntent(activationProfile),
-          switchProvider,
-          handle.settingsService,
-          handle.providerManager,
-          (method) => childClient.refreshAuth(method),
-          assembleModelSelection(handle.settingsOwner),
-        );
-      }
       this.populateChildSettings(
         settingsService,
         runtimeStateProfile,
@@ -879,24 +891,4 @@ export class SubagentOrchestrator {
       );
     }
   }
-}
-
-function buildChildActivationIntent(
-  profile: Profile,
-): Parameters<typeof executeProviderActivation>[1] {
-  return {
-    provider: profile.provider,
-    model: profile.model,
-    modelParams: profile.modelParams,
-    // Carry the profile's credential/endpoint ephemerals into the
-    // activation so the isolated provider talks to the RIGHT endpoint
-    // with the RIGHT key. Without base-url, a profile like zai
-    // (provider 'anthropic', base-url https://api.z.ai/api/anthropic)
-    // would fall back to the provider default (api.anthropic.com) and
-    // its z.ai key would never authenticate — the request stalls until
-    // the 5-minute first-response timeout and the subagent returns an
-    // empty result. auth-key-name/auth-keyfile are resolved the same
-    // way the CLI bootstrap applies them (Issue #2410).
-    cliOverrides: buildActivationCliOverrides(profile),
-  };
 }
