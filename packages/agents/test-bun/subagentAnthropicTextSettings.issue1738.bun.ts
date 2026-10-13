@@ -22,9 +22,15 @@ const defaultDisabledTools = normalizeDefaultToolSet(DEFAULT_DISABLED_TOOLS);
 
 function classifySubagentProfile(profile: Profile) {
   const service = createRuntimeSettingsService();
-  populatePreActivationSettings(service, profile, 'anthropic-subagent');
+  populatePreActivationSettings(
+    service.set.bind(service),
+    service.setCurrentProfileName.bind(service),
+    profile,
+    'anthropic-subagent',
+  );
   populatePostActivationSettings(
-    service,
+    service.set.bind(service),
+    service.setCurrentProfileName.bind(service),
     profile,
     'anthropic-subagent',
     defaultDisabledTools,

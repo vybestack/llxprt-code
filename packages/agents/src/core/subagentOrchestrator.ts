@@ -626,15 +626,13 @@ export class SubagentOrchestrator {
       subagent.name,
     );
     const settingsService = this.options.createChildSettings();
-    if (!isLoadBalancerActivation) {
-      populatePreActivationSettings(
-        settingsService,
-        runtimeStateProfile,
-        subagent.profile,
-      );
-    } else {
-      this.populateLoadBalancerIdentity(settingsService, subagent.profile);
-    }
+    this.populateInitialChildSettings(
+      settingsService.set.bind(settingsService),
+      settingsService.setCurrentProfileName.bind(settingsService),
+      runtimeStateProfile,
+      subagent.profile,
+      isLoadBalancerActivation,
+    );
 
     const isolatedHandle = await this.createIsolatedRuntime(
       settingsService,
@@ -679,16 +677,28 @@ export class SubagentOrchestrator {
     }
   }
 
-  private populateLoadBalancerIdentity(
-    settings: SettingsService,
+  private populateInitialChildSettings(
+    writeSetting: (key: string, value: unknown) => void,
+    selectProfile: (profileName: string) => void,
+    profile: Profile,
     profileName: string,
+    isLoadBalancerActivation: boolean,
   ): void {
-    settings.setCurrentProfileName(profileName);
-    settings.set('activeProvider', LOAD_BALANCER_PROVIDER_NAME);
-    settings.set(
-      `providers.${LOAD_BALANCER_PROVIDER_NAME}.model`,
-      LOAD_BALANCER_PROVIDER_NAME,
-    );
+    if (!isLoadBalancerActivation) {
+      populatePreActivationSettings(
+        writeSetting,
+        selectProfile,
+        profile,
+        profileName,
+      );
+    } else {
+      selectProfile(profileName);
+      writeSetting('activeProvider', LOAD_BALANCER_PROVIDER_NAME);
+      writeSetting(
+        `providers.${LOAD_BALANCER_PROVIDER_NAME}.model`,
+        LOAD_BALANCER_PROVIDER_NAME,
+      );
+    }
   }
 
   private async loadRuntimeInIsolatedScope(
@@ -870,7 +880,8 @@ export class SubagentOrchestrator {
         isLoadBalancerActivation,
       );
       populatePostActivationSettings(
-        settingsService,
+        settingsService.set.bind(settingsService),
+        settingsService.setCurrentProfileName.bind(settingsService),
         runtimeStateProfile,
         profileName,
         this.defaultDisabledTools,
