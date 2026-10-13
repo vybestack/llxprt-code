@@ -50,7 +50,6 @@ import {
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { debugLogger } from '@vybestack/llxprt-code-core/utils/debugLogger.js';
 import { reportError } from '@vybestack/llxprt-code-core/utils/errorReporting.js';
-import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import {
   canonicalizeToolName,
@@ -808,11 +807,11 @@ function instantiateChat(
 }
 
 export function createSubagentProviderRuntime(
-  handle: IsolatedRuntimeContextHandle,
+  runtimeId: string,
   subagent: string,
 ): ProviderRuntimeContext {
   return createProviderRuntimeContext({
-    runtimeId: handle.runtimeId,
+    runtimeId,
     metadata: { source: 'SubagentOrchestrator', subagent },
   });
 }

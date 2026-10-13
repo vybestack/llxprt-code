@@ -17,6 +17,7 @@
 export {
   configureProviderRuntimeFactories,
   createProviderManager,
+  populateProviderManager,
   refreshAliasProviders,
   bindOpenAIAliasIdentity,
 } from './providerManagerInstance.js';

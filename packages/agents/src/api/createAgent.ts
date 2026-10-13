@@ -80,10 +80,7 @@ import { CoreToolScheduler } from '../core/coreToolScheduler.js';
 import { wrapRegistryWithConfirmation } from './confirmationForcing.js';
 import { rebuildLoop, type LoopHolder } from './loop/rebuildLoop.js';
 import { AgentImpl } from './agentImpl.js';
-import {
-  assembleProviderSwitch,
-  assembleSessionProviderSwitch,
-} from './providerSwitchAssembly.js';
+import { assembleProviderSwitch } from './providerSwitchAssembly.js';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 import { executeProviderActivation } from './providerActivationExecutor.js';
 import { PLACEHOLDER_MODEL } from './constants.js';
@@ -326,7 +323,15 @@ async function activateCreatedSession(
     resolvedAuth,
     config,
     messageBus,
-    assembleSessionProviderSwitch(handle, client.operations.refreshAuth),
+    assembleProviderSwitch(
+      handle.config,
+      handle.settingsService,
+      handle.providerManager,
+      handle.oauthManager,
+      () => handle.readRuntimeKind(),
+      client.operations.refreshAuth,
+      handle.settingsOwner,
+    ),
     handle.settingsService,
     mcpRuntime,
     handle.providerManager,
