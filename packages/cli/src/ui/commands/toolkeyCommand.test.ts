@@ -12,7 +12,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { toolkeyCommand } from './toolkeyCommand.js';
+import { createToolkeyCommand } from './toolkeyCommand.js';
+import { ToolKeyStorage } from '@vybestack/llxprt-code-core';
 import { createCompletionHandler } from './schema/index.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { CommandKind } from './types.js';
@@ -43,6 +44,7 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
 }));
 
 describe('toolkeyCommand', () => {
+  const toolkeyCommand = createToolkeyCommand(new ToolKeyStorage());
   let context: CommandContext;
 
   beforeEach(() => {

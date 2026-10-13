@@ -6,6 +6,7 @@
 
 import { useMemo } from 'react';
 import type { Agent } from '@vybestack/llxprt-code-agents';
+import { ToolKeyStorage } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { BuiltinCommandOwners } from '../../services/BuiltinCommandLoader.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
@@ -19,12 +20,19 @@ import {
 import { createKeyCommand } from '../commands/keyCommand.js';
 import { createKeyfileCommand } from '../commands/keyfileCommand.js';
 import { createLogoutCommand } from '../commands/logoutCommand.js';
+import { createToolkeyCommand } from '../commands/toolkeyCommand.js';
+import { createToolkeyfileCommand } from '../commands/toolkeyfileCommand.js';
 import { useOAuthControl } from '../contexts/OAuthControlContext.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 
 type CredentialCommands = Pick<
   BuiltinCommandOwners,
-  'baseurlCommand' | 'logoutCommand' | 'keyfileCommand' | 'keyCommand'
+  | 'baseurlCommand'
+  | 'logoutCommand'
+  | 'keyfileCommand'
+  | 'keyCommand'
+  | 'toolkeyCommand'
+  | 'toolkeyfileCommand'
 >;
 
 /**
@@ -55,8 +63,27 @@ export function useCredentialCommands(
     () => createKeyCommand(bindKeyCommandOperations(api, config)),
     [api, config],
   );
+  const toolkeyCommands = useMemo(() => {
+    const storage = new ToolKeyStorage();
+    return {
+      toolkeyCommand: createToolkeyCommand(storage),
+      toolkeyfileCommand: createToolkeyfileCommand(storage),
+    };
+  }, []);
   return useMemo(
-    () => ({ baseurlCommand, logoutCommand, keyfileCommand, keyCommand }),
-    [baseurlCommand, logoutCommand, keyfileCommand, keyCommand],
+    () => ({
+      baseurlCommand,
+      logoutCommand,
+      keyfileCommand,
+      keyCommand,
+      ...toolkeyCommands,
+    }),
+    [
+      baseurlCommand,
+      logoutCommand,
+      keyfileCommand,
+      keyCommand,
+      toolkeyCommands,
+    ],
   );
 }

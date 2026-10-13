@@ -48,8 +48,6 @@ import { toolsCommand } from '../ui/commands/toolsCommand.js';
 import { skillsCommand } from '../ui/commands/skillsCommand.js';
 import { settingsCommand } from '../ui/commands/settingsCommand.js';
 import { vimCommand } from '../ui/commands/vimCommand.js';
-import { toolkeyCommand } from '../ui/commands/toolkeyCommand.js';
-import { toolkeyfileCommand } from '../ui/commands/toolkeyfileCommand.js';
 import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
 import { profileCommand } from '../ui/commands/profileCommand.js';
 import { diagnosticsCommand } from '../ui/commands/diagnosticsCommand.js';
@@ -82,6 +80,8 @@ export interface BuiltinCommandOwners {
   readonly keyfileCommand: SlashCommand;
   readonly baseurlCommand: SlashCommand;
   readonly logoutCommand: SlashCommand;
+  readonly toolkeyCommand: SlashCommand;
+  readonly toolkeyfileCommand: SlashCommand;
 }
 
 export class BuiltinCommandLoader implements ICommandLoader {
@@ -178,8 +178,8 @@ export class BuiltinCommandLoader implements ICommandLoader {
       this.owners.modelCommand,
       this.owners.keyCommand,
       this.owners.keyfileCommand,
-      toolkeyCommand, // @plan PLAN-20260206-TOOLKEY.P09 @requirement REQ-002
-      toolkeyfileCommand, // @plan PLAN-20260206-TOOLKEY.P09 @requirement REQ-003
+      this.owners.toolkeyCommand, // @plan PLAN-20260206-TOOLKEY.P09 @requirement REQ-002
+      this.owners.toolkeyfileCommand, // @plan PLAN-20260206-TOOLKEY.P09 @requirement REQ-003
       this.owners.baseurlCommand,
       this.owners.toolFormatCommand,
       setupGithubCommand,

@@ -10,15 +10,11 @@
  * @pseudocode lines 317-381
  */
 
-import type {
-  SlashCommand,
-  CommandContext,
-  MessageActionReturn,
-} from './types.js';
+import type { SlashCommand, MessageActionReturn } from './types.js';
 import { CommandKind } from './types.js';
 import type { CommandArgumentSchema } from './schema/types.js';
 import {
-  ToolKeyStorage,
+  type ToolKeyStorage,
   isValidToolKeyName,
   getSupportedToolNames,
   getToolKeyEntry,
@@ -57,102 +53,116 @@ const toolkeyfileSchema: CommandArgumentSchema = [
   },
 ];
 
-export const toolkeyfileCommand: SlashCommand = {
-  name: 'toolkeyfile',
-  description: 'manage API key file for a built-in tool',
-  kind: CommandKind.BUILT_IN,
-  schema: toolkeyfileSchema,
-  action: async (
-    context: CommandContext,
-    args: string,
-  ): Promise<MessageActionReturn> => {
-    // @pseudocode lines 327-328: Parse arguments
-    const tokens = args.trim().split(/\s+/, 2);
-    const toolName = tokens[0]?.trim()?.toLowerCase();
+/**
+ * The keyfile-mapping operations /toolkeyfile needs. The host binds one
+ * storage at registration; the command never opens its own.
+ */
+export type ToolkeyfileCommandOperations = Pick<
+  ToolKeyStorage,
+  'getKeyfilePath' | 'setKeyfilePath' | 'clearKeyfilePath'
+>;
 
-    // @pseudocode lines 331-333: No arguments — show usage
-    if (!toolName) {
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Usage: /toolkeyfile <tool> [<filepath>|none]\nSupported tools: ${getSupportedToolNames().join(', ')}`,
-      };
-    }
+export function createToolkeyfileCommand(
+  storage: ToolkeyfileCommandOperations,
+): SlashCommand {
+  return {
+    name: 'toolkeyfile',
+    description: 'manage API key file for a built-in tool',
+    kind: CommandKind.BUILT_IN,
+    schema: toolkeyfileSchema,
+    action: (_context, args) => runToolkeyfile(storage, args),
+  };
+}
 
-    // @pseudocode lines 336-338: Validate tool name
-    if (!isValidToolKeyName(toolName)) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Unknown tool '${toolName}'. Supported tools: ${getSupportedToolNames().join(', ')}`,
-      };
-    }
+async function runToolkeyfile(
+  storage: ToolkeyfileCommandOperations,
+  args: string,
+): Promise<MessageActionReturn> {
+  // @pseudocode lines 327-328: Parse arguments
+  const tokens = args.trim().split(/\s+/, 2);
+  const toolName = tokens[0]?.trim()?.toLowerCase();
 
-    // @pseudocode lines 340-342
-    const filePath = tokens[1]?.trim();
-    const entry = getToolKeyEntry(toolName)!;
-    const storage = new ToolKeyStorage();
-
-    // @pseudocode lines 345-352: Show current keyfile
-    if (!filePath) {
-      const currentPath = await storage.getKeyfilePath(toolName);
-      if (currentPath !== null) {
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `${entry.displayName} keyfile: ${currentPath}`,
-        };
-      }
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `No keyfile configured for '${entry.displayName}'`,
-      };
-    }
-
-    // @pseudocode lines 355-358: Clear keyfile (case-insensitive "none")
-    if (filePath.toLowerCase() === 'none') {
-      await storage.clearKeyfilePath(toolName);
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: `Cleared keyfile for '${entry.displayName}'`,
-      };
-    }
-
-    // @pseudocode lines 360-379: Set keyfile
-    // @pseudocode line 361: Resolve ~ to homedir (REQ-003.2)
-    const resolvedPath = filePath.replace(/^~/, homedir());
-    // @pseudocode line 362: Resolve to absolute path
-    const absolutePath = path.resolve(resolvedPath);
-
-    // @pseudocode lines 365-369: Validate file exists
-    try {
-      await fs.access(absolutePath);
-    } catch {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `File not found: ${absolutePath}`,
-      };
-    }
-
-    // @pseudocode lines 372-375: Validate file is non-empty
-    const content = await fs.readFile(absolutePath, 'utf-8');
-    if (!content.trim()) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Keyfile is empty: ${absolutePath}`,
-      };
-    }
-
-    // @pseudocode lines 377-379: Persist and confirm
-    await storage.setKeyfilePath(toolName, absolutePath);
+  // @pseudocode lines 331-333: No arguments — show usage
+  if (!toolName) {
     return {
       type: 'message',
       messageType: 'info',
-      content: `Keyfile set for '${entry.displayName}': ${absolutePath}`,
+      content: `Usage: /toolkeyfile <tool> [<filepath>|none]\nSupported tools: ${getSupportedToolNames().join(', ')}`,
     };
-  },
-};
+  }
+
+  // @pseudocode lines 336-338: Validate tool name
+  if (!isValidToolKeyName(toolName)) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: `Unknown tool '${toolName}'. Supported tools: ${getSupportedToolNames().join(', ')}`,
+    };
+  }
+
+  // @pseudocode lines 340-342
+  const filePath = tokens[1]?.trim();
+  const entry = getToolKeyEntry(toolName)!;
+
+  // @pseudocode lines 345-352: Show current keyfile
+  if (!filePath) {
+    const currentPath = await storage.getKeyfilePath(toolName);
+    if (currentPath !== null) {
+      return {
+        type: 'message',
+        messageType: 'info',
+        content: `${entry.displayName} keyfile: ${currentPath}`,
+      };
+    }
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: `No keyfile configured for '${entry.displayName}'`,
+    };
+  }
+
+  // @pseudocode lines 355-358: Clear keyfile (case-insensitive "none")
+  if (filePath.toLowerCase() === 'none') {
+    await storage.clearKeyfilePath(toolName);
+    return {
+      type: 'message',
+      messageType: 'info',
+      content: `Cleared keyfile for '${entry.displayName}'`,
+    };
+  }
+
+  // @pseudocode lines 360-379: Set keyfile
+  // @pseudocode line 361: Resolve ~ to homedir (REQ-003.2)
+  const resolvedPath = filePath.replace(/^~/, homedir());
+  // @pseudocode line 362: Resolve to absolute path
+  const absolutePath = path.resolve(resolvedPath);
+
+  // @pseudocode lines 365-369: Validate file exists
+  try {
+    await fs.access(absolutePath);
+  } catch {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: `File not found: ${absolutePath}`,
+    };
+  }
+
+  // @pseudocode lines 372-375: Validate file is non-empty
+  const content = await fs.readFile(absolutePath, 'utf-8');
+  if (!content.trim()) {
+    return {
+      type: 'message',
+      messageType: 'error',
+      content: `Keyfile is empty: ${absolutePath}`,
+    };
+  }
+
+  // @pseudocode lines 377-379: Persist and confirm
+  await storage.setKeyfilePath(toolName, absolutePath);
+  return {
+    type: 'message',
+    messageType: 'info',
+    content: `Keyfile set for '${entry.displayName}': ${absolutePath}`,
+  };
+}
