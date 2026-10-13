@@ -1,5 +1,3 @@
-import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
-import { resolveShellJobSettings } from '@vybestack/llxprt-code-core/config/asyncTaskServices.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -11,13 +9,9 @@ import { spawnSync } from 'node:child_process';
 import { readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import {
-  createAgenticLoop,
-  TaskLaunchOwner,
-} from '@vybestack/llxprt-code-agents';
-import { AsyncTaskManager } from '@vybestack/llxprt-code-core/services/asyncTaskManager.js';
+import { createAgent, type Agent } from '@vybestack/llxprt-code-agents';
 import { ToolConfirmationOutcome } from '@vybestack/llxprt-code-tools';
-import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { resolveRepositoryFixture } from './helpers/fixtureRoot.js';
 import { makeScratchDir } from './helpers/scratch-dir.js';
 import {
@@ -27,9 +21,10 @@ import {
   shellQuote,
 } from './helpers/shell-owner-gate.js';
 
-describe('standalone createAgenticLoop shell ownership', () => {
+describe('public Agent shell ownership', () => {
+  const credentials = useOwnedCredentials();
   it.skipIf(process.platform === 'win32')(
-    'joins a real model-generated background shell process and removes its log on explicit runner disposal',
+    'joins a real model-generated background shell process and removes its log on explicit Agent disposal',
     async () => {
       const root = await makeScratchDir('standalone-shell-owner-');
       const gate = await shellOwnerGate();
@@ -47,8 +42,8 @@ describe('standalone createAgenticLoop shell ownership', () => {
         shellQuote(marker),
       ].join(' ');
       const fixture = join(root, 'shell.jsonl');
-      let built: Awaited<ReturnType<typeof buildCliStyleConfig>> | undefined;
-      let loop: ReturnType<typeof createAgenticLoop> | undefined;
+      const previousFake = process.env.LLXPRT_FAKE_RESPONSES;
+      let agent: Agent | undefined;
       try {
         await writeFile(
           fixture,
@@ -78,43 +73,27 @@ describe('standalone createAgenticLoop shell ownership', () => {
             }),
           ].join('\n') + '\n',
         );
-        built = await buildCliStyleConfig(fixture, {
+        process.env.LLXPRT_FAKE_RESPONSES = fixture;
+        const created = await createAgent({
+          credentialAuthority: credentials().authority,
+          provider: 'fake',
+          model: 'fake-model',
           workingDir: root,
           folderTrust: true,
           telemetry: { enabled: false },
           recording: { enabled: false },
           skillsSupport: false,
         });
-        const settingsRoot = built;
-        loop = createAgenticLoop({
-          telemetry: RootTelemetry.prepare({
-            enabled: false,
-            sessionId: 'isolated-caller-fixture',
-            maxBytes: 1024,
-            maxFiles: 1,
-          }),
-          readShellJobSettings: () =>
-            resolveShellJobSettings(settingsRoot.settingsService),
-          readExecutionPolicy: () =>
-            settingsRoot.settingsOwner.readToolExecutionPolicy(),
-          getToolGovernance: () =>
-            settingsRoot.settingsOwner.readToolGovernance(
-              settingsRoot.config.getExcludeTools() ?? [],
-            ),
-          agentClient: built.agentClient,
-          config: built.config,
-          messageBus: built.messageBus,
-          interactiveMode: false,
-          approvalHandler: async () => ({
-            outcome: ToolConfirmationOutcome.ProceedOnce,
-          }),
-          displayCallbacks: {},
-          taskLaunchOwner: new TaskLaunchOwner(new AsyncTaskManager(5)),
+        agent = created;
+        created.tools.onConfirmationRequest((request) => {
+          created.tools.respondToConfirmation(
+            request.confirmationId,
+            ToolConfirmationOutcome.ProceedOnce,
+          );
         });
         const events = [];
-        for await (const event of loop.run(
+        for await (const event of agent.stream(
           'Launch the shell background job.',
-          new AbortController().signal,
         )) {
           events.push(event);
         }
@@ -125,12 +104,9 @@ describe('standalone createAgenticLoop shell ownership', () => {
         expect(
           events.some(
             (event) =>
-              event.kind === 'tools_complete' &&
-              event.completed.some(
-                (call) =>
-                  call.request.name === 'run_shell_command' &&
-                  call.status === 'success',
-              ),
+              event.type === 'tool-result' &&
+              event.result.name === 'run_shell_command' &&
+              event.result.isError === false,
           ),
         ).toBe(true);
         expect(existsSync(`${marker}.pid`)).toBe(true);
@@ -144,22 +120,20 @@ describe('standalone createAgenticLoop shell ownership', () => {
           throw new Error(
             `Cannot identify standalone shell group: ${group.stderr}`,
           );
-        const job = events
-          .filter((event) => event.kind === 'tools_complete')
-          .flatMap((event) => event.completed)
-          .find(
-            (call) =>
-              call.request.name === 'run_shell_command' &&
-              call.status === 'success',
-          );
+        const job = events.find(
+          (event) =>
+            event.type === 'tool-result' &&
+            event.result.name === 'run_shell_command' &&
+            event.result.isError === false,
+        );
         if (
           !job ||
-          job.status !== 'success' ||
-          typeof job.response.resultDisplay !== 'string'
+          job.type !== 'tool-result' ||
+          typeof job.result.display !== 'string'
         )
           throw new Error('Missing successful standalone shell response');
         const jobId = /Background job \*\*([a-zA-Z0-9_-]+)\*\*/.exec(
-          job.response.resultDisplay,
+          job.result.display,
         )?.[1];
         if (!jobId) throw new Error('Standalone shell response omitted job id');
         const logParent = tmpdir();
@@ -173,16 +147,20 @@ describe('standalone createAgenticLoop shell ownership', () => {
         expect(await readFile(join(logDir, `${jobId}.log`), 'utf8')).toContain(
           'waiting for shell owner gate',
         );
-        await deadline(loop.dispose(), 'standalone runner disposal');
+        await deadline(agent.dispose(), 'public Agent disposal');
         await awaitShellGroupAbsence(pgid);
         expect(existsSync(marker)).toBe(false);
         expect(existsSync(logDir)).toBe(false);
       } finally {
-        await loop?.dispose();
-        await built?.config.dispose();
-        await built?.cleanup();
-        await gate.stop();
-        await rm(root, { recursive: true, force: true });
+        try {
+          await agent?.dispose();
+        } finally {
+          if (previousFake === undefined)
+            delete process.env.LLXPRT_FAKE_RESPONSES;
+          else process.env.LLXPRT_FAKE_RESPONSES = previousFake;
+          await gate.stop();
+          await rm(root, { recursive: true, force: true });
+        }
       }
     },
     30_000,
