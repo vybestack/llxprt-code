@@ -35,7 +35,16 @@ import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/client
 import type { Agent } from './agent.js';
 import type { IsolatedRuntimeContextOptions } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
 import { registerProvidersOntoManager } from './createAgent.js';
-import type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
+import type {
+  AgentRuntimeFactoryBindings,
+  RuntimeProviderManager,
+  RuntimeContentGeneratorFactory,
+  RuntimeTokenizerFactory,
+  ContentGenerator,
+} from '@vybestack/llxprt-code-core';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 
 const DEFAULT_MODEL = 'gemini-1.5-flash';
 const DEFAULT_DEBUG_MODE = false;
@@ -185,7 +194,14 @@ export async function disposeIsolatedMediaRuntime(
 }
 
 export async function createIsolatedSessionClient(
-  handle: IsolatedRuntimeContextHandle,
+  config: Config,
+  settings: SettingsService,
+  settingsOwner: SessionSettingsOwner,
+  providerManager: RuntimeProviderManager,
+  oauthManager: OAuthManager,
+  contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
+  tokenizerFactory: RuntimeTokenizerFactory,
+  providerFileLifecycle: ProviderFileLifecycle,
   mediaOwner: SessionMediaOwner,
   factory: AgentClientFactory = buildAgentClientFactory(),
   readInstructions: () => string | undefined,
@@ -194,41 +210,38 @@ export async function createIsolatedSessionClient(
   imageOperation?: SessionImageSelection['imageOperation'],
 ): Promise<SessionClientOwner> {
   const client = await SessionClientOwner.create(
-    handle.config,
-    assembleTaskSchemaPolicy(handle.settingsService),
-    handle.providerManager,
+    config,
+    assembleTaskSchemaPolicy(settings),
+    providerManager,
     factory,
     mediaOwner.store,
     readInstructions,
     workspacePaths,
-    handle.settingsOwner,
-    handle.contentGeneratorFactory,
-    handle.tokenizerFactory,
+    settingsOwner,
+    contentGeneratorFactory,
+    tokenizerFactory,
     undefined,
     messageBus,
   );
   client.bindInteractiveAuthRequests((prompt) =>
-    handle.oauthManager.requestInteractiveAuth(prompt),
+    oauthManager.requestInteractiveAuth(prompt),
   );
   assembleSessionImages(
     client,
-    handle.config.getTargetDir(),
-    handle.providerManager,
-    handle.oauthManager,
-    handle.settingsService,
+    config.getTargetDir(),
+    providerManager,
+    oauthManager,
+    settings,
     imageOperation,
   );
-  const mainScope = handle.config.getSessionId();
+  const mainScope = config.getSessionId();
   client.bindProviderFiles(
-    handle.providerFileLifecycle,
-    (provider) => handle.oauthManager.composeRetryOperations(provider),
+    providerFileLifecycle,
+    (provider) => oauthManager.composeRetryOperations(provider),
     (scope) =>
       scope === mainScope
         ? Promise.resolve()
-        : SessionClientOwner.cleanupProviderScope(
-            handle.providerFileLifecycle,
-            scope,
-          ),
+        : SessionClientOwner.cleanupProviderScope(providerFileLifecycle, scope),
   );
   return client;
 }
