@@ -4,27 +4,26 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { afterEach, describe, expect, it, vi } from 'bun:test';
-import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
+import { Storage } from '@vybestack/llxprt-code-settings';
+import { MessageBusType } from '@vybestack/llxprt-code-core/confirmation-bus/types.js';
 import {
   FakeProvider,
   ProviderManager,
 } from '@vybestack/llxprt-code-providers';
 import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
 import { WorkspaceCheckpointOwner } from '@vybestack/llxprt-code-core/services/workspace-checkpoint-owner.js';
+import { CHECKPOINT_STORE_MARKER_FILENAME } from '@vybestack/llxprt-code-core/services/gitService.js';
 import { fromConfig } from '../fromConfig.js';
-import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
+import { assembleMcpRuntime } from '../mcpOAuthAssembly.js';
 import { buildFactoryLessConfig } from './helpers/buildCliStyleConfig.js';
 import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 const cleanups: Array<() => Promise<void>> = [];
 
-async function adoptionOptions(
-  credentialAuthority: CredentialAuthority,
-  checkpointing = false,
-) {
+async function adoptionOptions(credentialAuthority: CredentialAuthority) {
   const directory = await realpath(
     await mkdtemp(join(tmpdir(), 'from-config-bootstrap-failure-')),
   );
@@ -35,7 +34,7 @@ async function adoptionOptions(
     {
       workingDir: directory,
       sessionId: 'from-config-bootstrap-failure',
-      checkpointing,
+      checkpointing: true,
       folderTrust: true,
       mcpEnabled: false,
       skillsSupport: false,
@@ -63,10 +62,34 @@ async function adoptionOptions(
   };
 }
 
+async function blockCheckpointConfiguration(
+  historyDirectory: string,
+): Promise<void> {
+  await mkdir(join(historyDirectory, '.gitconfig'), { recursive: true });
+  await writeFile(
+    join(historyDirectory, CHECKPOINT_STORE_MARKER_FILENAME),
+    'fixture',
+  );
+}
+
 function collectMessages(error: unknown): string[] {
   if (error instanceof AggregateError)
     return [error.message, ...error.errors.flatMap(collectMessages)];
   return [error instanceof Error ? error.message : String(error)];
+}
+
+function observeCheckpointFailures(): unknown[] {
+  const failures: unknown[] = [];
+  const initialize = WorkspaceCheckpointOwner.prototype.initialize;
+  vi.spyOn(WorkspaceCheckpointOwner.prototype, 'initialize').mockImplementation(
+    function (this: WorkspaceCheckpointOwner) {
+      return initialize.call(this).catch((error: unknown) => {
+        failures.push(error);
+        throw error;
+      });
+    },
+  );
+  return failures;
 }
 
 describe('fromConfig bootstrap failure reporting', () => {
@@ -78,21 +101,9 @@ describe('fromConfig bootstrap failure reporting', () => {
   });
 
   it('surfaces a workspace initialization failure as the original error, not a cleanup wrapper', async () => {
-    const options = await adoptionOptions(credentials().authority, true);
-    await mkdir(join(options.config.projectHistoryDir, '.gitconfig'), {
-      recursive: true,
-    });
-    const failures: unknown[] = [];
-    const initialize = WorkspaceCheckpointOwner.prototype.initialize;
-    vi.spyOn(
-      WorkspaceCheckpointOwner.prototype,
-      'initialize',
-    ).mockImplementation(function (this: WorkspaceCheckpointOwner) {
-      return initialize.call(this).catch((error: unknown) => {
-        failures.push(error);
-        throw error;
-      });
-    });
+    const options = await adoptionOptions(credentials().authority);
+    await blockCheckpointConfiguration(options.config.projectHistoryDir);
+    const failures = observeCheckpointFailures();
 
     const outcome = await fromConfig(options).then(
       () => undefined,
@@ -110,15 +121,35 @@ describe('fromConfig bootstrap failure reporting', () => {
   });
 
   it('keeps the primary message visible when a genuine cleanup failure is also reported', async () => {
-    const primary = new Error('workspace initialization failed');
-    vi.spyOn(IdeClient, 'create').mockRejectedValue(primary);
-    vi.spyOn(McpRuntimeOwner.prototype, 'dispose').mockRejectedValue(
-      new Error('workspace disposal failed'),
+    const options = await adoptionOptions(credentials().authority);
+    await blockCheckpointConfiguration(options.config.projectHistoryDir);
+    const policyWritePath = join(
+      Storage.getUserPoliciesDir(),
+      'auto-saved.toml.tmp',
     );
+    await mkdir(policyWritePath, { recursive: true });
+    const mcpRuntime = await assembleMcpRuntime(
+      options.config,
+      undefined,
+      {},
+      undefined,
+      'runtime',
+      options.settingsOwner,
+    );
+    mcpRuntime.messageBus.publish({
+      type: MessageBusType.UPDATE_POLICY,
+      toolName: 'write_file',
+      persist: true,
+    });
+    const failures = observeCheckpointFailures();
 
-    const outcome = await fromConfig(
-      await adoptionOptions(credentials().authority),
-    ).then(
+    const outcome = await fromConfig({
+      ...options,
+      mcpRuntime,
+      mcpOwnership: 'agent',
+      policyOwner: mcpRuntime.policyOwner,
+      messageBus: mcpRuntime.messageBus,
+    }).then(
       () => undefined,
       (error: unknown) => error,
     );
@@ -126,8 +157,15 @@ describe('fromConfig bootstrap failure reporting', () => {
     expect(outcome).toBeInstanceOf(AggregateError);
     if (!(outcome instanceof AggregateError))
       throw new Error('Expected an AggregateError');
-    expect(outcome.message).toContain('workspace initialization failed');
+    expect(failures).toHaveLength(1);
+    const primary = failures[0];
+    if (!(primary instanceof Error))
+      throw new Error('Expected a checkpoint initialization error');
+    expect(outcome.message).toContain(primary.message);
     expect(outcome.errors[0]).toBe(primary);
-    expect(collectMessages(outcome)).toContain('workspace disposal failed');
+    expect(collectMessages(outcome).join(' ')).toContain(policyWritePath);
+    expect(outcome.errors).toHaveLength(2);
+    expect(mcpRuntime.isStopped()).toBe(true);
+    expect(credentials().snapshot()).toStrictEqual([1]);
   });
 });
