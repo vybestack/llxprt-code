@@ -702,6 +702,14 @@
       "bun": "./src/policy/policy-owner.ts",
       "import": "./dist/src/policy/policy-owner.js"
     },
+    "./policy/owner-policy-evaluation.js": {
+      "bun": "./src/policy/owner-policy-evaluation.ts",
+      "import": "./dist/src/policy/owner-policy-evaluation.js"
+    },
+    "./config/ephemeralSettingsHelpers.js": {
+      "bun": "./src/config/ephemeralSettingsHelpers.ts",
+      "import": "./dist/src/config/ephemeralSettingsHelpers.js"
+    },
     "./lsp/workspace-lsp-owner.js": {
       "types": "./dist/src/lsp/workspace-lsp-owner.d.ts",
       "bun": "./src/lsp/workspace-lsp-owner.ts",
