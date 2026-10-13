@@ -109,6 +109,28 @@ function createHistoryState(
   );
 }
 
+/**
+ * Places `items` ahead of the resident entries. Used when rows that precede
+ * the live tail arrive after it (a resumed transcript finishing its load
+ * while the session is already running).
+ */
+function prependHistoryItems(
+  previous: HistoryState,
+  items: readonly HistoryItem[],
+  limits: HistoryLimits,
+): HistoryState {
+  if (limits.maxItems === 0) return previous;
+  const leading = createHistoryState(items, limits);
+  return trimHistoryState(
+    {
+      entries: [...leading.entries, ...previous.entries],
+      totalBytes: leading.totalBytes + previous.totalBytes,
+      truncatedItems: leading.truncatedItems + previous.truncatedItems,
+    },
+    limits,
+  );
+}
+
 function trimHistoryState(
   state: HistoryState,
   limits: HistoryLimits,
@@ -323,6 +345,8 @@ export interface HistoryLedger {
   ) => void;
   remove: (ids: readonly number[]) => void;
   load: (items: readonly HistoryItem[]) => void;
+  /** Inserts `items` before every resident entry, keeping those entries. */
+  prepend: (items: readonly HistoryItem[]) => void;
   clear: () => void;
   /**
    * Index of the resident entry carrying `identity`, or -1. Scans only the
@@ -368,6 +392,9 @@ export function createHistoryLedger(
     },
     load: (items) => {
       apply(createHistoryState(items, limits));
+    },
+    prepend: (items) => {
+      apply(prependHistoryItems(state, items, limits));
     },
     clear: () => {
       apply(EMPTY_HISTORY_STATE);

@@ -96,7 +96,7 @@ function registerUnmountAndMemoryTests(): void {
               displayed.push(item.type);
               return displayed.length;
             },
-            loadHistory: (items) => {
+            prependHistory: (items) => {
               displayed.push(...items.map((item) => item.type));
             },
             resumedBoot: {
@@ -121,7 +121,7 @@ function registerUnmountAndMemoryTests(): void {
 
     it('initializes memory file counts from config', async () => {
       const config = makeConfig(3, 5);
-      const loadHistory = vi.fn();
+      const prependHistory = vi.fn();
       const addItem = vi.fn();
 
       const { result } = renderHook(() =>
@@ -129,7 +129,7 @@ function registerUnmountAndMemoryTests(): void {
           uiRuntime: config as never,
           agent: makeAgent(),
           addItem,
-          loadHistory,
+          prependHistory,
         }),
       );
 
@@ -145,9 +145,9 @@ function registerUnmountAndMemoryTests(): void {
 
 function registerHistorySeedingTests(): void {
   describe('history seeding', () => {
-    it('seeds resumed history via loadHistory when resumedHistory is provided', async () => {
+    it('seeds resumed history via prependHistory when resumedHistory is provided', async () => {
       const config = makeConfig();
-      const loadHistory = vi.fn();
+      const prependHistory = vi.fn();
       const addItem = vi.fn();
       const resumedHistory: IContent[] = [
         { speaker: 'human', blocks: [{ type: 'text', text: 'hello' }] },
@@ -158,7 +158,7 @@ function registerHistorySeedingTests(): void {
           uiRuntime: config as never,
           agent: makeAgent(),
           addItem,
-          loadHistory,
+          prependHistory,
           resumedBoot: displayBoot(resumedHistory),
         }),
       );
@@ -169,14 +169,14 @@ function registerHistorySeedingTests(): void {
 
       // Assert against the converter's real output (the stub config resolves
       // no emojifilter setting → 'auto') instead of hard-coding its ID scheme.
-      expect(loadHistory).toHaveBeenCalledWith(
+      expect(prependHistory).toHaveBeenCalledWith(
         iContentToHistoryItems(resumedHistory, 'auto'),
       );
     });
 
-    it('does not call loadHistory when resumedHistory is empty', async () => {
+    it('does not call prependHistory when resumedHistory is empty', async () => {
       const config = makeConfig();
-      const loadHistory = vi.fn();
+      const prependHistory = vi.fn();
       const addItem = vi.fn();
 
       renderHook(() =>
@@ -184,7 +184,7 @@ function registerHistorySeedingTests(): void {
           uiRuntime: config as never,
           agent: makeAgent(),
           addItem,
-          loadHistory,
+          prependHistory,
           resumedBoot: displayBoot([]),
         }),
       );
@@ -193,7 +193,7 @@ function registerHistorySeedingTests(): void {
         await Promise.resolve();
       });
 
-      expect(loadHistory).not.toHaveBeenCalled();
+      expect(prependHistory).not.toHaveBeenCalled();
     });
   });
 }
@@ -202,7 +202,7 @@ function registerSessionStartTests(): void {
   describe('session start', () => {
     it('triggers session start hook on mount', async () => {
       const config = makeConfig();
-      const loadHistory = vi.fn();
+      const prependHistory = vi.fn();
       const addItem = vi.fn();
       const { agent, triggerSessionStart } = makeAgentWithSpy();
 
@@ -211,7 +211,7 @@ function registerSessionStartTests(): void {
           uiRuntime: config as never,
           agent,
           addItem,
-          loadHistory,
+          prependHistory,
         }),
       );
 
@@ -228,7 +228,7 @@ function registerSessionStartTests(): void {
 
     it('injects SessionStart output into history via the agent client', async () => {
       const config = makeConfig();
-      const loadHistory = vi.fn();
+      const prependHistory = vi.fn();
       const addItem = vi.fn();
       const addHistory = vi.fn().mockResolvedValue(undefined);
       config.agentClientSource.getAgentClient.mockReturnValue({ addHistory });
@@ -242,7 +242,7 @@ function registerSessionStartTests(): void {
           uiRuntime: config as never,
           agent,
           addItem,
-          loadHistory,
+          prependHistory,
         }),
       );
 
@@ -270,7 +270,7 @@ function registerUnmountAndRerenderTests(): void {
   describe('unmount and rerender', () => {
     it('aborts session initialization on unmount', async () => {
       const config = makeConfig();
-      const loadHistory = vi.fn();
+      const prependHistory = vi.fn();
       const addItem = vi.fn();
 
       const { unmount } = renderHook(() =>
@@ -278,7 +278,7 @@ function registerUnmountAndRerenderTests(): void {
           uiRuntime: config as never,
           agent: makeAgent(),
           addItem,
-          loadHistory,
+          prependHistory,
         }),
       );
 
@@ -291,14 +291,14 @@ function registerUnmountAndRerenderTests(): void {
       });
 
       // The hook must not continue to load history after unmount; with no
-      // resumedHistory supplied, loadHistory is never called anyway, and the
+      // resumedHistory supplied, prependHistory is never called anyway, and the
       // abort must not cause a spurious invocation either.
-      expect(loadHistory).not.toHaveBeenCalled();
+      expect(prependHistory).not.toHaveBeenCalled();
     });
 
     it('does not duplicate history seeding across renders', async () => {
       const config = makeConfig();
-      const loadHistory = vi.fn();
+      const prependHistory = vi.fn();
       const addItem = vi.fn();
       const resumedHistory: IContent[] = [
         { speaker: 'human', blocks: [{ type: 'text', text: 'hi' }] },
@@ -309,7 +309,7 @@ function registerUnmountAndRerenderTests(): void {
           uiRuntime: config as never,
           agent: makeAgent(),
           addItem,
-          loadHistory,
+          prependHistory,
           resumedBoot: displayBoot(resumedHistory),
         }),
       );
@@ -324,7 +324,7 @@ function registerUnmountAndRerenderTests(): void {
         await Promise.resolve();
       });
 
-      expect(loadHistory).toHaveBeenCalledTimes(1);
+      expect(prependHistory).toHaveBeenCalledTimes(1);
     });
   });
 }

@@ -176,7 +176,7 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     }),
     [settings.merged.ui.historyMaxItems, settings.merged.ui.historyMaxBytes],
   );
-  const { addItem, loadHistory } = useRetractableHistory(
+  const { addItem, prependHistory } = useRetractableHistory(
     props.turnStore,
     historyLimits,
   );
@@ -189,7 +189,7 @@ function useBootstrapHistory(props: AppBootstrapProps) {
     uiRuntime,
     agent,
     addItem,
-    loadHistory,
+    prependHistory,
     resumedBoot,
   });
   // Store mirrors: the context summary renders from the settings store.

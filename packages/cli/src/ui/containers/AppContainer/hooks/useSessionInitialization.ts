@@ -15,7 +15,7 @@ import type { UiRuntime } from '../../../cliUiRuntime.js';
 /**
  * @hook useSessionInitialization
  * @description One-time session initialization with state machine
- * @inputs uiRuntime, addItem, loadHistory, resumedBoot
+ * @inputs uiRuntime, addItem, prependHistory, resumedBoot
  * @outputs SessionInitState
  * @sideEffects Session start hook, history seeding
  * @cleanup AbortController.abort() on change/unmount
@@ -39,7 +39,7 @@ export interface UseSessionInitializationParams {
   uiRuntime: UiRuntime;
   agent: Agent;
   addItem: (item: Omit<HistoryItem, 'id'>, baseTimestamp: number) => number;
-  loadHistory: (newHistory: HistoryItem[]) => void;
+  prependHistory: (leading: HistoryItem[]) => void;
   resumedBoot?: Pick<ResumeCursorBoot, 'streamRows'>;
 }
 
@@ -94,7 +94,7 @@ export function useSessionInitialization({
   uiRuntime,
   agent,
   addItem,
-  loadHistory,
+  prependHistory,
   resumedBoot,
 }: UseSessionInitializationParams): UseSessionInitializationResult {
   const [llxprtMdFileCount, setLlxprtMdFileCount] = useState<number>(0);
@@ -113,8 +113,11 @@ export function useSessionInitialization({
   }, []);
 
   // Effect: Seed resumed history into history manager.
-  // The guard ref prevents redundant loadHistory calls across StrictMode
-  // double-mount while keeping resumedBoot as a static mount-time prop.
+  // The restored rows load asynchronously, so the SessionStart message or the
+  // first turn may already be in the history; they are prepended, never
+  // replacing what arrived meanwhile. The guard ref prevents redundant seeding
+  // across StrictMode double-mount while keeping resumedBoot as a static
+  // mount-time prop.
   useEffect(() => {
     if (hasSeededResumedHistory.current || !resumedBoot) return undefined;
     hasSeededResumedHistory.current = true;
@@ -123,7 +126,7 @@ export function useSessionInitialization({
       resolveEmojiFilterMode(uiRuntime.ephemeral),
     ).then(
       (items) => {
-        if (mounted.current && items.length > 0) loadHistory(items);
+        if (mounted.current && items.length > 0) prependHistory(items);
       },
       (error: unknown) => {
         if (!mounted.current) return;
@@ -137,7 +140,7 @@ export function useSessionInitialization({
       },
     );
     return undefined;
-  }, [loadHistory, resumedBoot, uiRuntime, addItem]);
+  }, [prependHistory, resumedBoot, uiRuntime, addItem]);
 
   // Effect: Trigger SessionStart hook on initialization
   useEffect(() => {

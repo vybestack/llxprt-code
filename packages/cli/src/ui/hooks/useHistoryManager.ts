@@ -32,6 +32,7 @@ export interface UseHistoryManagerReturn {
 export interface RetractableHistoryManagerReturn
   extends UseHistoryManagerReturn {
   removeItems: (ids: readonly number[]) => void;
+  prependHistory: (leading: HistoryItem[]) => void;
 }
 
 export type RemoveHistoryItems = RetractableHistoryManagerReturn['removeItems'];
@@ -83,6 +84,7 @@ export function useRetractableHistory(
       removeItems: commands.removeItems,
       clearItems: commands.clearItems,
       loadHistory: commands.loadHistory,
+      prependHistory: commands.prependHistory,
     }),
     [history, commands],
   );

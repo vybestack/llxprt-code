@@ -49,20 +49,20 @@ async function seedWith(
   emojiMode: string | undefined,
   resumedHistory: IContent[] = RESUMED_HISTORY,
 ) {
-  const loadHistory = vi.fn();
+  const prependHistory = vi.fn();
   renderHook(() =>
     useSessionInitialization({
       uiRuntime: makeConfig(emojiMode),
       agent: makeAgent(),
       addItem: vi.fn(),
-      loadHistory,
+      prependHistory,
       resumedBoot: displayBoot(resumedHistory),
     }),
   );
   await act(async () => {
     await Promise.resolve();
   });
-  return loadHistory;
+  return prependHistory;
 }
 
 function clearTestMocks(): void {
@@ -78,10 +78,10 @@ describe('useSessionInitialization emoji filtering (#2888)', () => {
   afterEach(restoreTestMocks);
 
   it('seeds filtered model text and verbatim user text by default', async () => {
-    const loadHistory = await seedWith(undefined);
+    const prependHistory = await seedWith(undefined);
 
-    expect(loadHistory).toHaveBeenCalledTimes(1);
-    expect(loadHistory).toHaveBeenCalledWith([
+    expect(prependHistory).toHaveBeenCalledTimes(1);
+    expect(prependHistory).toHaveBeenCalledWith([
       {
         id: -1,
         type: 'user',
@@ -98,9 +98,9 @@ describe('useSessionInitialization emoji filtering (#2888)', () => {
   });
 
   it('seeds verbatim text when the setting allows emojis', async () => {
-    const loadHistory = await seedWith('allowed');
+    const prependHistory = await seedWith('allowed');
 
-    expect(loadHistory).toHaveBeenCalledWith([
+    expect(prependHistory).toHaveBeenCalledWith([
       {
         id: -1,
         type: 'user',
@@ -122,12 +122,12 @@ describe('useSessionInitialization emoji filtering (#2888): error and warn', () 
   afterEach(restoreTestMocks);
 
   it('seeds the live error item for blocked model text in error mode', async () => {
-    const loadHistory = await seedWith('error');
+    const prependHistory = await seedWith('error');
 
     // The blocked turn replays as the same error item the live path renders;
     // user text stays verbatim. The error replacement keeps the source
     // record's row identity.
-    expect(loadHistory).toHaveBeenCalledWith([
+    expect(prependHistory).toHaveBeenCalledWith([
       {
         id: -1,
         type: 'user',
@@ -144,11 +144,11 @@ describe('useSessionInitialization emoji filtering (#2888): error and warn', () 
   });
 
   it('matches direct conversion output for the same mode', async () => {
-    const loadHistory = await seedWith('warn');
+    const prependHistory = await seedWith('warn');
 
     // Warn mode appends the feedback info item after the filtered turn,
     // exactly as the live path would have shown it.
-    expect(loadHistory).toHaveBeenCalledWith(
+    expect(prependHistory).toHaveBeenCalledWith(
       iContentToHistoryItems(RESUMED_HISTORY, 'warn'),
     );
   });
@@ -167,9 +167,9 @@ describe('useSessionInitialization emoji filtering (#2888): error and warn', () 
         ],
       },
     ];
-    const loadHistory = await seedWith('error', withThinking);
+    const prependHistory = await seedWith('error', withThinking);
 
-    expect(loadHistory).toHaveBeenCalledWith([
+    expect(prependHistory).toHaveBeenCalledWith([
       {
         id: -1,
         type: 'user',
