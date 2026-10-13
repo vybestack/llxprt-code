@@ -41,6 +41,7 @@ import {
   RecordingTicketQueue,
   type PendingRecord,
 } from './recording-ticket-queue.js';
+import { ReplaceWriteGuard } from './replaceWriteGuard.js';
 import { type IContent } from '../services/history/IContent.js';
 import { debugLogger } from '../utils/debugLogger.js';
 import {
@@ -71,6 +72,7 @@ import {
 import {
   defaultWriterIo,
   isDiskSpaceError,
+  reportQueueHighWater,
 } from './recordingWriterDefaults.js';
 import { CommitAckRegistry } from './CommitAckRegistry.js';
 import { diagnoseMissingPath, watchChatsDir } from './ChatsDirWatcher.js';
@@ -94,12 +96,6 @@ export const SESSION_FILE_ID_PREFIX_LENGTH = 12;
  */
 export const DEFAULT_MAX_QUEUE_BYTES = 8 * 1024 * 1024;
 
-/**
- * Queue depth at which the writer is clearly not keeping up with production.
- * Crossing it is reported once so the condition is diagnosable; records are
- * never dropped, because the session file is the durable transcript.
- */
-const QUEUE_HIGH_WATER_RECORDS = 4096;
 const MATERIALIZING_EVENT_TYPES: ReadonlySet<SessionEventType> = new Set([
   'content',
   'session_metadata',
@@ -123,6 +119,7 @@ type RecordingLifecycle =
 export class SessionRecordingService {
   /** @pseudocode session-recording-service.md lines 40-51 */
   private readonly queue = new RecordingTicketQueue();
+  private readonly replaceWrites = new ReplaceWriteGuard();
   private queueBytes: number = 0;
   private highWaterReported: boolean = false;
   private seq: number = 0;
@@ -279,6 +276,7 @@ export class SessionRecordingService {
    */
   enqueue(type: SessionEventType, payload: unknown): SessionRecordLine | null {
     if (!this.isActive()) return null;
+    this.replaceWrites.admit(type, payload);
     if (!this.materialized && !MATERIALIZING_EVENT_TYPES.has(type)) {
       return this.bufferPreContent(type, payload);
     }
@@ -402,6 +400,7 @@ export class SessionRecordingService {
     record: PendingRecord,
     rebind: HeaderRebind | null,
   ): Promise<CommitWatermark> {
+    this.replaceWrites.admit(line.type, line.payload);
     this.stageRecord(record, rebind);
     this.reportHighWater();
     const ack = this.acks.register(line.seq);
@@ -500,25 +499,11 @@ export class SessionRecordingService {
         : { status: 'failed', error: canonicalError };
   }
 
-  /**
-   * Reports, once, that the writer has fallen far behind. Deliberately does not
-   * drop records: the JSONL file is the durable transcript, and the queue is
-   * bounded in practice by disk throughput, which far exceeds the rate at which
-   * a model can produce content.
-   */
   private reportHighWater(): void {
-    if (
-      this.highWaterReported ||
-      this.queue.length + this.preContentBuffer.length <
-        QUEUE_HIGH_WATER_RECORDS
-    ) {
-      return;
-    }
-    this.highWaterReported = true;
-    debugLogger.error(
-      `[SessionRecording] pending queue exceeded ${QUEUE_HIGH_WATER_RECORDS} records ` +
-        `(${this.queueBytes + this.preContentBytes} bytes); the session file writer is behind. ` +
-        `No records are dropped.`,
+    if (this.highWaterReported) return;
+    this.highWaterReported = reportQueueHighWater(
+      this.queue.length + this.preContentBuffer.length,
+      this.queueBytes + this.preContentBytes,
     );
   }
 
@@ -814,6 +799,7 @@ export class SessionRecordingService {
     this.filePath = filePath;
     this.seq = lastSeq;
     this.materialized = true;
+    this.replaceWrites.reset();
     this.preContentBuffer.clear();
     this.preContentBytes = 0;
     // Watermark offsets are absolute for the (possibly different) journal

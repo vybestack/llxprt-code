@@ -157,22 +157,52 @@ function overlayRows(store: HistoryJournalStore): string[] {
   return store.withReadRows((cursor) => [...cursor.rows()].map(textOf));
 }
 
-/** Write records verbatim; the store would refuse to publish malformed ones. */
-function enqueueRaw(
+/**
+ * Append records verbatim after a seeded row. Neither the store nor the
+ * recorder will publish a malformed transaction, so the lines go straight to
+ * the file to prove that every reader still rejects one.
+ */
+async function appendRaw(
   recorder: SessionRecordingService,
   ops: readonly HistoryJournalOp[],
-): void {
+): Promise<string> {
   recorder.enqueue('content', { content: row('seed') });
+  await recorder.flush();
+  const file = recorder.getFilePath();
+  if (file === null) throw new Error('journal was not materialized');
+  let seq = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).length;
   for (const op of ops) {
-    if (op.kind === 'content')
-      recorder.enqueue('content', { content: op.content, tx: op.tx });
-    else if (op.kind === 'replaceBegin')
-      recorder.enqueue('replace_begin', { txId: op.txId });
-    else if (op.kind === 'replaceCommit')
-      recorder.enqueue('replace_commit', {
-        txId: op.txId,
-        rowCount: op.rowCount,
-      });
+    const record = rawRecord(op);
+    if (record === undefined) continue;
+    seq += 1;
+    fs.appendFileSync(
+      file,
+      JSON.stringify({
+        v: 2,
+        seq,
+        ts: '2026-10-10T00:00:00Z',
+        ...record,
+      }) + '\n',
+    );
+  }
+  return file;
+}
+
+function rawRecord(
+  op: HistoryJournalOp,
+): { type: string; payload: unknown } | undefined {
+  switch (op.kind) {
+    case 'content':
+      return { type: 'content', payload: { content: op.content, tx: op.tx } };
+    case 'replaceBegin':
+      return { type: 'replace_begin', payload: { txId: op.txId } };
+    case 'replaceCommit':
+      return {
+        type: 'replace_commit',
+        payload: { txId: op.txId, rowCount: op.rowCount },
+      };
+    default:
+      return undefined;
   }
 }
 
@@ -353,10 +383,7 @@ describe('replace transactions', () => {
         model: 'test',
       });
       try {
-        enqueueRaw(recorder, ops);
-        await recorder.flush();
-        const file = recorder.getFilePath();
-        if (file === null) throw new Error('journal was not materialized');
+        const file = await appendRaw(recorder, ops);
         const outcomes = await foldOutcomes(file);
         for (const outcome of Object.values(outcomes))
           expect(outcome).toContain('Malformed replace transaction');

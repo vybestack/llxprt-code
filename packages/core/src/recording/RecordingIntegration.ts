@@ -52,6 +52,7 @@ export class RecordingIntegration {
   private subscriptionGeneration = 0;
   private detachmentSettlement: Promise<void> = Promise.resolve();
   private detachmentFailure: { error: unknown } | undefined;
+  private pendingDetachments = 0;
   private attachmentSettlement: Promise<void> = Promise.resolve();
   private attachmentOperation: Promise<void> = Promise.resolve();
   private attachmentFailure: { error: unknown } | undefined;
@@ -64,6 +65,7 @@ export class RecordingIntegration {
   }
 
   private detach(history: HistoryService): void {
+    this.pendingDetachments += 1;
     const operation = history
       .detachJournal(this.recording)
       .catch((error: unknown) => {
@@ -76,6 +78,9 @@ export class RecordingIntegration {
                   'Journal detachment failed',
                 ),
         };
+      })
+      .finally(() => {
+        this.pendingDetachments -= 1;
       });
     this.detachmentSettlement = Promise.all([
       this.detachmentSettlement,
@@ -167,8 +172,41 @@ export class RecordingIntegration {
     if (this.disposed) return Promise.resolve();
     const generation = this.subscriptionGeneration;
     this.journalHistory = history;
+    // The previous history must finish detaching before the new one starts its
+    // replace transaction, or its last writes land inside that transaction.
+    const operation =
+      this.pendingDetachments === 0 && this.detachmentFailure === undefined
+        ? this.attachJournal(history, owner, generation)
+        : this.settleDetachments().then(
+            () => this.attachJournal(history, owner, generation),
+            (error: unknown) => {
+              this.releaseSubscription(generation);
+              throw error;
+            },
+          );
+    this.attachmentOperation = operation;
+    this.attachmentSettlement = operation.catch((error: unknown) => {
+      this.releaseSubscription(generation);
+      this.attachmentFailure = { error };
+    });
+    return operation;
+  }
+
+  private releaseSubscription(generation: number): void {
+    if (generation !== this.subscriptionGeneration) return;
+    this.historySubscription?.();
+    this.historySubscription = null;
+    this.journalHistory = undefined;
+  }
+
+  private attachJournal(
+    history: HistoryService,
+    owner: object | undefined,
+    generation: number,
+  ): Promise<void> {
+    if (generation !== this.subscriptionGeneration) return Promise.resolve();
     try {
-      const operation = history.attachJournal(
+      return history.attachJournal(
         this.recording,
         true,
         () => {
@@ -179,18 +217,8 @@ export class RecordingIntegration {
         },
         owner,
       );
-      this.attachmentOperation = operation;
-      this.attachmentSettlement = operation.catch((error: unknown) => {
-        if (generation === this.subscriptionGeneration) {
-          this.historySubscription?.();
-          this.historySubscription = null;
-          this.journalHistory = undefined;
-        }
-        this.attachmentFailure = { error };
-      });
-      return operation;
     } catch (error) {
-      this.journalHistory = undefined;
+      this.releaseSubscription(generation);
       throw error;
     }
   }
