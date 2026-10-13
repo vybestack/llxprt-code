@@ -4,17 +4,20 @@ import {
   requireTxId,
 } from '../../recording/replaceTransaction.js';
 import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
-import type { SessionRecordLine } from '../../recording/types.js';
+import type {
+  SessionEventType,
+  SessionRecordLine,
+} from '../../recording/types.js';
 import {
   scanJournalRecords,
+  type JournalRecordScan,
   type ScannedJournalRecord,
 } from './historyJournalRecordScan.js';
-import {
-  DroppedRanges,
-  SharedHistoryRows,
-  type BaselineOwner,
-} from './historySharedRows.js';
-import { mirrorWrites } from './historyMirrorTranslation.js';
+import { envelopeToEvent } from './historyJournalFold.js';
+import { JournalRowReader } from './historyJournalRowReader.js';
+import { planMirrors } from './historyMirrorTranslation.js';
+import { writeMirrorPlan } from './historyMirrorWrites.js';
+import { SharedRowIndex } from './historySharedRowIndex.js';
 import { acceptsHistoryOrigin, payloadOrigin } from './historyOriginId.js';
 import {
   rethrow,
@@ -53,6 +56,12 @@ function isAppendedRow(line: Pick<DirectLine, 'type' | 'payload'>): boolean {
   return line.type === 'content' && contentTxId(line.payload) === undefined;
 }
 
+/** Rows below this byte offset of the primary are owned by `origin`, whatever their records say. */
+export interface BaselineOwner {
+  readonly origin: string;
+  readonly end: number;
+}
+
 interface OpenTransaction {
   readonly txId: string;
   /** Rows each mirror received for the transaction. */
@@ -73,23 +82,30 @@ interface OpenTransaction {
  *
  * A mirror holds exactly the shared rows its origin owns, so a record whose
  * meaning depends on position (a rewind, an insert, a density pass, a
- * compression) is translated to the mirror's own rows. The translation folds
- * the primary's delivered records into a transient {@link SharedHistoryRows}
- * that lives for one batch.
+ * compression) is translated to the mirror's own rows. The pump keeps a
+ * {@link SharedRowIndex}: one fixed-width disk row per shared row with its
+ * owner, folded incrementally from the records the pump consumes. A batch
+ * reads only the bytes appended since the previous one and holds only the
+ * record it is working on; the one exception is the first batch after
+ * `reset`, which folds the journal the pump was pointed past.
  */
 export class HistoryFanoutFeed {
   private cursor = 0;
   private consumedSeq = 0;
   private primary: SessionRecordingService | undefined;
   private baseline: BaselineOwner | undefined;
-  private readonly dropped = new DroppedRanges();
-  private sharedRows: SharedHistoryRows | undefined;
+  private index: SharedRowIndex | undefined;
+  /** Journal offset the index has folded through. */
+  private foldedTo = 0;
   private openTransaction: OpenTransaction | undefined;
   private chain: Promise<void> = Promise.resolve();
   private failures: unknown[] = [];
   private scheduled = 0;
 
-  constructor(private readonly fanout: HistoryRecorderFanout) {}
+  constructor(
+    private readonly fanout: HistoryRecorderFanout,
+    private readonly scan: JournalRecordScan = scanJournalRecords,
+  ) {}
 
   /**
    * Point the pump at a new primary journal; callers settle first. Rows of
@@ -104,9 +120,16 @@ export class HistoryFanoutFeed {
     this.cursor = cursor;
     this.consumedSeq = 0;
     this.baseline = baseline;
-    this.dropped.clear();
-    this.sharedRows = undefined;
+    this.index?.close();
+    this.index = new SharedRowIndex();
+    this.foldedTo = 0;
     this.openTransaction = undefined;
+  }
+
+  /** Release the disk rows; callers settle first. */
+  dispose(): void {
+    this.index?.close();
+    this.index = undefined;
   }
 
   /**
@@ -117,17 +140,12 @@ export class HistoryFanoutFeed {
     const filePath = this.primary?.getFilePath();
     if (filePath === null || filePath === undefined)
       throw new Error('History fan-out primary has no journal file');
-    const sharedRows = await SharedHistoryRows.fold(
-      filePath,
-      this.cursor,
-      this.dropped,
-      this.baseline,
-    );
+    const index = this.requireIndex();
+    await this.foldThrough(filePath, this.cursor);
+    const counts = index.counts();
     for (const origin of this.fanout.origins) {
       if (origin === owner) continue;
-      const held = sharedRows.rows.filter((row) =>
-        acceptsHistoryOrigin(origin, sharedRows.ownerOf(row)),
-      ).length;
+      const held = counts.heldBy(index.idOf(origin));
       if (held > 0) this.fanout.send(origin, 'rewind', { itemsRemoved: held });
     }
   }
@@ -179,7 +197,6 @@ export class HistoryFanoutFeed {
       } catch (error) {
         this.failures.push(error);
       } finally {
-        this.sharedRows = undefined;
         this.scheduled--;
       }
     });
@@ -196,15 +213,13 @@ export class HistoryFanoutFeed {
     if (filePath === null)
       throw new Error('History fan-out primary has no journal file');
     const failures: unknown[] = [];
-    for await (const record of scanJournalRecords(
-      filePath,
-      this.cursor,
-      limit,
-    )) {
+    await this.foldThrough(filePath, this.cursor);
+    for await (const record of this.scan(filePath, this.cursor, limit)) {
       if (record.seq <= seq) {
         this.cursor = record.end;
         this.consumedSeq = record.seq;
-        if (mode === 'drop') this.dropped.add(record.start, record.end);
+        // A dropped record never reached a mirror, so it is not shared history.
+        if (mode === 'drop') this.foldedTo = record.end;
         else await this.process(filePath, record, mode === 'deliver', failures);
       }
       if (record.seq >= seq) break;
@@ -227,7 +242,36 @@ export class HistoryFanoutFeed {
       return;
     }
     if (deliver) this.deliverRecord(record, failures);
-    this.sharedRows?.apply(record, payloadOrigin(record.payload));
+    this.foldRecord(record);
+  }
+
+  private requireIndex(): SharedRowIndex {
+    if (this.index === undefined)
+      throw new Error('History fan-out pump has no primary journal');
+    return this.index;
+  }
+
+  /** The origin a primary record belongs to, whatever its payload says below the baseline. */
+  private ownerOf(record: ScannedJournalRecord): string | undefined {
+    const baseline = this.baseline;
+    return baseline !== undefined && record.start < baseline.end
+      ? baseline.origin
+      : payloadOrigin(record.payload);
+  }
+
+  private foldRecord(record: ScannedJournalRecord): void {
+    this.requireIndex().fold(record, this.ownerOf(record));
+    this.foldedTo = record.end;
+  }
+
+  /**
+   * Fold the records the index has not seen yet, up to byte `end`. After the
+   * first batch following a reset the index is level with the cursor and this
+   * reads nothing.
+   */
+  private async foldThrough(filePath: string, end: number): Promise<void> {
+    for await (const record of this.scan(filePath, this.foldedTo, end))
+      this.foldRecord(record);
   }
 
   private deliverRecord(
@@ -294,31 +338,40 @@ export class HistoryFanoutFeed {
     record: ScannedJournalRecord,
     failures: unknown[],
   ): Promise<void> {
-    this.sharedRows ??= await SharedHistoryRows.fold(
-      filePath,
-      record.start,
-      this.dropped,
-      this.baseline,
-    );
-    const sharedRows = this.sharedRows;
-    const before = [...sharedRows.rows];
-    const event = sharedRows.apply(record, payloadOrigin(record.payload));
-    if (event === null) return;
-    for (const origin of this.fanout.origins) {
-      try {
-        const writes = mirrorWrites({
-          mirror: origin,
-          record,
-          event,
-          before,
-          after: sharedRows.rows,
-          ownerOf: (row) => sharedRows.ownerOf(row),
-        });
-        for (const write of writes)
-          this.fanout.send(origin, write.type, write.payload);
-      } catch (error) {
-        failures.push(error);
+    const event = envelopeToEvent(record.type, record.payload);
+    if (event === null) {
+      this.foldRecord(record);
+      return;
+    }
+    const index = this.requireIndex();
+    const mirrors = this.fanout.origins;
+    const plans = planMirrors({
+      index,
+      mirrors,
+      record,
+      event,
+      owner: this.ownerOf(record),
+    });
+    this.foldRecord(record);
+    const reader = new JournalRowReader(filePath);
+    let counts: ReturnType<SharedRowIndex['counts']> | undefined;
+    const context = {
+      index,
+      reader,
+      send: (mirror: string, type: SessionEventType, payload: unknown) =>
+        this.fanout.send(mirror, type, payload),
+      countsAfter: () => (counts ??= index.counts()),
+    };
+    try {
+      for (const [mirror, plan] of plans) {
+        try {
+          await writeMirrorPlan(context, mirror, plan);
+        } catch (error) {
+          failures.push(error);
+        }
       }
+    } finally {
+      reader.close();
     }
   }
 

@@ -177,3 +177,56 @@ describe('row directory ownership', () => {
     }
   });
 });
+
+describe('row origin', () => {
+  const owned = (index: number): NumericRow => ({
+    ...row(index),
+    origin: index + 1,
+  });
+
+  it('keeps an origin through every mutation and a clone, and omits it when absent', () => {
+    inScratch((directory) => {
+      directory.append(row(0));
+      directory.append(owned(1));
+      directory.append(owned(2));
+      expect('origin' in directory.rowAt(0)).toBe(false);
+      expect(directory.rowAt(1).origin).toBe(2);
+      directory.insert(1, owned(7));
+      directory.replace(0, { ...directory.rowAt(0), origin: 9 });
+      directory.compact((entry) => entry.chronologySeq !== 1);
+      directory.transform((entry) => ({ ...entry }));
+      const copy = directory.clone();
+      try {
+        expect(Array.from(copy.rows(), (entry) => entry.origin)).toStrictEqual([
+          9, 8, 3,
+        ]);
+      } finally {
+        copy.close();
+      }
+      directory.truncate(2);
+      expect(
+        Array.from(directory.rows(), (entry) => entry.origin),
+      ).toStrictEqual([9, 8]);
+    });
+  });
+
+  it('refuses an origin that is not a positive 32-bit integer', () => {
+    inScratch((directory) => {
+      for (const origin of [0, -1, 1.5, 2 ** 32, Number.NaN])
+        expect(() => directory.append({ ...row(0), origin })).toThrow(
+          'Invalid numeric row',
+        );
+      expect(directory.length).toBe(0);
+    });
+  });
+
+  it('iterates rows from a start position in bounded chunks', () => {
+    inScratch((directory) => {
+      for (let index = 0; index < 2500; index += 1)
+        directory.append(owned(index % 50));
+      const seqs = Array.from(directory.rows(2400), (entry) => entry.origin);
+      expect(seqs.length).toBe(100);
+      expect(seqs[0]).toBe((2400 % 50) + 1);
+    });
+  });
+});

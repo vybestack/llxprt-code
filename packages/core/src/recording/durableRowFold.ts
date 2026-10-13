@@ -119,16 +119,22 @@ export interface DurableRowFoldOptions {
   readonly keepOpenTransaction?: boolean;
 }
 
-function isContent(value: unknown): value is IContent {
+export function isContent(value: unknown): value is IContent {
   return (
     ['human', 'ai', 'tool'].includes(String(field(value, 'speaker'))) &&
     Array.isArray(field(value, 'blocks'))
   );
 }
 
+/** The origin fields of a row an `owner` wrote; none when the owner is absent. */
+function ownedBy(owner: number): Pick<NumericRow, 'origin'> {
+  return owner === 0 ? {} : { origin: owner };
+}
+
 function projectedRow(
   content: unknown,
   source: RowSource = 'durable',
+  owner = 0,
 ): NumericRow {
   const offset = field(content, 'start');
   const bytes = field(content, 'bytes');
@@ -148,10 +154,11 @@ function projectedRow(
     chronologySeq: Number.isNaN(marker) ? null : marker,
     pendingSlot: -1,
     invalidateResponses: false,
+    ...ownedBy(owner),
   };
 }
 
-function indexedRow(row: IndexedRow): NumericRow {
+function indexedRow(row: IndexedRow, owner: number): NumericRow {
   if (!Number.isNaN(row.chron) && !validSeq(row.chron))
     throw new UnsupportedDurableFoldEvent('non_numeric_chronology');
   return {
@@ -161,6 +168,7 @@ function indexedRow(row: IndexedRow): NumericRow {
     chronologySeq: Number.isNaN(row.chron) ? null : row.chron,
     pendingSlot: -1,
     invalidateResponses: false,
+    ...ownedBy(owner),
   };
 }
 
@@ -185,7 +193,11 @@ function foldChronologyBinding(
   const content = field(payload, 'content');
   if (content !== undefined && !validRow(content)) return;
   const previous = directory.rowAt(binding.rowIndex);
-  const source = content === undefined ? previous : projectedRow(content);
+  // A rebinding replaces the row's value, never its owner.
+  const source =
+    content === undefined
+      ? previous
+      : projectedRow(content, 'durable', previous.origin);
   directory.replace(binding.rowIndex, {
     ...source,
     chronologySeq: binding.chronology.seq,
@@ -201,6 +213,7 @@ function foldChronologyBinding(
 function foldSyntheticInsert(
   directory: MutableRowDirectory,
   payload: unknown,
+  owner: number,
 ): void {
   const content = field(payload, 'content');
   const chronologySeq = field(payload, 'chronologySeq');
@@ -209,10 +222,12 @@ function foldSyntheticInsert(
     return;
   const anchor = directory.firstChronology(afterSeq);
   if (anchor === -1) return;
-  directory.insert(anchor + 1, projectedRow(content));
+  // An insert that names no owner repairs the row it follows and so belongs to it.
+  const inserted = owner === 0 ? (directory.rowAt(anchor).origin ?? 0) : owner;
+  directory.insert(anchor + 1, projectedRow(content, 'durable', inserted));
 }
 
-function densityRow(entry: DensityEntry): NumericRow {
+function densityRow(entry: DensityEntry, owner: number): NumericRow {
   if (!Number.isNaN(entry.chron) && !validSeq(entry.chron))
     throw new UnsupportedDurableFoldEvent('non_numeric_chronology');
   return {
@@ -222,6 +237,7 @@ function densityRow(entry: DensityEntry): NumericRow {
     chronologySeq: Number.isNaN(entry.chron) ? null : entry.chron,
     pendingSlot: -1,
     invalidateResponses: false,
+    ...ownedBy(owner),
   };
 }
 
@@ -230,6 +246,7 @@ function foldDensity(
   payload: unknown,
   line: ProjectedLine,
   density: DurableDensityIndex,
+  owner: number,
 ): void {
   if (
     !Array.isArray(field(payload, 'removedSeqs')) ||
@@ -240,7 +257,9 @@ function foldDensity(
   directory.transform((row) => {
     if (row.chronologySeq === null) return row;
     const replacement = density.find('replacement', row.chronologySeq);
-    if (replacement !== null) return densityRow(replacement);
+    // A pass that names no owner rewrites rows in place, so they keep theirs.
+    if (replacement !== null)
+      return densityRow(replacement, owner === 0 ? (row.origin ?? 0) : owner);
     return density.find('removed', row.chronologySeq) === null ? row : null;
   });
 }
@@ -250,6 +269,7 @@ function foldSemanticPurge(
   payload: unknown,
   line: ProjectedLine,
   staged: ResolverDiskIndex,
+  owner: number,
 ): void {
   if (line.length > MAX_PURGE_SNAPSHOT_BYTES && field(line.parsed, 'v') !== 2)
     throw new UnsupportedDurableFoldEvent('oversized_semantic_media_purge');
@@ -257,7 +277,7 @@ function foldSemanticPurge(
   if (!Array.isArray(history) || line.projection.invalidPurge) return;
   directory.truncate(0);
   for (let index = 0; index < staged.length; index += 1)
-    directory.append(indexedRow(staged.get(index)));
+    directory.append(indexedRow(staged.get(index), owner));
 }
 
 export function foldLine(
@@ -267,6 +287,7 @@ export function foldLine(
   density: DurableDensityIndex,
   tx: ReplaceTransactionFold,
   source: RowSource = 'durable',
+  owner = 0,
 ): void {
   if (line.invalid || line.blank || line.parsed === null) return;
   const version = field(line.parsed, 'v');
@@ -291,7 +312,7 @@ export function foldLine(
           field(payload, 'itemsCompressed') === undefined)
       )
         return;
-      const numeric = projectedRow(row, source);
+      const numeric = projectedRow(row, source, owner);
       if (type === 'compressed') directory.truncate(0);
       directory.append(numeric);
       return;
@@ -302,16 +323,16 @@ export function foldLine(
     case 'compression_detail':
       return;
     case 'density_mutation':
-      foldDensity(directory, payload, line, density);
+      foldDensity(directory, payload, line, density, owner);
       return;
     case 'synthetic_insert':
-      foldSyntheticInsert(directory, payload);
+      foldSyntheticInsert(directory, payload, owner);
       return;
     case 'chronology_bind':
       foldChronologyBinding(directory, payload);
       return;
     case 'semantic_media_purge':
-      foldSemanticPurge(directory, payload, line, staged);
+      foldSemanticPurge(directory, payload, line, staged, owner);
       return;
     default:
       return;

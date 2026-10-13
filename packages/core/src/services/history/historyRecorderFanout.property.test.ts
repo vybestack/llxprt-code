@@ -80,6 +80,20 @@ describe('recorder mirrors stay replayable under random operations', () => {
 
     await ownNewRows(undefined, false);
 
+    // A repair row answers a tool call, so it belongs to the owner of the row
+    // it follows.
+    const ownRepairRows = async (): Promise<void> => {
+      const rows = await harness.shared(service);
+      rows.forEach((row, position) => {
+        if (owners.has(seqOf(row))) return;
+        const call = position === 0 ? undefined : rows[position - 1];
+        owners.set(
+          seqOf(row),
+          call === undefined ? null : (owners.get(seqOf(call)) ?? null),
+        );
+      });
+    };
+
     const step = async (operation: Operation): Promise<void> => {
       const who = pick(people);
       const rows = await harness.shared(service);
@@ -118,7 +132,7 @@ describe('recorder mirrors stay replayable under random operations', () => {
           await ownNewRows(who.id, false);
           service.validateAndFix();
           await service.waitForCommit();
-          await ownNewRows(undefined, false);
+          await ownRepairRows();
           return;
         case 'replace': {
           const count = 1 + Math.floor(next() * 3);

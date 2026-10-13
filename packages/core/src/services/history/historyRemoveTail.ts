@@ -65,6 +65,7 @@ async function rollbackRemoval(
   admitted: boolean,
   effect: PreparedHistoryBatchEffect | undefined,
   primary: unknown,
+  restored: (journalRestored: boolean) => void,
 ): Promise<never> {
   const failures: unknown[] = [];
   try {
@@ -72,13 +73,16 @@ async function rollbackRemoval(
   } catch (error) {
     failures.push(error);
   }
+  let journalRestored = true;
   if (admitted) {
     try {
       restoreSuffix(journal, previous, cut);
     } catch (error) {
+      journalRestored = false;
       failures.push(error);
     }
   }
+  restored(journalRestored);
   try {
     await effect?.rollback();
   } catch (error) {
@@ -115,6 +119,25 @@ async function publishRemoval(
   previous: HistoryMutationSnapshot,
   removed: IContent,
 ): Promise<IContent> {
+  // A removal that is undone never reaches the mirrors, so the rows it put
+  // back are not seen without the owners the removed rows had.
+  const publication = input.journal.openPublication();
+  let published = true;
+  try {
+    return await removeAndRecalculate(input, previous, removed, (restored) => {
+      published = !restored;
+    });
+  } finally {
+    publication.close(published);
+  }
+}
+
+async function removeAndRecalculate(
+  input: RemovalInput,
+  previous: HistoryMutationSnapshot,
+  removed: IContent,
+  restored: (journalRestored: boolean) => void,
+): Promise<IContent> {
   const cut = cutIndex(previous, removed);
   const effect = await input.owner?.prepareReplacement({
     previous,
@@ -140,6 +163,7 @@ async function publishRemoval(
       admitted,
       effect,
       error,
+      restored,
     );
   }
   try {
@@ -153,6 +177,7 @@ async function publishRemoval(
         true,
         effect,
         error.failure,
+        restored,
       );
     }
     await effect?.finalize?.();

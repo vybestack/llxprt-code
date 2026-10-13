@@ -87,6 +87,11 @@ export class FanoutHarness {
 
   /** The history a replay of the recording yields, as row texts. */
   async replayed(recorder: SessionRecordingService): Promise<string[]> {
+    return (await this.replayedRows(recorder)).map(rowText);
+  }
+
+  /** The rows a replay of the recording yields. */
+  async replayedRows(recorder: SessionRecordingService): Promise<IContent[]> {
     await recorder.flush();
     const path = recorder.getFilePath();
     if (path === null) return [];
@@ -94,7 +99,7 @@ export class FanoutHarness {
     if (!replay.ok) throw new Error(`replay failed: ${replay.error}`);
     if (replay.warnings.length > 0)
       throw new Error(`replay warned: ${replay.warnings.join('; ')}`);
-    return replay.history.map(rowText);
+    return replay.history;
   }
 
   async shared(service: HistoryService): Promise<IContent[]> {

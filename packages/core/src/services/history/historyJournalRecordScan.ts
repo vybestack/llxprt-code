@@ -7,12 +7,15 @@ export interface ScannedJournalRecord {
   readonly start: number;
   /** Exclusive end offset, after the line's newline. */
   readonly end: number;
+  /** The line's bytes, newline included, as they sit in the journal. */
+  readonly raw: Buffer;
   readonly seq: number;
   readonly type: SessionEventType;
   readonly payload: unknown;
 }
 
 function parseRecord(
+  raw: Buffer,
   text: string,
   start: number,
   end: number,
@@ -29,6 +32,7 @@ function parseRecord(
   return {
     start,
     end,
+    raw,
     seq: parsed.seq,
     type: parsed.type as SessionEventType,
     payload: parsed.payload,
@@ -49,7 +53,10 @@ function splitLines(pending: Buffer, offset: number): LineSplit {
   for (let newline = rest.indexOf(0x0a); newline !== -1; ) {
     const lineEnd = position + newline + 1;
     const text = rest.subarray(0, newline).toString('utf8');
-    if (text.length > 0) records.push(parseRecord(text, position, lineEnd));
+    if (text.length > 0)
+      records.push(
+        parseRecord(rest.subarray(0, newline + 1), text, position, lineEnd),
+      );
     rest = rest.subarray(newline + 1);
     position = lineEnd;
     newline = rest.indexOf(0x0a);
@@ -83,6 +90,7 @@ export async function* scanJournalRecords(
     }
     if (pending.length > 0)
       yield parseRecord(
+        pending,
         pending.toString('utf8'),
         offset,
         offset + pending.length,
@@ -91,3 +99,6 @@ export async function* scanJournalRecords(
     stream.destroy();
   }
 }
+
+/** The journal reader the fan-out pump uses; tests substitute a counting one. */
+export type JournalRecordScan = typeof scanJournalRecords;

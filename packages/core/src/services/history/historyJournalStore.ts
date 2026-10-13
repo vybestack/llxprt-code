@@ -827,6 +827,7 @@ export class HistoryJournalStore {
     void this.fanoutFeed
       .settle()
       .catch(() => undefined)
+      .then(() => this.fanoutFeed.dispose())
       .then(() => recorder.dispose())
       .catch(() => undefined)
       .then(() => {

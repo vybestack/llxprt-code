@@ -67,7 +67,7 @@ describe('history fan-out feed bounds', () => {
     const path = primary.getFilePath();
     if (path === null) throw new Error('primary was not materialized');
     feed.reset(primary, (await stat(path)).size);
-    return { feed, primary, mirror };
+    return { feed, primary, mirror, fanout };
   }
 
   it('delivers exactly the records up to the requested sequence when later ones are already acknowledged', async () => {
@@ -116,5 +116,34 @@ describe('history fan-out feed bounds', () => {
     const file = await recorded(mirror);
     expect(file).toContain('survivor');
     expect(file).not.toContain('rolled-back');
+  });
+
+  it('renumbers a rebinding for the mirror that holds the row and tells no other', async () => {
+    const { feed, primary, mirror, fanout } = await fixture();
+    const other = recorder('other');
+    fanout.bind('B', other);
+    enqueueContent(primary, 'b-row', 'B');
+    enqueueContent(primary, 'a-row', 'A');
+    const bind = primary.enqueue('chronology_bind', {
+      rowIndex: 2,
+      chronology: { seq: 4, userTurn: 1, step: 1, recordedAt: 9 },
+    });
+    if (bind === null) throw new Error('primary refused a binding');
+    await primary.waitForCommitSequence(bind.seq);
+    feed.schedule(primary, bind.seq, 'deliver');
+    await feed.settle();
+    const lines = (await recorded(mirror))
+      .trim()
+      .split('\n')
+      .map(
+        (line) =>
+          JSON.parse(line) as { type: string; payload: { rowIndex?: number } },
+      );
+    expect(
+      lines
+        .filter((line) => line.type === 'chronology_bind')
+        .map((line) => line.payload.rowIndex),
+    ).toStrictEqual([1]);
+    expect(await recorded(other)).not.toContain('chronology_bind');
   });
 });

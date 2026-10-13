@@ -50,6 +50,10 @@ export function clearHistoryRows(input: {
             { start: firstSeq, end: lastSeq, reason: 'cleared' },
           ]);
     let admitted = false;
+    // The clear and its restore reach the mirrors together or not at all, so a
+    // restored row is never seen without the owner its original had.
+    const publication = input.journal.openPublication();
+    let published = true;
     try {
       if (cursor.length > 0) {
         input.journal.apply({
@@ -63,10 +67,11 @@ export function clearHistoryRows(input: {
     } catch (error) {
       if (!input.rollbackOnFailure) throw error;
       input.restore();
-      throw historyMutationFailure(
-        error,
-        restoreClearedRows(input.journal, cursor, admitted),
-      );
+      const failures = restoreClearedRows(input.journal, cursor, admitted);
+      published = failures.length > 0;
+      throw historyMutationFailure(error, failures);
+    } finally {
+      publication.close(published);
     }
   });
 }

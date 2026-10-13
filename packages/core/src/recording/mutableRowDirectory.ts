@@ -16,7 +16,14 @@ export interface NumericRow {
   readonly chronologyUserTurn?: number;
   readonly chronologyStep?: number;
   readonly chronologyRecordedAt?: number;
+  /**
+   * Dictionary id of the origin that owns the row; absent when unowned. The
+   * directory stores the number only, whoever supplies it keeps the dictionary.
+   */
+  readonly origin?: number;
 }
+
+const MAX_ORIGIN = 0xffffffff;
 
 const WIDTH = 64;
 const COPY_ROWS = 1024;
@@ -66,10 +73,18 @@ function encode(row: NumericRow, buffer: Buffer): void {
     !validChronologyOverlay(row)
   )
     throw new RangeError('Invalid numeric row');
+  if (
+    row.origin !== undefined &&
+    (!Number.isSafeInteger(row.origin) ||
+      row.origin < 1 ||
+      row.origin > MAX_ORIGIN)
+  )
+    throw new RangeError('Invalid numeric row');
   buffer.fill(0);
   buffer.writeUInt8(source, 0);
   buffer.writeUInt8(Number(row.invalidateResponses), 1);
   buffer.writeUInt8(Number(row.chronologyOverlay === true), 2);
+  buffer.writeUInt32LE(row.origin ?? 0, 4);
   buffer.writeDoubleLE(row.pendingSlot, 8);
   buffer.writeDoubleLE(row.offset, 16);
   buffer.writeDoubleLE(row.bytes, 24);
@@ -86,7 +101,9 @@ function decode(buffer: Buffer): NumericRow {
   const source = SOURCES[sourceCode];
   const chronology = buffer.readDoubleLE(32);
   const chronologyOverlay = buffer.readUInt8(2) === 1;
+  const origin = buffer.readUInt32LE(4);
   return {
+    ...(origin === 0 ? {} : { origin }),
     source,
     invalidateResponses: buffer.readUInt8(1) === 1,
     pendingSlot: buffer.readDoubleLE(8),
@@ -134,6 +151,25 @@ export class MutableRowDirectory {
     if (fs.readSync(this.fd, this.buffer, 0, WIDTH, index * WIDTH) !== WIDTH)
       throw new Error('Truncated numeric row directory');
     return decode(this.buffer);
+  }
+
+  /**
+   * The rows from `start` on, read in bounded chunks. The directory must not
+   * be mutated while the iteration is open.
+   */
+  *rows(start = 0): Generator<NumericRow, void, undefined> {
+    this.assertOpen();
+    const chunk = Buffer.alloc(COPY_ROWS * WIDTH);
+    for (let first = start; first < this.size; first += COPY_ROWS) {
+      const count = Math.min(COPY_ROWS, this.size - first);
+      if (
+        fs.readSync(this.fd, chunk, 0, count * WIDTH, first * WIDTH) !==
+        count * WIDTH
+      )
+        throw new Error('Truncated numeric row directory');
+      for (let index = 0; index < count; index += 1)
+        yield decode(chunk.subarray(index * WIDTH, (index + 1) * WIDTH));
+    }
   }
 
   firstChronology(seq: number): number {
