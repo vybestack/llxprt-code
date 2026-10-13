@@ -105,10 +105,8 @@ import {
 } from './historyJournalFold.js';
 import { DurableFoldCheckpoint } from '../../recording/durableFoldCheckpoint.js';
 import { HistoryPendingTickets } from './history-pending-tickets.js';
-import {
-  HistoryFanoutFeed,
-  HistoryRecorderFanout,
-} from './historyRecorderFanout.js';
+import { HistoryFanoutFeed } from './historyFanoutFeed.js';
+import { HistoryRecorderFanout } from './historyRecorderFanout.js';
 import { acceptsHistoryOrigin } from './historyOriginId.js';
 import type { ResumeProjection } from './historyResumeProjection.js';
 import {
@@ -257,8 +255,12 @@ export class HistoryJournalStore {
     return this.primaryOrigin;
   }
 
-  /** A resumed recorder became the primary on behalf of this origin. */
+  /** A resumed recorder was adopted on behalf of this origin. */
   adoptedOrigin(origin: string | undefined): void {
+    if (this.fanout.active && origin === undefined)
+      throw new Error(
+        'A resumed recorder in a fan-out history must name its origin',
+      );
     this.primaryOrigin = origin;
   }
 
@@ -317,13 +319,22 @@ export class HistoryJournalStore {
     this.publicationOrdinals.admitted(line.seq);
     if (!this.fanout.active) return;
     if (this.publicationDepth === 0) {
-      if (this.fanoutFeed.idle) this.fanoutFeed.deliverNow(recorder, [line]);
-      else this.fanoutFeed.schedule(recorder, line.seq, 'deliver');
+      this.publishToMirrors(recorder, [line], line.seq);
     } else if (this.scopeLines.length < DIRECT_DELIVERY_LINE_LIMIT) {
       this.scopeLines.push(line);
     } else {
       this.scopeOverflow = true;
     }
+  }
+
+  /** Small appended rows go straight to the mirrors; anything else through the pump. */
+  private publishToMirrors(
+    recorder: SessionRecordingService,
+    lines: readonly SessionRecordLine[],
+    seq: number,
+  ): void {
+    if (!this.fanoutFeed.deliverNow(recorder, lines))
+      this.fanoutFeed.schedule(recorder, seq, 'deliver');
   }
 
   /**
@@ -349,9 +360,8 @@ export class HistoryJournalStore {
         if (!this.fanout.active || recorder === undefined || seq === null)
           return;
         if (!published) this.fanoutFeed.schedule(recorder, seq, 'drop');
-        else if (!overflow && this.fanoutFeed.idle)
-          this.fanoutFeed.deliverNow(recorder, lines);
-        else this.fanoutFeed.schedule(recorder, seq, 'deliver');
+        else if (overflow) this.fanoutFeed.schedule(recorder, seq, 'deliver');
+        else this.publishToMirrors(recorder, lines, seq);
       },
     };
   }
@@ -548,10 +558,7 @@ export class HistoryJournalStore {
       commit: async () => {
         settle();
         if (!retirementPrepared) retire();
-        if (mirrored) {
-          await this.fanoutFeed.settle();
-          this.fanoutFeed.reset(recorder, this.binding.durableTail);
-        }
+        if (mirrored) await this.mirrorResumedRecorder(recorder);
         retireHistoryPending(previous);
         removeTempDir(previous.projection?.directory ?? null);
         if (previous.ownsRecorder) {
@@ -564,6 +571,44 @@ export class HistoryJournalStore {
         this.binding = previous;
       },
     };
+  }
+
+  /**
+   * A resumed history replaces the shared rows with rows the resuming origin
+   * owns. Its recorder takes over that origin's mirror, so it keeps the
+   * origin filter instead of becoming the unfiltered primary; the hidden
+   * primary is rebuilt from it, and every other mirror loses the rows it held.
+   */
+  private async mirrorResumedRecorder(
+    recorder: SessionRecordingService,
+  ): Promise<void> {
+    const owner = this.primaryOrigin;
+    if (owner === undefined)
+      throw new Error(
+        'A resumed recorder in a fan-out history must name its origin',
+      );
+    await this.fanoutFeed.settle();
+    await this.fanoutFeed.retireSharedRows(owner);
+    this.fanout.bind(owner, recorder);
+    const copy = await cloneHistoryJournal(recorder, () => this.disposed);
+    this.binding = {
+      ...this.binding,
+      recorder: copy.recorder,
+      ownsRecorder: true,
+      tempDir: copy.directory,
+      pending: new HistoryPendingTickets(),
+      unsubscribeWatermark: undefined,
+      durableTail: copy.byteOffset,
+      resumeBoundary: 0,
+      projection: undefined,
+      seeded: true,
+      lastLine: null,
+      lastSeq: null,
+    };
+    this.fanoutFeed.reset(copy.recorder, copy.byteOffset, {
+      origin: owner,
+      end: copy.byteOffset,
+    });
   }
 
   private assertNoAdoption(): void {

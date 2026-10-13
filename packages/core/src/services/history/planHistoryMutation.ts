@@ -9,6 +9,7 @@ import {
 } from './historyReplaceOps.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
 import { planDiskDensityMutation } from './historyDiskDensity.js';
+import { historyOriginId } from './historyOriginId.js';
 import type { HistoryMutationInput } from './historyBatchContracts.js';
 import type { DensityResult } from '../../core/compression/types.js';
 import type { DensityReplacementRecordShape } from './historyJournalGuards.js';
@@ -102,9 +103,15 @@ export async function compensateMutation(
     input.streamPublication !== false &&
     nextHistory instanceof HistoryDensityRows &&
     !previousHistory.hasPendingRows;
+  const origin =
+    input.options.origin === undefined
+      ? undefined
+      : historyOriginId(input.options.origin);
+  const stamped = (op: HistoryJournalOp): HistoryJournalOp =>
+    origin === undefined ? op : { ...op, origin };
   const abort = replacements.abortOp();
   if (abort !== null) {
-    journal.apply(abort);
+    journal.apply(stamped(abort));
     replacements.observe(abort);
     if (awaitDurability) await journal.waitForDurable();
     return;
@@ -116,7 +123,7 @@ export async function compensateMutation(
     previousHistory,
     previousHistory.length + nextHistory.length,
   )) {
-    journal.apply(op);
+    journal.apply(stamped(op));
     if (awaitDurability) await journal.waitForDurable();
   }
 }

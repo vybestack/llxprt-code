@@ -17,7 +17,20 @@ export function historyOriginId(origin: object): string {
   return id;
 }
 
-/** Rows without an origin (external producers, pre-origin journals) are unowned. */
+/** The origin id a journal record's payload carries, if any. */
+export function payloadOrigin(payload: unknown): string | undefined {
+  if (typeof payload !== 'object' || payload === null) return undefined;
+  const origin = (payload as { origin?: unknown }).origin;
+  return typeof origin === 'string' ? origin : undefined;
+}
+
+/**
+ * Rows without an origin (external producers, pre-origin journals, and
+ * operations that name no owner) are unowned. The rule for them is explicit:
+ * an unowned row belongs to every origin, so each recorder mirror carries it
+ * and each newly attached mirror is seeded with it. Rows an origin writes are
+ * stamped with that origin and reach only its own mirror.
+ */
 export function acceptsHistoryOrigin(
   recorderOrigin: string,
   rowOrigin: string | undefined,

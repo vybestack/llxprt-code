@@ -180,7 +180,10 @@ function replaceEvent(type: string, payload: unknown): FoldEvent {
     : { kind: 'replaceAbort', txId, rowCount };
 }
 
-function envelopeToEvent(type: string, payload: unknown): FoldEvent | null {
+export function envelopeToEvent(
+  type: string,
+  payload: unknown,
+): FoldEvent | null {
   switch (type) {
     case 'chronology_bind':
       return chronologyBindingEvent(payload);

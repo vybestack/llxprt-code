@@ -683,11 +683,9 @@ export abstract class HistoryServiceCore
     try {
       // Durable write first: the postcondition of every mutation is "journal
       // appended (awaitable ack) + observers notified" (#854).
-      this.journal.apply({
-        kind: 'content',
-        content,
-        origin: origin === undefined ? undefined : historyOriginId(origin),
-      });
+      const originId =
+        origin === undefined ? undefined : historyOriginId(origin);
+      this.journal.apply({ kind: 'content', content, origin: originId });
 
       try {
         this.emit('contentAdded', content, origin);
@@ -701,6 +699,7 @@ export abstract class HistoryServiceCore
           kind: 'rewind',
           itemsRemoved: 1,
           cutSeq: content.metadata?.chronology?.seq,
+          origin: originId,
         });
         throw error;
       }

@@ -4,10 +4,8 @@ import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
-import {
-  HistoryFanoutFeed,
-  HistoryRecorderFanout,
-} from './historyRecorderFanout.js';
+import { HistoryFanoutFeed } from './historyFanoutFeed.js';
+import { HistoryRecorderFanout } from './historyRecorderFanout.js';
 import type { IContent } from './IContent.js';
 
 let dir: string;

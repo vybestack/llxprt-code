@@ -134,7 +134,7 @@ async function stageSource(
  */
 async function commitReplacement(
   destination: SessionRecordingService,
-  entries: AsyncIterable<ResolvedEntry>,
+  entries: AsyncIterable<OwnedEntry>,
   isCancelled: () => boolean,
 ): Promise<{ watermark: CommitWatermark; rows: number }> {
   const txId = randomUUID();
@@ -143,7 +143,7 @@ async function commitReplacement(
   try {
     for await (const entry of entries) {
       requireLiveSource(isCancelled);
-      await destination.commit('content', { content: entry.content, tx: txId });
+      await destination.commit('content', seededPayload(entry, txId));
       rows++;
     }
     const watermark = await destination.commit('replace_commit', {
@@ -178,6 +178,12 @@ async function abortReplacement(
   }
 }
 
+/** A resolved row with the origin its journal line carries (absent: unowned). */
+interface OwnedEntry {
+  readonly content: IContent;
+  readonly origin: string | undefined;
+}
+
 /** Row origin ids sit on the journal line, not on the resolved content. */
 async function lineOrigin(
   handle: FileHandle,
@@ -198,23 +204,37 @@ async function lineOrigin(
   return typeof origin === 'string' ? origin : undefined;
 }
 
-/** Resolved rows, streamed through an optional origin filter. */
-async function* acceptedEntries(
+/**
+ * Resolved rows with their origins, streamed through an optional origin
+ * filter. Seeding keeps each row's origin so a mirror or a new primary stays
+ * attributable: an owned row never becomes unowned by being copied.
+ */
+async function* ownedEntries(
   resolver: JournalResolver,
   stagedPath: string,
   accept: ((origin: string | undefined) => boolean) | undefined,
-): AsyncIterable<ResolvedEntry> {
-  if (accept === undefined) {
-    yield* resolver.resolve();
-    return;
-  }
+): AsyncIterable<OwnedEntry> {
   const handle = await open(stagedPath, 'r');
   try {
-    for await (const entry of resolver.resolve())
-      if (accept(await lineOrigin(handle, entry))) yield entry;
+    for await (const entry of resolver.resolve()) {
+      const origin = await lineOrigin(handle, entry);
+      if (accept === undefined || accept(origin))
+        yield { content: entry.content, origin };
+    }
   } finally {
     await handle.close();
   }
+}
+
+function seededPayload(
+  entry: OwnedEntry,
+  tx?: string,
+): { content: IContent; tx?: string; origin?: string } {
+  return {
+    content: entry.content,
+    ...(tx === undefined ? {} : { tx }),
+    ...(entry.origin === undefined ? {} : { origin: entry.origin }),
+  };
 }
 
 export async function appendHistoryJournal(
@@ -244,7 +264,7 @@ export async function appendHistoryJournal(
       if (count > 0) {
         const replaced = await commitReplacement(
           destination,
-          acceptedEntries(resolver, staged, accept),
+          ownedEntries(resolver, staged, accept),
           isCancelled,
         );
         return {
@@ -262,11 +282,9 @@ export async function appendHistoryJournal(
         destination.getFilePath() === null
           ? { seq: destination.getLastEnqueuedSequence(), byteOffset: 0 }
           : await destination.commit('rewind', { itemsRemoved: count });
-      for await (const entry of acceptedEntries(resolver, staged, accept)) {
+      for await (const entry of ownedEntries(resolver, staged, accept)) {
         requireLiveSource(isCancelled);
-        watermark = await destination.commit('content', {
-          content: entry.content,
-        });
+        watermark = await destination.commit('content', seededPayload(entry));
         committedRows++;
       }
       return { watermark, committedRows, destinationRewound: false };
