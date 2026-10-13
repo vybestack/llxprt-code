@@ -1,0 +1,216 @@
+{
+  "description": "Golden request bytes for the real provider send paths (issue #854 step A1). Regenerate intentionally with WIRE_BODY_GOLDEN_UPDATE=1; never in CI.",
+  "pinnedClock": "2026-01-02T03:04:05.678Z",
+  "routes": {
+    "openai-chat-plain": {
+      "contentLength": {
+        "stream": "present",
+        "rows": "present"
+      },
+      "cases": [
+        "text-only",
+        "system-and-tools",
+        "tool-calls-with-results",
+        "parallel-tool-calls",
+        "orphan-tool-call",
+        "orphan-tool-result",
+        "interleaved-tool-results",
+        "displaced-tool-result",
+        "tool-id-shapes",
+        "reasoning-thinking",
+        "thinking-only-chain",
+        "media-inline-image",
+        "media-reference-image",
+        "unicode-edges",
+        "cache-tail-user",
+        "cache-tail-tool-result",
+        "cache-tail-assistant",
+        "cache-anchor",
+        "cache-tail-thinking",
+        "cache-media-purge-boundary",
+        "responses-stateful-parent",
+        "blockless-row"
+      ]
+    },
+    "openai-chat-kimi": {
+      "contentLength": {
+        "stream": "present",
+        "rows": "present"
+      },
+      "cases": [
+        "text-only",
+        "system-and-tools",
+        "tool-calls-with-results",
+        "parallel-tool-calls",
+        "orphan-tool-call",
+        "orphan-tool-result",
+        "interleaved-tool-results",
+        "displaced-tool-result",
+        "tool-id-shapes",
+        "reasoning-thinking",
+        "thinking-only-chain",
+        "media-inline-image",
+        "media-reference-image",
+        "unicode-edges",
+        "cache-tail-user",
+        "cache-tail-tool-result",
+        "cache-tail-assistant",
+        "cache-anchor",
+        "cache-tail-thinking",
+        "cache-media-purge-boundary",
+        "responses-stateful-parent",
+        "blockless-row"
+      ]
+    },
+    "openai-chat-mistral": {
+      "contentLength": {
+        "stream": "present",
+        "rows": "present"
+      },
+      "cases": [
+        "text-only",
+        "system-and-tools",
+        "tool-calls-with-results",
+        "parallel-tool-calls",
+        "orphan-tool-call",
+        "orphan-tool-result",
+        "interleaved-tool-results",
+        "displaced-tool-result",
+        "tool-id-shapes",
+        "reasoning-thinking",
+        "thinking-only-chain",
+        "media-inline-image",
+        "media-reference-image",
+        "unicode-edges",
+        "cache-tail-user",
+        "cache-tail-tool-result",
+        "cache-tail-assistant",
+        "cache-anchor",
+        "cache-tail-thinking",
+        "cache-media-purge-boundary",
+        "responses-stateful-parent",
+        "blockless-row"
+      ]
+    },
+    "openai-responses-via-openai": {
+      "contentLength": {
+        "stream": "present",
+        "rows": "present"
+      },
+      "cases": [
+        "text-only",
+        "system-and-tools",
+        "tool-calls-with-results",
+        "parallel-tool-calls",
+        "orphan-tool-call",
+        "orphan-tool-result",
+        "interleaved-tool-results",
+        "displaced-tool-result",
+        "tool-id-shapes",
+        "reasoning-thinking",
+        "thinking-only-chain",
+        "media-inline-image",
+        "media-reference-image",
+        "unicode-edges",
+        "cache-tail-user",
+        "cache-tail-tool-result",
+        "cache-tail-assistant",
+        "cache-anchor",
+        "cache-tail-thinking",
+        "cache-media-purge-boundary",
+        "responses-stateful-parent",
+        "blockless-row"
+      ]
+    },
+    "openai-responses": {
+      "contentLength": {
+        "stream": "absent",
+        "rows": "absent"
+      },
+      "cases": [
+        "text-only",
+        "system-and-tools",
+        "tool-calls-with-results",
+        "parallel-tool-calls",
+        "orphan-tool-call",
+        "orphan-tool-result",
+        "interleaved-tool-results",
+        "displaced-tool-result",
+        "tool-id-shapes",
+        "reasoning-thinking",
+        "thinking-only-chain",
+        "media-inline-image",
+        "media-reference-image",
+        "unicode-edges",
+        "cache-tail-user",
+        "cache-tail-tool-result",
+        "cache-tail-assistant",
+        "cache-anchor",
+        "cache-tail-thinking",
+        "cache-media-purge-boundary",
+        "responses-stateful-parent",
+        "blockless-row"
+      ]
+    },
+    "anthropic-cache-1h": {
+      "contentLength": {
+        "stream": "present",
+        "rows": "present"
+      },
+      "cases": [
+        "text-only",
+        "system-and-tools",
+        "tool-calls-with-results",
+        "parallel-tool-calls",
+        "orphan-tool-call",
+        "orphan-tool-result",
+        "interleaved-tool-results",
+        "displaced-tool-result",
+        "tool-id-shapes",
+        "reasoning-thinking",
+        "thinking-only-chain",
+        "media-inline-image",
+        "media-reference-image",
+        "unicode-edges",
+        "cache-tail-user",
+        "cache-tail-tool-result",
+        "cache-tail-assistant",
+        "cache-anchor",
+        "cache-tail-thinking",
+        "cache-media-purge-boundary",
+        "responses-stateful-parent",
+        "blockless-row"
+      ]
+    },
+    "anthropic-cache-off": {
+      "contentLength": {
+        "stream": "present",
+        "rows": "present"
+      },
+      "cases": [
+        "text-only",
+        "system-and-tools",
+        "tool-calls-with-results",
+        "parallel-tool-calls",
+        "orphan-tool-call",
+        "orphan-tool-result",
+        "interleaved-tool-results",
+        "displaced-tool-result",
+        "tool-id-shapes",
+        "reasoning-thinking",
+        "thinking-only-chain",
+        "media-inline-image",
+        "media-reference-image",
+        "unicode-edges",
+        "cache-tail-user",
+        "cache-tail-tool-result",
+        "cache-tail-assistant",
+        "cache-anchor",
+        "cache-tail-thinking",
+        "cache-media-purge-boundary",
+        "responses-stateful-parent",
+        "blockless-row"
+      ]
+    }
+  }
+}
