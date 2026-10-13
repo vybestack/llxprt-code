@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { failureAfterDisposal } from './historyDisposalFailure.js';
+import { runCleanupSteps } from './subagent-cleanup.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
@@ -29,13 +30,24 @@ export async function replaceDeferredClientSource(
     options,
   );
   replacement.publish(admitted.journal, admitted.release);
-  await replacement.existing?.dispose();
-  await replacement.priorRelease?.();
-  await releaseDeferredArray(
-    replacement.admissions,
-    replacement.prior,
-    'Prior deferred history cleanup failed',
-  );
+  await releasePriorHistory(replacement, replacement.existing);
+}
+
+/** Runs every prior-history step even when an earlier one fails, then raises the combined failure. */
+function releasePriorHistory(
+  replacement: Replacement,
+  existing: HistoryService | undefined,
+): Promise<void> {
+  return runCleanupSteps([
+    () => existing?.dispose(),
+    () => replacement.priorRelease?.(),
+    () =>
+      releaseDeferredArray(
+        replacement.admissions,
+        replacement.prior,
+        'Prior deferred history cleanup failed',
+      ),
+  ]);
 }
 
 /** The live chat's array replacement, which carries the publishing origin. */
@@ -147,11 +159,5 @@ export async function replaceClientHistorySource(
     throw failure;
   }
   replacement.publish(journal, release);
-  if (detached) await existing?.dispose();
-  await replacement.priorRelease?.();
-  await releaseDeferredArray(
-    replacement.admissions,
-    replacement.prior,
-    'Prior deferred history cleanup failed',
-  );
+  await releasePriorHistory(replacement, detached ? existing : undefined);
 }
