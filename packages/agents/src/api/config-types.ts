@@ -442,7 +442,6 @@ interface FromConfigBaseOptions
   readonly agentClient?: AgentClientContract;
   readonly providerManager?: RuntimeProviderManager;
   readonly runtimeFactoryBindings?: AgentRuntimeFactoryBindings;
-  readonly runtimeActivationBindings?: RuntimeActivationBindings;
   readonly tokenStore?: TokenStore;
   readonly credentialAuthority?: CredentialAuthority;
   readonly asyncTaskManager?: AsyncTaskManager;

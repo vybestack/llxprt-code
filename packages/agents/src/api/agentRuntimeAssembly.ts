@@ -41,9 +41,28 @@ import type {
   RuntimeTokenizerFactory,
   ContentGenerator,
 } from '@vybestack/llxprt-code-core';
-import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type {
+  OAuthManager,
+  CredentialAuthority,
+} from '@vybestack/llxprt-code-providers/auth.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import {
+  AdoptionRelease,
+  releaseAdoptedFileScope,
+} from './adoption-release.js';
+import {
+  acquireAdoptedProviderManager,
+  acquireAdoptedOAuth,
+  activateAdoptedProviders,
+} from './adopted-provider-assembly.js';
+import { completeAdoptedAgent } from './adopted-agent-completion.js';
+import { cleanupFailedAdoption } from './fromConfig-cleanup.js';
+import { adoptedDefinitionCleanup } from './adopted-definition-assembly.js';
+import type { FromConfigOptions } from './config-types.js';
+import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
+import type { HostGitHubBrokerOwner } from './host-github-broker-owner.js';
 
 const DEFAULT_MODEL = 'gemini-1.5-flash';
 const DEFAULT_DEBUG_MODE = false;
@@ -254,5 +273,143 @@ export function closeIsolatedSessionRuntime(
     closeConfig,
     closeMedia,
     closeClient,
+  );
+}
+
+export function assembleAdoptedAgent(
+  options: FromConfigOptions,
+  github: HostGitHubBrokerOwner | undefined,
+  runtimeId: string,
+  mcp: McpRuntimeOwner,
+  media: SessionMediaOwner | undefined,
+): Promise<Agent> {
+  const release = new AdoptionRelease();
+  const preflight = options.activationPreflight?.operation;
+  try {
+    const authority = options.credentialAuthority;
+    if (authority === undefined)
+      throw new Error('Adoption requires captured credential authority');
+    const transferred = preflight?.takeSettingsOwner(options.settingsService);
+    const settingsOwner =
+      transferred ??
+      options.settingsOwner ??
+      new SessionSettingsOwner(options.settingsService);
+    if (
+      (transferred !== undefined &&
+        preflight?.settingsOwnerOwnership === 'transferred') ||
+      (transferred === undefined && options.settingsOwner === undefined)
+    )
+      release.acquire('settings', () => settingsOwner.dispose());
+    settingsOwner.bindTelemetry(options.config);
+    const files =
+      options.providerFileLifecycle ??
+      preflight?.providerFileLifecycle ??
+      new ProviderFileLifecycle({ maxFiles: 100, maxBytes: 512 * 1024 * 1024 });
+    const clientScope = options.config.getSessionId();
+    for (const scope of runtimeId === clientScope
+      ? [clientScope]
+      : [runtimeId, clientScope])
+      release.acquire('files', () => releaseAdoptedFileScope(files, scope));
+    const manager = acquireAdoptedProviderManager(
+      options.providerManager,
+      options.config,
+      options.settingsService,
+      settingsOwner,
+      files,
+      runtimeId,
+      authority,
+      release,
+    );
+    return finishAdoptionAssembly(
+      options,
+      github,
+      runtimeId,
+      mcp,
+      media,
+      settingsOwner,
+      files,
+      manager,
+      release,
+      authority,
+    );
+  } catch (primary) {
+    return cleanupFailedAdoption(
+      primary,
+      () => release.rollback(),
+      adoptedDefinitionCleanup(
+        mcp,
+        options.definitionOwner,
+        options.definitionOwnership,
+        (options.mcpOwnership ??
+          (options.mcpRuntime === undefined ? 'agent' : 'caller')) === 'agent',
+      ),
+      media === undefined ? undefined : () => media.dispose(),
+      undefined,
+    );
+  }
+}
+
+function finishAdoptionAssembly(
+  options: FromConfigOptions,
+  github: HostGitHubBrokerOwner | undefined,
+  runtimeId: string,
+  mcp: McpRuntimeOwner,
+  media: SessionMediaOwner | undefined,
+  settingsOwner: SessionSettingsOwner,
+  files: ProviderFileLifecycle,
+  manager: RuntimeProviderManager,
+  release: AdoptionRelease,
+  authority: CredentialAuthority,
+): Promise<Agent> {
+  const preflight = options.activationPreflight?.operation;
+  const { tokenizerFactory, contentGeneratorFactory } =
+    configureProviderRuntimeFactories(options.config, manager, {
+      tokenizerFactory: options.tokenizerFactory ?? preflight?.tokenizerFactory,
+      contentGeneratorFactory:
+        options.contentGeneratorFactory ?? preflight?.contentGeneratorFactory,
+    });
+  const oauth = acquireAdoptedOAuth(
+    options.oauthManager ?? preflight?.oauthManager,
+    options.tokenStore,
+    mcp.messageBus,
+    options.config,
+    options.settingsService,
+    manager,
+    runtimeId,
+    options.definitionOwner?.profileReads ??
+      preflight?.workspaceDefinitions.profileReads ??
+      options.mcpRuntime?.profileDefinitions,
+    authority,
+    release,
+  );
+  return completeAdoptedAgent(
+    options,
+    github,
+    runtimeId,
+    mcp,
+    media,
+    settingsOwner,
+    manager,
+    oauth,
+    files,
+    tokenizerFactory,
+    contentGeneratorFactory,
+    () =>
+      activateAdoptedProviders(
+        options.config,
+        options.settingsService,
+        settingsOwner,
+        manager,
+        oauth,
+        runtimeId,
+        options.providerManager === undefined,
+        tokenizerFactory,
+      ),
+    () => release.close(),
+    options.policyOwner === undefined && options.mcpRuntime !== undefined
+      ? undefined
+      : options.messageBus,
+    (options.mcpOwnership ??
+      (options.mcpRuntime === undefined ? 'agent' : 'caller')) === 'agent',
   );
 }
