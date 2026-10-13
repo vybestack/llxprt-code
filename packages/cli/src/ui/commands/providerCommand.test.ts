@@ -66,7 +66,7 @@ const mocks = (() => {
 
 // This test writes real alias files, so it opts out of the preload's
 // providerAliases stub (see bun-test-setup.ts) and re-exports the genuine
-// functions through the composition.js mock that providerCommand.ts imports.
+// functions through the composition.js mock that providerCommandHost.ts imports.
 void vi.mock('@vybestack/llxprt-code-providers/composition.js', () => {
   const real = realProviderAliasesModule;
   return {
@@ -83,8 +83,23 @@ void vi.mock(
 );
 
 // Import after mocks are set up
-import { providerCommand } from './providerCommand.js';
+import { createProviderCommand } from './providerCommand.js';
+import { bindProviderCommandOperations } from './providerCommandHost.js';
+import type { CommandContext } from './types.js';
 import { assertDefined } from '../../__tests__/assertions.js';
+
+function runProvider(context: CommandContext, args: string) {
+  const command = createProviderCommand(
+    bindProviderCommandOperations(
+      context.runtimeApi,
+      context.services.agent,
+      context.refreshProviderAliases,
+      async () => {},
+    ),
+  );
+  assertDefined(command.action);
+  return command.action(context, args);
+}
 
 function baseUrlSetting(key: string, baseUrl: string): string | undefined {
   return key === 'base-url' ? baseUrl : undefined;
@@ -184,9 +199,7 @@ describe('providerCommand /provider save', () => {
       },
     });
 
-    assertDefined(providerCommand.action);
-
-    const result = await providerCommand.action(context, 'save myalias');
+    const result = await runProvider(context, 'save myalias');
 
     expect(result).toStrictEqual({
       type: 'message',
@@ -246,9 +259,7 @@ describe('providerCommand /provider switch', () => {
       },
     });
 
-    assertDefined(providerCommand.action);
-
-    const result = await providerCommand.action(context, 'qwen');
+    const result = await runProvider(context, 'qwen');
 
     expect(mocks.runtimeApi.getActiveProviderName).toHaveBeenCalledTimes(1);
     expect(mocks.agent.setProvider).toHaveBeenCalledWith(
@@ -293,9 +304,7 @@ describe('providerCommand /provider switch', () => {
       },
     });
 
-    assertDefined(providerCommand.action);
-
-    const result = await providerCommand.action(context, 'unknown');
+    const result = await runProvider(context, 'unknown');
 
     expect(result).toStrictEqual({
       type: 'message',
@@ -359,9 +368,8 @@ describe('providerCommand /provider switch', () => {
         agent: mocks.agent as unknown as Agent,
       },
     });
-    assertDefined(providerCommand.action);
 
-    await providerCommand.action(context, 'qwen');
+    await runProvider(context, 'qwen');
 
     expect(context.ui.addItem).toHaveBeenNthCalledWith(
       1,
@@ -396,9 +404,7 @@ describe('providerCommand /provider switch', () => {
       },
     });
 
-    assertDefined(providerCommand.action);
-
-    const result = await providerCommand.action(context, 'save unconfigured');
+    const result = await runProvider(context, 'save unconfigured');
 
     expect(result).toStrictEqual({
       type: 'message',

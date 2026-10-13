@@ -9,6 +9,9 @@ import { useCallback, useMemo, useState } from 'react';
 import { createToolFormatCommand } from '../commands/toolformatCommand.js';
 import { createModelCommand } from '../commands/modelCommand.js';
 import { createSetCommand } from '../commands/setCommand.js';
+import { createProviderCommand } from '../commands/providerCommand.js';
+import { bindProviderCommandOperations } from '../commands/providerCommandHost.js';
+import { useCredentialCommands } from './useCredentialCommands.js';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type {
   RecordingIntegration,
@@ -43,8 +46,8 @@ import {
   slashCommandLogger,
   type SlashCommandProcessorActions,
 } from './slashCommandProcessor.js';
+import type { BuiltinCommandOwners } from '../../services/BuiltinCommandLoader.js';
 import {
-  type BuiltinCommandOwners,
   loadBuiltinSlashCommands,
   useCommandContext,
   useCommandReload,
@@ -116,32 +119,52 @@ function useCommandState(
     format: ToolFormatOverrideLiteral | null,
   ) => Promise<ToolFormatState>,
   settings: LoadedSettings,
-  ownedRecording: Pick<Agent['session'], 'recordRecordingEvent'> | null,
+  agent: Agent | null,
+  refreshProviderAliases: () => Promise<void>,
   rawRecording: Pick<RecordingIntegration, 'recordProviderSwitch'> | undefined,
   recordingOwner: 'agent' | 'raw' | undefined,
   config: CliUiRuntime | null,
 ): SlashCommandProcessorState {
-  const modelCommand = useRegisteredModelCommand(
-    selectModel,
-    ownedRecording,
+  const recordProviderSwitch = useProviderSwitchRecorder(
+    agent?.session ?? null,
     rawRecording,
     recordingOwner,
+  );
+  const modelCommand = useMemo(
+    () => createModelCommand(selectModel, recordProviderSwitch),
+    [selectModel, recordProviderSwitch],
+  );
+  const providerCommand = useRegisteredProviderCommand(
+    agent,
+    refreshProviderAliases,
+    recordProviderSwitch,
   );
   const toolFormatCommand = useMemo(
     () => createToolFormatCommand(readToolFormat, writeToolFormat),
     [readToolFormat, writeToolFormat],
   );
   const setCommand = useSetCommand(settings);
+  const credentialCommands = useCredentialCommands(agent, settings, config);
+  const builtins = useMemo<BuiltinCommandOwners>(
+    () => ({
+      modelCommand,
+      toolFormatCommand,
+      setCommand,
+      providerCommand,
+      ...credentialCommands,
+    }),
+    [
+      modelCommand,
+      toolFormatCommand,
+      setCommand,
+      providerCommand,
+      credentialCommands,
+    ],
+  );
   const [commands, setCommands] = useState<readonly SlashCommand[] | undefined>(
     () =>
       process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY === 'true'
-        ? loadBuiltinSlashCommands(
-            modelCommand,
-            toolFormatCommand,
-            setCommand,
-            config,
-            recordingOwner,
-          )
+        ? loadBuiltinSlashCommands(builtins, config, recordingOwner)
         : undefined,
   );
   const [reloadTrigger, setReloadTrigger] = useState(0);
@@ -153,7 +176,7 @@ function useCommandState(
     setReloadTrigger((v) => v + 1);
   }, []);
   return {
-    builtins: { modelCommand, toolFormatCommand, setCommand },
+    builtins,
     commands,
     setCommands,
     reloadTrigger,
@@ -196,28 +219,46 @@ function buildHandlerDeps(
   };
 }
 
-function useRegisteredModelCommand(
-  selectModel: (model: string) => Promise<ModelChangeResult>,
+function useProviderSwitchRecorder(
   ownedRecording: Pick<Agent['session'], 'recordRecordingEvent'> | null,
   rawRecording: Pick<RecordingIntegration, 'recordProviderSwitch'> | undefined,
-  recordingOwner?: 'agent' | 'raw',
+  recordingOwner: 'agent' | 'raw' | undefined,
+): (provider: string, model: string) => Promise<void> {
+  return useCallback(
+    async (provider, model) => {
+      if (recordingOwner === 'agent') {
+        if (ownedRecording === null)
+          throw new Error('Session agent is unavailable');
+        await ownedRecording.recordRecordingEvent({
+          type: 'provider_switch',
+          provider,
+          model,
+        });
+      } else {
+        rawRecording?.recordProviderSwitch(provider, model);
+      }
+    },
+    [ownedRecording, rawRecording, recordingOwner],
+  );
+}
+
+function useRegisteredProviderCommand(
+  agent: Agent | null,
+  refreshProviderAliases: () => Promise<void>,
+  recordProviderSwitch: (provider: string, model: string) => Promise<void>,
 ): SlashCommand {
+  const api = useRuntimeApi();
   return useMemo(
     () =>
-      createModelCommand(selectModel, async (provider, model) => {
-        if (recordingOwner === 'agent') {
-          if (ownedRecording === null)
-            throw new Error('Session agent is unavailable');
-          await ownedRecording.recordRecordingEvent({
-            type: 'provider_switch',
-            provider,
-            model,
-          });
-        } else {
-          rawRecording?.recordProviderSwitch(provider, model);
-        }
-      }),
-    [selectModel, ownedRecording, rawRecording, recordingOwner],
+      createProviderCommand(
+        bindProviderCommandOperations(
+          api,
+          agent,
+          refreshProviderAliases,
+          recordProviderSwitch,
+        ),
+      ),
+    [api, agent, recordProviderSwitch, refreshProviderAliases],
   );
 }
 
@@ -252,7 +293,8 @@ export function useSlashCommandProcessorCore(
     useMemo(() => api.getActiveToolFormatState.bind(api), [api]),
     useMemo(() => api.setActiveToolFormatOverride.bind(api), [api]),
     args.settings,
-    args.agent?.session ?? null,
+    args.agent,
+    refreshProviderAliases,
     args.recordingIntegration,
     args.recordingOwner,
     args.config,

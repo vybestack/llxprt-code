@@ -6,10 +6,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
-import {
-  createUnconfiguredModelCommand,
-  createUnconfiguredToolFormatCommand,
-} from '../../__tests__/unconfigured-model-command.js';
+import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { createAgentSetCommand } from '../../__tests__/set-command-test-owner.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
@@ -21,9 +18,10 @@ describe('registered set command ownership', () => {
 
   function loader(agent: Agent): BuiltinCommandLoader {
     return new BuiltinCommandLoader(
-      createUnconfiguredModelCommand(),
-      createUnconfiguredToolFormatCommand(),
-      createAgentSetCommand(agent),
+      {
+        ...createUnconfiguredBuiltinOwners(),
+        setCommand: createAgentSetCommand(agent),
+      },
       null,
       'agent',
     );
@@ -72,7 +70,9 @@ describe('registered set command ownership', () => {
       createMockCommandContext({ services: { agent: right } }),
       'modelparam left_only 0.1',
     );
-    await (await registered(right)).action!(
+    await (
+      await registered(right)
+    ).action!(
       createMockCommandContext({ services: { agent: left } }),
       'modelparam right_only 0.2',
     );

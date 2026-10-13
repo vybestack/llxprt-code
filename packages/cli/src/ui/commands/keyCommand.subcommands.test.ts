@@ -21,7 +21,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'bun:test';
 import { promises as fs } from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { keyCommand } from './keyCommand.js';
+import { registerKeyCommand } from '../../__tests__/credential-command-test-owner.js';
 import { KeyCompletionOwner } from './key-completion-owner.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { CommandContext, MessageActionReturn } from './types.js';
@@ -154,7 +154,7 @@ describe('/key subcommands', () => {
 
   // Helper to invoke the command action and cast the result
   async function runKey(args: string): Promise<MessageActionReturn> {
-    const result = await keyCommand.action!(context, args);
+    const result = await registerKeyCommand(context).action!(context, args);
     return result as MessageActionReturn;
   }
 
@@ -163,7 +163,9 @@ describe('/key subcommands', () => {
     const { createCompletionHandler } = await import(
       '../commands/schema/index.js'
     );
-    const handler = createCompletionHandler(keyCommand.schema!);
+    const handler = createCompletionHandler(
+      registerKeyCommand(context).schema!,
+    );
     const result = await handler(context, undefined, fullLine);
     return result.suggestions.map((s) => s.value);
   }
@@ -251,7 +253,7 @@ describe('/key subcommands', () => {
      */
     it('prompts for overwrite when key already exists in interactive mode', async () => {
       await mockStorage.saveKey('existing', 'old-key-value');
-      const result = await keyCommand.action!(
+      const result = await registerKeyCommand(context).action!(
         context,
         'save existing new-key-value',
       );
@@ -525,7 +527,10 @@ describe('/key subcommands', () => {
     it('returns confirm_action prompt when not yet confirmed', async () => {
       await mockStorage.saveKey('mykey', 'sk-todelete123');
       // overwriteConfirmed not set — should prompt
-      const result = await keyCommand.action!(context, 'delete mykey');
+      const result = await registerKeyCommand(context).action!(
+        context,
+        'delete mykey',
+      );
       expect(result).toBeDefined();
       expect((result as unknown as Record<string, unknown>).type).toBe(
         'confirm_action',
@@ -666,7 +671,9 @@ describe('/key subcommands', () => {
       await mockStorage.saveKey('beta', 'sk-beta123');
       const sibling = createKeyCommandContext({ runtimeApi: mockRuntime });
       const { createCompletionHandler } = await import('./schema/index.js');
-      const handler = createCompletionHandler(keyCommand.schema!);
+      const handler = createCompletionHandler(
+        registerKeyCommand(sibling).schema!,
+      );
       const result = await handler(sibling, undefined, '/key load ');
       expect(result.suggestions.map((entry) => entry.value)).toStrictEqual([
         'alpha',

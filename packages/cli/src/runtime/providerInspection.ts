@@ -198,7 +198,7 @@ function buildAliasConfig(
   return aliasConfig;
 }
 
-type AliasResolveResult =
+export type AliasResolveResult =
   | { ok: true; config: ProviderAliasConfig | null }
   | { ok: false; content: string };
 

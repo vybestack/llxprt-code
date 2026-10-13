@@ -22,6 +22,7 @@ import { CommandKind } from './types.js';
 
 import type { CommandArgumentSchema, CompleterFn } from './schema/types.js';
 import { maskKeyForDisplay } from '@vybestack/llxprt-code-core';
+import type { ApiKeyUpdateResult } from '@vybestack/llxprt-code-core';
 import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import { SecureStoreError } from '@vybestack/llxprt-code-storage';
 import type { ProviderKeyStorageLike } from '@vybestack/llxprt-code-storage';
@@ -34,25 +35,22 @@ import { firstNonEmptyString } from '../../utils/coalesce.js';
 const SUBCOMMANDS = ['save', 'load', 'show', 'list', 'delete'] as const;
 type Subcommand = (typeof SUBCOMMANDS)[number];
 
-type KeyCompletionReads = {
-  listKeyCompletionNames(): Promise<readonly string[]>;
-  invalidateKeyCompletion(): void;
-};
-
-function getKeyCompletion(
-  completion: KeyCompletionReads | null,
-): KeyCompletionReads {
-  if (!completion)
-    throw new Error('Key commands require an explicit credential owner');
-  return completion;
-}
-
-function getKeyStorage(
-  storage: ProviderKeyStorageLike | undefined,
-): ProviderKeyStorageLike {
-  if (!storage)
-    throw new Error('Key commands require an explicit credential owner');
-  return storage;
+/**
+ * The operations /key needs from its owning session. The host binds each one
+ * at registration; the command never reads them from an invocation.
+ */
+export interface KeyCommandOperations {
+  /** Throws when the session has no explicit credential owner. */
+  readonly providerKeys: () => ProviderKeyStorageLike;
+  readonly listKeyCompletionNames: () => Promise<readonly string[]>;
+  readonly invalidateKeyCompletion: () => void;
+  readonly isInteractive: () => boolean;
+  readonly activeProviderName: () => string | null;
+  readonly updateActiveProviderApiKey: (
+    key: string | null,
+  ) => Promise<ApiKeyUpdateResult>;
+  readonly setEphemeralSetting: (key: string, value: unknown) => void;
+  readonly schedulePaymentModeCheck: () => void;
 }
 
 /**
@@ -83,6 +81,7 @@ function formatStorageError(error: unknown): string {
 async function handleSave(
   tokens: string[],
   context: CommandContext,
+  operations: KeyCommandOperations,
 ): Promise<MessageActionReturn | SlashCommandActionReturn> {
   // Missing name and key (R13.5)
   if (tokens.length === 0) {
@@ -106,19 +105,13 @@ async function handleSave(
   }
 
   // @plan:PLAN-20250214-CREDPROXY.P33
-  const storage = getKeyStorage(context.services.config?.getProviderKeys());
+  const storage = operations.providerKeys();
 
   // Check for existing key — prompt overwrite (R13.2, R13.3)
   try {
     const exists = await storage.hasKey(name);
     if (exists) {
-      const config = context.services.config;
-      const isInteractive =
-        config && 'isInteractive' in config
-          ? (config as { isInteractive: () => boolean }).isInteractive()
-          : true;
-
-      if (!isInteractive) {
+      if (!operations.isInteractive()) {
         // Non-interactive: fail (R13.3)
         return {
           type: 'message',
@@ -153,7 +146,7 @@ async function handleSave(
     await storage.saveKey(name, apiKey);
     // Invalidate only after a successful mutation so failed/declined paths
     // don't trigger needless future keychain prompts.
-    getKeyCompletion(context.services.config).invalidateKeyCompletion();
+    operations.invalidateKeyCompletion();
     return {
       type: 'message',
       messageType: 'info',
@@ -178,6 +171,7 @@ async function handleSave(
 async function handleLoad(
   tokens: string[],
   context: CommandContext,
+  operations: KeyCommandOperations,
 ): Promise<MessageActionReturn> {
   // Missing name (R14.3)
   if (tokens.length === 0) {
@@ -190,7 +184,7 @@ async function handleLoad(
 
   const name = tokens[0];
   // @plan:PLAN-20250214-CREDPROXY.P33
-  const storage = getKeyStorage(context.services.config?.getProviderKeys());
+  const storage = operations.providerKeys();
 
   try {
     const key = await storage.getKey(name);
@@ -205,25 +199,16 @@ async function handleLoad(
     }
 
     // Set as active session key (R14.1)
-    const runtime = context.runtimeApi;
-    await runtime.updateActiveProviderApiKey(key);
+    await operations.updateActiveProviderApiKey(key);
 
     // Set auth-key-name so profile saves capture the name reference,
     // not the raw key value. Clear auth-key/auth-keyfile to prevent
     // buildRuntimeProfileSnapshot from persisting the resolved secret.
-    const config = context.services.config;
-    if (config) {
-      config.setEphemeralSetting('auth-key-name', name);
-      config.setEphemeralSetting('auth-key', undefined);
-      config.setEphemeralSetting('auth-keyfile', undefined);
-    }
+    operations.setEphemeralSetting('auth-key-name', name);
+    operations.setEphemeralSetting('auth-key', undefined);
+    operations.setEphemeralSetting('auth-keyfile', undefined);
 
-    const extendedContext = context as CommandContext & {
-      checkPaymentModeChange?: () => void;
-    };
-    if (extendedContext.checkPaymentModeChange) {
-      setTimeout(extendedContext.checkPaymentModeChange, 100);
-    }
+    setTimeout(operations.schedulePaymentModeCheck, 100);
 
     // Note: load only reads/activates a key — it does NOT change the stored
     // key-name set, so the completion cache is left intact.
@@ -354,6 +339,7 @@ async function handleList(
 async function handleDelete(
   tokens: string[],
   context: CommandContext,
+  operations: KeyCommandOperations,
 ): Promise<MessageActionReturn | SlashCommandActionReturn> {
   // Missing name (R17.4)
   if (tokens.length === 0) {
@@ -367,13 +353,7 @@ async function handleDelete(
   const name = tokens[0];
 
   // Non-interactive check (R17.2)
-  const config = context.services.config;
-  const isInteractive =
-    config && 'isInteractive' in config
-      ? (config as { isInteractive: () => boolean }).isInteractive()
-      : true;
-
-  if (!isInteractive) {
+  if (!operations.isInteractive()) {
     return {
       type: 'message',
       messageType: 'error',
@@ -382,7 +362,7 @@ async function handleDelete(
   }
 
   // @plan:PLAN-20250214-CREDPROXY.P33
-  const storage = getKeyStorage(context.services.config?.getProviderKeys());
+  const storage = operations.providerKeys();
 
   try {
     // Check if key exists (R17.3)
@@ -413,7 +393,7 @@ async function handleDelete(
     await storage.deleteKey(name);
     // Invalidate only after a successful mutation so failed/declined paths
     // don't trigger needless future keychain prompts.
-    getKeyCompletion(context.services.config).invalidateKeyCompletion();
+    operations.invalidateKeyCompletion();
     return {
       type: 'message',
       messageType: 'info',
@@ -439,129 +419,130 @@ async function handleDelete(
  * useSlashCompletion hook uses schema (not the completion property)
  * to provide argument-level autocomplete suggestions.
  */
-const keyNameCompleter: CompleterFn = async (context, partial) => {
-  try {
-    const names = await getKeyCompletion(
-      context.services.config,
-    ).listKeyCompletionNames();
-    return names
-      .filter((name) => name.startsWith(partial))
-      .map((name) => ({ value: name }));
-  } catch {
-    // Keyring unavailable during autocomplete (R19.3)
-    return [];
-  }
-};
+function createKeySchema(
+  operations: KeyCommandOperations,
+): CommandArgumentSchema {
+  const keyNameCompleter: CompleterFn = async (_context, partial) => {
+    try {
+      const names = await operations.listKeyCompletionNames();
+      return names
+        .filter((name) => name.startsWith(partial))
+        .map((name) => ({ value: name }));
+    } catch {
+      // Keyring unavailable during autocomplete (R19.3)
+      return [];
+    }
+  };
 
-const keyNameArg: CommandArgumentSchema = [
-  {
-    kind: 'value',
-    name: 'name',
-    description: 'Saved key name',
-    completer: keyNameCompleter,
-  },
-];
+  const keyNameArg: CommandArgumentSchema = [
+    {
+      kind: 'value',
+      name: 'name',
+      description: 'Saved key name',
+      completer: keyNameCompleter,
+    },
+  ];
 
-const keySchema: CommandArgumentSchema = [
-  {
-    kind: 'literal',
-    value: 'save',
-    description: 'Save an API key to the keyring',
-    next: [
-      {
-        kind: 'value',
-        name: 'name',
-        description: 'Name for the key',
-        completer: keyNameCompleter,
-        next: [
-          {
-            kind: 'value',
-            name: 'api-key',
-            description: 'API key value',
-            hint: 'Paste your API key',
-          },
-        ],
-      },
-    ],
-  },
-  {
-    kind: 'literal',
-    value: 'load',
-    description: 'Load a saved key for this session',
-    next: keyNameArg,
-  },
-  {
-    kind: 'literal',
-    value: 'show',
-    description: 'Show a masked preview of a saved key',
-    next: keyNameArg,
-  },
-  {
-    kind: 'literal',
-    value: 'list',
-    description: 'List all saved key names',
-  },
-  {
-    kind: 'literal',
-    value: 'delete',
-    description: 'Delete a saved key',
-    next: keyNameArg,
-  },
-];
+  return [
+    {
+      kind: 'literal',
+      value: 'save',
+      description: 'Save an API key to the keyring',
+      next: [
+        {
+          kind: 'value',
+          name: 'name',
+          description: 'Name for the key',
+          completer: keyNameCompleter,
+          next: [
+            {
+              kind: 'value',
+              name: 'api-key',
+              description: 'API key value',
+              hint: 'Paste your API key',
+            },
+          ],
+        },
+      ],
+    },
+    {
+      kind: 'literal',
+      value: 'load',
+      description: 'Load a saved key for this session',
+      next: keyNameArg,
+    },
+    {
+      kind: 'literal',
+      value: 'show',
+      description: 'Show a masked preview of a saved key',
+      next: keyNameArg,
+    },
+    {
+      kind: 'literal',
+      value: 'list',
+      description: 'List all saved key names',
+    },
+    {
+      kind: 'literal',
+      value: 'delete',
+      description: 'Delete a saved key',
+      next: keyNameArg,
+    },
+  ];
+}
 
 // ─── Main Command ────────────────────────────────────────────────────────────
 
-export const keyCommand: SlashCommand = {
-  name: 'key',
-  description: 'set or remove API key for the current provider',
-  kind: CommandKind.BUILT_IN,
-  schema: keySchema,
-  action: async (
-    context: CommandContext,
-    args: string,
-  ): Promise<MessageActionReturn | SlashCommandActionReturn> => {
-    // @plan PLAN-20260211-SECURESTORE.P15
-    // @pseudocode lines 2-30
-    // @requirement R12.6 — trim whitespace
-    const trimmedArgs = args.trim();
+export function createKeyCommand(
+  operations: KeyCommandOperations,
+): SlashCommand {
+  return {
+    name: 'key',
+    description: 'set or remove API key for the current provider',
+    kind: CommandKind.BUILT_IN,
+    schema: createKeySchema(operations),
+    action: async (
+      context: CommandContext,
+      args: string,
+    ): Promise<MessageActionReturn | SlashCommandActionReturn> => {
+      // @plan PLAN-20260211-SECURESTORE.P15
+      // @pseudocode lines 2-30
+      // @requirement R12.6 — trim whitespace
+      const trimmedArgs = args.trim();
 
-    // @requirement R12.4 — no args: show status (legacy behavior)
-    if (trimmedArgs.length === 0) {
-      return handleLegacyKeyAction(null, context);
-    }
-
-    // @requirement R12.1 — split by whitespace
-    const tokens = trimmedArgs.split(/\s+/);
-    const firstToken = tokens[0];
-
-    // @requirement R12.5 — case-sensitive match
-    if (SUBCOMMANDS.includes(firstToken as Subcommand)) {
-      const subcommand = firstToken as Subcommand;
-      switch (subcommand) {
-        case 'save':
-          return handleSave(tokens.slice(1), context);
-        case 'load':
-          return handleLoad(tokens.slice(1), context);
-        case 'show':
-          return handleShow(
-            tokens.slice(1),
-            getKeyStorage(context.services.config?.getProviderKeys()),
-          );
-        case 'list':
-          return handleList(
-            getKeyStorage(context.services.config?.getProviderKeys()),
-          );
-        case 'delete':
-          return handleDelete(tokens.slice(1), context);
-        default:
-          break;
+      // @requirement R12.4 — no args: show status (legacy behavior)
+      if (trimmedArgs.length === 0) {
+        return handleLegacyKeyAction(null, operations);
       }
-    }
 
-    // @requirement R12.3 — no match: legacy behavior
-    return handleLegacyKeyAction(trimmedArgs, context);
-  },
-};
+      // @requirement R12.1 — split by whitespace
+      const tokens = trimmedArgs.split(/\s+/);
+      const firstToken = tokens[0];
+
+      // @requirement R12.5 — case-sensitive match
+      if (SUBCOMMANDS.includes(firstToken as Subcommand)) {
+        const subcommand = firstToken as Subcommand;
+        switch (subcommand) {
+          case 'save':
+            return handleSave(tokens.slice(1), context, operations);
+          case 'load':
+            return handleLoad(tokens.slice(1), context, operations);
+          case 'show':
+            return handleShow(tokens.slice(1), operations.providerKeys());
+          case 'list':
+            return handleList(operations.providerKeys());
+          case 'delete':
+            return handleDelete(tokens.slice(1), context, operations);
+          default:
+            break;
+        }
+      }
+
+      // @requirement R12.3 — no match: legacy behavior
+      return handleLegacyKeyAction(trimmedArgs, operations);
+    },
+  };
+}
 
 // ─── Legacy Behavior (preserved from original) ─────────────────────────────
 
@@ -572,20 +553,14 @@ export const keyCommand: SlashCommand = {
  */
 async function handleLegacyKeyAction(
   apiKey: string | null,
-  context: CommandContext,
+  operations: KeyCommandOperations,
 ): Promise<MessageActionReturn> {
-  const runtime = context.runtimeApi;
   try {
     const targetKey =
       !apiKey || apiKey.toLowerCase() === 'none' ? null : apiKey;
-    const result = await runtime.updateActiveProviderApiKey(targetKey);
+    const result = await operations.updateActiveProviderApiKey(targetKey);
 
-    const extendedContext = context as CommandContext & {
-      checkPaymentModeChange?: () => void;
-    };
-    if (extendedContext.checkPaymentModeChange) {
-      setTimeout(extendedContext.checkPaymentModeChange, 100);
-    }
+    setTimeout(operations.schedulePaymentModeCheck, 100);
 
     return {
       type: 'message',
@@ -593,11 +568,10 @@ async function handleLegacyKeyAction(
       content: result.message,
     };
   } catch (error) {
-    const status = runtime.providerStatus();
     return {
       type: 'message',
       messageType: 'error',
-      content: `Failed to update API key for provider '${status.providerName ?? 'unknown'}': ${error instanceof Error ? error.message : String(error)}`,
+      content: `Failed to update API key for provider '${operations.activeProviderName() ?? 'unknown'}': ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }

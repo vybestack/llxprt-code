@@ -7,10 +7,7 @@ import { describe, expect, it } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import type { Agent } from '@vybestack/llxprt-code-agents';
 import { useCommandOwners } from '../../__tests__/command-owner-fixture.js';
-import {
-  createUnconfiguredSetCommand,
-  createUnconfiguredToolFormatCommand,
-} from '../../__tests__/unconfigured-model-command.js';
+import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
 import { CommandService } from '../../services/CommandService.js';
@@ -23,15 +20,18 @@ describe('registered model command ownership', () => {
 
   function loader(agent: Agent): BuiltinCommandLoader {
     return new BuiltinCommandLoader(
-      createModelCommand(createSessionModelCommand(agent), (provider, model) =>
-        agent.session.recordRecordingEvent({
-          type: 'provider_switch',
-          provider,
-          model,
-        }),
-      ),
-      createUnconfiguredToolFormatCommand(),
-      createUnconfiguredSetCommand(),
+      {
+        ...createUnconfiguredBuiltinOwners(),
+        modelCommand: createModelCommand(
+          createSessionModelCommand(agent),
+          (provider, model) =>
+            agent.session.recordRecordingEvent({
+              type: 'provider_switch',
+              provider,
+              model,
+            }),
+        ),
+      },
       null,
       'agent',
     );

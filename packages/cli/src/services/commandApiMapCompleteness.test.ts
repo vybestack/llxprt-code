@@ -28,11 +28,7 @@ import { COMMAND_API_MAP } from '@vybestack/llxprt-code-agents/app-service.js';
 import { CLI_COMMAND_API_EXTENSIONS } from './cliCommandApiMap.js';
 import type { SlashCommand } from '../ui/commands/types.js';
 import { BuiltinCommandLoader } from './BuiltinCommandLoader.js';
-import {
-  createUnconfiguredModelCommand,
-  createUnconfiguredToolFormatCommand,
-  createUnconfiguredSetCommand,
-} from '../__tests__/unconfigured-model-command.js';
+import { createUnconfiguredBuiltinOwners } from '../__tests__/unconfigured-model-command.js';
 
 /**
  * The unified boundary map: the agents-canonical COMMAND_API_MAP augmented
@@ -118,9 +114,7 @@ function flattenCommands(
 
 describe('Command-map completeness (#2203 / REQ-021)', () => {
   const loader = new BuiltinCommandLoader(
-    createUnconfiguredModelCommand(),
-    createUnconfiguredToolFormatCommand(),
-    createUnconfiguredSetCommand(),
+    createUnconfiguredBuiltinOwners(),
     null,
   );
   const registeredCommands = loader.loadCommandsSync();
