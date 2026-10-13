@@ -55,6 +55,7 @@ void vi.mock('../ui/commands/permissionsCommand.js', () => ({
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { BuiltinCommandLoader } from './BuiltinCommandLoader.js';
+import { createUnconfiguredModelCommand } from '../__tests__/unconfigured-model-command.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { CommandKind } from '../ui/commands/types.js';
 
@@ -74,9 +75,6 @@ void vi.mock('../ui/commands/extensionsCommand.js', () => ({
 }));
 void vi.mock('../ui/commands/helpCommand.js', () => ({ helpCommand: {} }));
 void vi.mock('../ui/commands/memoryCommand.js', () => ({ memoryCommand: {} }));
-void vi.mock('../ui/commands/modelCommand.js', () => ({
-  modelCommand: { name: 'model' },
-}));
 void vi.mock('../ui/commands/privacyCommand.js', () => ({
   privacyCommand: {},
 }));
@@ -141,7 +139,10 @@ describe('BuiltinCommandLoader', () => {
 
   it('should correctly pass the config object to restore command factory', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
-    const loader = new BuiltinCommandLoader(runtime);
+    const loader = new BuiltinCommandLoader(
+      createUnconfiguredModelCommand(),
+      runtime,
+    );
     await loader.loadCommands(new AbortController().signal);
 
     // ideCommand is now a constant, no longer needs config
@@ -152,7 +153,10 @@ describe('BuiltinCommandLoader', () => {
   it('should filter out null command definitions returned by factories', async () => {
     // ideCommand is now a constant SlashCommand
     const runtime = composeFixtureRuntime(mockConfig);
-    const loader = new BuiltinCommandLoader(runtime);
+    const loader = new BuiltinCommandLoader(
+      createUnconfiguredModelCommand(),
+      runtime,
+    );
     const commands = await loader.loadCommands(new AbortController().signal);
 
     // The 'ide' command should be present.
@@ -165,7 +169,10 @@ describe('BuiltinCommandLoader', () => {
   });
 
   it('should handle a null config gracefully when calling factories', async () => {
-    const loader = new BuiltinCommandLoader(null);
+    const loader = new BuiltinCommandLoader(
+      createUnconfiguredModelCommand(),
+      null,
+    );
     await loader.loadCommands(new AbortController().signal);
     // ideCommand is now a constant, no longer needs config
     expect(restoreCommandMock).toHaveBeenCalledTimes(1);
@@ -174,7 +181,10 @@ describe('BuiltinCommandLoader', () => {
 
   it('should return a list of all loaded commands', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
-    const loader = new BuiltinCommandLoader(runtime);
+    const loader = new BuiltinCommandLoader(
+      createUnconfiguredModelCommand(),
+      runtime,
+    );
     const commands = await loader.loadCommands(new AbortController().signal);
 
     const aboutCmd = commands.find((c) => c.name === 'about');
@@ -190,7 +200,10 @@ describe('BuiltinCommandLoader', () => {
 
   it('should include permissions command', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
-    const loader = new BuiltinCommandLoader(runtime);
+    const loader = new BuiltinCommandLoader(
+      createUnconfiguredModelCommand(),
+      runtime,
+    );
     const commands = await loader.loadCommands(new AbortController().signal);
     const permissionsCmd = commands.find((c) => c.name === 'permissions');
     expect(permissionsCmd).toBeDefined();
@@ -198,7 +211,10 @@ describe('BuiltinCommandLoader', () => {
 
   it('should exclude development-only commands in production mode', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
-    const loader = new BuiltinCommandLoader(runtime);
+    const loader = new BuiltinCommandLoader(
+      createUnconfiguredModelCommand(),
+      runtime,
+    );
     const commands = await loader.loadCommands(new AbortController().signal);
     expect(
       commands.find((command) => command.name === 'uiprofile'),
@@ -210,7 +226,10 @@ describe('BuiltinCommandLoader', () => {
   // is therefore what guarantees `/image` is discoverable in both surfaces.
   it('should include the image command with a description so it appears in /help and completion', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
-    const loader = new BuiltinCommandLoader(runtime);
+    const loader = new BuiltinCommandLoader(
+      createUnconfiguredModelCommand(),
+      runtime,
+    );
     const commands = await loader.loadCommands(new AbortController().signal);
 
     const imageCmd = commands.find((c) => c.name === 'image');
@@ -223,7 +242,10 @@ describe('BuiltinCommandLoader', () => {
 
   it('should include quota command', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
-    const loader = new BuiltinCommandLoader(runtime);
+    const loader = new BuiltinCommandLoader(
+      createUnconfiguredModelCommand(),
+      runtime,
+    );
     const commands = await loader.loadCommands(new AbortController().signal);
     const quotaCmd = commands.find((c) => c.name === 'quota');
     expect(quotaCmd).toBeDefined();
@@ -237,6 +259,7 @@ describe('BuiltinCommandLoader', () => {
       getEnableHooksUI: () => false,
     } as unknown as Config;
     const loader = new BuiltinCommandLoader(
+      createUnconfiguredModelCommand(),
       composeFixtureRuntime(mockConfigWithMessageBus),
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -264,7 +287,10 @@ describe('BuiltinCommandLoader profile', () => {
 
   it('should always include profile command', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
-    const loader = new BuiltinCommandLoader(runtime);
+    const loader = new BuiltinCommandLoader(
+      createUnconfiguredModelCommand(),
+      runtime,
+    );
     const commands = await loader.loadCommands(new AbortController().signal);
     const profileCmd = commands.find((c) => c.name === 'profile');
     expect(profileCmd).toBeDefined();
@@ -279,7 +305,10 @@ describe('BuiltinCommandLoader profile', () => {
       };
     });
     const runtime = composeFixtureRuntime(mockConfig);
-    const loader = new BuiltinCommandLoader(runtime);
+    const loader = new BuiltinCommandLoader(
+      createUnconfiguredModelCommand(),
+      runtime,
+    );
     const commands = await loader.loadCommands(new AbortController().signal);
     const uiprofileCmd = commands.find((c) => c.name === 'uiprofile');
     expect(uiprofileCmd).toBeDefined();

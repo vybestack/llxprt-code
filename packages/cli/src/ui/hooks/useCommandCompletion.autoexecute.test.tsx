@@ -17,7 +17,7 @@ import { docsCommand } from '../commands/docsCommand.js';
 import { editorCommand } from '../commands/editorCommand.js';
 import { helpCommand } from '../commands/helpCommand.js';
 import { initCommand } from '../commands/initCommand.js';
-import { modelCommand } from '../commands/modelCommand.js';
+import { createModelCommand } from '../commands/modelCommand.js';
 import { quitCommand } from '../commands/quitCommand.js';
 import { settingsCommand } from '../commands/settingsCommand.js';
 import { themeCommand } from '../commands/themeCommand.js';
@@ -26,6 +26,15 @@ import { authCommand } from '../commands/authCommand.js';
 import { setupGithubCommand } from '../commands/setupGithubCommand.js';
 import { bugCommand } from '../commands/bugCommand.js';
 import { chatCommand } from '../commands/chatCommand.js';
+
+const modelCommand = createModelCommand(
+  async () => {
+    throw new Error('No model owner in metadata fixture');
+  },
+  async () => {
+    throw new Error('No recording owner in metadata fixture');
+  },
+);
 
 /** Helper to find a subcommand by name. */
 function findSub(cmd: SlashCommand, name: string): SlashCommand | undefined {

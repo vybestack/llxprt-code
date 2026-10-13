@@ -54,7 +54,7 @@ import {
 import { authCommand } from '../commands/authCommand.js';
 import { ProviderAliasRefreshProvider } from './ProviderAliasRefreshContext.js';
 import { setCommand } from '../commands/setCommand.js';
-import { modelCommand } from '../commands/modelCommand.js';
+import { createModelCommand } from '../commands/modelCommand.js';
 import { keyCommand } from '../commands/keyCommand.js';
 import { providerCommand } from '../commands/providerCommand.js';
 import { profileCommand } from '../commands/profileCommand.js';
@@ -314,13 +314,30 @@ describe('interactive runtime owner bridge', () => {
       </RuntimeContextProvider>,
     );
     try {
-      if (
-        !captured.left ||
-        !captured.right ||
-        !setCommand.action ||
-        !modelCommand.action
-      )
+      if (!captured.left || !captured.right || !setCommand.action)
         throw new Error('Commands or owners unavailable');
+      const leftApi = captured.left;
+      const rightApi = captured.right;
+      const leftModel = createModelCommand(
+        (model) => leftApi.setActiveModel(model),
+        async (provider, model) =>
+          a.session.recordRecordingEvent({
+            type: 'provider_switch',
+            provider,
+            model,
+          }),
+      );
+      const rightModel = createModelCommand(
+        (model) => rightApi.setActiveModel(model),
+        async (provider, model) =>
+          b.session.recordRecordingEvent({
+            type: 'provider_switch',
+            provider,
+            model,
+          }),
+      );
+      if (!leftModel.action || !rightModel.action)
+        throw new Error('Missing bound model actions');
       const leftContext = createMockCommandContext({
         runtimeApi: captured.left,
       });
@@ -338,8 +355,8 @@ describe('interactive runtime owner bridge', () => {
         27002,
       );
       await Promise.all([
-        modelCommand.action(leftContext, 'model-left'),
-        modelCommand.action(rightContext, 'model-right'),
+        leftModel.action(leftContext, 'model-left'),
+        rightModel.action(rightContext, 'model-right'),
       ]);
       expect(a.getModel()).toBe('model-left');
       expect(b.getModel()).toBe('model-right');

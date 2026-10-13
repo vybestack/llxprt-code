@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
-import { modelCommand } from '../../../src/ui/commands/modelCommand.js';
+import { createModelCommand } from '../../../src/ui/commands/modelCommand.js';
 import {
   CommandContext,
   OpenDialogActionReturn,
@@ -18,6 +18,10 @@ import { SessionStatsState } from '../../../src/ui/contexts/SessionContext.js';
 import { createMockRuntimeApi } from '../../../src/ui/components/__tests__/StatsDisplay.testHelpers.js';
 
 const mockSetActiveModel = vi.fn();
+const modelCommand = createModelCommand(
+  (model) => mockSetActiveModel(model),
+  async () => {},
+);
 
 // Create mock command context
 function createMockContext(): CommandContext {

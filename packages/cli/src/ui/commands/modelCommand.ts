@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ModelChangeResult } from '@vybestack/llxprt-code-core';
 import type {
   SlashCommand,
-  CommandContext,
   OpenDialogActionReturn,
   MessageActionReturn,
   ModelsDialogData,
@@ -91,67 +91,49 @@ function argsToDialogData(args: ModelCommandArgs): ModelsDialogData {
   };
 }
 
-async function recordModelSwitch(
-  context: CommandContext,
-  provider: string,
-  model: string,
-): Promise<void> {
-  if (context.recordingOwner === 'agent') {
-    const agent = context.services.agent;
-    if (!agent) throw new Error('Session agent is unavailable');
-    await agent.session.recordRecordingEvent({
-      type: 'provider_switch',
-      provider,
-      model,
-    });
-    return;
-  }
-  try {
-    context.recordingIntegration?.recordProviderSwitch(provider, model);
-  } catch {
-    // Recording failure should not mask a successful model switch
-  }
-}
+export function createModelCommand(
+  selectModel: (model: string) => Promise<ModelChangeResult>,
+  recordSelection: (provider: string, model: string) => Promise<void>,
+): SlashCommand {
+  return {
+    name: 'model',
+    description: 'browse, search, or switch models',
+    kind: CommandKind.BUILT_IN,
+    autoExecute: true,
+    action: async (
+      _invocation: Readonly<{ signal: AbortSignal }>,
+      args: string,
+    ): Promise<OpenDialogActionReturn | MessageActionReturn> => {
+      const parsedArgs = parseArgs(args);
 
-export const modelCommand: SlashCommand = {
-  name: 'model',
-  description: 'browse, search, or switch models',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  action: async (
-    context: CommandContext,
-    args: string,
-  ): Promise<OpenDialogActionReturn | MessageActionReturn> => {
-    const parsedArgs = parseArgs(args);
-
-    // Direct switch: positional arg with NO flags
-    // e.g., "/model gpt-4o" switches directly
-    // but "/model gpt-4o --tools" opens dialog with search + filter
-    if (parsedArgs.search && !hasAnyFlags(parsedArgs)) {
-      try {
-        const runtime = context.runtimeApi;
-        const result = await runtime.setActiveModel(parsedArgs.search);
-        await recordModelSwitch(context, result.providerName, result.nextModel);
-        return {
-          type: 'message',
-          messageType: 'info',
-          content: `Switched from ${result.previousModel ?? 'unknown'} to ${result.nextModel} in provider '${result.providerName}'`,
-        };
-      } catch (error) {
-        return {
-          type: 'message',
-          messageType: 'error',
-          content: `Failed to switch model: ${error instanceof Error ? error.message : String(error)}`,
-        };
+      // Direct switch: positional arg with NO flags
+      // e.g., "/model gpt-4o" switches directly
+      // but "/model gpt-4o --tools" opens dialog with search + filter
+      if (parsedArgs.search && !hasAnyFlags(parsedArgs)) {
+        try {
+          const result = await selectModel(parsedArgs.search);
+          await recordSelection(result.providerName, result.nextModel);
+          return {
+            type: 'message',
+            messageType: 'info',
+            content: `Switched from ${result.previousModel ?? 'unknown'} to ${result.nextModel} in provider '${result.providerName}'`,
+          };
+        } catch (error) {
+          return {
+            type: 'message',
+            messageType: 'error',
+            content: `Failed to switch model: ${error instanceof Error ? error.message : String(error)}`,
+          };
+        }
       }
-    }
 
-    // Open dialog with filters
-    const dialogData = argsToDialogData(parsedArgs);
-    return {
-      type: 'dialog',
-      dialog: 'models',
-      dialogData,
-    };
-  },
-};
+      // Open dialog with filters
+      const dialogData = argsToDialogData(parsedArgs);
+      return {
+        type: 'dialog',
+        dialog: 'models',
+        dialogData,
+      };
+    },
+  };
+}
