@@ -654,7 +654,7 @@ export class SubagentOrchestrator {
     signal?: AbortSignal;
   }): Promise<AgentRuntimeLoaderResult> {
     const providerRuntime = createSubagentProviderRuntime(
-      params.isolatedHandle,
+      params.isolatedHandle.runtimeId,
       params.subagentName,
     );
     const settingsSnapshot = createSettingsSnapshot(

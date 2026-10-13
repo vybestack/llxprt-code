@@ -11,8 +11,27 @@ import {
   buildEphemeralSettings,
   createEmojiFilter,
   buildRuntimeFunctionDeclarations,
+  createSubagentProviderRuntime,
 } from './subagentRuntimeSetup.js';
 import type { ToolRegistryView } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+
+describe('createSubagentProviderRuntime', () => {
+  it.each([
+    ['child-alpha', 'researcher'],
+    ['child-beta', 'reviewer'],
+  ])(
+    'captures runtime %s and role %s without a service handle',
+    (runtimeId, subagent) => {
+      const context = createSubagentProviderRuntime(runtimeId, subagent);
+
+      expect(context).toStrictEqual({
+        runtimeId,
+        runtimeKind: undefined,
+        metadata: { source: 'SubagentOrchestrator', subagent },
+      });
+    },
+  );
+});
 
 describe('convertMetadataToFunctionDeclaration', () => {
   it('should convert tool metadata to FunctionDeclaration with fallbackName and description', () => {
