@@ -48,10 +48,8 @@ import type {
 } from '@vybestack/llxprt-code-providers/auth.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
-import {
-  AdoptionRelease,
-  releaseAdoptedFileScope,
-} from './adoption-release.js';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
+import { releaseAdoptedFileScope } from './adoption-release.js';
 import {
   acquireAdoptedProviderManager,
   acquireAdoptedOAuth,
@@ -283,7 +281,7 @@ export function assembleAdoptedAgent(
   mcp: McpRuntimeOwner,
   media: SessionMediaOwner | undefined,
 ): Promise<Agent> {
-  const release = new AdoptionRelease();
+  const release = new AcquisitionRelease();
   const preflight = options.activationPreflight?.operation;
   try {
     const authority = options.credentialAuthority;
@@ -358,7 +356,7 @@ function finishAdoptionAssembly(
   settingsOwner: SessionSettingsOwner,
   files: ProviderFileLifecycle,
   manager: RuntimeProviderManager,
-  release: AdoptionRelease,
+  release: AcquisitionRelease,
   authority: CredentialAuthority,
 ): Promise<Agent> {
   const preflight = options.activationPreflight?.operation;

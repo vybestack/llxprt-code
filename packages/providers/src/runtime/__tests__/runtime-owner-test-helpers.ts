@@ -30,7 +30,9 @@ export interface RuntimeTestOwners {
       settingsService?: SettingsService;
     },
   ): IsolatedRuntimeContextHandle;
-  foreground(label?: string): AssembledCliProviderRuntime & RuntimeTestRoot;
+  foreground(
+    label?: string,
+  ): Promise<AssembledCliProviderRuntime & RuntimeTestRoot>;
 }
 function createRuntimeTestRoot(
   label: string,
@@ -109,9 +111,9 @@ export function useRuntimeTestOwners(): RuntimeTestOwners {
       cleanups.push(() => handle.cleanup());
       return handle;
     },
-    foreground: (label = 'same-label') => {
+    foreground: async (label = 'same-label') => {
       const root = createRoot(label);
-      const bundle = assembleCliProviderRuntime({
+      const bundle = await assembleCliProviderRuntime({
         credentialAuthority: new CredentialAuthority(),
 
         settingsService: root.settingsService,

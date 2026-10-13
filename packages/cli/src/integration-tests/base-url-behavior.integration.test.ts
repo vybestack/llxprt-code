@@ -1,5 +1,7 @@
-import { CredentialAuthority } from '../../../providers/src/auth/proxy/credential-store-factory.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type {
+  Agent,
+  AgentProfilePreflight,
+} from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -29,8 +31,8 @@ import {
   Config,
   type RuntimeProviderManager,
 } from '@vybestack/llxprt-code-core';
-import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
-import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
+import { prepareIntegrationPreflight } from './__tests__/prepare-preflight.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
   createTempDirectory,
   cleanupTempDirectory,
@@ -48,13 +50,14 @@ import { setProviderBaseUrl } from '../../../agents/src/api/providerConfigUtils.
  * @pseudocode:cli-runtime.md lines 9-15
  */
 describe('Base URL Runtime Helper Integration', () => {
+  const credentials = useOwnedCredentials();
   let tempDir: string;
   let config: Config;
   let sessionRoot: CliTestSessionRoot;
   let providerManager: RuntimeProviderManager;
   let profileManager: ProfileManager;
   let settingsService: SettingsService;
-  let registration: CliRuntimeRegistrationHandle;
+  let preflight: AgentProfilePreflight;
   let sessionClient: Pick<Agent['sessionClient'], 'refreshAuth'>;
 
   beforeEach(async () => {
@@ -69,16 +72,15 @@ describe('Base URL Runtime Helper Integration', () => {
     });
     settingsService = new SettingsService();
     const runtimeId = 'base-url-test-runtime';
-    const assembled = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
-
-      settingsService,
+    preflight = await prepareIntegrationPreflight(
       config,
+      settingsService,
+      credentials().authority,
       runtimeId,
-      metadata: { source: 'base-url-test' },
-    });
-    providerManager = assembled.providerManager;
-    registration = assembled.registration;
+      (manager) => {
+        providerManager = manager;
+      },
+    );
     sessionRoot = await initializeTestSessionRoot(
       config,
       providerManager,
@@ -93,7 +95,7 @@ describe('Base URL Runtime Helper Integration', () => {
   });
 
   afterEach(async () => {
-    registration.dispose();
+    await preflight.dispose();
     await cleanupTempDirectory(tempDir);
   });
 

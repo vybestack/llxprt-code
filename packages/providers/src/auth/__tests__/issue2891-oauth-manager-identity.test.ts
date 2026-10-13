@@ -40,7 +40,7 @@ describe('issue #2891: provider OAuth identity is owner-bound', () => {
     const secondRoot = makeOwner('oauth-identity-second');
     const first = firstRoot.config;
     const second = secondRoot.config;
-    const a = assembleCliProviderRuntime({
+    const a = await assembleCliProviderRuntime({
       credentialAuthority: new CredentialAuthority(),
 
       config: first,

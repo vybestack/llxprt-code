@@ -3,6 +3,7 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { SessionPolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import type {
   RuntimeProviderManager,
   RuntimeTokenizerFactory,
@@ -158,4 +159,12 @@ export function bindFactoryClient(
     createProviderAdapterFromManager(bindings.manager),
     bindings.manager,
   );
+}
+
+export function requireSessionPolicy(
+  owner: SessionPolicyOwner | undefined,
+): SessionPolicyOwner {
+  if (owner === undefined)
+    throw new Error('Missing session policy composition');
+  return owner;
 }

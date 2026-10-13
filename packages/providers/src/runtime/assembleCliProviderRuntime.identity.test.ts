@@ -1,4 +1,3 @@
-import { CredentialAuthority } from '../auth/proxy/credential-store-factory.js';
 import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
 /**
  * @license
@@ -15,6 +14,16 @@ import { createProviderConfigFixture } from './__tests__/provider-config-fixture
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { createIsolatedRuntimeContext } from './index.js';
 import { assembleCliProviderRuntime } from './assembleCliProviderRuntime.js';
+import { mkdtemp, rm, writeFile, readdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { prepareAgentPreflight } from '../../../agents/src/api/profile-preflight.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
+import {
+  WorkspaceTrustLifecycle,
+  WorkspaceFilesystemOwner,
+  assembleWorkspaceMemory,
+} from '@vybestack/llxprt-code-core';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
 
 function createOwner(
@@ -32,11 +41,12 @@ function createOwner(
 }
 
 describe('CLI foreground provider ownership', () => {
+  const credentials = useOwnedCredentials();
   it('keeps Config on the foreground owner instead of the admitted runtime', async () => {
     const settings = new SettingsService();
     const { config, settingsOwner } = createOwner(settings, 'config-owner');
-    const bundle = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
+    const bundle = await assembleCliProviderRuntime({
+      credentialAuthority: credentials().authority,
       settingsOwner,
       settingsService: settings,
       config,
@@ -57,11 +67,11 @@ describe('CLI foreground provider ownership', () => {
     }
   });
 
-  it('binds the same runtime bus, provider manager, OAuth manager, and file lifecycle to the Config', () => {
+  it('binds the same runtime bus, provider manager, OAuth manager, and file lifecycle to the Config', async () => {
     const settings = new SettingsService();
     const { config: config } = createOwner(settings, 'bundle-owner');
-    const bundle = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
+    const bundle = await assembleCliProviderRuntime({
+      credentialAuthority: credentials().authority,
 
       settingsService: settings,
       config,
@@ -86,8 +96,8 @@ describe('CLI foreground provider ownership', () => {
 
   it('preserves supplied OAuth bus and pending caller confirmation during final assembly', async () => {
     const settings = new SettingsService();
-    const early = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
+    const early = await assembleCliProviderRuntime({
+      credentialAuthority: credentials().authority,
 
       settingsService: settings,
       config: undefined,
@@ -105,8 +115,8 @@ describe('CLI foreground provider ownership', () => {
     );
     const pending = bus.requestConfirmation({ name: 'privileged_unknown' }, {});
     const { config } = createOwner(settings, 'final-auth-owner');
-    const final = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
+    const final = await assembleCliProviderRuntime({
+      credentialAuthority: credentials().authority,
 
       settingsService: settings,
       config,
@@ -132,18 +142,18 @@ describe('CLI foreground provider ownership', () => {
     }
   });
 
-  it('keeps concurrent equal-label roots independent across interleaved Config adoption and one cleanup', () => {
+  it('keeps concurrent equal-label roots independent across interleaved Config adoption and one cleanup', async () => {
     const settingsA = new SettingsService();
     const settingsB = new SettingsService();
-    const earlyA = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
+    const earlyA = await assembleCliProviderRuntime({
+      credentialAuthority: credentials().authority,
 
       settingsService: settingsA,
       config: undefined,
       runtimeId: 'same-cli-label',
     });
-    const earlyB = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
+    const earlyB = await assembleCliProviderRuntime({
+      credentialAuthority: credentials().authority,
 
       settingsService: settingsB,
       config: undefined,
@@ -153,16 +163,16 @@ describe('CLI foreground provider ownership', () => {
     const { config: configB } = createOwner(settingsB, 'foreground-b');
     settingsA.set('activeProvider', 'openai');
     settingsB.set('activeProvider', 'kimi');
-    const runtimeB = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
+    const runtimeB = await assembleCliProviderRuntime({
+      credentialAuthority: credentials().authority,
 
       settingsService: settingsB,
       config: configB,
       runtimeId: 'same-cli-label',
       registration: earlyB.registration,
     });
-    const runtimeA = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
+    const runtimeA = await assembleCliProviderRuntime({
+      credentialAuthority: credentials().authority,
 
       settingsService: settingsA,
       config: configA,
@@ -185,10 +195,10 @@ describe('CLI foreground provider ownership', () => {
     runtimeB.registration.dispose();
   });
 
-  it('rejects another Config from borrowing a pre-Config handle', () => {
+  it('rejects another Config from borrowing a pre-Config handle', async () => {
     const settings = new SettingsService();
-    const early = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
+    const early = await assembleCliProviderRuntime({
+      credentialAuthority: credentials().authority,
 
       settingsService: settings,
       config: undefined,
@@ -196,52 +206,61 @@ describe('CLI foreground provider ownership', () => {
     });
     const { config: owner } = createOwner(settings, 'handle-owner');
     const { config: sibling } = createOwner(settings, 'handle-sibling');
-    const bound = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
+    const bound = await assembleCliProviderRuntime({
+      credentialAuthority: credentials().authority,
 
       settingsService: settings,
       config: owner,
       runtimeId: 'one-handle',
       registration: early.registration,
     });
-    expect(() =>
+    await expect(
       assembleCliProviderRuntime({
-        credentialAuthority: new CredentialAuthority(),
+        credentialAuthority: credentials().authority,
 
         settingsService: settings,
         config: sibling,
         runtimeId: 'one-handle',
         registration: early.registration,
       }),
-    ).toThrow('belongs to another Config');
+    ).rejects.toThrow('belongs to another Config');
     expect(bound.registration.config).toBe(owner);
     expect('providerManager' in sibling).toBe(false);
     bound.registration.dispose();
   });
 
-  it('restores Config and handle ownership on failed post-Config assembly, then retries on the exact Config', async () => {
+  it('closes failed Config attachment and accepts a new independent preflight without crossing file ownership', async () => {
+    const directory = await mkdtemp(
+      join(tmpdir(), 'preflight-attachment-recovery-'),
+    );
     const settings = new SettingsService();
-    const early = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
-
-      settingsService: settings,
-      config: undefined,
-      runtimeId: 'retry-label',
+    const early = await prepareAgentPreflight(
+      { runtimeId: 'retry-label' },
+      credentials().authority,
+      settings,
+    );
+    const { config, settingsOwner } = createOwner(settings, 'retry-config');
+    const { config: sibling, settingsOwner: siblingSettings } = createOwner(
+      settings,
+      'retry-sibling',
+    );
+    const trust = new WorkspaceTrustLifecycle({ localTrust: true });
+    const filesystem = new WorkspaceFilesystemOwner({
+      targetDir: directory,
+      isTrusted: () => true,
     });
-    const { config: config } = createOwner(settings, 'retry-config');
-    const { config: sibling } = createOwner(settings, 'retry-sibling');
-    settings.set('activeProvider', 'provider-does-not-exist');
-    const identity = {
-      provider: 'openai',
-      baseURL: 'http://127.0.0.1',
-      credentialHash: 'retained-key',
-    };
-    const retained = await early.registration.providerFileLifecycle.retain({
-      cacheKey: 'prior-file',
+    const memory = assembleWorkspaceMemory(config, filesystem, trust);
+    const file = join(directory, 'retained-file');
+    await writeFile(file, 'retained contents');
+    const retained = await early.retainProviderFile({
+      cacheKey: file,
       fileId: 'retained-file',
       bytes: 17,
-      identity,
-      scopeId: 'retry-label',
+      identity: {
+        provider: 'openai',
+        baseURL: 'http://127.0.0.1',
+        credentialHash: 'retained-key',
+      },
       policy: {
         mode: 'enabled',
         scope: 'session',
@@ -249,71 +268,95 @@ describe('CLI foreground provider ownership', () => {
         deletion: 'delete',
         zeroDataRetention: 'incompatible-while-retained',
       },
-      deleteRemote: async () => {},
+      deleteRemote: () => rm(file),
     });
     await retained.lease.release();
-    const originalHandleOwner = early.registration.config;
-
-    expect(() =>
-      assembleCliProviderRuntime({
-        credentialAuthority: new CredentialAuthority(),
-
-        settingsService: settings,
-        config,
-        runtimeId: 'retry-label',
-        registration: early.registration,
-      }),
-    ).toThrow(
-      "Could not activate explicitly-configured provider 'provider-does-not-exist'",
-    );
-    expect(early.registration.config).toBe(originalHandleOwner);
-    expect(early.registration.providerManager).toBe(early.providerManager);
-    expect('providerManager' in config).toBe(false);
-    expect(early.registration.providerFileLifecycle.snapshot()).toMatchObject({
-      retainedFiles: 1,
-      retainedBytes: 17,
-      activeLeases: 0,
-    });
-    expect(() =>
-      assembleCliProviderRuntime({
-        credentialAuthority: new CredentialAuthority(),
-
-        settingsService: settings,
-        config: sibling,
-        runtimeId: 'retry-label',
-        registration: early.registration,
-      }),
-    ).toThrow('belongs to another Config');
-
-    settings.set('activeProvider', 'openai');
-    const recovered = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
-
-      settingsService: settings,
-      config,
-      runtimeId: 'retry-label',
-      registration: early.registration,
-    });
-    expect(recovered.registration.config).toBe(config);
-    expect('providerFileLifecycle' in recovered.runtime).toBe(false);
-    expect(recovered.registration.providerFileLifecycle).toBe(
-      early.registration.providerFileLifecycle,
-    );
-    expect(recovered.providerManager.getActiveProvider()?.name).toBe('openai');
-    const lifecycle = recovered.registration.providerFileLifecycle;
-    const acquired = lifecycle.acquire({
-      cacheKey: 'prior-file',
-      identity,
-      scope: 'session',
-      scopeId: 'retry-label',
-    });
-    expect(acquired).toBeDefined();
-    await acquired?.lease.release();
-    await lifecycle.cleanupScope('session', 'retry-label');
-    expect(
-      early.registration.providerFileLifecycle.snapshot().retainedFiles,
-    ).toBe(0);
-    recovered.registration.dispose();
+    const prepare = (owner: typeof early, selectedConfig: typeof config) =>
+      owner.preparePostConfiguration(
+        selectedConfig,
+        filesystem,
+        memory,
+        trust,
+        undefined,
+        settingsOwner,
+      );
+    settings.set('activeProvider', 'provider-does-not-exist');
+    try {
+      expect(early.captureProviderFiles()).toMatchObject({
+        retainedFiles: 1,
+        retainedBytes: 17,
+        activeLeases: 0,
+      });
+      await expect(prepare(early, config)).rejects.toThrow(
+        'provider-does-not-exist',
+      );
+      expect(() => early.captureInput()).toThrow('disposed');
+      expect(() => early.readProviderDefaultModel('openai')).toThrow(
+        'disposed',
+      );
+      expect('providerManager' in config).toBe(false);
+      expect(early.captureProviderFiles()).toMatchObject({
+        retainedFiles: 0,
+        retainedBytes: 0,
+        activeLeases: 0,
+      });
+      expect(await readdir(directory)).not.toContain('retained-file');
+      await expect(prepare(early, sibling)).rejects.toThrow('disposed');
+      expect('providerManager' in sibling).toBe(false);
+      settings.set('activeProvider', 'openai');
+      const recovered = await prepareAgentPreflight(
+        { runtimeId: 'retry-label' },
+        credentials().authority,
+        settings,
+      );
+      const nextFilesystem = new WorkspaceFilesystemOwner({
+        targetDir: directory,
+        isTrusted: () => true,
+      });
+      const nextMemory = assembleWorkspaceMemory(config, nextFilesystem, trust);
+      try {
+        await recovered.preparePostConfiguration(
+          config,
+          nextFilesystem,
+          nextMemory,
+          trust,
+          undefined,
+          settingsOwner,
+        );
+        expect(recovered.captureInput().runtimeId).toBe('retry-label');
+        expect('runtime' in recovered).toBe(false);
+        expect(recovered.captureProviderFiles().retainedFiles).toBe(0);
+        expect(
+          (await recovered.preflight({ provider: 'openai', authMode: 'none' }))
+            .activeProvider,
+        ).toBe('openai');
+        expect(early.captureProviderFiles().retainedFiles).toBe(0);
+        await expect(
+          recovered.preparePostConfiguration(
+            sibling,
+            nextFilesystem,
+            nextMemory,
+            trust,
+            undefined,
+            settingsOwner,
+          ),
+        ).rejects.toThrow('already prepared');
+      } finally {
+        await recovered.dispose();
+        await nextMemory.dispose();
+        await nextFilesystem.dispose();
+      }
+    } finally {
+      await early.dispose();
+      await memory.dispose();
+      await filesystem.dispose();
+      await trust.dispose();
+      await settingsOwner.dispose();
+      await siblingSettings.dispose();
+      await config.dispose();
+      await sibling.dispose();
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it('does not replace an independent isolated Agent with the same label', async () => {
@@ -325,7 +368,7 @@ describe('CLI foreground provider ownership', () => {
       } = createOwner(new SettingsService(), 'shared-label');
       return createIsolatedRuntimeContext(
         {
-          credentialAuthority: new CredentialAuthority(),
+          credentialAuthority: credentials().authority,
 
           runtimeId: 'shared-label',
           runtimeKind: 'agent',
@@ -339,8 +382,8 @@ describe('CLI foreground provider ownership', () => {
     const settings = new SettingsService();
     const { config: config } = createOwner(settings, 'foreground-with-agent');
     try {
-      const assembled = assembleCliProviderRuntime({
-        credentialAuthority: new CredentialAuthority(),
+      const assembled = await assembleCliProviderRuntime({
+        credentialAuthority: credentials().authority,
 
         settingsService: settings,
         config,

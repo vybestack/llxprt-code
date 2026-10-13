@@ -46,7 +46,7 @@
  * published file set to the allow-listed layout.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import {
   cpSync,
@@ -64,7 +64,7 @@ import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { MemoryTokenStore } from '../../packages/providers/src/auth/__tests__/behavioral/test-utils.js';
+import { useOwnedCredentials } from '../../packages/agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
   discoverRuntimePluginPackages,
   loadRuntimePlugins,
@@ -373,6 +373,20 @@ const LEFTOVER_GEMINI_ALIAS: ProviderAliasEntry = {
   source: 'user',
 };
 
+function useBaseOnlyOAuth(): () => OAuthManager {
+  const credentials = useOwnedCredentials();
+  let oauth: OAuthManager;
+  beforeEach(() => {
+    oauth = new OAuthManager(
+      credentials().authority.createTokenStore(),
+      undefined,
+      {},
+    );
+  });
+  afterEach(() => oauth.dispose());
+  return () => oauth;
+}
+
 function makeBaseOnlyManager(): ProviderManager {
   return new ProviderManager(
     undefined,
@@ -380,6 +394,11 @@ function makeBaseOnlyManager(): ProviderManager {
     undefined,
     undefined,
     new SettingsService(),
+    undefined,
+    {
+      runtimeId: 'issue-2603-plugin-install-layouts',
+      runtimeKind: 'agent',
+    },
   );
 }
 
@@ -388,6 +407,7 @@ function makeBaseOnlyManager(): ProviderManager {
 // ---------------------------------------------------------------------------
 
 describe('base-only install (issue-2603 layout, no plugin packages)', () => {
+  const baseOnlyOAuth = useBaseOnlyOAuth();
   it('discovers no runtime plugins', () => {
     withInstalledFixture([], (root) => {
       const discovered = discoverRuntimePluginPackages(discoveryDeps(root));
@@ -429,11 +449,6 @@ describe('base-only install (issue-2603 layout, no plugin packages)', () => {
         { importModule: mustNotImport },
       );
       const manager = makeBaseOnlyManager();
-      const oauthManager = new OAuthManager(
-        new MemoryTokenStore(),
-        undefined,
-        {},
-      );
       let thrown: unknown;
       try {
         registerAliasProviders(
@@ -442,15 +457,13 @@ describe('base-only install (issue-2603 layout, no plugin packages)', () => {
           undefined,
           undefined,
           {},
-          oauthManager,
+          baseOnlyOAuth(),
           undefined,
           false,
           { providerContributions: baseOnlyRegistry },
         );
       } catch (error) {
         thrown = error;
-      } finally {
-        await oauthManager.dispose();
       }
       if (!(thrown instanceof Error)) {
         throw new Error(
@@ -471,6 +484,7 @@ describe('base-only install (issue-2603 layout, no plugin packages)', () => {
 // ---------------------------------------------------------------------------
 
 describe('base + @vybestack/llxprt-plugin-google-gemini install', () => {
+  const baseOnlyOAuth = useBaseOnlyOAuth();
   const release = releaseByDir('google-gemini');
 
   it('discovers exactly the installed plugin by its manifest marker', () => {
@@ -523,35 +537,26 @@ describe('base + @vybestack/llxprt-plugin-google-gemini install', () => {
       if (factory === undefined) {
         throw new Error('expected the plugin-contributed gemini factory');
       }
-      const oauthManager = new OAuthManager(
-        new MemoryTokenStore(),
-        undefined,
-        {},
+      const provider = factory(
+        {
+          alias: 'gemini',
+          config: { ...GEMINI_ALIAS_CONFIG },
+          filePath: `plugin:${release.name}`,
+          source: 'plugin',
+        },
+        {
+          openaiApiKey: undefined,
+          openaiBaseUrl: undefined,
+          openaiProviderConfig: {},
+          oauthManager: baseOnlyOAuth(),
+          config: undefined,
+          authOnlyEnabled: false,
+        },
       );
-      try {
-        const provider = factory(
-          {
-            alias: 'gemini',
-            config: { ...GEMINI_ALIAS_CONFIG },
-            filePath: `plugin:${release.name}`,
-            source: 'plugin',
-          },
-          {
-            openaiApiKey: undefined,
-            openaiBaseUrl: undefined,
-            openaiProviderConfig: {},
-            oauthManager,
-            config: undefined,
-            authOnlyEnabled: false,
-          },
-        );
-        // Constructing — not just resolving — proves the fixture-installed
-        // module graph executes, including its @ai-sdk/google dependency.
-        expect(provider.name).toBe('gemini');
-        expect(typeof provider.generateChatCompletion).toBe('function');
-      } finally {
-        await oauthManager.dispose();
-      }
+      // Constructing — not just resolving — proves the fixture-installed
+      // module graph executes, including its @ai-sdk/google dependency.
+      expect(provider.name).toBe('gemini');
+      expect(typeof provider.generateChatCompletion).toBe('function');
     });
   });
 });

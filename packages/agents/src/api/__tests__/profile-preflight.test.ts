@@ -4,20 +4,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core';
 import { prepareAgentPreflight } from '../profile-preflight.js';
 
 describe('profile preflight lifetime', () => {
+  const credentials = useOwnedCredentials();
+
   it('keeps same-label settings isolated without exposing the runtime graph', async () => {
-    const first = prepareAgentPreflight(
+    const first = await prepareAgentPreflight(
       { runtimeId: 'same-label', initialSettings: { marker: 1 } },
-      new CredentialAuthority(),
+      credentials().authority,
     );
-    const second = prepareAgentPreflight(
+    const second = await prepareAgentPreflight(
       { runtimeId: 'same-label', initialSettings: { marker: 2 } },
-      new CredentialAuthority(),
+      credentials().authority,
     );
     try {
       first.chooseProviderModel('openai', 'first-model');
@@ -37,9 +39,9 @@ describe('profile preflight lifetime', () => {
   it('preserves borrowed settings and rejects operations after disposal', async () => {
     const settings = new SettingsService();
     const owner = new SessionSettingsOwner(settings);
-    const operation = prepareAgentPreflight(
+    const operation = await prepareAgentPreflight(
       { runtimeId: 'borrowed-preflight' },
-      new CredentialAuthority(),
+      credentials().authority,
       settings,
       owner,
     );

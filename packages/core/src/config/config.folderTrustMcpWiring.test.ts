@@ -45,6 +45,7 @@ async function createFailingSession(config: Config, failure: Error) {
     manager,
     null,
     () => undefined,
+    'borrowed',
   );
   vi.spyOn(
     operation.sessionClient.getAgentClient(),

@@ -216,7 +216,7 @@ describe('Config-independent provider owner lifecycle', () => {
   });
   it('retains the pre-Config root manager and token totals across explicit host adoption', async () => {
     const settings = new SettingsService();
-    const early = assembleCliProviderRuntime({
+    const early = await assembleCliProviderRuntime({
       credentialAuthority: new CredentialAuthority(),
 
       settingsService: settings,
@@ -232,7 +232,7 @@ describe('Config-independent provider owner lifecycle', () => {
       thought: 0,
     });
     try {
-      const final = assembleCliProviderRuntime({
+      const final = await assembleCliProviderRuntime({
         credentialAuthority: new CredentialAuthority(),
 
         settingsService: settings,

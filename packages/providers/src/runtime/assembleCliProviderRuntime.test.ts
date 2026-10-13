@@ -44,10 +44,10 @@ import { assembleCliProviderRuntime } from './assembleCliProviderRuntime.js';
 import { SessionProviderReads } from '../../../agents/src/api/session-provider-reads.js';
 
 describe('assembleCliProviderRuntime @plan:PLAN-20270110-ISSUE2378.P04 @requirement:REQ-2378-004', () => {
-  it('owns session-bus construction internally and binds the OAuth manager to that exact bus', () => {
+  it('owns session-bus construction internally and binds the OAuth manager to that exact bus', async () => {
     const settingsService = new SettingsService();
 
-    const result = assembleCliProviderRuntime({
+    const result = await assembleCliProviderRuntime({
       credentialAuthority: new CredentialAuthority(),
 
       settingsService,
@@ -65,15 +65,15 @@ describe('assembleCliProviderRuntime @plan:PLAN-20270110-ISSUE2378.P04 @requirem
     );
   });
 
-  it('keeps same-label foreground owners separate when bootstrapped together', () => {
-    const first = assembleCliProviderRuntime({
+  it('keeps same-label foreground owners separate when bootstrapped together', async () => {
+    const first = await assembleCliProviderRuntime({
       credentialAuthority: new CredentialAuthority(),
 
       settingsService: new SettingsService(),
       config: undefined,
       runtimeId: 'same-label',
     });
-    const second = assembleCliProviderRuntime({
+    const second = await assembleCliProviderRuntime({
       credentialAuthority: new CredentialAuthority(),
 
       settingsService: new SettingsService(),
@@ -96,10 +96,10 @@ describe('assembleCliProviderRuntime @plan:PLAN-20270110-ISSUE2378.P04 @requirem
     second.registration.dispose();
   });
 
-  it('returns a provider manager registered with the standard providers', () => {
+  it('returns a provider manager registered with the standard providers', async () => {
     const settingsService = new SettingsService();
 
-    const result = assembleCliProviderRuntime({
+    const result = await assembleCliProviderRuntime({
       credentialAuthority: new CredentialAuthority(),
 
       settingsService,
@@ -114,10 +114,10 @@ describe('assembleCliProviderRuntime @plan:PLAN-20270110-ISSUE2378.P04 @requirem
     );
   });
 
-  it('produces an OAuth manager the CLI can adopt without constructing one itself', () => {
+  it('produces an OAuth manager the CLI can adopt without constructing one itself', async () => {
     const settingsService = new SettingsService();
 
-    const result = assembleCliProviderRuntime({
+    const result = await assembleCliProviderRuntime({
       credentialAuthority: new CredentialAuthority(),
 
       settingsService,
@@ -185,7 +185,7 @@ describe('assembleCliProviderRuntime OAuth-settings carry-through @plan:PLAN-202
     fs.rmSync(tmpConfigHome, { recursive: true, force: true });
   });
 
-  it('keeps a configured OAuth provider ENABLED on the post-Config recomposition even when the caller omits oauthSettings', () => {
+  it('keeps a configured OAuth provider ENABLED on the post-Config recomposition even when the caller omits oauthSettings', async () => {
     // A user who enabled anthropic OAuth in their global settings file.
     writeUserSettings({ oauthEnabledProviders: { anthropic: true } });
 
@@ -197,7 +197,7 @@ describe('assembleCliProviderRuntime OAuth-settings carry-through @plan:PLAN-202
 
     // This mirrors postConfigRuntime.setupRuntimeContext EXACTLY: a Config now
     // exists and the CLI recomposes the runtime WITHOUT passing oauthSettings.
-    const result = assembleCliProviderRuntime({
+    const result = await assembleCliProviderRuntime({
       credentialAuthority: new CredentialAuthority(),
 
       settingsService,
@@ -212,7 +212,7 @@ describe('assembleCliProviderRuntime OAuth-settings carry-through @plan:PLAN-202
     expect(result.oauthManager?.isOAuthEnabled('anthropic')).toBe(true);
   });
 
-  it('reports a NOT-configured provider as disabled through the same owned fallback', () => {
+  it('reports a NOT-configured provider as disabled through the same owned fallback', async () => {
     writeUserSettings({ oauthEnabledProviders: { anthropic: true } });
 
     const settingsService = new SettingsService();
@@ -221,7 +221,7 @@ describe('assembleCliProviderRuntime OAuth-settings carry-through @plan:PLAN-202
       settingsService,
     });
 
-    const result = assembleCliProviderRuntime({
+    const result = await assembleCliProviderRuntime({
       credentialAuthority: new CredentialAuthority(),
 
       settingsService,
@@ -236,12 +236,12 @@ describe('assembleCliProviderRuntime OAuth-settings carry-through @plan:PLAN-202
     expect(result.oauthManager?.isOAuthEnabled('gemini')).toBe(false);
   });
 
-  it('honors an explicit null opt-out by producing a settings-less OAuth manager', () => {
+  it('honors an explicit null opt-out by producing a settings-less OAuth manager', async () => {
     writeUserSettings({ oauthEnabledProviders: { anthropic: true } });
 
     const settingsService = new SettingsService();
 
-    const result = assembleCliProviderRuntime({
+    const result = await assembleCliProviderRuntime({
       credentialAuthority: new CredentialAuthority(),
 
       settingsService,
@@ -278,7 +278,7 @@ describe('assembleCliProviderRuntime OAuth-settings carry-through @plan:PLAN-202
       policyEngineConfig,
     });
 
-    const result = assembleCliProviderRuntime({
+    const result = await assembleCliProviderRuntime({
       credentialAuthority: new CredentialAuthority(),
 
       settingsService,

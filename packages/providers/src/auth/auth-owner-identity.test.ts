@@ -198,7 +198,7 @@ describe('explicit OAuth owner identity', () => {
   });
   it('reads CLI manager identity changes without borrowing the active runtime', async () => {
     const isolated = owner('agent');
-    const cli = assembleCliProviderRuntime({
+    const cli = await assembleCliProviderRuntime({
       credentialAuthority: new CredentialAuthority(),
 
       config: isolated.config,

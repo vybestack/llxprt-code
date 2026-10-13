@@ -115,8 +115,8 @@ describe('explicit runtime lifecycle', () => {
     },
   );
 
-  it('releasing a foreground handle removes its authority and rejects subsequent adoption', () => {
-    const foreground = owners.foreground();
+  it('releasing a foreground handle removes its authority and rejects subsequent adoption', async () => {
+    const foreground = await owners.foreground();
     foreground.registration.dispose();
     expect(foreground.registration.config).toBeUndefined();
     expect(foreground.registration.providerManager).toBeUndefined();
@@ -129,8 +129,8 @@ describe('explicit runtime lifecycle', () => {
     expect(() => foreground.registration.dispose()).not.toThrow();
   });
 
-  it('refuses a different Config without overwriting the original owner', () => {
-    const foreground = owners.foreground();
+  it('refuses a different Config without overwriting the original owner', async () => {
+    const foreground = await owners.foreground();
     const { config: other } = owners.config();
     expect(() => foreground.registration.adopt(other)).toThrow(
       'another Config',

@@ -26,7 +26,18 @@ import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { SessionClientOwner } from '../../../../agents/src/session/session-client-owner.js';
 import { buildAgentClientFactory } from '../../../../agents/src/api/agentBootstrap.js';
-import { afterEach, describe, expect, it, spyOn } from 'bun:test';
+import {
+  afterEach,
+  afterAll,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  spyOn,
+} from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import { TestRuntimeProviderManager } from '../../../../agents/src/test-utils/runtimeProviderManager.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -36,7 +47,8 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
-import { beginCliRuntimeRegistration } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
+import { prepareAgentPreflight } from '@vybestack/llxprt-code-agents';
+import { useOwnedCredentials } from '../../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
   generateAutoPrompt,
   type AutoPromptRuntime,
@@ -167,6 +179,18 @@ function liveRuntime(source: {
 }
 
 describe('auto prompt explicit client ownership', () => {
+  const credentials = useOwnedCredentials();
+  let prompts: string;
+  const previousPrompts = process.env.LLXPRT_PROMPTS_DIR;
+  beforeAll(async () => {
+    prompts = await mkdtemp(join(tmpdir(), 'auto-prompt-fixture-'));
+    process.env.LLXPRT_PROMPTS_DIR = prompts;
+  });
+  afterAll(async () => {
+    if (previousPrompts === undefined) delete process.env.LLXPRT_PROMPTS_DIR;
+    else process.env.LLXPRT_PROMPTS_DIR = previousPrompts;
+    await rm(prompts, { recursive: true, force: true });
+  });
   afterEach(() => {
     fixtureFilesystem = undefined;
   });
@@ -180,15 +204,17 @@ describe('auto prompt explicit client ownership', () => {
       new Error('provider denied generation'),
     );
     const b = await owner('failure-scope');
-    const unrelated = beginCliRuntimeRegistration(b.settings, b.config, {
-      runtimeId: 'failure-scope',
-    });
+    const unrelated = await prepareAgentPreflight(
+      { runtimeId: b.config.getSessionId() },
+      credentials().authority,
+    );
+    cleanups.push(() => unrelated.dispose());
     const result = await generateAutoPrompt(
       liveRuntime(a),
       'Review code',
       a.config.getContentGeneratorConfig(),
     ).catch((error: unknown) => error);
-    unrelated.dispose();
+    await unrelated.dispose();
     expect(a.requests).toHaveLength(1);
     expect(result).toBeInstanceOf(Error);
     expect(result instanceof Error && result.message).toContain(
@@ -199,15 +225,17 @@ describe('auto prompt explicit client ownership', () => {
   it('uses owner A while an unrelated B runtime scope exists and preserves response whitespace', async () => {
     const a = await owner('owner-a');
     const b = await owner('owner-b');
-    const unrelated = beginCliRuntimeRegistration(b.settings, b.config, {
-      runtimeId: 'owner-b',
-    });
+    const unrelated = await prepareAgentPreflight(
+      { runtimeId: b.config.getSessionId() },
+      credentials().authority,
+    );
+    cleanups.push(() => unrelated.dispose());
     const result = await generateAutoPrompt(
       liveRuntime(a),
       'Review code',
       a.config.getContentGeneratorConfig(),
     );
-    unrelated.dispose();
+    await unrelated.dispose();
     expect(result).toBe('  owner-a: expanded prompt\n');
     expect(a.requests).toHaveLength(1);
     expect(b.requests).toHaveLength(0);

@@ -506,7 +506,7 @@ function readOwnerAuthPolicy(
   };
 }
 
-function createOwnedOAuthManager(
+export function createOwnedOAuthManager(
   tokenStore: TokenStore,
   settings: IOAuthSettingsProvider | undefined,
   messageBus: MessageBus | undefined,

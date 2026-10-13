@@ -22,7 +22,8 @@ import {
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ProviderManager } from '@vybestack/llxprt-code-providers';
 import {} from '@vybestack/llxprt-code-providers/runtime.js';
-import { beginCliRuntimeRegistration } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
+import { prepareAgentPreflight } from '../../agents/src/api/profile-preflight.js';
+import { useOwnedCredentials } from '../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { createAgentSetCommand } from './__tests__/set-command-test-owner.js';
 import { buildCliStyleConfig } from '../../agents/src/api/__tests__/helpers/buildCliStyleConfig.js';
 import {
@@ -151,6 +152,7 @@ function buildFakeAgent(): Agent {
 }
 
 describe('runNonInteractive - slash commands and thinking output', () => {
+  const credentials = useOwnedCredentials();
   let mockConfig: Config;
   let mockSettings: LoadedSettings;
   let mockShutdownTelemetry: Mock<(...args: never[]) => Promise<void>>;
@@ -397,12 +399,12 @@ describe('runNonInteractive - slash commands and thinking output', () => {
       settingsOwner: foreignOwner,
     } = makeConfig('headless-foreign-agent');
     foreignOwner.writeUserParameter('emojifilter', 'allowed');
-    const foreignRegistration = beginCliRuntimeRegistration(
+    const foreignPreflight = await prepareAgentPreflight(
+      { runtimeId: foreign.getSessionId() },
+      credentials().authority,
       foreignSettings,
-      foreign,
-      { runtimeId: 'headless-foreign-agent' },
+      foreignOwner,
     );
-    foreignRegistration.expectManager(foreignManager);
     const built = await buildCliStyleConfig('plain-text.jsonl');
     const agent = await original.fromConfig({
       settingsService: built.settingsService,
@@ -441,7 +443,10 @@ describe('runNonInteractive - slash commands and thinking output', () => {
     } finally {
       await agent.dispose();
       await built.cleanup();
-      foreignRegistration.dispose();
+      await foreignPreflight.dispose();
+      foreignManager.dispose();
+      await foreignOwner.dispose();
+      await foreign.dispose();
     }
   });
 

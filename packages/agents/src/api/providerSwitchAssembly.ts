@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { assembleSessionImages } from './session-image-assembly.js';
 import { assembleModelSelection } from './model-selection.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
@@ -150,37 +151,59 @@ function requirePreflightMedia(
   return store;
 }
 
-function composeActivationWorkspace(
+function acquireActivationFilesystem(
   config: Config,
-  mcpRuntime: McpRuntimeOwner | undefined,
-  filesystemOwner: WorkspaceFilesystemOwner | undefined,
-  memoryOwner: WorkspaceMemoryOwner | undefined,
+  mcp: McpRuntimeOwner | undefined,
+  supplied: WorkspaceFilesystemOwner | undefined,
   trust: WorkspaceTrustControlPort,
-): {
-  workspaceFilesystem: WorkspaceFilesystemOwner;
-  workspaceMemory: WorkspaceMemoryOwner;
-  workspaceDefinitions: WorkspaceDefinitionOwner;
-} {
-  const workspaceFilesystem =
-    mcpRuntime?.workspaceFilesystem ??
-    filesystemOwner ??
+  release: AcquisitionRelease,
+): WorkspaceFilesystemOwner {
+  const filesystem =
+    mcp?.workspaceFilesystem ??
+    supplied ??
     new WorkspaceFilesystemOwner({
       targetDir: config.getTargetDir(),
       customExcludes: config.customExcludes,
       includeDirectories: config.getConfiguredIncludeDirectories(),
       isTrusted: () => trust.isTrustedFolder(),
     });
-  const workspaceMemory =
-    mcpRuntime?.workspaceMemory ??
-    memoryOwner ??
-    assembleWorkspaceMemory(config, workspaceFilesystem, trust);
-  const workspaceDefinitions =
-    mcpRuntime?.workspaceDefinitions ??
+  if (mcp === undefined)
+    release.acquire('settings', () => filesystem.dispose());
+  return filesystem;
+}
+
+function acquireActivationMemory(
+  config: Config,
+  mcp: McpRuntimeOwner | undefined,
+  supplied: WorkspaceMemoryOwner | undefined,
+  filesystem: WorkspaceFilesystemOwner,
+  trust: WorkspaceTrustControlPort,
+  ownership: 'borrowed' | 'transferred',
+  release: AcquisitionRelease,
+): WorkspaceMemoryOwner {
+  const memory =
+    mcp?.workspaceMemory ??
+    supplied ??
+    assembleWorkspaceMemory(config, filesystem, trust);
+  if (ownership === 'transferred')
+    release.acquire('settings', () => memory.dispose());
+  return memory;
+}
+
+function acquireActivationDefinitions(
+  config: Config,
+  mcp: McpRuntimeOwner | undefined,
+  release: AcquisitionRelease,
+): WorkspaceDefinitionOwner {
+  const definitions =
+    mcp?.workspaceDefinitions ??
     new WorkspaceDefinitionOwner(
       config.profileDirectory ?? join(config.globalConfigRoot, 'profiles'),
       config.subagentDirectory ?? join(config.globalConfigRoot, 'subagents'),
     );
-  return { workspaceFilesystem, workspaceMemory, workspaceDefinitions };
+  if (mcp === undefined)
+    release.acquire('settings', () => definitions.dispose());
+  return definitions;
 }
 
 function resolveActivationSettings(
@@ -198,6 +221,7 @@ export async function assembleAgentActivationBootstrap(
   manager: RuntimeProviderManager,
   oauth: OAuthManager | null,
   readKind: () => RuntimeKind | undefined,
+  providerLifetime: 'borrowed' | (() => Promise<void>),
   agentClient?: AgentClientContract,
   mcpRuntime?: McpRuntimeOwner,
   filesystemOwner?: WorkspaceFilesystemOwner,
@@ -212,64 +236,120 @@ export async function assembleAgentActivationBootstrap(
   messageBus?: ConstructorParameters<typeof SessionClientOwner>[11],
   memoryOwnership: 'borrowed' | 'transferred' = 'borrowed',
 ): Promise<AgentActivationOperation> {
-  const workspace = prepareActivationInputs(
-    config,
-    manager,
-    agentClient,
-    mcpRuntime,
-    filesystemOwner,
-    memoryOwner,
-    suppliedTrust,
-    settings,
-    suppliedSettingsOwner,
-  );
+  const release = new AcquisitionRelease();
+  try {
+    return await prepareActivationOwner(
+      config,
+      settings,
+      manager,
+      agentClient,
+      mcpRuntime,
+      filesystemOwner,
+      memoryOwner,
+      suppliedSettingsOwner,
+      settingsOwnerOwnership,
+      suppliedTrust,
+      trustCleanup,
+      memoryOwnership,
+      release,
+      oauth,
+      readKind,
+      providerLifetime,
+      tokenizerFactory,
+      contentGeneratorFactory,
+      providerFileLifecycle,
+      messageBus,
+    );
+  } catch (error) {
+    try {
+      await release.rollback();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        'Activation acquisition cleanup failed',
+      );
+    }
+    throw error;
+  }
+}
+
+async function completeActivationAcquisition(
+  config: Config,
+  settings: SettingsService,
+  manager: RuntimeProviderManager,
+  oauth: OAuthManager | null,
+  readKind: () => RuntimeKind | undefined,
+  providerLifetime: 'borrowed' | (() => Promise<void>),
+  supplied: AgentClientContract | undefined,
+  mcp: McpRuntimeOwner | undefined,
+  store: ConstructorParameters<typeof SessionClientOwner>[4],
+  owner: SessionSettingsOwner,
+  media: SessionMediaOwner | undefined,
+  filesystem: WorkspaceFilesystemOwner,
+  memory: WorkspaceMemoryOwner,
+  definitions: WorkspaceDefinitionOwner,
+  trust: WorkspaceTrustControlPort,
+  cleanupTrust: (() => Promise<void>) | undefined,
+  settingsOwnership: 'borrowed' | 'transferred',
+  content: SessionClientOwner['contentGeneratorFactory'] | undefined,
+  tokenizer: SessionClientOwner['tokenizerFactory'] | undefined,
+  files: ProviderFileLifecycle | undefined,
+  bus: ConstructorParameters<typeof SessionClientOwner>[11],
+  memoryOwnership: 'borrowed' | 'transferred',
+  release: AcquisitionRelease,
+): Promise<AgentActivationOperation> {
   const factories = configureProviderRuntimeFactories(config, manager, {
-    tokenizerFactory,
-    contentGeneratorFactory,
+    tokenizerFactory: tokenizer,
+    contentGeneratorFactory: content,
   });
-  const sessionClient = await SessionClientOwner.create(
+  const client = await SessionClientOwner.create(
     config,
     assembleTaskSchemaPolicy(settings),
     manager,
     buildAgentClientFactory(),
-    workspace.store,
-    mcpRuntime?.readInstructions ?? (() => undefined),
-    workspace.workspaceFilesystem.paths,
-    workspace.settingsOwner,
+    store,
+    mcp?.readInstructions ?? (() => undefined),
+    filesystem.paths,
+    owner,
     factories.contentGeneratorFactory,
     factories.tokenizerFactory,
-    agentClient,
-    messageBus,
+    supplied,
+    bus,
   );
-  const execute = await bindActivationClient(
-    sessionClient,
+  release.acquire('manager', () => client.dispose());
+  const execute = bindActivationClient(
+    client,
     config,
     manager,
     oauth,
     settings,
-    workspace,
-    mcpRuntime,
-    providerFileLifecycle,
+    definitions,
+    memory,
+    owner,
+    mcp,
+    files,
     readKind,
   );
+  if (providerLifetime !== 'borrowed')
+    client.adoptProviderLifetime(providerLifetime);
   return new AgentActivationBootstrap(
     config,
     manager,
     execute,
-    workspace.mediaOwner,
-    sessionClient,
-    workspace.workspaceFilesystem,
-    workspace.workspaceMemory,
-    mcpRuntime === undefined,
-    workspace.settingsOwner,
-    settingsOwnerOwnership,
-    workspace.workspaceDefinitions,
-    mcpRuntime === undefined,
-    workspace.workspaceTrust,
-    resolveTrustCleanup(workspace.ownedTrust, trustCleanup),
+    media,
+    client,
+    filesystem,
+    memory,
+    mcp === undefined,
+    owner,
+    settingsOwnership,
+    definitions,
+    mcp === undefined,
+    trust,
+    cleanupTrust,
     oauth ?? undefined,
-    messageBus ?? mcpRuntime?.messageBus,
-    resolveActivationMemoryOwnership(mcpRuntime, memoryOwner, memoryOwnership),
+    bus ?? mcp?.messageBus,
+    memoryOwnership,
   );
 }
 
@@ -280,103 +360,223 @@ function resolveTrustCleanup(
   return owned === undefined ? cleanup : () => owned.dispose();
 }
 
-async function bindActivationClient(
-  sessionClient: SessionClientOwner,
+function bindActivationClient(
+  sessionClient: Pick<
+    SessionClientOwner,
+    | 'hasImageComposition'
+    | 'bindImageOperation'
+    | 'bindProviderFiles'
+    | 'bindMcpRuntime'
+    | 'bindHooks'
+    | 'bindDefinitionReads'
+    | 'bindWorkspaceInstructions'
+    | 'refreshAuth'
+  >,
   config: Config,
   manager: RuntimeProviderManager,
   oauth: OAuthManager | null,
   settings: SettingsService,
-  workspace: ReturnType<typeof prepareActivationInputs>,
+  definitions: WorkspaceDefinitionOwner,
+  memory: WorkspaceMemoryOwner,
+  owner: SessionSettingsOwner,
   mcpRuntime: McpRuntimeOwner | undefined,
   providerFileLifecycle: ProviderFileLifecycle | undefined,
   readKind: () => RuntimeKind | undefined,
-): Promise<ReturnType<typeof assembleActivationExecutor>> {
-  try {
-    assembleSessionImages(
-      {
-        hasImageComposition: () => sessionClient.hasImageComposition(),
-        bindImageOperation: (run, dispose) =>
-          sessionClient.bindImageOperation(run, dispose),
-      },
-      config.getTargetDir(),
-      manager,
-      oauth ?? undefined,
-      settings,
-    );
-    bindActivationCapabilities(
-      sessionClient,
-      providerFileLifecycle,
-      oauth,
-      workspace.workspaceDefinitions,
-      workspace.workspaceMemory,
-      mcpRuntime,
-    );
-    return createPreflightExecutor(
-      config,
-      settings,
-      manager,
-      oauth,
-      readKind,
-      workspace.settingsOwner,
-      (method) => sessionClient.refreshAuth(method),
-    );
-  } catch (error) {
-    try {
-      await sessionClient.dispose();
-    } catch (cleanupError) {
-      throw new AggregateError(
-        [error, cleanupError],
-        'Activation client binding cleanup failed',
-      );
-    }
-    throw error;
-  }
+): ReturnType<typeof assembleActivationExecutor> {
+  assembleSessionImages(
+    {
+      hasImageComposition: () => sessionClient.hasImageComposition(),
+      bindImageOperation: (run, dispose) =>
+        sessionClient.bindImageOperation(run, dispose),
+    },
+    config.getTargetDir(),
+    manager,
+    oauth ?? undefined,
+    settings,
+  );
+  bindActivationCapabilities(
+    sessionClient,
+    providerFileLifecycle,
+    oauth,
+    definitions,
+    memory,
+    mcpRuntime,
+  );
+  return createPreflightExecutor(
+    config,
+    settings,
+    manager,
+    oauth,
+    readKind,
+    owner,
+    (method) => sessionClient.refreshAuth(method),
+  );
 }
 
-function prepareActivationInputs(
+function acquireActivationSettings(
   config: Config,
-  manager: RuntimeProviderManager,
-  agentClient: AgentClientContract | undefined,
-  mcpRuntime: McpRuntimeOwner | undefined,
-  filesystemOwner: WorkspaceFilesystemOwner | undefined,
-  memoryOwner: WorkspaceMemoryOwner | undefined,
-  suppliedTrust: WorkspaceTrustControlPort | undefined,
   settings: SettingsService,
-  suppliedSettingsOwner: SessionSettingsOwner | undefined,
-) {
-  agentClient?.assertConfig(config);
-  agentClient?.assertProviderManager(manager);
+  supplied: SessionSettingsOwner | undefined,
+  ownership: 'borrowed' | 'transferred',
+  release: AcquisitionRelease,
+): SessionSettingsOwner {
+  const owner = resolveActivationSettings(settings, supplied);
+  if (ownership === 'transferred')
+    release.acquire('settings', () => owner.dispose());
+  owner.bindTelemetry(config);
+  return owner;
+}
+
+function acquireActivationMedia(
+  config: Config,
+  client: AgentClientContract | undefined,
+  release: AcquisitionRelease,
+): SessionMediaOwner | undefined {
+  const media = createPreflightMedia(config, client);
+  if (media !== undefined) release.acquire('settings', () => media.dispose());
+  return media;
+}
+
+async function prepareActivationOwner(
+  config: Config,
+  settings: SettingsService,
+  manager: RuntimeProviderManager,
+  client: AgentClientContract | undefined,
+  mcp: McpRuntimeOwner | undefined,
+  suppliedFilesystem: WorkspaceFilesystemOwner | undefined,
+  suppliedMemory: WorkspaceMemoryOwner | undefined,
+  suppliedSettings: SessionSettingsOwner | undefined,
+  settingsOwnership: 'borrowed' | 'transferred',
+  suppliedTrust: WorkspaceTrustControlPort | undefined,
+  trustCleanup: (() => Promise<void>) | undefined,
+  memoryOwnership: 'borrowed' | 'transferred',
+  release: AcquisitionRelease,
+  oauth: OAuthManager | null,
+  readKind: () => RuntimeKind | undefined,
+  providerLifetime: 'borrowed' | (() => Promise<void>),
+  tokenizer: SessionClientOwner['tokenizerFactory'] | undefined,
+  content: SessionClientOwner['contentGeneratorFactory'] | undefined,
+  files: ProviderFileLifecycle | undefined,
+  bus: ConstructorParameters<typeof SessionClientOwner>[11],
+): Promise<AgentActivationOperation> {
+  client?.assertConfig(config);
+  client?.assertProviderManager(manager);
   const { ownedTrust, workspaceTrust } = resolveActivationTrust(
     config,
-    mcpRuntime,
+    mcp,
     suppliedTrust,
   );
-  const settingsOwner = resolveActivationSettings(
-    settings,
-    suppliedSettingsOwner,
-  );
-  settingsOwner.bindTelemetry(config);
-  const mediaOwner = createPreflightMedia(config, agentClient);
-  const store = requirePreflightMedia(agentClient, mediaOwner);
-  const { workspaceFilesystem, workspaceMemory, workspaceDefinitions } =
-    composeActivationWorkspace(
-      config,
-      mcpRuntime,
-      filesystemOwner,
-      memoryOwner,
-      workspaceTrust,
-    );
 
-  return {
-    ownedTrust,
-    workspaceTrust,
-    settingsOwner,
+  const cleanupTrust = resolveTrustCleanup(ownedTrust, trustCleanup);
+  if (mcp === undefined && cleanupTrust !== undefined)
+    release.acquire('settings', cleanupTrust);
+  const owner = acquireActivationSettings(
+    config,
+    settings,
+    suppliedSettings,
+    settingsOwnership,
+    release,
+  );
+  const mediaOwner = acquireActivationMedia(config, client, release);
+  return completeWorkspaceActivation(
+    config,
+    settings,
+    manager,
+    client,
+    mcp,
+    suppliedFilesystem,
+    suppliedMemory,
+    owner,
     mediaOwner,
-    store,
+    workspaceTrust,
+    cleanupTrust,
+    settingsOwnership,
+    memoryOwnership,
+    release,
+    oauth,
+    readKind,
+    providerLifetime,
+    tokenizer,
+    content,
+    files,
+    bus,
+  );
+}
+
+async function completeWorkspaceActivation(
+  config: Config,
+  settings: SettingsService,
+  manager: RuntimeProviderManager,
+  client: AgentClientContract | undefined,
+  mcp: McpRuntimeOwner | undefined,
+  suppliedFilesystem: WorkspaceFilesystemOwner | undefined,
+  suppliedMemory: WorkspaceMemoryOwner | undefined,
+  owner: SessionSettingsOwner,
+  mediaOwner: SessionMediaOwner | undefined,
+  workspaceTrust: WorkspaceTrustControlPort,
+  cleanupTrust: (() => Promise<void>) | undefined,
+  settingsOwnership: 'borrowed' | 'transferred',
+  memoryOwnership: 'borrowed' | 'transferred',
+  release: AcquisitionRelease,
+  oauth: OAuthManager | null,
+  readKind: () => RuntimeKind | undefined,
+  providerLifetime: 'borrowed' | (() => Promise<void>),
+  tokenizer: SessionClientOwner['tokenizerFactory'] | undefined,
+  content: SessionClientOwner['contentGeneratorFactory'] | undefined,
+  files: ProviderFileLifecycle | undefined,
+  bus: ConstructorParameters<typeof SessionClientOwner>[11],
+): Promise<AgentActivationOperation> {
+  const workspaceFilesystem = acquireActivationFilesystem(
+    config,
+    mcp,
+    suppliedFilesystem,
+    workspaceTrust,
+    release,
+  );
+  const ownedMemory = resolveActivationMemoryOwnership(
+    mcp,
+    suppliedMemory,
+    memoryOwnership,
+  );
+  const workspaceMemory = acquireActivationMemory(
+    config,
+    mcp,
+    suppliedMemory,
+    workspaceFilesystem,
+    workspaceTrust,
+    ownedMemory,
+    release,
+  );
+  const workspaceDefinitions = acquireActivationDefinitions(
+    config,
+    mcp,
+    release,
+  );
+  return completeActivationAcquisition(
+    config,
+    settings,
+    manager,
+    oauth,
+    readKind,
+    providerLifetime,
+    client,
+    mcp,
+    requirePreflightMedia(client, mediaOwner),
+    owner,
+    mediaOwner,
     workspaceFilesystem,
     workspaceMemory,
     workspaceDefinitions,
-  };
+    workspaceTrust,
+    cleanupTrust,
+    settingsOwnership,
+    content,
+    tokenizer,
+    files,
+    bus,
+    ownedMemory,
+    release,
+  );
 }
 
 // Memory disposition is tracked independently of filesystem ownership: memory

@@ -1,11 +1,13 @@
-import { CredentialAuthority } from '../../../providers/src/auth/proxy/credential-store-factory.js';
 import { buildRuntimeProfileSnapshot } from '../../../agents/src/api/profileSnapshot.js';
 import {
   modelSelectionInputs,
   providerSwitchInputs,
   modelParamInputs,
 } from '../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type {
+  Agent,
+  AgentProfilePreflight,
+} from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -38,8 +40,8 @@ import {
   clearActiveModelParam,
 } from '../../../agents/src/api/model-parameters.js';
 import { setActiveModel } from '../../../agents/src/api/providerMutations.js';
-import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
-import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
+import { prepareIntegrationPreflight } from './__tests__/prepare-preflight.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
   createTempDirectory,
   cleanupTempDirectory,
@@ -76,12 +78,13 @@ function createStubProvider(name: string): IProvider & { clearState(): void } {
 }
 
 describe('Runtime model parameter isolation', () => {
+  const credentials = useOwnedCredentials();
   let tempDir: string;
   let config: Config;
   let sessionRoot: CliTestSessionRoot;
   let providerManager: RuntimeProviderManager;
   let settingsService: SettingsService;
-  let registration: CliRuntimeRegistrationHandle;
+  let preflight: AgentProfilePreflight;
   let sessionClient: Pick<Agent['sessionClient'], 'refreshAuth'>;
 
   beforeEach(async () => {
@@ -94,16 +97,15 @@ describe('Runtime model parameter isolation', () => {
       model: 'alpha-model',
     });
     settingsService = new SettingsService();
-    const assembled = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
-
-      settingsService,
+    preflight = await prepareIntegrationPreflight(
       config,
-      runtimeId: 'model-params-isolation-test',
-      metadata: { source: 'model-params-isolation.integration.test.ts' },
-    });
-    providerManager = assembled.providerManager;
-    registration = assembled.registration;
+      settingsService,
+      credentials().authority,
+      'model-params-isolation-test',
+      (manager) => {
+        providerManager = manager;
+      },
+    );
     sessionRoot = await initializeTestSessionRoot(
       config,
       providerManager,
@@ -123,7 +125,7 @@ describe('Runtime model parameter isolation', () => {
   });
 
   afterEach(async () => {
-    registration.dispose();
+    await preflight.dispose();
     await cleanupTempDirectory(tempDir);
   });
 

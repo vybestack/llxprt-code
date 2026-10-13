@@ -146,6 +146,7 @@ describe('activation media owner lifetime', () => {
       manager,
       null,
       () => undefined,
+      'borrowed',
       undefined,
       undefined,
       filesystem,

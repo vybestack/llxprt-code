@@ -56,6 +56,7 @@ async function failingCleanupOperation() {
     manager,
     null,
     () => undefined,
+    'borrowed',
     undefined,
     undefined,
     undefined,

@@ -44,6 +44,7 @@ describe('Acquisition rollback', () => {
           built.handle.providerManager,
           null,
           () => undefined,
+          'borrowed',
           undefined,
           built.mcp,
           undefined,
