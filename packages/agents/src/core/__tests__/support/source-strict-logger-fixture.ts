@@ -41,6 +41,7 @@ export type StrictFault =
   | 'retry'
   | 'abort'
   | 'unsupported'
+  | 'no-artifact-exporter'
   | 'api-request'
   | 'conversation-request'
   | 'api-response'
@@ -242,7 +243,7 @@ export async function assembleStrict(
       settingsService: setup.context.settingsService,
       provider: setup.provider,
       logger:
-        fault === 'unsupported'
+        fault === 'unsupported' || fault === 'no-artifact-exporter'
           ? new UnsupportedFileExporter(exporter)
           : exporter,
     });

@@ -44,6 +44,18 @@ describe('source strict logger prerequisites with real HTTP and Config exporters
     assertClosed(receipt);
   }, 60000);
 
+  it('sends the request without body artifacts when the exporter cannot carry them', async () => {
+    const receipt = await strictProbe(root(), 'no-artifact-exporter', true);
+    expect(receipt.error).toBeNull();
+    expect(receipt.bodies).toHaveLength(1);
+    expect(receipt.output).toBe('finished');
+    expect(receipt.rejected).toStrictEqual([]);
+    expect(
+      receipt.events.map((event) => String(event['event.name'])),
+    ).not.toContain('llxprt_code.api_request_complete');
+    assertClosed(receipt);
+  }, 60000);
+
   it('preserves request-before-terminal ordering and response usage on a successful source seam', async () => {
     const receipt = await strictProbe(root(), 'none', true);
     expect(receipt.error).toBeNull();

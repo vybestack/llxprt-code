@@ -37,11 +37,16 @@ export class AcknowledgedLogExporter implements LogRecordExporter {
   private readonly abandonExports = new Map<string, (error: Error) => void>();
   constructor(private readonly exporter: LogRecordExporter) {}
 
+  /** Whether the wrapped exporter can carry schema 4 request-artifact records. */
+  supportsRequestArtifacts(): boolean {
+    return (
+      'requestArtifactSchemaVersion' in this.exporter &&
+      this.exporter.requestArtifactSchemaVersion === 4
+    );
+  }
+
   assertArtifactSupport(): void {
-    if (
-      !('requestArtifactSchemaVersion' in this.exporter) ||
-      this.exporter.requestArtifactSchemaVersion !== 4
-    )
+    if (!this.supportsRequestArtifacts())
       throw new Error(
         'Telemetry exporter does not support request artifact schema 4',
       );

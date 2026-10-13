@@ -96,6 +96,36 @@ describe('request artifact telemetry owned by a RootTelemetry', () => {
     ).rejects.toThrow('request artifact schema 4');
   });
 
+  it('reports artifact support without throwing: file exporter yes, schema-less exporter no', async () => {
+    const supported = await fileRoot(outfile());
+    const unsupported = await createRootTelemetry(
+      {
+        sessionId: 'unsupported-probe',
+        enabled: true,
+        maxBytes: 1,
+        maxFiles: 1,
+      },
+      () => ({
+        tracer: {
+          export: (_spans, done) => done({ code: ExportResultCode.SUCCESS }),
+          shutdown: () => Promise.resolve(),
+        },
+        logger: unsupportedExporter,
+        meter: {
+          export: (_metrics, done) => done({ code: ExportResultCode.SUCCESS }),
+          shutdown: () => Promise.resolve(),
+          forceFlush: () => Promise.resolve(),
+        },
+      }),
+    );
+    roots.push(unsupported);
+
+    expect(supported.supportsRequestArtifacts()).toBe(true);
+    expect(unsupported.supportsRequestArtifacts()).toBe(false);
+    await supported.setEnabled(false);
+    expect(supported.supportsRequestArtifacts()).toBe(false);
+  });
+
   it('requires an active root for the exporter assertion', async () => {
     const selected = await fileRoot(outfile());
     await selected.setEnabled(false);

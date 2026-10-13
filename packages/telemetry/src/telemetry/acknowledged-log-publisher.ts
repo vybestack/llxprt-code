@@ -23,6 +23,10 @@ export class AcknowledgedLogPublisher {
     private readonly sessionId: string,
   ) {}
 
+  supportsArtifacts(): boolean {
+    return this.exporter.supportsRequestArtifacts();
+  }
+
   assertSupport(): void {
     this.exporter.assertArtifactSupport();
   }

@@ -38,7 +38,11 @@ export interface RequestTelemetryOptions {
 export interface ProviderRequestDiagnostics {
   readonly conversationLoggingEnabled: boolean;
   readonly conversationLogPath: string;
-  /** Telemetry is enabled and API-body plus prompt logging are opted in. */
+  /**
+   * Telemetry is enabled, API-body plus prompt logging are opted in, and the
+   * session's exporter can carry request artifacts. An exporter that cannot
+   * (console) is never asked to, so the request is logged without a body.
+   */
   readonly requestBodyLoggingEnabled: boolean;
   readonly redaction: RedactionConfig;
   /** Throws when this session's telemetry cannot export request artifacts. */
@@ -93,7 +97,8 @@ export function captureProviderRequestDiagnostics(
       return (
         settings.telemetry.isEnabled() &&
         privacy.logApiBodies &&
-        privacy.logPrompts
+        privacy.logPrompts &&
+        settings.telemetry.supportsRequestArtifacts()
       );
     },
     conversationLogPath: owner.getConversationLogPath(),

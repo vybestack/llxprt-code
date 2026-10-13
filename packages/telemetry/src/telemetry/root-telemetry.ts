@@ -506,6 +506,18 @@ export class RootTelemetry {
     else effect();
   }
 
+  /**
+   * Whether this root is exporting through a log exporter that can carry
+   * request artifact schema 4 (the console exporter cannot). Callers that
+   * would otherwise ask for body artifacts check this first.
+   */
+  supportsRequestArtifacts(): boolean {
+    return (
+      this.accepting &&
+      this.requireLifetime().providers.publisher.supportsArtifacts()
+    );
+  }
+
   /** Throws unless this root is exporting and its log exporter supports request artifact schema 4. */
   assertRequestArtifactExporter(): void {
     if (!this.accepting)
