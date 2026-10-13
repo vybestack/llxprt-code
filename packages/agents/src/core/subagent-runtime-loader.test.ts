@@ -1,0 +1,108 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import { describe, expect, it } from 'bun:test';
+import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { ProviderManager } from '@vybestack/llxprt-code-providers';
+import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
+import { buildIsolatedAgentConfig } from '../api/agentRuntimeAssembly.js';
+import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
+import { createSubagentProviderRuntime } from './subagentRuntimeSetup.js';
+import { buildSubagentRuntimeLoaderOptions } from './subagent-runtime-loader.js';
+
+describe('explicit child runtime loader inputs', () => {
+  it('loads independent history while capturing live child invocation and policy settings', async () => {
+    const settings = new SettingsService();
+    settings.set('activeProvider', 'openai');
+    settings.set('context-limit', 8192);
+    const { config, mediaOwner } = buildIsolatedAgentConfig({
+      sessionId: 'explicit-child',
+      model: 'child-model',
+      settingsService: settings,
+    });
+    const { settingsOwner } = createSessionSettingsFixture(config, settings);
+    const runtime = createSubagentProviderRuntime('explicit-child', 'research');
+    const manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      settings,
+      config,
+      runtime,
+      new CredentialAuthority(),
+      settingsOwner,
+    );
+    const { tokenizerFactory, contentGeneratorFactory } =
+      configureProviderRuntimeFactories(config, manager);
+    const state = createAgentRuntimeState({
+      runtimeId: 'explicit-child',
+      sessionId: 'child-session',
+      provider: 'openai',
+      model: 'child-model',
+    });
+    const signal = new AbortController().signal;
+    const options = buildSubagentRuntimeLoaderOptions(
+      config,
+      settingsOwner,
+      mediaOwner.store,
+      manager,
+      tokenizerFactory,
+      contentGeneratorFactory,
+      undefined,
+      state,
+      {},
+      runtime,
+      { model: state.model },
+      signal,
+    );
+    try {
+      const first = await loadAgentRuntime(options);
+      const second = await loadAgentRuntime(options);
+      first.history.add({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'Only the first child history' }],
+      });
+      expect(first.history.getCurated()).toHaveLength(1);
+      expect(second.history.getCurated()).toHaveLength(0);
+      expect(first.runtimeContext.state.sessionId).toBe('child-session');
+      expect(first.telemetryRoot).toBe(settingsOwner.telemetry);
+      expect(options.profile.readRuntimeSettings?.().contextLimit).toBe(8192);
+      settings.set('context-limit', 4096);
+      settings.set('tools.disabled', ['shell']);
+      expect(options.profile.readRuntimeSettings?.().contextLimit).toBe(4096);
+      expect(options.profile.readToolGovernance().disabled).toContain('shell');
+      settings.setProviderSetting(
+        'openai',
+        'base-url',
+        'https://child.example',
+      );
+      const invocation = options.profile.prepareProviderInvocation('openai');
+      expect(invocation.runtimeId).toBe(state.runtimeId);
+      expect(invocation.sessionId).toBe(state.sessionId);
+      expect(invocation.getEphemeral<string>('base-url')).toBe(
+        'https://child.example',
+      );
+      const signalled = options.profile.prepareProviderInvocation(
+        'openai',
+        undefined,
+        signal,
+      );
+      expect(signalled.signal).toBe(signal);
+      await settingsOwner.dispose();
+      expect(() => options.profile.readRuntimeSettings?.()).toThrow('closed');
+      expect(second.history.getCurated()).toHaveLength(0);
+      first.history.dispose();
+      second.history.dispose();
+    } finally {
+      manager.dispose();
+      await config.dispose();
+      await mediaOwner.dispose();
+    }
+  });
+});
