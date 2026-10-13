@@ -5,10 +5,12 @@
  */
 
 import type { CliUiRuntime } from '../cliUiRuntime.js';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { createModelCommand } from '../commands/modelCommand.js';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type {
   RecordingIntegration,
+  ModelChangeResult,
   Todo,
   AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
@@ -36,7 +38,7 @@ import {
   type SlashCommandProcessorActions,
 } from './slashCommandProcessor.js';
 import {
-  loadBuiltinSlashCommandsForTesting,
+  loadBuiltinSlashCommands,
   useCommandContext,
   useCommandReload,
   useManagers,
@@ -99,14 +101,15 @@ interface SlashCommandProcessorState {
   setSessionShellAllowlist: React.Dispatch<React.SetStateAction<Set<string>>>;
 }
 
-function useSlashCommandProcessorState(
+function useCommandState(
+  modelCommand: SlashCommand,
   config: CliUiRuntime | null,
   recordingOwner?: 'agent' | 'raw',
 ): SlashCommandProcessorState {
   const [commands, setCommands] = useState<readonly SlashCommand[] | undefined>(
     () =>
       process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY === 'true'
-        ? loadBuiltinSlashCommandsForTesting(config, recordingOwner)
+        ? loadBuiltinSlashCommands(modelCommand, config, recordingOwner)
         : undefined,
   );
   const [reloadTrigger, setReloadTrigger] = useState(0);
@@ -160,6 +163,31 @@ function buildHandlerDeps(
   };
 }
 
+function useRegisteredModelCommand(
+  selectModel: (model: string) => Promise<ModelChangeResult>,
+  ownedRecording: Pick<Agent['session'], 'recordRecordingEvent'> | null,
+  rawRecording: Pick<RecordingIntegration, 'recordProviderSwitch'> | undefined,
+  recordingOwner?: 'agent' | 'raw',
+): SlashCommand {
+  return useMemo(
+    () =>
+      createModelCommand(selectModel, async (provider, model) => {
+        if (recordingOwner === 'agent') {
+          if (ownedRecording === null)
+            throw new Error('Session agent is unavailable');
+          await ownedRecording.recordRecordingEvent({
+            type: 'provider_switch',
+            provider,
+            model,
+          });
+        } else {
+          rawRecording?.recordProviderSwitch(provider, model);
+        }
+      }),
+    [selectModel, ownedRecording, rawRecording, recordingOwner],
+  );
+}
+
 export function useSlashCommandProcessorCore(
   args: UseSlashCommandProcessorCoreArgs,
 ): SlashCommandProcessorCoreResult {
@@ -167,7 +195,13 @@ export function useSlashCommandProcessorCore(
   const refreshProviderAliases = useProviderAliasRefresh();
   const oauthControl = useOAuthControl();
   const session = useSessionStats();
-  const state = useSlashCommandProcessorState(args.config, args.recordingOwner);
+  const modelCommand = useRegisteredModelCommand(
+    runtimeApi.setActiveModel,
+    args.agent?.session ?? null,
+    args.recordingIntegration,
+    args.recordingOwner,
+  );
+  const state = useCommandState(modelCommand, args.config, args.recordingOwner);
   const cancellation = useSlashCommandCancellation();
   const managers = useManagers(args.config, args.agent ?? undefined);
   const pending = usePendingHistory(args.addItem);
@@ -201,6 +235,7 @@ export function useSlashCommandProcessorCore(
     stats: session,
   });
   useCommandReload(
+    modelCommand,
     args.config,
     state.reloadTrigger,
     args.isConfigInitialized,

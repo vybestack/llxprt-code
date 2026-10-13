@@ -79,7 +79,6 @@
       "settings",
       "storage",
       "telemetry",
-      "test-utils",
       "tools"
     ],
     "settings": ["storage"],
@@ -108,7 +107,7 @@
     "lsp": [],
     "mcp": ["test-utils"],
     "policy": [],
-    "providers": ["policy"],
+    "providers": ["policy", "test-utils"],
     "settings": [],
     "storage": [],
     "telemetry": [],

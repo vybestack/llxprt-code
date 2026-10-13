@@ -49,7 +49,6 @@ import { skillsCommand } from '../ui/commands/skillsCommand.js';
 import { settingsCommand } from '../ui/commands/settingsCommand.js';
 import { vimCommand } from '../ui/commands/vimCommand.js';
 import { providerCommand } from '../ui/commands/providerCommand.js';
-import { modelCommand } from '../ui/commands/modelCommand.js';
 import { keyCommand } from '../ui/commands/keyCommand.js';
 import { keyfileCommand } from '../ui/commands/keyfileCommand.js';
 import { toolkeyCommand } from '../ui/commands/toolkeyCommand.js';
@@ -85,6 +84,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
   private extensionEnablementManager?: ExtensionEnablementSource;
 
   constructor(
+    private readonly modelCommand: SlashCommand,
     private config: CliUiRuntime | null,
     private recordingOwner: 'agent' | 'raw' = 'raw',
   ) {
@@ -171,7 +171,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       settingsCommand,
       vimCommand,
       providerCommand,
-      modelCommand,
+      this.modelCommand,
       keyCommand,
       keyfileCommand,
       toolkeyCommand, // @plan PLAN-20260206-TOOLKEY.P09 @requirement REQ-002

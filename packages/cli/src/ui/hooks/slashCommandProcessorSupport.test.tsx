@@ -11,6 +11,8 @@ import { CommandKind, type SlashCommand } from '../commands/types.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { CoreEvent, coreEvents } from '@vybestack/llxprt-code-core';
 import { useCommandReload } from './slashCommandProcessorSupport.js';
+import { createUnconfiguredModelCommand } from '../../__tests__/unconfigured-model-command.js';
+const modelCommand = createUnconfiguredModelCommand();
 
 const loaderState = {
   builtinCommands: [] as SlashCommand[],
@@ -60,6 +62,7 @@ function useCommandRegistry(config: CliUiRuntime): readonly SlashCommand[] {
     setReloadTrigger((value) => value + 1);
   }, []);
   useCommandReload(
+    modelCommand,
     config,
     reloadTrigger,
     true,
