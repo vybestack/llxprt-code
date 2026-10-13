@@ -38,7 +38,14 @@ describe('Acquisition rollback', () => {
       }
     }
     const pending = createOwnedSessionRoots(
-      built.handle,
+      built.config,
+      built.handle.settingsService,
+      built.handle.settingsOwner,
+      built.handle.providerManager,
+      built.handle.oauthManager,
+      built.handle.contentGeneratorFactory,
+      built.handle.tokenizerFactory,
+      built.handle.providerFileLifecycle,
       built.media,
       (config, state, instructions, store, paths) => {
         if (store === undefined || paths === undefined)
@@ -61,6 +68,7 @@ describe('Acquisition rollback', () => {
       policy,
       undefined,
       false,
+      undefined,
     ).then(
       () => undefined,
       (error: unknown) => {

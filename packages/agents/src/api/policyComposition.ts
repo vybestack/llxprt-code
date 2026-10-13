@@ -26,7 +26,6 @@ import {
 } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
 import { applyRuntimeEphemerals } from './agentConfig.adapter.js';
 import type { AgentConfigSchema } from './config-schema.js';
-import type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
 import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
 import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import type { SessionClientOwner } from '../session/session-client-owner.js';
@@ -42,6 +41,7 @@ import type { AgentConfig } from './config-types.js';
 import { injectConfirmationForcingPolicy } from './confirmationForcing.js';
 import { assembleMcpRuntime } from './mcpOAuthAssembly.js';
 import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
+import type { McpAssemblyOptions } from './mcpOAuthAssembly.js';
 
 export function initializePolicyComposition(
   params: ConfigParameters,
@@ -80,21 +80,7 @@ export function initializePolicyComposition(
 export async function assembleOwnedMcpRuntime(
   config: Config,
   bus: MessageBus,
-  options: Pick<
-    AgentConfig,
-    | 'imageOperation'
-    | 'trustPort'
-    | 'idePort'
-    | 'memoryOwner'
-    | 'mcpHost'
-    | 'mcpTokenStorage'
-    | 'lspOwner'
-    | 'lspOwnership'
-    | 'definitionOwner'
-    | 'definitionOwnership'
-    | 'filesystemOwner'
-    | 'filesystemOwnership'
-  >,
+  options: McpAssemblyOptions,
   policy: RuntimePolicyOwner,
   settingsOwner: SessionSettingsOwner,
 ): Promise<McpRuntimeOwner> {
@@ -158,53 +144,47 @@ async function bindCreatedSessionClient(
 }
 
 export async function createOwnedSessionRoots(
-  handle: IsolatedRuntimeContextHandle,
+  config: Config,
+  settings: SettingsService,
+  settingsOwner: SessionSettingsOwner,
+  providerManager: RuntimeProviderManager,
+  oauthManager: OAuthManager,
+  contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
+  tokenizerFactory: RuntimeTokenizerFactory,
+  providerFileLifecycle: ProviderFileLifecycle,
   media: SessionMediaOwner,
   factory: AgentClientFactory | undefined,
-  options: Pick<
-    AgentConfig,
-    | 'imageOperation'
-    | 'trustPort'
-    | 'idePort'
-    | 'memoryOwner'
-    | 'mcpHost'
-    | 'mcpTokenStorage'
-    | 'lspOwner'
-    | 'lspOwnership'
-    | 'definitionOwner'
-    | 'definitionOwnership'
-    | 'filesystemOwner'
-    | 'filesystemOwnership'
-  >,
+  options: McpAssemblyOptions,
   policy: RuntimePolicyOwner,
   registration: Parameters<SessionClientOwner['bindMcpRuntime']>[1],
   forceConfirmations: boolean,
+  imageOperation: AgentConfig['imageOperation'],
 ): Promise<readonly [McpRuntimeOwner, SessionClientOwner]> {
   const mcp = await assembleOwnedMcpRuntime(
-    handle.config,
+    config,
     policy.session.messageBus,
     options,
     policy,
-    handle.settingsOwner,
+    settingsOwner,
   );
   try {
     return [
       mcp,
       await bindCreatedSessionClient(
-        handle.config,
-        handle.settingsService,
-        handle.settingsOwner,
-        handle.providerManager,
-        handle.oauthManager,
-        handle.contentGeneratorFactory,
-        handle.tokenizerFactory,
-        handle.providerFileLifecycle,
+        config,
+        settings,
+        settingsOwner,
+        providerManager,
+        oauthManager,
+        contentGeneratorFactory,
+        tokenizerFactory,
+        providerFileLifecycle,
         media,
         factory,
         mcp,
         registration,
         forceConfirmations,
-        options.imageOperation,
+        imageOperation,
       ),
     ];
   } catch (error) {
@@ -223,20 +203,18 @@ export async function createOwnedSessionRoots(
 export async function prepareOwnedMediaRuntime(
   config: Config,
   mediaOwner: SessionMediaOwner,
-  _factories: AgentRuntimeFactoryBindings | undefined,
   parsed: ReturnType<typeof AgentConfigSchema.parse>,
   runtimeId: string,
   runtimeActivationBindings: AgentConfig['runtimeActivationBindings'],
   tokenStore: AgentConfig['tokenStore'],
   messageBus: MessageBus,
   policyOwner: RuntimePolicyOwner,
-  factorySelection: Pick<
-    AgentConfig,
-    | 'tokenizerFactory'
-    | 'contentGeneratorFactory'
-    | 'definitionOwner'
-    | 'credentialAuthority'
-  > = {},
+  tokenizerFactory: AgentConfig['tokenizerFactory'],
+  contentGeneratorFactory: AgentConfig['contentGeneratorFactory'],
+  profileReads:
+    | NonNullable<AgentConfig['definitionOwner']>['profileReads']
+    | undefined,
+  credentialAuthority: AgentConfig['credentialAuthority'],
 ): Promise<IsolatedRuntimeContextHandle> {
   let settingsOwner: SessionSettingsOwner | undefined;
   try {
@@ -264,10 +242,10 @@ export async function prepareOwnedMediaRuntime(
     // FakeProvider under LLXPRT_FAKE_RESPONSES) onto the isolated manager.
     return createIsolatedRuntimeContext(
       {
-        credentialAuthority: factorySelection.credentialAuthority,
-        profileReads: factorySelection.definitionOwner?.profileReads,
-        tokenizerFactory: factorySelection.tokenizerFactory,
-        contentGeneratorFactory: factorySelection.contentGeneratorFactory,
+        credentialAuthority,
+        profileReads,
+        tokenizerFactory,
+        contentGeneratorFactory,
         runtimeId,
         activationBindings:
           runtimeActivationBindings ?? createRuntimeActivationBindings(),
