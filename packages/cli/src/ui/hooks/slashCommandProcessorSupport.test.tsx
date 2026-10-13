@@ -11,14 +11,8 @@ import { CommandKind, type SlashCommand } from '../commands/types.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { CoreEvent, coreEvents } from '@vybestack/llxprt-code-core';
 import { useCommandReload } from './slashCommandProcessorSupport.js';
-import {
-  createUnconfiguredModelCommand,
-  createUnconfiguredToolFormatCommand,
-  createUnconfiguredSetCommand,
-} from '../../__tests__/unconfigured-model-command.js';
-const modelCommand = createUnconfiguredModelCommand();
-const toolFormatCommand = createUnconfiguredToolFormatCommand();
-const setCommand = createUnconfiguredSetCommand();
+import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
+const builtinOwners = createUnconfiguredBuiltinOwners();
 
 const loaderState = {
   builtinCommands: [] as SlashCommand[],
@@ -70,7 +64,7 @@ function useCommandRegistry(config: CliUiRuntime): readonly SlashCommand[] {
     setReloadTrigger((value) => value + 1);
   }, []);
   useCommandReload(
-    { modelCommand, toolFormatCommand, setCommand },
+    builtinOwners,
     config,
     reloadTrigger,
     true,

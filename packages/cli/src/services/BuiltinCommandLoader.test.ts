@@ -55,11 +55,7 @@ void vi.mock('../ui/commands/permissionsCommand.js', () => ({
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { BuiltinCommandLoader } from './BuiltinCommandLoader.js';
-import {
-  createUnconfiguredModelCommand,
-  createUnconfiguredToolFormatCommand,
-  createUnconfiguredSetCommand,
-} from '../__tests__/unconfigured-model-command.js';
+import { createUnconfiguredBuiltinOwners } from '../__tests__/unconfigured-model-command.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { CommandKind } from '../ui/commands/types.js';
 
@@ -144,9 +140,7 @@ describe('BuiltinCommandLoader', () => {
   it('should correctly pass the config object to restore command factory', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
     const loader = new BuiltinCommandLoader(
-      createUnconfiguredModelCommand(),
-      createUnconfiguredToolFormatCommand(),
-      createUnconfiguredSetCommand(),
+      createUnconfiguredBuiltinOwners(),
       runtime,
     );
     await loader.loadCommands(new AbortController().signal);
@@ -160,9 +154,7 @@ describe('BuiltinCommandLoader', () => {
     // ideCommand is now a constant SlashCommand
     const runtime = composeFixtureRuntime(mockConfig);
     const loader = new BuiltinCommandLoader(
-      createUnconfiguredModelCommand(),
-      createUnconfiguredToolFormatCommand(),
-      createUnconfiguredSetCommand(),
+      createUnconfiguredBuiltinOwners(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -178,9 +170,7 @@ describe('BuiltinCommandLoader', () => {
 
   it('should handle a null config gracefully when calling factories', async () => {
     const loader = new BuiltinCommandLoader(
-      createUnconfiguredModelCommand(),
-      createUnconfiguredToolFormatCommand(),
-      createUnconfiguredSetCommand(),
+      createUnconfiguredBuiltinOwners(),
       null,
     );
     await loader.loadCommands(new AbortController().signal);
@@ -192,9 +182,7 @@ describe('BuiltinCommandLoader', () => {
   it('should return a list of all loaded commands', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
     const loader = new BuiltinCommandLoader(
-      createUnconfiguredModelCommand(),
-      createUnconfiguredToolFormatCommand(),
-      createUnconfiguredSetCommand(),
+      createUnconfiguredBuiltinOwners(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -213,9 +201,7 @@ describe('BuiltinCommandLoader', () => {
   it('should include permissions command', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
     const loader = new BuiltinCommandLoader(
-      createUnconfiguredModelCommand(),
-      createUnconfiguredToolFormatCommand(),
-      createUnconfiguredSetCommand(),
+      createUnconfiguredBuiltinOwners(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -226,9 +212,7 @@ describe('BuiltinCommandLoader', () => {
   it('should exclude development-only commands in production mode', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
     const loader = new BuiltinCommandLoader(
-      createUnconfiguredModelCommand(),
-      createUnconfiguredToolFormatCommand(),
-      createUnconfiguredSetCommand(),
+      createUnconfiguredBuiltinOwners(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -243,9 +227,7 @@ describe('BuiltinCommandLoader', () => {
   it('should include the image command with a description so it appears in /help and completion', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
     const loader = new BuiltinCommandLoader(
-      createUnconfiguredModelCommand(),
-      createUnconfiguredToolFormatCommand(),
-      createUnconfiguredSetCommand(),
+      createUnconfiguredBuiltinOwners(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -261,9 +243,7 @@ describe('BuiltinCommandLoader', () => {
   it('should include quota command', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
     const loader = new BuiltinCommandLoader(
-      createUnconfiguredModelCommand(),
-      createUnconfiguredToolFormatCommand(),
-      createUnconfiguredSetCommand(),
+      createUnconfiguredBuiltinOwners(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -279,9 +259,7 @@ describe('BuiltinCommandLoader', () => {
       getEnableHooksUI: () => false,
     } as unknown as Config;
     const loader = new BuiltinCommandLoader(
-      createUnconfiguredModelCommand(),
-      createUnconfiguredToolFormatCommand(),
-      createUnconfiguredSetCommand(),
+      createUnconfiguredBuiltinOwners(),
       composeFixtureRuntime(mockConfigWithMessageBus),
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -310,9 +288,7 @@ describe('BuiltinCommandLoader profile', () => {
   it('should always include profile command', async () => {
     const runtime = composeFixtureRuntime(mockConfig);
     const loader = new BuiltinCommandLoader(
-      createUnconfiguredModelCommand(),
-      createUnconfiguredToolFormatCommand(),
-      createUnconfiguredSetCommand(),
+      createUnconfiguredBuiltinOwners(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -330,9 +306,7 @@ describe('BuiltinCommandLoader profile', () => {
     });
     const runtime = composeFixtureRuntime(mockConfig);
     const loader = new BuiltinCommandLoader(
-      createUnconfiguredModelCommand(),
-      createUnconfiguredToolFormatCommand(),
-      createUnconfiguredSetCommand(),
+      createUnconfiguredBuiltinOwners(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);

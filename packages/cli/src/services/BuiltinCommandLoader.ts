@@ -48,7 +48,6 @@ import { toolsCommand } from '../ui/commands/toolsCommand.js';
 import { skillsCommand } from '../ui/commands/skillsCommand.js';
 import { settingsCommand } from '../ui/commands/settingsCommand.js';
 import { vimCommand } from '../ui/commands/vimCommand.js';
-import { providerCommand } from '../ui/commands/providerCommand.js';
 import { keyCommand } from '../ui/commands/keyCommand.js';
 import { keyfileCommand } from '../ui/commands/keyfileCommand.js';
 import { toolkeyCommand } from '../ui/commands/toolkeyCommand.js';
@@ -78,13 +77,18 @@ import { continueCommand } from '../ui/commands/continueCommand.js';
  * Loads the core, hard-coded slash commands that are an integral part
  * of the LLxprt Code application.
  */
+export interface BuiltinCommandOwners {
+  readonly modelCommand: SlashCommand;
+  readonly toolFormatCommand: SlashCommand;
+  readonly setCommand: SlashCommand;
+  readonly providerCommand: SlashCommand;
+}
+
 export class BuiltinCommandLoader implements ICommandLoader {
   private extensionEnablementManager?: ExtensionEnablementSource;
 
   constructor(
-    private readonly modelCommand: SlashCommand,
-    private readonly toolFormatCommand: SlashCommand,
-    private readonly setCommand: SlashCommand,
+    private readonly owners: BuiltinCommandOwners,
     private config: CliUiRuntime | null,
     private recordingOwner: 'agent' | 'raw' = 'raw',
   ) {
@@ -170,16 +174,16 @@ export class BuiltinCommandLoader implements ICommandLoader {
       ...this.resolveSkillsCommand(),
       settingsCommand,
       vimCommand,
-      providerCommand,
-      this.modelCommand,
+      this.owners.providerCommand,
+      this.owners.modelCommand,
       keyCommand,
       keyfileCommand,
       toolkeyCommand, // @plan PLAN-20260206-TOOLKEY.P09 @requirement REQ-002
       toolkeyfileCommand, // @plan PLAN-20260206-TOOLKEY.P09 @requirement REQ-003
       baseurlCommand,
-      this.toolFormatCommand,
+      this.owners.toolFormatCommand,
       setupGithubCommand,
-      this.setCommand,
+      this.owners.setCommand,
       profileCommand,
       diagnosticsCommand,
       terminalSetupCommand,

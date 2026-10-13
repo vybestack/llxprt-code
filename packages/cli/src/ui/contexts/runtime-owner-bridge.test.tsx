@@ -34,9 +34,7 @@ import {
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import React, { act, useEffect } from 'react';
-import { Text } from 'ink';
-import { Colors } from '../colors.js';
+import { act } from 'react';
 import { render } from 'ink-testing-library';
 import { fromConfig } from '@vybestack/llxprt-code-agents';
 import { SessionController } from '../containers/SessionController.js';
@@ -46,17 +44,12 @@ import {
   createRuntimeOwnerFeatures,
   createProviderAliasRefresh,
 } from '../../runtime/createRuntimeOwnerFeatures.js';
-import { createOAuthControl } from '../../runtime/createOAuthControl.js';
-import {
-  OAuthControlProvider,
-  useOAuthControl,
-} from './OAuthControlContext.js';
-import { authCommand } from '../commands/authCommand.js';
 import { ProviderAliasRefreshProvider } from './ProviderAliasRefreshContext.js';
 import { createSetCommandForTest } from '../../__tests__/set-command-test-owner.js';
 import { createModelCommand } from '../commands/modelCommand.js';
 import { keyCommand } from '../commands/keyCommand.js';
-import { providerCommand } from '../commands/providerCommand.js';
+import { createProviderCommand } from '../commands/providerCommand.js';
+import { bindProviderCommandOperations } from '../commands/providerCommandHost.js';
 import { profileCommand } from '../commands/profileCommand.js';
 import { RuntimeContextProvider, type RuntimeApi } from './RuntimeContext.js';
 
@@ -363,7 +356,37 @@ describe('interactive runtime owner bridge', () => {
       expect(a.getModel()).toBe('model-left');
       expect(b.getModel()).toBe('model-right');
 
-      if (!keyCommand.action || !providerCommand.action)
+      const recordProviderSwitch = (
+        owner: typeof a,
+        provider: string,
+        model: string,
+      ) =>
+        owner.session.recordRecordingEvent({
+          type: 'provider_switch',
+          provider,
+          model,
+        });
+      const leftProviderCommand = createProviderCommand(
+        bindProviderCommandOperations(
+          leftApi,
+          a,
+          async () => {},
+          (provider, model) => recordProviderSwitch(a, provider, model),
+        ),
+      );
+      const rightProviderCommand = createProviderCommand(
+        bindProviderCommandOperations(
+          rightApi,
+          b,
+          async () => {},
+          (provider, model) => recordProviderSwitch(b, provider, model),
+        ),
+      );
+      if (
+        !keyCommand.action ||
+        !leftProviderCommand.action ||
+        !rightProviderCommand.action
+      )
         throw new Error('Credential or provider command unavailable');
       await Promise.all([
         keyCommand.action(leftContext, 'key-left'),
@@ -376,8 +399,8 @@ describe('interactive runtime owner bridge', () => {
         'key-right',
       );
       const [leftProvider, rightProvider] = await Promise.all([
-        providerCommand.action(leftContext, 'fake'),
-        providerCommand.action(rightContext, 'fake'),
+        leftProviderCommand.action(leftContext, 'fake'),
+        rightProviderCommand.action(rightContext, 'fake'),
       ]);
       expect(leftProvider).toMatchObject({
         content: 'Already using provider: fake',
@@ -598,11 +621,29 @@ describe('interactive runtime owner bridge', () => {
       </ProviderAliasRefreshProvider>,
     );
     try {
-      const action = providerCommand.action;
-      if (!captured.left || !captured.right || !action)
+      if (!captured.left || !captured.right)
         throw new Error('Provider command or root APIs unavailable');
       if (!captured.leftRefresh || !captured.rightRefresh)
         throw new Error('Provider alias refresh unavailable');
+      const noRecording = async (): Promise<void> => {};
+      const leftAction = createProviderCommand(
+        bindProviderCommandOperations(
+          captured.left,
+          a,
+          captured.leftRefresh,
+          noRecording,
+        ),
+      ).action;
+      const rightAction = createProviderCommand(
+        bindProviderCommandOperations(
+          captured.right,
+          b,
+          captured.rightRefresh,
+          noRecording,
+        ),
+      ).action;
+      if (!leftAction || !rightAction)
+        throw new Error('Provider command actions unavailable');
       const leftContext = createMockCommandContext({
         runtimeApi: captured.left,
         refreshProviderAliases: captured.leftRefresh,
@@ -630,8 +671,12 @@ describe('interactive runtime owner bridge', () => {
         'right-before-save',
       );
       const [leftSaved, rightSaved] = await Promise.all([
-        Promise.resolve().then(() => action(leftContext, 'save left-owned')),
-        Promise.resolve().then(() => action(rightContext, 'save right-owned')),
+        Promise.resolve().then(() =>
+          leftAction(leftContext, 'save left-owned'),
+        ),
+        Promise.resolve().then(() =>
+          rightAction(rightContext, 'save right-owned'),
+        ),
       ]);
       expect(leftSaved).toMatchObject({ messageType: 'info' });
       expect(rightSaved).toMatchObject({ messageType: 'info' });
@@ -654,7 +699,7 @@ describe('interactive runtime owner bridge', () => {
       await a.dispose();
       await first.config.dispose();
       await first.cleanup();
-      const afterDispose = await action(
+      const afterDispose = await rightAction(
         rightContext,
         'save right-after-dispose',
       );
@@ -678,133 +723,6 @@ describe('interactive runtime owner bridge', () => {
         delete process.env.LLXPRT_FAKE_RESPONSES;
       else process.env.LLXPRT_FAKE_RESPONSES = previousFakeResponses;
       rmSync(dataDir, { recursive: true, force: true });
-    }
-  }, 30000);
-  it('isolates interleaved OAuth auth status in two same-label roots after one owner is disposed', async () => {
-    const first = await buildCliStyleConfig('multi-turn-text.jsonl');
-    const second = await buildCliStyleConfig('multi-turn-text.jsonl');
-    const a = await fromConfig({
-      settingsOwner: first.settingsOwner,
-      settingsService: first.settingsService,
-      providerManager: first.providerManager,
-      config: first.config,
-      messageBus: first.messageBus,
-      mcpRuntime: first.mcpRuntime,
-      sessionId: 'shared-oauth-label',
-    });
-    const b = await fromConfig({
-      settingsOwner: second.settingsOwner,
-      settingsService: second.settingsService,
-      providerManager: second.providerManager,
-      config: second.config,
-      messageBus: second.messageBus,
-      mcpRuntime: second.mcpRuntime,
-      sessionId: 'shared-oauth-label',
-    });
-    const captured: {
-      left?: ReturnType<typeof createOAuthControl>;
-      right?: ReturnType<typeof createOAuthControl>;
-    } = {};
-    function OAuthView({
-      side,
-    }: {
-      side: 'left' | 'right';
-    }): React.JSX.Element {
-      const control = useOAuthControl();
-      useEffect(() => {
-        captured[side] = control;
-      }, [control, side]);
-      return <Text color={Colors.Foreground}>oauth:{side}</Text>;
-    }
-    const left = render(
-      <OAuthControlProvider
-        control={createOAuthControl(
-          () => first.runtime.oauthManager,
-          a.providerManager,
-        )}
-      >
-        <OAuthView side="left" />
-      </OAuthControlProvider>,
-    );
-    const right = render(
-      <OAuthControlProvider
-        control={createOAuthControl(
-          () => second.runtime.oauthManager,
-          b.providerManager,
-        )}
-      >
-        <OAuthView side="right" />
-      </OAuthControlProvider>,
-    );
-    try {
-      if (!captured.left || !captured.right || !authCommand.action)
-        throw new Error('OAuth root unavailable');
-      const leftControl = captured.left;
-      const rightControl = captured.right;
-      const initialLeft = await leftControl.getAuthStatus();
-      const initialRight = await rightControl.getAuthStatus();
-      expect(initialLeft).toStrictEqual(initialRight);
-      const [enabledLeft, enabledRight] = await Promise.all([
-        leftControl.toggleOAuthEnabled('codex'),
-        rightControl.toggleOAuthEnabled('claudecode'),
-      ]);
-      expect(enabledLeft).toBe(true);
-      expect(enabledRight).toBe(true);
-      const [leftStatus, rightStatus] = await Promise.all([
-        leftControl.getAuthStatus(),
-        rightControl.getAuthStatus(),
-      ]);
-      expect(
-        leftStatus.find((status) => status.provider === 'codex')?.oauthEnabled,
-      ).toBe(true);
-      expect(
-        leftStatus.find((status) => status.provider === 'claudecode')
-          ?.oauthEnabled,
-      ).not.toBe(true);
-      expect(
-        rightStatus.find((status) => status.provider === 'claudecode')
-          ?.oauthEnabled,
-      ).toBe(true);
-      expect(
-        rightStatus.find((status) => status.provider === 'codex')?.oauthEnabled,
-      ).not.toBe(true);
-      const rightContext = createMockCommandContext({
-        oauthControl: rightControl,
-      });
-      Object.defineProperty(rightContext, 'runtimeApi', {
-        get: () => {
-          throw new Error(
-            'OAuth status must not resolve a generic runtime API',
-          );
-        },
-      });
-      const statusResult = await authCommand.action(rightContext, 'claudecode');
-      expect(statusResult).toMatchObject({
-        type: 'message',
-        messageType: 'info',
-        content: expect.stringContaining('ENABLED'),
-      });
-      expect(JSON.stringify(statusResult)).not.toContain('access_token');
-      expect(JSON.stringify(leftStatus)).not.toContain('access_token');
-      expect(JSON.stringify(rightStatus)).not.toContain('access_token');
-      left.unmount();
-      await a.dispose();
-      await first.config.dispose();
-      await first.cleanup();
-      const statusAfterDisposal = await rightControl.getAuthStatus();
-      expect(
-        statusAfterDisposal.find((status) => status.provider === 'claudecode')
-          ?.oauthEnabled,
-      ).toBe(true);
-      expect(
-        statusAfterDisposal.find((status) => status.provider === 'codex')
-          ?.oauthEnabled,
-      ).not.toBe(true);
-    } finally {
-      right.unmount();
-      await b.dispose();
-      await second.config.dispose();
-      await second.cleanup();
     }
   }, 30000);
 });

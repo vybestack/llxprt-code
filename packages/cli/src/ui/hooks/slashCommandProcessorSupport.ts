@@ -29,7 +29,10 @@ import type { LoadedSettings } from '../../config/settings.js';
 import type { CommandContext, SlashCommand } from '../commands/types.js';
 import type { RuntimeApi } from '../contexts/RuntimeContext.js';
 import { CommandService } from '../../services/CommandService.js';
-import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
+import {
+  BuiltinCommandLoader,
+  type BuiltinCommandOwners,
+} from '../../services/BuiltinCommandLoader.js';
 import { FileCommandLoader } from '../../services/FileCommandLoader.js';
 import { McpPromptLoader } from '../../services/McpPromptLoader.js';
 import type { ICommandLoader } from '../../services/types.js';
@@ -257,14 +260,8 @@ function buildCommandContextUi(
   };
 }
 
-export interface BuiltinCommandOwners {
-  modelCommand: SlashCommand;
-  toolFormatCommand: SlashCommand;
-  setCommand: SlashCommand;
-}
-
 export function useCommandReload(
-  { modelCommand, toolFormatCommand, setCommand }: BuiltinCommandOwners,
+  owners: BuiltinCommandOwners,
   config: CliUiRuntime | null,
   reloadTrigger: number,
   isConfigInitialized: boolean,
@@ -280,9 +277,7 @@ export function useCommandReload(
   useEffect(() => {
     const controller = new AbortController();
     void loadSlashCommands(
-      modelCommand,
-      toolFormatCommand,
-      setCommand,
+      owners,
       config,
       controller.signal,
       setCommands,
@@ -292,9 +287,7 @@ export function useCommandReload(
       controller.abort();
     };
   }, [
-    modelCommand,
-    toolFormatCommand,
-    setCommand,
+    owners,
     config,
     reloadTrigger,
     isConfigInitialized,
@@ -328,25 +321,19 @@ function shouldUseBuiltinCommandsOnly(): boolean {
 }
 
 export function loadBuiltinSlashCommands(
-  modelCommand: SlashCommand,
-  toolFormatCommand: SlashCommand,
-  setCommand: SlashCommand,
+  owners: BuiltinCommandOwners,
   config: CliUiRuntime | null,
   recordingOwner?: 'agent' | 'raw',
 ): readonly SlashCommand[] {
   return new BuiltinCommandLoader(
-    modelCommand,
-    toolFormatCommand,
-    setCommand,
+    owners,
     config,
     recordingOwner,
   ).loadCommandsSync();
 }
 
 async function loadSlashCommands(
-  modelCommand: SlashCommand,
-  toolFormatCommand: SlashCommand,
-  setCommand: SlashCommand,
+  owners: BuiltinCommandOwners,
   config: CliUiRuntime | null,
   signal: AbortSignal,
   setCommands: (commands: readonly SlashCommand[]) => void,
@@ -354,13 +341,7 @@ async function loadSlashCommands(
 ): Promise<void> {
   try {
     const loaders: ICommandLoader[] = [
-      new BuiltinCommandLoader(
-        modelCommand,
-        toolFormatCommand,
-        setCommand,
-        config,
-        recordingOwner,
-      ),
+      new BuiltinCommandLoader(owners, config, recordingOwner),
     ];
     if (!shouldUseBuiltinCommandsOnly()) {
       loaders.unshift(new McpPromptLoader(config));
