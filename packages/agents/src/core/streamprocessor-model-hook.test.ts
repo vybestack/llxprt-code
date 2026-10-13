@@ -77,7 +77,6 @@ const rejected: ModelHookMode[] = [
   'bad-continue',
   'bad-decision',
   'bad-reason',
-  'error',
   'cancel',
 ];
 const ignoredByEagerRoute: ModelHookMode[] = [
@@ -147,10 +146,21 @@ describe('BeforeModel source enforcement', () => {
     },
     120000,
   );
-  it('retains the measured command exit failure in the source error', async () => {
-    const source = await modelHookWorker(root(), 'error');
-    expect(source.error).toContain('exited with code 1');
-    expect(source.bodies).toStrictEqual([]);
+  it('logs a failing command and sends the unmodified request, as the eager route does', async () => {
+    const source = await modelHookWorker(join(root(), 'source'), 'error');
+    const array = await modelHookWorker(join(root(), 'array'), 'error', false);
+    expect(source.error).toBeUndefined();
+    expect(array.error).toBeUndefined();
+    expect(source.hooks.length).toBeGreaterThan(0);
+    expect(source.bodies).toHaveLength(1);
+    expect(source.bodies).toStrictEqual(array.bodies);
+    expect(source.logs.join('\n')).toContain(
+      '[BeforeModelSnapshot] BeforeModel hook failed (non-blocking)',
+    );
+    expect(source.logs.join('\n')).toContain('exited with code 1');
+    expect(source.owners.every((owner) => owner.closed)).toBe(true);
+    expect(source.activeBodies).toBe(0);
+    expect(source.directories).toStrictEqual([]);
   }, 120000);
   it('executes the genuine hook on each HTTP retry without byte or prompt identity drift', async () => {
     const source = await modelHookWorker(root(), 'retry');

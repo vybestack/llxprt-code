@@ -166,11 +166,15 @@ export async function fireBeforeModelSnapshotHook(
   let resolved: BoundarySnapshotResult | undefined;
   try {
     enforceSnapshotDecision(hook.finalOutput);
-    if (!hook.success)
-      throw new AggregateError(
-        hook.errors,
-        `Source BeforeModel hook execution failed: ${hook.errors.map((error) => error.message).join('; ')}`,
+    // Execution failures are non-blocking, as on the eager route and for
+    // AfterModel. The stop/block decision above still applies; otherwise the
+    // request goes out unmodified.
+    if (!hook.success) {
+      options.log(
+        `[BeforeModelSnapshot] BeforeModel hook failed (non-blocking): ${hook.errors.map((error) => error.message).join('; ')}`,
       );
+      return undefined;
+    }
     const target: HookModelRowsInput['llm_request'] = {
       version: 2,
       model: options.model,
