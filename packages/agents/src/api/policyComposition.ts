@@ -1,7 +1,4 @@
-import type {
-  CredentialAuthority,
-  OAuthManager,
-} from '@vybestack/llxprt-code-providers/auth.js';
+import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -10,9 +7,10 @@ import type {
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { NodeFileSystem } from '@vybestack/llxprt-code-providers/composition.js';
+import { populateProviderManager } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
-import { createProviderManager } from '@vybestack/llxprt-code-providers/composition/providerManagerInstance.js';
-import { createFileOAuthSettingsProvider } from '@vybestack/llxprt-code-providers/auth.js';
+import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
+import type { RuntimeSettingsState } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { rethrowAfterCleanup } from '../session/session-client-cleanup.js';
 import { AgentBootstrapError } from './agentBootstrap.js';
 import {
@@ -254,10 +252,7 @@ export async function prepareOwnedMediaRuntime(
           registerProvidersOntoManager(
             ctx.providerManager,
             ctx.settingsService,
-            ctx.runtimeId,
-            ctx.metadata,
             ctx.config,
-            ctx.credentialAuthority,
             ctx.oauthManager,
           ),
       },
@@ -282,60 +277,31 @@ export async function prepareOwnedMediaRuntime(
   }
 }
 
-/**
- * Registers providers onto the isolated context's ProviderManager. Uses
- * createProviderManager (from composition) to build a fully-registered manager
- * and transfers all registered provider names + their provider instances onto
- * the isolated manager. Under LLXPRT_FAKE_RESPONSES this registers only
- * FakeProvider and sets it active.
- */
 export function registerProvidersOntoManager(
-  isolatedManager: IsolatedRuntimeContextHandle['providerManager'],
-  settingsService: IsolatedRuntimeContextHandle['settingsService'],
-  runtimeId: string,
-  metadata: Record<string, unknown>,
+  isolatedManager: RuntimeProviderManager,
+  settingsService: RuntimeSettingsState,
   config: Config,
-  credentialAuthority: CredentialAuthority | undefined,
   oauthManager: OAuthManager | undefined,
 ): void {
-  const context = {
-    settingsService,
-    runtimeId,
-    metadata,
-  };
-  // Wire the file-backed OAuth settings provider so the provider instances
-  // built here are bound to an OAuthManager that can read oauthEnabledProviders
-  // (and therefore use shared-keychain OAuth tokens). Without it,
-  // createProviderManager's contract leaves the OAuth manager without a
-  // settings provider, so isOAuthEnabled('codex'|'anthropic'|…) always returns
-  // false and OAuth-only providers report "auth required" (Issue #2410). This
-  // mirrors the CLI foreground (createOAuthSettingsAdapter) and the isolated
-  // runtime factory (resolveOAuthManager), staying on the providers layer to
-  // preserve the agents-vs-CLI package boundary.
   if (!(isolatedManager instanceof ProviderManager))
     throw new AgentBootstrapError(
       'Owned provider registration requires its concrete manager',
     );
-  if (credentialAuthority === undefined)
-    throw new Error('Provider registration requires its credential authority');
-  createProviderManager(
-    settingsService,
-    context,
-    config,
-    credentialAuthority,
-    new NodeFileSystem(),
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    createFileOAuthSettingsProvider(),
-    undefined,
-    oauthManager,
-    undefined,
+  if (oauthManager === undefined)
+    throw new AgentBootstrapError(
+      'Owned provider registration requires its OAuth manager',
+    );
+  populateProviderManager(
     isolatedManager,
-    undefined,
+    oauthManager,
+    oauthManager.getTokenStore(),
+    settingsService,
+    new NodeFileSystem(),
+    config,
     undefined,
     undefined,
     false,
+    false,
+    process.env.LLXPRT_FAKE_RESPONSES,
   );
 }

@@ -142,10 +142,7 @@ describe('registerProvidersOntoManager OAuth wiring (Issue #2410)', () => {
     registerProvidersOntoManager(
       handle.providerManager,
       handle.settingsService,
-      handle.runtimeId,
-      handle.metadata,
       handle.config,
-      credentialAuthority,
       handle.oauthManager,
     );
 

@@ -398,10 +398,7 @@ async function createAdoptedRuntime(
             registerProvidersOntoManager(
               ctx.providerManager,
               ctx.settingsService,
-              ctx.runtimeId,
-              ctx.metadata,
               ctx.config,
-              ctx.credentialAuthority,
               ctx.oauthManager,
             );
         },

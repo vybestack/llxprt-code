@@ -472,10 +472,10 @@ function activateExplicitProvider(
 function tryActivateFakeProvider(
   manager: ProviderManager,
   config: Config | undefined,
-): { manager: ProviderManager } | null {
-  const fakeResponsesPath = process.env.LLXPRT_FAKE_RESPONSES;
+  fakeResponsesPath: string | undefined,
+): boolean {
   if (!fakeResponsesPath) {
-    return null;
+    return false;
   }
   if (config) {
     manager.setConfig(config);
@@ -487,7 +487,7 @@ function tryActivateFakeProvider(
   logger.debug(
     () => `FakeProvider active — replaying from ${fakeResponsesPath}`,
   );
-  return { manager };
+  return true;
 }
 
 function readOwnerAuthPolicy(
@@ -559,7 +559,6 @@ export function createProviderManager(
   allowBrowser = false,
   activateConfiguredProvider = true,
 ): { manager: ProviderManager; oauthManager: OAuthManager } {
-  const user = resolveUserSettings(fileSystem);
   const manager =
     selectedManager ??
     new ProviderManager(
@@ -596,15 +595,38 @@ export function createProviderManager(
       settings,
     );
 
+  populateProviderManager(
+    manager,
+    oauthManager,
+    tokenStore,
+    settings,
+    fileSystem,
+    config,
+    providerContributions,
+    addItem,
+    allowBrowser,
+    activateConfiguredProvider,
+    process.env.LLXPRT_FAKE_RESPONSES,
+  );
+  return { manager, oauthManager };
+}
+
+export function populateProviderManager(
+  manager: ProviderManager,
+  oauthManager: OAuthManager,
+  tokenStore: TokenStore,
+  settings: RuntimeSettingsState,
+  fileSystem: IFileSystem,
+  config: Config | undefined,
+  providerContributions: ProviderContributionRegistry | undefined,
+  addItem: OAuthUICallback | undefined,
+  allowBrowser: boolean,
+  activateConfiguredProvider: boolean,
+  fakeResponsesPath: string | undefined,
+): void {
+  const user = resolveUserSettings(fileSystem);
   bindOwnerRetryOperations(manager, oauthManager);
-
-  const fakeResult = tryActivateFakeProvider(manager, config);
-  if (fakeResult) return { manager: fakeResult.manager, oauthManager };
-
-  logger.debug('createProviderManager config check', {
-    hasConfig: config !== undefined,
-    configType: config?.constructor.name,
-  });
+  if (tryActivateFakeProvider(manager, config, fakeResponsesPath)) return;
 
   if (config) {
     manager.setConfig(config);
@@ -615,38 +637,6 @@ export function createProviderManager(
   const { openaiApiKey, openaiBaseUrl, openaiProviderConfig } =
     resolveOpenaiSettings(settings, user, authOnlyEnabled, allowBrowser);
 
-  return finishProviderRegistration(
-    manager,
-    oauthManager,
-    tokenStore,
-    config,
-    settings,
-    user,
-    openaiApiKey,
-    openaiBaseUrl,
-    openaiProviderConfig,
-    authOnlyEnabled,
-    addItem,
-    providerContributions,
-    activateConfiguredProvider,
-  );
-}
-
-function finishProviderRegistration(
-  manager: ProviderManager,
-  oauthManager: OAuthManager,
-  tokenStore: TokenStore,
-  config: Config | undefined,
-  settings: RuntimeSettingsState,
-  user: UserSettingsView | undefined,
-  openaiApiKey: string | undefined,
-  openaiBaseUrl: string | undefined,
-  openaiProviderConfig: IProviderConfig,
-  authOnlyEnabled: boolean,
-  addItem: OAuthUICallback | undefined,
-  providerContributions: ProviderContributionRegistry | undefined,
-  activateConfiguredProvider: boolean,
-): { manager: ProviderManager; oauthManager: OAuthManager } {
   registerAllProviders(
     manager,
     loadProviderAliasEntries(),
@@ -676,8 +666,6 @@ function finishProviderRegistration(
     authOnlyEnabled,
     providerContributions,
   );
-
-  return { manager, oauthManager };
 }
 
 function bindOwnerRetryOperations(

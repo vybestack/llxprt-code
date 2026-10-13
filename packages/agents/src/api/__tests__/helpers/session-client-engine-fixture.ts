@@ -110,10 +110,7 @@ export async function createSessionClientEngineFixture(
         registerProvidersOntoManager(
           ctx.providerManager,
           ctx.settingsService,
-          ctx.runtimeId,
-          ctx.metadata,
           config,
-          ctx.credentialAuthority,
           ctx.oauthManager,
         ),
     },

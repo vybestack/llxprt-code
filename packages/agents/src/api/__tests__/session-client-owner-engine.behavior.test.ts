@@ -234,10 +234,7 @@ describe('Explicit session client lifetime', () => {
           registerProvidersOntoManager(
             ctx.providerManager,
             ctx.settingsService,
-            ctx.runtimeId,
-            ctx.metadata,
             built.config,
-            ctx.credentialAuthority,
             ctx.oauthManager,
           ),
       },
