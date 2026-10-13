@@ -216,6 +216,7 @@ async function resolveActivation(
             config,
             activation,
             manager,
+            settings,
           )
         : await executeProviderActivation(
             config,

@@ -109,11 +109,14 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
         options.config,
         options.activation,
         options.providerManager,
+        options.settingsService,
       );
     }
+    const runtimeId = validateAdoption(options);
     agent = await adoptConfig(
       { ...options, imageOperation: images.selection },
       github,
+      runtimeId,
     );
   } catch (primaryError) {
     return cleanupFailedFromConfig(
@@ -173,19 +176,30 @@ function validateAdoption(options: FromConfigOptions): string {
   assertBorrowedClient(options);
   const runtimeId = options.sessionId ?? generateRuntimeId();
   validateAgentRuntimeId(runtimeId);
+  options.settingsOwner?.assertSettingsIdentity(options.settingsService);
+  if (options.mcpRuntime !== undefined)
+    assertAdoptedMcpConfig(options, options.mcpRuntime);
+  const messageBus =
+    options.messageBus ??
+    options.activationPreflight?.operation.messageBus ??
+    options.mcpRuntime?.messageBus;
+  const oauth =
+    options.oauthManager ?? options.activationPreflight?.operation.oauthManager;
+  if (
+    oauth !== undefined &&
+    (messageBus === undefined || oauth.runtimeMessageBus !== messageBus)
+  )
+    throw new AgentBootstrapError(
+      'Borrowed OAuth must retain its selected runtime message bus',
+    );
   return runtimeId;
 }
 
 async function adoptConfig(
   options: FromConfigOptions,
   github: HostGitHubBrokerOwner | undefined,
+  runtimeId: string,
 ): Promise<Agent> {
-  // @pseudocode lines 11-13: validate presence + the small validatable portion.
-  // The FromConfigOptions type marks config as required, but at runtime callers
-  // may omit it (T1d); read through a generic presence check so the lint
-  // accepts the runtime-undefined check without an unsafe assertion.
-  const runtimeId = validateAdoption(options);
-
   // Adopt an explicit caller bus first, then the Config's assembled runtime bus.
   // Only non-CLI consumers without either seam receive a newly owned bus.
   const mcp = await resolveAdoptedMcpRuntime(options);
@@ -612,7 +626,6 @@ async function resolveAdoptedMcpRuntime(
       options.policyOwner === undefined ? 'runtime' : 'caller',
       options.settingsOwner,
     ));
-  assertAdoptedMcpConfig(options, mcp);
   return mcp;
 }
 

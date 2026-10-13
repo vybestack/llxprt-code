@@ -323,6 +323,7 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
     config: Config,
     intent: ProviderActivationIntent | undefined,
     manager: RuntimeProviderManager | undefined,
+    settings: SettingsService,
   ): void {
     const operation = preflight.operation;
     if (
@@ -346,6 +347,7 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
       throw new AgentBootstrapError(
         'Activation preflight belongs to a different ProviderManager',
       );
+    operation.settingsOwner.assertSettingsIdentity(settings);
     if (
       intent === undefined ||
       operation.#receipt.fingerprint !==
@@ -361,8 +363,15 @@ export class AgentActivationBootstrap implements AgentActivationOperation {
     config: Config,
     intent: ProviderActivationIntent,
     manager: RuntimeProviderManager | undefined,
+    settings: SettingsService,
   ): ProviderActivationResult {
-    AgentActivationBootstrap.validate(preflight, config, intent, manager);
+    AgentActivationBootstrap.validate(
+      preflight,
+      config,
+      intent,
+      manager,
+      settings,
+    );
     const operation = preflight.operation;
     if (
       !(operation instanceof AgentActivationBootstrap) ||

@@ -651,6 +651,7 @@ describe('preflight adoption boundaries', () => {
           built.config,
           intent,
           other.providerManager,
+          built.settingsService,
         ),
       ).toThrow('different ProviderManager');
       const agent = await fromConfig({
