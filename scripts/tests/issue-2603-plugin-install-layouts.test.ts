@@ -64,7 +64,7 @@ import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { createKeyringTokenStore } from '@vybestack/llxprt-code-core/auth-factories.js';
+import { MemoryTokenStore } from '../../packages/providers/src/auth/__tests__/behavioral/test-utils.js';
 import {
   discoverRuntimePluginPackages,
   loadRuntimePlugins,
@@ -373,17 +373,14 @@ const LEFTOVER_GEMINI_ALIAS: ProviderAliasEntry = {
   source: 'user',
 };
 
-const BASE_ONLY_OAUTH_MANAGER = new OAuthManager(
-  createKeyringTokenStore(),
-  undefined,
-  {},
-);
-
 function makeBaseOnlyManager(): ProviderManager {
-  return new ProviderManager({
-    settingsService: new SettingsService() as never,
-    runtimeId: 'issue-2603-plugin-install-layouts',
-  });
+  return new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new SettingsService(),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -432,6 +429,11 @@ describe('base-only install (issue-2603 layout, no plugin packages)', () => {
         { importModule: mustNotImport },
       );
       const manager = makeBaseOnlyManager();
+      const oauthManager = new OAuthManager(
+        new MemoryTokenStore(),
+        undefined,
+        {},
+      );
       let thrown: unknown;
       try {
         registerAliasProviders(
@@ -440,13 +442,15 @@ describe('base-only install (issue-2603 layout, no plugin packages)', () => {
           undefined,
           undefined,
           {},
-          BASE_ONLY_OAUTH_MANAGER,
+          oauthManager,
           undefined,
           false,
           { providerContributions: baseOnlyRegistry },
         );
       } catch (error) {
         thrown = error;
+      } finally {
+        await oauthManager.dispose();
       }
       if (!(thrown instanceof Error)) {
         throw new Error(
@@ -519,26 +523,35 @@ describe('base + @vybestack/llxprt-plugin-google-gemini install', () => {
       if (factory === undefined) {
         throw new Error('expected the plugin-contributed gemini factory');
       }
-      const provider = factory(
-        {
-          alias: 'gemini',
-          config: { ...GEMINI_ALIAS_CONFIG },
-          filePath: `plugin:${release.name}`,
-          source: 'plugin',
-        },
-        {
-          openaiApiKey: undefined,
-          openaiBaseUrl: undefined,
-          openaiProviderConfig: {},
-          oauthManager: BASE_ONLY_OAUTH_MANAGER,
-          config: undefined,
-          authOnlyEnabled: false,
-        },
+      const oauthManager = new OAuthManager(
+        new MemoryTokenStore(),
+        undefined,
+        {},
       );
-      // Constructing — not just resolving — proves the fixture-installed
-      // module graph executes, including its @ai-sdk/google dependency.
-      expect(provider.name).toBe('gemini');
-      expect(typeof provider.generateChatCompletion).toBe('function');
+      try {
+        const provider = factory(
+          {
+            alias: 'gemini',
+            config: { ...GEMINI_ALIAS_CONFIG },
+            filePath: `plugin:${release.name}`,
+            source: 'plugin',
+          },
+          {
+            openaiApiKey: undefined,
+            openaiBaseUrl: undefined,
+            openaiProviderConfig: {},
+            oauthManager,
+            config: undefined,
+            authOnlyEnabled: false,
+          },
+        );
+        // Constructing — not just resolving — proves the fixture-installed
+        // module graph executes, including its @ai-sdk/google dependency.
+        expect(provider.name).toBe('gemini');
+        expect(typeof provider.generateChatCompletion).toBe('function');
+      } finally {
+        await oauthManager.dispose();
+      }
     });
   });
 });
@@ -587,9 +600,9 @@ describe('base + a malformed plugin install', () => {
    * (so real discovery finds it) but exports an incompatible manifest
    * (apiVersion 2). Everything else about the package is a real install.
    */
-  function withIncompatibleManifestFixture<T>(
-    run: (root: string, pluginName: string) => T,
-  ): T {
+  async function withIncompatibleManifestFixture<T>(
+    run: (root: string, pluginName: string) => Promise<T>,
+  ): Promise<T> {
     const root = buildInstalledFixture([]);
     try {
       const pluginName = '@vybestack/llxprt-plugin-google-gemini';
@@ -617,7 +630,7 @@ describe('base + a malformed plugin install', () => {
           '',
         ].join('\n'),
       );
-      return run(root, pluginName);
+      return await run(root, pluginName);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
