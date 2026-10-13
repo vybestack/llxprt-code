@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { afterEach, describe, expect, it, vi } from 'bun:test';
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { IdeClient } from '@vybestack/llxprt-code-ide-integration';
@@ -12,13 +12,19 @@ import {
   FakeProvider,
   ProviderManager,
 } from '@vybestack/llxprt-code-providers';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { WorkspaceCheckpointOwner } from '@vybestack/llxprt-code-core/services/workspace-checkpoint-owner.js';
 import { fromConfig } from '../fromConfig.js';
 import { McpRuntimeOwner } from '../mcpRuntimeAssembly.js';
 import { buildFactoryLessConfig } from './helpers/buildCliStyleConfig.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 const cleanups: Array<() => Promise<void>> = [];
 
-async function adoptionOptions() {
+async function adoptionOptions(
+  credentialAuthority: CredentialAuthority,
+  checkpointing = false,
+) {
   const directory = await realpath(
     await mkdtemp(join(tmpdir(), 'from-config-bootstrap-failure-')),
   );
@@ -29,6 +35,7 @@ async function adoptionOptions() {
     {
       workingDir: directory,
       sessionId: 'from-config-bootstrap-failure',
+      checkpointing,
       folderTrust: true,
       mcpEnabled: false,
       skillsSupport: false,
@@ -50,6 +57,7 @@ async function adoptionOptions() {
   );
   return {
     ...built,
+    credentialAuthority,
     providerManager: manager,
     activation: { provider: 'fake', model: 'fake-model' },
   };
@@ -62,23 +70,43 @@ function collectMessages(error: unknown): string[] {
 }
 
 describe('fromConfig bootstrap failure reporting', () => {
+  const credentials = useOwnedCredentials();
+
   afterEach(async () => {
     vi.restoreAllMocks();
     for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
   });
 
   it('surfaces a workspace initialization failure as the original error, not a cleanup wrapper', async () => {
-    const primary = new Error(
-      'checkpoint history is not backed by a persistent checkpoint store',
-    );
-    vi.spyOn(IdeClient, 'create').mockRejectedValue(primary);
+    const options = await adoptionOptions(credentials().authority, true);
+    await mkdir(join(options.config.projectHistoryDir, '.gitconfig'), {
+      recursive: true,
+    });
+    const failures: unknown[] = [];
+    const initialize = WorkspaceCheckpointOwner.prototype.initialize;
+    vi.spyOn(
+      WorkspaceCheckpointOwner.prototype,
+      'initialize',
+    ).mockImplementation(function (this: WorkspaceCheckpointOwner) {
+      return initialize.call(this).catch((error: unknown) => {
+        failures.push(error);
+        throw error;
+      });
+    });
 
-    const outcome = await fromConfig(await adoptionOptions()).then(
+    const outcome = await fromConfig(options).then(
       () => undefined,
       (error: unknown) => error,
     );
 
-    expect(outcome).toBe(primary);
+    expect(failures).toHaveLength(1);
+    expect(outcome).toBe(failures[0]);
+    expect(outcome).toBeInstanceOf(Error);
+    expect(outcome).not.toBeInstanceOf(AggregateError);
+    expect(outcome).toMatchObject({
+      message: expect.stringContaining('Failed to initialize checkpointing'),
+    });
+    expect(credentials().snapshot()).toStrictEqual([1]);
   });
 
   it('keeps the primary message visible when a genuine cleanup failure is also reported', async () => {
@@ -88,7 +116,9 @@ describe('fromConfig bootstrap failure reporting', () => {
       new Error('workspace disposal failed'),
     );
 
-    const outcome = await fromConfig(await adoptionOptions()).then(
+    const outcome = await fromConfig(
+      await adoptionOptions(credentials().authority),
+    ).then(
       () => undefined,
       (error: unknown) => error,
     );
