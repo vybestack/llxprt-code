@@ -19,7 +19,6 @@ import { assembleWorkspaceMemory } from '@vybestack/llxprt-code-core';
 import type { WorkspaceMemoryOwner } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
 import { WorkspaceFilesystemOwner } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 
-import type { IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 import { SessionClientOwner } from '../session/session-client-owner.js';
@@ -391,21 +390,6 @@ function resolveActivationMemoryOwnership(
 ): 'borrowed' | 'transferred' {
   if (mcpRuntime !== undefined) return 'borrowed';
   return suppliedMemory === undefined ? 'transferred' : requested;
-}
-
-export function assembleSessionProviderSwitch(
-  handle: IsolatedRuntimeContextHandle,
-  refreshAuth: () => Promise<void>,
-): ProviderSwitcher {
-  return assembleProviderSwitch(
-    handle.config,
-    handle.settingsService,
-    handle.providerManager,
-    handle.oauthManager,
-    () => handle.readRuntimeKind(),
-    refreshAuth,
-    handle.settingsOwner,
-  );
 }
 
 function bindActivationCapabilities(
