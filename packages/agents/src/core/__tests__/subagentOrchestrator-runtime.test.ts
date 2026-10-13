@@ -8,11 +8,7 @@ import {
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/task-schema-policy-assembly.js';
-
 import { emptyInstructionReads } from '@vybestack/llxprt-code-test-utils/core/instructions.js';
-import { CoreMessageBusAdapter } from '@vybestack/llxprt-code-core/tools-adapters/CoreMessageBusAdapter.js';
-import { ToolRegistry } from '@vybestack/llxprt-code-tools';
 
 import { installTestWorkspacePaths } from '@vybestack/llxprt-code-test-utils/core/config.js';
 const fixturePaths = installTestWorkspacePaths({
@@ -27,28 +23,36 @@ const fixturePaths = installTestWorkspacePaths({
  */
 
 import { describe, expect, it, vi } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import {
+  loadAgentRuntime,
+  type AgentRuntimeLoaderOptions,
+} from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import { useOwnedCredentials } from '../../api/__tests__/helpers/owned-credential-fixture.js';
+import {
+  ConfirmationOutcome,
+  MessageBusType,
+  type ToolConfirmationRequest,
+} from '@vybestack/llxprt-code-policy/confirmation-bus/types.js';
 import type { SubagentManager } from '@vybestack/llxprt-code-core/config/subagentManager.js';
 import type { Profile, ProfileManager } from '@vybestack/llxprt-code-settings';
-import { SettingsService } from '@vybestack/llxprt-code-settings';
+
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+
 import { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import type { SubAgentScope } from '../subagent.js';
+import { SubAgentScope } from '../subagent.js';
 import { type SubAgentScope as SubAgentScopeInstance } from '../subagent.js';
 import type { RunConfig } from '@vybestack/llxprt-code-core/core/subagentTypes.js';
-import * as runtimeModule from '@vybestack/llxprt-code-providers/runtime.js';
-import * as activationExecutor from '../../api/providerActivationExecutor.js';
+
 import { SubagentOrchestrator } from '../subagentOrchestrator.js';
 import {
   makeForegroundConfig,
   createRuntimeBundle,
+  fixtureToolSelection,
 } from './subagentOrchestrator-test-helpers.js';
 
 describe('SubagentOrchestrator - Runtime Assembly', () => {
+  const credentials = useOwnedCredentials();
   const subagentConfig: SubagentConfig = {
     name: 'planner',
     profile: 'planner-profile',
@@ -191,34 +195,23 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
 
   it('cleans up the isolated runtime when launch fails after runtime assembly', async () => {
     const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
-    const loadProfile = vi.fn().mockResolvedValue(profile);
-    const cleanup = vi.fn().mockResolvedValue(undefined);
-    const activate = vi.fn().mockResolvedValue(undefined);
-    const mediaRoot = mkdtempSync(join(tmpdir(), 'llxprt-child-runtime-'));
-    const mediaStore = new LocalMediaStore({
-      rootDirectory: mediaRoot,
-      quotaBytes: 1024 * 1024,
-    });
-    const createIsolated = runtimeModule.createIsolatedRuntimeContext;
-    const createIsolatedRuntimeContextSpy = vi
-      .spyOn(runtimeModule, 'createIsolatedRuntimeContext')
-      .mockImplementation((options, settingsService) => {
-        const handle = createIsolated(options, settingsService);
-        return {
-          ...handle,
-          activate,
-          cleanup: async () => {
-            await handle.cleanup();
-            await cleanup();
-          },
-        };
-      });
-    const executeProviderActivationSpy = vi
-      .spyOn(activationExecutor, 'executeProviderActivation')
-      .mockResolvedValue({ authFailed: false, infoMessages: [] });
-
-    const runtimeBundle = createRuntimeBundle('post-bundle-failure');
-    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
+    const childProfile: Profile = {
+      ...profile,
+      provider: 'openai',
+      model: 'gpt-4o',
+    };
+    const loadProfile = vi.fn().mockResolvedValue(childProfile);
+    let loadedOptions: AgentRuntimeLoaderOptions | undefined;
+    const runtimeLoader = async (options: AgentRuntimeLoaderOptions) => {
+      loadedOptions = options;
+      expect(options.profile.providerManager?.getActiveProvider().name).toBe(
+        childProfile.provider,
+      );
+      expect(options.profile.config.getModel()).toBe(childProfile.model);
+      expect(await credentials().listProviders(0)).toStrictEqual([]);
+      expect(credentials().snapshot()).toStrictEqual([0]);
+      return loadAgentRuntime(options);
+    };
     const scopeFactory = vi
       .fn<typeof SubAgentScope.create>()
       .mockRejectedValue(new Error('scope creation failed'));
@@ -226,7 +219,7 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     const foregroundConfig3 = makeForegroundConfig();
     const foregroundSettings3 = createSessionSettingsFixture(foregroundConfig3);
     const orchestrator = new SubagentOrchestrator({
-      credentialAuthority: new CredentialAuthority(),
+      credentialAuthority: credentials().authority,
       ...subagentSessionPorts(foregroundSettings3),
 
       instructions: emptyInstructionReads,
@@ -241,72 +234,68 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
       messageBus: new MessageBus(),
     });
 
-    try {
-      await expect(
-        orchestrator.launch({
-          name: subagentConfig.name,
-          runConfig,
-        }),
-      ).rejects.toThrow('scope creation failed');
+    await expect(
+      orchestrator.launch({
+        name: subagentConfig.name,
+        runConfig,
+      }),
+    ).rejects.toThrow('scope creation failed');
 
-      expect(cleanup).toHaveBeenCalledTimes(1);
-      expect(activate).toHaveBeenCalledTimes(1);
-      expect(executeProviderActivationSpy).toHaveBeenCalledTimes(1);
-      // The orchestrator owns the isolated Config it constructed, so its
-      // teardown disposes it after the handle cleanup (children first).
-    } finally {
-      createIsolatedRuntimeContextSpy.mockRestore();
-      executeProviderActivationSpy.mockRestore();
-      await mediaStore.close();
-      rmSync(mediaRoot, { recursive: true, force: true });
-    }
+    if (loadedOptions === undefined)
+      throw new Error('Child loader not reached');
+    expect(credentials().snapshot()).toStrictEqual([1]);
+    await expect(
+      loadedOptions.mediaStore.getStoredByteLength(),
+    ).rejects.toThrow(/closed/i);
+    expect(() => loadedOptions.profile.readRuntimeSettings?.()).toThrow(
+      'Session settings owner is closed',
+    );
+    expect(loadedOptions.profile.config).not.toBe(foregroundConfig3);
+    expect(foregroundSettings3.settingsOwner.readSelectedModel()).toBe(
+      'gemini-1.5-flash',
+    );
   });
 
   it('builds the subagent runtime through agent-owned assembly: a Config carrying working agent factories and runtime managers threads the SAME session bus (issue #3222, #2320)', async () => {
-    // RED basis (main @ 5bedbd238): the orchestrator calls
-    // createIsolatedRuntimeContext WITHOUT a config — providers constructs one
-    // and stamps CLI-registered factories onto it, so in a process with no CLI
-    // import the subagent Config carries NO agent factories at all.
-    const isolatedHome = mkdtempSync(join(tmpdir(), 'issue3222-orchestrator-'));
-    const previousConfigHome = process.env.LLXPRT_CONFIG_HOME;
-    process.env.LLXPRT_CONFIG_HOME = isolatedHome;
-
     const loadSubagent = vi.fn().mockResolvedValue(subagentConfig);
-    const loadProfile = vi.fn().mockResolvedValue(profile);
+    const childProfile: Profile = {
+      ...profile,
+      provider: 'openai',
+      model: 'gpt-4o',
+    };
+    const loadProfile = vi.fn().mockResolvedValue(childProfile);
     const profileManager = { loadProfile } as unknown as ProfileManager;
     const orchestratorBus = new MessageBus();
 
-    let capturedOptions:
-      | Parameters<typeof runtimeModule.createIsolatedRuntimeContext>[0]
-      | undefined;
-    const createIsolated = runtimeModule.createIsolatedRuntimeContext;
-    const isolatedSpy = vi
-      .spyOn(runtimeModule, 'createIsolatedRuntimeContext')
-      .mockImplementation((options, settingsService) => {
-        capturedOptions = options;
-        const handle = createIsolated(options, settingsService);
-        return { ...handle, activate: vi.fn().mockResolvedValue(undefined) };
-      });
-    const executeProviderActivationSpy = vi
-      .spyOn(activationExecutor, 'executeProviderActivation')
-      .mockResolvedValue({ authFailed: false, infoMessages: [] });
-
-    const runtimeBundle = createRuntimeBundle('agent-owned-assembly');
-    const runtimeLoader = vi.fn().mockResolvedValue(runtimeBundle);
-    const scope = {
-      runtimeContext: runtimeBundle.runtimeContext,
-      getAgentId: () => 'planner-agent-owned',
-    } as unknown as SubAgentScopeInstance;
-    const scopeFactory = vi
-      .fn<typeof SubAgentScope.create>()
-      .mockResolvedValue(scope);
+    const requests: string[] = [];
+    const unsubscribe = orchestratorBus.subscribe<ToolConfirmationRequest>(
+      MessageBusType.TOOL_CONFIRMATION_REQUEST,
+      (request) => {
+        requests.push(request.toolCall.name ?? '');
+        orchestratorBus.respondToConfirmation(
+          request.correlationId,
+          ConfirmationOutcome.ProceedOnce,
+        );
+      },
+    );
+    let childConfig: Config | undefined;
+    const runtimeLoader = async (options: AgentRuntimeLoaderOptions) => {
+      childConfig = options.profile.config;
+      return loadAgentRuntime(options);
+    };
+    const scopeFactory: typeof SubAgentScope.create = async (...args) => {
+      expect(
+        await args[15].requestConfirmation({ name: 'write_file' }, {}),
+      ).toBe(true);
+      return SubAgentScope.create(...args);
+    };
 
     try {
       const foregroundConfig4 = makeForegroundConfig();
       const foregroundSettings4 =
         createSessionSettingsFixture(foregroundConfig4);
       const orchestrator = new SubagentOrchestrator({
-        credentialAuthority: new CredentialAuthority(),
+        credentialAuthority: credentials().authority,
         workspaceTrust: foregroundSettings4.workspaceTrust,
         createChildSettings: () =>
           foregroundSettings4.settingsOwner.createChildStore(),
@@ -329,31 +318,33 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
         name: subagentConfig.name,
         runConfig,
       });
-      await result.dispose();
-
-      expect(capturedOptions).toBeDefined();
-      const options = capturedOptions;
-      // #2320 invariant: the SAME concrete session bus threads to child
-      // scheduling — the orchestrator passes its own bus, nothing else.
-      expect(options?.messageBus).toBe(orchestratorBus);
-      // Agent-owned assembly: the orchestrator hands providers a Config it
-      // built itself, carrying the three agent runtime factories and the
-      // runtime managers.
-      const config = options?.config;
-      expect(config).toBeInstanceOf(Config);
-      expect(config && 'agentClientFactory' in config).toBe(false);
-      expect(config).not.toHaveProperty('taskToolRegistration');
-      expect(config).not.toHaveProperty('profileManager');
-      expect(config).not.toHaveProperty('subagentManager');
-    } finally {
-      isolatedSpy.mockRestore();
-      executeProviderActivationSpy.mockRestore();
-      if (previousConfigHome === undefined) {
-        delete process.env.LLXPRT_CONFIG_HOME;
-      } else {
-        process.env.LLXPRT_CONFIG_HOME = previousConfigHome;
+      try {
+        expect(requests).toStrictEqual(['write_file']);
+        expect(childConfig).toBeInstanceOf(Config);
+        if (childConfig === undefined)
+          throw new Error('Child loader not reached');
+        expect(childConfig).not.toBe(foregroundConfig4);
+        expect('agentClientFactory' in childConfig).toBe(false);
+        expect(childConfig).not.toHaveProperty('taskToolRegistration');
+        expect(childConfig).not.toHaveProperty('profileManager');
+        expect(childConfig).not.toHaveProperty('subagentManager');
+        expect(result.runtime.providerAdapter.getActiveProvider().name).toBe(
+          childProfile.provider,
+        );
+        expect(result.scope.runtimeContext.state.runtimeId).toBe(
+          result.runtime.runtimeContext.state.runtimeId,
+        );
+        expect(await credentials().listProviders(0)).toStrictEqual([]);
+      } finally {
+        await result.dispose();
       }
-      rmSync(isolatedHome, { recursive: true, force: true });
+      expect(credentials().snapshot()).toStrictEqual([1]);
+      expect(
+        await orchestratorBus.requestConfirmation({ name: 'read_file' }, {}),
+      ).toBe(true);
+      expect(requests).toStrictEqual(['write_file', 'read_file']);
+    } finally {
+      unsubscribe();
     }
   });
 
@@ -926,11 +917,3 @@ describe('SubagentOrchestrator - Runtime Assembly', () => {
     expect(clearSpy).not.toHaveBeenCalled();
   });
 });
-
-function fixtureToolSelection(): import('@vybestack/llxprt-code-tools').ToolSelection {
-  return new ToolRegistry(
-    { getCoreTools: () => [], isTrustedFolder: () => true },
-    new CoreMessageBusAdapter(new MessageBus()),
-    assembleTaskSchemaPolicy(new SettingsService()),
-  );
-}
