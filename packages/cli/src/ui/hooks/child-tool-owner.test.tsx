@@ -372,11 +372,13 @@ describe('Mounted CLI child execution ownership', () => {
         ),
       ).toBe(true),
     );
-    expect(
-      b.hook?.result.current[0].find(
-        (call) => call.request.callId === 'same-child-call',
-      )?.request.agentId,
-    ).toBe(b.getScope()?.getAgentId());
+    await waitFor(() =>
+      expect(
+        b.hook?.result.current[0].find(
+          (call) => call.request.callId === 'same-child-call',
+        )?.request.agentId,
+      ).toBe(b.getScope()?.getAgentId()),
+    );
     expect(a.getScope()?.getAgentId()).not.toBe(b.getScope()?.getAgentId());
     a.hook?.unmount();
     await a.agent.dispose();
