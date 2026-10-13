@@ -16,7 +16,9 @@ import type { BuiltCliConfig } from './helpers/buildCliStyleConfig.js';
 import { describe, expect, it, vi } from 'bun:test';
 import { fromConfig } from '@vybestack/llxprt-code-agents';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { createRuntimeActivationBindings } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
+import { createSessionAuthPolicyReader } from '@vybestack/llxprt-code-providers/composition.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
+import { makeToken } from './helpers/provider-auth-fixtures.js';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
 import {
   buildAgent,
@@ -26,6 +28,7 @@ import {
 } from './helpers/agentHarness.js';
 
 describe('explicit provider owner construction', () => {
+  const credentials = useOwnedCredentials();
   it('constructs a public Agent without storing manager authority on Config', async () => {
     const built = await buildAgent('multi-turn-text.jsonl');
     try {
@@ -132,13 +135,19 @@ describe('explicit provider owner construction', () => {
   });
   it('retains the caller OAuth owner through activation and borrowed facade shutdown', async () => {
     const built = await buildCliStyleConfig('multi-turn-text.jsonl');
-    const callerOAuth = built.runtime.oauthManager;
-    const activated: OAuthManager[] = [];
-    const bindings = createRuntimeActivationBindings();
+    const store = credentials().authority.createTokenStore();
+    const callerOAuth = new OAuthManager(store, undefined, {
+      config: built.config,
+      messageBus: built.messageBus,
+      readSessionAuthPolicy: createSessionAuthPolicyReader(
+        built.settingsService,
+      ),
+    });
+    callerOAuth.registerProvider(createTestProvider('fake'));
+    await callerOAuth.toggleOAuthEnabled('fake');
     try {
-      if (!(callerOAuth instanceof OAuthManager))
-        throw new Error('Missing caller OAuth owner');
       const agent = await fromConfig({
+        credentialAuthority: credentials().authority,
         oauthManager: callerOAuth,
         providerFileLifecycle: built.runtime.providerFileLifecycle,
         settingsOwner: built.settingsOwner,
@@ -147,28 +156,30 @@ describe('explicit provider owner construction', () => {
         agentClient: built.agentClient,
         providerManager: built.providerManager,
         mcpRuntime: built.mcpRuntime,
-        runtimeActivationBindings: {
-          ...bindings,
-          registerInfrastructure: (manager, oauth, context) => {
-            activated.push(oauth);
-            return bindings.registerInfrastructure(manager, oauth, context);
-          },
-        },
       });
       try {
-        expect(callerOAuth).toBe(activated[0]);
+        expect((await agent.auth.detailedStatus('fake')).authenticated).toBe(
+          false,
+        );
+        await store.saveToken('fake', makeToken('borrowed-oauth'));
+        expect((await agent.auth.detailedStatus('fake')).authenticated).toBe(
+          true,
+        );
+        expect(callerOAuth.getTokenStore()).toBe(store);
         built.settingsOwner.writeUserParameter('auth.noBrowser', true);
-        expect(activated[0]?.isBrowserDisabled()).toBe(true);
+        expect(callerOAuth.isBrowserDisabled()).toBe(true);
         await agent.dispose();
         built.settingsService.set('auth.noBrowser', false);
-        expect(activated[0]?.isBrowserDisabled()).toBe(false);
-        expect<typeof callerOAuth>(callerOAuth).toBe(
-          built.runtime.oauthManager,
-        );
+        expect(callerOAuth.isBrowserDisabled()).toBe(false);
+        expect(await callerOAuth.isAuthenticated('fake')).toBe(true);
+        expect(credentials().snapshot()).toStrictEqual([0]);
+        await store.removeToken('fake');
+        expect(await callerOAuth.isAuthenticated('fake')).toBe(false);
       } finally {
         await agent.dispose();
       }
     } finally {
+      await callerOAuth.dispose();
       await built.cleanup();
     }
   });

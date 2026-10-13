@@ -16,6 +16,7 @@ import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers/provider
 import { createAgent, fromConfig, type Agent } from '../index.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 class MemoryStore implements TokenStore {
   private readonly tokens = new Map<string, OAuthToken>();
@@ -48,6 +49,7 @@ class MemoryStore implements TokenStore {
 }
 
 describe('public Agent same-label Kimi files', () => {
+  const credentials = useOwnedCredentials();
   const oldHome = process.env.LLXPRT_CONFIG_HOME;
   const oldFake = process.env.LLXPRT_FAKE_RESPONSES;
   let home: string;
@@ -187,9 +189,43 @@ describe('public Agent same-label Kimi files', () => {
       };
       try {
         for (const index of [0, 1]) {
-          const base = createRuntimeActivationBindings();
           agents.push(
             await (async (): Promise<Agent> => {
+              if (adoptConfig) {
+                const config = new Config({
+                  sessionId: 'distinct-caller-config-scope',
+                  cwd: process.cwd(),
+                  targetDir: process.cwd(),
+                  debugMode: false,
+                  provider: 'kimi',
+                  model: 'kimi-k3',
+                });
+                configs.push(config);
+                const settings = new SettingsService();
+                settings.set('provider-files', 'session');
+                settings.set('kimi.experimental-video', true);
+                const lifecycle = new ProviderFileLifecycle({
+                  maxFiles: 10,
+                  maxBytes: 1024 * 1024,
+                });
+                lifecycles[index] = lifecycle;
+                return fromConfig({
+                  credentialAuthority: credentials().authority,
+                  config,
+                  settingsService: settings,
+                  sessionId: 'same-kimi-label',
+                  providerFileLifecycle: lifecycle,
+                  activation: {
+                    provider: 'kimi',
+                    model: 'kimi-k3',
+                    cliOverrides: {
+                      key: `test-key-${index}`,
+                      baseUrl: endpoint,
+                    },
+                  },
+                });
+              }
+              const base = createRuntimeActivationBindings();
               const options = {
                 provider: 'kimi',
                 model: 'kimi-k3',
@@ -213,31 +249,7 @@ describe('public Agent same-label Kimi files', () => {
                   },
                 },
               };
-              if (!adoptConfig) return createAgent(options);
-              const config = new Config({
-                sessionId: 'distinct-caller-config-scope',
-                cwd: process.cwd(),
-                targetDir: process.cwd(),
-                debugMode: false,
-                provider: 'kimi',
-                model: 'kimi-k3',
-              });
-              configs.push(config);
-              return fromConfig({
-                config,
-                settingsService: new SettingsService(),
-                sessionId: options.sessionId,
-                tokenStore: options.tokenStore,
-                runtimeActivationBindings: options.runtimeActivationBindings,
-                activation: {
-                  provider: options.provider,
-                  model: options.model,
-                  cliOverrides: {
-                    key: options.auth.apiKey,
-                    baseUrl: options.auth.baseUrl,
-                  },
-                },
-              });
+              return createAgent(options);
             })(),
           );
         }
@@ -265,6 +277,14 @@ describe('public Agent same-label Kimi files', () => {
           () => null,
           (error: unknown) => error,
         );
+        expect(credentials().snapshot()).toStrictEqual(
+          adoptConfig ? [1, 0] : [],
+        );
+        expect(configs.map((config) => config.getSessionId())).toStrictEqual(
+          adoptConfig
+            ? ['distinct-caller-config-scope', 'distinct-caller-config-scope']
+            : [],
+        );
         const stateBeforeRetry = lifecycles.map(
           (owner) => owner.snapshot().retainedFiles,
         );
@@ -290,6 +310,9 @@ describe('public Agent same-label Kimi files', () => {
         );
         await agents[1].dispose();
         expect(deleted).toStrictEqual(['public-file-0', 'public-file-1']);
+        expect(credentials().snapshot()).toStrictEqual(
+          adoptConfig ? [1, 1] : [],
+        );
         expect(
           requests
             .filter((entry) => entry.includes('/chat/completions'))

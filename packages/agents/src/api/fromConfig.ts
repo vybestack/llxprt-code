@@ -4,15 +4,17 @@ import { assertPreflightOwners } from './activationPreflightState.js';
 import {
   cleanupFailedFromConfig,
   closePreflightAfterAdoption,
-  rethrowPrimaryAfterCleanup,
+  cleanupFailedAdoption,
+  cleanupFailedMediaAssembly,
 } from './fromConfig-cleanup.js';
 import { prepareImageConstruction } from './session-image-assembly.js';
-import type { RuntimeTokenizerFactory } from '@vybestack/llxprt-code-core';
+import { finalizeAdoptedAgent } from './fromConfig-finalization.js';
+import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import {
   assembleAdoptedDefinitionOperations,
   adoptedDefinitionCleanup,
 } from './adopted-definition-assembly.js';
-import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 /**
  * @plan:PLAN-20260621-COREAPIREMED.P09
  * @requirement:REQ-001,REQ-005,REQ-INT-001
@@ -23,16 +25,11 @@ import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/s
  * reusing the SAME shared finalize path createAgent uses (CRIT-4).
  */
 
-import { admittedEndpoint } from '../core/admittedRouteSecurity.js';
 import type { SessionClientOwner } from '../session/session-client-owner.js';
-import {
-  activateAdoptedSession,
-  initializeAdoptedClient,
-} from './fromConfig-session.js';
+import { initializeAdoptedClient } from './fromConfig-session.js';
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 import { assembleMcpRuntime } from './mcpOAuthAssembly.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
 
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
@@ -41,9 +38,7 @@ import {
   createRuntimeActivationBindings,
   type IsolatedRuntimeContextHandle,
 } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { RuntimeProviderManager } from '@vybestack/llxprt-code-core';
-import type { AgentSchedulerHandle } from './config-types.js';
 import type { FromConfigOptions } from './config-types.js';
 import { FromConfigValidatableSchema } from './config-types.js';
 import type { Agent } from './agent.js';
@@ -53,11 +48,7 @@ import {
   validateAgentRuntimeId,
 } from './agentBootstrap.js';
 import { AgentActivationBootstrap } from './activationPreflightState.js';
-import {
-  finalizeAgent,
-  registerProvidersOntoManager,
-  resolveSchedulerFactory,
-} from './createAgent.js';
+import { registerProvidersOntoManager } from './createAgent.js';
 
 /**
  * Adopts an existing caller-supplied Config and returns a ready Agent.
@@ -91,6 +82,13 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
   options = { ...options, credentialAuthority };
   const images = prepareImageConstruction(options.imageOperation);
   const github = assembleHostGitHubBroker(options);
+  const preflight = options.activationPreflight?.operation;
+  const closePreflight =
+    preflight === undefined
+      ? undefined
+      : () => AgentActivationBootstrap.close(preflight);
+  const definitions = options.definitionOwner;
+  const memory = options.memoryOwner;
   let agent: Agent;
   try {
     if (!hasConfig(options, 'config')) {
@@ -118,9 +116,20 @@ export async function fromConfig(options: FromConfigOptions): Promise<Agent> {
       github,
     );
   } catch (primaryError) {
-    return cleanupFailedFromConfig(primaryError, options, github, images);
+    return cleanupFailedFromConfig(
+      primaryError,
+      github === undefined
+        ? undefined
+        : () => github.cleanupFailedConstruction(),
+      () => images.cleanupFailedConstruction(),
+      options.definitionOwnership === 'agent' && definitions !== undefined
+        ? () => definitions.dispose()
+        : undefined,
+      memory?.ownership === 'agent' ? () => memory.owner.dispose() : undefined,
+      closePreflight,
+    );
   }
-  await closePreflightAfterAdoption(options, agent);
+  await closePreflightAfterAdoption(closePreflight, () => agent.dispose());
   return agent;
 }
 
@@ -128,7 +137,9 @@ function bindAdoptedSessionHooks(
   client: SessionClientOwner,
   mcp: McpRuntimeOwner,
   options: FromConfigOptions,
+  github: HostGitHubBrokerOwner | undefined,
 ): void {
+  client.bindHostGitHub(github);
   const definitions = assembleAdoptedDefinitionOperations(
     mcp,
     options.definitionOwner,
@@ -173,7 +184,6 @@ async function adoptConfig(
   // The FromConfigOptions type marks config as required, but at runtime callers
   // may omit it (T1d); read through a generic presence check so the lint
   // accepts the runtime-undefined check without an unsafe assertion.
-  const config = options.config;
   const runtimeId = validateAdoption(options);
 
   // Adopt an explicit caller bus first, then the Config's assembled runtime bus.
@@ -182,13 +192,19 @@ async function adoptConfig(
   // @pseudocode line 18 (CRIT-1): adopt the Config's existing manager.
 
   // @pseudocode lines 20-28: adopt the runtime context (NOT a second manager).
-  const media = await assembleAdoptedMedia(options);
+  const preflight = options.activationPreflight?.operation;
+  const media = await assembleAdoptedMedia(
+    options.config,
+    preflight?.takeMediaOwner.bind(preflight),
+    options.agentClient?.mediaStore,
+    preflight?.dispose.bind(preflight),
+  );
   const handle = await prepareAdoptionRuntime(options, runtimeId, media, mcp);
 
   let sessionClient: SessionClientOwner | undefined;
   try {
     sessionClient = await initializeAdoptedClient(
-      config,
+      options.config,
       handle.settingsService,
       handle.settingsOwner,
       handle.providerManager,
@@ -206,8 +222,7 @@ async function adoptConfig(
       adoptedClientBus(options),
       options.imageOperation,
     );
-    sessionClient.bindHostGitHub(github);
-    bindAdoptedSessionHooks(sessionClient, mcp, options);
+    bindAdoptedSessionHooks(sessionClient, mcp, options, github);
 
     // @pseudocode line 29: activate infrastructure for the supplied Config.
     await handle.activate();
@@ -221,17 +236,6 @@ async function adoptConfig(
     await initializeAdoptedSession(options, mcp, sessionClient);
 
     // @plan:PLAN-20270104-ISSUE2374.P03 @requirement:REQ-001
-    await activateAdoptedSession(
-      config,
-      options.settingsService,
-      handle.settingsOwner,
-      handle.providerManager,
-      handle.oauthManager,
-      () => handle.readRuntimeKind(),
-      sessionClient,
-      options.activation,
-      options.activationPreflight,
-    );
 
     // @pseudocode lines 37-48 (Mismatch 1): synthesize parsed + resolvedAuth.
 
@@ -239,89 +243,92 @@ async function adoptConfig(
     // The 17th positional arg 'caller' threads REQ-001.3 ownership so dispose()
     // skips the caller-owned Config teardown.
     return await finalizeAdoptedAgent(
-      options,
-      await prepareAdoptedConfig(
-        config,
-        options,
-        handle.settingsOwner,
-        handle.tokenizerFactory,
-      ),
-      config,
+      options.providerManager,
+      options.sessionId,
+      handle.tokenizerFactory,
+      options.activation,
+      options.activationPreflight,
+      options.config,
       handle.providerManager,
       handle.oauthManager,
       options.settingsService,
       runtimeId,
-      handle,
+      handle.settingsOwner,
+      () => handle.readRuntimeKind(),
+      () => handle.cleanup(),
+      options.onApproval,
+      options.onOAuthPrompt,
+      options.editorCallbacks,
       mcp,
+      options.definitionOwner,
+      options.definitionOwnership,
+      ownsMcpRuntime(options),
+      options.toolSchedulerFactory,
+      options.asyncTaskManager,
+      options.sessionIdentityOwnership ?? 'facade',
       media,
       sessionClient,
     );
   } catch (primaryError) {
     return cleanupFailedAdoption(
       primaryError,
-      handle,
-      mcp,
+      () => handle.cleanup(),
       adoptedDefinitionCleanup(
         mcp,
         options.definitionOwner,
         options.definitionOwnership,
         ownsMcpRuntime(options),
       ),
-      media,
-      sessionClient,
+      media === undefined ? undefined : () => media.dispose(),
+      sessionClient?.dispose.bind(sessionClient),
     );
   }
 }
 
 async function createAdoptedRuntime(
-  options: FromConfigOptions,
   config: Config,
   messageBus: MessageBus,
   runtimeId: string,
   adoptedManager: RuntimeProviderManager | undefined,
+  settingsService: FromConfigOptions['settingsService'],
+  borrowedSettingsOwner: SessionSettingsOwner | undefined,
+  takeSettingsOwner:
+    | ((settings: FromConfigOptions['settingsService']) => SessionSettingsOwner)
+    | undefined,
+  settingsOwnership: 'borrowed' | 'transferred' | undefined,
+  credentialAuthority: FromConfigOptions['credentialAuthority'],
+  activationBindings: FromConfigOptions['runtimeActivationBindings'],
+  tokenStore: FromConfigOptions['tokenStore'],
+  profileReads:
+    | NonNullable<FromConfigOptions['definitionOwner']>['profileReads']
+    | undefined,
+  tokenizerFactory: FromConfigOptions['tokenizerFactory'],
+  contentGeneratorFactory: FromConfigOptions['contentGeneratorFactory'],
+  oauthManager: FromConfigOptions['oauthManager'],
+  providerFileLifecycle: FromConfigOptions['providerFileLifecycle'],
 ): Promise<IsolatedRuntimeContextHandle> {
-  const transferredOwner =
-    options.activationPreflight?.operation.takeSettingsOwner(
-      options.settingsService,
-    );
-  const settingsOwner = transferredOwner ?? options.settingsOwner;
-  settingsOwner?.assertSettingsIdentity(options.settingsService);
+  const transferredOwner = takeSettingsOwner?.(settingsService);
+  const settingsOwner = transferredOwner ?? borrowedSettingsOwner;
+  settingsOwner?.assertSettingsIdentity(settingsService);
   try {
     return createIsolatedRuntimeContext(
       {
         runtimeId,
-        credentialAuthority: options.credentialAuthority,
+        credentialAuthority,
         activationBindings:
-          options.runtimeActivationBindings ??
-          createRuntimeActivationBindings(),
-        ...(options.tokenStore !== undefined
-          ? { tokenStore: options.tokenStore }
-          : {}),
+          activationBindings ?? createRuntimeActivationBindings(),
+        ...(tokenStore !== undefined ? { tokenStore } : {}),
         config,
-        profileReads:
-          options.definitionOwner?.profileReads ??
-          options.activationPreflight?.operation.workspaceDefinitions
-            .profileReads ??
-          options.mcpRuntime?.profileDefinitions,
-        tokenizerFactory:
-          options.tokenizerFactory ??
-          options.activationPreflight?.operation.tokenizerFactory,
-        contentGeneratorFactory:
-          options.contentGeneratorFactory ??
-          options.activationPreflight?.operation.contentGeneratorFactory,
+        profileReads,
+        tokenizerFactory,
+        contentGeneratorFactory,
         settingsOwner,
         settingsOwnerOwnership:
-          transferredOwner === undefined
-            ? 'borrowed'
-            : options.activationPreflight?.operation.settingsOwnerOwnership,
+          transferredOwner === undefined ? 'borrowed' : settingsOwnership,
         messageBus,
         providerManager: adoptedManager,
-        oauthManager:
-          options.oauthManager ??
-          options.activationPreflight?.operation.oauthManager,
-        providerFileLifecycle:
-          options.providerFileLifecycle ??
-          options.activationPreflight?.operation.providerFileLifecycle,
+        oauthManager,
+        providerFileLifecycle,
         prepare: (ctx) => {
           if (adoptedManager === undefined)
             registerProvidersOntoManager(
@@ -332,44 +339,12 @@ async function createAdoptedRuntime(
             );
         },
       },
-      options.settingsService,
+      settingsService,
     );
   } catch (error: unknown) {
-    if (
-      options.activationPreflight?.operation.settingsOwnerOwnership ===
-      'transferred'
-    )
-      await transferredOwner?.dispose();
+    if (settingsOwnership === 'transferred') await transferredOwner?.dispose();
     throw error;
   }
-}
-
-async function cleanupFailedAdoption(
-  primaryError: unknown,
-  handle: IsolatedRuntimeContextHandle,
-  _mcpRuntime: McpRuntimeOwner,
-  disposeWorkspace: (() => Promise<void>) | undefined,
-  mediaOwner: SessionMediaOwner | undefined,
-  sessionClient: SessionClientOwner | undefined,
-): Promise<never> {
-  const mcpCleanup = await Promise.allSettled([disposeWorkspace?.()]);
-  const clientCleanup = await Promise.allSettled([sessionClient?.dispose()]);
-  const runtimeCleanup = await Promise.allSettled([handle.cleanup()]);
-  const mediaCleanup = await Promise.allSettled([mediaOwner?.dispose()]);
-  const cleanup = [
-    ...mcpCleanup,
-    ...clientCleanup,
-    ...runtimeCleanup,
-    ...mediaCleanup,
-  ];
-  const failures = cleanup.flatMap((result) =>
-    result.status === 'rejected' ? [result.reason] : [],
-  );
-  return rethrowPrimaryAfterCleanup(
-    primaryError,
-    failures,
-    'fromConfig bootstrap cleanup failed',
-  );
 }
 
 async function initializeAdoptedSession(
@@ -418,22 +393,6 @@ async function initializeAdoptedConfig(
  * Derive the provider from the post-activation runtime truth, falling back to
  * the Config only when the adopted manager has no active provider.
  */
-function buildParsedConfig(
-  config: Config,
-  options: FromConfigOptions,
-  settingsOwner: SessionSettingsOwner,
-): { provider: string; model: string; sessionId?: string } {
-  const activeRuntimeProvider =
-    options.providerManager?.getActiveProviderName() ?? config.getProvider();
-  return {
-    provider: activeRuntimeProvider ?? '',
-    model: settingsOwner.readSelectedModel() ?? config.getModel(),
-    ...(options.sessionId !== undefined
-      ? { sessionId: options.sessionId }
-      : {}),
-  };
-}
-
 /**
  * Type guard: does the options object carry a non-null Config? The
  * FromConfigOptions type marks config as required, but at runtime a caller
@@ -493,58 +452,34 @@ function assertMcpHandoff(options: {
   }
 }
 
-async function prepareAdoptedConfig(
+async function assembleAdoptedMedia(
   config: Config,
-  options: FromConfigOptions,
-  settingsOwner: SessionSettingsOwner,
-  tokenizerFactory: RuntimeTokenizerFactory,
-): Promise<ReturnType<typeof buildParsedConfig>> {
-  const parsed = buildParsedConfig(config, options, settingsOwner);
-  await tokenizerFactory.prepareTokenizer?.(parsed.provider, parsed.model);
-  return parsed;
-}
-
-function assembleAdoptedScheduler(options: FromConfigOptions): {
-  injectedSchedulerHandles: AgentSchedulerHandle[];
-  schedulerFactory: ReturnType<typeof resolveSchedulerFactory>;
-} {
-  const injectedSchedulerHandles: AgentSchedulerHandle[] = [];
-  return {
-    injectedSchedulerHandles,
-    schedulerFactory: resolveSchedulerFactory(
-      false,
-      options.toolSchedulerFactory,
-      injectedSchedulerHandles,
-    ),
-  };
-}
-
-function adoptMediaOwner(
-  options: FromConfigOptions,
-): SessionMediaOwner | undefined {
-  const config = options.config;
-  return (
-    options.activationPreflight?.operation.takeMediaOwner(config) ??
-    (options.agentClient?.mediaStore === undefined
+  takeMediaOwner:
+    | ((config: Config) => SessionMediaOwner | undefined)
+    | undefined,
+  clientMedia: LocalMediaStore | undefined,
+  closePreflight: (() => void | Promise<void>) | undefined,
+): Promise<SessionMediaOwner | undefined> {
+  const owner =
+    takeMediaOwner?.(config) ??
+    (clientMedia === undefined
       ? new SessionMediaOwner(
           config.projectTempDir,
           config.getMediaStoreQuotaByteLimit(),
         )
-      : undefined)
-  );
-}
-
-async function assembleAdoptedMedia(
-  options: FromConfigOptions,
-): Promise<SessionMediaOwner | undefined> {
-  const owner = adoptMediaOwner(options);
+      : undefined);
   try {
-    const store = options.agentClient?.mediaStore ?? owner?.store;
+    const store = clientMedia ?? owner?.store;
     if (store === undefined)
       throw new AgentBootstrapError('Missing explicit media owner');
     return owner;
   } catch (error) {
-    return cleanupFailedMediaAssembly(error, options, owner);
+    return cleanupFailedMediaAssembly(
+      error,
+      closePreflight,
+      owner === undefined ? undefined : () => owner.dispose(),
+      undefined,
+    );
   }
 }
 
@@ -556,70 +491,43 @@ async function prepareAdoptionRuntime(
 ): Promise<IsolatedRuntimeContextHandle> {
   try {
     return await createAdoptedRuntime(
-      options,
       options.config,
       options.messageBus ??
         options.activationPreflight?.operation.messageBus ??
         mcp.messageBus,
       runtimeId,
       options.providerManager,
+      options.settingsService,
+      options.settingsOwner,
+      options.activationPreflight?.operation.takeSettingsOwner.bind(
+        options.activationPreflight.operation,
+      ),
+      options.activationPreflight?.operation.settingsOwnerOwnership,
+      options.credentialAuthority,
+      options.runtimeActivationBindings,
+      options.tokenStore,
+      options.definitionOwner?.profileReads ??
+        options.activationPreflight?.operation.workspaceDefinitions
+          .profileReads ??
+        options.mcpRuntime?.profileDefinitions,
+      options.tokenizerFactory ??
+        options.activationPreflight?.operation.tokenizerFactory,
+      options.contentGeneratorFactory ??
+        options.activationPreflight?.operation.contentGeneratorFactory,
+      options.oauthManager ??
+        options.activationPreflight?.operation.oauthManager,
+      options.providerFileLifecycle ??
+        options.activationPreflight?.operation.providerFileLifecycle,
     );
   } catch (error) {
-    return cleanupFailedMediaAssembly(error, options, owner, mcp);
+    const preflight = options.activationPreflight?.operation;
+    return cleanupFailedMediaAssembly(
+      error,
+      preflight?.dispose.bind(preflight),
+      owner === undefined ? undefined : () => owner.dispose(),
+      ownsMcpRuntime(options) ? () => mcp.dispose() : undefined,
+    );
   }
-}
-
-async function finalizeAdoptedAgent(
-  options: FromConfigOptions,
-  parsed: Awaited<ReturnType<typeof prepareAdoptedConfig>>,
-  config: Config,
-  manager: RuntimeProviderManager,
-  oauthManager: OAuthManager,
-  settingsService: SettingsService,
-  runtimeId: string,
-  handle: IsolatedRuntimeContextHandle,
-  mcpRuntime: McpRuntimeOwner,
-  mediaOwner: SessionMediaOwner | undefined,
-  sessionClient: SessionClientOwner,
-): Promise<Agent> {
-  const { injectedSchedulerHandles, schedulerFactory } =
-    assembleAdoptedScheduler(options);
-  return finalizeAgent(
-    parsed,
-    { baseUrl: admittedEndpoint(settingsService, parsed.provider) },
-    config,
-    manager,
-    oauthManager,
-    settingsService,
-    runtimeId,
-    handle.settingsOwner,
-    () => handle.readRuntimeKind(),
-    () => handle.cleanup(),
-    options.onApproval,
-    options.onOAuthPrompt,
-    options.editorCallbacks,
-    injectedSchedulerHandles,
-    'caller',
-    adoptedDefinitionCleanup(
-      mcpRuntime,
-      options.definitionOwner,
-      options.definitionOwnership,
-      ownsMcpRuntime(options),
-    ),
-    assembleAdoptedDefinitionOperations(
-      mcpRuntime,
-      options.definitionOwner,
-      config,
-      options.definitionOwnership,
-      ownsMcpRuntime(options),
-    ),
-    schedulerFactory,
-    options.asyncTaskManager,
-    options.sessionIdentityOwnership ?? 'facade',
-    mediaOwner,
-    sessionClient,
-    mcpRuntime.workspaceSkills.operations,
-  );
 }
 
 function assertBorrowedClient(options: FromConfigOptions): void {
@@ -642,30 +550,6 @@ function assertBorrowedClient(options: FromConfigOptions): void {
     throw new AgentBootstrapError(
       'Borrowed client differs from the preflight session client',
     );
-}
-
-async function cleanupFailedMediaAssembly(
-  error: unknown,
-  options: FromConfigOptions,
-  media: SessionMediaOwner | undefined,
-  mcp?: McpRuntimeOwner,
-): Promise<never> {
-  const clients = await Promise.allSettled([
-    options.activationPreflight?.operation.dispose(),
-  ]);
-  const resources = await Promise.allSettled([
-    media?.dispose(),
-    ownsMcpRuntime(options) ? mcp?.dispose() : undefined,
-  ]);
-  const failures = [...clients, ...resources].flatMap((result) =>
-    result.status === 'rejected' ? [result.reason] : [],
-  );
-  if (failures.length > 0)
-    throw new AggregateError(
-      [error, ...failures],
-      'Adopted media assembly cleanup failed',
-    );
-  throw error;
 }
 
 async function resolveAdoptedMcpRuntime(
