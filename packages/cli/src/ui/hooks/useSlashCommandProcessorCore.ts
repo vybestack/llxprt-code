@@ -11,6 +11,7 @@ import { createModelCommand } from '../commands/modelCommand.js';
 import { createSetCommand } from '../commands/setCommand.js';
 import { createProviderCommand } from '../commands/providerCommand.js';
 import { bindProviderCommandOperations } from '../commands/providerCommandHost.js';
+import { useCredentialCommands } from './useCredentialCommands.js';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type {
   RecordingIntegration,
@@ -143,9 +144,22 @@ function useCommandState(
     [readToolFormat, writeToolFormat],
   );
   const setCommand = useSetCommand(settings);
+  const credentialCommands = useCredentialCommands(agent, settings, config);
   const builtins = useMemo<BuiltinCommandOwners>(
-    () => ({ modelCommand, toolFormatCommand, setCommand, providerCommand }),
-    [modelCommand, toolFormatCommand, setCommand, providerCommand],
+    () => ({
+      modelCommand,
+      toolFormatCommand,
+      setCommand,
+      providerCommand,
+      ...credentialCommands,
+    }),
+    [
+      modelCommand,
+      toolFormatCommand,
+      setCommand,
+      providerCommand,
+      credentialCommands,
+    ],
   );
   const [commands, setCommands] = useState<readonly SlashCommand[] | undefined>(
     () =>

@@ -15,8 +15,10 @@ import type {
 import { compressCommand } from './compressCommand.js';
 import { policiesCommand } from './policiesCommand.js';
 import { taskCommand } from './tasksCommand.js';
-import { baseurlCommand } from './baseurlCommand.js';
-import { logoutCommand } from './logoutCommand.js';
+import {
+  registerBaseurlCommand,
+  registerLogoutCommand,
+} from '../../__tests__/credential-command-test-owner.js';
 import { hooksCommand } from './hooksCommand.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core';
 import { MessageType } from '../types.js';
@@ -183,7 +185,7 @@ describe('baseurlCommand — agent surface', () => {
       auth: { setBaseUrl } as unknown as AgentAuthControl,
     });
 
-    const result = (await baseurlCommand.action!(
+    const result = (await registerBaseurlCommand(context).action!(
       context,
       'https://api.example.com',
     )) as {
@@ -203,7 +205,10 @@ describe('baseurlCommand — agent surface', () => {
       auth: { setBaseUrl } as unknown as AgentAuthControl,
     });
 
-    const result = (await baseurlCommand.action!(context, '')) as {
+    const result = (await registerBaseurlCommand(context).action!(
+      context,
+      '',
+    )) as {
       messageType: string;
       content: string;
     };
@@ -222,7 +227,10 @@ describe('logoutCommand — agent surface', () => {
       listProviders: vi.fn().mockReturnValue([{ name: 'qwen' }]),
     });
 
-    const result = (await logoutCommand.action!(context, 'qwen')) as {
+    const result = (await registerLogoutCommand(context).action!(
+      context,
+      'qwen',
+    )) as {
       messageType: string;
       content: string;
     };
@@ -241,7 +249,10 @@ describe('logoutCommand — agent surface', () => {
       listProviders: vi.fn().mockReturnValue([{ name: 'gemini' }]),
     });
 
-    const result = (await logoutCommand.action!(context, 'gemini')) as {
+    const result = (await registerLogoutCommand(context).action!(
+      context,
+      'gemini',
+    )) as {
       messageType: string;
       content: string;
     };
@@ -377,7 +388,7 @@ describe('error paths — agent surface rejections', () => {
       auth: { setBaseUrl } as unknown as AgentAuthControl,
     });
 
-    const result = (await baseurlCommand.action!(
+    const result = (await registerBaseurlCommand(context).action!(
       context,
       'https://bad.example.com',
     )) as {
@@ -398,7 +409,10 @@ describe('error paths — agent surface rejections', () => {
       listProviders: vi.fn().mockReturnValue([{ name: 'qwen' }]),
     });
 
-    const result = (await logoutCommand.action!(context, 'qwen')) as {
+    const result = (await registerLogoutCommand(context).action!(
+      context,
+      'qwen',
+    )) as {
       messageType: string;
       content: string;
     };

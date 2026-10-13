@@ -11,53 +11,42 @@ import type {
 } from './types.js';
 import { CommandKind } from './types.js';
 
-export const baseurlCommand: SlashCommand = {
-  name: 'baseurl',
-  description: 'set base URL for the current provider',
-  kind: CommandKind.BUILT_IN,
-  action: async (
-    context: CommandContext,
-    args: string,
-  ): Promise<MessageActionReturn> => {
-    const baseUrl = args.trim();
-    const agent = context.services.agent;
+/**
+ * The operations /baseurl needs from its owning session. The host binds them
+ * once at registration; the command never reads them from an invocation.
+ */
+export interface BaseurlCommandOperations {
+  /** Name of the provider whose endpoint is being changed. */
+  readonly activeProviderName: () => string;
+  /** Applies a trimmed base URL (empty clears it) and returns the report. */
+  readonly updateBaseUrl: (baseUrl: string) => Promise<string>;
+}
 
-    if (agent) {
-      const provider = agent.getProvider();
+export function createBaseurlCommand(
+  operations: BaseurlCommandOperations,
+): SlashCommand {
+  return {
+    name: 'baseurl',
+    description: 'set base URL for the current provider',
+    kind: CommandKind.BUILT_IN,
+    action: async (
+      _context: CommandContext,
+      args: string,
+    ): Promise<MessageActionReturn> => {
+      const baseUrl = args.trim();
       try {
-        await agent.auth.setBaseUrl(baseUrl || null);
         return {
           type: 'message',
           messageType: 'info',
-          content: baseUrl
-            ? `Base URL set to '${baseUrl}' for provider '${provider}'`
-            : `Base URL cleared for provider '${provider}'`,
+          content: await operations.updateBaseUrl(baseUrl),
         };
       } catch (error) {
         return {
           type: 'message',
           messageType: 'error',
-          content: `Failed to update base URL for provider '${provider}': ${error instanceof Error ? error.message : String(error)}`,
+          content: `Failed to update base URL for provider '${operations.activeProviderName()}': ${error instanceof Error ? error.message : String(error)}`,
         };
       }
-    }
-
-    // Fallback: Runtime API (tracked migration debt for null agent)
-    const runtime = context.runtimeApi;
-    try {
-      const result = await runtime.updateActiveProviderBaseUrl(baseUrl);
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: result.message,
-      };
-    } catch (error) {
-      const status = runtime.providerStatus();
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Failed to update base URL for provider '${status.providerName ?? 'unknown'}': ${error instanceof Error ? error.message : String(error)}`,
-      };
-    }
-  },
-};
+    },
+  };
+}

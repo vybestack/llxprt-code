@@ -7,6 +7,10 @@
 import { createModelCommand } from '../ui/commands/modelCommand.js';
 import { createSetCommand } from '../ui/commands/setCommand.js';
 import { createProviderCommand } from '../ui/commands/providerCommand.js';
+import { createBaseurlCommand } from '../ui/commands/baseurlCommand.js';
+import { createKeyCommand } from '../ui/commands/keyCommand.js';
+import { createKeyfileCommand } from '../ui/commands/keyfileCommand.js';
+import { createLogoutCommand } from '../ui/commands/logoutCommand.js';
 import type { BuiltinCommandOwners } from '../services/BuiltinCommandLoader.js';
 import type { SlashCommand } from '../ui/commands/types.js';
 import { createToolFormatCommand } from '../ui/commands/toolformatCommand.js';
@@ -70,11 +74,48 @@ export function createUnconfiguredProviderCommand(): SlashCommand {
   });
 }
 
+export function createUnconfiguredCredentialCommands(): Pick<
+  BuiltinCommandOwners,
+  'keyCommand' | 'keyfileCommand' | 'baseurlCommand' | 'logoutCommand'
+> {
+  const unavailable = (): never => {
+    throw new Error(
+      'Credential operations are unavailable in this registry fixture',
+    );
+  };
+  return {
+    keyCommand: createKeyCommand({
+      providerKeys: unavailable,
+      listKeyCompletionNames: unavailable,
+      invalidateKeyCompletion: unavailable,
+      isInteractive: unavailable,
+      activeProviderName: unavailable,
+      updateActiveProviderApiKey: unavailable,
+      setEphemeralSetting: unavailable,
+      schedulePaymentModeCheck: unavailable,
+    }),
+    keyfileCommand: createKeyfileCommand({
+      activeProviderName: unavailable,
+      updateActiveProviderApiKey: unavailable,
+      setEphemeralSetting: unavailable,
+      rememberProviderKeyfile: unavailable,
+      forgetProviderKeyfile: unavailable,
+      schedulePaymentModeCheck: unavailable,
+    }),
+    baseurlCommand: createBaseurlCommand({
+      activeProviderName: unavailable,
+      updateBaseUrl: unavailable,
+    }),
+    logoutCommand: createLogoutCommand({ logout: unavailable }),
+  };
+}
+
 export function createUnconfiguredBuiltinOwners(): BuiltinCommandOwners {
   return {
     modelCommand: createUnconfiguredModelCommand(),
     toolFormatCommand: createUnconfiguredToolFormatCommand(),
     setCommand: createUnconfiguredSetCommand(),
     providerCommand: createUnconfiguredProviderCommand(),
+    ...createUnconfiguredCredentialCommands(),
   };
 }

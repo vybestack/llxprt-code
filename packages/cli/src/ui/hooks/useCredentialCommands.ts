@@ -1,0 +1,62 @@
+/**
+ * @license
+ * Copyright 2026 Vybestack LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { useMemo } from 'react';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import type { LoadedSettings } from '../../config/settings.js';
+import type { BuiltinCommandOwners } from '../../services/BuiltinCommandLoader.js';
+import type { CliUiRuntime } from '../cliUiRuntime.js';
+import { createBaseurlCommand } from '../commands/baseurlCommand.js';
+import {
+  bindBaseurlCommandOperations,
+  bindKeyCommandOperations,
+  bindKeyfileCommandOperations,
+  bindLogoutCommandOperations,
+} from '../commands/credentialCommandHost.js';
+import { createKeyCommand } from '../commands/keyCommand.js';
+import { createKeyfileCommand } from '../commands/keyfileCommand.js';
+import { createLogoutCommand } from '../commands/logoutCommand.js';
+import { useOAuthControl } from '../contexts/OAuthControlContext.js';
+import { useRuntimeApi } from '../contexts/RuntimeContext.js';
+
+type CredentialCommands = Pick<
+  BuiltinCommandOwners,
+  'baseurlCommand' | 'logoutCommand' | 'keyfileCommand' | 'keyCommand'
+>;
+
+/**
+ * Registers the credential commands for one session, each bound to the
+ * operations it uses. Memoised so the registered command identities stay stable
+ * while their owners do.
+ */
+export function useCredentialCommands(
+  agent: Agent | null,
+  settings: LoadedSettings,
+  config: CliUiRuntime | null,
+): CredentialCommands {
+  const api = useRuntimeApi();
+  const oauthControl = useOAuthControl();
+  const baseurlCommand = useMemo(
+    () => createBaseurlCommand(bindBaseurlCommandOperations(api, agent)),
+    [api, agent],
+  );
+  const logoutCommand = useMemo(
+    () => createLogoutCommand(bindLogoutCommandOperations(agent, oauthControl)),
+    [agent, oauthControl],
+  );
+  const keyfileCommand = useMemo(
+    () => createKeyfileCommand(bindKeyfileCommandOperations(api, settings)),
+    [api, settings],
+  );
+  const keyCommand = useMemo(
+    () => createKeyCommand(bindKeyCommandOperations(api, config)),
+    [api, config],
+  );
+  return useMemo(
+    () => ({ baseurlCommand, logoutCommand, keyfileCommand, keyCommand }),
+    [baseurlCommand, logoutCommand, keyfileCommand, keyCommand],
+  );
+}

@@ -47,7 +47,7 @@ import {
 import { ProviderAliasRefreshProvider } from './ProviderAliasRefreshContext.js';
 import { createSetCommandForTest } from '../../__tests__/set-command-test-owner.js';
 import { createModelCommand } from '../commands/modelCommand.js';
-import { keyCommand } from '../commands/keyCommand.js';
+import { registerKeyCommand } from '../../__tests__/credential-command-test-owner.js';
 import { createProviderCommand } from '../commands/providerCommand.js';
 import { bindProviderCommandOperations } from '../commands/providerCommandHost.js';
 import { profileCommand } from '../commands/profileCommand.js';
@@ -382,15 +382,18 @@ describe('interactive runtime owner bridge', () => {
           (provider, model) => recordProviderSwitch(b, provider, model),
         ),
       );
+      const leftKeyCommand = registerKeyCommand(leftContext);
+      const rightKeyCommand = registerKeyCommand(rightContext);
       if (
-        !keyCommand.action ||
+        !leftKeyCommand.action ||
+        !rightKeyCommand.action ||
         !leftProviderCommand.action ||
         !rightProviderCommand.action
       )
         throw new Error('Credential or provider command unavailable');
       await Promise.all([
-        keyCommand.action(leftContext, 'key-left'),
-        keyCommand.action(rightContext, 'key-right'),
+        leftKeyCommand.action(leftContext, 'key-left'),
+        rightKeyCommand.action(rightContext, 'key-right'),
       ]);
       expect(first.settingsOwner.readNamedParameter('auth-key')).toBe(
         'key-left',
