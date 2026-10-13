@@ -286,6 +286,7 @@ describe('fromConfig task-tool reconcile @plan:ISSUE-3222 @requirement:REQ-3222-
         manager,
         null,
         () => undefined,
+        'borrowed',
         built.agentClient,
         built.mcpRuntime,
       );

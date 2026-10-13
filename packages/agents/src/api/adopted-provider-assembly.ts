@@ -35,7 +35,7 @@ import {
   createOwnerAuthCacheInvalidator,
   registerStandardOAuthProviders,
 } from '@vybestack/llxprt-code-providers/composition.js';
-import type { AdoptionRelease } from './adoption-release.js';
+import type { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 
 export function acquireAdoptedProviderManager(
   supplied: RuntimeProviderManager | undefined,
@@ -45,7 +45,7 @@ export function acquireAdoptedProviderManager(
   files: ProviderFileLifecycle,
   runtimeId: string,
   authority: CredentialAuthority,
-  release: AdoptionRelease,
+  release: AcquisitionRelease,
 ): RuntimeProviderManager {
   if (supplied !== undefined) return supplied;
   const manager = new ProviderManager(
@@ -76,7 +76,7 @@ export function acquireAdoptedOAuth(
   runtimeId: string,
   profileReads: Pick<ProfileManager, 'loadProfile'> | undefined,
   authority: CredentialAuthority,
-  release: AdoptionRelease,
+  release: AcquisitionRelease,
 ): OAuthManager {
   const requestFetch = (
     input: RequestInfo | URL,

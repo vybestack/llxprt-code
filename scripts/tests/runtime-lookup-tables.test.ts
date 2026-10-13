@@ -24,7 +24,10 @@ const tables = Object.freeze(
       ],
       ['promptEnvelopeProjections.ts', 'STATEFUL_INCREMENTAL_PROMPT_KEYS'],
       ['promptEnvelopeProjections.ts', 'PROMPT_KEYS'],
-      ['providerSwitch.ts', 'DEFAULT_PRESERVE_EPHEMERALS'],
+      [
+        '../../../agents/src/api/provider-switch/provider-switch.ts',
+        'DEFAULT_PRESERVE_EPHEMERALS',
+      ],
       ['statelessHardening.ts', 'STATELESS_METADATA_KEYS'],
     ] as const
   ).map((table) => Object.freeze(table)),

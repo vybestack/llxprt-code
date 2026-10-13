@@ -1,3 +1,4 @@
+import { ProviderLifetimeOwnership } from './provider-lifetime-ownership.js';
 import { ModelRegistry } from '@vybestack/llxprt-code-core/models/registry.js';
 import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
 import { OwnedFetch } from '@vybestack/llxprt-code-core/utils/fetch.js';
@@ -15,6 +16,7 @@ import {
 import { SessionImageAdmission } from './session-image-admission.js';
 import {
   bindClientTokenization,
+  requireSessionPolicy,
   bindFactoryClient,
   captureSessionRuntimeState,
 } from './session-client-binding.js';
@@ -205,22 +207,16 @@ export class SessionClientOwner {
   private ownsSessionPolicy = false;
   private readonly policyWrites = new Set<Promise<void>>();
   get messageBus() {
-    if (this.sessionPolicy === undefined)
-      throw new Error('Missing session policy composition');
-    return this.sessionPolicy.messageBus;
+    return requireSessionPolicy(this.sessionPolicy).messageBus;
   }
   addSessionPolicyRule(
     rule: Parameters<SessionPolicyOwner['confirmation']['addRule']>[0],
   ): void {
     this.getAgentClient();
-    if (this.sessionPolicy === undefined)
-      throw new Error('Missing session policy composition');
-    this.sessionPolicy.confirmation.addRule(rule);
+    requireSessionPolicy(this.sessionPolicy).confirmation.addRule(rule);
   }
   get policyInspection() {
-    if (this.sessionPolicy === undefined)
-      throw new Error('Missing session policy composition');
-    return this.sessionPolicy.inspection;
+    return requireSessionPolicy(this.sessionPolicy).inspection;
   }
   private readonly mcpBindingToken = Symbol('MCP session client');
   private readonly images = new SessionImageAdmission();
@@ -256,6 +252,10 @@ export class SessionClientOwner {
   private client: AgentClientContract;
   private runtimeState: AgentRuntimeState;
   private closing: Promise<void> | undefined;
+  private readonly providerLife = new ProviderLifetimeOwnership();
+  readonly adoptProviderLifetime = this.providerLife.adopt.bind(
+    this.providerLife,
+  );
   private admissionClosed = false;
   private releaseMcpBinding: (() => void) | undefined;
   private tail: Promise<void> = Promise.resolve();
@@ -802,6 +802,7 @@ export class SessionClientOwner {
 
   closeAdmission(): void {
     this.admissionClosed = true;
+    this.providerLife.closeAdmission();
   }
 
   dispose(): Promise<void> {
@@ -840,6 +841,7 @@ export class SessionClientOwner {
           this.ownsSessionPolicy ? this.sessionPolicy?.dispose() : undefined,
         ]);
         finishCleanup(
+          await Promise.allSettled([this.providerLife.close()]),
           hooks,
           instructions,
           services,

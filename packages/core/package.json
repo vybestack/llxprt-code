@@ -11,6 +11,11 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
+    "./lifecycle/acquisition-release.js": {
+      "types": "./dist/src/lifecycle/acquisition-release.d.ts",
+      "bun": "./src/lifecycle/acquisition-release.ts",
+      "import": "./dist/src/lifecycle/acquisition-release.js"
+    },
     ".": {
       "types": "./dist/index.d.ts",
       "bun": "./index.ts",

@@ -8,6 +8,7 @@ import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/s
 import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core';
 
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import { ProviderManager } from '../ProviderManager.js';
 
 /**
@@ -41,7 +42,9 @@ import {
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
 import {
-  createProviderManager,
+  populateProviderManager,
+  createOwnedOAuthManager,
+  createOwnedTokenStoreClose,
   configureProviderRuntimeFactories,
 } from '../composition/index.js';
 import { NodeFileSystem } from '../composition/IFileSystem.js';
@@ -127,46 +130,35 @@ function resolveCliOAuthSettings(
  * Performs the ordered pre-Config CLI provider-runtime assembly, owning the
  * session MessageBus internally.
  */
-export function assembleCliProviderRuntime(
+export async function assembleCliProviderRuntime(
   input: AssembleCliProviderRuntimeInput,
-): AssembledCliProviderRuntime {
-  const {
-    settingsService,
-    config,
+): Promise<AssembledCliProviderRuntime> {
+  const { settingsService, config, runtimeId } = input;
+  assertCliRegistration(
+    input.registration?.runtimeId,
+    input.registration?.settingsService,
     runtimeId,
-    metadata,
-    oauthSettings,
-    providerContributions,
-  } = input;
-  if (
-    input.registration &&
-    (input.registration.runtimeId !== runtimeId ||
-      input.registration.settingsService !== settingsService)
-  ) {
-    throw new Error('CLI registration does not belong to this runtime');
-  }
+    settingsService,
+  );
   const registration =
     input.registration ??
     beginCliRuntimeRegistration(settingsService, config, { runtimeId });
+  const release = new AcquisitionRelease();
   let undoAdoption: (() => void) | undefined;
-  let policyOwner: RuntimePolicyOwner | undefined;
 
   try {
     if (input.registration && config) undoAdoption = registration.adopt(config);
     if (config !== undefined) input.settingsOwner?.bindTelemetry(config);
-    const runtime: ProviderRuntimeContext = {
-      runtimeId,
-      runtimeKind: resolveRuntimeKind(undefined, metadata, 'cli-interactive'),
-      metadata,
-    };
+    const runtime = cliProviderContext(runtimeId, input.metadata);
 
     const runtimeMessageBus = registration.messageBus;
-    if (input.oauthManager !== undefined)
-      assertOAuthMessageBus(
-        input.oauthManager.runtimeMessageBus,
-        runtimeMessageBus,
-      );
-    policyOwner = bindCliPolicy(config, input.trustPort, registration);
+    const policyOwner = bindCliPolicy(
+      config,
+      input.trustPort,
+      registration,
+      input.oauthManager,
+      release,
+    );
 
     // Resolve the OAuth-settings surface. Bus/OAuth ownership lives in the
     // providers package (#2378), so the fallback also lives here: when the
@@ -175,30 +167,37 @@ export function assembleCliProviderRuntime(
     // `null` opts out entirely (settings-less manager). This closes the
     // post-Config recomposition gap where the CLI re-seed omitted the adapter
     // and silently disabled every configured OAuth provider.
-    const resolvedOAuthSettings = resolveCliOAuthSettings(oauthSettings);
+    const resolvedOAuthSettings = resolveCliOAuthSettings(input.oauthSettings);
 
     // 3. Construct the ProviderManager + OAuthManager on that bus.
     const borrowedManager = input.registration?.providerManager;
-    const { manager, oauthManager } =
-      borrowedManager === undefined
-        ? createProviderManager(
-            settingsService,
-            runtime,
-            config,
-            input.credentialAuthority,
-            new NodeFileSystem(),
-            undefined,
-            undefined,
-            undefined,
-            registration.providerFileLifecycle,
-            resolvedOAuthSettings,
-            runtimeMessageBus,
-            undefined,
-            input.settingsOwner,
-            undefined,
-            providerContributions,
-          )
-        : { manager: borrowedManager, oauthManager: input.oauthManager };
+    let manager = borrowedManager;
+    let oauthManager = input.oauthManager;
+    if (manager === undefined) {
+      const acquiredManager = new ProviderManager(
+        undefined,
+        undefined,
+        undefined,
+        registration.providerFileLifecycle,
+        settingsService,
+        config,
+        runtime,
+        undefined,
+        input.settingsOwner,
+      );
+      release.acquire('manager', () => acquiredManager.dispose());
+      manager = acquiredManager;
+      oauthManager = acquireCliOAuth(
+        acquiredManager,
+        input.credentialAuthority,
+        settingsService,
+        resolvedOAuthSettings,
+        runtimeMessageBus,
+        config,
+        input.providerContributions,
+        release,
+      );
+    }
     if (borrowedManager !== undefined && config !== undefined)
       bindOwner(manager, config, runtime, input.settingsOwner, settingsService);
 
@@ -213,11 +212,118 @@ export function assembleCliProviderRuntime(
       registration,
     };
   } catch (error) {
-    void policyOwner?.dispose();
-    undoAdoption?.();
-    if (!input.registration) registration.rollback();
+    await rollbackCliAcquisition(
+      error,
+      release,
+      undoAdoption,
+      input.registration === undefined
+        ? () => registration.rollback()
+        : undefined,
+    );
     throw error;
   }
+}
+
+function assertCliRegistration(
+  actualId: string | undefined,
+  actualSettings: SettingsService | undefined,
+  runtimeId: string,
+  settings: SettingsService,
+): void {
+  if (
+    actualId !== undefined &&
+    (actualId !== runtimeId || actualSettings !== settings)
+  )
+    throw new Error('CLI registration does not belong to this runtime');
+}
+
+async function rollbackCliAcquisition(
+  error: unknown,
+  release: AcquisitionRelease,
+  undoAdoption: (() => void) | undefined,
+  rollbackRegistration: (() => void) | undefined,
+): Promise<never> {
+  const failures: unknown[] = [error];
+  try {
+    await release.rollback();
+  } catch (cleanupError) {
+    failures.push(cleanupError);
+  }
+  try {
+    undoAdoption?.();
+  } catch (cleanupError) {
+    failures.push(cleanupError);
+  }
+  try {
+    rollbackRegistration?.();
+  } catch (cleanupError) {
+    failures.push(cleanupError);
+  }
+  if (failures.length > 1)
+    throw new AggregateError(failures, 'CLI provider assembly cleanup failed');
+  throw error;
+}
+
+function cliProviderContext(
+  runtimeId: string,
+  metadata: Record<string, unknown> | undefined,
+): ProviderRuntimeContext {
+  return {
+    runtimeId,
+    runtimeKind: resolveRuntimeKind(undefined, metadata, 'cli-interactive'),
+    metadata,
+  };
+}
+
+function acquireCliOAuth(
+  manager: ProviderManager,
+  authority: CredentialAuthority,
+  settings: SettingsService,
+  oauthSettings: IOAuthSettingsProvider | undefined,
+  bus: MessageBus,
+  config: Config | undefined,
+  contributions: ProviderContributionRegistry | undefined,
+  release: AcquisitionRelease,
+): OAuthManager {
+  const keys = authority.createProviderKeyStorage();
+  let keysClosed = false;
+  const closeKeys = (): void => {
+    if (keysClosed) return;
+    keysClosed = true;
+    keys.close();
+  };
+  release.acquire('manager', closeKeys);
+  manager.bindProviderKeyStorage(keys, closeKeys);
+  const tokens = authority.createTokenStore();
+  const closeTokens = createOwnedTokenStoreClose(tokens);
+  let tokenOwnership: 'root' | 'oauth' = 'root';
+  release.acquire('tokens', () => {
+    if (tokenOwnership === 'root') closeTokens();
+  });
+  const oauth = createOwnedOAuthManager(
+    tokens,
+    oauthSettings,
+    bus,
+    config,
+    manager,
+    settings,
+  );
+  tokenOwnership = 'oauth';
+  release.acquire('oauth', () => oauth.dispose());
+  populateProviderManager(
+    manager,
+    oauth,
+    tokens,
+    settings,
+    new NodeFileSystem(),
+    config,
+    contributions,
+    undefined,
+    false,
+    true,
+    process.env.LLXPRT_FAKE_RESPONSES,
+  );
+  return oauth;
 }
 
 function assertOAuthMessageBus(
@@ -234,7 +340,11 @@ function bindCliPolicy(
   config: Config | undefined,
   trust: WorkspaceTrustControlPort | undefined,
   registration: CliRuntimeRegistrationHandle,
+  oauth: OAuthManager | undefined,
+  release: AcquisitionRelease,
 ): RuntimePolicyOwner | undefined {
+  if (oauth !== undefined)
+    assertOAuthMessageBus(oauth.runtimeMessageBus, registration.messageBus);
   if (config === undefined) return undefined;
   const owner = new RuntimePolicyOwner(
     config,
@@ -242,6 +352,7 @@ function bindCliPolicy(
     undefined,
     registration.messageBus,
   );
+  release.acquire('policy', () => owner.dispose());
   const decisions = owner.session.decisions;
   registration.bindPolicyEvaluation((name, args, server) =>
     decisions.evaluate(name, args, server),

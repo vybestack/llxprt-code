@@ -247,6 +247,7 @@ describe('Explicit session client lifetime', () => {
       handle.providerManager,
       handle.oauthManager,
       () => handle.readRuntimeKind(),
+      'borrowed',
       undefined,
       built.mcp,
     );
@@ -424,6 +425,7 @@ describe('Explicit session client lifetime', () => {
       built.handle.providerManager,
       built.handle.oauthManager,
       () => built.handle.readRuntimeKind(),
+      'borrowed',
       client,
       built.mcp,
     );

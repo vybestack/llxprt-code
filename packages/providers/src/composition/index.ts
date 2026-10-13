@@ -115,6 +115,7 @@ export { ContentGeneratorRole } from './types.js';
 
 export { extractProviderBaseUrl } from '../baseUrlResolver.js';
 
+export { createOwnedOAuthManager } from './providerManagerInstance.js';
 export { createOwnerOAuthManager } from './owner-oauth-construction.js';
 export { createSessionAuthPolicyReader } from '../auth/session-auth-policy.js';
 export { createOAuthProfileReads } from '../auth/oauth-profile-reads.js';

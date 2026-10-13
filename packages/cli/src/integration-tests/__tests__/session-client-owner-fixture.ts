@@ -34,6 +34,7 @@ export async function createProviderSessionOwner(
     manager,
     null,
     () => undefined,
+    'borrowed',
     undefined,
     undefined,
     undefined,

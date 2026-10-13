@@ -46,7 +46,7 @@
  * published file set to the allow-listed layout.
  */
 
-import { describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import {
   cpSync,
@@ -64,7 +64,7 @@ import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { createKeyringTokenStore } from '@vybestack/llxprt-code-core/auth-factories.js';
+import { useOwnedCredentials } from '../../packages/agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import {
   discoverRuntimePluginPackages,
   loadRuntimePlugins,
@@ -373,17 +373,33 @@ const LEFTOVER_GEMINI_ALIAS: ProviderAliasEntry = {
   source: 'user',
 };
 
-const BASE_ONLY_OAUTH_MANAGER = new OAuthManager(
-  createKeyringTokenStore(),
-  undefined,
-  {},
-);
+function useBaseOnlyOAuth(): () => OAuthManager {
+  const credentials = useOwnedCredentials();
+  let oauth: OAuthManager;
+  beforeEach(() => {
+    oauth = new OAuthManager(
+      credentials().authority.createTokenStore(),
+      undefined,
+      {},
+    );
+  });
+  afterEach(() => oauth.dispose());
+  return () => oauth;
+}
 
 function makeBaseOnlyManager(): ProviderManager {
-  return new ProviderManager({
-    settingsService: new SettingsService() as never,
-    runtimeId: 'issue-2603-plugin-install-layouts',
-  });
+  return new ProviderManager(
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    new SettingsService(),
+    undefined,
+    {
+      runtimeId: 'issue-2603-plugin-install-layouts',
+      runtimeKind: 'agent',
+    },
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -391,6 +407,7 @@ function makeBaseOnlyManager(): ProviderManager {
 // ---------------------------------------------------------------------------
 
 describe('base-only install (issue-2603 layout, no plugin packages)', () => {
+  const baseOnlyOAuth = useBaseOnlyOAuth();
   it('discovers no runtime plugins', () => {
     withInstalledFixture([], (root) => {
       const discovered = discoverRuntimePluginPackages(discoveryDeps(root));
@@ -440,7 +457,7 @@ describe('base-only install (issue-2603 layout, no plugin packages)', () => {
           undefined,
           undefined,
           {},
-          BASE_ONLY_OAUTH_MANAGER,
+          baseOnlyOAuth(),
           undefined,
           false,
           { providerContributions: baseOnlyRegistry },
@@ -467,6 +484,7 @@ describe('base-only install (issue-2603 layout, no plugin packages)', () => {
 // ---------------------------------------------------------------------------
 
 describe('base + @vybestack/llxprt-plugin-google-gemini install', () => {
+  const baseOnlyOAuth = useBaseOnlyOAuth();
   const release = releaseByDir('google-gemini');
 
   it('discovers exactly the installed plugin by its manifest marker', () => {
@@ -530,7 +548,7 @@ describe('base + @vybestack/llxprt-plugin-google-gemini install', () => {
           openaiApiKey: undefined,
           openaiBaseUrl: undefined,
           openaiProviderConfig: {},
-          oauthManager: BASE_ONLY_OAUTH_MANAGER,
+          oauthManager: baseOnlyOAuth(),
           config: undefined,
           authOnlyEnabled: false,
         },

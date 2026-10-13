@@ -1,5 +1,7 @@
-import { CredentialAuthority } from '../../../providers/src/auth/proxy/credential-store-factory.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type {
+  Agent,
+  AgentProfilePreflight,
+} from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -39,8 +41,8 @@ import {
 } from './test-utils.js';
 import { setActiveModelParam } from '../../../agents/src/api/model-parameters.js';
 import { switchActiveProvider } from '@vybestack/llxprt-code-agents';
-import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
-import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
+import { prepareIntegrationPreflight } from './__tests__/prepare-preflight.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { setProviderApiKey } from '../../../agents/src/api/providerConfigUtils.js';
 
 /**
@@ -51,12 +53,13 @@ import { setProviderApiKey } from '../../../agents/src/api/providerConfigUtils.j
  * @pseudocode:cli-runtime.md lines 9-15
  */
 describe('Runtime Provider Switching Integration', () => {
+  const credentials = useOwnedCredentials();
   let tempDir: string;
   let config: Config;
   let sessionRoot: CliTestSessionRoot;
   let providerManager: RuntimeProviderManager;
   let settingsService: SettingsService;
-  let registration: CliRuntimeRegistrationHandle;
+  let preflight: AgentProfilePreflight;
   let sessionClient: Pick<Agent['sessionClient'], 'refreshAuth'>;
 
   beforeEach(async () => {
@@ -70,16 +73,15 @@ describe('Runtime Provider Switching Integration', () => {
       model: 'test-model',
     });
     settingsService = new SettingsService();
-    const assembled = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
-
-      settingsService,
+    preflight = await prepareIntegrationPreflight(
       config,
-      runtimeId: 'provider-switch-test',
-      metadata: { source: 'provider-switch-test' },
-    });
-    providerManager = assembled.providerManager;
-    registration = assembled.registration;
+      settingsService,
+      credentials().authority,
+      'provider-switch-test',
+      (manager) => {
+        providerManager = manager;
+      },
+    );
     sessionRoot = await initializeTestSessionRoot(
       config,
       providerManager,
@@ -89,19 +91,28 @@ describe('Runtime Provider Switching Integration', () => {
   });
 
   afterEach(async () => {
-    registration.dispose();
+    await preflight.dispose();
     await cleanupTempDirectory(tempDir);
   });
 
-  it('binds a provider-file lifecycle to the exact foreground Config', () => {
-    expect(registration.config).toBe(config);
-    expect(registration.config).toBe(config);
-    expect(
-      registration.providerFileLifecycle.retainsScope(
-        'session',
-        registration.runtimeId,
-      ),
-    ).toBe(false);
+  it('binds a provider-file lifecycle to the exact foreground Config', async () => {
+    let close: (() => void | Promise<void>) | undefined;
+    preflight.transferActivation((activation) => {
+      close = () => activation.dispose();
+      expect(() =>
+        activation.sessionClient.getAgentClient().assertConfig(config),
+      ).not.toThrow();
+      expect(() =>
+        activation.sessionClient
+          .getAgentClient()
+          .assertProviderManager(providerManager),
+      ).not.toThrow();
+    });
+    try {
+      expect(preflight.captureProviderFiles().retainedFiles > 0).toBe(false);
+    } finally {
+      await close?.();
+    }
   });
 
   it('clears previous provider API key and auth state', async () => {
@@ -382,12 +393,13 @@ describe('Runtime Provider Switching Integration', () => {
 });
 
 describe('First provider selection from no active provider (#2481)', () => {
+  const credentials = useOwnedCredentials();
   let tempDir: string;
   let config: Config;
   let sessionRoot: CliTestSessionRoot;
   let providerManager: RuntimeProviderManager;
   let settingsService: SettingsService;
-  let registration: CliRuntimeRegistrationHandle;
+  let preflight: AgentProfilePreflight;
   let sessionClient: Pick<Agent['sessionClient'], 'refreshAuth'>;
 
   beforeEach(async () => {
@@ -401,16 +413,15 @@ describe('First provider selection from no active provider (#2481)', () => {
       model: 'test-model',
     });
     settingsService = new SettingsService();
-    const assembled = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
-
-      settingsService,
+    preflight = await prepareIntegrationPreflight(
       config,
-      runtimeId: 'first-select-test',
-      metadata: { source: 'first-select-test' },
-    });
-    providerManager = assembled.providerManager;
-    registration = assembled.registration;
+      settingsService,
+      credentials().authority,
+      'first-select-test',
+      (manager) => {
+        providerManager = manager;
+      },
+    );
     sessionRoot = await initializeTestSessionRoot(
       config,
       providerManager,
@@ -423,7 +434,7 @@ describe('First provider selection from no active provider (#2481)', () => {
   });
 
   afterEach(async () => {
-    registration.dispose();
+    await preflight.dispose();
     await cleanupTempDirectory(tempDir);
   });
 

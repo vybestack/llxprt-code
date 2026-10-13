@@ -31,7 +31,7 @@ describe('Codex effective context limit runtime integration', () => {
       model: 'gpt-5.6-sol',
       settingsService,
     });
-    const assembled = assembleCliProviderRuntime({
+    const assembled = await assembleCliProviderRuntime({
       credentialAuthority: new CredentialAuthority(),
 
       settingsService,

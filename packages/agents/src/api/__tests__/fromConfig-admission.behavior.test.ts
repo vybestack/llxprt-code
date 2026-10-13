@@ -220,6 +220,7 @@ describe('fromConfig admission before resource effects', () => {
         built.providerManager,
         built.runtime.oauthManager,
         () => 'agent',
+        'borrowed',
         built.agentClient,
         built.mcpRuntime,
         undefined,

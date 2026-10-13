@@ -6,27 +6,38 @@
 import {
   SessionSettingsOwner,
   type Config,
-  type RuntimePolicyOwner,
   type RuntimeProviderManager,
   type WorkspaceTrustControlPort,
   type WorkspaceFilesystemOwner,
   type WorkspaceMemoryOwner,
 } from '@vybestack/llxprt-code-core';
+import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IOAuthSettingsProvider } from '@vybestack/llxprt-code-auth';
-import type {
+import {
+  createFileOAuthSettingsProvider,
   CredentialAuthority,
-  OAuthManager,
+  type OAuthManager,
 } from '@vybestack/llxprt-code-providers/auth.js';
 import type { ProviderContributionRegistry } from '@vybestack/llxprt-code-providers/composition.js';
 import {
   ProviderManager,
-  type ProviderFileLifecycle,
+  ProviderFileLifecycle,
 } from '@vybestack/llxprt-code-providers';
+import { createOwnerPolicyEvaluation } from '@vybestack/llxprt-code-core/policy/owner-policy-evaluation.js';
+import { createSessionMessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
+import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import { AcquisitionRelease } from '@vybestack/llxprt-code-core/lifecycle/acquisition-release.js';
 import {
-  assembleCliProviderRuntime,
-  type AssembledCliProviderRuntime,
-} from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
+  populateProviderManager,
+  NodeFileSystem,
+  createOwnerOAuthManager,
+  createSessionAuthPolicyReader,
+  createOwnedTokenStoreClose,
+  createOwnerAuthCacheInvalidator,
+  createPreflightOAuthProfileReads,
+} from '@vybestack/llxprt-code-providers/composition.js';
+import { releaseAdoptedFileScope } from './adoption-release.js';
 import { applyCliArgumentOverrides } from './settingsResolver.js';
 import type { ProviderSwitcher } from '@vybestack/llxprt-code-core';
 import {
@@ -52,11 +63,18 @@ export interface AgentPostConfigSettings {
 export class AgentProfilePreflight implements AgentPostConfigSettings {
   readonly #host: AgentPreflightHostInput;
   readonly #settings: SettingsService;
-  readonly #authority: CredentialAuthority;
-  readonly #contributions: ProviderContributionRegistry | undefined;
-  readonly #oauthSettings: IOAuthSettingsProvider | undefined;
-  #runtime: AssembledCliProviderRuntime;
-  #closed = false;
+  readonly #release = new AcquisitionRelease();
+  readonly #decisions = createOwnerPolicyEvaluation();
+  readonly #bus = createSessionMessageBus(this.#decisions);
+  readonly #files = new ProviderFileLifecycle({
+    maxFiles: 100,
+    maxBytes: 512 * 1024 * 1024,
+  });
+  readonly #profileReads = createPreflightOAuthProfileReads();
+  #manager!: ProviderManager;
+  #oauth!: OAuthManager;
+  #phase: 'pre-config' | 'configured' | 'transferred' | 'closed' = 'pre-config';
+  #closing: Promise<void> | undefined;
   #sessionSettings: SessionSettingsOwner | undefined;
   #activation: AgentActivationOperation | undefined;
   #switch: ProviderSwitcher | undefined;
@@ -64,35 +82,142 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
   #ownsSettings = false;
   #activationTransferred = false;
 
-  constructor(
+  private constructor(
+    host: AgentPreflightHostInput,
+    settings: SettingsService,
+  ) {
+    this.#host = host;
+    this.#settings = settings;
+    this.#release.acquire('bus', () => this.#bus.cancelPendingConfirmations());
+    this.#release.acquire('files', () =>
+      releaseAdoptedFileScope(this.#files, host.runtimeId),
+    );
+  }
+
+  static async create(
     host: AgentPreflightHostInput,
     authority: CredentialAuthority,
-    settings: SettingsService | undefined,
+    suppliedSettings: SettingsService | undefined,
     settingsOwner: SessionSettingsOwner | undefined,
     contributions: ProviderContributionRegistry | undefined,
     oauthSettings: IOAuthSettingsProvider | undefined,
-  ) {
-    this.#host = captureAgentPreflightHostInput(host);
-    this.#settings = settings ?? new SettingsService();
-    for (const [key, value] of Object.entries(this.#host.initialSettings ?? {}))
-      this.#settings.set(key, value);
-    settingsOwner?.assertSettingsIdentity(this.#settings);
-    this.#authority = authority;
-    this.#contributions = contributions;
-    this.#oauthSettings = oauthSettings;
-    this.#runtime = assembleCliProviderRuntime({
-      credentialAuthority: authority,
-      settingsService: this.#settings,
-      config: undefined,
+  ): Promise<AgentProfilePreflight> {
+    const captured = captureAgentPreflightHostInput(host);
+    if (!(authority instanceof CredentialAuthority))
+      throw new Error('Preflight requires CredentialAuthority');
+    const settings = suppliedSettings ?? new SettingsService();
+    settingsOwner?.assertSettingsIdentity(settings);
+    const operation = new AgentProfilePreflight(captured, settings);
+    try {
+      for (const [key, value] of Object.entries(captured.initialSettings ?? {}))
+        settings.set(key, value);
+      operation.#acquire(
+        authority,
+        contributions,
+        oauthSettings ?? createFileOAuthSettingsProvider(),
+        process.env.LLXPRT_FAKE_RESPONSES,
+      );
+      return operation;
+    } catch (error) {
+      operation.#phase = 'closed';
+      try {
+        await operation.#release.rollback();
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          'Preflight acquisition cleanup failed',
+        );
+      }
+      throw error;
+    }
+  }
+
+  #runtimeContext(stage: 'pre-config' | 'post-config') {
+    return createProviderRuntimeContext({
       runtimeId: this.#host.runtimeId,
-      metadata: this.#host.metadata,
-      providerContributions: contributions,
-      oauthSettings,
+      runtimeKind:
+        this.#host.metadata?.source === 'cli-bootstrap'
+          ? 'cli-bootstrap'
+          : 'cli-interactive',
+      metadata:
+        stage === 'post-config'
+          ? { ...this.#host.metadata, stage }
+          : this.#host.metadata,
     });
   }
 
+  #acquire(
+    authority: CredentialAuthority,
+    contributions: ProviderContributionRegistry | undefined,
+    oauthSettings: IOAuthSettingsProvider | undefined,
+    fakeResponses: string | undefined,
+  ): void {
+    this.#manager = new ProviderManager(
+      undefined,
+      undefined,
+      undefined,
+      this.#files,
+      this.#settings,
+      undefined,
+      this.#runtimeContext('pre-config'),
+    );
+    const manager = this.#manager;
+    this.#release.acquire('manager', () => manager.dispose());
+    const keys = authority.createProviderKeyStorage();
+    this.#release.acquire('manager', () => keys.close());
+    manager.bindProviderKeyStorage(keys);
+    const tokens = authority.createTokenStore();
+    this.#release.acquire('tokens', createOwnedTokenStoreClose(tokens));
+    const oauth = createOwnerOAuthManager(
+      tokens,
+      oauthSettings,
+      this.#bus,
+      this.#profileReads,
+      createSessionAuthPolicyReader(this.#settings),
+      () => manager.getAuthIdentity(),
+      undefined,
+      createOwnerAuthCacheInvalidator((name) =>
+        manager.getProviderByName(name),
+      ),
+      manager.fetchNetwork,
+    );
+    this.#oauth = oauth;
+    this.#release.acquire('oauth', () => oauth.dispose());
+    populateProviderManager(
+      manager,
+      oauth,
+      tokens,
+      this.#settings,
+      new NodeFileSystem(),
+      undefined,
+      contributions,
+      undefined,
+      false,
+      true,
+      fakeResponses,
+    );
+  }
+
+  retainProviderFile(
+    input: Omit<Parameters<ProviderFileLifecycle['retain']>[0], 'scopeId'>,
+  ): ReturnType<ProviderFileLifecycle['retain']> {
+    this.#assertOpen();
+    return this.#files.retain({ ...input, scopeId: this.#host.runtimeId });
+  }
+
+  captureProviderFiles(): ReturnType<ProviderFileLifecycle['snapshot']> {
+    return this.#files.snapshot();
+  }
+
+  retryProviderFileCleanup(): ReturnType<
+    ProviderFileLifecycle['retryDeletions']
+  > {
+    return this.#files.retryDeletions();
+  }
+
   #assertOpen(): void {
-    if (this.#closed) throw new Error('Agent profile preflight is disposed');
+    if (this.#phase === 'closed')
+      throw new Error('Agent profile preflight is disposed');
   }
 
   captureInput(): AgentPreflightHostInput {
@@ -107,9 +232,7 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
 
   readProviderDefaultModel(provider: string): string | undefined {
     this.#assertOpen();
-    const manager = this.#runtime.providerManager;
-    if (!(manager instanceof ProviderManager))
-      throw new Error('Profile preflight requires its provider manager owner');
+    const manager = this.#manager;
     return manager.getProviderByName(provider)?.getDefaultModel();
   }
 
@@ -144,7 +267,7 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
           owner.writeUserParameter(key, value),
       },
       this.#settings,
-      this.#runtime.providerManager.getActiveProvider(),
+      this.#manager.getActiveProvider(),
     );
   }
 
@@ -162,26 +285,44 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     onProviderFilesReady: ((files: ProviderFileLifecycle) => void) | undefined,
   ): Promise<void> {
     this.#assertOpen();
-    const previousPolicy = this.#runtime.policyOwner;
-    this.#runtime = assembleCliProviderRuntime({
-      credentialAuthority: this.#authority,
-      settingsService: this.#settings,
-      settingsOwner: owner,
-      trustPort: trust,
+    owner.assertSettingsIdentity(this.#settings);
+    const policy = new RuntimePolicyOwner(config, trust, undefined, this.#bus);
+    this.#release.acquire('policy', () => policy.dispose());
+    const configScope = config.getSessionId();
+    if (configScope !== this.#host.runtimeId)
+      this.#release.acquire('files', () =>
+        releaseAdoptedFileScope(this.#files, configScope),
+      );
+    owner.bindTelemetry(config);
+    const selected =
+      this.#settings.get('activeProvider') ?? config.getProvider();
+    if (selected !== undefined) {
+      if (typeof selected !== 'string')
+        throw new TypeError('Active provider must be a string');
+      try {
+        this.#manager.setActiveProvider(selected);
+      } catch (error) {
+        throw new Error(
+          `Could not activate explicitly-configured provider '${selected}': ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
+        );
+      }
+    }
+    this.#manager.setRuntimeContext(
+      this.#runtimeContext('post-config'),
+      owner,
+      this.#settings,
       config,
-      runtimeId: this.#host.runtimeId,
-      metadata: { ...this.#host.metadata, stage: 'post-config' },
-      oauthSettings: this.#oauthSettings,
-      providerContributions: this.#contributions,
-      registration: this.#runtime.registration,
-      oauthManager: this.#runtime.oauthManager,
-    });
-    await previousPolicy?.dispose();
-    if (this.#runtime.policyOwner)
-      onPolicyOwnerReady?.(this.#runtime.policyOwner);
-    onProviderManagerReady?.(this.#runtime.providerManager);
-    onOAuthManagerReady?.(this.#runtime.oauthManager);
-    onProviderFilesReady?.(this.#runtime.registration.providerFileLifecycle);
+    );
+    this.#manager.setConfig(config);
+    this.#profileReads.attachProfileDirectory(config.profileDirectory);
+    this.#decisions.bindPolicyEvaluation((name, args, server) =>
+      policy.session.decisions.evaluate(name, args, server),
+    );
+    onPolicyOwnerReady?.(policy);
+    onProviderManagerReady?.(this.#manager);
+    onOAuthManagerReady?.(this.#oauth);
+    onProviderFilesReady?.(this.#files);
   }
 
   async preparePostConfiguration(
@@ -221,6 +362,7 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
         trust,
         trustCleanup,
       );
+      this.#phase = 'configured';
     } catch (error) {
       try {
         await this.dispose();
@@ -286,6 +428,7 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
       throw new Error('Post-config activation is unavailable for transfer');
     ready(this.#activation);
     this.#activationTransferred = true;
+    this.#phase = 'transferred';
   }
 
   async finishPostConfiguration(): Promise<void> {
@@ -305,9 +448,10 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     this.#activation = await assembleAgentActivationBootstrap(
       config,
       this.#settings,
-      this.#runtime.providerManager,
-      this.#runtime.oauthManager ?? null,
-      () => this.#runtime.runtime.runtimeKind,
+      this.#manager,
+      this.#oauth,
+      () => this.#runtimeContext('post-config').runtimeKind,
+      () => this.#release.close(),
       undefined,
       undefined,
       filesystem,
@@ -318,8 +462,8 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
       trustCleanup,
       undefined,
       undefined,
-      this.#runtime.registration.providerFileLifecycle,
-      this.#runtime.runtimeMessageBus,
+      this.#files,
+      this.#bus,
       'transferred',
     );
     this.#switch = this.prepareSwitch(
@@ -349,9 +493,9 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     return assembleProviderSwitch(
       config,
       this.#settings,
-      this.#runtime.providerManager,
-      this.#runtime.oauthManager ?? null,
-      () => this.#runtime.runtime.runtimeKind,
+      this.#manager,
+      this.#oauth,
+      () => this.#runtimeContext('post-config').runtimeKind,
       refreshAuth,
       owner,
     );
@@ -365,22 +509,42 @@ export class AgentProfilePreflight implements AgentPostConfigSettings {
     this.#assertOpen();
     return assembleProfileApplication(
       this.#settings,
-      this.#runtime.providerManager,
-      this.#runtime.oauthManager ?? null,
+      this.#manager,
+      this.#oauth,
       switchProvider,
       owner,
       profiles,
     );
   }
 
-  async dispose(): Promise<void> {
-    if (this.#closed) return;
-    this.#closed = true;
-    await this.finishPostConfiguration();
-    if (this.#activation === undefined && this.#ownsSettings)
-      await this.#sessionSettings?.dispose();
-    await this.#runtime.policyOwner?.dispose();
-    this.#runtime.registration.dispose();
+  dispose(): Promise<void> {
+    if (this.#closing !== undefined) return this.#closing;
+    const transferred = this.#activationTransferred;
+    this.#phase = 'closed';
+    this.#closing = Promise.resolve().then(async () => {
+      const failures: unknown[] = [];
+      const actions: Array<() => void | Promise<void>> = [];
+      if (!transferred) {
+        const activation = this.#activation;
+        if (activation !== undefined) actions.push(() => activation.dispose());
+        else {
+          actions.push(() => this.#release.close());
+          if (this.#ownsSettings)
+            actions.push(() => this.#sessionSettings?.dispose());
+        }
+      }
+      for (const close of actions) {
+        try {
+          await close();
+        } catch (error) {
+          failures.push(error);
+        }
+      }
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1)
+        throw new AggregateError(failures, 'Preflight cleanup failed');
+    });
+    return this.#closing;
   }
 }
 
@@ -391,8 +555,8 @@ export function prepareAgentPreflight(
   settingsOwner?: SessionSettingsOwner,
   contributions?: ProviderContributionRegistry,
   oauthSettings?: IOAuthSettingsProvider,
-): AgentProfilePreflight {
-  return new AgentProfilePreflight(
+): Promise<AgentProfilePreflight> {
+  return AgentProfilePreflight.create(
     host,
     authority,
     settings,

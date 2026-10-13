@@ -92,7 +92,7 @@ describe('retry runtime kind', () => {
   it('preserves bootstrap recovery wording through CLI context and assembly', async () => {
     const { options, root } = request(undefined);
     const { config } = root;
-    const assembled = assembleCliProviderRuntime({
+    const assembled = await assembleCliProviderRuntime({
       credentialAuthority: new CredentialAuthority(),
 
       settingsService: root.settingsService,
@@ -116,7 +116,7 @@ describe('retry runtime kind', () => {
     const { config } = root;
     root.settingsOwner.writeUserParameter('retrywait', 0);
     root.settingsOwner.writeUserParameter('auth-key', 'test-key');
-    const owner = assembleCliProviderRuntime({
+    const owner = await assembleCliProviderRuntime({
       credentialAuthority: new CredentialAuthority(),
 
       runtimeId: 'retry-owner',

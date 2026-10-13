@@ -14,7 +14,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
   it.each(['wrapper', 'direct'])(
     '%s activation keeps foreground provider and OAuth infrastructure unchanged',
     async (activation) => {
-      const foreground = owners.foreground();
+      const foreground = await owners.foreground();
       foreground.settingsService.set('activeProvider', 'kimi');
       const isolated = owners.isolated({ runtimeId: 'same-label' });
       if (activation === 'wrapper')
@@ -36,7 +36,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
   );
 
   it('isolated cleanup cannot clear the same-label foreground OAuth or provider manager', async () => {
-    const foreground = owners.foreground();
+    const foreground = await owners.foreground();
     const isolated = owners.isolated({ runtimeId: 'same-label' });
     await isolated.activate();
     await isolated.cleanup();
@@ -55,7 +55,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
   it('cleanup leaves a foreground owner created after isolated activation usable', async () => {
     const isolated = owners.isolated({ runtimeId: 'same-label' });
     await isolated.activate();
-    const foreground = owners.foreground();
+    const foreground = await owners.foreground();
     await isolated.cleanup();
     expect(foreground.oauthManager?.runtimeMessageBus).toBe(
       foreground.runtimeMessageBus,
@@ -64,7 +64,7 @@ describe('isolated activation preserves explicit foreground ownership (issue #23
   });
 
   it('parallel isolated activation never supplies an implicit foreground default', async () => {
-    const foreground = owners.foreground();
+    const foreground = await owners.foreground();
     const first = owners.isolated({ runtimeId: 'same-label' });
     const second = owners.isolated({ runtimeId: 'same-label' });
     await Promise.all([first.activate(), second.activate()]);

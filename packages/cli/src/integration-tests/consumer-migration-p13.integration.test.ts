@@ -8,7 +8,10 @@ import {
   initializeTestSessionRoot,
   type CliTestSessionRoot,
 } from './test-utils.js';
-import type { Agent } from '@vybestack/llxprt-code-agents';
+import type {
+  Agent,
+  AgentProfilePreflight,
+} from '@vybestack/llxprt-code-agents';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -67,8 +70,8 @@ import {
   cleanupTempDirectory,
   initializeTestConfig,
 } from './test-utils.js';
-import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
-import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
+import { prepareIntegrationPreflight } from './__tests__/prepare-preflight.js';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 
 // ─────────────────────────────────────────────────────────────────
 // Requirement 1: CLI provider manager creation
@@ -84,6 +87,7 @@ import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-provid
  * creation paths.
  */
 describe('CLI provider manager creation uses concrete providers', () => {
+  const credentials = useOwnedCredentials();
   let tempDir: string;
   let config: Config;
 
@@ -160,32 +164,29 @@ describe('CLI provider manager creation uses concrete providers', () => {
     );
   });
 
-  it('CLI foreground assembly exposes the provider manager on its Config', () => {
-    const assembled = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
-
-      settingsService: new SettingsService(),
+  it('CLI foreground assembly exposes the provider manager on its Config', async () => {
+    let manager: RuntimeProviderManager | undefined;
+    const preflight = await prepareIntegrationPreflight(
       config,
-      runtimeId: 'p13-consumer-test',
-    });
+      new SettingsService(),
+      credentials().authority,
+      'p13-consumer-test',
+      (selected) => {
+        manager = selected;
+      },
+    );
     try {
+      if (manager === undefined) throw new Error('Missing preflight manager');
       const testProvider = createTestProvider(
         'test-cli-provider',
         'test-default-model',
       );
-      assembled.providerManager.registerProvider(testProvider);
-      expect(assembled.providerManager.listProviders()).toContain(
-        'test-cli-provider',
-      );
-      expect('providerFileLifecycle' in assembled.runtime).toBe(false);
-      expect(
-        assembled.registration.providerFileLifecycle.retainsScope(
-          'session',
-          'p13-consumer-test',
-        ),
-      ).toBe(false);
+      manager.registerProvider(testProvider);
+      expect(manager.listProviders()).toContain('test-cli-provider');
+      expect('providerFileLifecycle' in preflight).toBe(false);
+      expect(preflight.captureProviderFiles().retainedFiles > 0).toBe(false);
     } finally {
-      assembled.registration.dispose();
+      await preflight.dispose();
     }
   });
 
@@ -399,12 +400,13 @@ describe('CLI provider manager creation uses concrete providers', () => {
  * provider command's use of runtime APIs.
  */
 describe('Provider switching reachable through CLI/runtime flow', () => {
+  const credentials = useOwnedCredentials();
   let tempDir: string;
   let config: Config;
   let sessionRoot: CliTestSessionRoot;
   let providerManager: RuntimeProviderManager;
   let settingsService: SettingsService;
-  let registration: CliRuntimeRegistrationHandle;
+  let preflight: AgentProfilePreflight;
   let sessionClient: Pick<Agent['sessionClient'], 'refreshAuth'>;
 
   beforeEach(async () => {
@@ -417,16 +419,15 @@ describe('Provider switching reachable through CLI/runtime flow', () => {
       model: 'test-model',
     });
     settingsService = new SettingsService();
-    const assembled = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
-
-      settingsService,
+    preflight = await prepareIntegrationPreflight(
       config,
-      runtimeId: 'p13-switch-test',
-      metadata: { source: 'p13-switch-test' },
-    });
-    providerManager = assembled.providerManager;
-    registration = assembled.registration;
+      settingsService,
+      credentials().authority,
+      'p13-switch-test',
+      (manager) => {
+        providerManager = manager;
+      },
+    );
     sessionRoot = await initializeTestSessionRoot(
       config,
       providerManager,
@@ -442,7 +443,7 @@ describe('Provider switching reachable through CLI/runtime flow', () => {
   });
 
   afterEach(async () => {
-    registration.dispose();
+    await preflight.dispose();
     await cleanupTempDirectory(tempDir);
   });
 

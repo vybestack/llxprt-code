@@ -34,6 +34,7 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
         manager,
         null,
         () => undefined,
+        'borrowed',
         built.agentClient,
         built.mcpRuntime,
       );
@@ -72,6 +73,7 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
         manager,
         null,
         () => undefined,
+        'borrowed',
         built.agentClient,
         built.mcpRuntime,
       );
@@ -104,6 +106,7 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
         manager,
         null,
         () => undefined,
+        'borrowed',
         built.agentClient,
         built.mcpRuntime,
       );
@@ -134,6 +137,7 @@ describe('AgentActivationBootstrap @plan:PLAN-20270110-ISSUE2378.P05 @requiremen
         manager,
         null,
         () => undefined,
+        'borrowed',
         built.agentClient,
         built.mcpRuntime,
       );
@@ -197,6 +201,7 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
       manager,
       null,
       () => undefined,
+      'borrowed',
       built.agentClient,
       built.mcpRuntime,
     );
@@ -256,6 +261,7 @@ describe('preflight agent-owned runtime factory assembly @plan:ISSUE-3222 @requi
       manager,
       null,
       () => undefined,
+      'borrowed',
       built.agentClient,
       built.mcpRuntime,
     );

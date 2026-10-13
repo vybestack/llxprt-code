@@ -33,13 +33,32 @@ class ObservedTokenTransport extends ProxyTokenStore {
 export class OwnedCredentialFixture {
   readonly authority: CredentialAuthority;
   private readonly transports: ObservedTokenTransport[] = [];
+  private readonly keys: Array<{
+    storage: ReturnType<CredentialAuthority['createProviderKeyStorage']>;
+    closes: number;
+    cleanup: () => void;
+  }> = [];
 
   private constructor(
     socketPath: string,
     private readonly server: CredentialProxyServer,
   ) {
     const transports = this.transports;
+    const keys = this.keys;
     this.authority = new (class extends CredentialAuthority {
+      override createProviderKeyStorage(): ReturnType<
+        CredentialAuthority['createProviderKeyStorage']
+      > {
+        const storage = super.createProviderKeyStorage();
+        const close = storage.close.bind(storage);
+        const observed = { storage, closes: 0, cleanup: close };
+        storage.close = (): void => {
+          observed.closes += 1;
+          close();
+        };
+        keys.push(observed);
+        return storage;
+      }
       override createTokenStore(): TokenStore {
         const transport = new ObservedTokenTransport(socketPath);
         transports.push(transport);
@@ -60,6 +79,10 @@ export class OwnedCredentialFixture {
     return this.transports.map((transport) => transport.closeCount);
   }
 
+  keySnapshot(): readonly number[] {
+    return this.keys.map((key) => key.closes);
+  }
+
   async listProviders(index: number): Promise<string[]> {
     const transport = this.transports.find((_, position) => position === index);
     if (transport === undefined) throw new Error('Missing acquired transport');
@@ -77,6 +100,7 @@ export class OwnedCredentialFixture {
   }
 
   async dispose(): Promise<void> {
+    for (const key of this.keys) key.cleanup();
     for (const transport of this.transports) transport.getClient().close();
     await this.server.stop();
   }

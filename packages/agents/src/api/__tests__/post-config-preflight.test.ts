@@ -15,75 +15,10 @@ import {
   assembleWorkspaceMemory,
 } from '@vybestack/llxprt-code-core';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 import { prepareAgentPreflight } from '../profile-preflight.js';
 import type { AgentProfilePreflight } from '../profile-preflight.js';
 import type { AgentActivationOperation } from '../activationPreflightState.js';
-
-async function withPreflight(
-  borrowed: boolean,
-  run: (
-    operation: AgentProfilePreflight,
-    prepare: (onManagerReady?: () => void) => Promise<void>,
-    supplied: SessionSettingsOwner | undefined,
-    stages: readonly string[],
-  ) => Promise<void>,
-): Promise<void> {
-  const root = await mkdtemp(join(tmpdir(), 'post-config-preflight-'));
-  const settings = new SettingsService();
-  const supplied = borrowed ? new SessionSettingsOwner(settings) : undefined;
-  const operation = prepareAgentPreflight(
-    { runtimeId: 'post-config-preflight' },
-    new CredentialAuthority(),
-    settings,
-  );
-  const config = new Config({
-    debugMode: false,
-    sessionId: 'post-config',
-    cwd: root,
-    targetDir: root,
-    model: 'test-model',
-    provider: 'openai',
-    mcpEnabled: false,
-    skillsSupport: false,
-  });
-  const trust = new WorkspaceTrustLifecycle({
-    localTrust: config.initialWorkspaceTrust,
-  });
-  const filesystem = new WorkspaceFilesystemOwner({
-    targetDir: root,
-    isTrusted: () => trust.isTrustedFolder(),
-  });
-  const memory = assembleWorkspaceMemory(config, filesystem, trust);
-  const stages: string[] = [];
-  const prepare = (onManagerReady?: () => void): Promise<void> =>
-    operation.preparePostConfiguration(
-      config,
-      filesystem,
-      memory,
-      trust,
-      () => trust.dispose(),
-      supplied,
-      () => stages.push('policy'),
-      () => {
-        stages.push('manager');
-        onManagerReady?.();
-      },
-      () => stages.push('oauth'),
-      () => stages.push('files'),
-    );
-  try {
-    await run(operation, prepare, supplied, stages);
-  } finally {
-    await operation.dispose();
-    await supplied?.dispose();
-    await memory.dispose();
-    await filesystem.dispose();
-    await trust.dispose();
-    await config.dispose();
-    await rm(root, { recursive: true, force: true });
-  }
-}
 
 function transfer(operation: AgentProfilePreflight): AgentActivationOperation {
   let activation: AgentActivationOperation | undefined;
@@ -96,6 +31,72 @@ function transfer(operation: AgentProfilePreflight): AgentActivationOperation {
 }
 
 describe('post-config preflight ownership', () => {
+  const credentials = useOwnedCredentials();
+  async function withPreflight(
+    borrowed: boolean,
+    run: (
+      operation: AgentProfilePreflight,
+      prepare: (onManagerReady?: () => void) => Promise<void>,
+      supplied: SessionSettingsOwner | undefined,
+      stages: readonly string[],
+    ) => Promise<void>,
+  ): Promise<void> {
+    const root = await mkdtemp(join(tmpdir(), 'post-config-preflight-'));
+    const settings = new SettingsService();
+    const supplied = borrowed ? new SessionSettingsOwner(settings) : undefined;
+    const operation = await prepareAgentPreflight(
+      { runtimeId: 'post-config-preflight' },
+      credentials().authority,
+      settings,
+    );
+    const config = new Config({
+      debugMode: false,
+      sessionId: 'post-config',
+      cwd: root,
+      targetDir: root,
+      model: 'test-model',
+      provider: 'openai',
+      mcpEnabled: false,
+      skillsSupport: false,
+    });
+    const trust = new WorkspaceTrustLifecycle({
+      localTrust: config.initialWorkspaceTrust,
+    });
+    const filesystem = new WorkspaceFilesystemOwner({
+      targetDir: root,
+      isTrusted: () => trust.isTrustedFolder(),
+    });
+    const memory = assembleWorkspaceMemory(config, filesystem, trust);
+    const stages: string[] = [];
+    const prepare = (onManagerReady?: () => void): Promise<void> =>
+      operation.preparePostConfiguration(
+        config,
+        filesystem,
+        memory,
+        trust,
+        () => trust.dispose(),
+        supplied,
+        () => stages.push('policy'),
+        () => {
+          stages.push('manager');
+          onManagerReady?.();
+        },
+        () => stages.push('oauth'),
+        () => stages.push('files'),
+      );
+    try {
+      await run(operation, prepare, supplied, stages);
+    } finally {
+      await operation.dispose();
+      await supplied?.dispose();
+      await memory.dispose();
+      await filesystem.dispose();
+      await trust.dispose();
+      await config.dispose();
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+
   for (const borrowed of [false, true]) {
     it(`preserves transferred activation and settings disposition (borrowed ${borrowed})`, async () => {
       await withPreflight(borrowed, async (operation, prepare, supplied) => {

@@ -1,4 +1,3 @@
-import { CredentialAuthority } from '../../../providers/src/auth/proxy/credential-store-factory.js';
 import { buildRuntimeProfileSnapshot } from '../../../agents/src/api/profileSnapshot.js';
 import { modelParamInputs } from '../../../providers/src/runtime/__tests__/provider-switch-inputs.js';
 /**
@@ -26,8 +25,9 @@ import {
   setActiveModelParam,
   clearActiveModelParam,
 } from '../../../agents/src/api/model-parameters.js';
-import { assembleCliProviderRuntime } from '@vybestack/llxprt-code-providers/runtime/assembleCliProviderRuntime.js';
-import type { CliRuntimeRegistrationHandle } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
+import { prepareIntegrationPreflight } from './__tests__/prepare-preflight.js';
+import type { AgentProfilePreflight } from '@vybestack/llxprt-code-agents';
+import { useOwnedCredentials } from '../../../agents/src/api/__tests__/helpers/owned-credential-fixture.js';
 import { assertDefined } from '../__tests__/assertions.js';
 import {
   createTempDirectory,
@@ -62,11 +62,12 @@ function createStubProvider(name: string): IProvider {
 }
 
 describe('CLI model parameter command integration', () => {
+  const credentials = useOwnedCredentials();
   let tempDir: string;
   let config: Config;
   let sessionRoot: CliTestSessionRoot;
   let settingsService: SettingsService;
-  let registration: CliRuntimeRegistrationHandle;
+  let preflight: AgentProfilePreflight;
   let providerManager: RuntimeProviderManager;
   let context: ReturnType<typeof createMockCommandContext>;
 
@@ -85,16 +86,15 @@ describe('CLI model parameter command integration', () => {
       model: 'alpha-model',
     });
     settingsService = new SettingsService();
-    const assembled = assembleCliProviderRuntime({
-      credentialAuthority: new CredentialAuthority(),
-
-      settingsService,
+    preflight = await prepareIntegrationPreflight(
       config,
-      runtimeId: 'modelparams-test',
-      metadata: { source: 'modelParams.integration.test.ts' },
-    });
-    providerManager = assembled.providerManager;
-    registration = assembled.registration;
+      settingsService,
+      credentials().authority,
+      'modelparams-test',
+      (manager) => {
+        providerManager = manager;
+      },
+    );
     sessionRoot = await initializeTestSessionRoot(
       config,
       providerManager,
@@ -130,7 +130,7 @@ describe('CLI model parameter command integration', () => {
   });
 
   afterEach(async () => {
-    registration.dispose();
+    await preflight.dispose();
     await cleanupTempDirectory(tempDir);
   });
 
