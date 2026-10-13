@@ -11,22 +11,11 @@ function closed(receipt: Awaited<ReturnType<typeof correlatedProbe>>): void {
 }
 function failedAttempt(
   receipt: Awaited<ReturnType<typeof correlatedProbe>>,
-  post: boolean,
 ): void {
   const first = receipt.starts.find(
     (attempt) => attempt.promptId === 'corr-first',
   );
-  if (post) {
-    expect(first).toBeDefined();
-    expect(
-      receipt.ends.find((attempt) => attempt.attemptId === first?.attemptId),
-    ).toMatchObject({
-      promptId: 'corr-first',
-      status: 'error',
-      inputTokens: 123,
-      outputTokens: 1,
-    });
-  } else expect(first).toBeUndefined();
+  expect(first).toBeUndefined();
   expect(
     receipt.ends.find((attempt) => attempt.promptId === 'corr-second'),
   ).toMatchObject({ status: 'success', inputTokens: 123, outputTokens: 1 });
@@ -38,14 +27,7 @@ function failedAttempt(
 }
 describe('request-correlated source telemetry with one SDK Config and FileLogExporter', () => {
   for (const secondSource of [false, true]) {
-    for (const fault of [
-      'pre',
-      'post',
-      'late',
-      'missing',
-      'post-late',
-      'post-missing',
-    ] as const) {
+    for (const fault of ['pre', 'late', 'missing'] as const) {
       it(`rejects only the source with ${fault} export failure alongside ${secondSource ? 'source' : 'eager'}`, async () => {
         const receipt = await correlatedProbe(
           root(),
@@ -73,13 +55,57 @@ describe('request-correlated source telemetry with one SDK Config and FileLogExp
           totalTokens: 124,
           cachedTokens: 0,
         });
-        expect(receipt.bodies).toHaveLength(fault.startsWith('post') ? 2 : 1);
+        expect(receipt.bodies).toHaveLength(1);
         expect(receipt.sessionTokens.total).toBe(124);
         expect(receipt.performance.totalRequests).toBe(1);
-        expect(receipt.performance.errorRate).toBe(
-          fault.startsWith('post') ? 0.5 : 0,
+        expect(receipt.performance.errorRate).toBe(0);
+        failedAttempt(receipt);
+        closed(receipt);
+      }, 60000);
+    }
+    for (const fault of ['post', 'post-late', 'post-missing'] as const) {
+      it(`completes the source turn with ${fault} export failure alongside ${secondSource ? 'source' : 'eager'}`, async () => {
+        const receipt = await correlatedProbe(
+          root(),
+          fault,
+          true,
+          secondSource,
         );
-        failedAttempt(receipt, fault.startsWith('post'));
+        expect(receipt.fault).toBe('EISDIR');
+        expect(
+          receipt.rejected.some((event) =>
+            String(event.prompt_id).startsWith('corr-first'),
+          ),
+        ).toBe(true);
+        for (const result of [receipt.first, receipt.other]) {
+          expect(result.error).toBeNull();
+          expect(result.output).toBe('finished');
+          expect(result.usage).toContainEqual({
+            promptTokens: 123,
+            completionTokens: 1,
+            totalTokens: 124,
+            cachedTokens: 0,
+          });
+        }
+        expect(receipt.bodies).toHaveLength(2);
+        expect(receipt.sessionTokens.total).toBe(248);
+        expect(receipt.performance.totalRequests).toBe(2);
+        expect(receipt.performance.errorRate).toBe(0);
+        for (const promptId of ['corr-first', 'corr-second']) {
+          const started = receipt.starts.find(
+            (attempt) => attempt.promptId === promptId,
+          );
+          expect(started).toBeDefined();
+          expect(
+            receipt.ends.find(
+              (attempt) => attempt.attemptId === started?.attemptId,
+            ),
+          ).toMatchObject({
+            status: 'success',
+            inputTokens: 123,
+            outputTokens: 1,
+          });
+        }
         closed(receipt);
       }, 60000);
     }
@@ -97,27 +123,26 @@ describe('request-correlated source telemetry with one SDK Config and FileLogExp
     },
     60000,
   );
-  it('settles an external successful physical attempt only after its source response export acknowledgement', async () => {
+  it('settles an external successful physical attempt as a success when its source response export fails', async () => {
     const receipt = await correlatedProbe(root(), 'post', true, true, true);
-    expect(receipt.first.error?.code).toBe('EISDIR');
-    expect(receipt.first.usage).toStrictEqual([]);
+    expect(receipt.first.error).toBeNull();
+    expect(receipt.first.output).toBe('finished');
     expect(receipt.other.error).toBeNull();
-    expect(receipt.sessionTokens.total).toBe(124);
-    expect(receipt.performance.errorRate).toBe(0.5);
+    expect(receipt.sessionTokens.total).toBe(248);
+    expect(receipt.performance.errorRate).toBe(0);
     closed(receipt);
   }, 60000);
 });
 
 describe('strict source telemetry opt-in boundaries', () => {
-  it('acknowledges API-only source success before accepting usage without conversation logging', async () => {
+  it('completes an API-only source turn when its success acknowledgement fails, without conversation logging', async () => {
     const receipt = await correlatedProbe(root(), 'post', true, true, false, {
       conversations: false,
     });
-    expect(receipt.first.error?.code).toBe('EISDIR');
-    expect(receipt.first.usage).toStrictEqual([]);
-    expect(receipt.first.finishes).toStrictEqual([]);
+    expect(receipt.first.error).toBeNull();
+    expect(receipt.first.output).toBe('finished');
     expect(receipt.other.error).toBeNull();
-    expect(receipt.sessionTokens.total).toBe(124);
+    expect(receipt.sessionTokens.total).toBe(248);
     expect(
       receipt.accepted.some(
         (event) => event['event.name'] === 'conversation_request',

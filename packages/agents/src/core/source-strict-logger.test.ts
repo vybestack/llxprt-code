@@ -143,7 +143,7 @@ describe('eager logger filesystem failure controls', () => {
   );
 });
 
-describe('required source failure propagation remains RED without a source terminal logging context', () => {
+describe('required source failure propagation before the request is sent', () => {
   it.each(['api-request', 'conversation-request'] as const)(
     'rejects source %s logging failure without upload, success or completion',
     async (fault) => {
@@ -163,13 +163,13 @@ describe('required source failure propagation remains RED without a source termi
     60000,
   );
   it.each(['api-response', 'conversation-response'] as const)(
-    'surfaces source post-attempt %s write failure before success or token commitment',
+    'completes the source turn when its post-attempt %s write fails',
     async (fault) => {
       const receipt = await strictProbe(root(), fault, true);
       expect(receipt.writeFault).toBe('EISDIR');
       expect(receipt.bodies).toHaveLength(1);
-      expect(receipt.error).not.toBeNull();
-      expect(terminals(receipt)).toHaveLength(0);
+      expect(receipt.error).toBeNull();
+      expect(receipt.output).toBe('finished');
       assertClosed(receipt);
     },
     60000,

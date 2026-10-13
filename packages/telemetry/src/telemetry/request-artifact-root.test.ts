@@ -14,6 +14,7 @@ import type {
   ReadableLogRecord,
 } from '@opentelemetry/sdk-logs';
 import { createRootTelemetry, type RootTelemetry } from './root-telemetry.js';
+import { ExportAcknowledgementMissingError } from './artifact-exporter.js';
 import { logBoundedRequestArtifact } from './bounded-request-artifact.js';
 import {
   assertRequestArtifactExporter,
@@ -279,4 +280,45 @@ describe('request artifact telemetry owned by a RootTelemetry', () => {
       ),
     ).rejects.toThrow('requires an active telemetry SDK');
   });
+
+  it('releases root flush and close when an exporter stops making progress, without a second failure', async () => {
+    const stalled: LogRecordExporter & {
+      readonly requestArtifactSchemaVersion: 4;
+    } = {
+      requestArtifactSchemaVersion: 4,
+      export: () => undefined,
+      shutdown: () => Promise.resolve(),
+      forceFlush: () => Promise.resolve(),
+    };
+    const selected = await createRootTelemetry(
+      {
+        sessionId: 'stalled-exporter',
+        enabled: true,
+        maxBytes: 1,
+        maxFiles: 1,
+      },
+      () => ({
+        tracer: {
+          export: (_spans, done) => done({ code: ExportResultCode.SUCCESS }),
+          shutdown: () => Promise.resolve(),
+        },
+        logger: stalled,
+        meter: {
+          export: (_metrics, done) => done({ code: ExportResultCode.SUCCESS }),
+          shutdown: () => Promise.resolve(),
+          forceFlush: () => Promise.resolve(),
+        },
+      }),
+    );
+    roots.push(selected);
+
+    const abandoned = flushRequestArtifactTelemetry(selected, {
+      body: 'stalled record',
+    });
+    await expect(abandoned).rejects.toBeInstanceOf(
+      ExportAcknowledgementMissingError,
+    );
+    await selected.flush();
+    await selected.close();
+  }, 30000);
 });

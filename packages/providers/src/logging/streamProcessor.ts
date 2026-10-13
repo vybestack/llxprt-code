@@ -199,6 +199,45 @@ export function processLoggedStreamChunk(
   return chunk;
 }
 
+function recordSourceStreamFailure(
+  error: unknown,
+  startTime: number,
+  acc: StreamAccumulatorState,
+  config: ProviderRequestDiagnostics | undefined,
+  recorder: AttemptRecorder,
+  ctx: StreamProcessContext,
+  modelName: string,
+  policy: RequestLoggingPolicy | undefined,
+): void {
+  ctx.performanceTracker.recordError(
+    performance.now() - startTime,
+    String(error),
+    acc.firstChunkTime,
+    acc.chunkCount,
+  );
+  // Accumulate partial token usage on stream errors so session totals
+  // remain consistent with the old logResponse path.
+  if (policy?.strictTelemetry !== true && acc.latestTokenUsage !== undefined) {
+    const partialTokenCounts = resolveTokenCounts(
+      acc.latestTokenUsage,
+      acc.streamedText,
+      ctx.debug,
+    );
+    accumulateTokenUsage(
+      partialTokenCounts,
+      config,
+      ctx.providerName,
+      ctx.debug,
+    );
+  }
+  recorder.finalizeAttempt(
+    classifyTerminalStatus(error),
+    modelName,
+    acc.latestTokenUsage,
+    error instanceof Error ? error.message : String(error),
+  );
+}
+
 export async function* processStreamWithRecorderGen(
   config: ProviderRequestDiagnostics | undefined,
   stream: AsyncIterableIterator<IContent>,
@@ -225,7 +264,12 @@ export async function* processStreamWithRecorderGen(
       if (visible !== undefined) yield visible;
     }
     if (policy?.strictTelemetry === true)
-      await recorder.acknowledgeSuccess(modelName, policy.signal);
+      await afterReply(
+        'Response telemetry acknowledgement',
+        ctx.debug,
+        policy.signal,
+        () => recorder.acknowledgeSuccess(modelName, policy.signal),
+      );
 
     const duration = performance.now() - startTime;
     recordLoggedStreamCompletion(
@@ -241,37 +285,15 @@ export async function* processStreamWithRecorderGen(
     if (terminalMetadata !== undefined)
       yield { speaker: 'ai', blocks: [], metadata: terminalMetadata };
   } catch (error) {
-    const duration = performance.now() - startTime;
-    ctx.performanceTracker.recordError(
-      duration,
-      String(error),
-      acc.firstChunkTime,
-      acc.chunkCount,
-    );
-    // Accumulate partial token usage on stream errors so session totals
-    // remain consistent with the old logResponse path.
-    if (
-      policy?.strictTelemetry !== true &&
-      acc.latestTokenUsage !== undefined
-    ) {
-      const partialTokenCounts = resolveTokenCounts(
-        acc.latestTokenUsage,
-        acc.streamedText,
-        ctx.debug,
-      );
-      accumulateTokenUsage(
-        partialTokenCounts,
-        config,
-        ctx.providerName,
-        ctx.debug,
-      );
-    }
-    const status = classifyTerminalStatus(error);
-    recorder.finalizeAttempt(
-      status,
+    recordSourceStreamFailure(
+      error,
+      startTime,
+      acc,
+      config,
+      recorder,
+      ctx,
       modelName,
-      acc.latestTokenUsage,
-      error instanceof Error ? error.message : String(error),
+      policy,
     );
     finalized = true;
     throw error;
@@ -409,6 +431,29 @@ function recordLoggedStreamCompletion(
   recorder.finalizeAttempt('success', modelName, acc.latestTokenUsage);
 }
 
+/**
+ * Runs logging work that follows a fully streamed reply. The reply and its
+ * usage already reached the caller, so a logging failure is reported through
+ * the debug error path and the turn stands. A caller abort still ends the turn.
+ */
+async function afterReply<T>(
+  what: string,
+  debug: DebugLogger,
+  signal: AbortSignal | undefined,
+  step: () => Promise<T>,
+): Promise<T | undefined> {
+  try {
+    return await step();
+  } catch (error) {
+    signal?.throwIfAborted();
+    debug.error(
+      () =>
+        `${what} failed after the reply streamed; the turn is unaffected: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return undefined;
+  }
+}
+
 async function acknowledgeResponseSuccess(
   recorder: AttemptRecorder,
   modelName: string,
@@ -438,6 +483,54 @@ async function* captureLoggedResponse(
   return terminalMetadata;
 }
 
+interface StrictReply {
+  readonly recorder: AttemptRecorder;
+  readonly modelName: string;
+  readonly ctx: StreamProcessContext;
+  readonly writeLog: ResponseLogWriter;
+  readonly content: string;
+  readonly promptId: string;
+  readonly duration: number;
+}
+
+/**
+ * Durable response write and telemetry acknowledgement for a fully streamed
+ * strict reply. Returns the telemetry publication still owed, if any.
+ */
+async function logStrictReply(
+  policy: RequestLoggingPolicy | undefined,
+  reply: StrictReply,
+): Promise<void | (() => void | Promise<void>)> {
+  const { recorder, modelName, ctx } = reply;
+  let publish: void | (() => void | Promise<void>) = undefined;
+  if (policy?.strictDurableResponse === true) {
+    publish = await afterReply(
+      'Durable conversation response write',
+      ctx.debug,
+      policy.signal,
+      () =>
+        reply.writeLog(
+          reply.content,
+          reply.promptId,
+          reply.duration,
+          true,
+          undefined,
+        ),
+    );
+  }
+  if (policy?.strictTelemetry === true) {
+    await afterReply(
+      'Response telemetry acknowledgement',
+      ctx.debug,
+      policy.signal,
+      () =>
+        acknowledgeResponseSuccess(recorder, modelName, policy.signal, publish),
+    );
+    return undefined;
+  }
+  return publish;
+}
+
 export async function* logResponseStreamWithRecorderGen(
   config: ProviderRequestDiagnostics,
   stream: AsyncIterableIterator<IContent>,
@@ -464,26 +557,16 @@ export async function* logResponseStreamWithRecorderGen(
     );
 
     const duration = performance.now() - startTime;
-    let publish: void | (() => void | Promise<void>) = undefined;
-    if (policy?.strictDurableResponse === true) {
-      responseAppendStarted = true;
-      publish = await writeLog(
-        acc.responseContent,
-        promptId,
-        duration,
-        true,
-        undefined,
-      );
-    }
-    if (policy?.strictTelemetry === true) {
-      await acknowledgeResponseSuccess(
-        recorder,
-        modelName,
-        policy.signal,
-        publish,
-      );
-      publish = undefined;
-    }
+    responseAppendStarted = policy?.strictDurableResponse === true;
+    const publish = await logStrictReply(policy, {
+      recorder,
+      modelName,
+      ctx,
+      writeLog,
+      content: acc.responseContent,
+      promptId,
+      duration,
+    });
     recordLoggedStreamCompletion(
       acc,
       duration,
@@ -495,7 +578,15 @@ export async function* logResponseStreamWithRecorderGen(
     finalized = true;
     if (policy?.strictDurableResponse !== true)
       await writeLog(acc.responseContent, promptId, duration, true, undefined);
-    if (publish !== undefined) await publish();
+    if (publish !== undefined) {
+      const deferred = publish;
+      await afterReply(
+        'Conversation response telemetry',
+        ctx.debug,
+        policy?.signal,
+        async () => deferred(),
+      );
+    }
     if (terminalMetadata !== undefined)
       yield { speaker: 'ai', blocks: [], metadata: terminalMetadata };
   } catch (error) {

@@ -76,7 +76,7 @@ function assertUploadsAndCleanup(receipt: Receipt): void {
         .map((event) => event['event.name']),
     ).toStrictEqual(names);
 }
-function assertFailedAttempt(receipt: Receipt): void {
+function assertSourceAttemptSucceeded(receipt: Receipt): void {
   const starts = receipt.attemptStarts.filter(
     (attempt) => attempt.promptId === 'post-source',
   );
@@ -87,38 +87,21 @@ function assertFailedAttempt(receipt: Receipt): void {
   expect(ends).toHaveLength(1);
   expect(ends[0]).toMatchObject({
     attemptId: starts[0].attemptId,
-    status: 'error',
+    status: 'success',
     inputTokens: 123,
     outputTokens: 1,
   });
-  const errors = receipt.events.filter(
-    (event) =>
-      event['event.name'] === 'llxprt_code.api_error' &&
-      event.prompt_id === 'post-source',
-  );
-  expect(errors).toHaveLength(1);
-  expect(errors[0].attempt_id).toBe(starts[0].attemptId);
+  expect(
+    receipt.events.filter(
+      (event) =>
+        event['event.name'] === 'llxprt_code.api_error' &&
+        event.prompt_id === 'post-source',
+    ),
+  ).toHaveLength(0);
 }
-function accepted(
-  receipt: Receipt,
-  prompt: string,
-): ReadonlyArray<Record<string, unknown>> {
-  return receipt.events.filter((event) => {
-    if (event['event.name'] === 'token_usage')
-      return event.conversation_id === prompt;
-    return (
-      [prompt, `${prompt}#a0`].includes(String(event.prompt_id)) &&
-      ['llxprt_code.api_response', 'conversation_response'].includes(
-        String(event['event.name']),
-      ) &&
-      event.success !== false
-    );
-  });
-}
-
-describe('request-local durable source response acknowledgement after real uploads', () => {
+describe('request-local durable source response failure after real uploads', () => {
   it.each([false, true])(
-    'rejects source with original durable EISDIR while shared eager completes (eager first: %s)',
+    'completes the source turn when its durable response write hits EISDIR while shared eager completes (eager first: %s)',
     async (eagerFirst) => {
       const receipt = await mixedPostSendProbe(
         root(),
@@ -126,49 +109,21 @@ describe('request-local durable source response acknowledgement after real uploa
         eagerFirst,
       );
       assertUploadsAndCleanup(receipt);
-      assertFailedAttempt(receipt);
+      assertSourceAttemptSucceeded(receipt);
       expect(receipt.writeFault).toBe('EISDIR');
-      expect(receipt.source.error).toMatchObject({
-        code: 'EISDIR',
-        syscall: 'open',
-      });
-      // Bun on Linux reports `path: null` for an EISDIR open; a present path
-      // must still be the faulted file.
-      expect(receipt.source.error?.path ?? receipt.faultPath).toBe(
-        receipt.faultPath,
-      );
-      expect(receipt.source.error?.stack).toContain('appendEntry');
-      expect(receipt.source.usage).toHaveLength(0);
-      expect(receipt.source.finishes).toHaveLength(0);
-      expect(accepted(receipt, 'post-source')).toHaveLength(0);
-      expect(
-        receipt.events.filter((event) => event['event.name'] === 'token_usage'),
-      ).toHaveLength(1);
-      expect(receipt.eager.error).toBeNull();
-      expect(receipt.eager.output).toBe('finished');
-      expect(receipt.eager.usage).toHaveLength(1);
-      const failed = receipt.events.filter(
-        (event) =>
-          event.prompt_id === 'post-source' &&
-          event['event.name'] === 'llxprt_code.api_error',
-      );
-      expect(failed).toHaveLength(1);
-      expect(failed[0]).toMatchObject({
-        error_type: 'stream_error',
-        provider: 'openai-responses',
-        model: 'gpt-5.6',
-        input_token_count: 123,
-        output_token_count: 1,
-      });
-      expect(failed[0].attempt_id).toBe('post-source#a0');
-      expect(String(failed[0].error)).toContain('EISDIR');
-      expect(receipt.performance.totalRequests).toBe(1);
-      expect(receipt.performance.totalTokens).toBe(124);
-      expect(receipt.performance.errorRate).toBe(0.5);
+      for (const result of [receipt.source, receipt.eager]) {
+        expect(result.error).toBeNull();
+        expect(result.output).toBe('finished');
+        expect(result.usage).toHaveLength(1);
+        expect(result.finishes).toStrictEqual(['stop']);
+      }
+      expect(receipt.performance.totalRequests).toBe(2);
+      expect(receipt.performance.totalTokens).toBe(248);
+      expect(receipt.performance.errorRate).toBe(0);
       expect(receipt.sessionTokens).toMatchObject({
-        input: 123,
-        output: 1,
-        total: 124,
+        input: 246,
+        output: 2,
+        total: 248,
       });
     },
     60000,
@@ -176,7 +131,7 @@ describe('request-local durable source response acknowledgement after real uploa
 });
 
 describe('source durable response with externally owned attempts', () => {
-  it('attributes durable failure to the actual RetryOrchestrator attempt without an earlier success record', async () => {
+  it('settles the actual RetryOrchestrator attempt as a success when the durable response write fails', async () => {
     const receipt = await mixedPostSendProbe(
       root(),
       'conversation-response',
@@ -184,33 +139,12 @@ describe('source durable response with externally owned attempts', () => {
       true,
     );
     assertUploadsAndCleanup(receipt);
-    assertFailedAttempt(receipt);
-    expect(receipt.source.error?.code).toBe('EISDIR');
-    expect(receipt.source.usage).toHaveLength(0);
-    expect(
-      receipt.events.filter((event) => event['event.name'] === 'token_usage'),
-    ).toHaveLength(1);
-    expect(
-      receipt.events.filter(
-        (event) => event['event.name'] === 'llxprt_code.api_response',
-      ),
-    ).toHaveLength(1);
-    const errors = receipt.events.filter(
-      (event) =>
-        event.prompt_id === 'post-source' &&
-        event['event.name'] === 'llxprt_code.api_error',
-    );
-    expect(errors).toHaveLength(1);
-    expect(errors[0]).toMatchObject({
-      error_type: 'stream_error',
-      input_token_count: 123,
-      output_token_count: 1,
-    });
-    expect(typeof errors[0].attempt_id).toBe('string');
-    expect(String(errors[0].error)).toContain('EISDIR');
+    assertSourceAttemptSucceeded(receipt);
+    expect(receipt.source.error).toBeNull();
+    expect(receipt.source.usage).toHaveLength(1);
     expect(receipt.eager.error).toBeNull();
-    expect(receipt.performance.totalRequests).toBe(1);
-    expect(receipt.sessionTokens.total).toBe(124);
+    expect(receipt.performance.totalRequests).toBe(2);
+    expect(receipt.sessionTokens.total).toBe(248);
   }, 60000);
 });
 
@@ -287,7 +221,7 @@ describe('successful mixed source and eager durable responses', () => {
 });
 
 describe('separate required telemetry response acknowledgement', () => {
-  it('rejects source after post-upload exporter EISDIR before accepted terminals', async () => {
+  it('completes the source turn after post-upload exporter EISDIR on the api response', async () => {
     const receipt = await mixedPostSendProbe(root(), 'api-response', false);
     expect(receipt.bodies).toHaveLength(2);
     expect(receipt.writeFault).toBe('EISDIR');
@@ -295,10 +229,11 @@ describe('separate required telemetry response acknowledgement', () => {
       receipt.rejected.some((batch) => batch.error.includes('EISDIR')),
     ).toBe(true);
     expect(receipt.eager.error).toBeNull();
-    expect(receipt.source.error).not.toBeNull();
-    expect(receipt.source.usage).toHaveLength(0);
-    expect(receipt.source.finishes).toHaveLength(0);
-    expect(receipt.performance.totalRequests).toBe(1);
-    expect(receipt.sessionTokens.total).toBe(124);
+    expect(receipt.source.error).toBeNull();
+    expect(receipt.source.output).toBe('finished');
+    expect(receipt.source.usage).toHaveLength(1);
+    expect(receipt.source.finishes).toStrictEqual(['stop']);
+    expect(receipt.performance.totalRequests).toBe(2);
+    expect(receipt.sessionTokens.total).toBe(248);
   }, 60000);
 });
