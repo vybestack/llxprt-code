@@ -11,8 +11,12 @@ import { CommandKind, type SlashCommand } from '../commands/types.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { CoreEvent, coreEvents } from '@vybestack/llxprt-code-core';
 import { useCommandReload } from './slashCommandProcessorSupport.js';
-import { createUnconfiguredModelCommand } from '../../__tests__/unconfigured-model-command.js';
+import {
+  createUnconfiguredModelCommand,
+  createUnconfiguredToolFormatCommand,
+} from '../../__tests__/unconfigured-model-command.js';
 const modelCommand = createUnconfiguredModelCommand();
+const toolFormatCommand = createUnconfiguredToolFormatCommand();
 
 const loaderState = {
   builtinCommands: [] as SlashCommand[],
@@ -63,6 +67,7 @@ function useCommandRegistry(config: CliUiRuntime): readonly SlashCommand[] {
   }, []);
   useCommandReload(
     modelCommand,
+    toolFormatCommand,
     config,
     reloadTrigger,
     true,

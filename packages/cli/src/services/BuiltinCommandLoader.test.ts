@@ -55,7 +55,10 @@ void vi.mock('../ui/commands/permissionsCommand.js', () => ({
 
 import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
 import { BuiltinCommandLoader } from './BuiltinCommandLoader.js';
-import { createUnconfiguredModelCommand } from '../__tests__/unconfigured-model-command.js';
+import {
+  createUnconfiguredModelCommand,
+  createUnconfiguredToolFormatCommand,
+} from '../__tests__/unconfigured-model-command.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { CommandKind } from '../ui/commands/types.js';
 
@@ -141,6 +144,7 @@ describe('BuiltinCommandLoader', () => {
     const runtime = composeFixtureRuntime(mockConfig);
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
+      createUnconfiguredToolFormatCommand(),
       runtime,
     );
     await loader.loadCommands(new AbortController().signal);
@@ -155,6 +159,7 @@ describe('BuiltinCommandLoader', () => {
     const runtime = composeFixtureRuntime(mockConfig);
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
+      createUnconfiguredToolFormatCommand(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -171,6 +176,7 @@ describe('BuiltinCommandLoader', () => {
   it('should handle a null config gracefully when calling factories', async () => {
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
+      createUnconfiguredToolFormatCommand(),
       null,
     );
     await loader.loadCommands(new AbortController().signal);
@@ -183,6 +189,7 @@ describe('BuiltinCommandLoader', () => {
     const runtime = composeFixtureRuntime(mockConfig);
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
+      createUnconfiguredToolFormatCommand(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -202,6 +209,7 @@ describe('BuiltinCommandLoader', () => {
     const runtime = composeFixtureRuntime(mockConfig);
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
+      createUnconfiguredToolFormatCommand(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -213,6 +221,7 @@ describe('BuiltinCommandLoader', () => {
     const runtime = composeFixtureRuntime(mockConfig);
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
+      createUnconfiguredToolFormatCommand(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -228,6 +237,7 @@ describe('BuiltinCommandLoader', () => {
     const runtime = composeFixtureRuntime(mockConfig);
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
+      createUnconfiguredToolFormatCommand(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -244,6 +254,7 @@ describe('BuiltinCommandLoader', () => {
     const runtime = composeFixtureRuntime(mockConfig);
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
+      createUnconfiguredToolFormatCommand(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -260,6 +271,7 @@ describe('BuiltinCommandLoader', () => {
     } as unknown as Config;
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
+      createUnconfiguredToolFormatCommand(),
       composeFixtureRuntime(mockConfigWithMessageBus),
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -289,6 +301,7 @@ describe('BuiltinCommandLoader profile', () => {
     const runtime = composeFixtureRuntime(mockConfig);
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
+      createUnconfiguredToolFormatCommand(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);
@@ -307,6 +320,7 @@ describe('BuiltinCommandLoader profile', () => {
     const runtime = composeFixtureRuntime(mockConfig);
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
+      createUnconfiguredToolFormatCommand(),
       runtime,
     );
     const commands = await loader.loadCommands(new AbortController().signal);

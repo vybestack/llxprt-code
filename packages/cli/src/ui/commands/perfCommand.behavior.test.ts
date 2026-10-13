@@ -15,7 +15,10 @@ import {
 } from './perfCommand.js';
 import type { MessageActionReturn } from './types.js';
 import { BuiltinCommandLoader } from '../../services/BuiltinCommandLoader.js';
-import { createUnconfiguredModelCommand } from '../../__tests__/unconfigured-model-command.js';
+import {
+  createUnconfiguredModelCommand,
+  createUnconfiguredToolFormatCommand,
+} from '../../__tests__/unconfigured-model-command.js';
 import type { PerfOperationRecord } from '@vybestack/llxprt-code-telemetry/perf/perfRecords.js';
 
 function makeOperation(
@@ -513,6 +516,7 @@ describe('PerfCommand (P11, AC-9)', () => {
   it('perf command is registered in BuiltinCommandLoader', () => {
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
+      createUnconfiguredToolFormatCommand(),
       null,
     );
     const commands = loader.loadCommandsSync();
@@ -541,14 +545,18 @@ describe('PerfCommand (P11, AC-9)', () => {
     };
     // Minimal config: truthy so ideCommand/restoreCommand are evaluated, but
     // they short-circuit to null when their accessors return undefined/false.
-    const loader = new BuiltinCommandLoader(createUnconfiguredModelCommand(), {
-      getPerfSnapshotCapability: () => capability,
-      getProjectTempDir: () => join(tmpdir(), 'token-usage'),
-      getIdeClient: () => undefined,
-      getCheckpointingEnabled: () => false,
-      getEnableHooksUI: () => false,
-      isSkillsSupportEnabled: () => false,
-    } as never);
+    const loader = new BuiltinCommandLoader(
+      createUnconfiguredModelCommand(),
+      createUnconfiguredToolFormatCommand(),
+      {
+        getPerfSnapshotCapability: () => capability,
+        getProjectTempDir: () => join(tmpdir(), 'token-usage'),
+        getIdeClient: () => undefined,
+        getCheckpointingEnabled: () => false,
+        getEnableHooksUI: () => false,
+        isSkillsSupportEnabled: () => false,
+      } as never,
+    );
     const commands = loader.loadCommandsSync();
     const perf = commands.find((c) => c.name === 'perf')!;
     const result = (await perf.action!({} as never, '')) as MessageActionReturn;
@@ -561,6 +569,7 @@ describe('PerfCommand (P11, AC-9)', () => {
   it('BuiltinCommandLoader without snapshot capability says not active', async () => {
     const loader = new BuiltinCommandLoader(
       createUnconfiguredModelCommand(),
+      createUnconfiguredToolFormatCommand(),
       null,
     );
     const commands = loader.loadCommandsSync();
