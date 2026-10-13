@@ -74,14 +74,14 @@ import type {
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
-import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 import {
   loadAgentRuntime,
   type AgentRuntimeLoaderOptions,
   type AgentRuntimeLoaderResult,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import type { ReadonlySettingsSnapshot } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeContext.js';
+import { buildSubagentRuntimeLoaderOptions } from './subagent-runtime-loader.js';
+import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
 import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
@@ -225,14 +225,17 @@ export class SubagentOrchestrator {
     runConfig: RunConfig,
     request: SubagentLaunchRequest,
     runtimeResult: AgentRuntimeLoaderResult,
-    isolatedHandle: IsolatedRuntimeContextHandle,
+    oauthManager: OAuthManager,
+    settingsService: SettingsService,
+    providerManager: RuntimeProviderManager,
+    providerFileLifecycle: ProviderFileLifecycle,
+    sessionClient: SessionClientOwner,
     signal?: AbortSignal,
   ): Promise<SubAgentScope> {
-    const retry = isolatedHandle.oauthManager.composeRetryOperations(
+    const retry = oauthManager.composeRetryOperations(
       runtimeResult.runtimeContext.state.provider,
       {
-        profileId:
-          isolatedHandle.settingsService.getCurrentProfileName() ?? undefined,
+        profileId: settingsService.getCurrentProfileName() ?? undefined,
       },
     );
     return this.scopeFactory(
@@ -266,17 +269,17 @@ export class SubagentOrchestrator {
         const providerName = runtimeResult.runtimeContext.state.provider;
         return providerName === LOAD_BALANCER_PROVIDER_NAME
           ? admitLoadBalancerModelParameters(
-              isolatedHandle.providerManager.getActiveProvider(),
-              isolatedHandle.settingsService,
+              providerManager.getActiveProvider(),
+              settingsService,
             )
           : admitModelParameters(
-              isolatedHandle.settingsService.getAllGlobalSettings(),
-              isolatedHandle.settingsService.getProviderSettings(providerName),
+              settingsService.getAllGlobalSettings(),
+              settingsService.getProviderSettings(providerName),
               providerName,
             );
       },
-      isolatedHandle.providerFileLifecycle,
-      isolatedHandle.sessionClient.hookOperations.execution({
+      providerFileLifecycle,
+      sessionClient.hookOperations.execution({
         sessionId: () => runtimeResult.runtimeContext.state.sessionId,
         transcriptPath: () => undefined,
         signal,
@@ -360,14 +363,15 @@ export class SubagentOrchestrator {
         runConfig,
         request,
         runtimeResult,
-        isolatedHandle,
+        isolatedHandle.oauthManager,
+        isolatedHandle.settingsService,
+        isolatedHandle.providerManager,
+        isolatedHandle.providerFileLifecycle,
+        isolatedHandle.sessionClient,
         signal,
       );
       this.throwIfAborted(signal, 'Subagent launch aborted before completion.');
-      const agentId =
-        typeof scope.getAgentId === 'function'
-          ? scope.getAgentId()
-          : `${subagent.name}-${agentRuntimeId}`;
+      const agentId = this.scopeId(scope, subagent.name, agentRuntimeId);
 
       return {
         agentId,
@@ -383,6 +387,16 @@ export class SubagentOrchestrator {
         this.cleanupAfterLaunchFailure(scope, runtimeResult, isolatedHandle),
       );
     }
+  }
+
+  private scopeId(
+    scope: SubAgentScope,
+    subagentName: string,
+    runtimeId: string,
+  ): string {
+    return typeof scope.getAgentId === 'function'
+      ? scope.getAgentId()
+      : `${subagentName}-${runtimeId}`;
   }
 
   private async cleanupAfterLaunchFailure(
@@ -595,7 +609,6 @@ export class SubagentOrchestrator {
     isolatedHandle: IsolatedRuntimeContextHandle;
   }> {
     const { runtimeProfile, modelConfig, agentRuntimeId, subagent } = params;
-    const { effectiveProfile } = runtimeProfile;
     const activationProfile =
       SubagentOrchestrator.getActivationProfile(runtimeProfile);
     const runtimeStateProfile =
@@ -620,12 +633,7 @@ export class SubagentOrchestrator {
         subagent.profile,
       );
     } else {
-      settingsService.setCurrentProfileName(subagent.profile);
-      settingsService.set('activeProvider', LOAD_BALANCER_PROVIDER_NAME);
-      settingsService.set(
-        `providers.${LOAD_BALANCER_PROVIDER_NAME}.model`,
-        LOAD_BALANCER_PROVIDER_NAME,
-      );
+      this.populateLoadBalancerIdentity(settingsService, subagent.profile);
     }
 
     const isolatedHandle = await this.createIsolatedRuntime(
@@ -638,15 +646,23 @@ export class SubagentOrchestrator {
       isLoadBalancerActivation,
     );
     try {
-      const runtimeResult = await this.loadRuntimeInIsolatedScope({
-        subagentName: subagent.name,
-        isolatedHandle,
-        runtimeState,
-        runtimeStateProfile,
-        effectiveProfile,
-        modelConfig,
-        signal,
-      });
+      const runtimeResult = await this.loadRuntimeInIsolatedScope(
+        isolatedHandle.runtimeId,
+        isolatedHandle.config,
+        isolatedHandle.settingsOwner,
+        isolatedHandle.mediaOwner.store,
+        isolatedHandle.providerManager,
+        isolatedHandle.tokenizerFactory,
+        isolatedHandle.contentGeneratorFactory,
+        {
+          subagentName: subagent.name,
+          runtimeState,
+          runtimeStateProfile,
+          effectiveProfile: runtimeProfile.effectiveProfile,
+          modelConfig,
+          signal,
+        },
+      );
       return { runtimeResult, isolatedHandle };
     } catch (error) {
       return cleanupAfterFailure(error, () =>
@@ -663,17 +679,37 @@ export class SubagentOrchestrator {
     }
   }
 
-  private async loadRuntimeInIsolatedScope(params: {
-    subagentName: string;
-    isolatedHandle: IsolatedRuntimeContextHandle;
-    runtimeState: AgentRuntimeState;
-    runtimeStateProfile: Profile;
-    effectiveProfile: Profile;
-    modelConfig: ModelConfig;
-    signal?: AbortSignal;
-  }): Promise<AgentRuntimeLoaderResult> {
+  private populateLoadBalancerIdentity(
+    settings: SettingsService,
+    profileName: string,
+  ): void {
+    settings.setCurrentProfileName(profileName);
+    settings.set('activeProvider', LOAD_BALANCER_PROVIDER_NAME);
+    settings.set(
+      `providers.${LOAD_BALANCER_PROVIDER_NAME}.model`,
+      LOAD_BALANCER_PROVIDER_NAME,
+    );
+  }
+
+  private async loadRuntimeInIsolatedScope(
+    runtimeId: string,
+    config: Config,
+    settingsOwner: SessionSettingsOwner,
+    mediaStore: LocalMediaStore,
+    providerManager: RuntimeProviderManager,
+    tokenizerFactory: RuntimeTokenizerFactory,
+    contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
+    params: {
+      subagentName: string;
+      runtimeState: AgentRuntimeState;
+      runtimeStateProfile: Profile;
+      effectiveProfile: Profile;
+      modelConfig: ModelConfig;
+      signal?: AbortSignal;
+    },
+  ): Promise<AgentRuntimeLoaderResult> {
     const providerRuntime = createSubagentProviderRuntime(
-      params.isolatedHandle.runtimeId,
+      runtimeId,
       params.subagentName,
     );
     const settingsSnapshot = createSettingsSnapshot(
@@ -684,81 +720,34 @@ export class SubagentOrchestrator {
       params.runtimeStateProfile,
       params.modelConfig,
     );
-    const loaderOptions = this.buildRuntimeLoaderOptions({
-      isolatedHandle: params.isolatedHandle,
-      runtimeState: params.runtimeState,
+    const loaderOptions = buildSubagentRuntimeLoaderOptions(
+      config,
+      settingsOwner,
+      mediaStore,
+      providerManager,
+      tokenizerFactory,
+      contentGeneratorFactory,
+      this.options.toolRegistry,
+      params.runtimeState,
       settingsSnapshot,
       providerRuntime,
       contentGeneratorConfig,
-      signal: params.signal,
-    });
-    await params.isolatedHandle.tokenizerFactory.prepareTokenizer?.(
+      params.signal,
+    );
+    await tokenizerFactory.prepareTokenizer?.(
       params.runtimeState.provider,
       params.runtimeState.model,
     );
     const loaded = await this.runtimeLoader(loaderOptions);
     loaded.history.setTokenizerFactory({
       getTokenizer: (provider, model) =>
-        params.isolatedHandle.tokenizerFactory.getTokenizer(provider, model),
+        tokenizerFactory.getTokenizer(provider, model),
     });
     loaded.history.setActiveTokenizationTarget(
       params.runtimeState.model,
       params.runtimeState.provider,
     );
     return loaded;
-  }
-
-  private buildRuntimeLoaderOptions(params: {
-    isolatedHandle: IsolatedRuntimeContextHandle;
-    runtimeState: AgentRuntimeState;
-    settingsSnapshot: ReadonlySettingsSnapshot;
-    providerRuntime: ProviderRuntimeContext;
-    contentGeneratorConfig: ContentGeneratorConfig;
-    signal?: AbortSignal;
-  }): AgentRuntimeLoaderOptions {
-    const toolRegistry = this.options.toolRegistry;
-
-    return {
-      mediaStore: params.isolatedHandle.mediaOwner.store,
-      profile: {
-        config: params.isolatedHandle.config,
-        telemetry: params.isolatedHandle.settingsOwner.telemetry,
-        state: params.runtimeState,
-        prepareProviderInvocation: (provider, parameters, signal) =>
-          params.isolatedHandle.settingsOwner.prepareProviderInvocation(
-            params.runtimeState.runtimeId,
-            provider,
-            parameters,
-            signal,
-            params.runtimeState.sessionId,
-          ),
-        readRuntimeSettings: () =>
-          params.isolatedHandle.settingsOwner.readRuntimePolicy(),
-        readToolGovernance: () =>
-          params.isolatedHandle.settingsOwner.readToolGovernance(
-            params.isolatedHandle.config.getExcludeTools() ?? [],
-          ),
-        settings: params.settingsSnapshot,
-        providerRuntime: params.providerRuntime,
-        promptEstimator: {
-          estimatePrompt: (request) =>
-            params.isolatedHandle.tokenizerFactory.estimatePrompt(request),
-          claimsModel: (model) =>
-            params.isolatedHandle.tokenizerFactory.claimsModel?.(model) ??
-            false,
-          getEstimatorFamily: (model) =>
-            params.isolatedHandle.tokenizerFactory.getEstimatorFamily?.(model),
-        },
-        contentGeneratorConfig: {
-          ...params.contentGeneratorConfig,
-          contentGeneratorFactory:
-            params.isolatedHandle.contentGeneratorFactory,
-        },
-        toolRegistry,
-        providerManager: params.isolatedHandle.providerManager,
-      },
-      signal: params.signal,
-    };
   }
 
   /**
