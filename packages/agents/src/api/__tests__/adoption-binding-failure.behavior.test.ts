@@ -7,39 +7,53 @@ import { describe, expect, it, vi } from 'bun:test';
 import { fromConfig } from '../fromConfig.js';
 import { SessionClientOwner } from '../../session/session-client-owner.js';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
+import { useOwnedCredentials } from './helpers/owned-credential-fixture.js';
 
 describe('failed adopted session binding', () => {
+  const credentials = useOwnedCredentials();
+
   it('retires the created session client while retaining caller authority', async () => {
     const caller = await buildCliStyleConfig('plain-text.jsonl');
-    let created: readonly SessionClientOwner[] = [];
-    const failure = new Error('Session binding failed');
-    const binding = vi
-      .spyOn(SessionClientOwner.prototype, 'bindMcpRuntime')
-      .mockImplementation(function (this: SessionClientOwner): void {
-        created = [...created, this];
-        throw failure;
+    await caller.mcpRuntime.workspaceMemory.dispose();
+    const retired: SessionClientOwner[] = [];
+    const dispose = SessionClientOwner.prototype.dispose;
+    const observation = vi
+      .spyOn(SessionClientOwner.prototype, 'dispose')
+      .mockImplementation(async function (
+        this: SessionClientOwner,
+      ): Promise<void> {
+        await dispose.call(this);
+        retired.push(this);
       });
     try {
-      await expect(
-        fromConfig({
-          config: caller.config,
-          settingsOwner: caller.settingsOwner,
-          settingsService: caller.settingsService,
-          providerManager: caller.providerManager,
-          agentClient: caller.agentClient,
-          mcpRuntime: caller.mcpRuntime,
-          messageBus: caller.messageBus,
-        }),
-      ).rejects.toBe(failure);
-      const retiring = created.slice(-1).pop();
-      if (retiring === undefined) throw new Error('No session reached binding');
-      expect(() => retiring.getAgentClient()).toThrow('disposed');
+      const failure = await fromConfig({
+        credentialAuthority: credentials().authority,
+        config: caller.config,
+        settingsOwner: caller.settingsOwner,
+        settingsService: caller.settingsService,
+        providerManager: caller.providerManager,
+        agentClient: caller.agentClient,
+        mcpRuntime: caller.mcpRuntime,
+        messageBus: caller.messageBus,
+      }).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).not.toBeInstanceOf(AggregateError);
+      expect(failure).toMatchObject({
+        message: 'Workspace memory is disposed',
+      });
+      expect(retired).toHaveLength(1);
+      expect(() => retired[0].getAgentClient()).toThrow('disposed');
+      expect(credentials().snapshot()).toStrictEqual([1]);
       caller.settingsOwner.writeUserParameter('maxOutputTokens', 37);
       expect(caller.settingsService.get('maxOutputTokens')).toBe(37);
       expect(caller.agentClient.isInitialized()).toBe(true);
+      expect(caller.providerManager.getActiveProviderName()).toBe('fake');
+      expect(caller.messageBus.evaluate('read_file', {})).toBeDefined();
     } finally {
-      binding.mockRestore();
-      await created.slice(-1).pop()?.dispose();
+      observation.mockRestore();
       await caller.cleanup();
     }
   });
