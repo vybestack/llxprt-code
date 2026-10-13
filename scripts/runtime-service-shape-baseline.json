@@ -6,7 +6,7 @@
     },
     "agents": {
       "runtime-service-bundle": 202,
-      "runtime-service-bag-parameter": 81
+      "runtime-service-bag-parameter": 80
     },
     "cli": {
       "runtime-service-bag-parameter": 534,

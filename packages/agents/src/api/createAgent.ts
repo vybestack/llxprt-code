@@ -1,3 +1,4 @@
+import { bindCreatedAgentFinalization } from './preferred-agent-finalization.js';
 import { createTaskRegistration } from './runtimeFactories.js';
 import { HostCredentialOwner } from '@vybestack/llxprt-code-providers/auth.js';
 import { setActiveModel } from './providerMutations.js';
@@ -54,15 +55,19 @@ import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/config
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
 import type { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
+import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { AgentClientContract } from '@vybestack/llxprt-code-core/core/clientContract.js';
-import { type IsolatedRuntimeContextHandle } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
 import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import type {
   SessionSettingsOwner,
   AgentRuntimeFactoryBindings,
   RuntimeProviderManager,
+  RuntimeContentGeneratorFactory,
+  RuntimeTokenizerFactory,
+  ContentGenerator,
 } from '@vybestack/llxprt-code-core';
 import type { SchedulerConstruction } from '../session/assembleSchedulerOwner.js';
+import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type {
@@ -144,22 +149,11 @@ async function createAgentWithHostGitHub(
     parsed,
     resolvedAuth,
     runtimeId,
-    onApproval,
-    onOAuthPrompt,
-    editorCallbacks,
     toolSchedulerFactory,
-    runtimeFactoryBindings,
-    runtimeActivationBindings,
-    tokenStore,
-    suppliedMediaOwner,
+    runtimeFactoryBindings: factories,
   } = construction;
 
-  const factories = runtimeFactoryBindings;
-  const { params, forceConfirmations } = prepareAgentConfig(
-    parsed,
-    runtimeId,
-    factories,
-  );
+  const { params, forceConfirmations } = prepareAgentConfig(parsed, runtimeId);
   // Registry of scheduler handles created via a caller-injected factory. The
   // facade retains these and Agent.dispose() tears them down (dispose.md lines
   // 40-47). Empty unless a toolSchedulerFactory was supplied.
@@ -179,36 +173,59 @@ async function createAgentWithHostGitHub(
   // Agent-owned runtime managers (issue #3222): the Config constructor does
   // not attach ProfileManager/SubagentManager, and TaskTool registration
   // (and skill discovery) need them at initialize() time.
-  const mediaOwner = suppliedMediaOwner ?? createSessionMedia(config);
+  const mediaOwner =
+    construction.suppliedMediaOwner ?? createSessionMedia(config);
   const handle = await prepareOwnedMediaRuntime(
     config,
     mediaOwner,
-    factories,
     parsed,
     runtimeId,
-    runtimeActivationBindings,
-    tokenStore,
+    construction.runtimeActivationBindings,
+    construction.tokenStore,
     messageBus,
     policyOwner,
-    rawConfig,
+    rawConfig.tokenizerFactory,
+    rawConfig.contentGeneratorFactory,
+    rawConfig.definitionOwner?.profileReads,
+    rawConfig.credentialAuthority,
   );
   return finishCreatedAgent(
-    handle,
     config,
-    messageBus,
+    handle.settingsService,
+    handle.settingsOwner,
+    handle.providerManager,
+    handle.oauthManager,
+    handle.contentGeneratorFactory,
+    handle.tokenizerFactory,
+    handle.providerFileLifecycle,
+    () => handle.activate(),
+    () => handle.readRuntimeKind(),
+    () => handle.cleanup(),
     agentMcpAssemblyOptions(rawConfig, construction),
     parsed,
     resolvedAuth,
-    runtimeId,
-    onApproval,
-    onOAuthPrompt,
-    editorCallbacks,
-    injectedSchedulerHandles,
-    schedulerFactory,
     mediaOwner,
-    factories,
+    factories?.agentClientFactory,
+    factories?.taskToolRegistration,
     policyOwner,
     github,
+    bindCreatedAgentFinalization(
+      resolvedAuth,
+      config,
+      handle.providerManager,
+      handle.oauthManager,
+      handle.settingsService,
+      runtimeId,
+      handle.settingsOwner,
+      () => handle.readRuntimeKind(),
+      () => handle.cleanup(),
+      construction.onApproval,
+      construction.onOAuthPrompt,
+      construction.editorCallbacks,
+      injectedSchedulerHandles,
+      schedulerFactory,
+      mediaOwner,
+    ),
   );
 }
 
@@ -220,47 +237,63 @@ function createSessionMedia(config: Config): SessionMediaOwner {
 }
 
 function selectTasks(
-  factories: AgentRuntimeFactoryBindings | undefined,
+  taskToolRegistration:
+    | AgentRuntimeFactoryBindings['taskToolRegistration']
+    | undefined,
   authority: AgentConfig['credentialAuthority'],
 ): ReturnType<typeof createTaskRegistration> {
   const registration = createTaskRegistration(authority);
-  return factories?.taskToolRegistration(registration) ?? registration;
+  return taskToolRegistration?.(registration) ?? registration;
 }
 
 type CreatedAgentMcpOptions = McpAssemblyOptions &
   Pick<AgentConfig, 'imageOperation' | 'credentialAuthority'>;
 
 async function finishCreatedAgent(
-  handle: IsolatedRuntimeContextHandle,
   config: Config,
-  messageBus: MessageBus,
+  settings: SettingsService,
+  settingsOwner: SessionSettingsOwner,
+  providerManager: RuntimeProviderManager,
+  oauthManager: OAuthManager,
+  contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
+  tokenizerFactory: RuntimeTokenizerFactory,
+  providerFileLifecycle: ProviderFileLifecycle,
+  activateRuntime: () => void | Promise<void>,
+  readRuntimeKind: () => RuntimeKind,
+  closeRuntime: () => void | Promise<void>,
   mcpOptions: CreatedAgentMcpOptions,
   parsed: ReturnType<typeof AgentConfigSchema.parse>,
   resolvedAuth: ReturnType<typeof resolveAuthType>,
-  runtimeId: string,
-  onApproval: AgentConfig['onApproval'],
-  onOAuthPrompt: AgentConfig['onOAuthPrompt'],
-  editorCallbacks: EditorCallbacks | undefined,
-  injectedSchedulerHandles: AgentSchedulerHandle[],
-  schedulerFactory: SchedulerConstruction,
   mediaOwner: SessionMediaOwner,
-  factories: AgentRuntimeFactoryBindings | undefined,
+  agentClientFactory: AgentClientFactory | undefined,
+  taskToolRegistration:
+    | AgentRuntimeFactoryBindings['taskToolRegistration']
+    | undefined,
   policyOwner: RuntimePolicyOwner,
   github: ReturnType<typeof assembleHostGitHubBroker>,
+  finalizeCreatedAgent: ReturnType<typeof bindCreatedAgentFinalization>,
 ): Promise<Agent> {
   let disposeMcpRuntime = async (): Promise<void> => policyOwner.dispose();
   let agent: Agent;
   let sessionClient: SessionClientOwner | undefined;
   try {
-    await handle.activate();
+    await activateRuntime();
     const [mcpRuntime, ownedSessionClient] = await createOwnedSessionRoots(
-      handle,
+      config,
+      settings,
+      settingsOwner,
+      providerManager,
+      oauthManager,
+      contentGeneratorFactory,
+      tokenizerFactory,
+      providerFileLifecycle,
       mediaOwner,
-      factories?.agentClientFactory,
+      agentClientFactory,
       mcpOptions,
       policyOwner,
-      selectTasks(factories, mcpOptions.credentialAuthority),
+      selectTasks(taskToolRegistration, mcpOptions.credentialAuthority),
       (parsed.harness?.forceConfirmations ?? true) && config.isInteractive(),
+      mcpOptions.imageOperation,
     );
     disposeMcpRuntime = () => mcpRuntime.dispose();
     sessionClient = ownedSessionClient;
@@ -268,41 +301,26 @@ async function finishCreatedAgent(
     const activationOutcome = await activateCreatedSession(
       parsed,
       resolvedAuth,
-      handle,
       config,
-      messageBus,
+      settings,
+      settingsOwner,
+      providerManager,
+      oauthManager,
+      readRuntimeKind,
+      policyOwner.session.messageBus,
       mcpRuntime,
       ownedSessionClient,
     );
-    agent = await finalizeAgent(
+    agent = await finalizeCreatedAgent(
       { ...parsed, ...activationOutcome },
-      resolvedAuth,
-      config,
-      handle.providerManager,
-      handle.oauthManager,
-      handle.settingsService,
-      runtimeId,
-      handle.settingsOwner,
-      () => handle.readRuntimeKind(),
-      () => handle.cleanup(),
-      onApproval,
-      onOAuthPrompt,
-      editorCallbacks,
-      injectedSchedulerHandles,
-      'agent',
-      disposeMcpRuntime,
       mcpRuntime,
-      schedulerFactory,
-      undefined,
-      'config',
-      mediaOwner,
       ownedSessionClient,
-      mcpRuntime.workspaceSkills.operations,
     );
   } catch (primaryError) {
     return cleanupFailedCreatedAgent(
       primaryError,
-      handle,
+      closeRuntime,
+      config,
       mediaOwner,
       sessionClient,
       disposeMcpRuntime,
@@ -322,8 +340,12 @@ async function initializeCreatedClient(
 async function activateCreatedSession(
   parsed: Parameters<typeof applyActivation>[0],
   resolvedAuth: Parameters<typeof applyActivation>[1],
-  handle: IsolatedRuntimeContextHandle,
   config: Config,
+  settings: SettingsService,
+  settingsOwner: SessionSettingsOwner,
+  providerManager: RuntimeProviderManager,
+  oauthManager: OAuthManager,
+  readRuntimeKind: () => RuntimeKind,
   messageBus: MessageBus,
   mcpRuntime: McpRuntimeOwner,
   client: SessionClientOwner,
@@ -334,20 +356,20 @@ async function activateCreatedSession(
     config,
     messageBus,
     assembleProviderSwitch(
-      handle.config,
-      handle.settingsService,
-      handle.providerManager,
-      handle.oauthManager,
-      () => handle.readRuntimeKind(),
+      config,
+      settings,
+      providerManager,
+      oauthManager,
+      readRuntimeKind,
       client.operations.refreshAuth,
-      handle.settingsOwner,
+      settingsOwner,
     ),
-    handle.settingsService,
+    settings,
     mcpRuntime,
-    handle.providerManager,
+    providerManager,
     (method) => client.refreshAuth(method),
-    assembleModelSelection(handle.settingsOwner),
-    () => handle.settingsOwner.readSelectedProvider(),
+    assembleModelSelection(settingsOwner),
+    () => settingsOwner.readSelectedProvider(),
   );
 }
 
@@ -649,7 +671,6 @@ function initializeAgentHistory(
 function prepareAgentConfig(
   parsed: ReturnType<typeof AgentConfigSchema.parse>,
   runtimeId: string,
-  _factories: AgentRuntimeFactoryBindings | undefined,
 ): {
   readonly params: ConfigParameters;
   readonly forceConfirmations: boolean;
@@ -857,18 +878,15 @@ function createDefaultToolSchedulerFactory(options: {
 
 async function cleanupFailedCreatedAgent(
   primaryError: unknown,
-  handle: IsolatedRuntimeContextHandle,
+  closeRuntime: () => void | Promise<void>,
+  config: Config,
   mediaOwner: SessionMediaOwner,
   sessionClient: SessionClientOwner | undefined,
   disposeMcpRuntime: (() => Promise<void>) | undefined,
 ): Promise<never> {
-  const config = handle.config;
   const mcpCleanup = await Promise.allSettled([disposeMcpRuntime?.()]);
   const clientCleanup = await Promise.allSettled([sessionClient?.dispose()]);
-  const cleanup = await Promise.allSettled([
-    handle.cleanup(),
-    config.dispose(),
-  ]);
+  const cleanup = await Promise.allSettled([closeRuntime(), config.dispose()]);
   const mediaCleanup = await Promise.allSettled([mediaOwner.dispose()]);
   const failures = [
     ...mcpCleanup,

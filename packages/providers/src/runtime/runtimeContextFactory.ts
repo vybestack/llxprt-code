@@ -41,15 +41,18 @@ import type {
 } from '@vybestack/llxprt-code-settings';
 import { ProviderManager } from '../ProviderManager.js';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
-import { OAuthManager } from '../auth/index.js';
+import type { OAuthManager } from '../auth/index.js';
 import type { TokenStore } from '../auth/types.js';
 import {
-  closeOwnedTokenStore,
+  createOwnedTokenStoreClose,
   type CredentialAuthority,
 } from '../auth/proxy/credential-store-factory.js';
 import { validateRuntimeId } from './runtimeIdValidation.js';
 import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createFileOAuthSettingsProvider } from '../auth/file-oauth-settings.js';
+import { createOwnerOAuthManager } from '../composition/owner-oauth-construction.js';
+import { createSessionAuthPolicyReader } from '../auth/session-auth-policy.js';
+import { createOAuthProfileReads } from '../auth/oauth-profile-reads.js';
 import { registerStandardOAuthProviders } from '../composition/oauth-provider-registration.js';
 
 export type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
@@ -221,32 +224,20 @@ function resolveOAuthManager(
   if (!tokenStore) {
     throw new Error('Isolated runtime requires an owner-created token store');
   }
-  const oauthSettings = createFileOAuthSettingsProvider();
-  const oauthManager = new OAuthManager(tokenStore, oauthSettings, {
-    messageBus: sessionMessageBus,
-    config,
-    profileReads,
-    requestInteractiveAuth,
-    invalidateAuthCaches,
-    readSessionAuthPolicy: () => ({
-      profileName: settings.getCurrentProfileName(),
-      baseUrl:
-        typeof settings.get('base-url') === 'string'
-          ? String(settings.get('base-url'))
-          : undefined,
-      bucketPrompt: settings.get('auth-bucket-prompt'),
-      bucketDelay: settings.get('auth-bucket-delay'),
-      interactiveTimeoutMs: settings.get('auth.interactiveTimeoutMs'),
-      noBrowser: settings.get('auth.noBrowser') === true,
-      authOnly: settings.get('authOnly') === true,
-    }),
-    readAuthIdentity: () => ({
+  return createOwnerOAuthManager(
+    tokenStore,
+    createFileOAuthSettingsProvider(),
+    sessionMessageBus,
+    profileReads ?? createOAuthProfileReads(config.profileDirectory),
+    createSessionAuthPolicyReader(settings),
+    () => ({
       runtimeId: activationState.currentRuntimeId,
       runtimeKind: activationState.currentRuntimeKind,
     }),
-  });
-  registerStandardOAuthProviders(oauthManager, requestFetch, tokenStore);
-  return oauthManager;
+    requestInteractiveAuth,
+    invalidateAuthCaches,
+    requestFetch,
+  );
 }
 
 /**
@@ -398,7 +389,7 @@ function buildCleanupClosure(
       // Renewals read and lock through the store, so the owned manager is
       // retired (timers cancelled, in-flight work joined) before the store closes.
       await settle(() => ownedAuth.oauthManager?.dispose());
-      await settle(() => closeOwnedTokenStore(ownedAuth.tokenStore));
+      await settle(() => ownedAuth.closeTokenStore?.());
       if (failures.length === 1) throw failures[0];
       if (failures.length > 1)
         throw new AggregateError(failures, 'Provider runtime cleanup failed');
@@ -410,7 +401,7 @@ function buildCleanupClosure(
 /** Auth resources created by this runtime; borrowed ones are never listed. */
 interface OwnedAuthResources {
   readonly oauthManager: OAuthManager | undefined;
-  readonly tokenStore: TokenStore | undefined;
+  readonly closeTokenStore: (() => void) | undefined;
 }
 
 function requireCredentialAuthority(
@@ -460,7 +451,10 @@ function resolveOwnerOAuthManager(
     ownedAuth: {
       oauthManager:
         options.oauthManager === undefined ? oauthManager : undefined,
-      tokenStore: ownedTokenStore,
+      closeTokenStore:
+        ownedTokenStore === undefined
+          ? undefined
+          : createOwnedTokenStoreClose(ownedTokenStore),
     },
   };
 }

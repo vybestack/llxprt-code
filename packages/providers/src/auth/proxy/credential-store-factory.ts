@@ -266,3 +266,12 @@ export function createGitHubBrokerSocketClient(
 ): ProxySocketClient | null {
   return authority.createGitHubBrokerSocketClient();
 }
+
+export function createOwnedTokenStoreClose(store: TokenStore): () => void {
+  let closed = false;
+  return (): void => {
+    if (closed) return;
+    closed = true;
+    closeOwnedTokenStore(store);
+  };
+}
