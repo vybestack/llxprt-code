@@ -7,6 +7,7 @@ import { field } from '../../recording/resolverProjection.js';
 import { parseChronologyBinding } from '../../recording/chronologyBinding.js';
 import type { SessionRecordingService } from '../../recording/SessionRecordingService.js';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import type { IContent } from './IContent.js';
 import type { ResumeCursorBoot } from '../../recording/resumeCursorBoot.js';
 import {
@@ -77,14 +78,15 @@ export async function persistResumeChronology(
       const row = await original.next();
       if (row.done === true)
         throw new Error('Resume projection exceeds source rows');
-      watermark = await persistProjectedRow(
-        line,
-        rowIndex,
-        row.value,
-        recording,
-        boot,
-        observation,
-      );
+      watermark =
+        (await persistProjectedRow(
+          line,
+          rowIndex,
+          row.value,
+          recording,
+          boot,
+          observation,
+        )) ?? watermark;
       rowIndex += 1;
     }
     if ((await original.next()).done !== true)
@@ -104,10 +106,13 @@ async function persistProjectedRow(
   recording: SessionRecordingService,
   boot: ResumeCursorBoot,
   observation?: ChronologyCommitObservation,
-): Promise<CommitWatermark> {
+): Promise<CommitWatermark | null> {
   const content = field(field(JSON.parse(line), 'payload'), 'content');
   if (content === null || typeof content !== 'object')
     throw new Error('Invalid projected content');
+  // The journal already resolves to this row, chronology and response-chain
+  // invalidation included, so a record would only repeat what it holds.
+  if (isDeepStrictEqual(content, original.content)) return null;
   boot.ownership?.retain(content);
   try {
     const chronology = field(field(content, 'metadata'), 'chronology');
