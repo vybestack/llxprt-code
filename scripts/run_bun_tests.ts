@@ -57,10 +57,10 @@ import {
   reapStaleBunTestProcesses,
   killTimedOutChild,
 } from './lib/bun-test-retry.js';
-import { scriptsTestFileWeight } from './lib/scripts-test-weights.js';
 import {
   parsePartitionIdentity,
-  selectRootPartition,
+  reportEmptySelection,
+  selectWeightedPartition,
   type PartitionIdentity,
 } from './lib/bun-test-partition.js';
 import {
@@ -577,10 +577,15 @@ export async function runBunTests(
 ): Promise<number> {
   const options = parseArgs(argv);
   const tsconfigOverride = resolveTsconfig(options, dependencies);
-  const { all, files } = resolveSelectedFiles(options, dependencies);
+  const all = resolveSelectedFiles(options, dependencies);
+  const files = selectWeightedPartition(
+    all,
+    options.partition,
+    dependencies.repoRoot,
+  );
 
   if (files.length === 0)
-    return reportEmptySelection(options, dependencies, all);
+    return reportEmptySelection(options, dependencies, all.length);
 
   if (options.dryRun) {
     dependencies.stdout(`Dry run: ${files.length} files would be executed:`);
@@ -674,11 +679,8 @@ function resolveTsconfig(
 function resolveSelectedFiles(
   options: CliOptions,
   dependencies: BunTestRunnerDependencies,
-): {
-  readonly all: readonly BunTestFile[];
-  readonly files: readonly BunTestFile[];
-} {
-  const all = applyFilters(
+): readonly BunTestFile[] {
+  return applyFilters(
     applyExclusions(
       dependencies.resolveFiles(
         dependencies.repoRoot,
@@ -688,29 +690,6 @@ function resolveSelectedFiles(
     ),
     options.filters,
   );
-  const weightOf = (file: string): number =>
-    scriptsTestFileWeight(dependencies.repoRoot, file);
-  return { all, files: selectRootPartition(all, options.partition, weightOf) };
-}
-
-/** Exit status for a run with no files: success only when another partition owns them. */
-function reportEmptySelection(
-  options: CliOptions,
-  dependencies: BunTestRunnerDependencies,
-  all: readonly BunTestFile[],
-): number {
-  if (all.length > 0 && options.partition !== null) {
-    dependencies.stdout(
-      `Partition ${options.partition.index}of${options.partition.count} owns none of the ${all.length} native Bun test files in this root`,
-    );
-    return 0;
-  }
-  const scope = options.workspace
-    ? `workspace "${options.workspace}"`
-    : 'any workspace';
-  dependencies.stderr(`No native Bun test files found for ${scope}.`);
-  dependencies.stderr('Roots must be declared in scripts/bun-test-roots.ts.');
-  return 1;
 }
 
 interface RunAllFilesOutcome {

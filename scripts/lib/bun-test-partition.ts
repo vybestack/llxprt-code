@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { scriptsTestFileWeight } from './scripts-test-weights.js';
+
 /**
  * Partition selection shared by the Bun test runners that split one workspace
  * across several CI legs (issue #3185 for cli, issue #854 for agents). The
@@ -172,4 +174,50 @@ export function selectRootPartition<T extends { readonly file: string }>(
     ),
   );
   return entries.filter((entry) => owned.has(entry.file));
+}
+
+/**
+ * Applies a partition identity to a resolved file list, balancing by the
+ * scripts test weights so slow files spread across the legs.
+ */
+export function selectWeightedPartition<T extends { readonly file: string }>(
+  entries: readonly T[],
+  identity: PartitionIdentity | null,
+  repoRoot: string,
+): readonly T[] {
+  return selectRootPartition(entries, identity, (file) =>
+    scriptsTestFileWeight(repoRoot, file),
+  );
+}
+
+export interface EmptySelectionOptions {
+  readonly workspace: string | null;
+  readonly partition: PartitionIdentity | null;
+}
+
+export interface EmptySelectionOutput {
+  readonly stdout: (message: string) => void;
+  readonly stderr: (message: string) => void;
+}
+
+/**
+ * Exit status for a run with no files: success only when files matched before
+ * partitioning, so another partition owns them.
+ */
+export function reportEmptySelection(
+  options: EmptySelectionOptions,
+  output: EmptySelectionOutput,
+  totalFiles: number,
+): number {
+  const { workspace, partition } = options;
+  if (totalFiles > 0 && partition !== null) {
+    output.stdout(
+      `Partition ${partition.index}of${partition.count} owns none of the ${totalFiles} native Bun test files in this root`,
+    );
+    return 0;
+  }
+  const scope = workspace ? `workspace "${workspace}"` : 'any workspace';
+  output.stderr(`No native Bun test files found for ${scope}.`);
+  output.stderr('Roots must be declared in scripts/bun-test-roots.ts.');
+  return 1;
 }
