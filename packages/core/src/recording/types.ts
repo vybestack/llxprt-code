@@ -495,6 +495,8 @@ export type ReplayResult =
       sessionName?: string | null;
       /** Self-contained child ancestry from the `session_forked` event. */
       ancestry?: SessionForkedPayload;
+      /** Transaction the journal ends inside, when a replacement was cut off. */
+      unfinishedReplaceTxId?: string;
       readonly semanticMediaPurgeFrontier?: {
         readonly contentIndex: number;
         readonly blockIndex: number;

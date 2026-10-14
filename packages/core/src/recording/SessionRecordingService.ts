@@ -786,6 +786,9 @@ export class SessionRecordingService {
   /**
    * Initialize for resuming an existing session file.
    * Sets the file path and sequence counter so new events append correctly.
+   * A journal that ends inside a replace transaction (`unfinishedReplaceTxId`)
+   * is closed with a `replace_abort` ahead of every other record, so the file
+   * grammar and the writer guard agree before a new replacement begins.
    *
    * @plan PLAN-20260211-SESSIONRECORDING.P05
    * @requirement REQ-REC-008
@@ -795,11 +798,12 @@ export class SessionRecordingService {
     filePath: string,
     lastSeq: number,
     title?: string | null,
+    unfinishedReplaceTxId?: string,
   ): void {
     this.filePath = filePath;
     this.seq = lastSeq;
     this.materialized = true;
-    this.replaceWrites.reset();
+    this.replaceWrites.resume(unfinishedReplaceTxId ?? null);
     this.preContentBuffer.clear();
     this.preContentBytes = 0;
     // Watermark offsets are absolute for the (possibly different) journal
@@ -807,6 +811,8 @@ export class SessionRecordingService {
     this.acks.resetBaseOffset();
     this.sessionTitle = title;
     this.startChatsDirWatcher();
+    if (unfinishedReplaceTxId !== undefined)
+      this.enqueue('replace_abort', { txId: unfinishedReplaceTxId });
   }
 
   /**

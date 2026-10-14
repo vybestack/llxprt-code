@@ -27,7 +27,12 @@ export class ReplaceTransactionConflict extends Error {
  * provider switches or session events, pass through.
  */
 export class ReplaceWriteGuard {
-  private openTxId: string | null = null;
+  private open: string | null = null;
+
+  /** The transaction the journal written so far leaves open, if any. */
+  get openTxId(): string | null {
+    return this.open;
+  }
 
   /**
    * Admit a record about to be appended: throws when it cannot follow the
@@ -42,9 +47,9 @@ export class ReplaceWriteGuard {
     switch (type) {
       case 'replace_begin': {
         const txId = requireTxId(payload);
-        if (this.openTxId !== null)
+        if (this.open !== null)
           throw new ReplaceTransactionConflict(
-            `begin ${txId} while transaction ${this.openTxId} is open`,
+            `begin ${txId} while transaction ${this.open} is open`,
           );
         return;
       }
@@ -62,33 +67,41 @@ export class ReplaceWriteGuard {
     }
   }
 
-  private observe(type: string, payload: unknown): void {
+  /**
+   * Advance the open-transaction state past a record already in the journal.
+   * Resume uses this to learn whether the file ends inside a transaction.
+   */
+  observe(type: string, payload: unknown): void {
     switch (type) {
       case 'replace_begin':
-        this.openTxId = requireTxId(payload);
+        this.open = requireTxId(payload);
         return;
       case 'replace_commit':
       case 'replace_abort':
-        this.openTxId = null;
+        this.open = null;
         return;
       case 'content':
-        if (contentTxId(payload) === undefined) this.openTxId = null;
+        if (contentTxId(payload) === undefined) this.open = null;
         return;
       default:
-        if (HISTORY_RECORD_TYPES.has(type)) this.openTxId = null;
+        if (HISTORY_RECORD_TYPES.has(type)) this.open = null;
     }
   }
 
-  reset(): void {
-    this.openTxId = null;
+  /**
+   * Start tracking a journal that ends inside transaction `openTxId`, or
+   * outside any transaction when null.
+   */
+  resume(openTxId: string | null): void {
+    this.open = openTxId;
   }
 
   private requireOpen(txId: string, what: string): void {
-    if (this.openTxId === txId) return;
+    if (this.open === txId) return;
     const open =
-      this.openTxId === null
+      this.open === null
         ? 'no transaction is open'
-        : `transaction ${this.openTxId} is open`;
+        : `transaction ${this.open} is open`;
     throw new ReplaceTransactionConflict(`${what} for ${txId} but ${open}`);
   }
 }

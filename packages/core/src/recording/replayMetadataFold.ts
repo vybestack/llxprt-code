@@ -21,6 +21,7 @@ import {
   isSessionStartHeader,
 } from './sessionStartHeader.js';
 import type { JournalReadCounters } from './journalCounters.js';
+import { ReplaceWriteGuard } from './replaceWriteGuard.js';
 const SUPPORTED_RECORDING_VERSIONS = new Set([1, 2]);
 
 export interface ReplayAccumulators {
@@ -38,6 +39,8 @@ export interface ReplayAccumulators {
 
   rawMetadataEvents: SessionRecordLine[];
   semanticMediaPurgeFrontier: SemanticMediaPurgePayload['frontier'] | undefined;
+  /** Tracks whether the journal ends inside an unfinished replace transaction. */
+  replaceTail: ReplaceWriteGuard;
 
   counters: JournalReadCounters | null;
 }
@@ -58,6 +61,7 @@ export function createAccumulators(
     unparseableLineCount: 0,
     rawMetadataEvents: [],
     semanticMediaPurgeFrontier: undefined,
+    replaceTail: new ReplaceWriteGuard(),
     counters,
   };
 }
@@ -347,6 +351,7 @@ function dispatchEvent(
     case 'replace_begin':
     case 'replace_commit':
     case 'replace_abort':
+      acc.replaceTail.observe(eventType, payload);
       return undefined;
     case 'session_start':
       return handleSessionStart(payload, acc, lineNumber, expectedProjectHash);
@@ -434,6 +439,9 @@ export function finalizeReplay(acc: ReplayAccumulators): ReplayResult {
     checkpoints: folded,
     sessionName,
     ancestry,
+    ...(acc.replaceTail.openTxId === null
+      ? {}
+      : { unfinishedReplaceTxId: acc.replaceTail.openTxId }),
     ...(acc.semanticMediaPurgeFrontier === undefined
       ? {}
       : { semanticMediaPurgeFrontier: acc.semanticMediaPurgeFrontier }),

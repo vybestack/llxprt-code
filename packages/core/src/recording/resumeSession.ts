@@ -156,7 +156,11 @@ async function resolveAndLockSession(
 function initializeRecordingForResume(
   lockedSession: LockedSession,
   request: ResumeRequest,
-  replayResult: { metadata: SessionMetadata; lastSeq: number },
+  replayResult: {
+    metadata: SessionMetadata;
+    lastSeq: number;
+    unfinishedReplaceTxId?: string;
+  },
 ): SessionRecordingService {
   const recording = new SessionRecordingService({
     sessionId: replayResult.metadata.sessionId,
@@ -176,6 +180,7 @@ function initializeRecordingForResume(
     lockedSession.targetFilePath,
     replayResult.lastSeq,
     replayResult.metadata.title,
+    replayResult.unfinishedReplaceTxId,
   );
   recording.adoptLock(lockedSession.lockHandle);
 

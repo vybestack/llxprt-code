@@ -19,6 +19,8 @@ const METADATA_FIELDS = new Set([
   'directories',
   'severity',
   'message',
+  'txId',
+  'tx',
 ]);
 // Per-envelope external metadata policy, independent of journal row count.
 // Charge four bytes per encoded UTF-16 unit for token plus decoded text, and
