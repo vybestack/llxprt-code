@@ -13,6 +13,8 @@ import { createProviderCommand } from '../commands/providerCommand.js';
 import { bindProviderCommandOperations } from '../commands/providerCommandHost.js';
 import { useCredentialCommands } from './useCredentialCommands.js';
 import { useChatCommand } from './useChatCommand.js';
+import { createContinueCommand } from '../commands/continueCommand.js';
+import { bindContinueCommandOperations } from '../commands/continueCommandHost.js';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type {
   RecordingIntegration,
@@ -159,9 +161,21 @@ function useCommandState(
     rawRecording,
     recordingSwapCallbacks,
   );
+  const continueCommand = useMemo(
+    () =>
+      createContinueCommand(
+        bindContinueCommandOperations(
+          agent,
+          config,
+          recordingOwner === 'agent' ? 'agent' : undefined,
+        ),
+      ),
+    [agent, config, recordingOwner],
+  );
   const builtins = useMemo<BuiltinCommandOwners>(
     () => ({
       chatCommand,
+      continueCommand,
       modelCommand,
       toolFormatCommand,
       setCommand,
@@ -170,6 +184,7 @@ function useCommandState(
     }),
     [
       chatCommand,
+      continueCommand,
       modelCommand,
       toolFormatCommand,
       setCommand,

@@ -15,7 +15,8 @@ import { DebugLogger } from '@vybestack/llxprt-code-core';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { renderHook, waitFor } from '../../__tests__/render.js';
-import { continueCommand } from '../commands/continueCommand.js';
+import { createContinueCommand } from '../commands/continueCommand.js';
+import { bindContinueCommandOperations } from '../commands/continueCommandHost.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
 import { resumeOwnerSession } from '../utils/resumeOwnerSession.js';
 import { useSessionBrowser } from './useSessionBrowser.js';
@@ -49,6 +50,9 @@ describe('owner mode with an unreadable recording present (issue #3732)', () => 
       const { commands } = turnStore;
       const addItem: SlashCommandHandlerDeps['addItem'] = (item, timestamp) =>
         commands.addItem(item, timestamp);
+      const continueCommand = createContinueCommand(
+        bindContinueCommandOperations(next, null, 'agent'),
+      );
       const deps: SlashCommandHandlerDeps = {
         commands: [continueCommand],
         config: {

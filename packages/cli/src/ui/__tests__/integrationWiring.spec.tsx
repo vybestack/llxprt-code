@@ -29,7 +29,7 @@ import { hasDialogRequest } from '../../__tests__/dialogStore.js';
 import { render } from 'ink-testing-library';
 import { Box, Text } from 'ink';
 
-import { continueCommand } from '../commands/continueCommand.js';
+import { createContinueCommandForTest } from '../commands/__tests__/continue-command-test-owner.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type {
   CommandContext,
@@ -117,6 +117,7 @@ function TestDialogRenderer({ store }: { store: DialogStore }) {
 
 describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
   let ctx: CommandContext;
+  const continueCommand = createContinueCommandForTest(() => ctx);
 
   beforeEach(() => {
     ctx = createMockCommandContext();
@@ -494,6 +495,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
           config: { isInteractive: () => true } as unknown as Config,
         },
       });
+      ctx = interactiveCtx;
       const dialogResult = await continueCommand.action!(interactiveCtx, '');
       expect(dialogResult).toBeDefined();
       expect(validTypes).toContain(dialogResult!.type);
@@ -504,6 +506,7 @@ describe('Integration Wiring @plan:PLAN-20260214-SESSIONBROWSER.P22', () => {
           config: { isInteractive: () => false } as unknown as Config,
         },
       });
+      ctx = nonInteractiveCtx;
       const errorResult = await continueCommand.action!(nonInteractiveCtx, '');
       expect(errorResult).toBeDefined();
       assertType(errorResult, isMessageAction);

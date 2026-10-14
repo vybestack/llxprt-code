@@ -17,7 +17,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { assertHasType } from '../__tests__/assertions.js';
-import { continueCommand } from '../ui/commands/continueCommand.js';
+import { createContinueCommandForTest } from '../ui/commands/__tests__/continue-command-test-owner.js';
 import type {
   CommandContext,
   SlashCommandActionReturn,
@@ -83,7 +83,7 @@ describe('Continue command integration #2', () => {
       },
     });
 
-    const result = (await continueCommand.action!(
+    const result = (await createContinueCommandForTest(() => ctx).action!(
       ctx,
       'latest',
     )) as SlashCommandActionReturn;
