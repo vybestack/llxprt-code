@@ -148,6 +148,9 @@ async function prepareParity(
   store.apply({ kind: 'content', content: row(3_000_000) });
   const expected = store.materialize();
   const snapshot = store.capturePendingFold();
+  // The pending row's append is still in flight. Letting it land before the
+  // tests unlink the journal keeps appendFile from recreating the path.
+  await store.waitForDurable();
   const journalPath = recorder.getFilePath();
   if (journalPath === null) throw new Error('Missing journal');
   return { recorder, store, snapshot, expected, journalPath, projected };
