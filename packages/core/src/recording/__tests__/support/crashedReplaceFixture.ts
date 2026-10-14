@@ -3,10 +3,13 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { HistoryService } from '../../../services/history/HistoryService.js';
+import { opToEnvelope } from '../../../services/history/historyJournalEnvelope.js';
+import { replaceAllOps } from '../../../services/history/historyReplaceOps.js';
 import type { IContent } from '../../../services/history/IContent.js';
 import { foldDurableRows } from '../../durableRowFold.js';
 import { JournalResolver } from '../../journalResolver.js';
-import type { ResumeCursorBoot } from '../../resumeCursorBoot.js';
+import { ResumeCursorBoot } from '../../resumeCursorBoot.js';
+import { scanResumeMetadata } from '../../resumeMetadata.js';
 import {
   CONTINUE_LATEST,
   resumeSession,
@@ -14,9 +17,56 @@ import {
 } from '../../resumeSession.js';
 import { SessionRecordingService } from '../../SessionRecordingService.js';
 
-const PROJECT_HASH = 'crashed-replace-project';
+export const PROJECT_HASH = 'crashed-replace-project';
 const PROVIDER = 'openai';
 const MODEL = 'gpt-4.1';
+
+export function newRecorder(dir: string): SessionRecordingService {
+  return new SessionRecordingService({
+    sessionId: 'crashed-replace',
+    projectHash: PROJECT_HASH,
+    chatsDir: dir,
+    workspaceDirs: [dir],
+    provider: PROVIDER,
+    model: MODEL,
+  });
+}
+
+export interface InterruptedReplaceOptions {
+  readonly taggedRows: readonly string[];
+  readonly commit?: boolean;
+  /** A plain row written after the tagged rows, abandoning the transaction. */
+  readonly abandonedBy?: string;
+}
+
+/**
+ * Record what a process leaves behind when it stops inside a replacement: one
+ * prior row, then `replace_begin` and `taggedRows` rows tagged with the
+ * transaction. `commit` finishes the transaction instead, as a clean shutdown
+ * would.
+ */
+export async function recordInterruptedReplace(
+  recorder: SessionRecordingService,
+  options: InterruptedReplaceOptions,
+): Promise<void> {
+  await recorder.commit('content', { content: row('old', 1) });
+  await recorder.commit('replace_begin', { txId: 'crashed' });
+  let seq = 2;
+  for (const text of options.taggedRows)
+    await recorder.commit('content', {
+      content: row(text, seq++),
+      tx: 'crashed',
+    });
+  if (options.commit === true)
+    await recorder.commit('replace_commit', {
+      txId: 'crashed',
+      rowCount: options.taggedRows.length,
+    });
+  if (options.abandonedBy !== undefined)
+    await recorder.commit('content', {
+      content: row(options.abandonedBy, seq),
+    });
+}
 
 export function row(text: string, seq: number): IContent {
   return {
@@ -26,7 +76,7 @@ export function row(text: string, seq: number): IContent {
   };
 }
 
-function textOf(content: IContent): string {
+export function textOf(content: IContent): string {
   const block = content.blocks[0];
   if (block.type !== 'text') throw new Error('expected a text block');
   return block.text;
@@ -46,39 +96,13 @@ export class CrashedReplaceSession {
    * `replace_begin` and `taggedRows` rows tagged with the transaction.
    * `commit` finishes the transaction instead, as a clean shutdown would.
    */
-  static async create(options: {
-    readonly taggedRows: readonly string[];
-    readonly commit?: boolean;
-    /** A plain row written after the tagged rows, abandoning the transaction. */
-    readonly abandonedBy?: string;
-  }): Promise<CrashedReplaceSession> {
+  static async create(
+    options: InterruptedReplaceOptions,
+  ): Promise<CrashedReplaceSession> {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'crashed-replace-'));
-    const recorder = new SessionRecordingService({
-      sessionId: 'crashed-replace',
-      projectHash: PROJECT_HASH,
-      chatsDir: dir,
-      workspaceDirs: [dir],
-      provider: PROVIDER,
-      model: MODEL,
-    });
+    const recorder = newRecorder(dir);
     try {
-      await recorder.commit('content', { content: row('old', 1) });
-      await recorder.commit('replace_begin', { txId: 'crashed' });
-      let seq = 2;
-      for (const text of options.taggedRows)
-        await recorder.commit('content', {
-          content: row(text, seq++),
-          tx: 'crashed',
-        });
-      if (options.commit === true)
-        await recorder.commit('replace_commit', {
-          txId: 'crashed',
-          rowCount: options.taggedRows.length,
-        });
-      if (options.abandonedBy !== undefined)
-        await recorder.commit('content', {
-          content: row(options.abandonedBy, seq),
-        });
+      await recordInterruptedReplace(recorder, options);
       const filePath = recorder.getFilePath();
       if (filePath === null) throw new Error('journal was not materialized');
       return new CrashedReplaceSession(dir, filePath);
@@ -164,7 +188,7 @@ export class CrashedReplaceSession {
   }
 }
 
-async function viaResolver(file: string): Promise<string[]> {
+export async function viaResolver(file: string): Promise<string[]> {
   const resolver = await JournalResolver.open(file);
   const rows: string[] = [];
   try {
@@ -176,7 +200,7 @@ async function viaResolver(file: string): Promise<string[]> {
   return rows;
 }
 
-async function viaDurableFold(file: string): Promise<string[]> {
+export async function viaDurableFold(file: string): Promise<string[]> {
   const fold = await foldDurableRows({
     filePath: file,
     maxBytes: (await fs.stat(file)).size,
@@ -189,6 +213,45 @@ async function viaDurableFold(file: string): Promise<string[]> {
     await fold.close();
   }
   return rows;
+}
+
+/** The rows a resume would stream from a journal file that is not a session file. */
+export async function viaBootStream(file: string): Promise<string[]> {
+  const { replay, watermark } = await scanResumeMetadata(
+    file,
+    PROJECT_HASH,
+    (await fs.stat(file)).size,
+  );
+  if (!replay.ok) throw new Error(replay.error);
+  const boot = await ResumeCursorBoot.open(file, replay.lastSeq, watermark);
+  const rows: string[] = [];
+  try {
+    for await (const content of boot.streamRows()) rows.push(textOf(content));
+  } finally {
+    await boot.close();
+  }
+  return rows;
+}
+
+/** Record types of a journal file, in file order. */
+export async function recordTypesOf(file: string): Promise<string[]> {
+  const text = await fs.readFile(file, 'utf8');
+  return text
+    .split('\n')
+    .filter((line) => line !== '')
+    .map((line) => (JSON.parse(line) as { type: string }).type);
+}
+
+/** Commit a replacement of the whole history through `recorder`, as the history service does. */
+export async function commitReplacement(
+  recorder: SessionRecordingService,
+  texts: readonly string[],
+): Promise<void> {
+  const rows = texts.map((text, index) => row(text, index + 100));
+  for (const op of replaceAllOps(rows)) {
+    const event = opToEnvelope(op);
+    await recorder.commit(event.type, event.payload);
+  }
 }
 
 /** Every reader returning `expected`. */

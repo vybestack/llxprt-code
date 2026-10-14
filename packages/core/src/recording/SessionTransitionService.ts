@@ -96,6 +96,23 @@ async function releaseSource(
   }
 }
 
+/** The child's lock, which also closes the child's boot when released. */
+function bootClosingLock(
+  lock: LockHandle,
+  currentBoot: () => ResumeCursorBoot | undefined,
+): LockHandle {
+  return {
+    ...lock,
+    async release(): Promise<void> {
+      try {
+        await currentBoot()?.close();
+      } finally {
+        await lock.release();
+      }
+    },
+  };
+}
+
 async function prepareChild(
   target: CheckpointTarget,
   checkpoint: CheckpointMetadataView,
@@ -124,7 +141,7 @@ async function prepareChild(
     } finally {
       await file.close();
     }
-    await copyCheckpointRange(
+    const { unfinishedReplaceTxId } = await copyCheckpointRange(
       target.source.filePath,
       filePath,
       watermark,
@@ -137,18 +154,13 @@ async function prepareChild(
       chatsDir,
       ...options,
     });
-    recording.initializeForResume(filePath, checkpoint.sequence);
-    const childLock = lock;
-    const lockHandle: LockHandle = {
-      ...childLock,
-      async release(): Promise<void> {
-        try {
-          await boot?.close();
-        } finally {
-          await childLock.release();
-        }
-      },
-    };
+    recording.initializeForResume(
+      filePath,
+      checkpoint.sequence,
+      undefined,
+      unfinishedReplaceTxId,
+    );
+    const lockHandle = bootClosingLock(lock, () => boot);
     recording.adoptLock(lockHandle);
     recording.recordSessionFork({
       parentSessionId: target.source.sessionId,
@@ -161,7 +173,7 @@ async function prepareChild(
       throw new Error('Child recording failed during flush');
     boot = await ResumeCursorBoot.open(
       filePath,
-      checkpoint.sequence + 1,
+      recording.getLastEnqueuedSequence(),
       (await fs.stat(filePath)).size,
       options.counters,
       options.mediaStore,

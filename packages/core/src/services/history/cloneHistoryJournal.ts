@@ -5,8 +5,7 @@ import { pipeline } from 'node:stream/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { SessionRecordingService } from '../../recording/SessionRecordingService.js';
-import { readMetadataJsonLines } from '../../recording/metadataJsonLines.js';
-import { field } from '../../recording/resolverProjection.js';
+import { scanResumeMetadata } from '../../recording/resumeMetadata.js';
 import { createScratchDir } from '../../storage/scratch-root.js';
 
 export async function cloneHistoryJournal(
@@ -31,20 +30,23 @@ export async function cloneHistoryJournal(
     const sourcePath = source.getFilePath();
     if (isCancelled()) throw new Error('History journal store is disposed');
     if (sourcePath === null) return { recorder, directory, byteOffset: 0 };
-    const byteOffset = (await stat(sourcePath)).size;
+    const copiedBytes = (await stat(sourcePath)).size;
     const filePath = join(directory, 'history.jsonl');
-    if (byteOffset > 0) {
+    let byteOffset = copiedBytes;
+    if (copiedBytes > 0) {
       await pipeline(
-        createReadStream(sourcePath, { start: 0, end: byteOffset - 1 }),
+        createReadStream(sourcePath, { start: 0, end: copiedBytes - 1 }),
         createWriteStream(filePath, { flags: 'wx' }),
       );
-      if ((await stat(filePath)).size !== byteOffset)
+      if ((await stat(filePath)).size !== copiedBytes)
         throw new Error(
           'History journal source was truncated during detachment',
         );
-      recorder.initializeForResume(
+      byteOffset = await initializeFromCopy(
+        recorder,
         filePath,
-        await lastSequence(filePath, byteOffset),
+        source.getProjectHash(),
+        copiedBytes,
       );
     }
     if (isCancelled()) throw new Error('History journal store is disposed');
@@ -56,16 +58,35 @@ export async function cloneHistoryJournal(
   }
 }
 
-async function lastSequence(
+/**
+ * Point the recorder at the copied journal. A source copied while a
+ * replacement was open ends inside that transaction; the recorder closes it
+ * with a `replace_abort`, exactly as resume does, and the abort is flushed
+ * here so the returned byte offset covers a journal that ends outside any
+ * transaction.
+ */
+async function initializeFromCopy(
+  recorder: SessionRecordingService,
   filePath: string,
-  byteOffset: number,
+  projectHash: string,
+  copiedBytes: number,
 ): Promise<number> {
-  let lastSeq = 0;
-  for await (const line of readMetadataJsonLines(filePath, byteOffset)) {
-    const seq = field(line.parsed, 'seq');
-    if (typeof seq === 'number') lastSeq = seq;
-  }
-  return lastSeq;
+  const { replay } = await scanResumeMetadata(
+    filePath,
+    projectHash,
+    copiedBytes,
+  );
+  if (!replay.ok)
+    throw new Error(`History journal source is unreadable: ${replay.error}`);
+  recorder.initializeForResume(
+    filePath,
+    replay.lastSeq,
+    undefined,
+    replay.unfinishedReplaceTxId,
+  );
+  if (replay.unfinishedReplaceTxId === undefined) return copiedBytes;
+  await recorder.flush();
+  return (await stat(filePath)).size;
 }
 
 export function removeTempDir(dir: string | null): void {

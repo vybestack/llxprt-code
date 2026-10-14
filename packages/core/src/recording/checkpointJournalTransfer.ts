@@ -3,6 +3,7 @@ import { open, type FileHandle } from 'node:fs/promises';
 import { readMetadataJsonLines } from './metadataJsonLines.js';
 import { field } from './resolverProjection.js';
 import type { JournalReadCounters } from './journalCounters.js';
+import { ReplaceWriteGuard } from './replaceWriteGuard.js';
 
 const HISTORY_EVENTS = new Set([
   'content',
@@ -48,7 +49,8 @@ async function* historyRanges(
   sourcePath: string,
   maxBytes: number,
   sequence: number,
-  counters?: JournalReadCounters,
+  counters: JournalReadCounters | undefined,
+  replaceTail: ReplaceWriteGuard,
 ): AsyncIterable<{ start: number; end: number; complete: boolean }> {
   let start = 0;
   for await (const line of readMetadataJsonLines(sourcePath, maxBytes)) {
@@ -64,6 +66,7 @@ async function* historyRanges(
         typeof type === 'string' &&
         HISTORY_EVENTS.has(type)
       ) {
+        replaceTail.observe(type, field(line.parsed, 'payload'));
         yield { start: offset, end: line.byteEnd, complete: line.complete };
       }
     }
@@ -87,21 +90,30 @@ async function copyRanges(
   }
 }
 
+/**
+ * Copy the history records through `sequence` into `childPath`. Resolves to
+ * the replace transaction the copied prefix leaves open, if any; the child's
+ * recorder must close it before it writes anything else.
+ */
 export async function copyCheckpointRange(
   sourcePath: string,
   childPath: string,
   maxBytes: number,
   sequence: number,
   counters?: JournalReadCounters,
-): Promise<void> {
+): Promise<{ unfinishedReplaceTxId?: string }> {
+  const replaceTail = new ReplaceWriteGuard();
   const source = await open(sourcePath, 'r');
   try {
     await copyRanges(
       source,
       childPath,
-      historyRanges(sourcePath, maxBytes, sequence, counters),
+      historyRanges(sourcePath, maxBytes, sequence, counters, replaceTail),
     );
   } finally {
     await source.close();
   }
+  return replaceTail.openTxId === null
+    ? {}
+    : { unfinishedReplaceTxId: replaceTail.openTxId };
 }
