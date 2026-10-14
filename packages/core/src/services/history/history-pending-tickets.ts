@@ -191,7 +191,13 @@ function decodeOp(value: unknown): HistoryJournalOp {
 function decodeTicket(value: unknown): PendingHistoryTicket {
   if (!isRecord(value) || (value.seq !== null && typeof value.seq !== 'number'))
     throw new Error('Invalid pending ticket sequence');
-  return { seq: value.seq, op: decodeOp(value.op) };
+  const op = decodeOp(value.op);
+  // The origin sits beside the op's body, so the per-kind decoders do not see it.
+  const origin = isRecord(value.op) ? value.op.origin : undefined;
+  return {
+    seq: value.seq,
+    op: typeof origin === 'string' ? { ...op, origin } : op,
+  };
 }
 
 export class HistoryPendingTickets {

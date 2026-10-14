@@ -1,10 +1,21 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { replaceAllOps } from './historyReplaceOps.js';
+import { replaceOwnedRowsOps, type OwnedRow } from './historyReplaceOps.js';
 import type { HistoryJournalStore } from './historyJournalStore.js';
 import type { RemovedInteriorSpan } from './historyEventTypes.js';
 import { mergeRemovedInteriorSpans } from './contextRange.js';
 import { historyMutationFailure } from './historyMutationEffects.js';
 import type { HistoryReadCursor } from '../../recording/synchronousHistoryCursor.js';
+
+/** The cleared rows one at a time, each with the origin it was written under. */
+function* ownedClearedRows(
+  cursor: HistoryReadCursor,
+): Generator<OwnedRow, void, unknown> {
+  let index = 0;
+  for (const content of cursor.rows()) {
+    const origin = cursor.originAt(index++);
+    yield origin === undefined ? { content } : { content, origin };
+  }
+}
 
 function restoreClearedRows(
   journal: HistoryJournalStore,
@@ -14,8 +25,11 @@ function restoreClearedRows(
   if (!admitted) return [];
   try {
     // The journal is empty after the clear; one transaction makes a crash
-    // during the restore leave it empty rather than partly restored.
-    for (const op of replaceAllOps(cursor.rows())) journal.apply(op);
+    // during the restore leave it empty rather than partly restored. Each row
+    // returns under its own origin, so rows an origin owned stay out of the
+    // mirrors of other origins.
+    for (const op of replaceOwnedRowsOps(ownedClearedRows(cursor)))
+      journal.apply(op);
     return [];
   } catch (error) {
     return [error];

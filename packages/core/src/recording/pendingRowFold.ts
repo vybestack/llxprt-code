@@ -58,6 +58,7 @@ export function pendingRow(
   content: IContent,
   slot: number,
   offset = 0,
+  owner = 0,
 ): NumericRow {
   const marker = content.metadata?.chronology?.seq;
   if (marker !== undefined && !validSeq(marker))
@@ -69,6 +70,7 @@ export function pendingRow(
     pendingSlot: slot,
     chronologySeq: marker ?? null,
     invalidateResponses: false,
+    ...(owner === 0 ? {} : { origin: owner }),
   };
 }
 
@@ -76,6 +78,7 @@ function applyDensity(
   directory: MutableRowDirectory,
   op: Extract<HistoryJournalOp, { kind: 'density' }>,
   slot: number,
+  owner: number,
 ): void {
   const { removedSeqs, replacements } = op.payload;
   if (
@@ -88,7 +91,13 @@ function applyDensity(
     if (seq === null) return row;
     for (let index = replacements.length - 1; index >= 0; index--) {
       if (replacements[index].replacedSeq === seq)
-        return pendingRow(replacements[index].replacement, slot, index + 1);
+        return pendingRow(
+          replacements[index].replacement,
+          slot,
+          index + 1,
+          // A pass that names no owner rewrites rows in place, so they keep theirs.
+          owner === 0 ? (row.origin ?? 0) : owner,
+        );
     }
     return removedSeqs.includes(seq) ? null : row;
   });
@@ -121,20 +130,26 @@ function applyReplaceOp(
   }
 }
 
+/**
+ * Fold one pending op. `owner` is the dictionary id of the origin that wrote
+ * it (0 for none); a caller that does not track origins leaves every row
+ * unowned.
+ */
 export function applyPending(
   directory: MutableRowDirectory,
   op: HistoryJournalOp,
   slot: number,
   tx: ReplaceTransactionFold,
+  owner = 0,
 ): void {
   if (applyReplaceOp(directory, op, tx)) return;
   switch (op.kind) {
     case 'content':
-      directory.append(pendingRow(op.content, slot));
+      directory.append(pendingRow(op.content, slot, 0, owner));
       return;
     case 'compressed':
       directory.truncate(0);
-      directory.append(pendingRow(op.summary, slot));
+      directory.append(pendingRow(op.summary, slot, 0, owner));
       return;
     case 'rewind': {
       const cut = op.cutSeq;
@@ -152,12 +167,15 @@ export function applyPending(
       const { content, chronologySeq, afterSeq } = op.payload;
       if (!validSeq(chronologySeq) || !validSeq(afterSeq)) return;
       const anchor = directory.firstChronology(afterSeq);
-      if (anchor !== -1)
-        directory.insert(anchor + 1, pendingRow(content, slot));
+      if (anchor === -1) return;
+      // An insert that names no owner repairs the row it follows and so belongs to it.
+      const inserted =
+        owner === 0 ? (directory.rowAt(anchor).origin ?? 0) : owner;
+      directory.insert(anchor + 1, pendingRow(content, slot, 0, inserted));
       return;
     }
     case 'density':
-      applyDensity(directory, op, slot);
+      applyDensity(directory, op, slot, owner);
       return;
     case 'compressionDetail':
       return;

@@ -121,6 +121,7 @@ function retain(
     'tx',
     'txId',
     'rowCount',
+    'origin',
   ].includes(String(keys[1]));
 }
 

@@ -46,15 +46,41 @@ function cutIndex(
   return previous.length - 1;
 }
 
+/**
+ * The origin of each row from `cut` to the end, read before the rewind drops
+ * them. Only the rows the rewind removes are listed: the origin is the one part
+ * of a row the snapshot does not keep.
+ */
+function suffixOrigins(
+  journal: HistoryJournalStore,
+  previous: HistoryMutationSnapshot,
+  cut: number,
+): ReadonlyArray<string | undefined> {
+  return journal.withReadRows((cursor) => {
+    if (cursor.length !== previous.length)
+      throw new Error('History changed between the snapshot and its removal');
+    const origins: Array<string | undefined> = [];
+    for (let index = cut; index < cursor.length; index++)
+      origins.push(cursor.originAt(index));
+    return origins;
+  });
+}
+
 function restoreSuffix(
   journal: HistoryJournalStore,
   previous: HistoryMutationSnapshot,
   cut: number,
+  origins: ReadonlyArray<string | undefined>,
 ): void {
   let index = 0;
   for (const content of previous) {
     if (index++ < cut) continue;
-    journal.apply({ kind: 'content', content });
+    const origin = origins[index - 1 - cut];
+    journal.apply(
+      origin === undefined
+        ? { kind: 'content', content }
+        : { kind: 'content', content, origin },
+    );
   }
 }
 
@@ -62,6 +88,7 @@ async function rollbackRemoval(
   journal: HistoryJournalStore,
   previous: HistoryMutationSnapshot,
   cut: number,
+  origins: ReadonlyArray<string | undefined>,
   admitted: boolean,
   effect: PreparedHistoryBatchEffect | undefined,
   primary: unknown,
@@ -76,7 +103,7 @@ async function rollbackRemoval(
   let journalRestored = true;
   if (admitted) {
     try {
-      restoreSuffix(journal, previous, cut);
+      restoreSuffix(journal, previous, cut, origins);
     } catch (error) {
       journalRestored = false;
       failures.push(error);
@@ -146,8 +173,10 @@ async function removeAndRecalculate(
     ownership: input.ownership,
   });
   let admitted = false;
+  let origins: ReadonlyArray<string | undefined> = [];
   try {
     input.journal.adoptMutationBoundary(previous.durableTail);
+    origins = suffixOrigins(input.journal, previous, cut);
     input.journal.apply({
       kind: 'rewind',
       itemsRemoved: 1,
@@ -160,6 +189,7 @@ async function removeAndRecalculate(
       input.journal,
       previous,
       cut,
+      origins,
       admitted,
       effect,
       error,
@@ -174,6 +204,7 @@ async function removeAndRecalculate(
         input.journal,
         previous,
         cut,
+        origins,
         true,
         effect,
         error.failure,

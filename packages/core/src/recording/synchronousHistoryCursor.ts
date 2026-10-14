@@ -6,6 +6,7 @@ import type { PendingFoldSnapshot } from './pendingFoldSnapshot.js';
 import type { JournalReadCounters } from './journalCounters.js';
 import {
   foldLine,
+  lineOrigin,
   resolveRowContent,
   type PinnedFile,
 } from './durableRowFold.js';
@@ -16,17 +17,27 @@ import {
 } from './replaceTransaction.js';
 
 import { MutableRowDirectory, type NumericRow } from './mutableRowDirectory.js';
+import { RowOriginDictionary } from './rowOriginDictionary.js';
 import { ResolverDiskIndex } from './resolverDiskIndex.js';
 import { DurableDensityIndex } from './durableDensityIndex.js';
-import { ProjectedLineReader } from './resolverScan.js';
+import { ProjectedLineReader, type ProjectedLine } from './resolverScan.js';
 
 export interface HistoryReadCursor {
   readonly length: number;
   isPendingRow(index: number): boolean;
   chronologySeqAt(index: number): number | undefined;
+  /**
+   * The origin id of the writer that owns row `index`; undefined for an
+   * unowned row, which belongs to every origin.
+   */
+  originAt(index: number): string | undefined;
   rows(reverse?: boolean): Generator<IContent, void, unknown>;
 }
 
+/**
+ * `origins` is the dictionary of a fold that tracks row origins. Without one,
+ * every row of the fold is unowned.
+ */
 function scanPrefix(
   pinned: PinnedFile,
   start: number,
@@ -36,12 +47,23 @@ function scanPrefix(
   density: DurableDensityIndex,
   projection: boolean,
   tx: ReplaceTransactionFold,
+  origins: RowOriginDictionary | undefined,
   signal?: AbortSignal,
 ): void {
   if (pinned.size < end)
     throw new Error('Journal truncated below pinned watermark');
   const reader = new ProjectedLineReader(staged, false, density, start);
   const buffer = Buffer.alloc(64 * 1024);
+  const fold = (line: ProjectedLine): void =>
+    foldLine(
+      directory,
+      line,
+      staged,
+      density,
+      tx,
+      projection ? 'projection' : 'durable',
+      origins?.idOf(lineOrigin(line)),
+    );
   let position = start;
   while (position < end) {
     signal?.throwIfAborted();
@@ -54,25 +76,9 @@ function scanPrefix(
     );
     if (count === 0) throw new Error('Journal ended before pinned watermark');
     position += count;
-    for (const line of reader.push(buffer.subarray(0, count)))
-      foldLine(
-        directory,
-        line,
-        staged,
-        density,
-        tx,
-        projection ? 'projection' : 'durable',
-      );
+    for (const line of reader.push(buffer.subarray(0, count))) fold(line);
   }
-  for (const line of reader.finishTail())
-    foldLine(
-      directory,
-      line,
-      staged,
-      density,
-      tx,
-      projection ? 'projection' : 'durable',
-    );
+  for (const line of reader.finishTail()) fold(line);
   signal?.throwIfAborted();
 }
 
@@ -88,6 +94,7 @@ function foldSnapshot(
   density: DurableDensityIndex,
   signal?: AbortSignal,
   pendingOverlay = true,
+  origins?: RowOriginDictionary,
 ): boolean {
   const tx = new ReplaceTransactionFold();
   if (snapshot.durableTail > 0) {
@@ -108,6 +115,7 @@ function foldSnapshot(
         density,
         projection !== null,
         tx,
+        origins,
         signal,
       );
       tx.abandon(directoryRowStore(directory));
@@ -122,13 +130,15 @@ function foldSnapshot(
       density,
       false,
       tx,
+      origins,
       signal,
     );
   }
   const openAtDurableTail = tx.open !== null;
   for (let slot = 0; pendingOverlay && slot < snapshot.pendingLength; slot++) {
     signal?.throwIfAborted();
-    applyPending(directory, snapshot.pending.read(slot).op, slot, tx);
+    const op = snapshot.pending.read(slot).op;
+    applyPending(directory, op, slot, tx, origins?.idOf(op.origin));
   }
   tx.abandon(directoryRowStore(directory));
   return openAtDurableTail;
@@ -180,6 +190,7 @@ class SynchronousHistoryCursor implements HistoryReadCursor {
   constructor(
     private readonly snapshot: PendingFoldSnapshot,
     private readonly directory: MutableRowDirectory,
+    private readonly origins: RowOriginDictionary,
     private readonly counters?: JournalReadCounters,
     private readonly signal?: AbortSignal,
   ) {}
@@ -197,6 +208,11 @@ class SynchronousHistoryCursor implements HistoryReadCursor {
   chronologySeqAt(index: number): number | undefined {
     this.check();
     return this.directory.rowAt(index).chronologySeq ?? undefined;
+  }
+
+  originAt(index: number): string | undefined {
+    this.check();
+    return this.origins.originOf(this.directory.rowAt(index).origin);
   }
 
   private check(): void {
@@ -371,12 +387,21 @@ function executePinnedCursor<T>(
   signal?: AbortSignal,
 ): T {
   const directory = new MutableRowDirectory();
+  const origins = new RowOriginDictionary();
   try {
     const staged = new ResolverDiskIndex();
     try {
       const density = new DurableDensityIndex();
       try {
-        foldSnapshot(snapshot, directory, staged, density, signal);
+        foldSnapshot(
+          snapshot,
+          directory,
+          staged,
+          density,
+          signal,
+          true,
+          origins,
+        );
       } finally {
         density.close();
       }
@@ -386,6 +411,7 @@ function executePinnedCursor<T>(
     const cursor = new SynchronousHistoryCursor(
       snapshot,
       directory,
+      origins,
       counters,
       signal,
     );

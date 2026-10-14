@@ -5,6 +5,7 @@ import {
   invalidateResponsesStatefulChain,
   type IContent,
 } from '../services/history/IContent.js';
+import { payloadOrigin } from '../services/history/historyOriginId.js';
 import { parseChronologyBinding } from './chronologyBinding.js';
 import {
   DurableDensityIndex,
@@ -124,6 +125,11 @@ export function isContent(value: unknown): value is IContent {
     ['human', 'ai', 'tool'].includes(String(field(value, 'speaker'))) &&
     Array.isArray(field(value, 'blocks'))
   );
+}
+
+/** The origin id a journal line names as its writer; absent when it names none. */
+export function lineOrigin(line: ProjectedLine): string | undefined {
+  return payloadOrigin(field(line.parsed, 'payload'));
 }
 
 /** The origin fields of a row an `owner` wrote; none when the owner is absent. */

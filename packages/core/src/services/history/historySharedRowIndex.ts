@@ -8,6 +8,7 @@ import {
 import { ResolverDiskIndex } from '../../recording/resolverDiskIndex.js';
 import { ProjectedLineReader } from '../../recording/resolverScan.js';
 import { ReplaceTransactionFold } from '../../recording/replaceTransaction.js';
+import { RowOriginDictionary } from '../../recording/rowOriginDictionary.js';
 import type { ScannedJournalRecord } from './historyJournalRecordScan.js';
 
 /** How many shared rows each origin owns; `unowned` rows belong to every origin. */
@@ -46,8 +47,7 @@ export class SharedRowIndex {
   private readonly staged: ResolverDiskIndex;
   private readonly density: DurableDensityIndex;
   private readonly tx = new ReplaceTransactionFold();
-  private readonly ids = new Map<string, number>();
-  private readonly names: string[] = [];
+  private readonly origins = new RowOriginDictionary();
   /** Where the next row of an open replace transaction looks for its predecessor. */
   private inheritFrom = 0;
   private failure: unknown;
@@ -86,19 +86,11 @@ export class SharedRowIndex {
 
   /** The dictionary id of an origin; 0 stands for no origin. */
   idOf(origin: string | undefined): number {
-    if (origin === undefined) return 0;
-    const known = this.ids.get(origin);
-    if (known !== undefined) return known;
-    this.names.push(origin);
-    this.ids.set(origin, this.names.length);
-    return this.names.length;
+    return this.origins.idOf(origin);
   }
 
   originOf(id: number | undefined): string | undefined {
-    if (id === undefined) return undefined;
-    if (id < 1 || id > this.names.length)
-      throw new Error(`Shared row index has no origin ${id}`);
-    return this.names[id - 1];
+    return this.origins.originOf(id);
   }
 
   counts(): OwnerCounts {

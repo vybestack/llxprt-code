@@ -16,12 +16,39 @@ import type { HistoryJournalOp } from './historyJournalStore.js';
 export function* replaceAllOps(
   rows: Iterable<IContent>,
 ): Generator<HistoryJournalOp, void, unknown> {
+  yield* replaceOwnedRowsOps(ownedRows(rows));
+}
+
+/** A row with the origin id its journal line carried; absent means unowned. */
+export interface OwnedRow {
+  readonly content: IContent;
+  readonly origin?: string;
+}
+
+function* ownedRows(rows: Iterable<IContent>): Generator<OwnedRow> {
+  for (const content of rows) yield { content };
+}
+
+/**
+ * {@link replaceAllOps} for rows that keep their own origin: each replacement
+ * row is written under the origin it had, so a replacement never turns an
+ * owned row into a row shared with every origin. The begin and commit records
+ * name no origin; they belong to the transaction, not to any row.
+ */
+export function* replaceOwnedRowsOps(
+  rows: Iterable<OwnedRow>,
+): Generator<HistoryJournalOp, void, unknown> {
   const txId = randomUUID();
   let rowCount = 0;
   yield { kind: 'replaceBegin', txId };
-  for (const content of rows) {
+  for (const { content, origin } of rows) {
     rowCount++;
-    yield { kind: 'content', content, tx: txId };
+    yield {
+      kind: 'content',
+      content,
+      tx: txId,
+      ...(origin === undefined ? {} : { origin }),
+    };
   }
   yield { kind: 'replaceCommit', txId, rowCount };
 }
