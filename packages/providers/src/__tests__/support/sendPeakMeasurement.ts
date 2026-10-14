@@ -180,11 +180,18 @@ export interface SendPeakVerdict {
   readonly arrayBufferGrowth: number;
   readonly arrayBufferGrowthWithinBound: boolean;
   /**
-   * Settled growth between the first and the last send of the accumulation
-   * run, the larger of the heap and the `arrayBuffers` figure.
+   * Growth over the sends of the accumulation run that the Theil-Sen trend of
+   * the settled readings implies (slope times sends minus one), the larger of
+   * the heap and the `arrayBuffers` figure. This is what the gate judges.
    */
   readonly retainedGrowth: number;
   readonly retainedGrowthWithinBound: boolean;
+  /**
+   * Settled growth between the first and the last send of the accumulation
+   * run, larger of heap and `arrayBuffers`. Reported next to the trend value
+   * for comparison; the gate does not judge it.
+   */
+  readonly retainedEndpointGrowth: number;
   /** Median peaks per size, kept for reporting. */
   readonly medians: {
     readonly peakHeap: { readonly small: number; readonly large: number };
@@ -233,22 +240,57 @@ function perSize(
 }
 
 /**
+ * Theil-Sen slope of a series read at equally spaced sends: the median of the
+ * slopes between every pair of readings. A steady per-send leak makes most
+ * pairs agree on a positive slope, while one noisy reading only spoils the
+ * pairs that include it and cannot move the median far.
+ */
+export function theilSenSlope(readings: readonly number[]): number {
+  if (readings.length < 2) {
+    throw new Error('a trend needs at least two readings');
+  }
+  const slopes: number[] = [];
+  for (let first = 0; first < readings.length - 1; first++) {
+    for (let second = first + 1; second < readings.length; second++) {
+      slopes.push((readings[second] - readings[first]) / (second - first));
+    }
+  }
+  return median(slopes);
+}
+
+/**
+ * Growth over the sends of one series that its Theil-Sen trend implies.
+ */
+export function trendGrowth(readings: readonly number[]): number {
+  return theilSenSlope(readings) * (readings.length - 1);
+}
+
+/**
  * Retention is what each further send leaves behind. A settled reading after
  * one send carries a one-time offset from collection timing (about -0.8 to
- * +1.7 MiB seen with no growth at all), so a single send cannot be judged
- * against a fixed bound. The same history sent again must not add to the
- * settled level: growth from the first send to the last is the retention, and
- * a real per-send leak adds up across the sends while the offset does not.
+ * +1.7 MiB seen with no growth at all) and loaded machines add noise of their
+ * own, so neither a single reading nor the two endpoints of the run can be
+ * judged against a fixed bound. The same history sent again must not add to
+ * the settled level: the trend across every reading is the retention, and a
+ * real per-send leak adds up across the sends while an offset or an outlier
+ * does not.
  */
-function retainedGrowthOf(
-  accumulation: readonly AccumulationReading[],
-): number {
+function retainedGrowthOf(accumulation: readonly AccumulationReading[]): {
+  trend: number;
+  endpoints: number;
+} {
   const first = accumulation[0];
   const last = accumulation[accumulation.length - 1];
-  return Math.max(
-    last.heap - first.heap,
-    last.arrayBuffers - first.arrayBuffers,
-  );
+  return {
+    trend: Math.max(
+      trendGrowth(accumulation.map((reading) => reading.heap)),
+      trendGrowth(accumulation.map((reading) => reading.arrayBuffers)),
+    ),
+    endpoints: Math.max(
+      last.heap - first.heap,
+      last.arrayBuffers - first.arrayBuffers,
+    ),
+  };
 }
 
 export function judgeSendPeak(
@@ -259,7 +301,7 @@ export function judgeSendPeak(
   const peakArrayBuffers = perSize(series, (round) => round.peakArrayBuffers);
   const heapGrowth = peakHeap.large - peakHeap.small;
   const arrayBufferGrowth = peakArrayBuffers.large - peakArrayBuffers.small;
-  const retainedGrowth = retainedGrowthOf(series.accumulation);
+  const retained = retainedGrowthOf(series.accumulation);
   return {
     bytesMatchOracle:
       sameBody(series.small, oracles.small) &&
@@ -270,8 +312,9 @@ export function judgeSendPeak(
     heapGrowthWithinBound: heapGrowth <= SEND_PEAK_BOUND_BYTES,
     arrayBufferGrowth,
     arrayBufferGrowthWithinBound: arrayBufferGrowth <= SEND_PEAK_BOUND_BYTES,
-    retainedGrowth,
-    retainedGrowthWithinBound: retainedGrowth <= SEND_PEAK_BOUND_BYTES,
+    retainedGrowth: retained.trend,
+    retainedGrowthWithinBound: retained.trend <= SEND_PEAK_BOUND_BYTES,
+    retainedEndpointGrowth: retained.endpoints,
     medians: {
       peakHeap,
       peakArrayBuffers,
