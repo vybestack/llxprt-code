@@ -8,7 +8,7 @@ import { describe, expect, it, spyOn } from 'bun:test';
 import { WorkspaceToolCatalogOwner } from '@vybestack/llxprt-code-core';
 import { fromConfig } from '../fromConfig.js';
 import { buildCliStyleConfig } from './helpers/buildCliStyleConfig.js';
-import { engineGate } from './helpers/session-client-engine-fixture.js';
+import { gate as engineGate } from './helpers/async-child-disposal-join-fixture.js';
 
 function messages(error: unknown): readonly string[] {
   if (error instanceof AggregateError)
