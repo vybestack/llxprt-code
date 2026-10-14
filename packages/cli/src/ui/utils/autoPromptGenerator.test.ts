@@ -5,9 +5,11 @@
  */
 
 import { beforeEach, describe, expect, it, vi, type Mock } from 'bun:test';
-import type { AgentClientContract } from '@vybestack/llxprt-code-core';
+import type {
+  AgentClientContract,
+  ContentGeneratorConfig,
+} from '@vybestack/llxprt-code-core';
 import { createUiSessionOwner } from '../../__tests__/uiSessionOwner.js';
-import type { AutoPromptRuntime } from './autoPromptGenerator.js';
 
 const createDetachedAutoPromptClientMock = vi.fn();
 
@@ -15,7 +17,23 @@ void vi.mock('../../runtime/autoPromptDetachedClient.js', () => ({
   createDetachedAutoPromptClient: createDetachedAutoPromptClientMock,
 }));
 
-const { generateAutoPrompt } = await import('./autoPromptGenerator.js');
+const { bindAutoPromptGeneration } = await import('./autoPromptGeneration.js');
+type PromptOwner = {
+  readonly getProvider: () => string;
+  readonly agentClient: AgentClientContract | null | undefined;
+  readonly createDetached: () => Promise<AgentClientContract>;
+};
+const generateAutoPrompt = (
+  owner: PromptOwner,
+  description: string,
+  config: ContentGeneratorConfig | undefined,
+): Promise<string> =>
+  bindAutoPromptGeneration(
+    owner.getProvider,
+    () => owner.agentClient,
+    owner.createDetached,
+    () => config,
+  )(description);
 
 async function makeClient(
   text = 'generated prompt',
@@ -31,9 +49,10 @@ async function makeClient(
 async function makeRuntime(
   provider: string,
   client: AgentClientContract | null | undefined,
-): Promise<AutoPromptRuntime> {
+): Promise<PromptOwner> {
+  const session = await createUiSessionOwner();
   return {
-    sessionClient: (await createUiSessionOwner()).sessionClient,
+    createDetached: () => session.sessionClient.createDetachedAgentClient(),
     getProvider: () => provider,
     agentClient: client,
   };
@@ -114,9 +133,12 @@ describe('generateAutoPrompt', () => {
       }),
     ).resolves.toBe('gemini prompt');
 
-    expect(createDetachedAutoPromptClientMock).toHaveBeenCalledWith(runtime, {
-      model: 'auto-prompt-test',
-    });
+    expect(createDetachedAutoPromptClientMock).toHaveBeenCalledWith(
+      runtime.createDetached,
+      {
+        model: 'auto-prompt-test',
+      },
+    );
     expect(liveClient.generateDirectMessage).not.toHaveBeenCalled();
     expect(detachedClient.generateDirectMessage).toHaveBeenCalledTimes(1);
     expect(detachedClient.dispose).toHaveBeenCalledTimes(1);
@@ -133,9 +155,12 @@ describe('generateAutoPrompt', () => {
       }),
     ).resolves.toBe('fallback prompt');
 
-    expect(createDetachedAutoPromptClientMock).toHaveBeenCalledWith(runtime, {
-      model: 'auto-prompt-test',
-    });
+    expect(createDetachedAutoPromptClientMock).toHaveBeenCalledWith(
+      runtime.createDetached,
+      {
+        model: 'auto-prompt-test',
+      },
+    );
     expect(detachedClient.generateDirectMessage).toHaveBeenCalledTimes(1);
     expect(detachedClient.dispose).toHaveBeenCalledTimes(1);
   });
@@ -151,9 +176,12 @@ describe('generateAutoPrompt', () => {
       }),
     ).resolves.toBe('undefined fallback prompt');
 
-    expect(createDetachedAutoPromptClientMock).toHaveBeenCalledWith(runtime, {
-      model: 'auto-prompt-test',
-    });
+    expect(createDetachedAutoPromptClientMock).toHaveBeenCalledWith(
+      runtime.createDetached,
+      {
+        model: 'auto-prompt-test',
+      },
+    );
     expect(detachedClient.generateDirectMessage).toHaveBeenCalledTimes(1);
     expect(detachedClient.dispose).toHaveBeenCalledTimes(1);
   });

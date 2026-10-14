@@ -17,6 +17,7 @@ import { createContinueCommand } from '../commands/continueCommand.js';
 import { bindContinueCommandOperations } from '../commands/continueCommandHost.js';
 import { createCopyCommand } from '../commands/copyCommand.js';
 import { useExtensionCommand } from './useExtensionCommand.js';
+import { useSubagentCommand } from './useSubagentCommand.js';
 import { createTodoCommand } from '../commands/todoCommand.js';
 import { createHooksCommand } from '../commands/hooksCommand.js';
 import { createTaskCommand } from '../commands/tasksCommand.js';
@@ -264,11 +265,6 @@ function useCommandState(
     rawRecording,
     recordingSwapCallbacks,
   );
-  const continueCommand = useContinueCommandOwner(
-    agent,
-    config,
-    recordingOwner,
-  );
   const workspaceCommands = useWorkspaceCommandOwners(
     config,
     agent,
@@ -284,13 +280,14 @@ function useCommandState(
   );
   const builtins = useBuiltinCommandOwners({
     chatCommand,
-    continueCommand,
+    continueCommand: useContinueCommandOwner(agent, config, recordingOwner),
     historyCommandOwners,
     modelCommand,
     toolFormatCommand,
     setCommand,
     provider,
     todoCommand: useTodoCommandOwner(todoContext, addItem),
+    subagentCommand: useSubagentCommand(agent, config, settings, addItem),
     extensionsCommand,
     ...workspaceCommands,
     credentialCommands,
@@ -337,6 +334,7 @@ type BuiltinCommandOwnerParts = Pick<
   | 'toolFormatCommand'
   | 'setCommand'
   | 'extensionsCommand'
+  | 'subagentCommand'
 > & {
   historyCommandOwners: ReturnType<typeof useHistoryCommandOwners>;
   provider: SlashCommand;
@@ -374,6 +372,7 @@ function useBuiltinCommandOwners(
     todoCommand,
     credentialCommands,
     extensionsCommand,
+    subagentCommand,
   } = parts;
   return useMemo(
     () => ({
@@ -394,6 +393,7 @@ function useBuiltinCommandOwners(
       taskCommand,
       todoCommand,
       extensionsCommand,
+      subagentCommand,
       ...credentialCommands,
     }),
     [
@@ -415,6 +415,7 @@ function useBuiltinCommandOwners(
       todoCommand,
       credentialCommands,
       extensionsCommand,
+      subagentCommand,
     ],
   );
 }

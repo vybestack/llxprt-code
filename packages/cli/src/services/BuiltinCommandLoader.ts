@@ -42,7 +42,6 @@ import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
 import { diagnosticsCommand } from '../ui/commands/diagnosticsCommand.js';
 import { terminalSetupCommand } from '../ui/commands/terminalSetupCommand.js';
 import { debugCommand } from '../ui/commands/debugCommands.js';
-import { subagentCommand } from '../ui/commands/subagentCommand.js';
 import { permissionsCommand } from '../ui/commands/permissionsCommand.js';
 
 import { setupCommand } from '../ui/commands/setupCommand.js';
@@ -57,6 +56,7 @@ import { createPerfCommand } from '../ui/commands/perfCommand.js';
  */
 export interface BuiltinCommandOwners {
   readonly extensionsCommand: SlashCommand;
+  readonly subagentCommand: SlashCommand;
   readonly hooksCommand: SlashCommand;
   readonly taskCommand: SlashCommand;
   readonly todoCommand: SlashCommand;
@@ -192,7 +192,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       terminalSetupCommand,
       debugCommand,
       this.owners.logoutCommand,
-      subagentCommand,
+      this.owners.subagentCommand,
       permissionsCommand,
       this.owners.policiesCommand,
       this.owners.dumpcontextCommand,

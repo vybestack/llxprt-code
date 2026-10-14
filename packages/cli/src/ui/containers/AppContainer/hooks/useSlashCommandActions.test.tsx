@@ -21,7 +21,7 @@ import { useThemeCommand } from '../../../hooks/useThemeCommand.js';
 import { processSlashCommand } from '../../../hooks/slashCommandHandlers.js';
 import { SubagentManager } from '@vybestack/llxprt-code-core';
 import { ProfileManager } from '@vybestack/llxprt-code-settings';
-import { subagentCommand } from '../../../commands/subagentCommand.js';
+import { registerSubagentCommand } from '../../../../__tests__/subagent-command-test-owner.js';
 import { LoggingDialog } from '../../../components/LoggingDialog.js';
 import { useEditorSettings } from '../../../hooks/useEditorSettings.js';
 import { themeCommand } from '../../../commands/themeCommand.js';
@@ -511,7 +511,13 @@ describe('domain dialog routes', () => {
       const context = createMockCommandContext();
       await processSlashCommand(
         {
-          commands: [subagentCommand],
+          commands: [
+            registerSubagentCommand(
+              createMockCommandContext({
+                services: { subagentManager: subagents },
+              }),
+            ),
+          ],
           config: null,
           commandContext: {
             ...context,
