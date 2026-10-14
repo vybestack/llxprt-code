@@ -50,7 +50,7 @@ import { createModelCommand } from '../commands/modelCommand.js';
 import { registerKeyCommand } from '../../__tests__/credential-command-test-owner.js';
 import { createProviderCommand } from '../commands/providerCommand.js';
 import { bindProviderCommandOperations } from '../commands/providerCommandHost.js';
-import { profileCommand } from '../commands/profileCommand.js';
+import { createProfileCommandForTest } from '../commands/__tests__/profile-command-test-owner.js';
 import { RuntimeContextProvider, type RuntimeApi } from './RuntimeContext.js';
 
 describe('interactive runtime owner bridge', () => {
@@ -414,16 +414,22 @@ describe('interactive runtime owner bridge', () => {
 
       a.setDefaultProfileName('owner-left');
       b.setDefaultProfileName('owner-right');
-      const setDefault = profileCommand.subCommands?.find(
-        (command) => command.name === 'set-default',
-      );
-      if (!setDefault?.action) throw new Error('Profile command unavailable');
       leftContext.services.agent = a;
       rightContext.services.agent = b;
-      await setDefault.action(leftContext, 'none');
+      const leftProfileCommand = createProfileCommandForTest(leftContext);
+      const rightProfileCommand = createProfileCommandForTest(rightContext);
+      const leftSetDefault = leftProfileCommand.subCommands?.find(
+        (command) => command.name === 'set-default',
+      );
+      const rightSetDefault = rightProfileCommand.subCommands?.find(
+        (command) => command.name === 'set-default',
+      );
+      if (!leftSetDefault?.action || !rightSetDefault?.action)
+        throw new Error('Profile command unavailable');
+      await leftSetDefault.action(rightContext, 'none');
       expect(captured.left.getDefaultProfileName()).toBeNull();
       expect(captured.right.getDefaultProfileName()).toBe('owner-right');
-      await setDefault.action(rightContext, 'none');
+      await rightSetDefault.action(rightContext, 'none');
       expect(captured.right.getDefaultProfileName()).toBeNull();
 
       first.settingsOwner.writeUserParameter('custom-headers', {

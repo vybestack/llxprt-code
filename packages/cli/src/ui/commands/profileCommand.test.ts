@@ -7,9 +7,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
 import { installDefinitionRuntimeFixture } from '../../__tests__/definition-runtime-fixture.js';
 const definitionFixture = installDefinitionRuntimeFixture();
-import { profileCommand } from './profileCommand.js';
+import { createProfileCommandForTest } from './__tests__/profile-command-test-owner.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import type { CommandContext } from './types.js';
+import type { CommandContext, SlashCommand } from './types.js';
 import { testRegex } from '../../__tests__/regex.js';
 
 const runtimeMocks = {
@@ -39,6 +39,7 @@ const tokenStoreMocks = {
 
 describe('profileCommand', () => {
   let context: CommandContext;
+  let profileCommand: SlashCommand;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -63,6 +64,8 @@ describe('profileCommand', () => {
           deleteProfileByName: runtimeMocks.deleteProfileByName,
           setDefaultProfileName: runtimeMocks.setDefaultProfileName,
           getProvider: () => 'gemini',
+          getModel: () => 'gemini-1.5-pro',
+          mcp: { refresh: async () => {} },
           sessionClient: { publishTools: async () => {} },
         },
       },
@@ -79,17 +82,19 @@ describe('profileCommand', () => {
       modelName: 'gemini-1.5-pro',
     });
     tokenStoreMocks.listBuckets.mockResolvedValue(['bucket-a', 'bucket-b']);
+    profileCommand = createProfileCommandForTest(context);
   });
 
   afterEach(() => vi.restoreAllMocks());
 
+  const getSubcommand = (name: string) => () =>
+    profileCommand.subCommands!.find((cmd) => cmd.name === name)!;
+
   describe('save subcommand', () => {
-    const save = profileCommand.subCommands!.find(
-      (cmd) => cmd.name === 'save',
-    )!;
+    const save = getSubcommand('save');
 
     it('saves model profile with provided name', async () => {
-      await save.action!(context, 'model demo');
+      await save().action!(context, 'model demo');
       expect(runtimeMocks.saveProfileSnapshot).toHaveBeenCalledWith(
         'demo',
         undefined,
@@ -97,7 +102,7 @@ describe('profileCommand', () => {
     });
 
     it('shows usage when no args provided', async () => {
-      const result = await save.action!(context, '');
+      const result = await save().action!(context, '');
       expect(result).toBeDefined();
       expect(result).toHaveProperty('type', 'message');
       expect(result).toHaveProperty('messageType', 'error');
@@ -106,7 +111,7 @@ describe('profileCommand', () => {
     });
 
     it('shows error for unknown profile type', async () => {
-      const result = await save.action!(context, 'unknown myprofile');
+      const result = await save().action!(context, 'unknown myprofile');
       expect(result).toBeDefined();
       expect(result).toHaveProperty('type', 'message');
       expect(result).toHaveProperty('messageType', 'error');
@@ -114,12 +119,10 @@ describe('profileCommand', () => {
   });
 
   describe('save model subcommand - quoted profile names', () => {
-    const save = profileCommand.subCommands!.find(
-      (cmd) => cmd.name === 'save',
-    )!;
+    const save = getSubcommand('save');
 
     it('saves a quoted profile name with spaces and undefined auth config', async () => {
-      await save.action!(context, 'model "foo bar"');
+      await save().action!(context, 'model "foo bar"');
       expect(runtimeMocks.saveProfileSnapshot).toHaveBeenCalledWith(
         'foo bar',
         undefined,
@@ -127,7 +130,7 @@ describe('profileCommand', () => {
     });
 
     it('saves a quoted profile name with spaces followed by bucket args', async () => {
-      await save.action!(context, 'model "foo bar" bucket-a bucket-b');
+      await save().action!(context, 'model "foo bar" bucket-a bucket-b');
       expect(runtimeMocks.saveProfileSnapshot).toHaveBeenCalledWith('foo bar', {
         auth: { type: 'oauth', buckets: ['bucket-a', 'bucket-b'] },
       });
@@ -136,7 +139,7 @@ describe('profileCommand', () => {
     it('falls back to unquoted handling when adjacent text follows the closing quote', async () => {
       // Legacy behavior: '"foo"bar' does not match the quoted-name pattern,
       // so the whole '"foo"bar' token becomes parts[1] (the profile name).
-      await save.action!(context, 'model "foo"bar');
+      await save().action!(context, 'model "foo"bar');
       expect(runtimeMocks.saveProfileSnapshot).toHaveBeenCalledWith(
         '"foo"bar',
         undefined,
@@ -147,7 +150,7 @@ describe('profileCommand', () => {
       // Legacy behavior: '""' does not match the quoted-name pattern (name
       // must be non-empty), so the empty quoted token is treated as parts[1].
       // validateProfileName allows it, so it is saved as the literal '""'.
-      await save.action!(context, 'model ""');
+      await save().action!(context, 'model ""');
       expect(runtimeMocks.saveProfileSnapshot).toHaveBeenCalledWith(
         '""',
         undefined,
@@ -156,9 +159,7 @@ describe('profileCommand', () => {
   });
 
   describe('load subcommand', () => {
-    const load = profileCommand.subCommands!.find(
-      (cmd) => cmd.name === 'load',
-    )!;
+    const load = getSubcommand('load');
 
     it('loads profile and surfaces info messages', async () => {
       runtimeMocks.loadProfileByName.mockResolvedValue({
@@ -169,7 +170,7 @@ describe('profileCommand', () => {
         providerChanged: true,
       });
 
-      const result = await load.action!(context, 'demo');
+      const result = await load().action!(context, 'demo');
       expect(runtimeMocks.loadProfileByName).toHaveBeenCalledWith('demo');
       expect(agentMocks.setProvider).not.toHaveBeenCalled();
       expect(result?.type).toBe('message');
@@ -187,10 +188,14 @@ describe('profileCommand', () => {
         services: {
           agent: {
             ...context.services.agent,
-            sessionClient: { publishTools: setToolsSpy },
+            mcp: { refresh: setToolsSpy },
           },
         },
       });
+      const ownerCommand = createProfileCommandForTest(contextWithConfig);
+      const ownerLoad = ownerCommand.subCommands!.find(
+        (cmd) => cmd.name === 'load',
+      )!;
 
       runtimeMocks.loadProfileByName.mockResolvedValue({
         providerName: 'openai',
@@ -198,7 +203,7 @@ describe('profileCommand', () => {
         infoMessages: [],
       });
 
-      await load.action!(contextWithConfig, 'demo');
+      await ownerLoad.action!(contextWithConfig, 'demo');
       expect(setToolsSpy).toHaveBeenCalled();
     });
 
@@ -215,7 +220,10 @@ describe('profileCommand', () => {
         infoMessages: [],
       });
 
-      const result = await load.action!(contextWithoutAgent, 'demo');
+      const unownedCommand = createProfileCommandForTest(contextWithoutAgent);
+      const result = await unownedCommand.subCommands!.find(
+        (cmd) => cmd.name === 'load',
+      )!.action!(contextWithoutAgent, 'demo');
 
       expect(result?.type).toBe('message');
       const content = (result as { content: string }).content;
@@ -228,48 +236,40 @@ describe('profileCommand', () => {
   });
 
   describe('delete subcommand', () => {
-    const del = profileCommand.subCommands!.find(
-      (cmd) => cmd.name === 'delete',
-    )!;
+    const del = getSubcommand('delete');
 
     it('deletes named profile', async () => {
-      await del.action!(context, 'demo');
+      await del().action!(context, 'demo');
       expect(runtimeMocks.deleteProfileByName).toHaveBeenCalledWith('demo');
     });
   });
 
   describe('set-default subcommand', () => {
-    const setDefault = profileCommand.subCommands!.find(
-      (cmd) => cmd.name === 'set-default',
-    )!;
+    const setDefault = getSubcommand('set-default');
 
     it('persists default profile name', async () => {
-      await setDefault.action!(context, 'alpha');
+      await setDefault().action!(context, 'alpha');
       expect(runtimeMocks.setDefaultProfileName).toHaveBeenCalledWith('alpha');
     });
 
     it('clears default when none specified', async () => {
-      await setDefault.action!(context, 'none');
+      await setDefault().action!(context, 'none');
       expect(runtimeMocks.setDefaultProfileName).toHaveBeenCalledWith(null);
     });
   });
 
   describe('list subcommand', () => {
-    const list = profileCommand.subCommands!.find(
-      (cmd) => cmd.name === 'list',
-    )!;
+    const list = getSubcommand('list');
 
     it('opens the profile list dialog', async () => {
-      const result = await list.action!(context, '');
+      const result = await list().action!(context, '');
       expect(result?.type).toBe('dialog');
       expect((result as { dialog: string }).dialog).toBe('profileList');
     });
   });
 
   describe('save subcommand - load balancer', () => {
-    const save = profileCommand.subCommands!.find(
-      (cmd) => cmd.name === 'save',
-    )!;
+    const save = getSubcommand('save');
 
     beforeEach(() => {
       runtimeMocks.listSavedProfiles.mockResolvedValue([
@@ -283,7 +283,7 @@ describe('profileCommand', () => {
     it('saves load balancer profile with selected profiles', async () => {
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer lb-profile roundrobin profile1 profile2',
       );
@@ -310,7 +310,7 @@ describe('profileCommand', () => {
     });
 
     it('requires at least 2 profiles for load balancer', async () => {
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer lb-profile roundrobin profile1',
       );
@@ -326,7 +326,7 @@ describe('profileCommand', () => {
     it('validates profile names exist', async () => {
       runtimeMocks.listSavedProfiles.mockResolvedValue(['profile1']);
 
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer lb-profile roundrobin profile1 nonexistent',
       );
@@ -349,7 +349,7 @@ describe('profileCommand', () => {
         ),
       );
 
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer lb-new roundrobin profile1 lb-existing',
       );
@@ -366,7 +366,7 @@ describe('profileCommand', () => {
         new Error('disk full'),
       );
 
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer lb-profile roundrobin profile1 profile2',
       );

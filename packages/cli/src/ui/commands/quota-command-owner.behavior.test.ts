@@ -85,7 +85,6 @@ async function registeredQuota(
           quotaCommand: createQuotaCommand(operations),
         },
         null,
-        'agent',
       ),
     ],
     new AbortController().signal,

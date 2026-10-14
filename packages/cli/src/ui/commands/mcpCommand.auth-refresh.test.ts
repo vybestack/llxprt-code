@@ -219,7 +219,10 @@ describe('mcpCommand', () => {
         messages.push(item);
         return 1;
       };
-      const work = requireCommandAction('auth', context)(context, 'test-server');
+      const work = requireCommandAction('auth', context)(
+        context,
+        'test-server',
+      );
       expect(reloads).toBe(0);
       expect(JSON.stringify(messages)).not.toContain(
         'Successfully authenticated',
@@ -262,7 +265,10 @@ describe('mcpCommand', () => {
       context.ui.reloadCommands = () => {
         reloads++;
       };
-      const result = await requireCommandAction('auth', context)(context, 'test-server');
+      const result = await requireCommandAction('auth', context)(
+        context,
+        'test-server',
+      );
       assertMessageAction(result);
       expect(result.messageType).toBe('error');
       expect(result.content).toContain('Failed to authenticate');

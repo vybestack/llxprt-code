@@ -23,7 +23,6 @@ describe('registered set command ownership', () => {
         setCommand: createAgentSetCommand(agent),
       },
       null,
-      'agent',
     );
   }
 

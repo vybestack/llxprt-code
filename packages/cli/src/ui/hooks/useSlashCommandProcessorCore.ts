@@ -12,6 +12,7 @@ import { createSetCommand } from '../commands/setCommand.js';
 import { createProviderCommand } from '../commands/providerCommand.js';
 import { bindProviderCommandOperations } from '../commands/providerCommandHost.js';
 import { useCredentialCommands } from './useCredentialCommands.js';
+import { useChatCommand } from './useChatCommand.js';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type {
   RecordingIntegration,
@@ -121,8 +122,9 @@ function useCommandState(
   settings: LoadedSettings,
   agent: Agent | null,
   refreshProviderAliases: () => Promise<void>,
-  rawRecording: Pick<RecordingIntegration, 'recordProviderSwitch'> | undefined,
+  rawRecording: RecordingIntegration | undefined,
   recordingOwner: 'agent' | 'raw' | undefined,
+  recordingSwapCallbacks: RecordingSwapCallbacks | undefined,
   config: CliUiRuntime | null,
 ): SlashCommandProcessorState {
   const recordProviderSwitch = useProviderSwitchRecorder(
@@ -144,9 +146,22 @@ function useCommandState(
     [readToolFormat, writeToolFormat],
   );
   const setCommand = useSetCommand(settings);
-  const credentialCommands = useCredentialCommands(agent, settings, config);
+  const credentialCommands = useCredentialCommands(
+    agent,
+    settings,
+    config,
+    recordProviderSwitch,
+  );
+  const chatCommand = useChatCommand(
+    agent,
+    config,
+    recordingOwner,
+    rawRecording,
+    recordingSwapCallbacks,
+  );
   const builtins = useMemo<BuiltinCommandOwners>(
     () => ({
+      chatCommand,
       modelCommand,
       toolFormatCommand,
       setCommand,
@@ -154,6 +169,7 @@ function useCommandState(
       ...credentialCommands,
     }),
     [
+      chatCommand,
       modelCommand,
       toolFormatCommand,
       setCommand,
@@ -161,10 +177,17 @@ function useCommandState(
       credentialCommands,
     ],
   );
+  return { builtins, ...useRegistryState(builtins, config) };
+}
+
+function useRegistryState(
+  builtins: BuiltinCommandOwners,
+  config: CliUiRuntime | null,
+): Omit<SlashCommandProcessorState, 'builtins'> {
   const [commands, setCommands] = useState<readonly SlashCommand[] | undefined>(
     () =>
       process.env.LLXPRT_CODE_BUILTIN_COMMANDS_ONLY === 'true'
-        ? loadBuiltinSlashCommands(builtins, config, recordingOwner)
+        ? loadBuiltinSlashCommands(builtins, config)
         : undefined,
   );
   const [reloadTrigger, setReloadTrigger] = useState(0);
@@ -176,7 +199,6 @@ function useCommandState(
     setReloadTrigger((v) => v + 1);
   }, []);
   return {
-    builtins,
     commands,
     setCommands,
     reloadTrigger,
@@ -297,6 +319,7 @@ export function useSlashCommandProcessorCore(
     refreshProviderAliases,
     args.recordingIntegration,
     args.recordingOwner,
+    args.recordingSwapCallbacks,
     args.config,
   );
   const cancellation = useSlashCommandCancellation();
@@ -339,7 +362,6 @@ export function useSlashCommandProcessorCore(
     state.reloadCommands,
     state.setCommands,
     args.agent,
-    args.recordingOwner,
   );
   const handleSlashCommand = useCallback(
     (

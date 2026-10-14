@@ -117,7 +117,7 @@ void vi.mock('../contexts/RuntimeContext.js', () => ({
 import { useModelDialogHandler } from '../components/modelDialogHandler.js';
 import { useLoadProfileDialog } from './useLoadProfileDialog.js';
 import { useProfileManagement } from './useProfileManagement.js';
-import { profileCommand } from '../commands/profileCommand.js';
+import { createProfileCommandForTest } from '../commands/__tests__/profile-command-test-owner.js';
 
 const PROJECT_HASH = 'provider-switch-recording';
 
@@ -536,12 +536,6 @@ describe('provider changes made in dialogs reach the session recording (issue #3
     });
 
     it('returns the /profile load result as loaded with the recording failure in its text', async () => {
-      const loadCommand = profileCommand.subCommands?.find(
-        (command) => command.name === 'load',
-      );
-      if (loadCommand?.action === undefined) {
-        throw new Error('/profile load is not defined');
-      }
       const context = createMockCommandContext({
         recordingIntegration: integration,
         services: {
@@ -559,10 +553,21 @@ describe('provider changes made in dialogs reach the session recording (issue #3
                 };
               },
             },
+            mcp: { refresh: async () => {} },
             sessionClient: { publishTools: async () => {} },
           },
         },
       });
+      const profileCommand = createProfileCommandForTest(
+        context,
+        (provider, model) => integration.recordProviderSwitch(provider, model),
+      );
+      const loadCommand = profileCommand.subCommands?.find(
+        (command) => command.name === 'load',
+      );
+      if (loadCommand?.action === undefined) {
+        throw new Error('/profile load is not defined');
+      }
 
       const result = await loadCommand.action(context, 'lunahigh');
 

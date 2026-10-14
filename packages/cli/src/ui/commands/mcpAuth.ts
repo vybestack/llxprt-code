@@ -61,7 +61,9 @@ export async function listOAuthServers(
   const oauthServersFromConfig = configuredServers
     .filter((server) => server.oauthEnabled)
     .map((server) => server.name);
-  const configuredNames = new Set(configuredServers.map((server) => server.name));
+  const configuredNames = new Set(
+    configuredServers.map((server) => server.name),
+  );
   const discoveredOAuthServers = (
     await operations.authenticationRequiredServers()
   ).filter((name) => configuredNames.has(name));
@@ -155,7 +157,11 @@ export function createMcpAuthCommand(
         return listOAuthServers(operations);
       }
 
-      if (!operations.configuredServers().some((server) => server.name === serverName)) {
+      if (
+        !operations
+          .configuredServers()
+          .some((server) => server.name === serverName)
+      ) {
         return {
           type: 'message',
           messageType: 'error',

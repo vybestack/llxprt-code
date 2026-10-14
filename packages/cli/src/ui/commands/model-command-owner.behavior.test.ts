@@ -33,7 +33,6 @@ describe('registered model command ownership', () => {
         ),
       },
       null,
-      'agent',
     );
   }
 

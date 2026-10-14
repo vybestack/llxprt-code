@@ -25,7 +25,6 @@ import { policiesCommand } from '../commands/policiesCommand.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { setupGithubCommand } from '../commands/setupGithubCommand.js';
 import { bugCommand } from '../commands/bugCommand.js';
-import { chatCommand } from '../commands/chatCommand.js';
 
 const modelCommand = createModelCommand(
   async () => {
@@ -76,7 +75,9 @@ describe('autoExecute classifications — top-level commands', () => {
   });
 
   it('/chat should NOT have autoExecute: true', () => {
-    expect(chatCommand.autoExecute).not.toBe(true);
+    expect(createUnconfiguredBuiltinOwners().chatCommand.autoExecute).not.toBe(
+      true,
+    );
   });
 });
 
