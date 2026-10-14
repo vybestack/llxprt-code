@@ -10,12 +10,13 @@ import { Writable } from 'node:stream';
 import { ProxyAgent } from 'undici';
 
 import type { CommandContext } from '../../ui/commands/types.js';
-import {
-  getGitRepoRoot,
-  getLatestGitHubRelease,
-  isGitHubRepository,
-  getGitHubRepoInfo,
-} from '../../utils/gitUtils.js';
+export interface GithubSetupOperations {
+  readonly isGitHubRepository: () => boolean;
+  readonly getGitRepoRoot: () => string;
+  readonly getRepoInfo: () => { owner: string; repo: string };
+  readonly getRelease: (signal: AbortSignal) => Promise<string>;
+  readonly proxy: string | undefined;
+}
 
 import type { SlashCommand, SlashCommandActionReturn } from './types.js';
 import { CommandKind } from './types.js';
@@ -43,14 +44,16 @@ const REPO_DOWNLOAD_URL =
   'https://raw.githubusercontent.com/acoliver/run-llxprt-code';
 const SOURCE_DIR = 'examples/workflows';
 // Generate OS-specific commands to open the GitHub pages needed for setup.
-function getOpenUrlsCommands(readmeUrl: string): string[] {
+function getOpenUrlsCommands(
+  readmeUrl: string,
+  repoInfo: { owner: string; repo: string },
+): string[] {
   // Determine the OS-specific command to open URLs, ex: 'open', 'xdg-open', etc
   const openCmd = getUrlOpenCommand();
 
   // Build a list of URLs to open
   const urlsToOpen = [readmeUrl];
 
-  const repoInfo = getGitHubRepoInfo();
   urlsToOpen.push(
     `https://github.com/${repoInfo.owner}/${repoInfo.repo}/settings/secrets/actions`,
   );
@@ -210,77 +213,84 @@ async function downloadSetupFiles({
   }
 }
 
-export const setupGithubCommand: SlashCommand = {
-  name: 'setup-github',
-  description: 'Set up GitHub Actions',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  action: async (
-    context: CommandContext,
-  ): Promise<SlashCommandActionReturn> => {
-    if (!isGitHubRepository()) {
-      throw new Error(
-        'Unable to determine the GitHub repository. /setup-github must be run from a git repository.',
+export function createSetupGithubCommand(
+  operations: GithubSetupOperations,
+): SlashCommand {
+  return {
+    name: 'setup-github',
+    description: 'Set up GitHub Actions',
+    kind: CommandKind.BUILT_IN,
+    autoExecute: true,
+    action: async (
+      context: Pick<CommandContext, 'signal'>,
+    ): Promise<SlashCommandActionReturn> => {
+      if (!operations.isGitHubRepository()) {
+        throw new Error(
+          'Unable to determine the GitHub repository. /setup-github must be run from a git repository.',
+        );
+      }
+
+      // Find the root directory of the repo
+      let gitRepoRoot: string;
+      try {
+        gitRepoRoot = operations.getGitRepoRoot();
+      } catch (error) {
+        debugLogger.debug(
+          () => `Failed to get git repo root: ${String(error)}`,
+        );
+        throw new Error(
+          'Unable to determine the GitHub repository. /setup-github must be run from a git repository.',
+        );
+      }
+
+      // Get the latest release tag from GitHub
+      const proxy = operations.proxy;
+      const releaseTag = await operations.getRelease(context.signal);
+      const readmeUrl = `https://github.com/acoliver/run-llxprt-code/blob/${releaseTag}/README.md#quick-start`;
+
+      // Create workflows directory
+      const workflowsDir = path.join(gitRepoRoot, '.github', 'workflows');
+      await createDirectory(workflowsDir);
+
+      // Create commands directory
+      const commandsDir = path.join(gitRepoRoot, '.github', 'commands');
+      await createDirectory(commandsDir);
+
+      await downloadSetupFiles({
+        configs: [
+          { paths: GITHUB_WORKFLOW_PATHS, targetDir: workflowsDir },
+          { paths: GITHUB_COMMANDS_PATHS, targetDir: commandsDir },
+        ],
+        releaseTag,
+        proxy,
+        signal: context.signal,
+      });
+
+      // Add entries to .gitignore file
+      await updateGitignore(gitRepoRoot);
+
+      // Print out a message
+      const commands = [];
+      if (process.platform !== 'win32') {
+        commands.push('set -eEuo pipefail');
+      }
+      commands.push(
+        `echo "Successfully downloaded ${GITHUB_WORKFLOW_PATHS.length} workflows, ${GITHUB_COMMANDS_PATHS.length} commands and updated .gitignore. Follow the steps in ${readmeUrl} (skipping the /setup-github step) to complete setup."`,
       );
-    }
-
-    // Find the root directory of the repo
-    let gitRepoRoot: string;
-    try {
-      gitRepoRoot = getGitRepoRoot();
-    } catch (error) {
-      debugLogger.debug(() => `Failed to get git repo root: ${String(error)}`);
-      throw new Error(
-        'Unable to determine the GitHub repository. /setup-github must be run from a git repository.',
+      commands.push(
+        ...getOpenUrlsCommands(readmeUrl, operations.getRepoInfo()),
       );
-    }
 
-    // Get the latest release tag from GitHub
-    const proxy =
-      'services' in context ? context.services.config?.getProxy() : undefined;
-    const releaseTag = await getLatestGitHubRelease(proxy);
-    const readmeUrl = `https://github.com/acoliver/run-llxprt-code/blob/${releaseTag}/README.md#quick-start`;
-
-    // Create workflows directory
-    const workflowsDir = path.join(gitRepoRoot, '.github', 'workflows');
-    await createDirectory(workflowsDir);
-
-    // Create commands directory
-    const commandsDir = path.join(gitRepoRoot, '.github', 'commands');
-    await createDirectory(commandsDir);
-
-    await downloadSetupFiles({
-      configs: [
-        { paths: GITHUB_WORKFLOW_PATHS, targetDir: workflowsDir },
-        { paths: GITHUB_COMMANDS_PATHS, targetDir: commandsDir },
-      ],
-      releaseTag,
-      proxy,
-      signal: context.signal,
-    });
-
-    // Add entries to .gitignore file
-    await updateGitignore(gitRepoRoot);
-
-    // Print out a message
-    const commands = [];
-    if (process.platform !== 'win32') {
-      commands.push('set -eEuo pipefail');
-    }
-    commands.push(
-      `echo "Successfully downloaded ${GITHUB_WORKFLOW_PATHS.length} workflows, ${GITHUB_COMMANDS_PATHS.length} commands and updated .gitignore. Follow the steps in ${readmeUrl} (skipping the /setup-github step) to complete setup."`,
-    );
-    commands.push(...getOpenUrlsCommands(readmeUrl));
-
-    const command = `(${commands.join(' && ')})`;
-    return {
-      type: 'tool',
-      toolName: 'run_shell_command',
-      toolArgs: {
-        description:
-          'Setting up GitHub Actions to triage issues and review PRs with LLxprt.',
-        command,
-      },
-    };
-  },
-};
+      const command = `(${commands.join(' && ')})`;
+      return {
+        type: 'tool',
+        toolName: 'run_shell_command',
+        toolArgs: {
+          description:
+            'Setting up GitHub Actions to triage issues and review PRs with LLxprt.',
+          command,
+        },
+      };
+    },
+  };
+}

@@ -1,12 +1,15 @@
-import { createPermissionsCommand } from '../ui/commands/permissionsCommand.js';
-import { bindPermissionCommit } from '../ui/commands/permissionsCommandHost.js';
-import { createPerfCommand } from '../ui/commands/perfCommand.js';
-import { createSkillsCommand } from '../ui/commands/skillsCommand.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import { createSetupGithubCommand } from '../ui/commands/setupGithubCommand.js';
+import { createDiagnosticsCommand } from '../ui/commands/diagnosticsCommand.js';
+import { createPermissionsCommand } from '../ui/commands/permissionsCommand.js';
+import { bindPermissionCommit } from '../ui/commands/permissionsCommandHost.js';
+import { createPerfCommand } from '../ui/commands/perfCommand.js';
+import { createSkillsCommand } from '../ui/commands/skillsCommand.js';
 
 import { createStatsCommand } from '../ui/commands/statsCommand.js';
 import { createLoggingCommand } from '../ui/commands/loggingCommand.js';
@@ -286,8 +289,48 @@ export function createUnconfiguredChatCommand(): SlashCommand {
   });
 }
 
+function unconfiguredReadCommands() {
+  return {
+    setupGithubCommand: createSetupGithubCommand({
+      isGitHubRepository: () => false,
+      getGitRepoRoot: () => {
+        throw new Error('Git repository unavailable');
+      },
+      getRepoInfo: () => {
+        throw new Error('Git repository unavailable');
+      },
+      getRelease: async () => {
+        throw new Error('Git repository unavailable');
+      },
+      proxy: undefined,
+    }),
+    diagnosticsCommand: createDiagnosticsCommand({
+      isConfigured: false,
+      readSnapshot: () => {
+        throw new Error('Diagnostics unavailable');
+      },
+      isOAuthAvailable: () => false,
+      readSessionBucket: () => undefined,
+      readFailoverBuckets: () => [],
+      readCurrentBucket: () => undefined,
+      readProviderName: () => undefined,
+      readLoadBalancerStats: () => undefined,
+      readTokenAccounting: () => undefined,
+      readSessionTokens: () => {
+        throw new Error('Diagnostics unavailable');
+      },
+      readStaticInfo: () => {
+        throw new Error('Diagnostics unavailable');
+      },
+      listTools: () => [],
+      appendTokens: async () => {},
+    }),
+  };
+}
+
 export function createUnconfiguredBuiltinOwners(): BuiltinCommandOwners {
   return {
+    ...unconfiguredReadCommands(),
     ideCommand: null,
     permissionsCommand: createPermissionsCommand(
       () => process.cwd(),

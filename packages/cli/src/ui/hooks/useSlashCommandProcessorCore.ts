@@ -4,6 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createDiagnosticsCommand } from '../commands/diagnosticsCommand.js';
+import { bindDiagnosticsReads } from '../commands/diagnosticsCommandHost.js';
+import { useOAuthControl } from '../contexts/OAuthControlContext.js';
+
 import { useCommandRuntimeState } from './useCommandRuntimeState.js';
 import { useRegisteredCommandReload } from './useRegisteredCommandReload.js';
 import { useHostCommands } from './useHostCommands.js';
@@ -61,11 +65,7 @@ import type {
   Todo,
   AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
-import type {
-  Agent,
-  ToolFormatState,
-  ToolFormatOverrideLiteral,
-} from '@vybestack/llxprt-code-agents';
+import type { Agent, ToolFormatState } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
@@ -96,9 +96,7 @@ import {
 } from './slashCommandProcessorSupport.js';
 import { type SlashCommandCancellation } from './useSlashCommandCancellation.js';
 
-type WriteToolFormat = (
-  format: ToolFormatOverrideLiteral | null,
-) => Promise<ToolFormatState>;
+type WriteToolFormat = Parameters<typeof createToolFormatCommand>[1];
 
 interface TodoContextValue {
   todos: Todo[];
@@ -157,6 +155,8 @@ function useHistoryCommandOwners(
   agent: Agent | null,
   config: CliUiRuntime | null,
   runtimeApi: ReturnType<typeof useRuntimeApi>,
+  settings: LoadedSettings,
+  oauthControl: ReturnType<typeof useOAuthControl>,
 ): Pick<
   BuiltinCommandOwners,
   | 'copyCommand'
@@ -164,9 +164,13 @@ function useHistoryCommandOwners(
   | 'dumpcontextCommand'
   | 'restoreCommand'
   | 'perfCommand'
+  | 'diagnosticsCommand'
 > {
   return useMemo(
     () => ({
+      diagnosticsCommand: createDiagnosticsCommand(
+        bindDiagnosticsReads(config, settings, agent, runtimeApi, oauthControl),
+      ),
       perfCommand: createPerfCommand({
         snapshotCapability: config?.getPerfSnapshotCapability?.() ?? null,
         tokenUsageDir: config
@@ -210,7 +214,7 @@ function useHistoryCommandOwners(
           : undefined,
       ),
     }),
-    [agent, config, runtimeApi],
+    [agent, config, runtimeApi, settings, oauthControl],
   );
 }
 
@@ -300,6 +304,8 @@ function useCommandState(
     agent,
     config,
     runtimeApi,
+    settings,
+    useOAuthControl(),
   );
   const builtins = useBuiltinCommandOwners({
     chatCommand,

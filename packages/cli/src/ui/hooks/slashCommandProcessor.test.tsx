@@ -171,6 +171,8 @@ describe('useSlashCommandProcessor', () => {
       getSessionId: vi.fn().mockReturnValue('test-session-id'),
       getDebugMode: vi.fn().mockReturnValue(false),
       getTargetDir: vi.fn().mockReturnValue('/test/project'),
+      getWorkingDir: () => '/test/project',
+      getProxy: () => undefined,
       getProjectTempDir: () => '/test/project/tmp',
       getCheckpointingEnabled: () => false,
       getUserMemory: vi.fn().mockReturnValue(''),
