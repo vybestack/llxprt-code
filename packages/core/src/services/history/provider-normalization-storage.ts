@@ -13,6 +13,14 @@ import { join } from 'node:path';
 import { isRecord } from './historyJournalGuards.js';
 
 const WIDTH = 48;
+/** A probe reads this many consecutive slots in one call; runs are short at load <= 0.5. */
+const PROBE_SLOTS = 16;
+/** Rehashing reads the old table in chunks of this many slots. */
+const REHASH_CHUNK_SLOTS = 1024;
+const PAGE_SLOTS = 64;
+const PAGE_BYTES = PAGE_SLOTS * WIDTH;
+/** The new table is written through at most this many resident pages. */
+const REHASH_PAGES = 64;
 /** Appended values are batched into one sequential write of at most this many bytes. */
 const VALUE_BUFFER_BYTES = 256 * 1024;
 
@@ -33,6 +41,76 @@ function transfer(
   }
 }
 
+/**
+ * The table being built by a rehash. Entries from one chunk of the old table
+ * land in two nearby regions of the new one, so a few resident pages absorb
+ * the writes that would otherwise each cost a probe read and a slot write.
+ */
+class RehashTable {
+  private readonly pages = new Map<number, Buffer>();
+
+  constructor(
+    private readonly fd: number,
+    private readonly capacity: number,
+  ) {}
+
+  insert(address: Buffer): void {
+    let slot = address.readUInt32LE(0) % this.capacity;
+    for (;;) {
+      const page = this.page(Math.floor(slot / PAGE_SLOTS));
+      const at = (slot % PAGE_SLOTS) * WIDTH;
+      if (page.readDoubleLE(at + 32) === 0) {
+        address.copy(page, at);
+        return;
+      }
+      slot = (slot + 1) % this.capacity;
+    }
+  }
+
+  flush(): void {
+    for (const [number, page] of this.pages)
+      transfer(this.fd, page, number * PAGE_BYTES, true);
+    this.pages.clear();
+  }
+
+  private page(number: number): Buffer {
+    const resident = this.pages.get(number);
+    if (resident !== undefined) {
+      this.pages.delete(number);
+      this.pages.set(number, resident);
+      return resident;
+    }
+    if (this.pages.size >= REHASH_PAGES) this.evictOldest();
+    const page = Buffer.alloc(PAGE_BYTES);
+    transfer(this.fd, page, number * PAGE_BYTES, false);
+    this.pages.set(number, page);
+    return page;
+  }
+
+  private evictOldest(): void {
+    for (const [number, page] of this.pages) {
+      transfer(this.fd, page, number * PAGE_BYTES, true);
+      this.pages.delete(number);
+      return;
+    }
+  }
+}
+
+/** Where a key lives in the index; carries no value so it retains no row. */
+interface Probe {
+  readonly key: string;
+  readonly hash: Buffer;
+  readonly slot: number;
+  readonly address: Buffer;
+  readonly occupied: boolean;
+}
+
+interface Found {
+  readonly probe: Probe;
+  /** Present when the slot holds `key`; read once while checking the key. */
+  readonly record?: { readonly key: string; readonly value: unknown };
+}
+
 /** Keys and values live on disk. Rehashing holds one fixed-width address at a time. */
 export class ProviderNormalizationStorage {
   private index: number;
@@ -44,6 +122,8 @@ export class ProviderNormalizationStorage {
   private flushed = 0;
   private readonly pending = Buffer.allocUnsafe(VALUE_BUFFER_BYTES);
   private closed = false;
+  /** The last probe, kept so a write right after a read of the same key skips the search. */
+  private probed: Probe | undefined;
 
   constructor(private readonly directory: string) {
     this.index = openSync(join(directory, 'index'), 'wx+', 0o600);
@@ -114,13 +194,13 @@ export class ProviderNormalizationStorage {
     return bytes;
   }
 
-  private entry(index: number, fd = this.index): Buffer {
-    const address = Buffer.alloc(WIDTH);
-    transfer(fd, address, index * WIDTH, false);
-    return address;
+  private entries(first: number, count: number): Buffer {
+    const addresses = Buffer.alloc(count * WIDTH);
+    transfer(this.index, addresses, first * WIDTH, false);
+    return addresses;
   }
 
-  private value(address: Buffer): { key: string; value: unknown } {
+  private record(address: Buffer): { key: string; value: unknown } {
     const bytes = this.readValue(
       address.readDoubleLE(32) - 1,
       address.readDoubleLE(40),
@@ -131,36 +211,49 @@ export class ProviderNormalizationStorage {
     return { key: record.key, value: record.value };
   }
 
-  private locate(key: string, hash: Buffer): { slot: number; address: Buffer } {
+  private search(key: string): Found {
+    const hash = createHash('sha256').update(key).digest();
     let slot = hash.readUInt32LE(0) % this.capacity;
-    for (let scanned = 0; scanned < this.capacity; scanned++) {
-      const address = this.entry(slot);
-      if (
-        address.readDoubleLE(32) === 0 ||
-        (address.subarray(0, 32).equals(hash) &&
-          this.value(address).key === key)
-      )
-        return { slot, address };
-      slot = (slot + 1) % this.capacity;
+    for (let scanned = 0; scanned < this.capacity; ) {
+      const span = Math.min(
+        PROBE_SLOTS,
+        this.capacity - slot,
+        this.capacity - scanned,
+      );
+      const window = this.entries(slot, span);
+      for (let offset = 0; offset < span; offset++) {
+        const address = window.subarray(offset * WIDTH, (offset + 1) * WIDTH);
+        const probe = {
+          key,
+          hash,
+          slot: slot + offset,
+          address,
+          occupied: address.readDoubleLE(32) !== 0,
+        };
+        if (!probe.occupied) return { probe };
+        if (!address.subarray(0, 32).equals(hash)) continue;
+        const record = this.record(address);
+        if (record.key === key) return { probe, record };
+      }
+      scanned += span;
+      slot = (slot + span) % this.capacity;
     }
     throw new Error('Provider normalization index is full');
   }
 
   get(key: string): unknown {
     this.check();
-    const hash = createHash('sha256').update(key).digest();
-    const { address } = this.locate(key, hash);
-    return address.readDoubleLE(32) === 0
-      ? undefined
-      : this.value(address).value;
+    const { probe, record } = this.search(key);
+    this.probed = { ...probe, occupied: record !== undefined };
+    return record?.value;
   }
 
   set(key: string, value: unknown): void {
     this.check();
     if (this.count * 2 >= this.capacity) this.grow();
-    const hash = createHash('sha256').update(key).digest();
-    const { slot, address } = this.locate(key, hash);
-    const inserted = address.readDoubleLE(32) === 0;
+    const { hash, slot, address, occupied } =
+      this.probed?.key === key ? this.probed : this.probe(key);
+    this.probed = undefined;
     const bytes = Buffer.from(JSON.stringify({ key, value }));
     const start = this.end;
     this.append(bytes);
@@ -168,23 +261,34 @@ export class ProviderNormalizationStorage {
     address.writeDoubleLE(start + 1, 32);
     address.writeDoubleLE(bytes.length, 40);
     transfer(this.index, address, slot * WIDTH, true);
-    if (inserted) this.count++;
+    if (!occupied) this.count++;
+  }
+
+  private probe(key: string): Probe {
+    const { probe, record } = this.search(key);
+    return { ...probe, occupied: record !== undefined };
+  }
+
+  private rehashChunk(table: RehashTable, first: number): void {
+    const count = Math.min(REHASH_CHUNK_SLOTS, this.capacity - first);
+    const chunk = this.entries(first, count);
+    for (let offset = 0; offset < count; offset++) {
+      const address = chunk.subarray(offset * WIDTH, (offset + 1) * WIDTH);
+      if (address.readDoubleLE(32) !== 0) table.insert(address);
+    }
   }
 
   private grow(): void {
+    this.probed = undefined;
     const capacity = this.capacity * 2;
     const nextPath = join(this.directory, 'index-next');
     const next = openSync(nextPath, 'w+', 0o600);
     try {
       ftruncateSync(next, capacity * WIDTH);
-      for (let index = 0; index < this.capacity; index++) {
-        const address = this.entry(index);
-        if (address.readDoubleLE(32) === 0) continue;
-        let slot = address.readUInt32LE(0) % capacity;
-        while (this.entry(slot, next).readDoubleLE(32) !== 0)
-          slot = (slot + 1) % capacity;
-        transfer(next, address, slot * WIDTH, true);
-      }
+      const table = new RehashTable(next, capacity);
+      for (let first = 0; first < this.capacity; first += REHASH_CHUNK_SLOTS)
+        this.rehashChunk(table, first);
+      table.flush();
       renameSync(nextPath, join(this.directory, 'index'));
     } catch (error) {
       closeSync(next);
