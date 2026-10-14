@@ -17,6 +17,8 @@ import type {
 import type { MediaBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderToolset } from '../IProvider.js';
 import type { RequestScopedBody } from '../utils/requestScopedBody.js';
+import { diskTextProjection } from '../openai-responses/responses-disk-text-projection.js';
+import { finishMediaRequest } from '../utils/request-media-resolution.js';
 import {
   projectOpenAIChatPromptEnvelope,
   projectOpenAIChatPromptEnvelopeOnDemand,
@@ -95,6 +97,32 @@ export class OpenAIPromptEnvelopeStore {
       releaseIfUnsent: prepared.mediaRequest.release,
     };
   }
+
+  /**
+   * Source route, Responses: the disk text projection of the one prepared
+   * context. Unsupported media comes from the prompt's own ledger, so no row
+   * array is read here.
+   */
+  async storeDiskTextProjection(
+    prepared: Extract<
+      PreparedOpenAIPromptEnvelope,
+      { readonly protocol: 'openai-responses' }
+    >,
+  ): Promise<PromptEnvelopeProjection> {
+    const transportToken = Object.freeze({});
+    this.prepared.set(transportToken, prepared);
+    const { mediaRequest } = prepared.requestContext;
+    try {
+      return diskTextProjection(
+        prepared.requestContext,
+        transportToken,
+        mediaRequest.release,
+      );
+    } catch (error) {
+      this.prepared.delete(transportToken);
+      return finishMediaRequest(mediaRequest, { status: 'failed', error });
+    }
+  }
 }
 
 interface PrepareOpenAIProjectionInput {
@@ -119,14 +147,18 @@ export async function prepareOpenAIPromptProjection(
 ): Promise<PromptEnvelopeProjection> {
   if (input.useResponses) {
     const requestContext = await input.prepareResponses();
+    const prepared = {
+      protocol: 'openai-responses',
+      requestContext,
+      ...(input.sourceInputs === undefined
+        ? {}
+        : { sourceInputs: input.sourceInputs }),
+    } as const;
+    if (requestContext.sourcePrompt !== undefined) {
+      return input.store.storeDiskTextProjection(prepared);
+    }
     return input.store.storeProjection(
-      {
-        protocol: 'openai-responses',
-        requestContext,
-        ...(input.sourceInputs === undefined
-          ? {}
-          : { sourceInputs: input.sourceInputs }),
-      },
+      prepared,
       input.collectUnsupported(
         input.normalized,
         (_block, category) =>

@@ -70,6 +70,7 @@ import {
   isResponsesPdfEnabled,
   type ResponsesExecutorDeps,
 } from '../openai-responses/openAIResponsesExecutor.js';
+import { buildDiskTextResponsesContext } from '../openai-responses/responses-disk-text-projection.js';
 import type { prepareRequest } from './OpenAIRequestPreparation.js';
 import {
   OpenAIPromptEnvelopeStore,
@@ -84,8 +85,8 @@ import {
 import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
 import {
   resolveChatMediaRequest,
+  resolveResponsesSendContext,
   restorePreparedSourceInputs,
-  withResponsesRows,
 } from './OpenAISourceRoute.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
@@ -493,6 +494,33 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     );
   }
 
+  private async *sendResponses(
+    options: NormalizedGenerateChatOptions,
+    prepared: ReturnType<OpenAIPromptEnvelopeStore['get']>,
+  ): AsyncIterableIterator<IContent> {
+    if (prepared?.protocol === 'openai-chat') {
+      await finishMediaRequest(prepared.mediaRequest, {
+        status: 'failed',
+        error: new Error(
+          'Prepared OpenAI Chat envelope cannot be sent through Responses transport',
+        ),
+      });
+      return;
+    }
+    const request = this.captureResponsesRequest(options);
+    const deps = this.buildResponsesExecutorDeps();
+    yield* executeOpenAIResponsesRequest(
+      request,
+      deps,
+      await resolveResponsesSendContext(
+        options,
+        request,
+        deps,
+        prepared?.requestContext,
+      ),
+    );
+  }
+
   protected override async *generateChatCompletionWithOptions(
     callOptions: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
@@ -520,22 +548,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       );
     }
     if (decision.useResponses) {
-      if (prepared?.protocol === 'openai-chat') {
-        await finishMediaRequest(prepared.mediaRequest, {
-          status: 'failed',
-          error: new Error(
-            'Prepared OpenAI Chat envelope cannot be sent through Responses transport',
-          ),
-        });
-        return;
-      }
-      yield* executeOpenAIResponsesRequest(
-        this.captureResponsesRequest(
-          await withResponsesRows(options, prepared !== undefined),
-        ),
-        this.buildResponsesExecutorDeps(),
-        prepared?.requestContext,
-      );
+      yield* this.sendResponses(options, prepared);
       return;
     }
     if (prepared?.protocol === 'openai-responses') {
@@ -795,12 +808,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       normalized.resolved.baseURL ?? this.baseProviderConfig.baseURL,
       normalized.invocation.ephemerals,
     ).useResponses;
-    const projected = useResponses
-      ? await withResponsesRows(normalized, false)
-      : normalized;
-    const request = this.captureResponsesRequest(projected);
+    const request = this.captureResponsesRequest(normalized);
     return prepareOpenAIPromptProjection({
-      normalized: projected,
+      normalized,
       ...(readsRequestRowsAtTransport(normalized)
         ? {
             sourceInputs: {
@@ -813,10 +823,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       store: this.preparedPromptEnvelopes,
       responsesPdfEnabled: isResponsesPdfEnabled(request),
       prepareResponses: () =>
-        buildResponsesRequestContextForProjection(
-          request,
-          this.buildResponsesExecutorDeps(),
-        ),
+        readsRequestRowsAtTransport(normalized)
+          ? buildDiskTextResponsesContext(
+              request,
+              this.buildResponsesExecutorDeps(),
+            )
+          : buildResponsesRequestContextForProjection(
+              request,
+              this.buildResponsesExecutorDeps(),
+            ),
       prepareChat: () =>
         prepareOpenAIChatProjection(
           normalized,

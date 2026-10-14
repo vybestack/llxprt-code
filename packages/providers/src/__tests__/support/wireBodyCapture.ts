@@ -227,7 +227,7 @@ async function readBodyBytes(
 }
 
 /** Installs the fake HTTP transport; call the returned restore in `finally`. */
-function installFakeTransport(
+export function installFakeTransport(
   route: WireRoute,
   captured: CapturedWireRequest[],
 ): () => void {
@@ -256,7 +256,9 @@ function installFakeTransport(
   };
 }
 
-function rowsSelection(rows: readonly IContent[]): ProviderRequestSelection {
+export function rowsSelection(
+  rows: readonly IContent[],
+): ProviderRequestSelection {
   return Object.freeze({
     count: rows.length,
     readAt: readAtOf(rows),
@@ -333,7 +335,7 @@ function buildOptions(
   };
 }
 
-function singleModelRequest(
+export function singleModelRequest(
   route: WireRoute,
   captured: readonly CapturedWireRequest[],
 ): CapturedWireRequest {

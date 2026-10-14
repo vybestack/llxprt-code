@@ -8,10 +8,17 @@ import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/r
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
 import { resolveRequestMedia } from '../utils/request-media-resolution.js';
+import { openTransportRowsMedia } from '../utils/transportRows.js';
+import type { ResponsesRequest } from '../openai-responses/responses-request.js';
+import type {
+  PreparedResponsesRequestContext,
+  ResponsesExecutorDeps,
+} from '../openai-responses/openAIResponsesExecutor.js';
 import {
-  openTransportRowsMedia,
-  readTransportRows,
-} from '../utils/transportRows.js';
+  assertDiskTextShape,
+  assertPreparedStatefulUnchanged,
+  buildDiskTextResponsesContext,
+} from '../openai-responses/responses-disk-text-projection.js';
 import type {
   OpenAIPromptEnvelopeStore,
   PreparedOpenAIPromptEnvelope,
@@ -39,16 +46,36 @@ export function restorePreparedSourceInputs(
 }
 
 /**
- * The Responses transport still builds from a plain history list, so on the
- * source route its rows are read here unless a prepared request already
- * carries them.
+ * The prepared Responses context of one send. On the source route the rows
+ * are read by the disk text route (the same one the openai-responses provider
+ * uses), either from the projection's token or built here when the caller
+ * sent rows without a projection; array-backed sends carry no context unless
+ * a projection prepared one.
  */
-export async function withResponsesRows(
+export async function resolveResponsesSendContext(
   options: NormalizedGenerateChatOptions,
-  hasPrepared: boolean,
-): Promise<NormalizedGenerateChatOptions> {
-  if (hasPrepared || !readsRequestRowsAtTransport(options)) return options;
-  return { ...options, contents: await readTransportRows(options) };
+  request: ResponsesRequest,
+  deps: ResponsesExecutorDeps,
+  prepared: PreparedResponsesRequestContext | undefined,
+): Promise<PreparedResponsesRequestContext | undefined> {
+  const sourceRoute = readsRequestRowsAtTransport(options);
+  if (!sourceRoute) {
+    if (prepared?.sourcePrompt !== undefined) {
+      throw new Error('Source token requires its transport-read request rows');
+    }
+    return prepared;
+  }
+  if (prepared === undefined) {
+    return buildDiskTextResponsesContext(request, deps);
+  }
+  if (prepared.sourcePrompt === undefined) {
+    throw new Error(
+      'Disk text selection requires a source-backed prepared token',
+    );
+  }
+  assertDiskTextShape(request, deps);
+  assertPreparedStatefulUnchanged(request, deps, prepared);
+  return prepared;
 }
 
 /** The media request of one chat send: prepared, rows-backed or array-backed. */
