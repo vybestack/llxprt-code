@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type OpenAI from 'openai';
 import type { PreparedOpenAIChatProjection } from './OpenAIPromptProjectionPreparation.js';
-import type { prepareRequest } from './OpenAIRequestPreparation.js';
+import type { RequestContext } from './OpenAIRequestPreparation.js';
+import { readSpooledChatBody } from './OpenAIChatSpooledBody.js';
 import type { PreparedResponsesRequestContext } from '../openai-responses/openAIResponsesExecutor.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type {
@@ -14,13 +14,9 @@ import type {
   UnsupportedMediaEntry,
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { ProviderToolset } from '../IProvider.js';
-import type { RequestScopedBody } from '../utils/requestScopedBody.js';
 import { diskTextProjection } from '../openai-responses/responses-disk-text-projection.js';
 import { finishMediaRequest } from '../utils/request-media-resolution.js';
-import {
-  projectOpenAIChatPromptEnvelope,
-  projectOpenAIChatPromptEnvelopeOnDemand,
-} from '../runtime/promptEnvelopeProjections.js';
+import { projectOpenAIChatPromptEnvelopeOnDemand } from '../runtime/promptEnvelopeProjections.js';
 
 /**
  * Source route: a send normalized with its prompt inputs blanked gets these
@@ -35,10 +31,8 @@ export interface OpenAISourceInputs {
 export type PreparedOpenAIPromptEnvelope =
   | {
       readonly protocol: 'openai-chat';
-      readonly requestContext: Awaited<ReturnType<typeof prepareRequest>>;
+      readonly requestContext: RequestContext;
       readonly mediaRequest: ResolvedMediaRequest;
-      /** Source route: the lease of the one prepared chat body. */
-      readonly bodyLease?: RequestScopedBody<OpenAI.Chat.ChatCompletionCreateParams>;
       readonly sourceInputs?: OpenAISourceInputs;
     }
   | {
@@ -66,21 +60,18 @@ export class OpenAIPromptEnvelopeStore {
   ): PromptEnvelopeProjection {
     const transportToken = Object.freeze({});
     this.prepared.set(transportToken, prepared);
-    const { bodyLease } = prepared;
-    if (bodyLease !== undefined) {
-      return projectOpenAIChatPromptEnvelopeOnDemand(() => bodyLease.value, {
+    // The estimator still reads the body as a value (issue #854 D3b moves it
+    // onto estimator-form segment files); it is parsed from the spool on each
+    // access and not kept.
+    const { spool } = prepared.requestContext;
+    return projectOpenAIChatPromptEnvelopeOnDemand(
+      () => readSpooledChatBody(spool),
+      {
         unsupportedMedia,
         transportToken,
         releaseIfUnsent: prepared.mediaRequest.release,
-      });
-    }
-    return {
-      ...projectOpenAIChatPromptEnvelope(prepared.requestContext.requestBody, {
-        unsupportedMedia,
-        transportToken,
-      }),
-      releaseIfUnsent: prepared.mediaRequest.release,
-    };
+      },
+    );
   }
 
   /**
@@ -134,15 +125,14 @@ export async function prepareOpenAIPromptProjection(
   }
 
   const prepared = await input.prepareChat();
-  const sourceRoute = input.sourceInputs !== undefined;
   return input.store.storeChatProjection(
     {
       protocol: 'openai-chat',
       requestContext: prepared.requestContext,
       mediaRequest: prepared.mediaRequest,
-      ...(sourceRoute
-        ? { bodyLease: prepared.bodyLease, sourceInputs: input.sourceInputs }
-        : {}),
+      ...(input.sourceInputs === undefined
+        ? {}
+        : { sourceInputs: input.sourceInputs }),
     },
     prepared.unsupportedMedia,
   );

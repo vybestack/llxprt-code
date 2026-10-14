@@ -17,9 +17,14 @@
 import type OpenAI from 'openai';
 import { type NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { type DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
+import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 import { convertToolsToOpenAI, type OpenAITool } from './schemaConverter.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
-import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
+import {
+  writeChatMessages,
+  type ChatBodyOptions,
+  type ChatBodyRows,
+} from './OpenAIChatBodyBuilder.js';
 import { extractModelParamsFromOptions } from './OpenAIClientFactory.js';
 import { sanitizePromptCacheKey } from '../openai-responses/sanitizePromptCacheKey.js';
 import { applyOpenAIChatReasoning } from './openai-chat-reasoning.js';
@@ -32,14 +37,43 @@ import {
   conservativeMediaTransportCapabilities,
   type ProviderMediaTransportCapabilities,
 } from '../providerMediaTransportCapabilities.js';
+import { getRequestSignal } from '../utils/abortSignal.js';
+import { jsonValueChunks } from '../utils/boundedJsonBody.js';
+import {
+  StreamedSegment,
+  writeEnvelope,
+  type EnvelopeSink,
+} from '../utils/envelope-writer.js';
+import { KeyedRowIndex } from '../utils/keyed-row-index.js';
+import { KeyedRowToolIdStore } from '../utils/keyed-row-tool-id-store.js';
+import { providerRowsOf } from '../utils/providerRows.js';
+import { WireBodySpool } from '../utils/wire-body-spool.js';
 
+/**
+ * A prepared chat request: the sealed body on scratch disk and the scalars the
+ * response path needs. The messages exist only as bytes in the spool.
+ */
 export interface RequestContext {
   model: string;
   detectedFormat: string;
   formattedTools: OpenAITool[] | undefined;
   streamingEnabled: boolean;
-  requestBody: OpenAI.Chat.ChatCompletionCreateParams;
-  messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[];
+  /** The sealed request body; its size is the Content-Length. */
+  spool: WireBodySpool;
+  /** Messages in the body, the system message included. */
+  messageCount: number;
+  /** Disposes the spool and closes the tool id index. Idempotent. */
+  release(): void;
+}
+
+/**
+ * Where the rows of one request come from. By default the call's own rows are
+ * read and no media is resolved; the caller supplies the media stage, or rows
+ * it already prepared (the Kimi file pre-pass).
+ */
+export interface ChatRowInput {
+  readonly rows?: ChatBodyRows;
+  readonly mediaStage?: ChatBodyOptions['mediaStage'];
 }
 
 /**
@@ -154,6 +188,7 @@ function applyRequestBodyOverrides(
       });
     }
     if (sanitizedOverrides) {
+      assertNoMessagesOverride(sanitizedOverrides);
       Object.assign(requestBody, sanitizedOverrides);
     }
   }
@@ -174,6 +209,19 @@ function applyRequestBodyOverrides(
 
   if (streamingEnabled) {
     Object.assign(requestBody, { stream_options: streamOptions });
+  }
+}
+
+/**
+ * The messages are the spooled array; an override cannot replace them, because
+ * the body is written from the rows and a replacement would be dropped or sent
+ * without the conversion rules applied.
+ */
+function assertNoMessagesOverride(overrides: Record<string, unknown>): void {
+  if ('messages' in overrides) {
+    throw new Error(
+      'OpenAI chat request overrides cannot replace "messages"; the messages are written from the request rows',
+    );
   }
 }
 
@@ -206,19 +254,17 @@ function sanitizeOverridesCacheKey(
   return Object.keys(result).length > 0 ? result : undefined;
 }
 
-interface OpenAIMessagePayload {
-  readonly detectedFormat: string;
+interface OpenAIToolPayload {
+  readonly detectedFormat: ToolFormat;
   readonly formattedTools: OpenAITool[] | undefined;
-  readonly messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[];
 }
 
-function prepareMessagePayload(
+function prepareToolPayload(
   options: NormalizedGenerateChatOptions,
   model: string,
-  config: OutputLimitConfig | undefined,
   logger: DebugLogger,
   providerName: string,
-): OpenAIMessagePayload {
+): OpenAIToolPayload {
   const detectedFormat = resolveToolFormat(
     model,
     providerName,
@@ -232,12 +278,6 @@ function prepareMessagePayload(
       `[OpenAIProvider] Using tool format '${detectedFormat}' for model '${model}'`,
     { model, detectedFormat, provider: providerName },
   );
-  const messages = buildMessagesWithReasoning(
-    options.contents,
-    options,
-    detectedFormat,
-    config,
-  );
   return {
     detectedFormat,
     formattedTools: convertAndGuardTools(
@@ -246,11 +286,100 @@ function prepareMessagePayload(
       detectedFormat,
       logger,
     ),
-    messagesWithSystem: [
-      { role: 'system', content: options.systemInstruction ?? '' },
-      ...messages,
-    ],
   };
+}
+
+async function callRows(
+  options: NormalizedGenerateChatOptions,
+): Promise<ChatBodyRows> {
+  const rows = await providerRowsOf(options);
+  const signal = getRequestSignal(options);
+  return { rows: () => rows.openReader(signal) };
+}
+
+function usesToolIdStore(format: ToolFormat): boolean {
+  return format === 'kimi' || format === 'mistral';
+}
+
+/**
+ * Writes the messages array: `[`, the system message, then each conversion
+ * output behind a comma, `]`. Returns the number of messages written.
+ */
+async function writeMessagesSegment(
+  sink: EnvelopeSink,
+  options: NormalizedGenerateChatOptions,
+  source: ChatBodyRows,
+  bodyOptions: ChatBodyOptions,
+): Promise<number> {
+  sink.append('[');
+  const system = jsonValueChunks({
+    role: 'system',
+    content: options.systemInstruction ?? '',
+  });
+  if (system === undefined) throw new Error('System message is not JSON');
+  for (const chunk of system) sink.append(chunk);
+  const converted = await writeChatMessages(source, bodyOptions, {
+    message(chunks) {
+      sink.append(',');
+      for (const chunk of chunks) sink.append(chunk);
+    },
+  });
+  sink.append(']');
+  return converted + 1;
+}
+
+/**
+ * Spools the request body: the envelope's small members are written as
+ * `JSON.stringify` would and the messages are converted and written one row
+ * at a time. A failure disposes the spool and the tool id index.
+ */
+async function spoolChatBody(
+  envelope: OpenAIChatRequestBody,
+  options: NormalizedGenerateChatOptions,
+  format: ToolFormat,
+  rowInput: ChatRowInput,
+): Promise<Pick<RequestContext, 'spool' | 'messageCount' | 'release'>> {
+  const spool = WireBodySpool.create('openai-chat', {
+    signal: getRequestSignal(options),
+  });
+  let toolIds: KeyedRowIndex | undefined;
+  const release = (): void => {
+    try {
+      spool.dispose();
+    } finally {
+      toolIds?.close();
+    }
+  };
+  try {
+    if (usesToolIdStore(format)) toolIds = KeyedRowIndex.create('tool-ids');
+    const source = rowInput.rows ?? (await callRows(options));
+    const bodyOptions: ChatBodyOptions = {
+      reasoning: options,
+      toolFormat: format,
+      config: parseOutputLimits(options.invocation.ephemerals),
+      ...(toolIds === undefined
+        ? {}
+        : { toolIdStore: new KeyedRowToolIdStore(toolIds) }),
+      ...(rowInput.mediaStage === undefined
+        ? {}
+        : { mediaStage: rowInput.mediaStage }),
+    };
+    let messageCount = 0;
+    const messages = new StreamedSegment(async (sink) => {
+      messageCount = await writeMessagesSegment(
+        sink,
+        options,
+        source,
+        bodyOptions,
+      );
+    });
+    await writeEnvelope(spool, { ...envelope, messages });
+    spool.seal();
+    return { spool, messageCount, release };
+  } catch (error) {
+    release();
+    throw error;
+  }
 }
 
 /**
@@ -264,35 +393,35 @@ export async function prepareRequest(
   logger: DebugLogger,
   providerName?: string,
   mediaTransportCapabilities: ProviderMediaTransportCapabilities = conservativeMediaTransportCapabilities(),
+  rowInput: ChatRowInput = {},
 ): Promise<RequestContext> {
   const model = options.resolved.model || defaultModel;
   const ephemeralSettings = readInvocationRecord(options.invocation.ephemerals);
   const resolvedProviderName = providerName ?? 'openai';
-  const { detectedFormat, formattedTools, messagesWithSystem } =
-    prepareMessagePayload(
-      options,
-      model,
-      parseOutputLimits(options.invocation.ephemerals),
-      logger,
-      resolvedProviderName,
-    );
+  const { detectedFormat, formattedTools } = prepareToolPayload(
+    options,
+    model,
+    logger,
+    resolvedProviderName,
+  );
   const streamingEnabled = ephemeralSettings['streaming'] !== 'disabled';
 
-  // Build request
-  const requestBody: OpenAIChatRequestBody = {
+  // The envelope keeps `messages` in its key position as an empty placeholder;
+  // the spool writer replaces it with the streamed array.
+  const envelope: OpenAIChatRequestBody = {
     model,
-    messages: messagesWithSystem,
+    messages: [],
     stream: streamingEnabled,
   };
 
   if (formattedTools && formattedTools.length > 0) {
-    requestBody.tools = formattedTools;
-    requestBody.tool_choice = 'auto';
+    envelope.tools = formattedTools;
+    envelope.tool_choice = 'auto';
   }
 
   // Apply model params, reasoning, and stream-options overrides
   applyRequestBodyOverrides(
-    requestBody,
+    envelope,
     options,
     ephemeralSettings,
     model,
@@ -300,18 +429,18 @@ export async function prepareRequest(
     resolvedProviderName,
     logger,
   );
-  applyKimiCacheAffinity(requestBody, {
+  applyKimiCacheAffinity(envelope, {
     providerName: resolvedProviderName,
     runtimeId: options.invocation.runtimeId,
     cacheAffinityKey: mediaTransportCapabilities.cacheAffinityKey,
   });
 
+  const body = await spoolChatBody(envelope, options, detectedFormat, rowInput);
   return {
     model,
     detectedFormat,
     formattedTools,
     streamingEnabled,
-    requestBody,
-    messagesWithSystem,
+    ...body,
   };
 }

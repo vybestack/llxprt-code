@@ -8,7 +8,12 @@ import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/r
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
 import { resolveRequestMedia } from '../utils/request-media-resolution.js';
-import { openTransportRowsMedia } from '../utils/transportRows.js';
+import { getRequestSignal } from '../utils/abortSignal.js';
+import {
+  resolveRowsMedia,
+  type RowsMediaInput,
+} from '../openai-responses/responses-row-media.js';
+import type { ChatRowInput } from './OpenAIRequestPreparation.js';
 import type { ResponsesRequest } from '../openai-responses/responses-request.js';
 import type {
   PreparedResponsesRequestContext,
@@ -102,19 +107,27 @@ export async function resolveResponsesSendContext(
   return prepared;
 }
 
-/** The media request of one chat send: prepared, rows-backed or array-backed. */
+/**
+ * The media request of one chat send: the prepared one, or a fresh owner for
+ * the leases of the rows this send resolves. Rows are never read here; media
+ * is resolved one row at a time while the body is written
+ * ({@link chatMediaStage}).
+ */
 export async function resolveChatMediaRequest(
   options: NormalizedGenerateChatOptions,
   prepared: PreparedOpenAIPromptEnvelope | undefined,
-  media: Parameters<typeof resolveRequestMedia>[0],
+  media: RowsMediaInput,
 ): Promise<ResolvedMediaRequest> {
   if (prepared?.protocol === 'openai-chat') return prepared.mediaRequest;
-  if (readsRequestRowsAtTransport(options)) {
-    return openTransportRowsMedia(options, media);
-  }
-  return resolveRequestMedia(
-    media,
-    options.contents,
-    options.invocation.signal,
-  );
+  return resolveRequestMedia(media, [], getRequestSignal(options));
+}
+
+/** Resolves stored media references row by row while the chat body is written. */
+export function chatMediaStage(
+  options: NormalizedGenerateChatOptions,
+  media: RowsMediaInput,
+  owner: ResolvedMediaRequest,
+): NonNullable<ChatRowInput['mediaStage']> {
+  const signal = getRequestSignal(options);
+  return (rows) => resolveRowsMedia(rows, media, owner, signal);
 }

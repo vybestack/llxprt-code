@@ -89,7 +89,7 @@ async function runStreaming(
       'openai',
       undefined,
       {} as Parameters<typeof processStreamingResponse>[4],
-      [],
+      () => [],
       {} as Parameters<typeof processStreamingResponse>[6],
       undefined,
       undefined,

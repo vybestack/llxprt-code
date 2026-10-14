@@ -9,20 +9,18 @@ import type OpenAI from 'openai';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { GenerateChatOptions } from '../IProvider.js';
-import { prepareRequest } from './OpenAIRequestPreparation.js';
+import {
+  prepareRequest,
+  type ChatRowInput,
+  type RequestContext,
+} from './OpenAIRequestPreparation.js';
+import { chatMediaStage } from './OpenAISourceRoute.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { ProviderMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
 import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import {
-  acquireRequestScopedBody,
-  type RequestScopedBody,
-} from '../utils/requestScopedBody.js';
-import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
-import {
-  dropTransportRows,
-  openTransportRowsMedia,
-} from '../utils/transportRows.js';
+import { getRequestSignal } from '../utils/abortSignal.js';
+import type { RowsMediaInput } from '../openai-responses/responses-row-media.js';
 import {
   finishMediaRequest,
   resolveRequestMedia,
@@ -92,69 +90,61 @@ interface ChatProjectionPreparationDeps {
   readonly resolveAuthToken: (
     options: NormalizedGenerateChatOptions,
   ) => Promise<string>;
+  /**
+   * The Kimi file pre-pass. Returns the rows to convert when it applies and
+   * `undefined` when the request has no pre-pass.
+   */
   readonly processMedia: (
     options: NormalizedGenerateChatOptions,
     client: OpenAI,
     logger: DebugLogger,
     mediaRequest: ResolvedMediaRequest,
-  ) => Promise<NormalizedGenerateChatOptions>;
+    media: RowsMediaInput,
+  ) => Promise<ChatRowInput | undefined>;
   readonly logger: DebugLogger;
   readonly defaultModel: string;
   readonly providerName: string;
   readonly mediaTransportCapabilities: ProviderMediaTransportCapabilities;
 }
 
+/**
+ * The prepared body belongs to the media request: finishing the request, on
+ * any outcome, disposes the spool and the tool id index.
+ */
 export function registerOpenAIChatRequestCleanup(
   mediaRequest: ResolvedMediaRequest,
-  requestContext: Awaited<ReturnType<typeof prepareRequest>>,
-): RequestScopedBody<OpenAI.Chat.ChatCompletionCreateParams> {
-  // Issue #854 P05b4: the wire body is owned by a request-scoped lease and
-  // the media request's finish releases it, so the body arrays are spliced
-  // once the transport call settles (any outcome) instead of outliving it.
-  const requestBodyLease = acquireRequestScopedBody(
-    'openai',
-    requestContext.requestBody,
-  );
-  mediaRequest.registerCleanup(() => {
-    void requestBodyLease.release();
-  });
-  return requestBodyLease;
+  requestContext: RequestContext,
+): void {
+  try {
+    mediaRequest.registerCleanup(requestContext.release);
+  } catch (error) {
+    requestContext.release();
+    throw error;
+  }
 }
 
 export interface PreparedOpenAIChatProjection {
-  readonly options: NormalizedGenerateChatOptions;
-  readonly requestContext: Awaited<ReturnType<typeof prepareRequest>>;
+  readonly requestContext: RequestContext;
   readonly mediaRequest: ResolvedMediaRequest;
-  readonly bodyLease: RequestScopedBody<OpenAI.Chat.ChatCompletionCreateParams>;
   readonly unsupportedMedia: readonly UnsupportedMediaEntry[];
 }
 
 /**
- * Drops the transient neutral rows once the chat body exists, so only the one
- * wire `messages` body stays alive (issue #854 WP08). The Kimi pre-pass may
- * have swapped in its own row list.
- */
-export function dropOpenAIChatSourceRows(
-  mediaRequest: ResolvedMediaRequest,
-  options: NormalizedGenerateChatOptions,
-): void {
-  dropTransportRows(mediaRequest);
-  options.contents.splice(0);
-}
-
-/**
- * An unprojected send builds its one chat body inside the transport: it takes
- * the body's request-scoped lease and, on the source route, drops the
- * transient neutral rows.
+ * An unprojected send builds its one chat body inside the transport and hands
+ * its spool to the media request, which disposes it when the call ends. The
+ * rows come from the Kimi pre-pass when it ran, otherwise from the call with
+ * their stored media resolved as they are read.
  */
 export async function prepareOwnedOpenAIChatRequest(
   options: NormalizedGenerateChatOptions,
   mediaRequest: ResolvedMediaRequest,
+  media: RowsMediaInput,
   defaultModel: string,
   logger: DebugLogger,
   providerName: string,
   mediaTransportCapabilities: ProviderMediaTransportCapabilities,
-): Promise<Awaited<ReturnType<typeof prepareRequest>>> {
+  kimiRows: ChatRowInput | undefined,
+): Promise<RequestContext> {
   const requestContext = await prepareRequest(
     options,
     defaultModel,
@@ -162,12 +152,31 @@ export async function prepareOwnedOpenAIChatRequest(
     logger,
     providerName,
     mediaTransportCapabilities,
+    kimiRows ?? { mediaStage: chatMediaStage(options, media, mediaRequest) },
   );
   registerOpenAIChatRequestCleanup(mediaRequest, requestContext);
-  if (readsRequestRowsAtTransport(options)) {
-    dropOpenAIChatSourceRows(mediaRequest, options);
-  }
   return requestContext;
+}
+
+/**
+ * Lists the media a protocol cannot carry as the rows pass by, so the
+ * projection learns it without reading the history into an array.
+ */
+function withUnsupportedMediaList(
+  stage: ChatRowInput['mediaStage'],
+  into: UnsupportedMediaEntry[],
+): NonNullable<ChatRowInput['mediaStage']> {
+  return async function* (rows) {
+    for await (const row of stage?.(rows) ?? rows) {
+      into.push(
+        ...collectUnsupportedMedia(
+          [row],
+          (_block, category) => category === 'image',
+        ),
+      );
+      yield row;
+    }
+  };
 }
 
 export async function prepareOpenAIChatProjection(
@@ -179,24 +188,20 @@ export async function prepareOpenAIChatProjection(
   const support = deps.readMediaSupport();
   const needsClient =
     support?.fileUpload === true || support?.videoSupport === true;
-  const sourceRoute = readsRequestRowsAtTransport(options);
   const media = captureRequestMediaInput(
     options.metadata['logicalRequestId'],
     options.invocation.runtimeId,
     mediaBudgetBytes,
     mediaResolver,
   );
-  const mediaRequest = sourceRoute
-    ? await openTransportRowsMedia(options, media)
-    : await resolveRequestMedia(
-        media,
-        options.contents,
-        options.invocation.signal,
-      );
+  const mediaRequest = await resolveRequestMedia(
+    media,
+    [],
+    getRequestSignal(options),
+  );
   try {
-    let preparedOptions = {
-      ...options,
-      contents: mediaRequest.withContents((contents) => contents),
+    let rowInput: ChatRowInput = {
+      mediaStage: chatMediaStage(options, media, mediaRequest),
     };
     if (needsClient) {
       const client = await deps.getClient({
@@ -206,37 +211,33 @@ export async function prepareOpenAIChatProjection(
           authToken: await deps.resolveAuthToken(options),
         },
       });
-      preparedOptions = await deps.processMedia(
-        preparedOptions,
-        client,
-        deps.logger,
-        mediaRequest,
-      );
+      rowInput =
+        (await deps.processMedia(
+          options,
+          client,
+          deps.logger,
+          mediaRequest,
+          media,
+        )) ?? rowInput;
     }
+    const unsupportedMedia: UnsupportedMediaEntry[] = [];
     const requestContext = await prepareRequest(
-      preparedOptions,
+      options,
       deps.defaultModel,
       undefined,
       deps.logger,
       deps.providerName,
       deps.mediaTransportCapabilities,
+      {
+        ...rowInput,
+        mediaStage: withUnsupportedMediaList(
+          rowInput.mediaStage,
+          unsupportedMedia,
+        ),
+      },
     );
-    const bodyLease = registerOpenAIChatRequestCleanup(
-      mediaRequest,
-      requestContext,
-    );
-    const unsupportedMedia = collectUnsupportedMedia(
-      preparedOptions.contents,
-      (_block, category) => category === 'image',
-    );
-    if (sourceRoute) dropOpenAIChatSourceRows(mediaRequest, preparedOptions);
-    return {
-      options: preparedOptions,
-      mediaRequest,
-      requestContext,
-      bodyLease,
-      unsupportedMedia,
-    };
+    registerOpenAIChatRequestCleanup(mediaRequest, requestContext);
+    return { mediaRequest, requestContext, unsupportedMedia };
   } catch (error) {
     return finishMediaRequest(mediaRequest, { status: 'failed', error });
   }

@@ -68,7 +68,13 @@ import {
   executeOpenAIResponsesRequest,
   type ResponsesExecutorDeps,
 } from '../openai-responses/openAIResponsesExecutor.js';
-import type { prepareRequest } from './OpenAIRequestPreparation.js';
+import type {
+  ChatRowInput,
+  RequestContext,
+} from './OpenAIRequestPreparation.js';
+import { lazySpooledChatBody } from './OpenAIChatSpooledBody.js';
+import type { WireBodySpool } from '../utils/wire-body-spool.js';
+import type { RowsMediaInput } from '../openai-responses/responses-row-media.js';
 import {
   OpenAIPromptEnvelopeStore,
   prepareOpenAIPromptProjection,
@@ -123,8 +129,7 @@ interface DispatchResponseOptions {
   detectedFormat: string;
   streamingEnabled: boolean;
   abortSignal: AbortSignal | undefined;
-  requestBody: OpenAI.Chat.ChatCompletionCreateParams;
-  messagesWithSystem: OpenAI.Chat.Completions.ChatCompletionMessageParam[];
+  spool: WireBodySpool;
   client: OpenAI;
   mergedHeaders: Record<string, string> | undefined;
   baseURL: string | undefined;
@@ -198,11 +203,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     return true;
   }
 
-  /** Responses calls read their rows from disk; chat still collects them. */
-  protected override takesRowsRoute(
-    options: NormalizedGenerateChatOptions,
-  ): boolean {
-    return this.resolveAdmittedTransport(options).useResponses;
+  /** Chat and Responses calls both read their rows from disk. */
+  protected override takesRowsRoute(): boolean {
+    return true;
   }
 
   /**
@@ -538,21 +541,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   protected override async *generateChatCompletionWithOptions(
     callOptions: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
-    const options = restorePreparedSourceInputs(
-      callOptions,
-      this.preparedPromptEnvelopes,
-    );
-    // Issue #3136: the agent layer owns system-prompt assembly. Fail fast
-    // before any request preparation so a missing instruction is never
-    // silently transported as an empty prompt.
-    requireAssembledSystemInstruction(options.systemInstruction);
-
-    const decision = this.resolveAdmittedTransport(options);
+    // An unknown token fails with its transport's message before the blanked
+    // prompt inputs of a rows-route call are restored from it.
+    const decision = this.resolveAdmittedTransport(callOptions);
     const prepared = this.preparedPromptEnvelopes.get(
-      options.promptEnvelopeTransportToken,
+      callOptions.promptEnvelopeTransportToken,
     );
     if (
-      options.promptEnvelopeTransportToken !== undefined &&
+      callOptions.promptEnvelopeTransportToken !== undefined &&
       prepared === undefined
     ) {
       throw new Error(
@@ -561,6 +557,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           : 'Unknown OpenAI Chat prompt-envelope transport token',
       );
     }
+    const options = restorePreparedSourceInputs(
+      callOptions,
+      this.preparedPromptEnvelopes,
+    );
+    // Issue #3136: the agent layer owns system-prompt assembly. Fail fast
+    // before any request preparation so a missing instruction is never
+    // silently transported as an empty prompt.
+    requireAssembledSystemInstruction(options.systemInstruction);
     if (decision.useResponses) {
       yield* this.sendResponses(options, prepared);
       return;
@@ -582,18 +586,14 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     );
     let outcome: MediaRequestOutcome = { status: 'succeeded' };
     try {
-      const effectiveOptions = {
-        ...options,
-        contents: mediaRequest.withContents((contents) => contents),
-      };
       const callFormatter = this.createToolFormatter();
-      const client = await this.getClient(effectiveOptions);
-      const runtimeKey = resolveRuntimeKey(effectiveOptions);
+      const client = await this.getClient(options);
+      const runtimeKey = resolveRuntimeKey(options);
       const logger = new DebugLogger('llxprt:provider:openai');
-      logOpenAIChatTools(effectiveOptions, runtimeKey, logger);
+      logOpenAIChatTools(options, runtimeKey, logger);
 
       yield* this.generateChatCompletionImpl(
-        effectiveOptions,
+        options,
         callFormatter,
         client,
         logger,
@@ -636,7 +636,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
   private logRequestContext(
     options: NormalizedGenerateChatOptions,
-    requestContext: Awaited<ReturnType<typeof prepareRequest>>,
+    requestContext: RequestContext,
     baseURL: string | undefined,
     logger: DebugLogger,
   ): void {
@@ -667,13 +667,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         reasoningFieldName: options.reasoningFieldName,
         onRawTokenDelta: options.onRawTokenDelta,
       };
+      // The continuation request is the one place that needs the body as a
+      // value; it is parsed from the spool on first use (issue #854 D4).
+      const readRequestBody = lazySpooledChatBody(options.spool);
       yield* processStreamingResponse(
         options.response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
         options.model,
         options.detectedFormat,
         options.abortSignal,
-        options.requestBody,
-        options.messagesWithSystem,
+        readRequestBody,
+        () => readRequestBody().messages,
         options.client,
         options.mergedHeaders,
         options.baseURL,
@@ -696,14 +699,16 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Kimi-only media pre-pass (see {@link prepareKimiProviderFiles}).
+   * Kimi-only media pre-pass (see {@link prepareKimiProviderFiles}): the rows
+   * to write the body from, or `undefined` when the request has no pre-pass.
    */
   private maybeProcessKimiMedia(
     options: NormalizedGenerateChatOptions,
     client: OpenAI,
     logger: DebugLogger,
     mediaRequest: ResolvedMediaRequest,
-  ): Promise<NormalizedGenerateChatOptions> {
+    media: RowsMediaInput,
+  ): Promise<ChatRowInput | undefined> {
     return prepareKimiProviderFiles(
       options,
       client,
@@ -714,6 +719,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       this.requestProviderFileBindings,
       this.requestProviderFileLifecycle,
       this.requestWorkspaceDirectory,
+      media,
     );
   }
 
@@ -723,7 +729,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     client: OpenAI,
     logger: DebugLogger,
     mediaRequest: ResolvedMediaRequest,
-    preparedRequestContext?: Awaited<ReturnType<typeof prepareRequest>>,
+    preparedRequestContext?: RequestContext,
   ): AsyncGenerator<IContent, void, unknown> {
     const abortSignal = getRequestSignal(options);
     const ephemeralSettings = (
@@ -733,38 +739,12 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const { executeApiRequest } = await import('./OpenAIApiExecution.js');
     const { mergeInvocationHeaders } = await import('./OpenAIClientFactory.js');
 
-    // Kimi media pre-pass: upload PDFs via the Files API and replace them
-    // with file-id references so large documents stay out of the token budget.
-    // Only activates for Kimi aliases with mediaSupport.fileUpload enabled.
-    const effectiveOptions =
-      preparedRequestContext === undefined
-        ? await this.maybeProcessKimiMedia(
-            options,
-            client,
-            logger,
-            mediaRequest,
-          )
-        : options;
-
     const requestContext =
       preparedRequestContext ??
-      (await prepareOwnedOpenAIChatRequest(
-        effectiveOptions,
-        mediaRequest,
-        this.getDefaultModel(),
-        logger,
-        this.name,
-        this.getMediaTransportCapabilities(),
-      ));
+      (await this.prepareChatRequest(options, client, logger, mediaRequest));
 
-    const {
-      model,
-      detectedFormat,
-      formattedTools,
-      streamingEnabled,
-      requestBody,
-      messagesWithSystem,
-    } = requestContext;
+    const { model, detectedFormat, formattedTools, streamingEnabled, spool } =
+      requestContext;
     const baseURL = options.resolved.baseURL ?? this.getBaseURL();
 
     this.logRequestContext(options, requestContext, baseURL, logger);
@@ -775,7 +755,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
 
     const response = await executeApiRequest({
       client,
-      requestBody,
+      spool,
       abortSignal,
       mergedHeaders,
       dumpMode,
@@ -797,8 +777,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       detectedFormat,
       streamingEnabled,
       abortSignal,
-      requestBody,
-      messagesWithSystem,
+      spool,
       client,
       mergedHeaders,
       baseURL,
@@ -806,6 +785,38 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       reasoningFieldName,
       onRawTokenDelta: resolveRawTokenDeltaNotifier(options.metadata),
     });
+  }
+
+  /**
+   * Writes the body of an unprojected send. The Kimi media pre-pass (upload
+   * PDFs via the Files API and replace them with file-id references so large
+   * documents stay out of the token budget) only activates for Kimi aliases
+   * with mediaSupport.fileUpload enabled; every other request resolves media
+   * row by row while the body is written.
+   */
+  private async prepareChatRequest(
+    options: NormalizedGenerateChatOptions,
+    client: OpenAI,
+    logger: DebugLogger,
+    mediaRequest: ResolvedMediaRequest,
+  ): Promise<RequestContext> {
+    const media = this.captureRequestMedia(options);
+    return prepareOwnedOpenAIChatRequest(
+      options,
+      mediaRequest,
+      media,
+      this.getDefaultModel(),
+      logger,
+      this.name,
+      this.getMediaTransportCapabilities(),
+      await this.maybeProcessKimiMedia(
+        options,
+        client,
+        logger,
+        mediaRequest,
+        media,
+      ),
+    );
   }
 
   async projectPromptEnvelope(
@@ -860,12 +871,13 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       getClient: (clientOptions) => this.getClient(clientOptions),
       resolveAuthToken: (authOptions) =>
         this.resolveProjectionAuthToken(authOptions),
-      processMedia: (preparedOptions, client, logger, mediaRequest) =>
+      processMedia: (preparedOptions, client, logger, mediaRequest, media) =>
         this.maybeProcessKimiMedia(
           preparedOptions,
           client,
           logger,
           mediaRequest,
+          media,
         ),
       logger: this.getLogger(),
       defaultModel: this.getDefaultModel(),
@@ -927,8 +939,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       type: 'function';
       function: { name: string; arguments: string };
     }>,
-    messagesWithSystem: OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-    requestBody: OpenAI.Chat.ChatCompletionCreateParams,
+    readMessages: () => OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+    readRequestBody: () => OpenAI.Chat.ChatCompletionCreateParams,
     client: OpenAI,
     abortSignal: AbortSignal | undefined,
     model: string,
@@ -940,7 +952,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   ): AsyncGenerator<IContent, void, unknown> {
     const continuationMessages = buildContinuationMessages(
       toolCalls,
-      messagesWithSystem,
+      readMessages(),
       toolFormat,
     );
 
@@ -952,7 +964,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       const continuationResponse = await executeBoundedStreamingChatRequest(
         client,
         {
-          ...requestBody,
+          ...readRequestBody(),
           messages: continuationMessages,
           stream: true,
         },

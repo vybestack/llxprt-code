@@ -20,7 +20,7 @@ import type { GenerateChatOptions, ProviderToolset } from '../IProvider.js';
 import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 import { createOpenAIRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 import { RetryOrchestrator } from '../RetryOrchestrator.js';
-import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
+import { activeWireBodySpoolCount } from '../utils/wire-body-spool.js';
 import { OpenAIProvider } from './OpenAIProvider.js';
 
 const mockChatCreate = vi.fn();
@@ -168,8 +168,9 @@ async function sendRows(scenario: Scenario): Promise<string[]> {
   const provider = new OpenAIProvider('test-key');
   const probe = probeRows(scenario.rows);
   await drain(provider.generateChatCompletion(rowsOptions(scenario, probe)));
-  expect(probe.opened()).toBe(1);
-  expect(probe.returned()).toBe(1);
+  // Pass 1 indexes the rows, pass 2 converts them; each reader is returned.
+  expect(probe.opened()).toBe(2);
+  expect(probe.returned()).toBe(2);
   return sentBodies();
 }
 
@@ -331,7 +332,7 @@ describe('OpenAI chat transport-owned request rows body (WP08)', () => {
       'Provider request rows count changed',
     );
     expect(mockChatCreate).not.toHaveBeenCalled();
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(activeWireBodySpoolCount()).toBe(0);
   });
 });
 
@@ -342,14 +343,14 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
     mockChatCreate.mockReset();
   });
 
-  it('holds one request body lease for estimate and send, released after the call', async () => {
+  it('holds one request body spool for estimate and send, released after the call', async () => {
     const provider = new OpenAIProvider('test-key');
     const probe = probeRows(scenario.rows);
     const options = rowsOptions(scenario, probe);
-    const before = activeRequestBodyCount();
+    const before = activeWireBodySpoolCount();
     const projection = await provider.projectPromptEnvelope(options);
-    expect(activeRequestBodyCount()).toBe(before + 1);
-    expect(probe.opened()).toBe(1);
+    expect(activeWireBodySpoolCount()).toBe(before + 1);
+    expect(probe.opened()).toBe(2);
     // The estimate graph is derived from the one body on demand, not kept.
     const first = projection.finalizedProjection;
     expect(projection.finalizedProjection).not.toBe(first);
@@ -358,7 +359,7 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
 
     let during = -1;
     mockChatCreate.mockImplementation(() => {
-      during = activeRequestBodyCount();
+      during = activeWireBodySpoolCount();
       return okResponse(false);
     });
     await drain(
@@ -368,9 +369,9 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
       }),
     );
     expect(during).toBe(before + 1);
-    expect(activeRequestBodyCount()).toBe(before);
-    // Send reused the prepared body: the rows were read once, at projection.
-    expect(probe.opened()).toBe(1);
+    expect(activeWireBodySpoolCount()).toBe(before);
+    // Send reused the prepared body: the rows were read at projection only.
+    expect(probe.opened()).toBe(2);
     expect(sentBodies()).toStrictEqual(await sendArray(scenario));
   });
 
@@ -428,13 +429,13 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
   it('releases an unsent preparation and refuses later estimation', async () => {
     const provider = new OpenAIProvider('test-key');
     const options = rowsOptions(scenario, probeRows(scenario.rows));
-    const before = activeRequestBodyCount();
+    const before = activeWireBodySpoolCount();
     const projection = await provider.projectPromptEnvelope(options);
-    expect(activeRequestBodyCount()).toBe(before + 1);
+    expect(activeWireBodySpoolCount()).toBe(before + 1);
     await projection.releaseIfUnsent?.();
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeWireBodySpoolCount()).toBe(before);
     expect(() => projection.finalizedProjection).toThrow(
-      'consumed after release',
+      'Wire body spool is disposed',
     );
     expect(mockChatCreate).not.toHaveBeenCalled();
   });
@@ -442,26 +443,26 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
   it('releases the body when the send fails', async () => {
     const provider = new OpenAIProvider('test-key');
     const options = rowsOptions(scenario, probeRows(scenario.rows));
-    const before = activeRequestBodyCount();
+    const before = activeWireBodySpoolCount();
     mockChatCreate.mockRejectedValue(new Error('transport exploded'));
     await expect(
       drain(provider.generateChatCompletion(options)),
     ).rejects.toThrow('transport exploded');
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeWireBodySpoolCount()).toBe(before);
   });
 
   it('releases the body when the consumer returns mid-stream', async () => {
     const streaming: Scenario = { rows: toolTurns, streaming: true };
     const provider = new OpenAIProvider('test-key');
     const options = rowsOptions(streaming, probeRows(streaming.rows));
-    const before = activeRequestBodyCount();
+    const before = activeWireBodySpoolCount();
     mockChatCreate.mockResolvedValue(okResponse(true));
     const iterator = provider.generateChatCompletion(options);
     const first = await iterator.next();
     expect(first.done).toBe(false);
-    expect(activeRequestBodyCount()).toBe(before + 1);
+    expect(activeWireBodySpoolCount()).toBe(before + 1);
     await iterator.return?.();
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeWireBodySpoolCount()).toBe(before);
   });
 
   it('releases the body when the request is aborted during the call', async () => {
@@ -472,7 +473,7 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
       probeRows(scenario.rows),
       controller.signal,
     );
-    const before = activeRequestBodyCount();
+    const before = activeWireBodySpoolCount();
     mockChatCreate.mockImplementation(() => {
       controller.abort(new Error('aborted mid call'));
       throw controller.signal.reason;
@@ -480,7 +481,7 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
     await expect(
       drain(provider.generateChatCompletion(options)),
     ).rejects.toThrow('aborted mid call');
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeWireBodySpoolCount()).toBe(before);
   });
 
   it('never opens the rows when cancelled before the first pull', async () => {
@@ -489,13 +490,13 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
     controller.abort(new Error('cancelled early'));
     const probe = probeRows(scenario.rows);
     const options = rowsOptions(scenario, probe, controller.signal);
-    const before = activeRequestBodyCount();
+    const before = activeWireBodySpoolCount();
     await expect(
       drain(provider.generateChatCompletion(options)),
     ).rejects.toThrow('cancelled early');
     expect(probe.pulled()).toBe(0);
     expect(mockChatCreate).not.toHaveBeenCalled();
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeWireBodySpoolCount()).toBe(before);
   });
 
   it('closes the reader and sends nothing when cancelled after the first chunk', async () => {
@@ -505,14 +506,14 @@ describe('OpenAI chat request rows preparation lifecycle (WP08)', () => {
       controller.abort(new Error('cancelled after first chunk'));
     });
     const options = rowsOptions(scenario, probe, controller.signal);
-    const before = activeRequestBodyCount();
+    const before = activeWireBodySpoolCount();
     await expect(provider.projectPromptEnvelope(options)).rejects.toThrow(
       'cancelled after first chunk',
     );
     expect(probe.pulled()).toBe(1);
     expect(probe.returned()).toBe(1);
     expect(mockChatCreate).not.toHaveBeenCalled();
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeWireBodySpoolCount()).toBe(before);
   });
 });
 
@@ -540,7 +541,7 @@ describe('OpenAI chat request rows retry bytes (WP08)', () => {
       route === 'array'
         ? arrayOptions(scenario)
         : rowsOptions(scenario, probeRows(scenario.rows));
-    const before = activeRequestBodyCount();
+    const before = activeWireBodySpoolCount();
     const projection = await provider.projectPromptEnvelope(options);
     const orchestrator = new RetryOrchestrator(provider, {
       maxAttempts: 2,
@@ -552,7 +553,7 @@ describe('OpenAI chat request rows retry bytes (WP08)', () => {
         promptEnvelopeTransportToken: projection.transportToken,
       }),
     );
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(activeWireBodySpoolCount()).toBe(before);
     return sentBodies();
   }
 

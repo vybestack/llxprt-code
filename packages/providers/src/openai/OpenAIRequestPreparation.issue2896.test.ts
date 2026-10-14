@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
-import { prepareRequest } from './OpenAIRequestPreparation.js';
+import { prepareRequestBody as prepareRequest } from './__tests__/support/prepareRequestBody.js';
 import { REASONING_WIRE_KEYS } from './openaiReasoningDialect.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';

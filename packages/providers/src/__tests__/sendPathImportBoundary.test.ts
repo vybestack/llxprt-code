@@ -17,7 +17,8 @@
  * it lands. Both keep their arrays by the owner's decision (GitHub #3869).
  * Everything else is pending work that removes its entry:
  *
- * - D (OpenAI chat) must remove the `openai/` entries.
+ * - D5 (Kimi file pre-pass per row) must remove the `openai/` entry. The chat
+ *   send path itself imports none of them since D3a.
  * - E (Anthropic) must remove the `anthropic/` entry.
  * - F1 removes the shared normalization and load-balancing seams.
  *
@@ -68,11 +69,8 @@ const pending = (reason: string): AllowedImporter => ({
 const ALLOWED_IMPORTERS: Readonly<Record<string, AllowedImporter>> = {
   'packages/providers/src/openai-vercel/OpenAIVercelProvider.ts': PERMANENT,
 
-  'packages/providers/src/openai/OpenAISourceRoute.ts': pending(
-    'step D (OpenAI chat) must remove this entry',
-  ),
-  'packages/providers/src/openai/OpenAIPromptProjectionPreparation.ts': pending(
-    'step D (OpenAI chat) must remove this entry',
+  'packages/providers/src/openai/kimi-provider-file-preparation.ts': pending(
+    'step D5 (Kimi file pre-pass per row) must remove this entry',
   ),
   'packages/providers/src/anthropic/AnthropicProvider.ts': pending(
     'step E (Anthropic) must remove this entry',
@@ -89,7 +87,7 @@ const ALLOWED_IMPORTERS: Readonly<Record<string, AllowedImporter>> = {
 };
 
 /** Lower this when a pending entry is removed. It never goes up. */
-const PENDING_CEILING = 6;
+const PENDING_CEILING = 5;
 
 const NAMED_IMPORT =
   /(?:import|export)\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g;
@@ -104,7 +102,7 @@ function bannedImports(source: string): string[] {
       const exported = entry
         .trim()
         .replace(/^type\s+/, '')
-        .split(/\s+as\s+/)[0]
+        .split(/\sas\s/)[0]
         .trim();
       if (BANNED_SYMBOLS.has(exported)) found.push(exported);
     }

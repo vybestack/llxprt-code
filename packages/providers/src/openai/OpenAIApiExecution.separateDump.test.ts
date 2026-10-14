@@ -10,6 +10,7 @@ import {
   executeApiRequest,
   type ApiExecutionOptions,
 } from './OpenAIApiExecution.js';
+import { WireBodySpool } from '../utils/wire-body-spool.js';
 import {
   createOpenAIRawPostTestAdapter,
   type RawPostTestHandler,
@@ -39,15 +40,27 @@ function createMockClient(response: unknown, apiKey?: string) {
   });
 }
 
+const requestBody = {
+  model: 'gpt-4o',
+  messages: [{ role: 'user', content: 'Hello' }],
+};
+
+const spools: WireBodySpool[] = [];
+
+function spoolOf(body: unknown): WireBodySpool {
+  const spool = WireBodySpool.create('openai-chat-test');
+  spools.push(spool);
+  spool.append(JSON.stringify(body));
+  spool.seal();
+  return spool;
+}
+
 function createBaseOptions(
   overrides: Partial<ApiExecutionOptions> = {},
 ): ApiExecutionOptions {
   return {
     client: createMockClient({ id: 'chatcmpl-test', choices: [] }),
-    requestBody: {
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: 'Hello' }],
-    } as unknown as Parameters<typeof executeApiRequest>[0]['requestBody'],
+    spool: spoolOf(requestBody),
     abortSignal: undefined,
     mergedHeaders: undefined,
     dumpMode: 'on',
@@ -93,6 +106,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    for (const spool of spools.splice(0)) spool.dispose();
   });
 
   it('should dump request before API call and response after in on mode (non-streaming)', async () => {
@@ -400,7 +414,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
       'openai',
       '/chat/completions',
-      opts.requestBody,
+      requestBody,
       'https://api.cerebras.ai/v1',
       { headers: undefined, transport: { type: 'http' } },
     );
@@ -446,7 +460,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
       'openai',
       '/chat/completions',
-      opts.requestBody,
+      requestBody,
       'https://api.cerebras.ai/v1',
       { headers: undefined, transport: { type: 'http' } },
     );
@@ -499,7 +513,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
       'openai',
       '/chat/completions',
-      opts.requestBody,
+      requestBody,
       'https://api.cerebras.ai/v1',
       { headers: undefined, transport: { type: 'http' } },
     );

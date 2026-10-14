@@ -1,5 +1,12 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { closeSync, openSync, readSync, rmSync, writeSync } from 'node:fs';
+import {
+  closeSync,
+  openSync,
+  readFileSync,
+  readSync,
+  rmSync,
+  writeSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { createScratchDirSync } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import {
@@ -202,6 +209,15 @@ export class WireBodySpool {
     closeSync(fd);
     this.state = 'sealed';
     return this.bytes;
+  }
+
+  /**
+   * The sealed bytes, read whole. For the few consumers that need the body as
+   * a value (estimator, dump, continuation); a send streams instead.
+   */
+  readSealed(): Buffer {
+    this.requireState('sealed');
+    return readFileSync(this.path);
   }
 
   /** A fresh stream over a fresh read handle. Use one per transport attempt. */

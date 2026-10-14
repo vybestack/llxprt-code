@@ -7,14 +7,11 @@
 /**
  * Issue #854 step A2: the openai provider, chat route.
  *
- * This route builds the whole request in memory today, so its peak grows with
- * the body and the bounds tests are marked `test.failing`. They turn into
- * errors once the route is fixed; the step that fixes it must change
- * `test.failing` to `it` below. The byte checks are ordinary tests, so a
- * crashed probe cannot pass as an expected failure.
+ * The route spools the body into a request-scoped scratch file one message at
+ * a time, so its peak does not grow with the body.
  */
 
-import { describe, expect, it, test } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { SEND_PEAK_BOUND_BYTES } from './support/sendPeakMeasurement.js';
 import { shapeRun, sharedSendPeak } from './support/sendPeakRunner.js';
 
@@ -46,7 +43,7 @@ describe('peak memory while sending, the openai provider, chat route', () => {
     TEST_TIMEOUT_MS,
   );
 
-  test.failing(
+  it(
     'text-only: grows no more than 1 MiB from a 1 MiB to an 8 MiB body and retains no more than 1 MiB over repeated sends',
     async () => {
       const { verdict } = shapeRun(await measured(), 'text-only');
@@ -59,7 +56,7 @@ describe('peak memory while sending, the openai provider, chat route', () => {
     TEST_TIMEOUT_MS,
   );
 
-  test.failing(
+  it(
     'tool-heavy: grows no more than 1 MiB from a 1 MiB to an 8 MiB body and retains no more than 1 MiB over repeated sends',
     async () => {
       const { verdict } = shapeRun(await measured(), 'tool-heavy');

@@ -19,9 +19,11 @@ class CollectingSink implements EnvelopeSink {
   }
 }
 
-function envelopeText(envelope: Record<string, unknown>): string {
+async function envelopeText(
+  envelope: Record<string, unknown>,
+): Promise<string> {
   const sink = new CollectingSink();
-  writeEnvelope(sink, envelope);
+  await writeEnvelope(sink, envelope);
   return sink.text();
 }
 
@@ -37,7 +39,7 @@ function arraySegment(items: readonly unknown[]): StreamedSegment {
 }
 
 describe('writeEnvelope', () => {
-  it('writes keys in insertion order, integer-like keys first, as JSON.stringify does', () => {
+  it('writes keys in insertion order, integer-like keys first, as JSON.stringify does', async () => {
     const envelope = {
       model: 'm',
       messages: [],
@@ -47,7 +49,7 @@ describe('writeEnvelope', () => {
       stream_options: { include_usage: true },
     };
 
-    expect(envelopeText(envelope)).toBe(JSON.stringify(envelope));
+    expect(await envelopeText(envelope)).toBe(JSON.stringify(envelope));
     expect(Object.keys(envelope)).toStrictEqual([
       '3',
       '7',
@@ -58,7 +60,7 @@ describe('writeEnvelope', () => {
     ]);
   });
 
-  it('skips undefined, function and symbol members without stray commas', () => {
+  it('skips undefined, function and symbol members without stray commas', async () => {
     const envelope = {
       first: undefined,
       model: 'm',
@@ -69,16 +71,16 @@ describe('writeEnvelope', () => {
       trailing: undefined,
     };
 
-    expect(envelopeText(envelope)).toBe('{"model":"m","last":"end"}');
-    expect(envelopeText(envelope)).toBe(JSON.stringify(envelope));
+    expect(await envelopeText(envelope)).toBe('{"model":"m","last":"end"}');
+    expect(await envelopeText(envelope)).toBe(JSON.stringify(envelope));
   });
 
-  it('writes an envelope with nothing to write as an empty object', () => {
-    expect(envelopeText({ a: undefined })).toBe('{}');
-    expect(envelopeText({})).toBe('{}');
+  it('writes an envelope with nothing to write as an empty object', async () => {
+    expect(await envelopeText({ a: undefined })).toBe('{}');
+    expect(await envelopeText({})).toBe('{}');
   });
 
-  it('writes a streamed segment at its position among small values', () => {
+  it('writes a streamed segment at its position among small values', async () => {
     const messages = [{ role: 'user', content: 'hi "there"\u2028' }, 'x'];
     const envelope = {
       model: 'kimi',
@@ -88,37 +90,60 @@ describe('writeEnvelope', () => {
       tail: { n: 1 },
     };
 
-    expect(envelopeText(envelope)).toBe(
+    expect(await envelopeText(envelope)).toBe(
       JSON.stringify({ model: 'kimi', messages, stream: true, tail: { n: 1 } }),
     );
   });
 
-  it('writes a streamed segment first, last and alone', () => {
-    expect(envelopeText({ input: arraySegment([1, 2]), model: 'm' })).toBe(
-      '{"input":[1,2],"model":"m"}',
+  it('writes a streamed segment first, last and alone', async () => {
+    expect(
+      await envelopeText({ input: arraySegment([1, 2]), model: 'm' }),
+    ).toBe('{"input":[1,2],"model":"m"}');
+    expect(
+      await envelopeText({ model: 'm', input: arraySegment([1, 2]) }),
+    ).toBe('{"model":"m","input":[1,2]}');
+    expect(await envelopeText({ input: arraySegment([]) })).toBe(
+      '{"input":[]}',
     );
-    expect(envelopeText({ model: 'm', input: arraySegment([1, 2]) })).toBe(
-      '{"model":"m","input":[1,2]}',
-    );
-    expect(envelopeText({ input: arraySegment([]) })).toBe('{"input":[]}');
   });
 
-  it('escapes keys and passes the member key to toJSON', () => {
+  it('escapes keys and passes the member key to toJSON', async () => {
     const envelope = {
       'we"ird\ud800key': 1,
       when: { toJSON: (key: string) => `at ${key}` },
     };
 
-    expect(envelopeText(envelope)).toBe(JSON.stringify(envelope));
+    expect(await envelopeText(envelope)).toBe(JSON.stringify(envelope));
   });
 
-  it('propagates a segment failure', () => {
+  it('propagates a segment failure, synchronous or not', async () => {
     const failing = new StreamedSegment(() => {
       throw new Error('row conversion failed');
     });
+    const failingLater = new StreamedSegment(async () => {
+      await Promise.resolve();
+      throw new Error('row read failed');
+    });
 
-    expect(() => envelopeText({ messages: failing })).toThrow(
+    await expect(envelopeText({ messages: failing })).rejects.toThrow(
       'row conversion failed',
+    );
+    await expect(envelopeText({ messages: failingLater })).rejects.toThrow(
+      'row read failed',
+    );
+  });
+
+  it('waits for an asynchronous segment before writing the members after it', async () => {
+    const delayed = new StreamedSegment(async (sink) => {
+      sink.append('[');
+      await Promise.resolve();
+      sink.append('1');
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      sink.append(',2]');
+    });
+
+    expect(await envelopeText({ a: delayed, b: 'after' })).toBe(
+      '{"a":[1,2],"b":"after"}',
     );
   });
 
@@ -129,7 +154,7 @@ describe('writeEnvelope', () => {
         role: 'user',
         content: `message ${index} 😀`,
       }));
-      writeEnvelope(spool, {
+      await writeEnvelope(spool, {
         model: 'm',
         messages: arraySegment(messages),
         stream: true,

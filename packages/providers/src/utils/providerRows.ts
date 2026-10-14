@@ -3,12 +3,20 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { GenerateChatOptions } from '../IProvider.js';
 import { getRequestSignal } from './abortSignal.js';
+import { isAsyncIterableContents } from './collectContents.js';
 import { stagedRequestRows } from './requestRowsLease.js';
 
 export type ProviderRowsOptions = Pick<
   GenerateChatOptions,
-  'requestRows' | 'contents' | 'invocation' | 'metadata'
->;
+  'requestRows' | 'invocation' | 'metadata'
+> & {
+  /**
+   * A one-shot stream handed out by `acquireRequestRows`, or the collected
+   * array of an already normalized call, which has no rows to offer unless it
+   * carries `requestRows`.
+   */
+  readonly contents: AsyncIterable<IContent> | readonly IContent[];
+};
 
 /**
  * The call's rows as a repeatable, countable selection with random access, so
@@ -25,9 +33,19 @@ export async function providerRowsOf(
 ): Promise<ProviderRequestRows> {
   const signal = getRequestSignal(options);
   signal?.throwIfAborted();
-  const rows =
-    options.requestRows ?? (await stagedRequestRows(options.contents));
+  const rows = options.requestRows ?? (await stagedRows(options.contents));
   return checkedRows(rows, signal);
+}
+
+function stagedRows(
+  contents: ProviderRowsOptions['contents'],
+): Promise<ProviderRequestRows> {
+  if (!isAsyncIterableContents(contents)) {
+    return Promise.reject(
+      new Error('Provider request rows require a requestRows selection'),
+    );
+  }
+  return stagedRequestRows(contents);
 }
 
 function checkedRows(
