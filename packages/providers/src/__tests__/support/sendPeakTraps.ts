@@ -17,6 +17,10 @@
  *   it (issue #3858): reads every row into an array, patches it with the
  *   synthetic tool responses (two more copies) and builds the whole
  *   `ResponsesInputItem[]`.
+ * - `retain`: reads every row into an `IContent[]` for each send of the
+ *   probe's accumulation run and never lets go of it, so every send leaves a
+ *   whole history behind. This is the per-send leak the retained-growth gate
+ *   exists to catch. It is armed for the accumulation run only.
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -24,15 +28,17 @@ import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputL
 import { SyntheticToolResponseHandler } from '../../openai/syntheticToolResponses.js';
 import { buildOpenAIResponsesInput } from '../../openai-responses/OpenAIResponsesInputBuilder.js';
 
-export type SendTrap = 'array' | 'fill';
+export type SendTrap = 'array' | 'fill' | 'retain';
 
 export const SEND_TRAP_ENV = 'ISSUE854_SEND_TRAP';
 
 /** An unset or empty value means no trap; anything unknown is an error. */
 export function parseSendTrap(value: string | undefined): SendTrap | undefined {
   if (value === undefined || value === '') return undefined;
-  if (value === 'array' || value === 'fill') return value;
-  throw new Error(`${SEND_TRAP_ENV} must be "array" or "fill", got: ${value}`);
+  if (value === 'array' || value === 'fill' || value === 'retain') return value;
+  throw new Error(
+    `${SEND_TRAP_ENV} must be "array", "fill" or "retain", got: ${value}`,
+  );
 }
 
 export interface TrapHold {
@@ -46,11 +52,18 @@ async function collect(rows: AsyncIterable<IContent>): Promise<IContent[]> {
   return all;
 }
 
+/** Histories the `retain` trap keeps alive for the rest of the process. */
+const retainedAcrossSends: unknown[] = [];
+
 export async function armSendTrap(
   trap: SendTrap,
   rows: AsyncIterable<IContent>,
 ): Promise<TrapHold> {
   const all = await collect(rows);
+  if (trap === 'retain') {
+    retainedAcrossSends.push(all);
+    return { release: () => undefined };
+  }
   const state: { held: readonly unknown[] | undefined } = { held: [all] };
   if (trap === 'fill') {
     const patched = SyntheticToolResponseHandler.patchMessageHistory(all);

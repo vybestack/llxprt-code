@@ -18,13 +18,16 @@
  * send is running the probe samples the settled heap, the ArrayBuffer total
  * and the resident set size, at every 2048th row read, at the first body byte,
  * at every MiB of body streamed and at the end of the body. The baseline of
- * each send is the quiet reading after the previous one, and its retained
- * memory is the quiet reading after it, taken once teardown has finished.
+ * each send is the quiet reading after the previous one.
  *
  * Per shape, one unmeasured send of the small size warms the code paths once
  * the runtime has aged out its cold code. Then the small and the large size
  * are measured alternately for the planned rounds, each send after the heap has
- * gone quiet. The result is written to `<rootDirectory>/measured.json`.
+ * gone quiet. Retention is measured apart from that: the large history is sent
+ * again and again in this process, with a settled reading after each send, so
+ * the judgment can compare the last send with the first (a leak adds up with
+ * every send; the one-time offset of a settled reading does not). The result
+ * is written to `<rootDirectory>/measured.json`.
  */
 
 import { createHash } from 'node:crypto';
@@ -39,6 +42,7 @@ import {
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import {
   SETTLED_WINDOW_BYTES,
+  median,
   settledHeap,
 } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import {
@@ -55,7 +59,9 @@ import {
   type TrapHold,
 } from './sendPeakTraps.js';
 import {
+  SEND_PEAK_ACCUMULATION_SENDS,
   isSendPeakPlan,
+  type AccumulationReading,
   type SendPeakMeasurement,
   type SendPeakPlan,
   type SendPeakSeries,
@@ -88,6 +94,9 @@ const CODE_AGING_DONE_SECONDS = 20;
 const QUIET_READINGS = 3;
 const QUIET_INTERVAL_MS = 500;
 const QUIET_MAX_READINGS = 30;
+/** Settled readings behind each accumulation reading, and the pause between them. */
+const ACCUMULATION_READINGS = 3;
+const ACCUMULATION_PAUSE_MS = 100;
 
 interface Job {
   readonly directory: string;
@@ -107,7 +116,12 @@ const parsedPlan: unknown = JSON.parse(
 if (!isSendPeakPlan(parsedPlan)) throw new Error('invalid send peak plan');
 const plan: SendPeakPlan = parsedPlan;
 const source: SendPeakSource = plan.source;
-const trap = parseSendTrap(process.env[SEND_TRAP_ENV]);
+const envTrap = parseSendTrap(process.env[SEND_TRAP_ENV]);
+/** `retain` leaks across sends, so it applies to the accumulation run only. */
+const peakTrap: SendTrap | undefined =
+  envTrap === 'retain' ? undefined : envTrap;
+const accumulationTrap: SendTrap | undefined =
+  envTrap === 'retain' ? envTrap : undefined;
 const deadline = setTimeout(() => {
   throw new Error('Send peak probe did not settle');
 }, 600000);
@@ -173,13 +187,6 @@ class MemorySampler {
         0,
       ),
     );
-  }
-
-  retainedAt(after: Reading): { heap: number; arrayBuffers: number } {
-    return {
-      heap: after.heap - this.baseline.heap,
-      arrayBuffers: after.arrayBuffers - this.baseline.arrayBuffers,
-    };
   }
 
   summary(): Pick<
@@ -424,22 +431,57 @@ async function measure(
   baseline: Reading,
 ): Promise<Measured> {
   const sampler = new MemorySampler(baseline);
-  const handle = fileSelection(job, sampler, trap);
+  const handle = fileSelection(job, sampler, peakTrap);
   const evidence = await send(wireRoute, handle, sampler);
   handle.hold()?.release();
   const after = await awaitQuiescentReading();
-  const retained = sampler.retainedAt(after);
   return {
     after,
     measurement: {
       routeId: wireRoute.id,
-      trap: trap ?? null,
+      trap: envTrap ?? null,
       ...evidence,
       ...sampler.summary(),
-      retainedHeap: retained.heap,
-      retainedArrayBuffers: retained.arrayBuffers,
     },
   };
+}
+
+/** Median of a few settled readings, taken once teardown has had a moment. */
+async function accumulationReading(): Promise<AccumulationReading> {
+  const heaps: number[] = [];
+  const arrayBuffers: number[] = [];
+  for (let reading = 0; reading < ACCUMULATION_READINGS; reading++) {
+    await sleep(ACCUMULATION_PAUSE_MS);
+    heaps.push(await settledHeap());
+    arrayBuffers.push(process.memoryUsage().arrayBuffers);
+  }
+  return { heap: median(heaps), arrayBuffers: median(arrayBuffers) };
+}
+
+/**
+ * Sends the same history repeatedly and reads the settled memory after each
+ * send. Every send must put the same bytes on the wire, so the readings
+ * compare like with like.
+ */
+async function accumulate(
+  wireRoute: WireRoute,
+  job: Job,
+): Promise<AccumulationReading[]> {
+  const readings: AccumulationReading[] = [];
+  let sha256: string | undefined;
+  for (let sent = 0; sent < SEND_PEAK_ACCUMULATION_SENDS; sent++) {
+    const evidence = await send(
+      wireRoute,
+      fileSelection(job, undefined, accumulationTrap),
+      undefined,
+    );
+    sha256 ??= evidence.sha256;
+    if (evidence.sha256 !== sha256) {
+      throw new Error('accumulation sends put different bytes on the wire');
+    }
+    readings.push(await accumulationReading());
+  }
+  return readings;
 }
 
 function jobFor(shape: string, size: 'small' | 'large', count: number): Job {
@@ -474,7 +516,7 @@ async function measureShape(
       baseline = after;
     }
   }
-  return series;
+  return { ...series, accumulation: await accumulate(wireRoute, jobs.large) };
 }
 
 await awaitCodeAging();

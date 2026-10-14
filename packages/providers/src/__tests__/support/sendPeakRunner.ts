@@ -178,6 +178,7 @@ function logRun(
       seconds,
       bytes: [run.oracles.small.bytes, run.oracles.large.bytes],
       contentLength: run.series.large[0].contentLength,
+      accumulation: run.series.accumulation,
       verdict: run.verdict,
     })}\n`,
   );

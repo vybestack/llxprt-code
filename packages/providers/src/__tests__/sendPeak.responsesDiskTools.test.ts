@@ -34,14 +34,14 @@ describe('peak memory while sending, the openai-responses provider, disk route (
   );
 
   it(
-    'grows no more than 1 MiB from a 1 MiB to an 8 MiB body and retains no more than 1 MiB',
+    'grows no more than 1 MiB from a 1 MiB to an 8 MiB body and retains no more than 1 MiB over repeated sends',
     async () => {
       const { verdict } = shapeRun(await measured(), 'tool-heavy');
       expect(verdict.heapGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
       expect(verdict.arrayBufferGrowth).toBeLessThanOrEqual(
         SEND_PEAK_BOUND_BYTES,
       );
-      expect(verdict.retained).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
+      expect(verdict.retainedGrowth).toBeLessThanOrEqual(SEND_PEAK_BOUND_BYTES);
     },
     TEST_TIMEOUT_MS,
   );

@@ -15,6 +15,19 @@ import { median } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 /** The growth and retention allowance, the same 1 MiB the other gates use. */
 export const SEND_PEAK_BOUND_BYTES = 1024 * 1024;
 
+/** How many times the probe sends the same large history to measure retention. */
+export const SEND_PEAK_ACCUMULATION_SENDS = 6;
+
+/**
+ * Settled memory after one send of the accumulation run, each figure the
+ * median of three settled readings. The absolute level carries a one-time
+ * offset from collection timing; only the change between sends means anything.
+ */
+export interface AccumulationReading {
+  readonly heap: number;
+  readonly arrayBuffers: number;
+}
+
 export interface SendPeakMeasurement {
   readonly routeId: string;
   readonly trap: string | null;
@@ -33,9 +46,6 @@ export interface SendPeakMeasurement {
   readonly samples: number;
   /** Most of the newest 64 rows read that were alive at once at a sample. */
   readonly peakLive: number;
-  /** Settled growth over the baseline after the send finished. */
-  readonly retainedHeap: number;
-  readonly retainedArrayBuffers: number;
 }
 
 const NUMBER_FIELDS = [
@@ -47,8 +57,6 @@ const NUMBER_FIELDS = [
   'peakRss',
   'samples',
   'peakLive',
-  'retainedHeap',
-  'retainedArrayBuffers',
 ] as const;
 
 function isSendPeakMeasurement(value: unknown): value is SendPeakMeasurement {
@@ -62,10 +70,31 @@ function isSendPeakMeasurement(value: unknown): value is SendPeakMeasurement {
   return NUMBER_FIELDS.every((field) => typeof record[field] === 'number');
 }
 
-/** The measured rounds of one shape: every round sends small, then large. */
+/**
+ * The measurements of one shape: every round sends small, then large, and the
+ * accumulation run sends the large history repeatedly with a settled reading
+ * after each send.
+ */
 export interface SendPeakSeries {
   readonly small: readonly SendPeakMeasurement[];
   readonly large: readonly SendPeakMeasurement[];
+  readonly accumulation: readonly AccumulationReading[];
+}
+
+function isAccumulationReading(value: unknown): value is AccumulationReading {
+  if (typeof value !== 'object' || value === null) return false;
+  const record: Record<string, unknown> = { ...value };
+  return (
+    typeof record.heap === 'number' && typeof record.arrayBuffers === 'number'
+  );
+}
+
+function isAccumulationList(value: unknown): value is AccumulationReading[] {
+  return (
+    Array.isArray(value) &&
+    value.length === SEND_PEAK_ACCUMULATION_SENDS &&
+    value.every(isAccumulationReading)
+  );
 }
 
 function isMeasurementList(value: unknown): value is SendPeakMeasurement[] {
@@ -79,7 +108,11 @@ function isMeasurementList(value: unknown): value is SendPeakMeasurement[] {
 export function isSendPeakSeries(value: unknown): value is SendPeakSeries {
   if (typeof value !== 'object' || value === null) return false;
   const record: Record<string, unknown> = { ...value };
-  return isMeasurementList(record.small) && isMeasurementList(record.large);
+  return (
+    isMeasurementList(record.small) &&
+    isMeasurementList(record.large) &&
+    isAccumulationList(record.accumulation)
+  );
 }
 
 /** Row counts of the two sizes of one shape. */
@@ -140,9 +173,12 @@ export interface SendPeakVerdict {
   /** Median `arrayBuffers` peak at the large size minus the one at the small. */
   readonly arrayBufferGrowth: number;
   readonly arrayBufferGrowthWithinBound: boolean;
-  /** Largest persistent (minimum over rounds) retained growth, over both sizes and signals. */
-  readonly retained: number;
-  readonly retainedWithinBound: boolean;
+  /**
+   * Settled growth between the first and the last send of the accumulation
+   * run, the larger of the heap and the `arrayBuffers` figure.
+   */
+  readonly retainedGrowth: number;
+  readonly retainedGrowthWithinBound: boolean;
   /** Median peaks per size, kept for reporting. */
   readonly medians: {
     readonly peakHeap: { readonly small: number; readonly large: number };
@@ -191,17 +227,22 @@ function perSize(
 }
 
 /**
- * Retention is what stays after every round. Each send is baselined on the
- * quiet reading after the previous one, so allocator and code-cache jitter
- * moves the retained figure of the small and large sends in opposite
- * directions by a MiB or so. A real leak persists across rounds and survives
- * the minimum; the bound itself is not widened.
+ * Retention is what each further send leaves behind. A settled reading after
+ * one send carries a one-time offset from collection timing (about -0.8 to
+ * +1.7 MiB seen with no growth at all), so a single send cannot be judged
+ * against a fixed bound. The same history sent again must not add to the
+ * settled level: growth from the first send to the last is the retention, and
+ * a real per-send leak adds up across the sends while the offset does not.
  */
-function persistentRetained(
-  rounds: readonly SendPeakMeasurement[],
-  pick: (round: SendPeakMeasurement) => number,
+function retainedGrowthOf(
+  accumulation: readonly AccumulationReading[],
 ): number {
-  return Math.min(...rounds.map(pick));
+  const first = accumulation[0];
+  const last = accumulation[accumulation.length - 1];
+  return Math.max(
+    last.heap - first.heap,
+    last.arrayBuffers - first.arrayBuffers,
+  );
 }
 
 export function judgeSendPeak(
@@ -212,12 +253,7 @@ export function judgeSendPeak(
   const peakArrayBuffers = perSize(series, (round) => round.peakArrayBuffers);
   const heapGrowth = peakHeap.large - peakHeap.small;
   const arrayBufferGrowth = peakArrayBuffers.large - peakArrayBuffers.small;
-  const retained = Math.max(
-    ...[series.small, series.large].flatMap((rounds) => [
-      persistentRetained(rounds, (round) => round.retainedHeap),
-      persistentRetained(rounds, (round) => round.retainedArrayBuffers),
-    ]),
-  );
+  const retainedGrowth = retainedGrowthOf(series.accumulation);
   return {
     bytesMatchOracle:
       sameBody(series.small, oracles.small) &&
@@ -228,8 +264,8 @@ export function judgeSendPeak(
     heapGrowthWithinBound: heapGrowth <= SEND_PEAK_BOUND_BYTES,
     arrayBufferGrowth,
     arrayBufferGrowthWithinBound: arrayBufferGrowth <= SEND_PEAK_BOUND_BYTES,
-    retained,
-    retainedWithinBound: retained <= SEND_PEAK_BOUND_BYTES,
+    retainedGrowth,
+    retainedGrowthWithinBound: retainedGrowth <= SEND_PEAK_BOUND_BYTES,
     medians: {
       peakHeap,
       peakArrayBuffers,
