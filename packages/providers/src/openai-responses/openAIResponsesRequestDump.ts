@@ -16,11 +16,11 @@ import { getRequestSignal } from '../utils/abortSignal.js';
 import type { ResponsesRequest } from './responses-request.js';
 import {
   shouldDumpSDKContext,
-  dumpSDKRequestContext,
   dumpSDKRequestContextBodyBytes,
   type RequestDumpMetadata,
   bestEffortDump,
 } from '../utils/dumpSDKContext.js';
+import type { dumpSDKRequestContext } from '../utils/dumpSDKContext.js';
 import { buildHttpDumpMetadata } from './openAIResponsesHttpStream.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 
