@@ -2,21 +2,21 @@
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { normalizeToAnthropicToolId } from '@vybestack/llxprt-code-tools/toolIdNormalization.js';
 import { buildToolResponsePayload } from '../utils/toolResponsePayload.js';
-import type { DumpScratch } from '../utils/dumpScratch.js';
 import {
   buildAnthropicToolResultContent,
   convertBlockToAnthropicPart,
   type AnthropicConversationConversionOptions,
 } from './AnthropicMessageNormalizer.js';
-import type { AnthropicDumpTable } from './anthropicDumpTable.js';
 import {
   newMessage,
+  type MessageTable,
   type StoredMessageBlock,
   type TableMessage,
 } from './message-table/message-table.js';
+import type { ChainResultsAppender } from './message-table/wire-builder.js';
 
 function addDescriptors(
-  table: AnthropicDumpTable,
+  table: MessageTable,
   row: IContent,
   prefix: TableMessage,
   media: TableMessage,
@@ -39,21 +39,20 @@ function addDescriptors(
   }
 }
 function descriptors(
-  table: AnthropicDumpTable,
-  rows: DumpScratch<IContent>,
-  start: number,
-  end: number,
-  options: AnthropicConversationConversionOptions,
+  table: MessageTable,
+  request: Parameters<ChainResultsAppender>[0],
 ): { prefix: TableMessage; media: TableMessage } {
   const prefix = newMessage('user');
   const media = newMessage('user');
-  for (let index = start; index <= end; index++) {
-    addDescriptors(table, rows.read(index), prefix, media, index, options);
+  for (let index = request.range.start; index <= request.range.end; index++) {
+    const row = request.projectedAt(index);
+    if (row !== undefined)
+      addDescriptors(table, row, prefix, media, index, request.options);
   }
   return { prefix, media };
 }
 function addResults(
-  table: AnthropicDumpTable,
+  table: MessageTable,
   target: TableMessage,
   row: IContent,
   prefix: TableMessage,
@@ -76,22 +75,20 @@ function addResults(
     table.addBlock(target, result);
   }
 }
-export function appendChainResults(
-  table: AnthropicDumpTable,
-  rows: DumpScratch<IContent>,
-  start: number,
-  end: number,
-  pending: number,
-  options: AnthropicConversationConversionOptions,
-): void {
-  const { prefix, media } = descriptors(table, rows, start, end, options);
-  let targetId = pending;
-  for (let index = start; index <= end; index++) {
-    const row = rows.read(index);
-    if (!row.blocks.some((block) => block.type === 'tool_response')) continue;
+function hasResponses(row: IContent): boolean {
+  return row.blocks.some((block) => block.type === 'tool_response');
+}
+
+export const appendDumpChainResults: ChainResultsAppender = async (request) => {
+  const { table, range, options } = request;
+  const { prefix, media } = descriptors(table, request);
+  let targetId = request.pending;
+  for (let index = range.start; index <= range.end; index++) {
+    const row = request.projectedAt(index);
+    if (row === undefined || !hasResponses(row)) continue;
     if (targetId === -1) targetId = table.append({ role: 'user', content: [] });
     const target = table.messages.read(targetId);
     addResults(table, target, row, prefix, media, options);
     table.messages.replace(targetId, target);
   }
-}
+};

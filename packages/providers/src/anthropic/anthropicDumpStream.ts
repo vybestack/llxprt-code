@@ -5,11 +5,7 @@ import type { AnthropicMessageBlock } from './AnthropicMessageNormalizer.js';
 import { AnthropicDumpTable } from './anthropicDumpTable.js';
 import type { TableMessage } from './message-table/message-table.js';
 import { buildAnthropicRawTable } from './anthropicDumpRaw.js';
-import {
-  filterOrphans,
-  repairAdjacency,
-  mergeRoles,
-} from './message-table/validation.js';
+import { validateWireTable } from './message-table/wire-builder.js';
 import { modelSupportsPrefill } from './AnthropicModelData.js';
 import { dumpBlockValue } from './anthropicDumpBlockValue.js';
 
@@ -62,9 +58,7 @@ export async function* buildAnthropicDumpStream(
   const table = new AnthropicDumpTable();
   try {
     await buildAnthropicRawTable(source, table, options);
-    filterOrphans(table);
-    repairAdjacency(table);
-    mergeRoles(table);
+    validateWireTable(table);
     if (table.head === -1) {
       yield { role: 'user', content: 'Hello' };
       return;

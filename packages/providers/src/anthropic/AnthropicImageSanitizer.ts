@@ -40,24 +40,42 @@ export function sanitizeAnthropicContentImages(
 
   let replacedCount = 0;
   const sanitized = contents.map((content) => {
-    const newBlocks = content.blocks.map((block) => {
-      if (block.type !== 'media' || block.encoding !== 'base64') {
-        return block;
-      }
-      const violation = checkImageDimensionBudget(block.data, budget);
-      if (violation === undefined) {
-        return block;
-      }
-      replacedCount++;
-      return {
-        type: 'text' as const,
-        text: DROPPED_IMAGE_PLACEHOLDER,
-      };
-    });
-    return { ...content, blocks: newBlocks };
+    const row = sanitizeRowImages(content, budget);
+    replacedCount += row.replacedCount;
+    return row.row;
   });
 
   return { contents: sanitized, replacedCount };
+}
+
+/**
+ * The one-row form of {@link sanitizeAnthropicContentImages}: a copy of `row`
+ * whose oversized base64 images are replaced by the dropped-image placeholder.
+ * With no budget the row itself comes back.
+ */
+export function sanitizeRowImages(
+  row: IContent,
+  budget: ImageDimensionBudget | undefined,
+): { row: IContent; replacedCount: number } {
+  if (budget === undefined) {
+    return { row, replacedCount: 0 };
+  }
+  let replacedCount = 0;
+  const blocks = row.blocks.map((block) => {
+    if (block.type !== 'media' || block.encoding !== 'base64') {
+      return block;
+    }
+    const violation = checkImageDimensionBudget(block.data, budget);
+    if (violation === undefined) {
+      return block;
+    }
+    replacedCount++;
+    return {
+      type: 'text' as const,
+      text: DROPPED_IMAGE_PLACEHOLDER,
+    };
+  });
+  return { row: { ...row, blocks }, replacedCount };
 }
 
 /**
