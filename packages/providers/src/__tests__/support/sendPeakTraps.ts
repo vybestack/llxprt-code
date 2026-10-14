@@ -17,6 +17,10 @@
  *   it (issue #3858): reads every row into an array, patches it with the
  *   synthetic tool responses (two more copies) and builds the whole
  *   `ResponsesInputItem[]`.
+ * - `estimate`: reads every row into an `IContent[]` when the probe estimates
+ *   the projected prompt, holds it while the estimator runs and lets go before
+ *   the request is sent, so only the estimate window can show it. It applies
+ *   to a plan that includes the estimate step.
  * - `retain`: reads every row into an `IContent[]` for each send of the
  *   probe's accumulation run and never lets go of it, so every send leaves a
  *   whole history behind. This is the per-send leak the retained-growth gate
@@ -28,16 +32,22 @@ import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputL
 import { SyntheticToolResponseHandler } from '../../openai/syntheticToolResponses.js';
 import { buildOpenAIResponsesInput } from '../../openai-responses/OpenAIResponsesInputBuilder.js';
 
-export type SendTrap = 'array' | 'fill' | 'retain';
+export type SendTrap = 'array' | 'fill' | 'estimate' | 'retain';
 
 export const SEND_TRAP_ENV = 'ISSUE854_SEND_TRAP';
 
 /** An unset or empty value means no trap; anything unknown is an error. */
 export function parseSendTrap(value: string | undefined): SendTrap | undefined {
   if (value === undefined || value === '') return undefined;
-  if (value === 'array' || value === 'fill' || value === 'retain') return value;
+  if (
+    value === 'array' ||
+    value === 'fill' ||
+    value === 'estimate' ||
+    value === 'retain'
+  )
+    return value;
   throw new Error(
-    `${SEND_TRAP_ENV} must be "array", "fill" or "retain", got: ${value}`,
+    `${SEND_TRAP_ENV} must be "array", "fill", "estimate" or "retain", got: ${value}`,
   );
 }
 

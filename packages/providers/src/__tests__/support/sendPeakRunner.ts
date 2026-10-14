@@ -126,6 +126,7 @@ function writePlan(
   histories: Record<SendPeakShape, ShapeHistories>,
   source: SendPeakSource,
   rounds: number,
+  estimate: boolean,
 ): void {
   const counts: Record<string, ShapeCounts> = {};
   for (const shape of shapes) {
@@ -138,7 +139,7 @@ function writePlan(
       large: histories[shape].large.rows.length,
     };
   }
-  const plan: SendPeakPlan = { source, rounds, shapes: counts };
+  const plan: SendPeakPlan = { source, rounds, estimate, shapes: counts };
   writeFileSync(join(root, 'plan.json'), JSON.stringify(plan));
 }
 
@@ -149,6 +150,11 @@ export interface SendPeakOptions {
   readonly source?: SendPeakSource;
   /** Measured small/large pairs per shape. */
   readonly rounds?: number;
+  /**
+   * Project and estimate the prompt before each send inside the measured
+   * window. Only providers with `projectPromptEnvelope` can take this.
+   */
+  readonly estimate?: boolean;
   /**
    * Control to apply. Without it the trap named in `ISSUE854_SEND_TRAP` (if
    * any) is applied, so running a suite under a trap shows its real
@@ -174,6 +180,7 @@ function logRun(
       routeId,
       shape,
       source: options.source ?? 'rows',
+      estimate: options.estimate ?? false,
       trap: trap ?? null,
       seconds,
       bytes: [run.oracles.small.bytes, run.oracles.large.bytes],
@@ -208,6 +215,7 @@ export async function runSendPeak(
       histories,
       options.source ?? 'rows',
       options.rounds ?? 3,
+      options.estimate ?? false,
     );
     const measured = await runChild(routeId, root, trap);
     const runs: Partial<Record<SendPeakShape, SendPeakRun>> = {};

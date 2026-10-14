@@ -129,6 +129,11 @@ export interface SendPeakPlan {
   readonly source: SendPeakSource;
   /** Measured small/large pairs per shape, after one unmeasured warm-up. */
   readonly rounds: number;
+  /**
+   * Project and estimate the prompt before each send, inside the measured
+   * window, and send with the projection's transport token.
+   */
+  readonly estimate: boolean;
   readonly shapes: Readonly<Record<string, ShapeCounts>>;
 }
 
@@ -146,8 +151,9 @@ function isShapeCounts(value: unknown): value is ShapeCounts {
 
 export function isSendPeakPlan(value: unknown): value is SendPeakPlan {
   if (!isRecord(value)) return false;
-  const { source, rounds, shapes } = value;
+  const { source, rounds, estimate, shapes } = value;
   if (source !== 'rows' && source !== 'stream') return false;
+  if (typeof estimate !== 'boolean') return false;
   if (typeof rounds !== 'number' || !isRecord(shapes)) return false;
   return Object.values(shapes).every(isShapeCounts);
 }

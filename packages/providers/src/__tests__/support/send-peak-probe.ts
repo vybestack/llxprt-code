@@ -35,6 +35,12 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deserialize } from 'node:v8';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
+import {
+  estimatePromptEnvelope,
+  type PromptEnvelopeProjection,
+} from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { createRuntimeTokenizerFactory } from '../../composition/runtimeTokenizerFactory.js';
+import type { GenerateChatOptions, IProvider } from '../../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   assertRowIndex,
@@ -117,9 +123,14 @@ if (!isSendPeakPlan(parsedPlan)) throw new Error('invalid send peak plan');
 const plan: SendPeakPlan = parsedPlan;
 const source: SendPeakSource = plan.source;
 const envTrap = parseSendTrap(process.env[SEND_TRAP_ENV]);
-/** `retain` leaks across sends, so it applies to the accumulation run only. */
+/**
+ * `retain` leaks across sends, so it applies to the accumulation run only.
+ * `estimate` is armed at the estimate step, not when the rows are opened.
+ */
 const peakTrap: SendTrap | undefined =
-  envTrap === 'retain' ? undefined : envTrap;
+  envTrap === 'retain' || envTrap === 'estimate' ? undefined : envTrap;
+const estimateTrap: SendTrap | undefined =
+  envTrap === 'estimate' ? envTrap : undefined;
 const accumulationTrap: SendTrap | undefined =
   envTrap === 'retain' ? envTrap : undefined;
 const deadline = setTimeout(() => {
@@ -318,6 +329,8 @@ async function* readRows(
 
 interface SelectionHandle {
   readonly selection: ProviderRequestSelection;
+  /** The rows again, unsampled, for a trap that holds them. */
+  rows(): AsyncIterable<IContent>;
   /** The hold taken by the trap, released by the caller after the send. */
   hold(): TrapHold | undefined;
 }
@@ -330,6 +343,7 @@ function fileSelection(
   let held: TrapHold | undefined;
   let armed = false;
   return {
+    rows: () => readRows(job, sampler, false),
     selection: {
       count: job.count,
       readAt: (index: number, signal?: AbortSignal) => {
@@ -352,6 +366,72 @@ function fileSelection(
     },
     hold: () => held,
   };
+}
+
+const tokenizerFactory = createRuntimeTokenizerFactory();
+
+/**
+ * Estimates the projected prompt while the sampler watches, so a copy of the
+ * history made by the estimator (or held by the `estimate` trap) is seen. The
+ * trap's copy is dropped as soon as the estimate ends: the send that follows
+ * cannot show it.
+ */
+async function estimateWhileSampling(
+  provider: IProvider,
+  projection: PromptEnvelopeProjection,
+  handle: SelectionHandle,
+  sampler: MemorySampler | undefined,
+): Promise<void> {
+  const hold =
+    estimateTrap === undefined
+      ? undefined
+      : await armSendTrap(estimateTrap, handle.rows());
+  try {
+    await sampler?.sample();
+    const state = { settled: false };
+    const estimating = estimatePromptEnvelope(
+      provider.name,
+      projection,
+      tokenizerFactory,
+    ).finally(() => {
+      state.settled = true;
+    });
+    if (sampler !== undefined) {
+      while (!state.settled) await sampler.sample();
+    }
+    await estimating;
+    await sampler?.sample();
+  } finally {
+    hold?.release();
+  }
+}
+
+/**
+ * The projection of the call, estimated inside the measured window. Its
+ * transport token makes the send reuse the prepared body, as the agent does.
+ */
+async function projectAndEstimate(
+  wireRoute: WireRoute,
+  provider: IProvider,
+  options: GenerateChatOptions,
+  handle: SelectionHandle,
+  sampler: MemorySampler | undefined,
+): Promise<object> {
+  if (provider.projectPromptEnvelope === undefined) {
+    throw new Error(`${provider.name} cannot project a prompt envelope`);
+  }
+  await tokenizerFactory.prepareTokenizer?.(provider.name, wireRoute.model);
+  const projection = await provider.projectPromptEnvelope(options);
+  if (projection === undefined) {
+    throw new Error(`${provider.name} projected no prompt envelope`);
+  }
+  try {
+    await estimateWhileSampling(provider, projection, handle, sampler);
+  } catch (error) {
+    await projection.releaseIfUnsent?.();
+    throw error;
+  }
+  return projection.transportToken;
 }
 
 async function send(
@@ -380,7 +460,15 @@ async function send(
           }
         : {}),
     };
-    for await (const chunk of provider.generateChatCompletion(options)) {
+    const promptEnvelopeTransportToken = plan.estimate
+      ? await projectAndEstimate(wireRoute, provider, options, handle, sampler)
+      : undefined;
+    for await (const chunk of provider.generateChatCompletion({
+      ...options,
+      ...(promptEnvelopeTransportToken === undefined
+        ? {}
+        : { promptEnvelopeTransportToken }),
+    })) {
       void chunk;
     }
   } finally {

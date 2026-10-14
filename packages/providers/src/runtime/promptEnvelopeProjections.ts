@@ -10,6 +10,7 @@ import type {
   UnsupportedMediaEntry,
 } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
+import type { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js';
 import {
   parseImageDimensionsFromBase64,
   type ImageDimensions,
@@ -371,20 +372,38 @@ export function projectAnthropicPromptEnvelopeOnDemand(
   );
 }
 
-export function projectOpenAIChatPromptEnvelopeOnDemand(
-  readBody: () => unknown,
-  options: OnDemandProjectionOptions,
-): PromptEnvelopeProjection {
-  return projectOnDemand(
-    readBody,
-    PROMPT_KEYS['openai-chat'],
-    {
-      protocol: 'openai-chat',
-      method: 'chat/completions/v1',
-      projectionRevision: PROJECTION_REVISION,
-    },
-    options,
+const CHAT_IDENTITY: ProjectionIdentity = {
+  protocol: 'openai-chat',
+  method: 'chat/completions/v1',
+  projectionRevision: PROJECTION_REVISION,
+};
+
+const sourceEstimatorOnly = (): Promise<number> =>
+  Promise.reject(
+    new Error('A source projection requires the pinned source estimator'),
   );
+
+/**
+ * Projection of a chat request whose prompt keys are sealed estimator-form
+ * files. The estimator reads the files in bounded chunks, so no body or
+ * message array exists at estimate time. The projection's owner disposes the
+ * files; `releaseIfUnsent` is the media request's release.
+ */
+export function projectOpenAIChatPromptEnvelopeFromSource(
+  source: Gpt56SourceProjection,
+  options: OnDemandProjectionOptions & { readonly model: string },
+): PromptEnvelopeProjection {
+  return Object.freeze({
+    model: extractModelOrThrow({ model: options.model }, CHAT_IDENTITY),
+    protocol: CHAT_IDENTITY.protocol,
+    method: CHAT_IDENTITY.method,
+    projectionRevision: CHAT_IDENTITY.projectionRevision,
+    unsupportedMedia: freezeUnsupportedMedia(options.unsupportedMedia),
+    transportToken: options.transportToken ?? EMPTY_TRANSPORT_TOKEN,
+    finalizedProjection: source,
+    legacyEstimate: sourceEstimatorOnly,
+    releaseIfUnsent: options.releaseIfUnsent,
+  });
 }
 
 export function projectOpenAIChatPromptEnvelope(

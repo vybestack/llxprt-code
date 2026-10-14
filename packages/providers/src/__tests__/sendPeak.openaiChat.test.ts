@@ -8,7 +8,10 @@
  * Issue #854 step A2: the openai provider, chat route.
  *
  * The route spools the body into a request-scoped scratch file one message at
- * a time, so its peak does not grow with the body.
+ * a time, so its peak does not grow with the body. Each send is preceded by
+ * the projection and token estimate the agent runs, written from the same
+ * pass as estimator-form files, so the measured window covers the estimate
+ * too (issue #854 D3b).
  */
 
 import { describe, expect, it } from 'bun:test';
@@ -20,6 +23,7 @@ const measured = sharedSendPeak('openai-chat-plain', {
   source: 'rows',
   shapes: ['text-only', 'tool-heavy'],
   rounds: 1,
+  estimate: true,
 });
 
 describe('peak memory while sending, the openai provider, chat route', () => {

@@ -5,10 +5,21 @@ import { PromptKeyDiskWriter } from './prompt-key-disk-writer.js';
 import { PromptKeyTeeWriter } from './prompt-key-tee-writer.js';
 import { withSerializationCleanup } from './responses-serialization-lifecycle.js';
 
+/** Forms written next to the estimator form; each is a copy of the key. */
+export type ExtraSegmentForm = 'wire' | 'dump';
+
+const ALL_EXTRA_FORMS: readonly ExtraSegmentForm[] = ['wire', 'dump'];
+
 /** What the writers need from the request: costs are priced per model. */
 export interface SegmentWriterOptions {
   readonly model: string;
   readonly signal?: AbortSignal;
+  /**
+   * The forms to write besides the estimator form. Responses writes both. A
+   * send whose body is already a spool writes none, and a dump form is added
+   * only when a dump was asked for.
+   */
+  readonly forms?: readonly ExtraSegmentForm[];
 }
 
 export interface WrittenSegment {
@@ -25,7 +36,10 @@ export type SegmentFill = (
   writers: readonly PromptKeyDiskWriter[],
 ) => Promise<void> | void;
 
-/** Estimator, wire and dump forms of one prompt key, written in a single pass. */
+/**
+ * The estimator form of one prompt key and the extra forms, written in a
+ * single pass. The estimator writer is always first.
+ */
 export function openSegmentWriters(
   options: SegmentWriterOptions,
   root: string,
@@ -33,12 +47,12 @@ export function openSegmentWriters(
   costs: string,
   encoding: 'utf8' | 'utf16le',
 ): readonly PromptKeyDiskWriter[] {
+  const forms = options.forms ?? ALL_EXTRA_FORMS;
   const opened: PromptKeyDiskWriter[] = [];
   try {
     for (const [suffix, mode] of [
       ['', 'estimator'],
-      ['.wire', 'wire'],
-      ['.dump', 'dump'],
+      ...forms.map((form) => [`.${form}`, form] as const),
     ] as const)
       opened.push(
         new PromptKeyDiskWriter(
@@ -80,6 +94,7 @@ export async function writePromptSegment(
   fill: SegmentFill,
 ): Promise<WrittenSegment> {
   const encoding = rawString ? 'utf16le' : 'utf8';
+  const forms = options.forms ?? ALL_EXTRA_FORMS;
   const writers = openSegmentWriters(options, root, key, costs, encoding);
   return withSerializationCleanup(
     async () => {
@@ -88,8 +103,12 @@ export async function writePromptSegment(
         segment: {
           promptKey: key,
           source: { path: join(root, key), encoding },
-          wireSource: { path: join(root, `${key}.wire`), encoding },
-          dumpSource: { path: join(root, `${key}.dump`), encoding },
+          ...(forms.includes('wire')
+            ? { wireSource: { path: join(root, `${key}.wire`), encoding } }
+            : {}),
+          ...(forms.includes('dump')
+            ? { dumpSource: { path: join(root, `${key}.dump`), encoding } }
+            : {}),
           ...(rawString ? { rawString: true as const } : {}),
         },
         imageCount: writers[0].imageCount,

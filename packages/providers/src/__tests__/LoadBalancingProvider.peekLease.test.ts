@@ -35,7 +35,7 @@ import { replayableContents } from '../utils/collectContents.js';
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
 import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
 import { serializeResponsesPromptEnvelope } from '../runtime/responses-source-serializer.js';
-import { projectOpenAIChatPromptEnvelopeOnDemand } from '../runtime/promptEnvelopeProjections.js';
+import { projectAnthropicPromptEnvelopeOnDemand } from '../runtime/promptEnvelopeProjections.js';
 
 const scratch = mkdtempSync(join(tmpdir(), 'lb-peek-lease-'));
 const factory = createRuntimeTokenizerFactory();
@@ -244,7 +244,7 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
     const delegate: IProvider = {
       name: 'prov-b',
       projectPromptEnvelope: async () =>
-        projectOpenAIChatPromptEnvelopeOnDemand(
+        projectAnthropicPromptEnvelopeOnDemand(
           () => {
             if (!bodyLeased) throw new Error('Request body lease released');
             return body;

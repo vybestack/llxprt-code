@@ -6,9 +6,9 @@ import type { WireBodySpool } from '../utils/wire-body-spool.js';
  * The sealed chat body parsed back into one object.
  *
  * This is the isolated place where a chat send still needs the whole body as
- * a value: the token estimator (D3b), the dump contexts (D3c) and the
- * continuation request (D4) each read it on demand. The send itself never
- * calls it; it streams the spool.
+ * a value: the dump contexts (D3c) and the continuation request (D4) each read
+ * it on demand. The send itself never calls it; it streams the spool, and the
+ * token estimator reads its own estimator-form files.
  */
 export function readSpooledChatBody(
   spool: WireBodySpool,

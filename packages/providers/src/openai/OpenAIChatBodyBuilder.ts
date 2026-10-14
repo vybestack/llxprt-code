@@ -65,9 +65,16 @@ export type ChatMessageItem =
     }
   | { readonly kind: 'tool-media'; readonly parts: () => Iterable<unknown> };
 
-/** Receives the JSON bytes of each message, consumed before it returns. */
+/**
+ * Receives each message as JSON bytes and as the item they were made from.
+ * Both are valid only until the call returns; a sink that writes the item in
+ * another form (the estimator files) reads it inside the call.
+ */
 export interface ChatMessageSink {
-  message(chunks: Iterable<Uint8Array>): void | Promise<void>;
+  message(
+    chunks: Iterable<Uint8Array>,
+    item: ChatMessageItem,
+  ): void | Promise<void>;
 }
 
 interface ChatFacts {
@@ -344,6 +351,7 @@ export async function writeChatMessages(
       item.kind === 'message'
         ? valueChunks(item.message)
         : toolMediaChunks(item.parts()),
+      item,
     );
     count++;
   }

@@ -17,8 +17,7 @@ import {
 import { chatMediaStage } from './OpenAISourceRoute.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { ProviderMediaTransportCapabilities } from '../providerMediaTransportCapabilities.js';
-import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
+import type { ChatPromptEstimate } from './OpenAIChatEstimatorFiles.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import type { RowsMediaInput } from '../openai-responses/responses-row-media.js';
 import {
@@ -109,16 +108,22 @@ interface ChatProjectionPreparationDeps {
 
 /**
  * The prepared body belongs to the media request: finishing the request, on
- * any outcome, disposes the spool and the tool id index.
+ * any outcome, disposes the spool, the tool id index and, for a projected
+ * request, the estimator files.
  */
 export function registerOpenAIChatRequestCleanup(
   mediaRequest: ResolvedMediaRequest,
   requestContext: RequestContext,
 ): void {
+  const { estimate } = requestContext;
   try {
     mediaRequest.registerCleanup(requestContext.release);
+    if (estimate !== undefined) {
+      mediaRequest.registerCleanup(() => estimate.projection.dispose());
+    }
   } catch (error) {
     requestContext.release();
+    estimate?.discard();
     throw error;
   }
 }
@@ -126,7 +131,7 @@ export function registerOpenAIChatRequestCleanup(
 export interface PreparedOpenAIChatProjection {
   readonly requestContext: RequestContext;
   readonly mediaRequest: ResolvedMediaRequest;
-  readonly unsupportedMedia: readonly UnsupportedMediaEntry[];
+  readonly estimate: ChatPromptEstimate;
 }
 
 /**
@@ -156,27 +161,6 @@ export async function prepareOwnedOpenAIChatRequest(
   );
   registerOpenAIChatRequestCleanup(mediaRequest, requestContext);
   return requestContext;
-}
-
-/**
- * Lists the media a protocol cannot carry as the rows pass by, so the
- * projection learns it without reading the history into an array.
- */
-function withUnsupportedMediaList(
-  stage: ChatRowInput['mediaStage'],
-  into: UnsupportedMediaEntry[],
-): NonNullable<ChatRowInput['mediaStage']> {
-  return async function* (rows) {
-    for await (const row of stage?.(rows) ?? rows) {
-      into.push(
-        ...collectUnsupportedMedia(
-          [row],
-          (_block, category) => category === 'image',
-        ),
-      );
-      yield row;
-    }
-  };
 }
 
 export async function prepareOpenAIChatProjection(
@@ -220,7 +204,6 @@ export async function prepareOpenAIChatProjection(
           media,
         )) ?? rowInput;
     }
-    const unsupportedMedia: UnsupportedMediaEntry[] = [];
     const requestContext = await prepareRequest(
       options,
       deps.defaultModel,
@@ -228,16 +211,15 @@ export async function prepareOpenAIChatProjection(
       deps.logger,
       deps.providerName,
       deps.mediaTransportCapabilities,
-      {
-        ...rowInput,
-        mediaStage: withUnsupportedMediaList(
-          rowInput.mediaStage,
-          unsupportedMedia,
-        ),
-      },
+      rowInput,
+      true,
     );
     registerOpenAIChatRequestCleanup(mediaRequest, requestContext);
-    return { mediaRequest, requestContext, unsupportedMedia };
+    const { estimate } = requestContext;
+    if (estimate === undefined) {
+      throw new Error('A projected chat request carries its estimator files');
+    }
+    return { mediaRequest, requestContext, estimate };
   } catch (error) {
     return finishMediaRequest(mediaRequest, { status: 'failed', error });
   }

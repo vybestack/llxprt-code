@@ -22,10 +22,6 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type {
-  IContent,
-  MediaReferenceBlock,
-} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { RuntimePromptEstimateRequest } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeTokenizerFactory.js';
 import { convertToAnthropicMessages } from '../anthropic/AnthropicMessageNormalizer.js';
 import { buildMessagesWithReasoning } from '../openai/OpenAIRequestBuilder.js';
@@ -33,10 +29,11 @@ import { estimateGpt56Prompt } from '../tokenizers/Gpt56O200kPromptEstimator.js'
 import { estimateGpt56PromptFromSources } from '../tokenizers/gpt56-source-prompt-estimator.js';
 import type { Gpt56SourceProjection } from '../tokenizers/gpt56-source-projection.js';
 import { promptTextPieces } from '../tokenizers/source-family-input.js';
+import type { HistoryCase } from '../__tests__/support/wireBodyHistories.js';
 import {
-  buildHistoryCases,
-  type HistoryCase,
-} from '../__tests__/support/wireBodyHistories.js';
+  estimatorCorpus,
+  extraCases,
+} from '../__tests__/support/estimatorCorpus.js';
 import {
   projectAnthropicPromptEnvelope,
   projectOpenAIChatPromptEnvelope,
@@ -52,96 +49,6 @@ const ACTIVE_PROVIDER: Record<Protocol, string> = {
   'openai-chat': 'openai',
   'anthropic-messages': 'anthropic',
 };
-const unusedReference: MediaReferenceBlock = {
-  type: 'media_reference',
-} as unknown as MediaReferenceBlock;
-
-function png(width: number, height: number): string {
-  const bytes = Buffer.alloc(24);
-  Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex').copy(bytes);
-  bytes.writeUInt32BE(width, 16);
-  bytes.writeUInt32BE(height, 20);
-  return bytes.toString('base64');
-}
-
-function imageRow(...sizes: ReadonlyArray<[number, number]>): IContent {
-  return {
-    speaker: 'human',
-    blocks: [
-      { type: 'text', text: 'look at these' },
-      ...sizes.map(([width, height]) => ({
-        type: 'media' as const,
-        mimeType: 'image/png',
-        encoding: 'base64' as const,
-        data: png(width, height),
-      })),
-    ],
-  };
-}
-
-/** Cases the golden corpus lacks: header-bearing images and embedded data URIs. */
-function extraCases(): HistoryCase[] {
-  const dataUri = `data:image/png;base64,${png(40, 41)}`;
-  return [
-    {
-      id: 'many-images',
-      description: 'three images of different sizes in two rows',
-      rows: [
-        imageRow([1586, 991], [32, 32]),
-        { speaker: 'ai', blocks: [{ type: 'text', text: 'seen' }] },
-        imageRow([4096, 4096]),
-        { speaker: 'ai', blocks: [{ type: 'text', text: 'also seen' }] },
-        { speaker: 'human', blocks: [{ type: 'text', text: 'ok' }] },
-      ],
-      systemInstruction: 'Describe images.',
-    },
-    {
-      id: 'embedded-data-uri',
-      description: 'data URIs inside text, a tool result and the system prompt',
-      rows: [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: `inline ${dataUri} then more 雪` }],
-        },
-        {
-          speaker: 'ai',
-          blocks: [
-            {
-              type: 'tool_call',
-              id: 'uri_call',
-              name: 'read_file',
-              parameters: { path: '/img.png', uri: dataUri },
-            },
-          ],
-        },
-        {
-          speaker: 'tool',
-          blocks: [
-            {
-              type: 'tool_response',
-              callId: 'uri_call',
-              toolName: 'read_file',
-              result: `body ${dataUri}`,
-            },
-          ],
-        },
-        { speaker: 'human', blocks: [{ type: 'text', text: 'done' }] },
-      ],
-      systemInstruction: `System ${dataUri} end`,
-    },
-  ];
-}
-
-function corpus(): HistoryCase[] {
-  return [
-    ...buildHistoryCases({ imageReference: unusedReference })
-      // Media references need the request media store; the converters take
-      // resolved rows, so those cases are not meaningful here.
-      .filter((entry) => entry.usesMediaReferences !== true),
-    ...extraCases(),
-  ];
-}
-
 function chatBody(entry: HistoryCase): Body {
   const converted = buildMessagesWithReasoning(
     [...entry.rows],
@@ -320,7 +227,7 @@ async function countBothWays(protocol: Protocol, body: Body): Promise<Outcome> {
 describe.each([['openai-chat'], ['anthropic-messages']] as const)(
   'estimator parity for %s: segment files equal the whole body',
   (protocol) => {
-    for (const entry of corpus()) {
+    for (const entry of estimatorCorpus()) {
       for (const [label, body] of bodiesFor(protocol, entry)) {
         it(`${entry.id} (${label}) counts the same`, async () => {
           const outcome = await countBothWays(protocol, body);
@@ -338,7 +245,9 @@ describe.each([['openai-chat'], ['anthropic-messages']] as const)(
     });
 
     it('detects a segment file that differs from the whole body', async () => {
-      const entry = corpus().find((candidate) => candidate.id === 'text-only');
+      const entry = estimatorCorpus().find(
+        (candidate) => candidate.id === 'text-only',
+      );
       if (entry === undefined) throw new Error('text-only case is missing');
       const [[, body]] = bodiesFor(protocol, entry);
       const legacy = legacyProjection(protocol, body);

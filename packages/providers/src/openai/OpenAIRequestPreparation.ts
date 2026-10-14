@@ -48,6 +48,12 @@ import { KeyedRowIndex } from '../utils/keyed-row-index.js';
 import { KeyedRowToolIdStore } from '../utils/keyed-row-tool-id-store.js';
 import { providerRowsOf } from '../utils/providerRows.js';
 import { WireBodySpool } from '../utils/wire-body-spool.js';
+import type { PromptKeySink } from '../runtime/prompt-key-tee-writer.js';
+import {
+  ChatEstimatorFiles,
+  writeEstimateMessage,
+  type ChatPromptEstimate,
+} from './OpenAIChatEstimatorFiles.js';
 
 /**
  * A prepared chat request: the sealed body on scratch disk and the scalars the
@@ -62,6 +68,11 @@ export interface RequestContext {
   spool: WireBodySpool;
   /** Messages in the body, the system message included. */
   messageCount: number;
+  /**
+   * The estimator form of the prompt keys, written with the body when the
+   * request is projected. The caller owns it once it has the request.
+   */
+  estimate: ChatPromptEstimate | undefined;
   /** Disposes the spool and closes the tool id index. Idempotent. */
   release(): void;
 }
@@ -303,46 +314,87 @@ function usesToolIdStore(format: ToolFormat): boolean {
 
 /**
  * Writes the messages array: `[`, the system message, then each conversion
- * output behind a comma, `]`. Returns the number of messages written.
+ * output behind a comma, `]`. Returns the number of messages written. When
+ * `estimate` is given, the same messages are written to it in estimator form,
+ * one at a time, with the same punctuation.
  */
 async function writeMessagesSegment(
   sink: EnvelopeSink,
   options: NormalizedGenerateChatOptions,
   source: ChatBodyRows,
   bodyOptions: ChatBodyOptions,
+  estimate: PromptKeySink | undefined,
 ): Promise<number> {
-  sink.append('[');
-  const system = jsonValueChunks({
+  const systemMessage = {
     role: 'system',
     content: options.systemInstruction ?? '',
-  });
+  };
+  sink.append('[');
+  estimate?.append('[');
+  const system = jsonValueChunks(systemMessage);
   if (system === undefined) throw new Error('System message is not JSON');
   for (const chunk of system) sink.append(chunk);
+  estimate?.value(systemMessage);
   const converted = await writeChatMessages(source, bodyOptions, {
-    message(chunks) {
+    message(chunks, item) {
       sink.append(',');
       for (const chunk of chunks) sink.append(chunk);
+      if (estimate !== undefined) {
+        estimate.append(',');
+        writeEstimateMessage(estimate, item);
+      }
     },
   });
   sink.append(']');
+  estimate?.append(']');
   return converted + 1;
+}
+
+interface SpooledChatBody {
+  readonly spool: WireBodySpool;
+  readonly messageCount: number;
+  readonly estimate: ChatPromptEstimate | undefined;
+}
+
+function chatBodyOptions(
+  options: NormalizedGenerateChatOptions,
+  format: ToolFormat,
+  rowInput: ChatRowInput,
+  toolIds: KeyedRowIndex | undefined,
+  estimator: ChatEstimatorFiles | undefined,
+): ChatBodyOptions {
+  const mediaStage =
+    estimator === undefined
+      ? rowInput.mediaStage
+      : estimator.listUnsupportedMedia(rowInput.mediaStage);
+  return {
+    reasoning: options,
+    toolFormat: format,
+    config: parseOutputLimits(options.invocation.ephemerals),
+    ...(toolIds === undefined
+      ? {}
+      : { toolIdStore: new KeyedRowToolIdStore(toolIds) }),
+    ...(mediaStage === undefined ? {} : { mediaStage }),
+  };
 }
 
 /**
  * Spools the request body: the envelope's small members are written as
  * `JSON.stringify` would and the messages are converted and written one row
- * at a time. A failure disposes the spool and the tool id index.
+ * at a time. A failure disposes the spool, the tool id index and the
+ * estimator files.
  */
 async function spoolChatBody(
   envelope: OpenAIChatRequestBody,
   options: NormalizedGenerateChatOptions,
   format: ToolFormat,
   rowInput: ChatRowInput,
-): Promise<Pick<RequestContext, 'spool' | 'messageCount' | 'release'>> {
-  const spool = WireBodySpool.create('openai-chat', {
-    signal: getRequestSignal(options),
-  });
+  withEstimate: boolean,
+): Promise<SpooledChatBody & { readonly release: () => void }> {
+  const signal = getRequestSignal(options);
+  const spool = WireBodySpool.create('openai-chat', { signal });
   let toolIds: KeyedRowIndex | undefined;
+  let estimator: ChatEstimatorFiles | undefined;
   const release = (): void => {
     try {
       spool.dispose();
@@ -352,31 +404,35 @@ async function spoolChatBody(
   };
   try {
     if (usesToolIdStore(format)) toolIds = KeyedRowIndex.create('tool-ids');
+    if (withEstimate) {
+      estimator = ChatEstimatorFiles.create(envelope.model, signal);
+    }
     const source = rowInput.rows ?? (await callRows(options));
-    const bodyOptions: ChatBodyOptions = {
-      reasoning: options,
-      toolFormat: format,
-      config: parseOutputLimits(options.invocation.ephemerals),
-      ...(toolIds === undefined
-        ? {}
-        : { toolIdStore: new KeyedRowToolIdStore(toolIds) }),
-      ...(rowInput.mediaStage === undefined
-        ? {}
-        : { mediaStage: rowInput.mediaStage }),
-    };
+    const bodyOptions = chatBodyOptions(
+      options,
+      format,
+      rowInput,
+      toolIds,
+      estimator,
+    );
     let messageCount = 0;
     const messages = new StreamedSegment(async (sink) => {
-      messageCount = await writeMessagesSegment(
-        sink,
-        options,
-        source,
-        bodyOptions,
-      );
+      const write = (estimate: PromptKeySink | undefined): Promise<number> =>
+        writeMessagesSegment(sink, options, source, bodyOptions, estimate);
+      if (estimator === undefined) {
+        messageCount = await write(undefined);
+      } else {
+        await estimator.writeMessages(async (estimate) => {
+          messageCount = await write(estimate);
+        });
+      }
     });
     await writeEnvelope(spool, { ...envelope, messages });
     spool.seal();
-    return { spool, messageCount, release };
+    await estimator?.writeTools(envelope.tools);
+    return { spool, messageCount, estimate: estimator?.seal(), release };
   } catch (error) {
+    estimator?.discard();
     release();
     throw error;
   }
@@ -394,6 +450,7 @@ export async function prepareRequest(
   providerName?: string,
   mediaTransportCapabilities: ProviderMediaTransportCapabilities = conservativeMediaTransportCapabilities(),
   rowInput: ChatRowInput = {},
+  withEstimate = false,
 ): Promise<RequestContext> {
   const model = options.resolved.model || defaultModel;
   const ephemeralSettings = readInvocationRecord(options.invocation.ephemerals);
@@ -435,7 +492,13 @@ export async function prepareRequest(
     cacheAffinityKey: mediaTransportCapabilities.cacheAffinityKey,
   });
 
-  const body = await spoolChatBody(envelope, options, detectedFormat, rowInput);
+  const body = await spoolChatBody(
+    envelope,
+    options,
+    detectedFormat,
+    rowInput,
+    withEstimate,
+  );
   return {
     model,
     detectedFormat,

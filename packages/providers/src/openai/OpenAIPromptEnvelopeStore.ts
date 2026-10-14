@@ -6,17 +6,14 @@
 
 import type { PreparedOpenAIChatProjection } from './OpenAIPromptProjectionPreparation.js';
 import type { RequestContext } from './OpenAIRequestPreparation.js';
-import { readSpooledChatBody } from './OpenAIChatSpooledBody.js';
+import type { ChatPromptEstimate } from './OpenAIChatEstimatorFiles.js';
 import type { PreparedResponsesRequestContext } from '../openai-responses/openAIResponsesExecutor.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import type {
-  PromptEnvelopeProjection,
-  UnsupportedMediaEntry,
-} from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import type { ProviderToolset } from '../IProvider.js';
 import { diskTextProjection } from '../openai-responses/responses-disk-text-projection.js';
 import { finishMediaRequest } from '../utils/request-media-resolution.js';
-import { projectOpenAIChatPromptEnvelopeOnDemand } from '../runtime/promptEnvelopeProjections.js';
+import { projectOpenAIChatPromptEnvelopeFromSource } from '../runtime/promptEnvelopeProjections.js';
 
 /**
  * Source route: a send normalized with its prompt inputs blanked gets these
@@ -51,27 +48,32 @@ export class OpenAIPromptEnvelopeStore {
     return token === undefined ? undefined : this.prepared.get(token);
   }
 
-  storeChatProjection(
+  /**
+   * The chat projection of the one prepared request: the estimator reads the
+   * sealed prompt-key files written with the body. Unsupported media comes
+   * from the ledger written as the rows passed.
+   */
+  async storeChatProjection(
     prepared: Extract<
       PreparedOpenAIPromptEnvelope,
       { readonly protocol: 'openai-chat' }
     >,
-    unsupportedMedia: readonly UnsupportedMediaEntry[] = [],
-  ): PromptEnvelopeProjection {
+    estimate: ChatPromptEstimate,
+  ): Promise<PromptEnvelopeProjection> {
     const transportToken = Object.freeze({});
     this.prepared.set(transportToken, prepared);
-    // The estimator still reads the body as a value (issue #854 D3b moves it
-    // onto estimator-form segment files); it is parsed from the spool on each
-    // access and not kept.
-    const { spool } = prepared.requestContext;
-    return projectOpenAIChatPromptEnvelopeOnDemand(
-      () => readSpooledChatBody(spool),
-      {
-        unsupportedMedia,
+    const { mediaRequest, requestContext } = prepared;
+    try {
+      return projectOpenAIChatPromptEnvelopeFromSource(estimate.projection, {
+        model: requestContext.model,
+        unsupportedMedia: estimate.unsupportedMedia,
         transportToken,
-        releaseIfUnsent: prepared.mediaRequest.release,
-      },
-    );
+        releaseIfUnsent: mediaRequest.release,
+      });
+    } catch (error) {
+      this.prepared.delete(transportToken);
+      return finishMediaRequest(mediaRequest, { status: 'failed', error });
+    }
   }
 
   /**
@@ -134,6 +136,6 @@ export async function prepareOpenAIPromptProjection(
         ? {}
         : { sourceInputs: input.sourceInputs }),
     },
-    prepared.unsupportedMedia,
+    prepared.estimate,
   );
 }
