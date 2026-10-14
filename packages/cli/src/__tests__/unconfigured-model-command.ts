@@ -15,6 +15,8 @@ import {
   createAuthCommand,
   type AuthCommandOperations,
 } from '../ui/commands/authCommand.js';
+import type { QuotaCommandOperations } from '../ui/commands/quotaCommand.js';
+import { createQuotaCommand } from '../ui/commands/quotaCommand.js';
 import { createToolkeyCommand } from '../ui/commands/toolkeyCommand.js';
 import { createToolkeyfileCommand } from '../ui/commands/toolkeyfileCommand.js';
 import type { BuiltinCommandOwners } from '../services/BuiltinCommandLoader.js';
@@ -111,6 +113,19 @@ export function unavailableAuthControl(): AuthCommandOperations {
   };
 }
 
+export function unavailableQuotaOAuthControl(): QuotaCommandOperations['oauthControl'] {
+  const unavailable = (): never => {
+    throw new Error('Quota operations are unavailable in this registry fixture');
+  };
+  return {
+    isAvailable: unavailable,
+    getAllCodexRateLimitResetCredits: unavailable,
+    hasCodexToken: unavailable,
+    listBuckets: unavailable,
+    readCodexBucketToken: unavailable,
+  };
+}
+
 export function createUnconfiguredCredentialCommands(): Pick<
   BuiltinCommandOwners,
   | 'keyCommand'
@@ -120,6 +135,7 @@ export function createUnconfiguredCredentialCommands(): Pick<
   | 'toolkeyCommand'
   | 'toolkeyfileCommand'
   | 'authCommand'
+  | 'quotaCommand'
 > {
   const unavailable = (): never => {
     throw new Error(
@@ -151,6 +167,12 @@ export function createUnconfiguredCredentialCommands(): Pick<
     }),
     logoutCommand: createLogoutCommand({ logout: unavailable }),
     authCommand: createAuthCommand(unavailableAuthControl()),
+    quotaCommand: createQuotaCommand({
+      oauthControl: unavailableQuotaOAuthControl(),
+      fetch: unavailable,
+      baseUrlSetting: unavailable,
+      fetchQuotaLines: unavailable,
+    }),
     toolkeyCommand: createToolkeyCommand({
       getKey: unavailable,
       saveKey: unavailable,

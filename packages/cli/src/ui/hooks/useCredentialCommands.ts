@@ -17,10 +17,12 @@ import {
   bindKeyCommandOperations,
   bindKeyfileCommandOperations,
   bindLogoutCommandOperations,
+  bindQuotaCommandOperations,
 } from '../commands/credentialCommandHost.js';
 import { createKeyCommand } from '../commands/keyCommand.js';
 import { createKeyfileCommand } from '../commands/keyfileCommand.js';
 import { createLogoutCommand } from '../commands/logoutCommand.js';
+import { createQuotaCommand } from '../commands/quotaCommand.js';
 import { createToolkeyCommand } from '../commands/toolkeyCommand.js';
 import { createToolkeyfileCommand } from '../commands/toolkeyfileCommand.js';
 import { useOAuthControl } from '../contexts/OAuthControlContext.js';
@@ -35,6 +37,7 @@ type CredentialCommands = Pick<
   | 'toolkeyCommand'
   | 'toolkeyfileCommand'
   | 'authCommand'
+  | 'quotaCommand'
 >;
 
 /**
@@ -69,6 +72,10 @@ export function useCredentialCommands(
     () => createAuthCommand(oauthControl),
     [oauthControl],
   );
+  const quotaCommand = useMemo(
+    () => createQuotaCommand(bindQuotaCommandOperations(api, oauthControl)),
+    [api, oauthControl],
+  );
   const toolkeyCommands = useMemo(() => {
     const storage = new ToolKeyStorage();
     return {
@@ -83,6 +90,7 @@ export function useCredentialCommands(
       keyfileCommand,
       keyCommand,
       authCommand,
+      quotaCommand,
       ...toolkeyCommands,
     }),
     [
@@ -91,6 +99,7 @@ export function useCredentialCommands(
       keyfileCommand,
       keyCommand,
       authCommand,
+      quotaCommand,
       toolkeyCommands,
     ],
   );

@@ -6,8 +6,9 @@
 
 import { beforeEach, describe, it, expect } from 'bun:test';
 import { createCompletionHandler } from '../schema/index.js';
-import { quotaCommand } from '../quotaCommand.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
+import { registerQuotaCommand } from '../../../__tests__/credential-command-test-owner.js';
+import type { SlashCommand } from '../types.js';
 import type {
   CommandArgumentSchema,
   CompletionResult,
@@ -15,8 +16,10 @@ import type {
 
 describe('quotaCommand schema completion', () => {
   let mockContext: ReturnType<typeof createMockCommandContext>;
+  let quotaCommand: SlashCommand;
   beforeEach(() => {
     mockContext = createMockCommandContext();
+    quotaCommand = registerQuotaCommand(mockContext);
   });
 
   /**

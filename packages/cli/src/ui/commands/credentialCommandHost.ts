@@ -13,6 +13,8 @@ import type { BaseurlCommandOperations } from './baseurlCommand.js';
 import type { KeyCommandOperations } from './keyCommand.js';
 import type { KeyfileCommandOperations } from './keyfileCommand.js';
 import type { LogoutCommandOperations } from './logoutCommand.js';
+import type { QuotaCommandOperations } from './quotaCommand.js';
+import { fetchAllQuotaInfo } from './statsQuota.js';
 
 const MISSING_CREDENTIAL_OWNER =
   'Key commands require an explicit credential owner';
@@ -133,5 +135,21 @@ export function bindKeyCommandOperations(
     setEphemeralSetting: (key, value) =>
       owner().setEphemeralSetting(key, value),
     schedulePaymentModeCheck,
+  };
+}
+
+/**
+ * Binds /quota to one session: its OAuth control, its network fetch, its
+ * configured endpoint and the same quota report /stats shows.
+ */
+export function bindQuotaCommandOperations(
+  api: RuntimeApi,
+  oauthControl: OAuthControl,
+): QuotaCommandOperations {
+  return {
+    oauthControl,
+    fetch: api.fetch,
+    baseUrlSetting: () => api.getEphemeralSetting('base-url'),
+    fetchQuotaLines: () => fetchAllQuotaInfo(api, oauthControl),
   };
 }

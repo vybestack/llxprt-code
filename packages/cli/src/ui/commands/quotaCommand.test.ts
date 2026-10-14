@@ -6,8 +6,12 @@ import { detectFromProviderConfig } from '../../runtime/providerInspection.js';
  */
 
 import { vi, describe, it, expect, beforeEach, type Mock } from 'bun:test';
-import { quotaCommand } from './quotaCommand.js';
-import { type CommandContext, CommandKind } from './types.js';
+import { registerQuotaCommand } from '../../__tests__/credential-command-test-owner.js';
+import {
+  type CommandContext,
+  CommandKind,
+  type SlashCommand,
+} from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
 
@@ -152,6 +156,7 @@ function makeCodexResetOauthManager(
 
 describe('quotaCommand', () => {
   let mockContext: CommandContext;
+  let quotaCommand: SlashCommand;
 
   beforeEach(() => {
     mockContext = createMockCommandContext({
@@ -191,6 +196,8 @@ describe('quotaCommand', () => {
         },
       },
     });
+
+    quotaCommand = registerQuotaCommand(mockContext);
 
     oauthManagerMock.mockReset();
     optionalOAuthManagerMock.mockReset();
