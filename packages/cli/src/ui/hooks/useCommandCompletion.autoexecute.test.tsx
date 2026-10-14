@@ -11,8 +11,6 @@ import { describe, it, expect } from 'bun:test';
 import type { SlashCommand } from '../commands/types.js';
 import { aboutCommand } from '../commands/aboutCommand.js';
 import { clearCommand } from '../commands/clearCommand.js';
-import { compressCommand } from '../commands/compressCommand.js';
-import { copyCommand } from '../commands/copyCommand.js';
 import { docsCommand } from '../commands/docsCommand.js';
 import { editorCommand } from '../commands/editorCommand.js';
 import { helpCommand } from '../commands/helpCommand.js';
@@ -44,8 +42,8 @@ describe('autoExecute classifications — top-level commands', () => {
   it.each<[string, SlashCommand]>([
     ['about', aboutCommand],
     ['clear', clearCommand],
-    ['compress', compressCommand],
-    ['copy', copyCommand],
+    ['compress', createUnconfiguredBuiltinOwners().compressCommand],
+    ['copy', createUnconfiguredBuiltinOwners().copyCommand],
     ['docs', docsCommand],
     ['editor', editorCommand],
     ['help', helpCommand],

@@ -42,9 +42,6 @@ void vi.mock('../ui/commands/ideCommand.js', () => ({
     kind: CommandKind.BUILT_IN,
   }),
 }));
-void vi.mock('../ui/commands/restoreCommand.js', () => ({
-  restoreCommand: vi.fn(),
-}));
 void vi.mock('../ui/commands/permissionsCommand.js', () => ({
   permissionsCommand: {
     name: 'permissions',
@@ -53,13 +50,11 @@ void vi.mock('../ui/commands/permissionsCommand.js', () => ({
   },
 }));
 
-import { describe, it, expect, vi, beforeEach, type Mock } from 'bun:test';
+import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { BuiltinCommandLoader } from './BuiltinCommandLoader.js';
 import { createUnconfiguredBuiltinOwners } from '../__tests__/unconfigured-model-command.js';
 import type { Config } from '@vybestack/llxprt-code-core';
 import { CommandKind } from '../ui/commands/types.js';
-
-import { restoreCommand } from '../ui/commands/restoreCommand.js';
 
 void vi.mock('../ui/commands/bugCommand.js', () => ({ bugCommand: {} }));
 void vi.mock('../ui/commands/clearCommand.js', () => ({ clearCommand: {} }));
@@ -97,10 +92,6 @@ void vi.mock('../utils/installationInfo.js', () => {
 describe('BuiltinCommandLoader', () => {
   let mockConfig: Config;
 
-  const restoreCommandMock = restoreCommand as unknown as Mock<
-    (...args: never[]) => unknown
-  >;
-
   beforeEach(() => {
     vi.clearAllMocks();
     mockConfig = {
@@ -113,25 +104,27 @@ describe('BuiltinCommandLoader', () => {
       isAdminSkillsEnabled: () => true,
       getProjectTempDir: () => '/tmp/llxprt-test-project',
     } as unknown as Config;
+  });
 
-    restoreCommandMock.mockReturnValue({
+  it('registers the restore command supplied by its owner', async () => {
+    const restore = {
       name: 'restore',
       description: 'Restore command',
       kind: CommandKind.BUILT_IN,
-    });
-  });
-
-  it('should correctly pass the config object to restore command factory', async () => {
-    const runtime = composeFixtureRuntime(mockConfig);
+    };
+    const owners = {
+      ...createUnconfiguredBuiltinOwners(),
+      restoreCommand: restore,
+    };
     const loader = new BuiltinCommandLoader(
-      createUnconfiguredBuiltinOwners(),
-      runtime,
+      owners,
+      composeFixtureRuntime(mockConfig),
     );
-    await loader.loadCommands(new AbortController().signal);
+    const commands = await loader.loadCommands(new AbortController().signal);
 
-    // ideCommand is now a constant, no longer needs config
-    expect(restoreCommandMock).toHaveBeenCalledTimes(1);
-    expect(restoreCommandMock).toHaveBeenCalledWith(runtime);
+    expect(commands.find((command) => command.name === 'restore')).toBe(
+      restore,
+    );
   });
 
   it('should filter out null command definitions returned by factories', async () => {
@@ -157,10 +150,8 @@ describe('BuiltinCommandLoader', () => {
       createUnconfiguredBuiltinOwners(),
       null,
     );
-    await loader.loadCommands(new AbortController().signal);
-    // ideCommand is now a constant, no longer needs config
-    expect(restoreCommandMock).toHaveBeenCalledTimes(1);
-    expect(restoreCommandMock).toHaveBeenCalledWith(null);
+    const commands = await loader.loadCommands(new AbortController().signal);
+    expect(commands.some((command) => command.name === 'restore')).toBe(false);
   });
 
   it('should return a list of all loaded commands', async () => {

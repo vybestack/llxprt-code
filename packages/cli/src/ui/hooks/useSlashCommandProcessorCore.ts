@@ -15,6 +15,16 @@ import { useCredentialCommands } from './useCredentialCommands.js';
 import { useChatCommand } from './useChatCommand.js';
 import { createContinueCommand } from '../commands/continueCommand.js';
 import { bindContinueCommandOperations } from '../commands/continueCommandHost.js';
+import { createCopyCommand } from '../commands/copyCommand.js';
+import {
+  bindCopyCommandClipboard,
+  bindCopyCommandHistoryRead,
+} from '../commands/copyCommandHost.js';
+import { createCompressCommand } from '../commands/compressCommand.js';
+import { bindCompressCommand } from '../commands/compressCommandHost.js';
+import { createDumpcontextCommand } from '../commands/dumpcontextCommand.js';
+import { bindDumpcontextCommand } from '../commands/dumpcontextCommandHost.js';
+import { bindRestoreCommand } from '../commands/restoreCommandHost.js';
 import type { DialogStore } from '../stores/dialog/dialogStore.js';
 import type {
   RecordingIntegration,
@@ -61,6 +71,10 @@ import {
   useSlashCommandCancellation,
   type SlashCommandCancellation,
 } from './useSlashCommandCancellation.js';
+
+type WriteToolFormat = (
+  format: ToolFormatOverrideLiteral | null,
+) => Promise<ToolFormatState>;
 
 interface TodoContextValue {
   todos: Todo[];
@@ -115,12 +129,59 @@ interface SlashCommandProcessorState {
   setSessionShellAllowlist: React.Dispatch<React.SetStateAction<Set<string>>>;
 }
 
+function useHistoryCommandOwners(
+  agent: Agent | null,
+  config: CliUiRuntime | null,
+  runtimeApi: ReturnType<typeof useRuntimeApi>,
+): Pick<
+  BuiltinCommandOwners,
+  'copyCommand' | 'compressCommand' | 'dumpcontextCommand' | 'restoreCommand'
+> {
+  return useMemo(
+    () => ({
+      copyCommand: createCopyCommand(
+        bindCopyCommandHistoryRead(
+          () => agent?.agentClient.hasChatInitialized() ?? false,
+          () => agent?.getHistory() ?? Promise.resolve([]),
+        ),
+        bindCopyCommandClipboard(),
+      ),
+      compressCommand: createCompressCommand(bindCompressCommand(agent)),
+      dumpcontextCommand: createDumpcontextCommand(
+        bindDumpcontextCommand({
+          readMode: () => runtimeApi.getSessionSetting('dumpcontext'),
+          writeMode: (mode) =>
+            runtimeApi.setSessionSetting('dumpcontext', mode),
+          readHistory: () => {
+            const history = agent?.agentClient.getHistoryService();
+            return history === undefined || history === null
+              ? null
+              : {
+                  messages: history.getAll(),
+                  chronology: history.getChronologyTrace(),
+                };
+          },
+          readProvider: () => runtimeApi.getProviderDumpMetadata(),
+          readOutputSettings: () => config?.getEphemeralSettings() ?? {},
+          readRuntimeConfig: () => config,
+        }),
+      ),
+      restoreCommand: bindRestoreCommand(
+        config,
+        agent,
+        config?.getCheckpointingEnabled() === true
+          ? config.checkpoints
+          : undefined,
+      ),
+    }),
+    [agent, config, runtimeApi],
+  );
+}
+
 function useCommandState(
   selectModel: (model: string) => Promise<ModelChangeResult>,
   readToolFormat: () => Promise<ToolFormatState>,
-  writeToolFormat: (
-    format: ToolFormatOverrideLiteral | null,
-  ) => Promise<ToolFormatState>,
+  writeToolFormat: WriteToolFormat,
   settings: LoadedSettings,
   agent: Agent | null,
   refreshProviderAliases: () => Promise<void>,
@@ -128,31 +189,21 @@ function useCommandState(
   recordingOwner: 'agent' | 'raw' | undefined,
   recordingSwapCallbacks: RecordingSwapCallbacks | undefined,
   config: CliUiRuntime | null,
+  runtimeApi: ReturnType<typeof useRuntimeApi>,
 ): SlashCommandProcessorState {
-  const recordProviderSwitch = useProviderSwitchRecorder(
-    agent?.session ?? null,
-    rawRecording,
-    recordingOwner,
-  );
-  const modelCommand = useMemo(
-    () => createModelCommand(selectModel, recordProviderSwitch),
-    [selectModel, recordProviderSwitch],
-  );
-  const providerCommand = useRegisteredProviderCommand(
-    agent,
-    refreshProviderAliases,
-    recordProviderSwitch,
-  );
-  const toolFormatCommand = useMemo(
-    () => createToolFormatCommand(readToolFormat, writeToolFormat),
-    [readToolFormat, writeToolFormat],
+  const rec = useSwitch(agent?.session, rawRecording, recordingOwner);
+  const modelCommand = useModelCommand(selectModel, rec);
+  const provider = useProviderCommand(agent, refreshProviderAliases, rec);
+  const toolFormatCommand = useToolFormatCommand(
+    readToolFormat,
+    writeToolFormat,
   );
   const setCommand = useSetCommand(settings);
   const credentialCommands = useCredentialCommands(
     agent,
     settings,
     config,
-    recordProviderSwitch,
+    rec,
   );
   const chatCommand = useChatCommand(
     agent,
@@ -161,7 +212,47 @@ function useCommandState(
     rawRecording,
     recordingSwapCallbacks,
   );
-  const continueCommand = useMemo(
+  const continueCommand = useContinueCommandOwner(
+    agent,
+    config,
+    recordingOwner,
+  );
+  const historyCommandOwners = useHistoryCommandOwners(
+    agent,
+    config,
+    runtimeApi,
+  );
+  const builtins = useMemo<BuiltinCommandOwners>(
+    () => ({
+      chatCommand,
+      continueCommand,
+      ...historyCommandOwners,
+      modelCommand,
+      toolFormatCommand,
+      setCommand,
+      providerCommand: provider,
+      ...credentialCommands,
+    }),
+    [
+      chatCommand,
+      continueCommand,
+      modelCommand,
+      toolFormatCommand,
+      setCommand,
+      provider,
+      credentialCommands,
+      historyCommandOwners,
+    ],
+  );
+  return { builtins, ...useRegistryState(builtins, config) };
+}
+
+function useContinueCommandOwner(
+  agent: Agent | null,
+  config: CliUiRuntime | null,
+  recordingOwner: 'agent' | 'raw' | undefined,
+): SlashCommand {
+  return useMemo(
     () =>
       createContinueCommand(
         bindContinueCommandOperations(
@@ -172,27 +263,26 @@ function useCommandState(
       ),
     [agent, config, recordingOwner],
   );
-  const builtins = useMemo<BuiltinCommandOwners>(
-    () => ({
-      chatCommand,
-      continueCommand,
-      modelCommand,
-      toolFormatCommand,
-      setCommand,
-      providerCommand,
-      ...credentialCommands,
-    }),
-    [
-      chatCommand,
-      continueCommand,
-      modelCommand,
-      toolFormatCommand,
-      setCommand,
-      providerCommand,
-      credentialCommands,
-    ],
+}
+
+function useModelCommand(
+  selectModel: (model: string) => Promise<ModelChangeResult>,
+  recordProviderSwitch: ReturnType<typeof useSwitch>,
+): SlashCommand {
+  return useMemo(
+    () => createModelCommand(selectModel, recordProviderSwitch),
+    [selectModel, recordProviderSwitch],
   );
-  return { builtins, ...useRegistryState(builtins, config) };
+}
+
+function useToolFormatCommand(
+  readToolFormat: () => Promise<ToolFormatState>,
+  writeToolFormat: WriteToolFormat,
+): SlashCommand {
+  return useMemo(
+    () => createToolFormatCommand(readToolFormat, writeToolFormat),
+    [readToolFormat, writeToolFormat],
+  );
 }
 
 function useRegistryState(
@@ -256,15 +346,18 @@ function buildHandlerDeps(
   };
 }
 
-function useProviderSwitchRecorder(
-  ownedRecording: Pick<Agent['session'], 'recordRecordingEvent'> | null,
+function useSwitch(
+  ownedRecording:
+    | Pick<Agent['session'], 'recordRecordingEvent'>
+    | null
+    | undefined,
   rawRecording: Pick<RecordingIntegration, 'recordProviderSwitch'> | undefined,
   recordingOwner: 'agent' | 'raw' | undefined,
 ): (provider: string, model: string) => Promise<void> {
   return useCallback(
     async (provider, model) => {
       if (recordingOwner === 'agent') {
-        if (ownedRecording === null)
+        if (ownedRecording == null)
           throw new Error('Session agent is unavailable');
         await ownedRecording.recordRecordingEvent({
           type: 'provider_switch',
@@ -279,7 +372,7 @@ function useProviderSwitchRecorder(
   );
 }
 
-function useRegisteredProviderCommand(
+function useProviderCommand(
   agent: Agent | null,
   refreshProviderAliases: () => Promise<void>,
   recordProviderSwitch: (provider: string, model: string) => Promise<void>,
@@ -336,9 +429,9 @@ export function useSlashCommandProcessorCore(
     args.recordingOwner,
     args.recordingSwapCallbacks,
     args.config,
+    api,
   );
   const cancellation = useSlashCommandCancellation();
-  const managers = useManagers(args.config, args.agent ?? undefined);
   const pending = usePendingHistory(args.addItem);
   const commandContext = useCommandContext({
     runtimeApi: api,
@@ -347,7 +440,7 @@ export function useSlashCommandProcessorCore(
     config: args.config,
     agent: args.agent,
     settings: args.settings,
-    ...managers,
+    ...useManagers(args.config, args.agent ?? undefined),
     addItem: args.addItem,
     clearItems: args.clearItems,
     loadHistory: args.loadHistory,

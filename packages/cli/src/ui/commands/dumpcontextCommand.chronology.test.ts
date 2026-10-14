@@ -10,7 +10,8 @@
  */
 
 import { vi, describe, it, expect, type Mock } from 'bun:test';
-import { dumpcontextCommand } from './dumpcontextCommand.js';
+import { createDumpcontextCommand } from './dumpcontextCommand.js';
+import { bindDumpcontextCommand } from './dumpcontextCommandHost.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 
@@ -25,11 +26,6 @@ void vi.mock('@vybestack/llxprt-code-providers', () => ({
 }));
 
 import { dumpRequestContext } from '@vybestack/llxprt-code-providers';
-
-import { assertDefined } from '../../__tests__/assertions.js';
-
-const dumpcontextAction = dumpcontextCommand.action;
-assertDefined(dumpcontextAction);
 
 const TRACE = [
   {
@@ -70,16 +66,39 @@ function contextWithTrace(): CommandContext {
   Object.defineProperty(context, 'runtimeApi', {
     get: () => ({
       getProviderDumpMetadata: () => ({ providerName: 'anthropic' }),
+      getSessionSetting: () => 'off',
+      setSessionSetting: vi.fn(),
     }),
   });
   return context;
 }
 
-// Declared as a const arrow (not a hoisted function declaration) so the
-// assertDefined narrowing of dumpcontextAction above applies inside the body.
 const dumpAndCaptureCall = async (): Promise<unknown[]> => {
   (dumpRequestContext as Mock<typeof dumpRequestContext>).mockClear();
-  await dumpcontextAction(contextWithTrace(), 'now');
+  const context = contextWithTrace();
+  const command = createDumpcontextCommand(
+    bindDumpcontextCommand({
+      readMode: () => context.runtimeApi.getSessionSetting('dumpcontext'),
+      writeMode: (mode) =>
+        context.runtimeApi.setSessionSetting('dumpcontext', mode),
+      readHistory: () => {
+        const history = context.services.agent?.agentClient.getHistoryService();
+        return history == null
+          ? null
+          : {
+              messages: history.getAll(),
+              chronology: history.getChronologyTrace(),
+            };
+      },
+      readProvider: () => context.runtimeApi.getProviderDumpMetadata(),
+      readOutputSettings: () => ({}),
+      readRuntimeConfig: () => context.services.config,
+    }),
+  );
+  const action = command.action;
+  if (action === undefined)
+    throw new Error('Dumpcontext action is unavailable');
+  await action(context, 'now');
   return (dumpRequestContext as Mock<typeof dumpRequestContext>).mock.calls[0];
 };
 
