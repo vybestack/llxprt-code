@@ -78,13 +78,6 @@ void vi.mock('../ui/commands/privacyCommand.js', () => ({
   privacyCommand: {},
 }));
 void vi.mock('../ui/commands/quitCommand.js', () => ({ quitCommand: {} }));
-void vi.mock('../ui/commands/quotaCommand.js', () => ({
-  quotaCommand: {
-    name: 'quota',
-    description: 'Quota command',
-    kind: CommandKind.BUILT_IN,
-  },
-}));
 void vi.mock('../ui/commands/statsCommand.js', () => ({ statsCommand: {} }));
 void vi.mock('../ui/commands/themeCommand.js', () => ({ themeCommand: {} }));
 void vi.mock('../ui/commands/toolsCommand.js', () => ({ toolsCommand: {} }));

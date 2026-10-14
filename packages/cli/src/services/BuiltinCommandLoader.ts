@@ -39,7 +39,6 @@ import { loggingCommand } from '../ui/commands/loggingCommand.js';
 import { uiprofileCommand } from '../ui/commands/uiprofileCommand.js';
 import { mouseCommand } from '../ui/commands/mouseCommand.js';
 import { quitCommand } from '../ui/commands/quitCommand.js';
-import { quotaCommand } from '../ui/commands/quotaCommand.js';
 import { restoreCommand } from '../ui/commands/restoreCommand.js';
 import { statsCommand } from '../ui/commands/statsCommand.js';
 import { themeCommand } from '../ui/commands/themeCommand.js';
@@ -80,6 +79,7 @@ export interface BuiltinCommandOwners {
   readonly baseurlCommand: SlashCommand;
   readonly logoutCommand: SlashCommand;
   readonly authCommand: SlashCommand;
+  readonly quotaCommand: SlashCommand;
   readonly toolkeyCommand: SlashCommand;
   readonly toolkeyfileCommand: SlashCommand;
 }
@@ -167,7 +167,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       ...(isDevelopment ? [uiprofileCommand] : []),
       quitCommand,
       restoreCommand(this.config),
-      quotaCommand,
+      this.owners.quotaCommand,
       statsCommand,
       themeCommand,
       toolsCommand,

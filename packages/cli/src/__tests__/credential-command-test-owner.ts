@@ -8,6 +8,7 @@ import {
   bindKeyCommandOperations,
   bindKeyfileCommandOperations,
   bindLogoutCommandOperations,
+  bindQuotaCommandOperations,
 } from '../ui/commands/credentialCommandHost.js';
 import { createAuthCommand } from '../ui/commands/authCommand.js';
 import { createBaseurlCommand } from '../ui/commands/baseurlCommand.js';
@@ -17,6 +18,7 @@ import {
 } from '../ui/commands/keyCommand.js';
 import { createKeyfileCommand } from '../ui/commands/keyfileCommand.js';
 import { createLogoutCommand } from '../ui/commands/logoutCommand.js';
+import { createQuotaCommand } from '../ui/commands/quotaCommand.js';
 import type { CommandContext, SlashCommand } from '../ui/commands/types.js';
 
 /**
@@ -69,4 +71,12 @@ export function registerAuthCommand(
   owners: Pick<CommandContext, 'oauthControl'>,
 ): SlashCommand {
   return createAuthCommand(owners.oauthControl);
+}
+
+export function registerQuotaCommand(
+  owners: Pick<CommandContext, 'oauthControl' | 'runtimeApi'>,
+): SlashCommand {
+  return createQuotaCommand(
+    bindQuotaCommandOperations(owners.runtimeApi, owners.oauthControl),
+  );
 }

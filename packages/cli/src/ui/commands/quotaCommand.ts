@@ -13,7 +13,6 @@ import {
   type ConfirmActionReturn,
 } from './types.js';
 import { MessageType } from '../types.js';
-import { fetchAllQuotaInfo } from './statsQuota.js';
 import {
   CodexRateLimitResetCreditsResponseSchema,
   consumeCodexRateLimitResetCredit,
@@ -23,11 +22,58 @@ import type { CodexRateLimitResetCreditsResponse } from '@vybestack/llxprt-code-
 import type { OAuthControl } from '../contexts/OAuthControlContext.js';
 type QuotaOAuthControl = Pick<
   OAuthControl,
+  | 'isAvailable'
   | 'getAllCodexRateLimitResetCredits'
   | 'hasCodexToken'
   | 'listBuckets'
   | 'readCodexBucketToken'
 >;
+
+/**
+ * The operations /quota needs from its owning session. The host binds them
+ * once at registration; the command never reads them from an invocation.
+ */
+export interface QuotaCommandOperations {
+  /** The session's OAuth control; absent infrastructure reports unavailable. */
+  readonly oauthControl: QuotaOAuthControl;
+  /** The session's network fetch, used for credit listing and redemption. */
+  readonly fetch: NetworkFetch;
+  /** The raw `base-url` ephemeral setting of the active session. */
+  readonly baseUrlSetting: () => unknown;
+  /** Formatted quota lines for every provider the session can query. */
+  readonly fetchQuotaLines: () => Promise<string[]>;
+}
+
+/**
+ * What one invocation contributes: where to report and what the user typed.
+ * Everything else comes from the registered operations.
+ */
+interface QuotaRun {
+  readonly operations: QuotaCommandOperations;
+  readonly report: {
+    readonly info: (text: string) => void;
+    readonly error: (text: string) => void;
+  };
+  readonly confirmed: boolean;
+  readonly rawInvocation: string | undefined;
+}
+
+function startRun(
+  operations: QuotaCommandOperations,
+  context: CommandContext,
+): QuotaRun {
+  return {
+    operations,
+    report: {
+      info: (text) =>
+        context.ui.addItem({ type: MessageType.INFO, text }, Date.now()),
+      error: (text) =>
+        context.ui.addItem({ type: MessageType.ERROR, text }, Date.now()),
+    },
+    confirmed: context.overwriteConfirmed === true,
+    rawInvocation: context.invocation?.raw,
+  };
+}
 import { CodexOAuthTokenSchema } from '@vybestack/llxprt-code-auth';
 import type { CommandArgumentSchema } from './schema/types.js';
 import { randomUUID } from 'node:crypto';
@@ -85,11 +131,10 @@ function safeParseResetCredits(
 /**
  * Quota is optional when the owning runtime has no OAuth infrastructure.
  */
-function resolveOAuthManager(
-  context: CommandContext,
-): QuotaOAuthControl | null {
+function resolveOAuthManager(run: QuotaRun): QuotaOAuthControl | null {
+  const { oauthControl } = run.operations;
   try {
-    return context.oauthControl.isAvailable() ? context.oauthControl : null;
+    return oauthControl.isAvailable() ? oauthControl : null;
   } catch {
     return null;
   }
@@ -98,8 +143,8 @@ function resolveOAuthManager(
 /**
  * Resolve the trimmed base-url ephemeral setting, or undefined when blank.
  */
-function resolveBaseUrl(context: CommandContext): string | undefined {
-  const value = context.runtimeApi.getEphemeralSetting('base-url');
+function resolveBaseUrl(run: QuotaRun): string | undefined {
+  const value = run.operations.baseUrlSetting();
   if (typeof value !== 'string') {
     return undefined;
   }
@@ -107,37 +152,24 @@ function resolveBaseUrl(context: CommandContext): string | undefined {
   return trimmed === '' ? undefined : trimmed;
 }
 
-function addInfo(context: CommandContext, text: string): void {
-  context.ui.addItem({ type: MessageType.INFO, text }, Date.now());
-}
-
-function addError(context: CommandContext, text: string): void {
-  context.ui.addItem({ type: MessageType.ERROR, text }, Date.now());
-}
-
 /**
  * Status (and default) action: show quota/rate-limit info for all providers.
  */
-async function statusAction(context: CommandContext): Promise<void> {
+async function statusAction(run: QuotaRun): Promise<void> {
   try {
-    const runtimeApi = context.runtimeApi;
-    const quotaLines = await fetchAllQuotaInfo(
-      runtimeApi,
-      context.oauthControl,
-    );
+    const quotaLines = await run.operations.fetchQuotaLines();
 
     if (quotaLines.length === 0) {
-      addInfo(
-        context,
+      run.report.info(
         'No quota information available. Supported providers: Claude Code (OAuth), Codex (OAuth), Z.ai, Synthetic, Chutes, Kimi.',
       );
       return;
     }
 
-    addInfo(context, quotaLines.join('\n'));
+    run.report.info(quotaLines.join('\n'));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    addError(context, `Failed to retrieve quota information: ${msg}`);
+    run.report.error(`Failed to retrieve quota information: ${msg}`);
   }
 }
 
@@ -214,33 +246,33 @@ function formatAllResetCreditsLines(
 /**
  * Credits subcommand action: show available Codex reset credits.
  */
-async function creditsAction(context: CommandContext): Promise<void> {
-  const oauthManager = resolveOAuthManager(context);
+async function creditsAction(run: QuotaRun): Promise<void> {
+  const oauthManager = resolveOAuthManager(run);
   if (!oauthManager) {
-    addInfo(context, NO_RESET_CREDITS_MSG);
+    run.report.info(NO_RESET_CREDITS_MSG);
     return;
   }
 
   try {
     const creditsMap = await oauthManager.getAllCodexRateLimitResetCredits(
-      context.runtimeApi.fetch,
+      run.operations.fetch,
     );
 
     if (creditsMap.size === 0) {
-      addInfo(context, NO_RESET_CREDITS_MSG);
+      run.report.info(NO_RESET_CREDITS_MSG);
       return;
     }
 
     const lines = formatAllResetCreditsLines(creditsMap);
     if (lines.length === 0) {
-      addInfo(context, NO_RESET_CREDITS_MSG);
+      run.report.info(NO_RESET_CREDITS_MSG);
       return;
     }
 
-    addInfo(context, lines.join('\n'));
+    run.report.info(lines.join('\n'));
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    addError(context, `Failed to retrieve reset credits: ${msg}`);
+    run.report.error(`Failed to retrieve reset credits: ${msg}`);
   }
 }
 
@@ -336,10 +368,10 @@ const RESET_CONFIRMATION_PROMPT =
  * original raw invocation (falling back to a canonical form when the
  * invocation context is absent or blank).
  */
-function buildResetConfirmation(context: CommandContext): ConfirmActionReturn {
+function buildResetConfirmation(run: QuotaRun): ConfirmActionReturn {
   const rawInvocation =
-    context.invocation?.raw && context.invocation.raw.trim() !== ''
-      ? context.invocation.raw
+    run.rawInvocation && run.rawInvocation.trim() !== ''
+      ? run.rawInvocation
       : '/quota reset codex';
   return {
     type: 'confirm_action',
@@ -351,10 +383,10 @@ function buildResetConfirmation(context: CommandContext): ConfirmActionReturn {
 /**
  * Consume the redeemable credit and render the result (success / already
  * redeemed / failure) plus a refreshed quota snapshot. Returns void — all
- * user feedback flows through addInfo/addError.
+ * user feedback flows through the run reporter.
  */
 async function redeemResetCredit(
-  context: CommandContext,
+  run: QuotaRun,
   accessToken: string,
   accountId: string,
   creditId: string,
@@ -362,10 +394,10 @@ async function redeemResetCredit(
   // Both the credit listing (getAllCodexRateLimitResetCredits) and this
   // consume call resolve base-url from the same runtime settings source, so
   // list and consume always target the same backend host.
-  const baseUrl = resolveBaseUrl(context);
+  const baseUrl = resolveBaseUrl(run);
   const redeemRequestId = randomUUID();
   const consumeResult = await consumeCodexRateLimitResetCredit(
-    context.runtimeApi.fetch,
+    run.operations.fetch,
     accessToken,
     accountId,
     creditId,
@@ -374,25 +406,23 @@ async function redeemResetCredit(
   );
 
   if (consumeResult === null) {
-    addError(
-      context,
+    run.report.error(
       'Failed to reset rate-limit window. Please try again later.',
     );
     return;
   }
 
   if (consumeResult.code === 'reset') {
-    addInfo(context, 'Rate-limit window reset successfully.');
+    run.report.info('Rate-limit window reset successfully.');
   } else {
-    addInfo(context, 'Credit already redeemed.');
+    run.report.info('Credit already redeemed.');
   }
 
   // fetchAllQuotaInfo has its own internal error handling and returns [] on
   // failure, so it never throws — no extra guard is needed here.
-  const runtimeApi = context.runtimeApi;
-  const quotaLines = await fetchAllQuotaInfo(runtimeApi, context.oauthControl);
+  const quotaLines = await run.operations.fetchQuotaLines();
   if (quotaLines.length > 0) {
-    addInfo(context, quotaLines.join('\n'));
+    run.report.info(quotaLines.join('\n'));
   }
 }
 
@@ -400,7 +430,7 @@ async function redeemResetCredit(
  * Reset subcommand action: redeem a Codex rate-limit-reset credit.
  */
 async function resetAction(
-  context: CommandContext,
+  run: QuotaRun,
   args: string,
 ): Promise<SlashCommandActionReturn | void> {
   const tokens = args
@@ -410,33 +440,33 @@ async function resetAction(
   const provider = tokens[0] ?? '';
 
   if (provider !== '' && provider !== 'codex') {
-    addError(context, "Only 'codex' supports reset.");
+    run.report.error("Only 'codex' supports reset.");
     return undefined;
   }
   if (tokens.length > 1) {
-    addError(context, 'Too many arguments. Usage: /quota reset [codex]');
+    run.report.error('Too many arguments. Usage: /quota reset [codex]');
     return undefined;
   }
 
-  const oauthManager = resolveOAuthManager(context);
+  const oauthManager = resolveOAuthManager(run);
   if (!oauthManager) {
-    addInfo(context, NOT_AUTHED_CODEX_MSG);
+    run.report.info(NOT_AUTHED_CODEX_MSG);
     return undefined;
   }
 
   try {
     const authed = await isCodexAuthed(oauthManager);
     if (!authed) {
-      addInfo(context, NOT_AUTHED_CODEX_MSG);
+      run.report.info(NOT_AUTHED_CODEX_MSG);
       return undefined;
     }
 
     const redeemableCredits = await findRedeemableCredits(
-      context.runtimeApi.fetch,
+      run.operations.fetch,
       oauthManager,
     );
     if (redeemableCredits.length === 0) {
-      addInfo(context, NO_REDEEMABLE_CREDITS_MSG);
+      run.report.info(NO_REDEEMABLE_CREDITS_MSG);
       return undefined;
     }
 
@@ -445,8 +475,7 @@ async function resetAction(
       redeemableCredits,
     );
     if (redeemable === null) {
-      addError(
-        context,
+      run.report.error(
         'Codex credentials for all credit-bearing buckets are unavailable or expired. Run /auth codex to re-authenticate.',
       );
       return undefined;
@@ -456,12 +485,12 @@ async function resetAction(
     // so — like other mutating commands — prompt before performing the
     // mutation. The confirmed re-invocation arrives with
     // overwriteConfirmed === true and skips this gate to actually consume.
-    if (context.overwriteConfirmed !== true) {
-      return buildResetConfirmation(context);
+    if (!run.confirmed) {
+      return buildResetConfirmation(run);
     }
 
     await redeemResetCredit(
-      context,
+      run,
       redeemable.accessToken,
       redeemable.accountId,
       redeemable.firstCreditId,
@@ -469,7 +498,7 @@ async function resetAction(
     return undefined;
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    addError(context, `Failed to reset rate-limit window: ${msg}`);
+    run.report.error(`Failed to reset rate-limit window: ${msg}`);
     return undefined;
   }
 }
@@ -486,34 +515,41 @@ const resetSchema: CommandArgumentSchema = [
   },
 ];
 
-export const quotaCommand: SlashCommand = {
-  name: 'quota',
-  description:
-    'Manage quota and rate-limit reset. Usage: /quota [status|credits|reset]',
-  kind: CommandKind.BUILT_IN,
-  action: statusAction,
-  subCommands: [
-    {
-      name: 'status',
-      description: 'Show quota/rate-limit status for all providers.',
-      kind: CommandKind.BUILT_IN,
-      autoExecute: true,
-      action: statusAction,
-    },
-    {
-      name: 'credits',
-      description: 'Show available Codex rate-limit-reset credits.',
-      kind: CommandKind.BUILT_IN,
-      autoExecute: true,
-      action: creditsAction,
-    },
-    {
-      name: 'reset',
-      description:
-        'Redeem a Codex rate-limit-reset credit to reset the rate-limit window.',
-      kind: CommandKind.BUILT_IN,
-      schema: resetSchema,
-      action: resetAction,
-    },
-  ],
-};
+export function createQuotaCommand(
+  operations: QuotaCommandOperations,
+): SlashCommand {
+  const status = (context: CommandContext): Promise<void> =>
+    statusAction(startRun(operations, context));
+  return {
+    name: 'quota',
+    description:
+      'Manage quota and rate-limit reset. Usage: /quota [status|credits|reset]',
+    kind: CommandKind.BUILT_IN,
+    action: status,
+    subCommands: [
+      {
+        name: 'status',
+        description: 'Show quota/rate-limit status for all providers.',
+        kind: CommandKind.BUILT_IN,
+        autoExecute: true,
+        action: status,
+      },
+      {
+        name: 'credits',
+        description: 'Show available Codex rate-limit-reset credits.',
+        kind: CommandKind.BUILT_IN,
+        autoExecute: true,
+        action: (context) => creditsAction(startRun(operations, context)),
+      },
+      {
+        name: 'reset',
+        description:
+          'Redeem a Codex rate-limit-reset credit to reset the rate-limit window.',
+        kind: CommandKind.BUILT_IN,
+        schema: resetSchema,
+        action: (context, args) =>
+          resetAction(startRun(operations, context), args),
+      },
+    ],
+  };
+}
