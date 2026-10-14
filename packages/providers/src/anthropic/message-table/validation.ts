@@ -2,6 +2,7 @@
 import { DumpScratch } from '../../utils/dumpScratch.js';
 import type { AnthropicMessageBlock } from '../AnthropicMessageNormalizer.js';
 import {
+  flagsOf,
   newMessage,
   type MessageTable,
   type TableMessage,
@@ -129,7 +130,8 @@ function collectResult(
     block: found.block,
     toolUseId: wanted,
   });
-  table.addBlock(into.collected, table.blocks.read(found.block).block);
+  const stored = table.blocks.read(found.block);
+  table.addBlock(into.collected, stored.block, flagsOf(stored));
 }
 
 /**

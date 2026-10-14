@@ -10,6 +10,8 @@ import {
   countStorageOperations,
   type StorageCounts,
 } from './__tests__/support/storageCounter.js';
+import { FINISH_SCENARIOS } from './__tests__/support/finishHistories.js';
+import { cachedCandidate } from './__tests__/support/wireBuilderHarness.js';
 
 const SMALL = 60;
 const LARGE = SMALL * 4;
@@ -34,6 +36,38 @@ describe('message table storage operations grow linearly with rows', () => {
       const large = await operationsAt(scenario, LARGE);
       const growth = ratio(large, small);
       // Linear is 4; a table that scans per message would be near 16.
+      expect({
+        scenario: scenario.name,
+        small: small.total,
+        large: large.total,
+        growth: Math.round(growth * 100) / 100,
+        ok: growth > 3 && growth < 5,
+      }).toMatchObject({ ok: true });
+    }, 180_000);
+  }
+});
+
+/** Storage operations of the wire build, the table passes and the cache controls. */
+async function wireOperationsAt(
+  scenario: ScaleScenario,
+  units: number,
+): Promise<StorageCounts> {
+  const history = scenario.build(units);
+  return countStorageOperations(() =>
+    cachedCandidate(
+      history,
+      { reasoningEnabled: true, currentModel: 'claude-sonnet-4' },
+      { ttl: '5m', mediaPurge: true, contextPrefix: 'rules' },
+    ),
+  );
+}
+
+describe('the passes after the table passes grow linearly with rows', () => {
+  for (const scenario of FINISH_SCENARIOS) {
+    it(`${scenario.name}: 4x the rows costs about 4x the operations (${scenario.stressed})`, async () => {
+      const small = await wireOperationsAt(scenario, SMALL);
+      const large = await wireOperationsAt(scenario, LARGE);
+      const growth = ratio(large, small);
       expect({
         scenario: scenario.name,
         small: small.total,

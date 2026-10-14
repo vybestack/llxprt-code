@@ -1,5 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import type {
+  IContent,
+  SemanticMediaPurgeCacheWriteEvidence,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { ImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
 import {
@@ -10,9 +13,11 @@ import {
 } from '../../../AnthropicMessageNormalizer.js';
 import { sanitizeAnthropicContentImages } from '../../../AnthropicImageSanitizer.js';
 import {
-  ensureValidMessageSequence,
-  stripEmptyTextBlocks,
-} from '../../../AnthropicMessageValidator.js';
+  applyRequestCacheControls,
+  placeSystemInstruction,
+} from '../../../AnthropicRequestPreparation.js';
+import { formatContextPrefix } from '../../../../utils/systemPromptPlacement.js';
+import { finishWireRequest, leadsMergedMessage } from '../../finish.js';
 import { MessageTable } from '../../message-table.js';
 import {
   buildValidatedWireTable,
@@ -70,15 +75,14 @@ export function oracleJson(
   );
 }
 
-const THINKING = new Set(['thinking', 'redacted_thinking']);
-
 function orderedBlocks(
   role: 'user' | 'assistant',
   blocks: AnthropicMessageBlock[],
 ): AnthropicMessageBlock[] {
-  const first = (block: AnthropicMessageBlock): boolean =>
-    role === 'user' ? block.type === 'tool_result' : THINKING.has(block.type);
-  return [...blocks.filter(first), ...blocks.filter((block) => !first(block))];
+  return [
+    ...blocks.filter((block) => leadsMergedMessage(block, role)),
+    ...blocks.filter((block) => !leadsMergedMessage(block, role)),
+  ];
 }
 
 /** The table as messages: what the emit walk will write, before the E3 passes. */
@@ -100,36 +104,78 @@ export function tableMessages(table: MessageTable): AnthropicMessage[] {
   return messages;
 }
 
-/**
- * The array stages that follow the table passes in `convertToAnthropicMessages`
- * (start with user, placeholders, trailing assistant, empty text blocks). They
- * move to the table in E3; until then the table's messages go through them.
- */
-export function finishMessages(
-  messages: AnthropicMessage[],
-  settings: WireSettings,
-): AnthropicMessage[] {
-  return stripEmptyTextBlocks(
-    ensureValidMessageSequence(
-      messages,
-      settings.reasoningEnabled,
-      settings.currentModel,
-      logger,
-    ),
-    logger,
-  );
-}
-
 export type WireExtras = Partial<
   Pick<WireBuildOptions, 'mediaStage' | 'signal'>
 >;
 
-/** The same messages from the table builder and the E1 passes. */
-export async function candidateJson(
+/** Prompt caching and system placement, as the request preparation resolves them. */
+export interface CacheSettings {
+  /** Prompt caching is on when this is set. */
+  readonly ttl?: '5m' | '1h';
+  /** The semantic media purge mode asks for a boundary breakpoint. */
+  readonly mediaPurge?: boolean;
+  /** The system instruction, placed at the top of the context when set. */
+  readonly contextPrefix?: string;
+}
+
+export interface CachedWire {
+  readonly json: string;
+  readonly evidence: SemanticMediaPurgeCacheWriteEvidence | undefined;
+}
+
+/**
+ * Today's route end to end: the proactive image sanitizer, then
+ * `convertToAnthropicMessages`, then the request preparation's own system
+ * placement and cache controls on the message array.
+ */
+export function cachedOracle(
   rows: readonly IContent[],
   settings: WireSettings,
+  cache: CacheSettings,
+): CachedWire {
+  const sanitized = sanitizeAnthropicContentImages(
+    structuredClone([...rows]),
+    settings.imageBudget,
+  ).contents;
+  const converted = convertToAnthropicMessages(
+    sanitized,
+    conversionOptions(settings),
+  );
+  const wantCaching = cache.ttl !== undefined;
+  const ttl = cache.ttl ?? '5m';
+  const messages = placeSystemInstruction({
+    placement:
+      cache.contextPrefix === undefined ? 'system-field' : 'context-prefix',
+    anthropicMessages: converted,
+    wantCaching,
+    ttl,
+    cacheLogger: logger,
+    systemInstruction: cache.contextPrefix,
+  });
+  const evidence = applyRequestCacheControls({
+    systemContext: { systemField: undefined, messages },
+    requestSettings: {
+      streamingEnabled: true,
+      currentModel: settings.currentModel ?? '',
+      requestOverrides: {},
+      configEphemerals: {},
+      wantCaching,
+      ttl,
+    },
+    cacheLogger: logger,
+    wantCaching,
+    wantMediaPurgeCacheAnchor: cache.mediaPurge === true,
+  });
+  return { json: JSON.stringify(messages), evidence };
+}
+
+/** The same messages from the table builder, the table passes and the table cache controls. */
+export async function cachedCandidate(
+  rows: readonly IContent[],
+  settings: WireSettings,
+  cache: CacheSettings,
   extra: WireExtras = {},
-): Promise<string> {
+): Promise<CachedWire> {
   const table = new MessageTable();
   try {
     await buildValidatedWireTable(
@@ -141,10 +187,32 @@ export async function candidateJson(
         ...extra,
       },
     );
-    return JSON.stringify(finishMessages(tableMessages(table), settings));
+    const evidence = finishWireRequest(table, {
+      reasoningEnabled: settings.reasoningEnabled,
+      currentModel: settings.currentModel,
+      logger,
+      contextPrefix:
+        cache.contextPrefix === undefined || cache.contextPrefix === ''
+          ? undefined
+          : formatContextPrefix(cache.contextPrefix),
+      caching:
+        cache.ttl === undefined
+          ? undefined
+          : { ttl: cache.ttl, mediaPurgeBoundary: cache.mediaPurge === true },
+    });
+    return { json: JSON.stringify(tableMessages(table)), evidence };
   } finally {
     table.close();
   }
+}
+
+/** With prompt caching off and no system placement. */
+export async function candidateJson(
+  rows: readonly IContent[],
+  settings: WireSettings,
+  extra: WireExtras = {},
+): Promise<string> {
+  return (await cachedCandidate(rows, settings, {}, extra)).json;
 }
 
 /** Where two JSON strings first differ, or undefined when they are equal. */

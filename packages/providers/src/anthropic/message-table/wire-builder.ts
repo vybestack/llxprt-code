@@ -11,7 +11,12 @@ import {
   type AnthropicConversationConversionOptions,
   type AnthropicMessage,
 } from '../AnthropicMessageNormalizer.js';
-import type { MessageTable, TableMessage } from './message-table.js';
+import { markAnchor } from './cache-controls.js';
+import type {
+  BlockFlags,
+  MessageTable,
+  TableMessage,
+} from './message-table.js';
 import { projectRow, type RowProjection } from './project-row.js';
 import { filterOrphans, mergeRoles, repairAdjacency } from './validation.js';
 
@@ -71,9 +76,16 @@ interface BuildContext {
 }
 
 interface ConversionState {
+  /** The open user message of tool results, which is the table's last message, or -1. */
   pending: number;
   leading: boolean;
   skipThrough: number;
+  /**
+   * An anchored tool row marked the message its results flush into. The
+   * converter keeps this across rows: the mark lands on the message flushed
+   * next, on its last block that can hold a breakpoint.
+   */
+  anchorPending: boolean;
 }
 
 function isModelBoundThinking(block: ContentBlock): boolean {
@@ -223,45 +235,94 @@ function redactsGroup(
   );
 }
 
+/**
+ * The cache tags of a tool result. Its anchor is decided when the run of tool
+ * rows it belongs to is flushed (see `flushAnchor`), not by the converter's
+ * view of this one row.
+ */
+function resultFlags(table: MessageTable, block: object): BlockFlags {
+  const flags = table.readBlockTags(block);
+  delete flags.anchored;
+  return flags;
+}
+
 function appendResult(
   table: MessageTable,
   message: AnthropicMessage,
   pending: number,
 ): number {
-  if (pending === -1) return table.append(message);
-  const record = table.messages.read(pending);
   if (typeof message.content === 'string')
     throw new Error('Tool-result message must have blocks');
-  for (const block of message.content) table.addBlock(record, block);
-  table.messages.replace(pending, record);
-  return pending;
+  const id =
+    pending === -1
+      ? table.append({ role: message.role, content: [] })
+      : pending;
+  const record = table.messages.read(id);
+  for (const block of message.content)
+    table.addBlock(record, block, resultFlags(table, block));
+  table.messages.replace(id, record);
+  return id;
+}
+
+/**
+ * The tool results the converter holds back flush as one message when the next
+ * human or AI row arrives (or the rows end). If an anchored tool row asked for
+ * it, that message gets the anchor. `flushed` says whether there was a message.
+ */
+function flushAnchor(
+  table: MessageTable,
+  state: ConversionState,
+  flushed: boolean,
+): void {
+  if (state.anchorPending && flushed) markAnchor(table, table.tail);
+  state.anchorPending = false;
+}
+
+/** A human row whose only payload is tool responses has no message of its own. */
+function onlyToolResponses(row: IContent): boolean {
+  return (
+    row.blocks.some((block) => block.type === 'tool_response') &&
+    row.blocks.every(
+      (block) =>
+        block.type === 'tool_response' ||
+        block.type === 'text' ||
+        block.type === 'code',
+    )
+  );
 }
 
 /**
  * Converts one row with the array route's own conversion and appends what it
  * makes. Tool results join the open message of the run of tool rows, which
- * the next human or AI row closes. Returns the open message, or -1.
+ * the next human or AI row closes.
  */
 function appendRow(
   table: MessageTable,
   row: IContent,
   redact: boolean,
   options: AnthropicConversationConversionOptions,
-  pending: number,
-): number {
+  state: ConversionState,
+): void {
   const messages = convertContentToMessages(
     [row],
     new Set(redact ? [0] : []),
     options,
   );
   const hasResults = row.blocks.some((block) => block.type === 'tool_response');
-  let open = pending;
-  for (let index = 0; index < messages.length; index++) {
-    if (index === 0 && hasResults)
-      open = appendResult(table, messages[index], open);
-    else table.append(messages[index]);
+  const anchored = row.metadata?.cacheAnchor === true;
+  let open = state.pending;
+  if (hasResults) open = appendResult(table, messages[0], open);
+  if (row.speaker === 'tool') {
+    state.pending = open;
+    if (anchored) state.anchorPending = true;
+    return;
   }
-  return row.speaker === 'tool' ? open : -1;
+  flushAnchor(table, state, open !== -1);
+  for (const message of messages.slice(hasResults ? 1 : 0))
+    table.append(message);
+  if (row.speaker === 'human' && anchored && onlyToolResponses(row))
+    state.anchorPending = true;
+  state.pending = -1;
 }
 
 function chainHasResponses(request: ChainResultsRequest): boolean {
@@ -350,6 +411,9 @@ async function appendChain(
   range: ChainRange,
   redact: boolean,
 ): Promise<void> {
+  // The merged row keeps the metadata of the last row of the run.
+  const anchored =
+    projectedAt(context, range.end)?.metadata?.cacheAnchor === true;
   const { table } = context;
   const id = table.append({ role: 'assistant', content: [] });
   const record = table.messages.read(id);
@@ -369,6 +433,7 @@ async function appendChain(
   }
   if (record.head === -1) record.text = '';
   table.messages.replace(id, record);
+  if (anchored) markAnchor(table, id);
 }
 
 async function appendGroup(
@@ -381,17 +446,12 @@ async function appendGroup(
   const redact = redactsGroup(context.options, index, lastThinking);
   const end = chainEnd(context, index, row);
   if (end === index) {
-    state.pending = appendRow(
-      context.table,
-      row,
-      redact,
-      context.options,
-      state.pending,
-    );
+    appendRow(context.table, row, redact, context.options, state);
     return;
   }
   const range = { start: index, end };
   const appendResults = context.options.chainResults ?? appendWireChainResults;
+  const lastBefore = context.table.tail;
   await appendResults({
     table: context.table,
     range,
@@ -400,6 +460,11 @@ async function appendGroup(
     resolvedAt: (position) => resolvedAt(context, position),
     options: context.options,
   });
+  flushAnchor(
+    context.table,
+    state,
+    state.pending !== -1 || context.table.tail !== lastBefore,
+  );
   await appendChain(context, range, redact);
   state.pending = -1;
   state.skipThrough = end;
@@ -429,6 +494,7 @@ export async function buildWireTable(
     pending: -1,
     leading: true,
     skipThrough: -1,
+    anchorPending: false,
   };
   const reader = rows.openReader(options.signal);
   const stream = options.mediaStage?.(reader) ?? reader;
@@ -444,6 +510,7 @@ export async function buildWireTable(
   }
   if (index + 1 !== rows.count)
     throw new Error('The media stage changed the number of rows');
+  flushAnchor(table, state, state.pending !== -1);
 }
 
 /**

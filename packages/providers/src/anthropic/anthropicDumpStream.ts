@@ -5,18 +5,11 @@ import type { AnthropicMessageBlock } from './AnthropicMessageNormalizer.js';
 import { AnthropicDumpTable } from './anthropicDumpTable.js';
 import type { TableMessage } from './message-table/message-table.js';
 import { buildAnthropicRawTable } from './anthropicDumpRaw.js';
+import { leadsMergedMessage } from './message-table/finish.js';
 import { validateWireTable } from './message-table/wire-builder.js';
 import { modelSupportsPrefill } from './AnthropicModelData.js';
 import { dumpBlockValue } from './anthropicDumpBlockValue.js';
 
-function important(
-  block: AnthropicMessageBlock,
-  role: TableMessage['role'],
-): boolean {
-  return role === 'user'
-    ? block.type === 'tool_result'
-    : block.type === 'thinking' || block.type === 'redacted_thinking';
-}
 function nonempty(block: AnthropicMessageBlock): boolean {
   return block.type !== 'text' || block.text.trim() !== '';
 }
@@ -33,7 +26,7 @@ async function* contentBlocks(
     for (const entry of table.entries(message)) {
       if (
         nonempty(entry.block) &&
-        important(entry.block, message.role) === first
+        leadsMergedMessage(entry.block, message.role) === first
       )
         yield dumpBlockValue(table, entry.block);
     }

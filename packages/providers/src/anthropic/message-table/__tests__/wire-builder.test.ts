@@ -1,7 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { SeededRandom } from '../../../openai/__tests__/support/chatBodyCorpus.js';
+import type {
+  ContentBlock,
+  IContent,
+} from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import {
   createCorpus,
   type Corpus,
@@ -26,51 +28,15 @@ import {
   wireHistory,
 } from './support/wireBuilderCorpus.js';
 import {
+  everyReasoningSetting,
+  settingsFor,
+} from './support/wireBuilderSettings.js';
+import {
   candidateJson,
   describeDifference,
   oracleJson,
-  type StripPolicy,
   type WireSettings,
 } from './support/wireBuilderHarness.js';
-
-const STRIPS: ReadonlyArray<StripPolicy | undefined> = [
-  undefined,
-  'none',
-  'all',
-  'allButLast',
-];
-
-/** Every setting the conversion reads, drawn reproducibly from the seed. */
-function settingsFor(seed: number): WireSettings {
-  const random = new SeededRandom(seed * 7919 + 13);
-  return {
-    reasoningEnabled: random.chance(0.6),
-    strip: random.pick(STRIPS),
-    includeInContext: random.pick([undefined, true, false]),
-    currentModel: random.pick([undefined, CURRENT_MODEL]),
-    currentBaseURL: random.pick([undefined, CURRENT_BASE_URL]),
-    supportsUrlImages: random.pick([undefined, true, false]),
-    isOAuth: random.chance(0.3),
-    imageBudget: random.chance(0.4) ? { maxDimension: 2000 } : undefined,
-  };
-}
-
-function everyReasoningSetting(
-  base: Partial<WireSettings> = {},
-): WireSettings[] {
-  return [true, false].flatMap((reasoningEnabled) =>
-    (['none', 'all', 'allButLast'] as const).flatMap((strip) =>
-      [true, false].map((includeInContext) => ({
-        currentModel: CURRENT_MODEL,
-        currentBaseURL: CURRENT_BASE_URL,
-        ...base,
-        reasoningEnabled,
-        strip,
-        includeInContext,
-      })),
-    ),
-  );
-}
 
 async function differences(
   label: string,
@@ -433,8 +399,11 @@ describe('wire builder over targeted histories', () => {
       for await (const row of input)
         yield {
           ...row,
-          blocks: row.blocks.map((block) =>
-            block.type === 'media' ? { ...block, data: big } : block,
+          blocks: row.blocks.map(
+            (block): ContentBlock =>
+              block.type === 'media' && block.encoding === 'base64'
+                ? { ...block, data: big }
+                : block,
           ),
         };
     };

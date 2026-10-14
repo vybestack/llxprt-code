@@ -4,6 +4,15 @@ import type {
   AnthropicMessage,
   AnthropicMessageBlock,
 } from '../AnthropicMessageNormalizer.js';
+import {
+  readAnchorBlockTag,
+  readAnchorStringTag,
+} from '../AnthropicAnchorCache.js';
+import {
+  readPurgeBlockTag,
+  readPurgeStringTag,
+} from '../AnthropicMediaPurgeCache.js';
+import { selectLastCacheableBlockIndex } from '../AnthropicRequestBuilder.js';
 import { ToolIdIndex } from './tool-id-index.js';
 
 /**
@@ -18,6 +27,28 @@ export interface TableMessage {
   next: number;
   prev: number;
   ordered?: boolean;
+  /** String content that the converter marked as the cache anchor. */
+  anchorText?: true;
+  /** String content that the converter marked as the media purge boundary. */
+  purgeText?: true;
+}
+
+/**
+ * The cache decisions the converter attaches to a block as symbol tags, which
+ * JSON does not carry. They are kept on the block's record, outside `block`,
+ * so they never reach the wire.
+ */
+export interface BlockFlags {
+  anchored?: true;
+  purge?: true;
+}
+
+/** The flags of a record, for a block that moves to another list. */
+export function flagsOf(entry: BlockFlags): BlockFlags {
+  const flags: BlockFlags = {};
+  if (entry.anchored === true) flags.anchored = true;
+  if (entry.purge === true) flags.purge = true;
+  return flags;
 }
 
 /**
@@ -30,7 +61,7 @@ export type StoredMessageBlock = AnthropicMessageBlock & {
   dumpMediaHead?: number;
 };
 
-export interface TableBlock {
+export interface TableBlock extends BlockFlags {
   block: StoredMessageBlock;
   next: number;
   prev: number;
@@ -63,6 +94,11 @@ export class MessageTable {
   readonly blocks: DumpScratch<TableBlock>;
   head = -1;
   tail = -1;
+  /**
+   * The identity of the request's media purge boundary. A request has one; a
+   * block or message tagged with another is a bug upstream.
+   */
+  purgeBoundaryId: object | undefined;
   private toolIdIndex: ToolIdIndex | undefined;
 
   constructor() {
@@ -81,8 +117,12 @@ export class MessageTable {
       throw new Error('Cannot append to a message table whose ids are indexed');
     const record = newMessage(message.role);
     record.prev = this.tail;
-    if (typeof message.content === 'string') record.text = message.content;
-    else for (const block of message.content) this.addBlock(record, block);
+    if (typeof message.content === 'string') {
+      record.text = message.content;
+      Object.assign(record, this.readTextTags(message));
+    } else
+      for (const block of message.content)
+        this.addBlock(record, block, this.readBlockTags(block));
     const id = this.messages.append(record);
     if (this.tail !== -1) {
       const previous = this.messages.read(this.tail);
@@ -92,9 +132,53 @@ export class MessageTable {
     return id;
   }
 
-  /** Adds a block at the end of `message`'s list; the caller stores `message`. */
-  addBlock(message: TableMessage, block: StoredMessageBlock): number {
-    const id = this.blocks.append({ block, next: -1, prev: message.tail });
+  /** The cache tags the converter left on `block`, as flags. */
+  readBlockTags(block: object): BlockFlags {
+    const flags: BlockFlags = {};
+    if (readAnchorBlockTag(block)) flags.anchored = true;
+    const boundary = readPurgeBlockTag(block);
+    if (boundary !== undefined) {
+      this.noteBoundary(boundary);
+      flags.purge = true;
+    }
+    return flags;
+  }
+
+  /** The cache tags the converter left on a string-content message. */
+  readTextTags(
+    message: object,
+  ): Pick<TableMessage, 'anchorText' | 'purgeText'> {
+    const tags: Pick<TableMessage, 'anchorText' | 'purgeText'> = {};
+    if (readAnchorStringTag(message)) tags.anchorText = true;
+    const boundary = readPurgeStringTag(message);
+    if (boundary !== undefined) {
+      this.noteBoundary(boundary);
+      tags.purgeText = true;
+    }
+    return tags;
+  }
+
+  private noteBoundary(boundary: object): void {
+    if (this.purgeBoundaryId !== undefined && this.purgeBoundaryId !== boundary)
+      throw new Error('Conflicting media purge boundary identities');
+    this.purgeBoundaryId = boundary;
+  }
+
+  /**
+   * Adds a block at the end of `message`'s list; the caller stores `message`.
+   * `flags` are the block's cache tags.
+   */
+  addBlock(
+    message: TableMessage,
+    block: StoredMessageBlock,
+    flags: BlockFlags = {},
+  ): number {
+    const id = this.blocks.append({
+      block,
+      next: -1,
+      prev: message.tail,
+      ...flags,
+    });
     if (message.tail !== -1) {
       const previous = this.blocks.read(message.tail);
       this.blocks.replace(message.tail, { ...previous, next: id });
@@ -103,12 +187,25 @@ export class MessageTable {
     return id;
   }
 
-  /** Turns a string content into a one-block list. */
+  /**
+   * Turns a string content into a one-block list. The message's cache tags
+   * move to the block: the anchor only if the block can hold a breakpoint, the
+   * purge boundary always.
+   */
   blockify(message: TableMessage): void {
-    if (message.text !== undefined) {
-      this.addBlock(message, { type: 'text', text: message.text });
-      delete message.text;
-    }
+    if (message.text === undefined) return;
+    const block: StoredMessageBlock = { type: 'text', text: message.text };
+    const flags: BlockFlags = {};
+    if (
+      message.anchorText === true &&
+      selectLastCacheableBlockIndex([block]) >= 0
+    )
+      flags.anchored = true;
+    if (message.purgeText === true) flags.purge = true;
+    this.addBlock(message, block, flags);
+    delete message.text;
+    delete message.anchorText;
+    delete message.purgeText;
   }
 
   /**
@@ -180,6 +277,22 @@ export class MessageTable {
       const after = this.messages.read(removed.next);
       this.messages.replace(removed.next, { ...after, prev: removed.prev });
     }
+  }
+
+  /** Links a prepared message in front of the first one and returns its id. */
+  prepend(message: TableMessage): number {
+    const id = this.messages.append({
+      ...message,
+      prev: -1,
+      next: this.head,
+    });
+    if (this.head === -1) this.tail = id;
+    else {
+      const first = this.messages.read(this.head);
+      this.messages.replace(this.head, { ...first, prev: id });
+    }
+    this.head = id;
+    return id;
   }
 
   /**

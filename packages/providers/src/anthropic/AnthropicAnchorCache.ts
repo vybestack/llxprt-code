@@ -43,6 +43,16 @@ export function tagAnchorMessage(message: AnthropicMessage): void {
   Reflect.set(message.content[blockIndex], ANCHOR_CACHE_BLOCK, true);
 }
 
+/** Whether the converter tagged this block as the anchor boundary. */
+export function readAnchorBlockTag(block: object): boolean {
+  return Reflect.get(block, ANCHOR_CACHE_BLOCK) === true;
+}
+
+/** Whether the converter tagged this string-content message as the anchor. */
+export function readAnchorStringTag(message: object): boolean {
+  return Reflect.get(message, ANCHOR_CACHE_STRING) === true;
+}
+
 export function materializeAnchorBoundary(
   message: AnthropicMessage,
   blocks: AnthropicMessageBlock[],

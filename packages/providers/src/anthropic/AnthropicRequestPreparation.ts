@@ -308,7 +308,7 @@ function resolveRequestSettings(
  * placement (WHERE the prompt goes) is independent of transport auth. The
  * vendor system field is determined separately by buildSystemField.
  */
-function placeSystemInstruction(params: {
+export function placeSystemInstruction(params: {
   placement: SystemPromptPlacement;
   anthropicMessages: readonly AnthropicMessage[];
   wantCaching: boolean;
@@ -630,7 +630,7 @@ function logRequestDebugInfo(params: {
   }
 }
 
-function applyRequestCacheControls(params: {
+export function applyRequestCacheControls(params: {
   readonly systemContext: SystemContextResult;
   readonly requestSettings: RequestSettings;
   readonly cacheLogger: { debug: (fn: () => string) => void };
