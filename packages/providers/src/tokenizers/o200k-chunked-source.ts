@@ -85,21 +85,39 @@ class ChunkedCounter {
     private readonly tuning: ChunkedCountTuning,
   ) {}
 
-  /** Counts the whole pieces of `text`, returning the length consumed. */
+  /**
+   * Counts the whole pieces of `text`, returning the length consumed. The
+   * pieces tile the text, so the small ones between two cuts are taken as one
+   * slice instead of one substring each, and only a full chunk or an oversized
+   * piece waits on anything.
+   */
   async consume(text: string, final: boolean): Promise<number> {
     const limit = final ? text.length : text.length - LOOKAHEAD;
     this.#pieces.lastIndex = 0;
     let position = 0;
+    let runStart = 0;
     let match = this.#pieces.exec(text);
-    while (match && position + match[0].length <= limit) {
-      if (match.index !== position || match[0].length === 0)
+    while (match) {
+      const end = this.#pieces.lastIndex;
+      if (end > limit) break;
+      if (match.index !== position || end === position)
         throw new Error(
           `Pinned regex failed to cover source offset ${position}`,
         );
-      await this.#add(match[0]);
-      position += match[0].length;
+      if (end - position > this.tuning.wasmPieceChars) {
+        this.#take(text, runStart, position);
+        await this.#countLargePiece(text.slice(position, end));
+        runStart = end;
+      } else if (this.#chunkChars + end - runStart >= this.tuning.chunkChars) {
+        this.#take(text, runStart, end);
+        runStart = end;
+        this.#flush();
+        await checkpoint(this.options.signal);
+      }
+      position = end;
       match = position < text.length ? this.#pieces.exec(text) : null;
     }
+    this.#take(text, runStart, position);
     if (final && position !== text.length)
       throw new Error('Pinned regex did not consume the final source text');
     return position;
@@ -120,17 +138,11 @@ class ChunkedCounter {
       await rm(this.#fallbackDirectory, { recursive: true, force: true });
   }
 
-  async #add(piece: string): Promise<void> {
-    if (piece.length > this.tuning.wasmPieceChars) {
-      await this.#countLargePiece(piece);
-      return;
-    }
-    this.#chunk.push(piece);
-    this.#chunkChars += piece.length;
-    if (this.#chunkChars >= this.tuning.chunkChars) {
-      this.#flush();
-      await checkpoint(this.options.signal);
-    }
+  /** Adds `text[from, to)`, whole pieces, to the pending chunk. */
+  #take(text: string, from: number, to: number): void {
+    if (to === from) return;
+    this.#chunk.push(text.slice(from, to));
+    this.#chunkChars += to - from;
   }
 
   #flush(): void {
