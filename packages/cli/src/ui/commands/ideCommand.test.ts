@@ -7,7 +7,7 @@
 import { automock } from '@vybestack/llxprt-code-test-utils';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import type { Mock } from 'bun:test';
-import { ideCommand } from './ideCommand.js';
+import { registerIdeCommand } from '../../__tests__/host-command-test-owner.js';
 import { type CommandContext } from './types.js';
 import { IDE_DEFINITIONS } from '@vybestack/llxprt-code-core';
 import * as core from '@vybestack/llxprt-code-core';
@@ -25,8 +25,10 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
 }));
 
 function commandSubcommands(
-  command: ReturnType<typeof ideCommand>,
-): NonNullable<NonNullable<ReturnType<typeof ideCommand>>['subCommands']> {
+  command: ReturnType<typeof registerIdeCommand>,
+): NonNullable<
+  NonNullable<ReturnType<typeof registerIdeCommand>>['subCommands']
+> {
   return command?.subCommands ?? [];
 }
 
@@ -63,7 +65,7 @@ describe('ideCommand', () => {
   });
 
   it('should return null if config is not provided', () => {
-    const command = ideCommand(null);
+    const command = registerIdeCommand(null, mockContext);
     expect(command).toBeNull();
   });
 
@@ -80,7 +82,7 @@ describe('ideCommand', () => {
         status: core.IDEConnectionStatus.Disconnected,
       }),
     } as ReturnType<IdeState['getIdeClient']>);
-    const command = ideCommand(mockConfig);
+    const command = registerIdeCommand(mockConfig, mockContext);
     expect(command).not.toBeNull();
     expect(command?.name).toBe('ide');
     expect(command?.subCommands).toHaveLength(3);
@@ -102,7 +104,7 @@ describe('ideCommand', () => {
         status: core.IDEConnectionStatus.Disconnected,
       }),
     } as ReturnType<IdeState['getIdeClient']>);
-    const command = ideCommand(mockConfig);
+    const command = registerIdeCommand(mockConfig, mockContext);
     for (const subcommand of commandSubcommands(command)) {
       expect(subcommand.autoExecute).toBe(true);
     }
@@ -121,7 +123,7 @@ describe('ideCommand', () => {
         status: core.IDEConnectionStatus.Connected,
       }),
     } as ReturnType<IdeState['getIdeClient']>);
-    const command = ideCommand(mockConfig);
+    const command = registerIdeCommand(mockConfig, mockContext);
     for (const subcommand of commandSubcommands(command)) {
       expect(subcommand.autoExecute).toBe(true);
     }
@@ -140,7 +142,7 @@ describe('ideCommand', () => {
         status: core.IDEConnectionStatus.Connected,
       }),
     } as ReturnType<IdeState['getIdeClient']>);
-    const command = ideCommand(mockConfig);
+    const command = registerIdeCommand(mockConfig, mockContext);
     expect(command).not.toBeNull();
     const subCommandNames = command?.subCommands?.map((cmd) => cmd.name);
     expect(subCommandNames).toContain('disable');
@@ -178,7 +180,7 @@ describe('ideCommand', () => {
           },
         }),
       } as unknown as ReturnType<IdeState['getIdeClient']>);
-      const command = ideCommand(mockConfig);
+      const command = registerIdeCommand(mockConfig, mockContext);
       const result = await command!.subCommands!.find(
         (c) => c.name === 'status',
       )!.action!(mockContext, '');
@@ -194,7 +196,7 @@ describe('ideCommand', () => {
       mockGetConnectionStatus.mockReturnValue({
         status: core.IDEConnectionStatus.Connected,
       });
-      const command = ideCommand(mockConfig);
+      const command = registerIdeCommand(mockConfig, mockContext);
       const result = await command!.subCommands!.find(
         (c) => c.name === 'status',
       )!.action!(mockContext, '');
@@ -210,7 +212,7 @@ describe('ideCommand', () => {
       mockGetConnectionStatus.mockReturnValue({
         status: core.IDEConnectionStatus.Connecting,
       });
-      const command = ideCommand(mockConfig);
+      const command = registerIdeCommand(mockConfig, mockContext);
       const result = await command!.subCommands!.find(
         (c) => c.name === 'status',
       )!.action!(mockContext, '');
@@ -225,7 +227,7 @@ describe('ideCommand', () => {
       mockGetConnectionStatus.mockReturnValue({
         status: core.IDEConnectionStatus.Disconnected,
       });
-      const command = ideCommand(mockConfig);
+      const command = registerIdeCommand(mockConfig, mockContext);
       const result = await command!.subCommands!.find(
         (c) => c.name === 'status',
       )!.action!(mockContext, '');
@@ -243,7 +245,7 @@ describe('ideCommand', () => {
         status: core.IDEConnectionStatus.Disconnected,
         details,
       });
-      const command = ideCommand(mockConfig);
+      const command = registerIdeCommand(mockConfig, mockContext);
       const result = await command!.subCommands!.find(
         (c) => c.name === 'status',
       )!.action!(mockContext, '');
@@ -289,7 +291,7 @@ describe('ideCommand', () => {
         message: 'Successfully installed.',
       });
 
-      const command = ideCommand(mockConfig);
+      const command = registerIdeCommand(mockConfig, mockContext);
       await command!.subCommands!.find((c) => c.name === 'install')!.action!(
         mockContext,
         '',
@@ -319,7 +321,7 @@ describe('ideCommand', () => {
         message: 'Installation failed.',
       });
 
-      const command = ideCommand(mockConfig);
+      const command = registerIdeCommand(mockConfig, mockContext);
       await command!.subCommands!.find((c) => c.name === 'install')!.action!(
         mockContext,
         '',

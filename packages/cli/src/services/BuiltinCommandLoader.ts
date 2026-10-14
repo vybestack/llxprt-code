@@ -20,7 +20,6 @@ import { docsCommand } from '../ui/commands/docsCommand.js';
 
 import { editorCommand } from '../ui/commands/editorCommand.js';
 import { helpCommand } from '../ui/commands/helpCommand.js';
-import { ideCommand } from '../ui/commands/ideCommand.js';
 
 import { privacyCommand } from '../ui/commands/privacyCommand.js';
 import { mouseCommand } from '../ui/commands/mouseCommand.js';
@@ -32,7 +31,6 @@ import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
 import { diagnosticsCommand } from '../ui/commands/diagnosticsCommand.js';
 import { terminalSetupCommand } from '../ui/commands/terminalSetupCommand.js';
 import { debugCommand } from '../ui/commands/debugCommands.js';
-import { permissionsCommand } from '../ui/commands/permissionsCommand.js';
 
 import { setupCommand } from '../ui/commands/setupCommand.js';
 /**
@@ -44,6 +42,8 @@ import { setupCommand } from '../ui/commands/setupCommand.js';
  * of the LLxprt Code application.
  */
 export interface BuiltinCommandOwners {
+  readonly ideCommand: SlashCommand | null;
+  readonly permissionsCommand: SlashCommand;
   readonly skillsCommand: SlashCommand;
   readonly perfCommand: SlashCommand;
   readonly statsCommand: SlashCommand;
@@ -157,7 +157,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       editorCommand,
       this.owners.extensionsCommand,
       helpCommand,
-      ideCommand(this.config),
+      this.owners.ideCommand,
       this.owners.imageCommand,
       this.owners.initCommand,
       this.owners.mcpCommand,
@@ -191,7 +191,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       debugCommand,
       this.owners.logoutCommand,
       this.owners.subagentCommand,
-      permissionsCommand,
+      this.owners.permissionsCommand,
       this.owners.policiesCommand,
       this.owners.dumpcontextCommand,
       this.owners.todoCommand,
