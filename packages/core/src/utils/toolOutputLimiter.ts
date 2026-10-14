@@ -313,6 +313,11 @@ export function limitOutputTokensWithLimits(
     return { content, wasTruncated: false };
   }
   const effectiveLimit = getEffectiveTokenLimit(tokenLimit.maxTokens);
+  // A token spans at least one byte, so output with no more bytes than the
+  // limit cannot exceed it and needs no tokenizing.
+  if (Buffer.byteLength(content, 'utf8') <= effectiveLimit) {
+    return { content, wasTruncated: false };
+  }
 
   const encodedContent = encodeText(content);
   const tokens = encodedContent?.length ?? Math.ceil(content.length / 3);
