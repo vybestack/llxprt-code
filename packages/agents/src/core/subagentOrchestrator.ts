@@ -1,30 +1,18 @@
-import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
-import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
-import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
-import { ApprovalMode } from '@vybestack/llxprt-code-core';
+import type { ChildAgentLaunch } from '../api/child-agent-assembly.js';
+import { assembleChildAgent } from '../api/agentRuntimeAssembly.js';
+import type { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 
 import type { WorkspaceTrustControlPort } from '@vybestack/llxprt-code-core';
 
-import { activateChildProvider } from './subagent-provider-activation.js';
-
 import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
-
-import {
-  cleanupAfterFailure,
-  runCleanupSteps,
-  disposeHistoryLike,
-  closeSubagentScope,
-} from './subagent-cleanup.js';
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
-import type { SessionClientOwner } from '../session/session-client-owner.js';
-
-import { createSubagentProviderRuntime } from './subagentRuntimeSetup.js';
-import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { randomUUID } from 'node:crypto';
 import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
 import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -41,15 +29,9 @@ import {
   type RuntimeProfileResolution,
 } from './subagentProfileResolution.js';
 import { getStringSetting } from './subagentSettingsAccess.js';
-import {
-  createSettingsSnapshot,
-  normalizeDefaultToolSet,
-  populatePostActivationSettings,
-  populatePreActivationSettings,
-} from './subagentSettingsPopulation.js';
+import { normalizeDefaultToolSet } from './subagentSettingsPopulation.js';
 import type { SubagentConfig } from '@vybestack/llxprt-code-core/config/types.js';
 import { SubAgentScope } from './subagent.js';
-import type { SubAgentScope as SubAgentScopeInstance } from './subagent.js';
 import type {
   ModelConfig,
   PromptConfig,
@@ -64,45 +46,16 @@ import {
   createAgentRuntimeState,
   type AgentRuntimeState,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import type {
-  AgentRuntimeFactoryBindings,
-  RuntimeProviderManager,
-  RuntimeContentGeneratorFactory,
-  RuntimeTokenizerFactory,
-  ContentGenerator,
-} from '@vybestack/llxprt-code-core';
-import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import type { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
+import type { AgentRuntimeFactoryBindings } from '@vybestack/llxprt-code-core';
 
 import {
   loadAgentRuntime,
   type AgentRuntimeLoaderOptions,
   type AgentRuntimeLoaderResult,
 } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
-import { buildSubagentRuntimeLoaderOptions } from './subagent-runtime-loader.js';
-import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { ToolSelection } from '@vybestack/llxprt-code-tools';
-import type { ContentGeneratorConfig } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { MessageBus } from '@vybestack/llxprt-code-core/confirmation-bus/message-bus.js';
-import { getEnvironmentContext } from '@vybestack/llxprt-code-core/utils/environmentContext.js';
-
-import {
-  createIsolatedRuntimeContext,
-  createRuntimeActivationBindings,
-  type IsolatedRuntimeContextHandle as ProviderIsolatedRuntimeContextHandle,
-  type RuntimeActivationBindings,
-} from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
-import { admitModelParameters } from '@vybestack/llxprt-code-core/runtime/admit-model-parameters.js';
-import { admitLoadBalancerModelParameters } from '../api/admit-load-balancer-model-parameters.js';
-import {
-  disposeIsolatedMediaRuntime,
-  createIsolatedSessionClient,
-  closeIsolatedSessionRuntime,
-  buildIsolatedAgentConfig,
-  prepareIsolatedProviders,
-} from '../api/agentRuntimeAssembly.js';
 
 const LOAD_BALANCER_PROVIDER_NAME = 'load-balancer';
 
@@ -157,7 +110,6 @@ export interface SubagentOrchestratorOptions {
   readonly telemetry?: RootTelemetry;
   readRunPolicy: () => SubagentRunPolicy;
   runtimeFactoryBindings?: AgentRuntimeFactoryBindings;
-  runtimeActivationBindings?: RuntimeActivationBindings;
   runtimeLoader?: RuntimeLoader;
   scopeFactory?: ScopeFactory;
   idFactory?: () => string;
@@ -168,18 +120,6 @@ export interface SubagentOrchestratorOptions {
    */
   messageBus: MessageBus;
 }
-
-/**
- * Light-weight orchestrator responsible for resolving subagent configuration,
- * building isolated runtime bundles, and launching {@link SubAgentScope} instances.
- *
- * @plan PLAN-20251029-SUBAGENTORCHESTRATION
- * @requirement REQ-SUBAGENT-ORCH-001, REQ-SUBAGENT-ORCH-002
- */
-type IsolatedRuntimeContextHandle = ProviderIsolatedRuntimeContextHandle & {
-  readonly mediaOwner: SessionMediaOwner;
-  readonly sessionClient: SessionClientOwner;
-};
 
 export class SubagentOrchestrator {
   private readonly runtimeLoader: RuntimeLoader;
@@ -194,100 +134,6 @@ export class SubagentOrchestrator {
     this.scopeFactory =
       options.scopeFactory ?? SubAgentScope.create.bind(SubAgentScope);
     this.idFactory = options.idFactory ?? randomUUID;
-  }
-
-  private buildScopeDispose(
-    scope: SubAgentScope,
-    runtimeResult: AgentRuntimeLoaderResult,
-    isolatedHandle: IsolatedRuntimeContextHandle,
-  ): () => Promise<void> {
-    return () =>
-      closeSubagentScope(
-        () => {
-          if (typeof scope.dispose === 'function') scope.dispose();
-        },
-        runtimeResult.history,
-        scope.runtimeContext.history,
-        () =>
-          closeIsolatedSessionRuntime(
-            () => isolatedHandle.cleanup(),
-            () => isolatedHandle.config.dispose(),
-            () => isolatedHandle.mediaOwner.dispose(),
-            () => isolatedHandle.sessionClient.dispose(),
-          ),
-      );
-  }
-
-  private async createScopeWithEnvironment(
-    subagent: SubagentConfig,
-    promptConfig: PromptConfig,
-    modelConfig: ModelConfig,
-    runConfig: RunConfig,
-    request: SubagentLaunchRequest,
-    runtimeResult: AgentRuntimeLoaderResult,
-    oauthManager: OAuthManager,
-    settingsService: SettingsService,
-    providerManager: RuntimeProviderManager,
-    providerFileLifecycle: ProviderFileLifecycle,
-    sessionClient: SessionClientOwner,
-    signal?: AbortSignal,
-  ): Promise<SubAgentScope> {
-    const retry = oauthManager.composeRetryOperations(
-      runtimeResult.runtimeContext.state.provider,
-      {
-        profileId: settingsService.getCurrentProfileName() ?? undefined,
-      },
-    );
-    return this.scopeFactory(
-      subagent.name,
-      this.options.foregroundConfig,
-      promptConfig,
-      modelConfig,
-      runConfig,
-      request.toolConfig,
-      request.outputConfig,
-      runtimeResult.runtimeContext,
-      runtimeResult.contentGenerator,
-      runtimeResult.telemetryRoot,
-      runtimeResult.toolRegistry,
-      runtimeResult.runtimeContext.tools,
-      this.options.instructions,
-      this.options.workspacePaths,
-      this.options.readMcpInstructions,
-      this.options.messageBus,
-      runtimeResult.settingsSnapshot,
-      async (_runtime) =>
-        getEnvironmentContext(
-          this.options.instructions.snapshot().environmentMemory,
-          this.options.workspacePaths.directories(),
-        ),
-      () =>
-        this.options.workspaceTrust?.isTrustedFolder() === true
-          ? this.options.foregroundConfig.getApprovalMode()
-          : ApprovalMode.DEFAULT,
-      () => {
-        const providerName = runtimeResult.runtimeContext.state.provider;
-        return providerName === LOAD_BALANCER_PROVIDER_NAME
-          ? admitLoadBalancerModelParameters(
-              providerManager.getActiveProvider(),
-              settingsService,
-            )
-          : admitModelParameters(
-              settingsService.getAllGlobalSettings(),
-              settingsService.getProviderSettings(providerName),
-              providerName,
-            );
-      },
-      providerFileLifecycle,
-      sessionClient.hookOperations.execution({
-        sessionId: () => runtimeResult.runtimeContext.state.sessionId,
-        transcriptPath: () => undefined,
-        signal,
-      }),
-      retry.tryBucketFailover,
-      retry.readCurrentBucket,
-      signal,
-    );
   }
 
   /**
@@ -344,91 +190,75 @@ export class SubagentOrchestrator {
       'Subagent launch aborted before runtime assembly.',
     );
 
-    const agentRuntimeId = this.createRuntimeId(subagent.name);
-    const { runtimeResult, isolatedHandle } = await this.createRuntimeBundle(
-      { subagent, runtimeProfile, modelConfig, agentRuntimeId },
-      signal,
-    );
-    let scope: SubAgentScopeInstance | undefined;
-    try {
-      this.throwIfAborted(
-        signal,
-        'Subagent launch aborted after runtime assembly completed.',
-      );
-
-      scope = await this.createScopeWithEnvironment(
+    const authority = this.options.credentialAuthority;
+    if (authority === undefined)
+      throw new Error('Child assembly requires captured credential authority');
+    return assembleChildAgent(
+      this.createLaunchData(
         subagent,
-        promptConfig,
+        runtimeProfile,
+        profile,
         modelConfig,
+        promptConfig,
         runConfig,
         request,
-        runtimeResult,
-        isolatedHandle.oauthManager,
-        isolatedHandle.settingsService,
-        isolatedHandle.providerManager,
-        isolatedHandle.providerFileLifecycle,
-        isolatedHandle.sessionClient,
         signal,
-      );
-      this.throwIfAborted(signal, 'Subagent launch aborted before completion.');
-      const agentId = this.scopeId(scope, subagent.name, agentRuntimeId);
-
-      return {
-        agentId,
-        scope,
-        prompt: promptConfig,
-        profile,
-        config: subagent,
-        runtime: runtimeResult,
-        dispose: this.buildScopeDispose(scope, runtimeResult, isolatedHandle),
-      };
-    } catch (error) {
-      return cleanupAfterFailure(error, () =>
-        this.cleanupAfterLaunchFailure(scope, runtimeResult, isolatedHandle),
-      );
-    }
+      ),
+      authority,
+      this.options.messageBus,
+      this.options.requestInteractiveAuth,
+      this.options.profileManager,
+      this.options.subagentManager,
+      this.options.telemetry,
+      this.options.createChildSettings,
+      this.options.foregroundConfig,
+      this.options.instructions,
+      this.options.workspacePaths,
+      this.options.readMcpInstructions,
+      this.options.workspaceTrust,
+      this.options.toolRegistry,
+      this.options.hookOwner,
+      this.options.runtimeFactoryBindings?.agentClientFactory,
+      this.runtimeLoader,
+      this.scopeFactory,
+    );
   }
 
-  private scopeId(
-    scope: SubAgentScope,
-    subagentName: string,
-    runtimeId: string,
-  ): string {
-    return typeof scope.getAgentId === 'function'
-      ? scope.getAgentId()
-      : `${subagentName}-${runtimeId}`;
-  }
-
-  private async cleanupAfterLaunchFailure(
-    scope: SubAgentScopeInstance | undefined,
-    runtimeResult: AgentRuntimeLoaderResult,
-    isolatedHandle: IsolatedRuntimeContextHandle,
-  ): Promise<void> {
-    if (scope !== undefined) {
-      await this.buildScopeDispose(scope, runtimeResult, isolatedHandle)();
-    } else {
-      await this.cleanupRuntimeArtifacts(runtimeResult, isolatedHandle);
-    }
-  }
-
-  private async cleanupRuntimeArtifacts(
-    runtimeResult: AgentRuntimeLoaderResult,
-    isolatedHandle: IsolatedRuntimeContextHandle,
-  ): Promise<void> {
-    // Reached when the scope was never created (e.g. scope construction
-    // failed) AFTER createIsolatedRuntime already activated the config and
-    // ran provider activation — the Config can therefore hold a constructed
-    // AgentClient and needs the same children-first dispose.
-    await runCleanupSteps([
-      () => disposeHistoryLike(runtimeResult.history),
-      () =>
-        closeIsolatedSessionRuntime(
-          () => isolatedHandle.cleanup(),
-          () => isolatedHandle.config.dispose(),
-          () => isolatedHandle.mediaOwner.dispose(),
-          () => isolatedHandle.sessionClient.dispose(),
-        ),
-    ]);
+  private createLaunchData(
+    subagent: SubagentConfig,
+    runtimeProfile: RuntimeProfileResolution,
+    profile: Profile,
+    modelConfig: ModelConfig,
+    promptConfig: PromptConfig,
+    runConfig: RunConfig,
+    request: SubagentLaunchRequest,
+    signal: AbortSignal | undefined,
+  ): ChildAgentLaunch {
+    const agentRuntimeId = this.createRuntimeId(subagent.name);
+    const activationProfile =
+      SubagentOrchestrator.getActivationProfile(runtimeProfile);
+    const runtimeStateProfile =
+      SubagentOrchestrator.getRuntimeStateProfile(runtimeProfile);
+    return {
+      subagent,
+      activationProfile,
+      runtimeStateProfile,
+      effectiveProfile: runtimeProfile.effectiveProfile,
+      profile,
+      model: modelConfig,
+      prompt: promptConfig,
+      run: runConfig,
+      request,
+      state: this.createRuntimeState(
+        runtimeStateProfile,
+        modelConfig,
+        agentRuntimeId,
+        subagent.name,
+      ),
+      runtimeId: agentRuntimeId,
+      disabledTools: this.defaultDisabledTools,
+      signal,
+    };
   }
 
   private throwIfAborted(signal: AbortSignal | undefined, message: string) {
@@ -543,23 +373,6 @@ export class SubagentOrchestrator {
     return `${this.baseSessionId()}#${subagentName}#${suffix}`;
   }
 
-  private buildContentGeneratorConfig(
-    profile: Profile,
-    modelConfig: ModelConfig,
-  ): ContentGeneratorConfig {
-    const authKey = getStringSetting(profile.ephemeralSettings, ['auth-key']);
-    const proxy = getStringSetting(profile.ephemeralSettings, [
-      'proxy',
-      'proxy-url',
-    ]);
-
-    return {
-      model: modelConfig.model,
-      apiKey: authKey,
-      proxy,
-    };
-  }
-
   private createRuntimeState(
     profile: Profile,
     modelConfig: ModelConfig,
@@ -594,308 +407,5 @@ export class SubagentOrchestrator {
       parentRuntimeId: this.baseSessionId(),
       subagentName,
     });
-  }
-
-  private async createRuntimeBundle(
-    params: {
-      subagent: SubagentConfig;
-      runtimeProfile: RuntimeProfileResolution;
-      modelConfig: ModelConfig;
-      agentRuntimeId: string;
-    },
-    signal?: AbortSignal,
-  ): Promise<{
-    runtimeResult: AgentRuntimeLoaderResult;
-    isolatedHandle: IsolatedRuntimeContextHandle;
-  }> {
-    const { runtimeProfile, modelConfig, agentRuntimeId, subagent } = params;
-    const activationProfile =
-      SubagentOrchestrator.getActivationProfile(runtimeProfile);
-    const runtimeStateProfile =
-      SubagentOrchestrator.getRuntimeStateProfile(runtimeProfile);
-    const isLoadBalancerActivation = isLoadBalancerProfile(activationProfile);
-
-    this.throwIfAborted(
-      signal,
-      'Subagent launch aborted before runtime state.',
-    );
-    const runtimeState = this.createRuntimeState(
-      runtimeStateProfile,
-      modelConfig,
-      agentRuntimeId,
-      subagent.name,
-    );
-    const settingsService = this.options.createChildSettings();
-    this.populateInitialChildSettings(
-      settingsService.set.bind(settingsService),
-      settingsService.setCurrentProfileName.bind(settingsService),
-      runtimeStateProfile,
-      subagent.profile,
-      isLoadBalancerActivation,
-    );
-
-    const isolatedHandle = await this.createIsolatedRuntime(
-      settingsService,
-      activationProfile,
-      runtimeStateProfile,
-      subagent.profile,
-      subagent.name,
-      agentRuntimeId,
-      isLoadBalancerActivation,
-    );
-    try {
-      const runtimeResult = await this.loadRuntimeInIsolatedScope(
-        isolatedHandle.runtimeId,
-        isolatedHandle.config,
-        isolatedHandle.settingsOwner,
-        isolatedHandle.mediaOwner.store,
-        isolatedHandle.providerManager,
-        isolatedHandle.tokenizerFactory,
-        isolatedHandle.contentGeneratorFactory,
-        {
-          subagentName: subagent.name,
-          runtimeState,
-          runtimeStateProfile,
-          effectiveProfile: runtimeProfile.effectiveProfile,
-          modelConfig,
-          signal,
-        },
-      );
-      return { runtimeResult, isolatedHandle };
-    } catch (error) {
-      return cleanupAfterFailure(error, () =>
-        runCleanupSteps([
-          () =>
-            closeIsolatedSessionRuntime(
-              () => isolatedHandle.cleanup(),
-              () => isolatedHandle.config.dispose(),
-              () => isolatedHandle.mediaOwner.dispose(),
-              () => isolatedHandle.sessionClient.dispose(),
-            ),
-        ]),
-      );
-    }
-  }
-
-  private populateInitialChildSettings(
-    writeSetting: (key: string, value: unknown) => void,
-    selectProfile: (profileName: string) => void,
-    profile: Profile,
-    profileName: string,
-    isLoadBalancerActivation: boolean,
-  ): void {
-    if (!isLoadBalancerActivation) {
-      populatePreActivationSettings(
-        writeSetting,
-        selectProfile,
-        profile,
-        profileName,
-      );
-    } else {
-      selectProfile(profileName);
-      writeSetting('activeProvider', LOAD_BALANCER_PROVIDER_NAME);
-      writeSetting(
-        `providers.${LOAD_BALANCER_PROVIDER_NAME}.model`,
-        LOAD_BALANCER_PROVIDER_NAME,
-      );
-    }
-  }
-
-  private async loadRuntimeInIsolatedScope(
-    runtimeId: string,
-    config: Config,
-    settingsOwner: SessionSettingsOwner,
-    mediaStore: LocalMediaStore,
-    providerManager: RuntimeProviderManager,
-    tokenizerFactory: RuntimeTokenizerFactory,
-    contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
-    params: {
-      subagentName: string;
-      runtimeState: AgentRuntimeState;
-      runtimeStateProfile: Profile;
-      effectiveProfile: Profile;
-      modelConfig: ModelConfig;
-      signal?: AbortSignal;
-    },
-  ): Promise<AgentRuntimeLoaderResult> {
-    const providerRuntime = createSubagentProviderRuntime(
-      runtimeId,
-      params.subagentName,
-    );
-    const settingsSnapshot = createSettingsSnapshot(
-      params.effectiveProfile,
-      this.defaultDisabledTools,
-    );
-    const contentGeneratorConfig = this.buildContentGeneratorConfig(
-      params.runtimeStateProfile,
-      params.modelConfig,
-    );
-    const loaderOptions = buildSubagentRuntimeLoaderOptions(
-      config,
-      settingsOwner,
-      mediaStore,
-      providerManager,
-      tokenizerFactory,
-      contentGeneratorFactory,
-      this.options.toolRegistry,
-      params.runtimeState,
-      settingsSnapshot,
-      providerRuntime,
-      contentGeneratorConfig,
-      params.signal,
-    );
-    await tokenizerFactory.prepareTokenizer?.(
-      params.runtimeState.provider,
-      params.runtimeState.model,
-    );
-    const loaded = await this.runtimeLoader(loaderOptions);
-    loaded.history.setTokenizerFactory({
-      getTokenizer: (provider, model) =>
-        tokenizerFactory.getTokenizer(provider, model),
-    });
-    loaded.history.setActiveTokenizationTarget(
-      params.runtimeState.model,
-      params.runtimeState.provider,
-    );
-    return loaded;
-  }
-
-  /**
-   * Builds, registers providers onto, activates, and runs provider
-   * activation for an isolated runtime so the subagent uses its OWN provider
-   * instead of the parent's active provider (Issue #2410).
-   */
-  private bindChildTools(client: SessionClientOwner): void {
-    if (this.options.toolRegistry === undefined)
-      throw new Error('Missing explicit child tool selection');
-    client.bindInheritedTools(
-      this.options.toolRegistry,
-      this.options.messageBus,
-      this.options.workspaceTrust,
-    );
-  }
-
-  private async createChildClient(
-    config: Config,
-    settings: SettingsService,
-    settingsOwner: SessionSettingsOwner,
-    providerManager: RuntimeProviderManager,
-    oauthManager: OAuthManager,
-    contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>,
-    tokenizerFactory: RuntimeTokenizerFactory,
-    providerFileLifecycle: ProviderFileLifecycle,
-    mediaOwner: SessionMediaOwner,
-  ): Promise<SessionClientOwner> {
-    const client = await createIsolatedSessionClient(
-      config,
-      settings,
-      settingsOwner,
-      providerManager,
-      oauthManager,
-      contentGeneratorFactory,
-      tokenizerFactory,
-      providerFileLifecycle,
-      mediaOwner,
-      this.options.runtimeFactoryBindings?.agentClientFactory,
-      this.options.readMcpInstructions,
-      this.options.workspacePaths,
-    );
-    client.bindDefinitionReads(
-      this.options.profileManager,
-      this.options.subagentManager,
-    );
-    client.bindInheritedInstructions(this.options.instructions);
-    client.bindHooks(
-      this.options.hookOwner,
-      this.options.messageBus,
-      this.options.workspaceTrust,
-    );
-    return client;
-  }
-
-  private async createIsolatedRuntime(
-    settingsService: SettingsService,
-    activationProfile: Profile,
-    runtimeStateProfile: Profile,
-    profileName: string,
-    subagentName: string,
-    agentRuntimeId: string,
-    isLoadBalancerActivation: boolean,
-  ): Promise<IsolatedRuntimeContextHandle> {
-    // Do NOT pass the foreground config — the isolated runtime must get its
-    // own Config so activation operates on the subagent's provider, not the
-    // parent's (Issue #2410). Load-balancer profiles intentionally activate via
-    // the foreground profile-application path inside this isolated runtime so
-    // the real load-balancer provider is registered and selected.
-    const { config: isolatedConfig, mediaOwner } = buildIsolatedAgentConfig({
-      sessionId: agentRuntimeId,
-      model: activationProfile.model,
-      runtimeFactoryBindings: this.options.runtimeFactoryBindings,
-      settingsService,
-    });
-    const handle = createIsolatedRuntimeContext(
-      {
-        runtimeId: agentRuntimeId,
-        credentialAuthority: this.options.credentialAuthority,
-        requestInteractiveAuth: this.options.requestInteractiveAuth,
-        config: isolatedConfig,
-        borrowedTelemetry: this.options.telemetry,
-        activationBindings:
-          this.options.runtimeActivationBindings ??
-          createRuntimeActivationBindings(),
-        messageBus: this.options.messageBus,
-        metadata: { source: 'SubagentOrchestrator', subagent: subagentName },
-        prepare: prepareIsolatedProviders,
-      },
-      settingsService,
-    );
-
-    let sessionClient: SessionClientOwner | undefined;
-    try {
-      const childClient = await this.createChildClient(
-        handle.config,
-        handle.settingsService,
-        handle.settingsOwner,
-        handle.providerManager,
-        handle.oauthManager,
-        handle.contentGeneratorFactory,
-        handle.tokenizerFactory,
-        handle.providerFileLifecycle,
-        mediaOwner,
-      );
-      sessionClient = childClient;
-      this.bindChildTools(childClient);
-      await handle.activate();
-      await activateChildProvider(
-        handle.config,
-        handle.settingsService,
-        handle.providerManager,
-        handle.oauthManager,
-        handle.settingsOwner,
-        () => handle.readRuntimeKind(),
-        (method) => childClient.refreshAuth(method),
-        this.options.profileManager,
-        activationProfile,
-        profileName,
-        isLoadBalancerActivation,
-      );
-      populatePostActivationSettings(
-        settingsService.set.bind(settingsService),
-        settingsService.setCurrentProfileName.bind(settingsService),
-        runtimeStateProfile,
-        profileName,
-        this.defaultDisabledTools,
-      );
-      return { ...handle, mediaOwner, sessionClient: childClient };
-    } catch (error) {
-      return cleanupAfterFailure(error, () =>
-        disposeIsolatedMediaRuntime(
-          () => handle.cleanup(),
-          () => handle.config.dispose(),
-          () => mediaOwner.dispose(),
-          sessionClient?.dispose.bind(sessionClient),
-        ),
-      );
-    }
   }
 }
