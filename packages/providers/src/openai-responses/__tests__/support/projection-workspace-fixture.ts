@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { readAtOf } from '../../../__tests__/requestRowsTestSupport.js';
 import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, expect } from 'bun:test';
 import { createHash } from 'node:crypto';
@@ -117,6 +118,7 @@ export function workspaceRows(failure?: () => void): {
     state,
     rows: {
       count: expected.length,
+      readAt: readAtOf(expected),
       async *openReader(): AsyncGenerator<IContent, void> {
         state.active++;
         state.opened++;

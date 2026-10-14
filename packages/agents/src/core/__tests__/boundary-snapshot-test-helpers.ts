@@ -347,6 +347,8 @@ export function diskFixture(test: BoundaryCase): {
     owners.push(owner);
     return {
       count: rows.length,
+      readAt: (index: number, signal?: AbortSignal) =>
+        owner.readAt(index, signal),
       async *openReader(
         signal?: AbortSignal,
       ): AsyncGenerator<IContent, void, unknown> {

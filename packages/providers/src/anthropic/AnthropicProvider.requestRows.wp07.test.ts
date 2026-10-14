@@ -12,6 +12,7 @@
  * outcome. Only the SDK transport is faked.
  */
 
+import { readAtOf } from '../__tests__/requestRowsTestSupport.js';
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
 import { APIError } from '@anthropic-ai/sdk';
 import sharp from 'sharp';
@@ -93,6 +94,7 @@ function probeRows(rows: IContent[], onPull?: () => void): RowProbe {
   let returned = 0;
   const selection: ProviderRequestSelection = Object.freeze({
     count: rows.length,
+    readAt: readAtOf(rows),
     openReader: (signal?: AbortSignal) => {
       opened += 1;
       return (async function* (): AsyncGenerator<IContent, void> {

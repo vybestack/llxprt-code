@@ -99,6 +99,7 @@ async function independentActualEstimate(
 ): Promise<PromptEnvelopeEstimate> {
   const rows = {
     count: rowCount,
+    readAt: (index: number) => diskTextRow(index, large && index === 63),
     async *openReader(): AsyncGenerator<IContent, void> {
       for (let index = 0; index < rowCount; index++)
         yield diskTextRow(index, large && index === 63);

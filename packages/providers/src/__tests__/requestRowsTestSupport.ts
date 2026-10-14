@@ -5,7 +5,11 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import {
+  inMemoryRequestSelection,
+  type ProviderRequestRows,
+  type ProviderRequestSelection,
+} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 
 export interface TrackedRequestRows extends ProviderRequestSelection {
   /** Readers opened and not yet finished or returned. */
@@ -13,6 +17,14 @@ export interface TrackedRequestRows extends ProviderRequestSelection {
   /** Total readers opened over the selection's life. */
   readonly readersOpened: () => number;
   readonly closeCount: () => number;
+}
+
+/** Random access over rows held in a test list; each read is a fresh copy, like a disk read. */
+export function readAtOf(
+  rows: readonly IContent[],
+): ProviderRequestRows['readAt'] {
+  const selection = inMemoryRequestSelection(rows);
+  return (index, signal) => structuredClone(selection.readAt(index, signal));
 }
 
 export function textRow(text: string, speaker: IContent['speaker'] = 'human') {
@@ -31,6 +43,7 @@ export function trackedRequestRows(
   let closed = 0;
   return {
     count: rows.length,
+    readAt: readAtOf(rows),
     async *openReader(signal) {
       open++;
       opened++;

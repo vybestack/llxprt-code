@@ -1,8 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import type {
-  ProviderRequestRows,
-  ProviderRequestSelection,
-  ProviderRequestSnapshot,
+import {
+  assertRowIndex,
+  type ProviderRequestRows,
+  type ProviderRequestSelection,
+  type ProviderRequestSnapshot,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 
@@ -16,9 +17,12 @@ export interface SourcePendingSelection {
 export function sourcePendingMembership(
   snapshot: ProviderRequestSnapshot,
 ): SourcePendingSelection {
-  let count = 0;
+  // Positions of the pending rows in the full selection; bounded by the
+  // pending rows of this request, not by the history.
+  const positions: number[] = [];
   for (let index = 0; index < snapshot.count; index++)
-    if (snapshot.isPending(index)) count++;
+    if (snapshot.isPending(index)) positions.push(index);
+  const count = positions.length;
   return Object.freeze({
     kind: 'provider-output-membership',
     rows: Object.freeze({
@@ -30,6 +34,10 @@ export function sourcePendingMembership(
         for await (const row of snapshot.openReader(signal)) {
           if (snapshot.isPending(index++)) yield row;
         }
+      },
+      readAt(index: number, signal?: AbortSignal): IContent {
+        assertRowIndex(index, count);
+        return snapshot.readAt(positions[index], signal);
       },
     }),
   });
@@ -48,6 +56,7 @@ export function pendingAwareRequestSelection(
   return Object.freeze({
     count: rows.count,
     openReader: (signal?: AbortSignal) => rows.openReader(signal),
+    readAt: (index: number, signal?: AbortSignal) => rows.readAt(index, signal),
     close: () => rows.close(),
     pendingSelection,
   });

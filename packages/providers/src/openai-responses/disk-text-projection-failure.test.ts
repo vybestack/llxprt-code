@@ -95,6 +95,7 @@ describe('Responses disk-text projection adaptation failure', () => {
     const corrupting: ProviderRequestSelection = {
       count: selection.count,
       close: () => selection.close(),
+      readAt: (index, signal) => selection.readAt(index, signal),
       openReader: (signal) =>
         corruptAfter(selection.openReader(signal), corruptLedgers),
     };

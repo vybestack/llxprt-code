@@ -51,6 +51,7 @@ export async function diskSource(root: string, count = 64, large = false) {
   const state = { closed: 0, opened: 0, pulled: 0, active: 0 };
   const source: PromptEnvelopeSource = {
     count: rows.count,
+    readAt: (index: number, signal?: AbortSignal) => rows.readAt(index, signal),
     async *openReader(
       signal?: AbortSignal,
     ): AsyncGenerator<IContent, void, unknown> {

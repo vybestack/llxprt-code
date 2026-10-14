@@ -142,6 +142,9 @@ describe('source shape context prerequisite', () => {
       'disabled',
       {
         count: 1,
+        readAt: () => {
+          throw new Error('Disabled shape must not read history');
+        },
         openReader(): AsyncGenerator<IContent, void, unknown> {
           throw new Error('Disabled shape must not read history');
         },

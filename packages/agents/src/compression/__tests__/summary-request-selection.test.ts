@@ -85,6 +85,14 @@ describe('disk summary request selection', () => {
       });
       expect(JSON.stringify(streamed)).toBe(JSON.stringify(reference));
       expect(selection.count).toBe(reference.length);
+      // Random access returns the same row as the sequential reader, and the
+      // trigger row (which depends on every journal row) is read last or first.
+      for (const index of [reference.length - 1, 0, 2, 1]) {
+        expect(JSON.stringify(selection.readAt(index))).toBe(
+          JSON.stringify(reference[index]),
+        );
+      }
+      expect(() => selection.readAt(reference.length)).toThrow(RangeError);
       // The selection is repeatable: a second reader sees the same bytes.
       const again = await drain({
         [Symbol.asyncIterator]: () => selection.openReader(),

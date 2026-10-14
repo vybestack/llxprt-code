@@ -29,6 +29,7 @@ export async function preflightDisk(root: string, large: boolean) {
   const state = { closed: 0, active: 0 };
   const source = requestSelection({
     count: 64,
+    readAt: (index: number, signal?: AbortSignal) => rows.readAt(index, signal),
     async *openReader(signal?: AbortSignal): AsyncGenerator<IContent> {
       state.active++;
       try {

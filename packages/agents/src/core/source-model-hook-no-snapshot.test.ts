@@ -62,6 +62,9 @@ describe('calls with no registered model hooks', () => {
       count: 1,
       pending: { inputCount: 0, firstOutputIndex: undefined },
       isPending: () => false,
+      readAt: () => {
+        throw new Error('rows must stay unread');
+      },
       openReader: () => {
         calls.rowsOpened++;
         throw new Error('rows must stay unread');

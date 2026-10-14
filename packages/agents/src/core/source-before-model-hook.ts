@@ -2,7 +2,10 @@
 
 import type { HookExecutionOwner } from '@vybestack/llxprt-code-core/hooks/hookEventHandler.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRequestSnapshot } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import {
+  assertRowIndex,
+  type ProviderRequestSnapshot,
+} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { RuntimeProviderToolset } from '@vybestack/llxprt-code-core/runtime/contracts/RuntimeProviderChat.js';
 import {
   pendingAwareRequestSelection,
@@ -48,6 +51,11 @@ export async function sourceBeforeModelHook(
             yield row;
           }
         },
+        readAt(index, signal) {
+          signal?.throwIfAborted();
+          assertRowIndex(index, pending.length);
+          return pending[index];
+        },
       },
       model: input.model,
       tools: input.tools ?? [],
@@ -63,6 +71,7 @@ export async function sourceBeforeModelHook(
       {
         count: boundary.contents.count,
         openReader: (signal) => boundary.contents.openReader(signal),
+        readAt: (index, signal) => boundary.contents.readAt(index, signal),
         close: () => boundary.close(),
       },
       boundary.pendingSelection === undefined

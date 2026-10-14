@@ -279,6 +279,7 @@ function observeIngressRows(
 ): ProviderRequestSelection {
   return {
     count: snapshot.count,
+    readAt: (index, signal) => snapshot.readAt(index, signal),
     close: () => snapshot.close(),
     async *openReader(
       signal?: AbortSignal,

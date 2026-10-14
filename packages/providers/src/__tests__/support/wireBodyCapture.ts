@@ -14,6 +14,7 @@
  * their production code up to the socket.
  */
 
+import { readAtOf } from '../requestRowsTestSupport.js';
 import { createHash } from 'node:crypto';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { bindProviderMedia } from '@vybestack/llxprt-code-core/runtime/bindProviderMedia.js';
@@ -258,6 +259,7 @@ function installFakeTransport(
 function rowsSelection(rows: readonly IContent[]): ProviderRequestSelection {
   return Object.freeze({
     count: rows.length,
+    readAt: readAtOf(rows),
     openReader: (signal?: AbortSignal) =>
       (async function* (): AsyncGenerator<IContent, void> {
         for (const row of rows) {

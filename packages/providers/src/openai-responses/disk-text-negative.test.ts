@@ -14,6 +14,10 @@ describe('disk text request option exclusion', () => {
     let reads = 0;
     const source = requestSelection({
       count: 1,
+      readAt: () => ({
+        speaker: 'human',
+        blocks: [{ type: 'text', text: 'payload' }],
+      }),
       async *openReader(): AsyncGenerator<IContent, void> {
         reads++;
         yield { speaker: 'human', blocks: [{ type: 'text', text: 'payload' }] };

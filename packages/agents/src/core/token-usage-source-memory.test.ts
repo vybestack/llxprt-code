@@ -160,6 +160,7 @@ function observed(
 ): ProviderRequestRows {
   return {
     count: snapshot.count,
+    readAt: (index, signal) => snapshot.readAt(index, signal),
     openReader(signal): AsyncGenerator<IContent, void, unknown> {
       const reader = snapshot.openReader(signal);
       const observer = new ObservedReader(reader, facts);

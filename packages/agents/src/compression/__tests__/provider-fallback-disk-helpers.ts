@@ -15,7 +15,10 @@ import {
 import { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
-import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import {
+  inMemoryRequestSelection,
+  type ProviderRequestSelection,
+} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { buildRuntimeContext } from '../../core/__tests__/chatSession-density-helpers.js';
 import type { FallbackTransactionDeps } from '../providerFallbackTransaction.js';
@@ -48,6 +51,7 @@ export interface FallbackHarness {
 
 const EMPTY_ROWS: ProviderRequestSelection = Object.freeze({
   count: 0,
+  readAt: inMemoryRequestSelection([]).readAt,
   async *openReader() {},
   close() {},
 });

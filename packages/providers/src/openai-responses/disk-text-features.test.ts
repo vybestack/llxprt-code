@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { readAtOf } from '../__tests__/requestRowsTestSupport.js';
 import { describe, expect, it, spyOn } from 'bun:test';
 import { readdirSync } from 'node:fs';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -35,6 +36,7 @@ function captureServer(failFirst: boolean): {
 function rowsOf(list: readonly IContent[]): ProviderRequestRows {
   return {
     count: list.length,
+    readAt: readAtOf(list),
     async *openReader(signal?: AbortSignal): AsyncGenerator<IContent, void> {
       for (const row of list) {
         signal?.throwIfAborted();

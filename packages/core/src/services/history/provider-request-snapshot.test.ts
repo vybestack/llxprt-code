@@ -1,11 +1,16 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { tmpdir } from 'node:os';
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { RowOwnership } from '../../recording/rowOwnership.js';
 import type { IContent } from './IContent.js';
+import {
+  inMemoryRequestSelection,
+  providerRequestRows,
+} from './provider-request-snapshot.js';
+import { ProviderNormalizationDisk } from './provider-normalization-disk.js';
 import { withCoreSuffixFixture } from './__tests__/support/core-suffix-fixture-test-helpers.js';
 import { providerFixtureRow } from './__tests__/support/provider-curated-test-helpers.js';
 import { suffixRow } from '@vybestack/llxprt-code-test-utils/core/history-suffix-test-helpers.js';
@@ -391,6 +396,95 @@ describe('normalized request production stream integration', () => {
       },
       128,
       providerFixtureRow,
+    );
+  });
+});
+
+describe('random access to one request row', () => {
+  it('reads any row of a 512-row disk snapshot by position, in any order, with one table lookup each', async () => {
+    await withCoreSuffixFixture(
+      512,
+      async (history) => {
+        const snapshot = await history.prepareCuratedForProviderSnapshot([
+          pending,
+        ]);
+        const rows = providerRequestRows(snapshot);
+        const lookups = spyOn(ProviderNormalizationDisk.prototype, 'row');
+        try {
+          for (const index of [511, 0, 300, 512, 1]) {
+            const expected = index === 512 ? pending : suffixRow(index, 128);
+            expect(rows.readAt(index)).toStrictEqual(expected);
+          }
+          expect(lookups).toHaveBeenCalledTimes(5);
+          expect(snapshot.readAt(7)).toStrictEqual(suffixRow(7, 128));
+          expect(rows.readAt(7)).not.toBe(rows.readAt(7));
+        } finally {
+          lookups.mockRestore();
+          snapshot.close();
+        }
+      },
+      128,
+    );
+  });
+
+  it('agrees with the sequential reader for every row', async () => {
+    await withCoreSuffixFixture(
+      64,
+      async (history) => {
+        const snapshot = await history.prepareCuratedForProviderSnapshot();
+        try {
+          let index = 0;
+          for await (const row of snapshot.openReader()) {
+            expect(JSON.stringify(snapshot.readAt(index))).toBe(
+              JSON.stringify(row),
+            );
+            index++;
+          }
+          expect(index).toBe(snapshot.count);
+        } finally {
+          snapshot.close();
+        }
+      },
+      32,
+    );
+  });
+
+  it('rejects positions outside the selection', async () => {
+    await withCoreSuffixFixture(8, async (history) => {
+      const snapshot = await history.prepareCuratedForProviderSnapshot();
+      try {
+        for (const index of [-1, 8, 1.5, Number.NaN])
+          expect(() => snapshot.readAt(index)).toThrow(RangeError);
+      } finally {
+        snapshot.close();
+      }
+    });
+  });
+
+  it('stops on an aborted signal and on a closed snapshot', async () => {
+    await withCoreSuffixFixture(8, async (history) => {
+      const snapshot = await history.prepareCuratedForProviderSnapshot();
+      const controller = new AbortController();
+      controller.abort(new Error('read cancelled'));
+      expect(() => snapshot.readAt(0, controller.signal)).toThrow(
+        'read cancelled',
+      );
+      snapshot.close();
+      expect(() => snapshot.readAt(0)).toThrow('snapshot is closed');
+    });
+  });
+
+  it('reads an in-memory selection by position with the same range and abort rules', () => {
+    const rows = [suffixRow(0), suffixRow(1), suffixRow(2)];
+    const selection = inMemoryRequestSelection(rows);
+    expect(selection.readAt(2)).toBe(rows[2]);
+    expect(selection.readAt(0)).toBe(rows[0]);
+    expect(() => selection.readAt(3)).toThrow(RangeError);
+    expect(() => selection.readAt(-1)).toThrow(RangeError);
+    const controller = new AbortController();
+    controller.abort(new Error('read cancelled'));
+    expect(() => selection.readAt(0, controller.signal)).toThrow(
+      'read cancelled',
     );
   });
 });

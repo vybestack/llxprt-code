@@ -57,6 +57,7 @@ async function nativeEstimate(
 ): Promise<PromptEnvelopeEstimate> {
   const rows = {
     count: 64,
+    readAt: (index: number) => diskTextRow(index, large),
     async *openReader() {
       for (let index = 0; index < 64; index++) yield diskTextRow(index, large);
     },
@@ -110,6 +111,8 @@ async function warmRuntime(setup: Setup): Promise<void> {
   // state of the large-piece estimator path exists before the baseline.
   const rows = requestSelection({
     count: 2,
+    readAt: (index: number) =>
+      index === 0 ? diskTextRow(0, false) : diskTextRow(63, 2),
     async *openReader() {
       yield diskTextRow(0, false);
       yield diskTextRow(63, 2);

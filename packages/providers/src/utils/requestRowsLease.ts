@@ -1,6 +1,9 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import {
+  assertRowIndex,
+  type ProviderRequestRows,
+} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { ProviderNormalizationDisk } from '@vybestack/llxprt-code-core/services/history/provider-normalization-disk.js';
 import type { GenerateChatOptions, ProviderToolset } from '../IProvider.js';
 import {
@@ -44,6 +47,26 @@ export function acquireRequestRows(
     },
     close: () => owner.close(),
   };
+}
+
+/**
+ * The row selection behind a leased request stream. Reads the rest of a
+ * one-shot stream onto the lease's scratch disk (one row in memory at a time)
+ * and returns a repeatable selection with a known count and random access.
+ * Throws when `contents` was not handed out by {@link acquireRequestRows}.
+ */
+export function stagedRequestRows(
+  contents: AsyncIterable<IContent>,
+): Promise<ProviderRequestRows> {
+  const lease = leases.get(contents);
+  if (lease === undefined) {
+    return Promise.reject(
+      new Error(
+        'Provider request rows were not staged; acquire them with acquireRequestRows',
+      ),
+    );
+  }
+  return lease.staged();
 }
 
 class RequestRowsLease {
@@ -98,6 +121,39 @@ class RequestRowsLease {
     }
   }
 
+  private async stageNext(): Promise<void> {
+    this.advancing ??= this.advance().finally(() => {
+      this.advancing = undefined;
+    });
+    if (this.signal === undefined) await this.advancing;
+    else await raceWithAbort(this.advancing, this.signal);
+  }
+
+  async staged(): Promise<ProviderRequestRows> {
+    this.assertOpen();
+    if (this.rows !== undefined) return this.rows;
+    while (!this.exhausted) {
+      this.assertOpen();
+      await this.stageNext();
+    }
+    this.assertOpen();
+    return Object.freeze({
+      count: this.length,
+      openReader: () => this.openReader(),
+      readAt: (index: number, signal?: AbortSignal) =>
+        this.readAt(index, signal),
+    });
+  }
+
+  private readAt(index: number, signal?: AbortSignal): IContent {
+    signal?.throwIfAborted();
+    this.assertOpen();
+    assertRowIndex(index, this.length);
+    if (this.disk === undefined)
+      throw new Error('Missing request staging disk');
+    return this.disk.row('ordered', index);
+  }
+
   private async *readRows(): AsyncGenerator<IContent, void, unknown> {
     this.assertOpen();
     if (this.rows !== undefined) {
@@ -106,13 +162,7 @@ class RequestRowsLease {
     }
     for (let index = 0; ; index++) {
       this.assertOpen();
-      if (index === this.length && !this.exhausted) {
-        this.advancing ??= this.advance().finally(() => {
-          this.advancing = undefined;
-        });
-        if (this.signal === undefined) await this.advancing;
-        else await raceWithAbort(this.advancing, this.signal);
-      }
+      if (index === this.length && !this.exhausted) await this.stageNext();
       this.assertOpen();
       if (index === this.length) return;
       if (this.disk === undefined)

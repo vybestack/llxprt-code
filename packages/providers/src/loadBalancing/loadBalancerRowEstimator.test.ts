@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { readAtOf } from '../__tests__/requestRowsTestSupport.js';
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
@@ -65,6 +66,7 @@ function repeatableRows(source: readonly IContent[]): {
   return {
     rows: {
       count: source.length,
+      readAt: readAtOf(source),
       openReader: async function* open() {
         opened++;
         yield* source;
@@ -154,6 +156,7 @@ describe('row-source load balancer estimation', () => {
   it('surfaces reader failures instead of degrading to a fallback estimate', async () => {
     const failing: ProviderRequestRows = {
       count: 2,
+      readAt: readAtOf(rows),
       openReader: async function* open() {
         yield rows[0];
         throw new Error('reader exploded');

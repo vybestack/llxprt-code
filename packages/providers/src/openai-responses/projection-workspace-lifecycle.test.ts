@@ -49,6 +49,7 @@ describe('actual Responses workspace large rows and token retirement', () => {
       expect(Buffer.byteLength(text)).toBeGreaterThan(10 * 1024 * 1024);
       const rows = {
         count: 1,
+        readAt: () => row,
         async *openReader(): AsyncGenerator<IContent, void> {
           yield row;
         },
@@ -437,21 +438,23 @@ describe('actual Responses projection cleanup failures', () => {
 describe('actual Responses disabled media workspace', () => {
   it('releases a snapshot containing disabled PDF media without changing unsupported-media reporting', async () => {
     await withWorkspaceRuntime(root(), async (setup) => {
+      const disabledPdf: IContent = {
+        speaker: 'human',
+        blocks: [
+          {
+            type: 'media',
+            mimeType: 'application/pdf',
+            data: 'JVBERi0=',
+            encoding: 'base64',
+            filename: 'disabled.pdf',
+          },
+        ],
+      };
       const rows = {
         count: 1,
+        readAt: () => disabledPdf,
         async *openReader(): AsyncGenerator<IContent, void> {
-          yield {
-            speaker: 'human',
-            blocks: [
-              {
-                type: 'media',
-                mimeType: 'application/pdf',
-                data: 'JVBERi0=',
-                encoding: 'base64',
-                filename: 'disabled.pdf',
-              },
-            ],
-          };
+          yield disabledPdf;
         },
       };
       const options = setup.options(rows, undefined, {

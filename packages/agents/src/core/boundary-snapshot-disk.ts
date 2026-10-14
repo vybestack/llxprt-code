@@ -2,7 +2,10 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import {
+  assertRowIndex,
+  type ProviderRequestRows,
+} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { HookSnapshotRows } from '@vybestack/llxprt-code-core/hooks/hookOutputSnapshot.js';
 import { isSpeakerContent } from '@vybestack/llxprt-code-core/services/history/historyJournalGuards.js';
 import { ProviderNormalizationStorage } from '@vybestack/llxprt-code-core/services/history/provider-normalization-storage.js';
@@ -161,6 +164,12 @@ class BoundaryDiskSelection implements ProviderRequestRows {
 
   openReader(signal?: AbortSignal): AsyncGenerator<IContent, void, unknown> {
     return this.disk.open(this.stage, this.start, this.count, signal);
+  }
+
+  readAt(index: number, signal?: AbortSignal): IContent {
+    signal?.throwIfAborted();
+    assertRowIndex(index, this.count);
+    return this.disk.row(this.stage, this.start + index);
   }
 }
 

@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { readAtOf } from '../__tests__/requestRowsTestSupport.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -40,6 +41,7 @@ const history: readonly IContent[] = [
 function rowsOf(list: readonly IContent[]): ProviderRequestRows {
   return {
     count: list.length,
+    readAt: readAtOf(list),
     async *openReader(signal?: AbortSignal): AsyncGenerator<IContent, void> {
       for (const row of list) {
         signal?.throwIfAborted();

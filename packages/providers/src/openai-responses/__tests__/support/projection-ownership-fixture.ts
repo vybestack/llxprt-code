@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { assertRowIndex } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -87,6 +88,12 @@ export function projectionDiskRows(
   }
   const rows: ProviderRequestRows = {
     count: rowCount,
+    readAt(index: number, signal?: AbortSignal): IContent {
+      signal?.throwIfAborted();
+      assertRowIndex(index, rowCount);
+      if (state.closed) throw new Error('Disk source is closed');
+      return deserialize(readFileSync(join(root, `${index}.row`)));
+    },
     async *openReader(signal?: AbortSignal): AsyncGenerator<IContent, void> {
       state.opened++;
       state.active++;

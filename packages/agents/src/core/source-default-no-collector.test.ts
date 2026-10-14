@@ -67,6 +67,7 @@ class CountingHistory extends HistoryService {
       count: snapshot.count,
       pending: snapshot.pending,
       isPending: (index) => snapshot.isPending(index),
+      readAt: (index, signal) => snapshot.readAt(index, signal),
       async *openReader(signal): AsyncGenerator<IContent, void, unknown> {
         census.opened++;
         census.active++;

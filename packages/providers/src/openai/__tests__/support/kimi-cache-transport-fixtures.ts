@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { readAtOf } from '../../../__tests__/requestRowsTestSupport.js';
 import { bindProviderFiles } from '@vybestack/llxprt-code-core/runtime/bindProviderFiles.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
@@ -207,6 +208,7 @@ export async function captureResponsesWire(
   });
   const rows = {
     count: RESPONSES_MEDIA_HISTORY.length,
+    readAt: readAtOf(RESPONSES_MEDIA_HISTORY),
     openReader: (): AsyncGenerator<IContent, void> =>
       (async function* (): AsyncGenerator<IContent, void> {
         for (const row of RESPONSES_MEDIA_HISTORY) yield structuredClone(row);

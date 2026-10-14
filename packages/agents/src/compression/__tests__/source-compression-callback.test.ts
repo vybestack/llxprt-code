@@ -2,7 +2,10 @@
 import { describe, expect, it } from 'bun:test';
 import { PerformCompressionResult } from '@vybestack/llxprt-code-core/core/turn.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import {
+  inMemoryRequestSelection,
+  type ProviderRequestSelection,
+} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { createSourceCompressionCallback } from '../source-compression-callback.js';
 import { SourceCandidate } from '../source-candidate.js';
 import { ContextOverflowError } from '../contextOverflowError.js';
@@ -24,6 +27,7 @@ function rowsOf(...texts: string[]): ProviderRequestSelection {
   }));
   return {
     count: rows.length,
+    readAt: inMemoryRequestSelection(rows).readAt,
     async *openReader() {
       for (const row of rows) yield row;
     },

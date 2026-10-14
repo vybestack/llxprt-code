@@ -12,6 +12,7 @@
  * outcome. Only the network (global fetch) is faked.
  */
 
+import { readAtOf } from '../__tests__/requestRowsTestSupport.js';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
@@ -114,6 +115,7 @@ function probeRows(rows: IContent[], onPull?: () => void): RowProbe {
   let returned = 0;
   const selection: ProviderRequestSelection = Object.freeze({
     count: rows.length,
+    readAt: readAtOf(rows),
     openReader: (signal?: AbortSignal) => {
       opened += 1;
       return (async function* (): AsyncGenerator<IContent, void> {

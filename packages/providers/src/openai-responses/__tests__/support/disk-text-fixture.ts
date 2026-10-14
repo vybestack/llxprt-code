@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { assertRowIndex } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -138,6 +139,12 @@ export function diskTextFixture(
     retained,
     rows: {
       count: 64,
+      readAt(index: number, signal?: AbortSignal): IContent {
+        signal?.throwIfAborted();
+        assertRowIndex(index, 64);
+        if (state.closed) throw new Error('Disk source is closed');
+        return deserialize(readFileSync(join(root, `${index}.row`)));
+      },
       async *openReader(signal?: AbortSignal): AsyncGenerator<IContent, void> {
         state.opened++;
         state.active++;

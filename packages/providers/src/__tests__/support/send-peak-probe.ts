@@ -33,7 +33,10 @@ import { join } from 'node:path';
 import { deserialize } from 'node:v8';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import {
+  assertRowIndex,
+  type ProviderRequestSelection,
+} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import {
   SETTLED_WINDOW_BYTES,
   settledHeap,
@@ -322,6 +325,14 @@ function fileSelection(
   return {
     selection: {
       count: job.count,
+      readAt: (index: number, signal?: AbortSignal) => {
+        signal?.throwIfAborted();
+        assertRowIndex(index, job.count);
+        const row: IContent = deserialize(
+          readFileSync(join(job.directory, `${index}.row`)),
+        );
+        return row;
+      },
       openReader: (signal?: AbortSignal) =>
         (async function* (): AsyncGenerator<IContent, void> {
           if (activeTrap !== undefined && !armed) {

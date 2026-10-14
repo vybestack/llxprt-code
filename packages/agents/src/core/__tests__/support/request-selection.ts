@@ -14,6 +14,7 @@ export function requestSelection(
   return Object.freeze({
     count: rows.count,
     openReader: (signal?: AbortSignal) => rows.openReader(signal),
+    readAt: (index: number, signal?: AbortSignal) => rows.readAt(index, signal),
     close: (): void | Promise<void> => {
       if (rows.close === undefined)
         throw new Error('Test selection has no close owner');

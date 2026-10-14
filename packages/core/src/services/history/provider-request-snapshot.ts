@@ -8,6 +8,19 @@ export interface ProviderRequestRows {
   readonly openReader: (
     signal?: AbortSignal,
   ) => AsyncGenerator<IContent, void, unknown>;
+  /**
+   * Random access to one row by its position in the selection, without
+   * reading the rows before it. The caller owns the returned row and holds
+   * only that one; it is not counted by a reader's row ownership.
+   * Throws a RangeError for a position outside `0..count-1`.
+   */
+  readonly readAt: (index: number, signal?: AbortSignal) => IContent;
+}
+
+/** Shared range rule for every `readAt` implementation. */
+export function assertRowIndex(index: number, count: number): void {
+  if (!Number.isInteger(index) || index < 0 || index >= count)
+    throw new RangeError('Provider request row index is out of range');
 }
 
 /**
@@ -32,6 +45,11 @@ export function inMemoryRequestSelection(
         yield row;
       }
     },
+    readAt(index, signal) {
+      signal?.throwIfAborted();
+      assertRowIndex(index, rows.length);
+      return rows[index];
+    },
     close: () => undefined,
   };
 }
@@ -42,6 +60,8 @@ export function providerRequestRows(
   return Object.freeze({
     count: snapshot.count,
     openReader: (signal?: AbortSignal) => snapshot.openReader(signal),
+    readAt: (index: number, signal?: AbortSignal) =>
+      snapshot.readAt(index, signal),
   });
 }
 
@@ -113,6 +133,14 @@ export class NormalizedProviderRequestSnapshot
 
   read(index: number): IContent {
     return this.storage().row('ordered', index);
+  }
+
+  /** One key lookup in the disk row table (`row:ordered:<index>`), O(1) in the index. */
+  readAt(index: number, signal?: AbortSignal): IContent {
+    signal?.throwIfAborted();
+    const disk = this.storage();
+    assertRowIndex(index, this.count);
+    return disk.row('ordered', index);
   }
 
   release(reader: ProviderSnapshotReader): void {

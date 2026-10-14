@@ -1,4 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
+import { readAtOf } from './requestRowsTestSupport.js';
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
@@ -52,6 +53,7 @@ function probe(rows: IContent[], failAtOpen?: number): Probe {
   const state = { opened: 0, closed: 0, signals: [] as unknown[] };
   const selection: ProviderRequestSelection = {
     count: rows.length,
+    readAt: readAtOf(rows),
     async *openReader(signal) {
       const open = ++state.opened;
       state.signals.push(signal);
@@ -164,6 +166,7 @@ describe('provider-neutral requestRows on a provider with no source transport', 
     const lying: ProviderRequestSelection = {
       count: 3,
       openReader: (signal) => selection.openReader(signal),
+      readAt: (index, signal) => selection.readAt(index, signal),
       close: () => selection.close(),
     };
     const provider = new NeutralRowsProvider();

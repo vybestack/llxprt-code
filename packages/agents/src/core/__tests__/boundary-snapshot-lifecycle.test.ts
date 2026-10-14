@@ -17,6 +17,8 @@ describe('boundary snapshot lifecycle', () => {
       const controller = new AbortController();
       const before = {
         count: fixture.before.count,
+        readAt: (index: number, signal?: AbortSignal) =>
+          fixture.before.readAt(index, signal),
         async *openReader(
           signal?: AbortSignal,
         ): AsyncGenerator<IContent, void, unknown> {

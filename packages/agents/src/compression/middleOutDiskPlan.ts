@@ -3,7 +3,10 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import type { HistoryIndexedRows } from '@vybestack/llxprt-code-core/services/history/historyMutationSnapshot.js';
 import type { CompressionContext } from '@vybestack/llxprt-code-core/core/compression/types.js';
 import type { RowOwnership } from '@vybestack/llxprt-code-core/recording/rowOwnership.js';
-import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import {
+  assertRowIndex,
+  type ProviderRequestSelection,
+} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import { estimateTokens } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
 import {
   adjustDiskToolBoundary,
@@ -115,6 +118,12 @@ function preserveLastPrompt(
 
 const SUMMARY_FRAME_ROWS = 3;
 
+function hasStateSnapshot(row: IContent): boolean {
+  return row.blocks.some(
+    (block) => block.type === 'text' && block.text.includes('<state_snapshot>'),
+  );
+}
+
 /**
  * The complete summarization request as a repeatable selection: the security
  * preamble, the compression prompt, the sanitized journal rows in
@@ -134,8 +143,43 @@ export function diskSummaryRequestSelection(
     speaker: 'human',
     blocks: [{ type: 'text', text: prompt }],
   };
+  const count = SUMMARY_FRAME_ROWS + (plan.bottom - plan.top) + tail.length;
+  const journalEnd = 2 + (plan.bottom - plan.top);
+  const sanitizedAt = (journalIndex: number): IContent =>
+    sanitizeHistoryForCompression([rows.readRow(journalIndex)])[0];
+  const triggerRow = (priorSnapshot: boolean): IContent => ({
+    speaker: 'human',
+    blocks: [
+      {
+        type: 'text',
+        text: buildTriggerInstruction(
+          priorSnapshot
+            ? [
+                {
+                  speaker: 'human',
+                  blocks: [{ type: 'text', text: '<state_snapshot>' }],
+                },
+              ]
+            : [],
+        ),
+      },
+    ],
+  });
+  // The trigger row depends on every journal row, so a random read of it scans
+  // the journal once; the answer is kept for later reads.
+  let scannedSnapshot: boolean | undefined;
+  const journalHasSnapshot = (signal?: AbortSignal): boolean => {
+    if (scannedSnapshot !== undefined) return scannedSnapshot;
+    let found = false;
+    for (let index = plan.top; index < plan.bottom && !found; index++) {
+      signal?.throwIfAborted();
+      found = hasStateSnapshot(rows.readRow(index));
+    }
+    scannedSnapshot = found;
+    return found;
+  };
   return {
-    count: SUMMARY_FRAME_ROWS + (plan.bottom - plan.top) + tail.length,
+    count,
     async *openReader(signal) {
       signal?.throwIfAborted();
       yield COMPRESSION_SECURITY_PREAMBLE;
@@ -144,10 +188,7 @@ export function diskSummaryRequestSelection(
       for (let index = plan.top; index < plan.bottom; index++) {
         signal?.throwIfAborted();
         const row = rows.readRow(index);
-        priorSnapshot ||= row.blocks.some(
-          (block) =>
-            block.type === 'text' && block.text.includes('<state_snapshot>'),
-        );
+        priorSnapshot ||= hasStateSnapshot(row);
         const sanitized = sanitizeHistoryForCompression([row])[0];
         ownership.retain(sanitized);
         try {
@@ -157,24 +198,16 @@ export function diskSummaryRequestSelection(
         }
       }
       yield* tail;
-      yield {
-        speaker: 'human',
-        blocks: [
-          {
-            type: 'text',
-            text: buildTriggerInstruction(
-              priorSnapshot
-                ? [
-                    {
-                      speaker: 'human',
-                      blocks: [{ type: 'text', text: '<state_snapshot>' }],
-                    },
-                  ]
-                : [],
-            ),
-          },
-        ],
-      };
+      yield triggerRow(priorSnapshot);
+    },
+    readAt(index, signal) {
+      signal?.throwIfAborted();
+      assertRowIndex(index, count);
+      if (index === 0) return COMPRESSION_SECURITY_PREAMBLE;
+      if (index === 1) return promptRow;
+      if (index < journalEnd) return sanitizedAt(plan.top + index - 2);
+      if (index < count - 1) return tail[index - journalEnd];
+      return triggerRow(journalHasSnapshot(signal));
     },
     close: () => undefined,
   };

@@ -28,6 +28,7 @@ describe('source prepared transactional cleanup failure', () => {
     const source = requestSelection({
       count: fixture.source.count,
       openReader: (signal) => fixture.source.openReader(signal),
+      readAt: (index, signal) => fixture.source.readAt(index, signal),
       async close(): Promise<void> {
         await fixture.source.close();
         throw cleanupFailed;
