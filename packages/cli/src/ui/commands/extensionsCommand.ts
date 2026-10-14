@@ -4,24 +4,38 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { listExtensions } from '@vybestack/llxprt-code-core';
+import type {
+  listExtensions,
+  LlxprtExtension,
+} from '@vybestack/llxprt-code-core';
 import type { ExtensionUpdateInfo } from '../../config/extension.js';
-import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import { getErrorMessage } from '../../utils/errors.js';
-import { MessageType, type HistoryItemExtensionsList } from '../types.js';
 import {
-  type CommandContext,
-  type SlashCommand,
-  CommandKind,
-} from './types.js';
-import { loadSettings } from '../../config/settings.js';
+  type HistoryItemWithoutId,
+  MessageType,
+  type HistoryItemExtensionsList,
+} from '../types.js';
+import { type SlashCommand, CommandKind } from './types.js';
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+import type { ExtensionUpdateAction } from '../state/extensions.js';
+
+export interface ExtensionCommandOperations {
+  readonly list: () => ReturnType<typeof listExtensions>;
+  readonly isAdminDisabled: () => boolean;
+  readonly restart: ((extension: LlxprtExtension) => Promise<void>) | undefined;
+  readonly install: (source: string) => Promise<void>;
+  readonly uninstall: (name: string) => Promise<void>;
+  readonly addItem: UseHistoryManagerReturn['addItem'];
+  readonly setPendingItem: (item: HistoryItemWithoutId | null) => void;
+  readonly dispatchUpdate: (action: ExtensionUpdateAction) => void;
+}
 
 function showMessageIfNoExtensions(
-  context: CommandContext,
+  operations: ExtensionCommandOperations,
   extensions: unknown[],
 ): boolean {
   if (extensions.length === 0) {
-    context.ui.addItem(
+    operations.addItem(
       {
         type: MessageType.INFO,
         text: 'No extensions installed. Run `/extensions explore` to check out the gallery.',
@@ -33,18 +47,15 @@ function showMessageIfNoExtensions(
   return false;
 }
 
-async function listAction(context: CommandContext) {
-  const extensions = context.services.config
-    ? listExtensions(context.services.config)
-    : [];
+async function listAction(operations: ExtensionCommandOperations) {
+  const extensions = operations.list();
 
   // Check if extensions are disabled by admin
   if (extensions.length === 0) {
-    const settings = loadSettings().merged;
-    const adminDisabled = settings.admin?.extensions?.enabled === false;
+    const adminDisabled = operations.isAdminDisabled();
 
     if (adminDisabled) {
-      context.ui.addItem(
+      operations.addItem(
         {
           type: MessageType.INFO,
           text: 'Extensions are disabled by your administrator.',
@@ -55,7 +66,7 @@ async function listAction(context: CommandContext) {
     }
   }
 
-  if (showMessageIfNoExtensions(context, extensions)) {
+  if (showMessageIfNoExtensions(operations, extensions)) {
     return;
   }
 
@@ -64,22 +75,22 @@ async function listAction(context: CommandContext) {
     extensions,
   };
 
-  context.ui.addItem(historyItem);
+  operations.addItem(historyItem);
 }
 
 function reportMissingExtensions(
-  context: CommandContext,
+  operations: ExtensionCommandOperations,
   names: string[] | null,
 ): void {
   if (names == null || names.length === 0) {
     return;
   }
 
-  const extensions = listExtensions(context.services.config!);
+  const extensions = operations.list();
   for (const name of names) {
     const extension = extensions.find((extension) => extension.name === name);
     if (!extension) {
-      context.ui.addItem(
+      operations.addItem(
         {
           type: MessageType.ERROR,
           text: `Extension ${name} not found.`,
@@ -91,16 +102,16 @@ function reportMissingExtensions(
 }
 
 function dispatchUpdateAndReport(
-  context: CommandContext,
+  operations: ExtensionCommandOperations,
   all: boolean,
   names: string[] | null,
   historyItem: HistoryItemExtensionsList,
   resolveUpdateComplete: (updateInfo: ExtensionUpdateInfo[]) => void,
 ): void {
   try {
-    context.ui.setPendingItem(historyItem);
+    operations.setPendingItem(historyItem);
 
-    context.ui.dispatchExtensionStateUpdate({
+    operations.dispatchUpdate({
       type: 'SCHEDULE_UPDATE',
       payload: {
         all,
@@ -110,10 +121,10 @@ function dispatchUpdateAndReport(
         },
       },
     });
-    reportMissingExtensions(context, names);
+    reportMissingExtensions(operations, names);
   } catch (error) {
     resolveUpdateComplete([]);
-    context.ui.addItem(
+    operations.addItem(
       {
         type: MessageType.ERROR,
         text: getErrorMessage(error),
@@ -124,12 +135,12 @@ function dispatchUpdateAndReport(
 }
 
 function handleUpdateComplete(
-  context: CommandContext,
+  operations: ExtensionCommandOperations,
   updateInfos: ExtensionUpdateInfo[],
   historyItem: HistoryItemExtensionsList,
 ): void {
   if (updateInfos.length === 0) {
-    context.ui.addItem(
+    operations.addItem(
       {
         type: MessageType.INFO,
         text: 'No extensions to update.',
@@ -138,17 +149,20 @@ function handleUpdateComplete(
     );
   }
 
-  context.ui.addItem(historyItem);
-  context.ui.setPendingItem(null);
+  operations.addItem(historyItem);
+  operations.setPendingItem(null);
 }
 
-function updateAction(context: CommandContext, args: string): Promise<void> {
+function updateAction(
+  operations: ExtensionCommandOperations,
+  args: string,
+): Promise<void> {
   const updateArgs = args.split(' ').filter((value) => value.length > 0);
   const all = updateArgs.length === 1 && updateArgs[0] === '--all';
   const names = all ? null : updateArgs;
 
   if (!all && names?.length === 0) {
-    context.ui.addItem(
+    operations.addItem(
       {
         type: MessageType.ERROR,
         text: 'Usage: /extensions update <extension-names>|--all',
@@ -163,11 +177,9 @@ function updateAction(context: CommandContext, args: string): Promise<void> {
     (resolve) => (resolveUpdateComplete = resolve),
   );
 
-  const extensions = context.services.config
-    ? listExtensions(context.services.config)
-    : [];
+  const extensions = operations.list();
 
-  if (showMessageIfNoExtensions(context, extensions)) {
+  if (showMessageIfNoExtensions(operations, extensions)) {
     return Promise.resolve();
   }
 
@@ -177,11 +189,11 @@ function updateAction(context: CommandContext, args: string): Promise<void> {
   };
 
   void updateComplete.then((updateInfos) =>
-    handleUpdateComplete(context, updateInfos, historyItem),
+    handleUpdateComplete(operations, updateInfos, historyItem),
   );
 
   dispatchUpdateAndReport(
-    context,
+    operations,
     all,
     names,
     historyItem,
@@ -190,40 +202,46 @@ function updateAction(context: CommandContext, args: string): Promise<void> {
   return updateComplete.then((_) => {});
 }
 
-const listExtensionsCommand: SlashCommand = {
-  name: 'list',
-  description: 'List active extensions',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  action: listAction,
-};
+function createListCommand(
+  operations: ExtensionCommandOperations,
+): SlashCommand {
+  return {
+    name: 'list',
+    description: 'List active extensions',
+    kind: CommandKind.BUILT_IN,
+    autoExecute: true,
+    action: () => listAction(operations),
+  };
+}
 
-const updateExtensionsCommand: SlashCommand = {
-  name: 'update',
-  description: 'Update extensions. Usage: update <extension-names>|--all',
-  kind: CommandKind.BUILT_IN,
-  action: updateAction,
-  completion: async (context, partialArg) => {
-    const extensions = context.services.config
-      ? listExtensions(context.services.config)
-      : [];
-    const extensionNames = extensions.map((ext) => ext.name);
-    const suggestions = extensionNames.filter((name) =>
-      name.startsWith(partialArg),
-    );
+function createUpdateCommand(
+  operations: ExtensionCommandOperations,
+): SlashCommand {
+  return {
+    name: 'update',
+    description: 'Update extensions. Usage: update <extension-names>|--all',
+    kind: CommandKind.BUILT_IN,
+    action: (_invocation, args) => updateAction(operations, args),
+    completion: async (_invocation, partialArg) => {
+      const extensions = operations.list();
+      const extensionNames = extensions.map((ext) => ext.name);
+      const suggestions = extensionNames.filter((name) =>
+        name.startsWith(partialArg),
+      );
 
-    if ('--all'.startsWith(partialArg) || 'all'.startsWith(partialArg)) {
-      suggestions.unshift('--all');
-    }
+      if ('--all'.startsWith(partialArg) || 'all'.startsWith(partialArg)) {
+        suggestions.unshift('--all');
+      }
 
-    return suggestions;
-  },
-};
+      return suggestions;
+    },
+  };
+}
 
 function filterExtensionsToRestart(
   extensions: LlxprtExtension[],
   names: string[] | null,
-  context: CommandContext,
+  operations: ExtensionCommandOperations,
 ): LlxprtExtension[] {
   let extensionsToRestart = extensions.filter(
     (extension: LlxprtExtension) => extension.isActive,
@@ -240,7 +258,7 @@ function filterExtensionsToRestart(
           ),
       );
       if (notFound.length > 0) {
-        context.ui.addItem(
+        operations.addItem(
           {
             type: MessageType.WARNING,
             text: `Extension(s) not found or not active: ${notFound.join(', ')}`,
@@ -256,11 +274,11 @@ function filterExtensionsToRestart(
 async function performRestart(
   restart: (extension: LlxprtExtension) => Promise<void>,
   extensionsToRestart: LlxprtExtension[],
-  context: CommandContext,
+  operations: ExtensionCommandOperations,
 ): Promise<void> {
   const s = extensionsToRestart.length > 1 ? 's' : '';
 
-  context.ui.addItem({
+  operations.addItem({
     type: MessageType.INFO,
     text: `Restarting ${extensionsToRestart.length} extension${s}...`,
   });
@@ -269,7 +287,7 @@ async function performRestart(
     extensionsToRestart.map(async (extension: LlxprtExtension) => {
       if (extension.isActive) {
         await restart(extension);
-        context.ui.dispatchExtensionStateUpdate({
+        operations.dispatchUpdate({
           type: 'RESTARTED',
           payload: {
             name: extension.name,
@@ -289,7 +307,7 @@ async function performRestart(
 
   if (failureMessages.length > 0) {
     const errorMessages = failureMessages.join('\n  ');
-    context.ui.addItem(
+    operations.addItem(
       {
         type: MessageType.ERROR,
         text: `Failed to restart some extensions:\n  ${errorMessages}`,
@@ -297,7 +315,7 @@ async function performRestart(
       Date.now(),
     );
   } else {
-    context.ui.addItem(
+    operations.addItem(
       {
         type: MessageType.INFO,
         text: `${extensionsToRestart.length} extension${s} restarted successfully.`,
@@ -308,12 +326,12 @@ async function performRestart(
 }
 
 async function restartAction(
-  context: CommandContext,
+  operations: ExtensionCommandOperations,
   args: string,
 ): Promise<void> {
-  const restart = context.services.config?.restartExtension;
+  const restart = operations.restart;
   if (!restart) {
-    context.ui.addItem(
+    operations.addItem(
       {
         type: MessageType.ERROR,
         text: "Extensions are not yet loaded, can't restart yet",
@@ -323,8 +341,8 @@ async function restartAction(
     return;
   }
 
-  const extensions = context.services.config?.getExtensions() ?? [];
-  if (showMessageIfNoExtensions(context, extensions)) {
+  const extensions = operations.list();
+  if (showMessageIfNoExtensions(operations, extensions)) {
     return;
   }
 
@@ -332,7 +350,7 @@ async function restartAction(
   const all = restartArgs.length === 1 && restartArgs[0] === '--all';
   const names = all ? null : restartArgs;
   if (!all && names?.length === 0) {
-    context.ui.addItem(
+    operations.addItem(
       {
         type: MessageType.ERROR,
         text: 'Usage: /extensions restart <extension-names>|--all',
@@ -345,25 +363,24 @@ async function restartAction(
   const extensionsToRestart = filterExtensionsToRestart(
     extensions,
     names,
-    context,
+    operations,
   );
   if (extensionsToRestart.length === 0) {
     return;
   }
 
-  await performRestart(restart, extensionsToRestart, context);
+  await performRestart(restart, extensionsToRestart, operations);
 }
 
 async function completeExtensions(
-  context: CommandContext,
+  operations: ExtensionCommandOperations,
   partialArg: string,
+  activeOnly: boolean,
 ): Promise<string[]> {
-  let extensions = context.services.config
-    ? listExtensions(context.services.config)
-    : [];
+  let extensions = operations.list();
 
   // Filter by active state based on the command
-  if (context.invocation?.name === 'restart') {
+  if (activeOnly) {
     extensions = extensions.filter((ext) => ext.isActive);
   }
 
@@ -371,23 +388,28 @@ async function completeExtensions(
   return extensionNames.filter((name) => name.startsWith(partialArg));
 }
 
-const restartCommand: SlashCommand = {
-  name: 'restart',
-  description: 'Restart extensions. Usage: restart <extension-names>|--all',
-  kind: CommandKind.BUILT_IN,
-  action: restartAction,
-  completion: completeExtensions,
-};
+function createRestartCommand(
+  operations: ExtensionCommandOperations,
+): SlashCommand {
+  return {
+    name: 'restart',
+    description: 'Restart extensions. Usage: restart <extension-names>|--all',
+    kind: CommandKind.BUILT_IN,
+    action: (_invocation, args) => restartAction(operations, args),
+    completion: (_invocation, partialArg) =>
+      completeExtensions(operations, partialArg, true),
+  };
+}
 
 async function installAction(
-  context: CommandContext,
+  operations: ExtensionCommandOperations,
   args: string,
 ): Promise<void> {
-  const restart = context.services.config?.restartExtension;
+  const restart = operations.restart;
 
   // Check if extension reloading is enabled
   if (!restart) {
-    context.ui.addItem(
+    operations.addItem(
       {
         type: MessageType.ERROR,
         text: 'Extension reloading is not enabled. Use the CLI command instead.',
@@ -400,7 +422,7 @@ async function installAction(
   const source = args.trim();
 
   if (!source) {
-    context.ui.addItem(
+    operations.addItem(
       {
         type: MessageType.ERROR,
         text: 'Usage: /extensions install <source>',
@@ -418,7 +440,7 @@ async function installAction(
     source.startsWith('sso://');
 
   if (!isUrl && /[;&|`'"]/.test(source)) {
-    context.ui.addItem(
+    operations.addItem(
       {
         type: MessageType.ERROR,
         text: 'Invalid characters in source path.',
@@ -428,7 +450,7 @@ async function installAction(
     return;
   }
 
-  context.ui.addItem(
+  operations.addItem(
     {
       type: MessageType.INFO,
       text: `Installing extension from ${source}...`,
@@ -437,21 +459,9 @@ async function installAction(
   );
 
   try {
-    const { inferInstallMetadata, installOrUpdateExtension } = await import(
-      '../../config/extension.js'
-    );
-    const installMetadata = await inferInstallMetadata(source);
+    await operations.install(source);
 
-    // Use requestConsentNonInteractive for slash commands
-    const { requestConsentNonInteractive } = await import(
-      '../../config/extension.js'
-    );
-    await installOrUpdateExtension(
-      installMetadata,
-      requestConsentNonInteractive,
-    );
-
-    context.ui.addItem(
+    operations.addItem(
       {
         type: MessageType.INFO,
         text: `Extension installed successfully.`,
@@ -459,7 +469,7 @@ async function installAction(
       Date.now(),
     );
   } catch (error) {
-    context.ui.addItem(
+    operations.addItem(
       {
         type: MessageType.ERROR,
         text: getErrorMessage(error),
@@ -470,13 +480,13 @@ async function installAction(
 }
 
 async function uninstallAction(
-  context: CommandContext,
+  operations: ExtensionCommandOperations,
   args: string,
 ): Promise<void> {
-  const restart = context.services.config?.restartExtension;
+  const restart = operations.restart;
 
   if (!restart) {
-    context.ui.addItem(
+    operations.addItem(
       {
         type: MessageType.ERROR,
         text: 'Extension reloading is not enabled. Use the CLI command instead.',
@@ -489,7 +499,7 @@ async function uninstallAction(
   const name = args.trim();
 
   if (!name) {
-    context.ui.addItem(
+    operations.addItem(
       {
         type: MessageType.ERROR,
         text: 'Usage: /extensions uninstall <name>',
@@ -499,7 +509,7 @@ async function uninstallAction(
     return;
   }
 
-  context.ui.addItem(
+  operations.addItem(
     {
       type: MessageType.INFO,
       text: `Uninstalling extension ${name}...`,
@@ -508,10 +518,9 @@ async function uninstallAction(
   );
 
   try {
-    const { uninstallExtension } = await import('../../config/extension.js');
-    await uninstallExtension(name, false);
+    await operations.uninstall(name);
 
-    context.ui.addItem(
+    operations.addItem(
       {
         type: MessageType.INFO,
         text: `Extension ${name} uninstalled successfully.`,
@@ -519,7 +528,7 @@ async function uninstallAction(
       Date.now(),
     );
   } catch (error) {
-    context.ui.addItem(
+    operations.addItem(
       {
         type: MessageType.ERROR,
         text: getErrorMessage(error),
@@ -529,43 +538,46 @@ async function uninstallAction(
   }
 }
 
-const installCommand: SlashCommand = {
-  name: 'install',
-  description: 'Install an extension from a git repo or local path',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: false,
-  action: installAction,
-};
+function createInstallCommand(
+  operations: ExtensionCommandOperations,
+): SlashCommand {
+  return {
+    name: 'install',
+    description: 'Install an extension from a git repo or local path',
+    kind: CommandKind.BUILT_IN,
+    autoExecute: false,
+    action: (_invocation, args) => installAction(operations, args),
+  };
+}
 
-const uninstallCommand: SlashCommand = {
-  name: 'uninstall',
-  description: 'Uninstall an extension',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: false,
-  action: uninstallAction,
-  completion: completeExtensions,
-};
+function createUninstallCommand(
+  operations: ExtensionCommandOperations,
+): SlashCommand {
+  return {
+    name: 'uninstall',
+    description: 'Uninstall an extension',
+    kind: CommandKind.BUILT_IN,
+    autoExecute: false,
+    action: (_invocation, args) => uninstallAction(operations, args),
+    completion: (_invocation, partialArg) =>
+      completeExtensions(operations, partialArg, false),
+  };
+}
 
-// Build subcommands list with conditional commands
-const buildSubCommands = (): SlashCommand[] => {
-  const commands = [listExtensionsCommand, updateExtensionsCommand];
-
-  // Add commands that require extension reloading
-  // Note: We can't check the config here, so we add them unconditionally
-  // and check inside each action
-  commands.push(restartCommand);
-  commands.push(installCommand);
-  commands.push(uninstallCommand);
-
-  return commands;
-};
-
-export const extensionsCommand: SlashCommand = {
-  name: 'extensions',
-  description: 'Manage extensions',
-  kind: CommandKind.BUILT_IN,
-  subCommands: buildSubCommands(),
-  action: (context, args) =>
-    // Default to list if no subcommand is provided
-    listExtensionsCommand.action!(context, args),
-};
+export function createExtensionsCommand(
+  operations: ExtensionCommandOperations,
+): SlashCommand {
+  return {
+    name: 'extensions',
+    description: 'Manage extensions',
+    kind: CommandKind.BUILT_IN,
+    subCommands: [
+      createListCommand(operations),
+      createUpdateCommand(operations),
+      createRestartCommand(operations),
+      createInstallCommand(operations),
+      createUninstallCommand(operations),
+    ],
+    action: () => listAction(operations),
+  };
+}

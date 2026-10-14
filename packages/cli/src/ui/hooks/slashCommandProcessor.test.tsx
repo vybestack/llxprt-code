@@ -1,94 +1,22 @@
 import { installWorkspaceRuntimeFixture } from '../../__tests__/workspace-runtime-fixture.js';
 const composeFixtureRuntime = installWorkspaceRuntimeFixture();
 import { createDialogStore } from '../stores/dialog/dialogStore.js';
-const reactStub = (() => {
-  let stateCursor = 0;
-  const states: unknown[] = [];
-  const setters: Array<(value: unknown) => void> = [];
-  const listeners = new Map<number, (value: unknown) => void>();
-  const effects: Array<() => void | Promise<void> | (() => void)> = [];
-
-  const reset = () => {
-    stateCursor = 0;
-    effects.length = 0;
-  };
-
-  const notify = (index: number, value: unknown) => {
-    const listener = listeners.get(index);
-    if (listener) {
-      listener(value);
-    }
-  };
-
-  const useState = <T,>(
-    initial: T | (() => T),
-  ): [T, (value: T | ((prev: T) => T)) => void] => {
-    const index = stateCursor++;
-    if (states[index] === undefined) {
-      states[index] =
-        typeof initial === 'function' ? (initial as () => T)() : initial;
-    }
-    const setState = (value: T | ((prev: T) => T)) => {
-      const next =
-        typeof value === 'function'
-          ? (value as (prev: T) => T)(states[index] as T)
-          : value;
-      states[index] = next;
-      notify(index, next);
-    };
-    setters[index] = (value: unknown) => {
-      const next = typeof value === 'function' ? value(states[index]) : value;
-      states[index] = next;
-      notify(index, next);
-    };
-    return [states[index] as T, setState];
-  };
-
-  const useEffect = (callback: () => void | (() => void) | Promise<void>) => {
-    effects.push(callback);
-  };
-
-  const runEffects = async () => {
-    for (const effect of effects) {
-      await effect();
-    }
-  };
-
-  return {
-    module: {
-      useState,
-      useEffect,
-      useMemo: <T,>(factory: () => T) => factory(),
-      useCallback: <T extends (...args: unknown[]) => unknown>(fn: T) => fn,
-      useRef: <T,>(initial: T) => ({ current: initial }),
-      useMemoizedState: <T,>(value: T) => value,
-    },
-    reset,
-    states,
-    setters,
-    listeners,
-    runEffects,
-  };
-})();
-
-const actual = { ...(await import('react')) };
-void vi.mock('react', () => ({
-  ...actual,
-  ...reactStub.module,
-}));
-
 import { describe, it, expect, beforeEach, vi } from 'bun:test';
+import { renderHook, waitFor } from '../../__tests__/render.js';
 import { useSlashCommandProcessor } from './slashCommandProcessor.js';
 import { createMockRuntimeApi } from '../components/__tests__/StatsDisplay.testHelpers.js';
 
+const runtimeApi = createMockRuntimeApi();
+const refreshAliases = vi.fn(async () => {});
+const oauthControl = { isAvailable: () => false };
 void vi.mock('../contexts/RuntimeContext.js', () => ({
-  useRuntimeApi: () => createMockRuntimeApi(),
+  useRuntimeApi: () => runtimeApi,
 }));
 void vi.mock('../contexts/ProviderAliasRefreshContext.js', () => ({
-  useProviderAliasRefresh: () => vi.fn(async () => {}),
+  useProviderAliasRefresh: () => refreshAliases,
 }));
 void vi.mock('../contexts/OAuthControlContext.js', () => ({
-  useOAuthControl: () => ({ isAvailable: () => false }),
+  useOAuthControl: () => oauthControl,
 }));
 import type { SlashCommand } from '../commands/types.js';
 import { CommandKind } from '../commands/types.js';
@@ -219,22 +147,9 @@ describe('useSlashCommandProcessor', () => {
   let toggleVimEnabled: ReturnType<typeof vi.fn>;
   let setIsProcessing: ReturnType<typeof vi.fn>;
   let setLlxprtMdFileCount: ReturnType<typeof vi.fn>;
-  let commandsPromise: Promise<void>;
-  let resolveCommandsUpdate: (() => void) | undefined;
-  let latestCommands: readonly SlashCommand[];
 
   beforeEach(() => {
     vi.clearAllMocks();
-    reactStub.reset();
-    latestCommands = [];
-    commandsPromise = new Promise((resolve) => {
-      resolveCommandsUpdate = resolve;
-    });
-    reactStub.listeners.set(0, (value) => {
-      latestCommands = value as SlashCommand[];
-      resolveCommandsUpdate?.();
-    });
-
     loaderMocks.builtinLoaderInstance.loadCommands.mockReset();
     loaderMocks.fileLoaderInstance.loadCommands.mockReset();
     loaderMocks.mcpLoaderInstance.loadCommands.mockReset();
@@ -293,52 +208,52 @@ describe('useSlashCommandProcessor', () => {
       testCommands,
     );
 
-    useSlashCommandProcessor(
-      composeFixtureRuntime(mockConfig),
-      null,
-      mockSettings,
-      addItem,
-      clearItems,
-      loadHistory,
-      refreshStatic,
-      toggleVimEnabled,
-      setIsProcessing,
-      setLlxprtMdFileCount,
-      {
-        openThemeDialog,
-        openAuthDialog,
-        openEditorDialog,
-        openProviderDialog,
-        openLoadProfileDialog,
-        toggleCorgiMode,
-        quit: setQuittingMessages,
-        openPrivacyNotice,
-        openSettingsDialog,
-        setDebugMessage: onDebugMessage,
-        openLoggingDialog: () => {},
-        openSubagentDialog: () => {},
-        openModelsDialog: () => {},
-        openPermissionsDialog: () => {},
-        openPoliciesDialog: () => {},
-        openCreateProfileDialog: () => {},
-        openProfileListDialog: () => {},
-        viewProfileDetail: () => {},
-        openProfileEditor: () => {},
-        toggleDebugProfiler: () => {},
-        dispatchExtensionStateUpdate: () => {},
-        addConfirmUpdateExtensionRequest: () => {},
-        openWelcomeDialog: () => {},
-        openSessionBrowserDialog: () => {},
-      },
-      createDialogStore(),
-      new Map(),
-      true,
+    const config = composeFixtureRuntime(mockConfig);
+    const dialogs = createDialogStore();
+    const extensionUpdates = new Map();
+    const { result, unmount } = renderHook(() =>
+      useSlashCommandProcessor(
+        config,
+        null,
+        mockSettings,
+        addItem,
+        clearItems,
+        loadHistory,
+        refreshStatic,
+        toggleVimEnabled,
+        setIsProcessing,
+        setLlxprtMdFileCount,
+        {
+          openThemeDialog,
+          openAuthDialog,
+          openEditorDialog,
+          openProviderDialog,
+          openLoadProfileDialog,
+          toggleCorgiMode,
+          quit: setQuittingMessages,
+          openPrivacyNotice,
+          openSettingsDialog,
+          setDebugMessage: onDebugMessage,
+          openLoggingDialog: () => {},
+          openSubagentDialog: () => {},
+          openModelsDialog: () => {},
+          openPermissionsDialog: () => {},
+          openPoliciesDialog: () => {},
+          openCreateProfileDialog: () => {},
+          openProfileListDialog: () => {},
+          viewProfileDetail: () => {},
+          openProfileEditor: () => {},
+          toggleDebugProfiler: () => {},
+          dispatchExtensionStateUpdate: () => {},
+          addConfirmUpdateExtensionRequest: () => {},
+          openWelcomeDialog: () => {},
+          openSessionBrowserDialog: () => {},
+        },
+        dialogs,
+        extensionUpdates,
+        true,
+      ),
     );
-
-    await reactStub.runEffects();
-    await loaderMocks.builtinLoaderInstance.loadCommands.mock.results.at(-1)
-      ?.value;
-    await commandsPromise;
 
     // The hook's contract here is forwarding the builtin loader's result to
     // the commands callback; assert a derived projection of behaviorally
@@ -346,14 +261,17 @@ describe('useSlashCommandProcessor', () => {
     // cannot pass by echoing a constant. The forwarded command names AND
     // kinds can only match if the loader was called and its complete
     // result was routed to the state setter.
-    expect(
-      latestCommands.map((command) => ({
-        name: command.name,
-        kind: command.kind,
-      })),
-    ).toStrictEqual([
-      { name: 'subagent', kind: CommandKind.BUILT_IN },
-      { name: 'about', kind: CommandKind.BUILT_IN },
-    ]);
+    await waitFor(() =>
+      expect(
+        result.current.slashCommands?.map((command) => ({
+          name: command.name,
+          kind: command.kind,
+        })),
+      ).toStrictEqual([
+        { name: 'subagent', kind: CommandKind.BUILT_IN },
+        { name: 'about', kind: CommandKind.BUILT_IN },
+      ]),
+    );
+    unmount();
   });
 });

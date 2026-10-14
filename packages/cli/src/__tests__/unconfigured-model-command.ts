@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createExtensionsCommand } from '../ui/commands/extensionsCommand.js';
+import { bindExtensionsCommand } from '../ui/commands/extensionsCommandHost.js';
 import { createTodoCommand } from '../ui/commands/todoCommand.js';
 import { createHooksCommand } from '../ui/commands/hooksCommand.js';
 import { createTaskCommand } from '../ui/commands/tasksCommand.js';
@@ -331,6 +333,14 @@ export function createUnconfiguredBuiltinOwners(): BuiltinCommandOwners {
 
 function unconfiguredWorkspaceCommands() {
   return {
+    extensionsCommand: createExtensionsCommand(
+      bindExtensionsCommand(
+        null,
+        () => 0,
+        () => {},
+        () => {},
+      ),
+    ),
     todoCommand: createTodoCommand(null, () => 0),
     hooksCommand: createHooksCommand(bindHooksCommand(null, false), () => 0),
     taskCommand: createTaskCommand(bindTaskCommand(null), () => 0),
