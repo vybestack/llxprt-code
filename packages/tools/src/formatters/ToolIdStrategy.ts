@@ -45,11 +45,70 @@ export interface ToolIdMapper {
 }
 
 /**
- * Interface for creating tool ID mappers based on content.
+ * Where a mapper keeps what it learns about a request's tool ids. The mapper
+ * holds only scalars itself, so a store backed by disk keeps the heap flat
+ * however many tool calls the history has.
+ */
+export interface ToolIdStore {
+  /** The provider id last recorded for a call id. */
+  getMappedId(callId: string): string | undefined;
+  /** Later records for a call id replace earlier ones. */
+  setMappedId(callId: string, mappedId: string): void;
+  /** Whether a provider id was already handed out for some call id. */
+  isUsed(mappedId: string): boolean;
+  markUsed(mappedId: string): void;
+}
+
+/** A mapper that learns ids one row at a time (`observe`) before it resolves. */
+export interface StreamingToolIdMapper extends ToolIdMapper {
+  /** Records the tool calls of one row; call once per row, in row order. */
+  observe(content: { blocks?: ContentBlock[] }): void;
+}
+
+/**
+ * Interface for creating tool ID mappers.
  */
 export interface ToolIdStrategy {
-  /** Creates a mapper that can resolve tool IDs for the given content. */
+  /**
+   * Creates a mapper that observes rows one at a time and keeps its facts in
+   * `store`. Observing every row first and then resolving gives the same ids
+   * as `createMapper` over the whole array.
+   */
+  createStreamingMapper(store: ToolIdStore): StreamingToolIdMapper;
+
+  /** Creates a mapper for an array that is already in memory. */
   createMapper(contents: Array<{ blocks?: ContentBlock[] }>): ToolIdMapper;
+}
+
+/** Facts held in a Map and a Set, for callers that already hold the array. */
+export function createInMemoryToolIdStore(): ToolIdStore {
+  const mapped = new Map<string, string>();
+  const used = new Set<string>();
+  return {
+    getMappedId: (callId) => mapped.get(callId),
+    setMappedId: (callId, mappedId) => {
+      mapped.set(callId, mappedId);
+    },
+    isUsed: (mappedId) => used.has(mappedId),
+    markUsed: (mappedId) => {
+      used.add(mappedId);
+    },
+  };
+}
+
+function defineStrategy(
+  createStreamingMapper: (store: ToolIdStore) => StreamingToolIdMapper,
+): ToolIdStrategy {
+  return {
+    createStreamingMapper,
+    createMapper(contents) {
+      const mapper = createStreamingMapper(createInMemoryToolIdStore());
+      for (const content of contents) {
+        mapper.observe(content);
+      }
+      return mapper;
+    },
+  };
 }
 
 /**
@@ -90,53 +149,49 @@ export function isMistralModel(model: string): boolean {
 /**
  * Kimi K2 strategy: IDs in format functions.{toolName}:{globalIndex}
  */
-export const kimiStrategy: ToolIdStrategy = {
-  createMapper(contents: Array<{ blocks?: ContentBlock[] }>): ToolIdMapper {
-    const idToK2Id = new Map<string, string>();
-    let globalIndex = 0;
+export const kimiStrategy: ToolIdStrategy = defineStrategy((store) => {
+  let globalIndex = 0;
 
-    for (const content of contents) {
+  return {
+    observe(content): void {
       for (const block of content.blocks ?? []) {
         if (block.type === 'tool_call' && block.id && block.name) {
-          const k2Id = `functions.${block.name}:${globalIndex}`;
-          idToK2Id.set(block.id, k2Id);
+          store.setMappedId(block.id, `functions.${block.name}:${globalIndex}`);
           globalIndex++;
         }
       }
-    }
+    },
 
-    return {
-      resolveToolCallId(tc: ToolCallBlock): string {
-        return idToK2Id.get(tc.id) ?? `functions.${tc.name}:${globalIndex++}`;
-      },
+    resolveToolCallId(tc: ToolCallBlock): string {
+      return (
+        store.getMappedId(tc.id) ?? `functions.${tc.name}:${globalIndex++}`
+      );
+    },
 
-      resolveToolResponseId(tr: { callId: string; toolName: string }): string {
-        const k2Id = idToK2Id.get(tr.callId);
-        if (k2Id) {
-          return k2Id;
-        }
-        return `functions.${tr.toolName}:${globalIndex++}`;
-      },
-    };
-  },
-};
+    resolveToolResponseId(tr: { callId: string; toolName: string }): string {
+      const k2Id = store.getMappedId(tr.callId);
+      if (k2Id) {
+        return k2Id;
+      }
+      return `functions.${tr.toolName}:${globalIndex++}`;
+    },
+  };
+});
 
 /**
  * Standard strategy: Converts to OpenAI call_xxx format.
  */
-export const standardStrategy: ToolIdStrategy = {
-  createMapper(_contents: Array<{ blocks?: ContentBlock[] }>): ToolIdMapper {
-    return {
-      resolveToolCallId(tc: ToolCallBlock): string {
-        return normalizeToOpenAIToolId(tc.id);
-      },
+export const standardStrategy: ToolIdStrategy = defineStrategy(() => ({
+  observe(): void {},
 
-      resolveToolResponseId(tr: { callId: string; toolName: string }): string {
-        return normalizeToOpenAIToolId(tr.callId);
-      },
-    };
+  resolveToolCallId(tc: ToolCallBlock): string {
+    return normalizeToOpenAIToolId(tc.id);
   },
-};
+
+  resolveToolResponseId(tr: { callId: string; toolName: string }): string {
+    return normalizeToOpenAIToolId(tr.callId);
+  },
+}));
 
 const MISTRAL_CHARS =
   'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -169,7 +224,7 @@ function generateDeterministicMistralId(seed: string, salt: number): string {
   return padded.slice(0, 9);
 }
 
-function toMistralToolId(id: string, used: Set<string>): string {
+function toMistralToolId(id: string, store: ToolIdStore): string {
   if (/^[a-zA-Z0-9]{9}$/.test(id)) {
     return id;
   }
@@ -177,7 +232,7 @@ function toMistralToolId(id: string, used: Set<string>): string {
   let salt = 0;
   while (salt <= Number.MAX_SAFE_INTEGER) {
     const candidate = generateDeterministicMistralId(id, salt);
-    if (!used.has(candidate)) {
+    if (!store.isUsed(candidate)) {
       return candidate;
     }
     salt += 1;
@@ -185,52 +240,37 @@ function toMistralToolId(id: string, used: Set<string>): string {
   throw new Error('Unable to generate a unique Mistral tool ID.');
 }
 
+function mapMistralId(callId: string, store: ToolIdStore): string {
+  const existing = store.getMappedId(callId);
+  if (existing) {
+    return existing;
+  }
+  const mistralId = toMistralToolId(callId, store);
+  store.setMappedId(callId, mistralId);
+  store.markUsed(mistralId);
+  return mistralId;
+}
+
 /**
  * Mistral strategy: IDs in 9-character alphanumeric format.
  */
-export const mistralStrategy: ToolIdStrategy = {
-  createMapper(contents: Array<{ blocks?: ContentBlock[] }>): ToolIdMapper {
-    const idToMistralId = new Map<string, string>();
-    const usedIds = new Set<string>();
-
-    for (const content of contents) {
-      for (const block of content.blocks ?? []) {
-        if (
-          block.type === 'tool_call' &&
-          block.id &&
-          !idToMistralId.has(block.id)
-        ) {
-          const mistralId = toMistralToolId(block.id, usedIds);
-          idToMistralId.set(block.id, mistralId);
-          usedIds.add(mistralId);
-        }
+export const mistralStrategy: ToolIdStrategy = defineStrategy((store) => ({
+  observe(content): void {
+    for (const block of content.blocks ?? []) {
+      if (block.type === 'tool_call' && block.id) {
+        mapMistralId(block.id, store);
       }
     }
-
-    return {
-      resolveToolCallId(tc: ToolCallBlock): string {
-        let mistralId = idToMistralId.get(tc.id);
-        if (!mistralId) {
-          mistralId = toMistralToolId(tc.id, usedIds);
-          idToMistralId.set(tc.id, mistralId);
-          usedIds.add(mistralId);
-        }
-        return mistralId;
-      },
-
-      resolveToolResponseId(tr: { callId: string; toolName: string }): string {
-        const mistralId = idToMistralId.get(tr.callId);
-        if (mistralId) {
-          return mistralId;
-        }
-        const newId = toMistralToolId(tr.callId, usedIds);
-        idToMistralId.set(tr.callId, newId);
-        usedIds.add(newId);
-        return newId;
-      },
-    };
   },
-};
+
+  resolveToolCallId(tc: ToolCallBlock): string {
+    return mapMistralId(tc.id, store);
+  },
+
+  resolveToolResponseId(tr: { callId: string; toolName: string }): string {
+    return mapMistralId(tr.callId, store);
+  },
+}));
 
 /**
  * Gets the appropriate tool ID strategy for a given tool format.

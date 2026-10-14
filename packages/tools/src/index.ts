@@ -76,10 +76,13 @@ export { ToolFormatter } from './formatters/ToolFormatter.js';
 export type {
   ToolIdStrategy,
   ToolIdMapper,
+  StreamingToolIdMapper,
+  ToolIdStore,
   ContentBlock as StrategyContentBlock,
 } from './formatters/ToolIdStrategy.js';
 
 export {
+  createInMemoryToolIdStore,
   getToolIdStrategy,
   kimiStrategy,
   standardStrategy,
