@@ -61,7 +61,6 @@ import { CommandKind } from '../ui/commands/types.js';
 
 import { restoreCommand } from '../ui/commands/restoreCommand.js';
 
-void vi.mock('../ui/commands/authCommand.js', () => ({ authCommand: {} }));
 void vi.mock('../ui/commands/bugCommand.js', () => ({ bugCommand: {} }));
 void vi.mock('../ui/commands/chatCommand.js', () => ({ chatCommand: {} }));
 void vi.mock('../ui/commands/clearCommand.js', () => ({ clearCommand: {} }));

@@ -9,6 +9,7 @@ import {
   bindKeyfileCommandOperations,
   bindLogoutCommandOperations,
 } from '../ui/commands/credentialCommandHost.js';
+import { createAuthCommand } from '../ui/commands/authCommand.js';
 import { createBaseurlCommand } from '../ui/commands/baseurlCommand.js';
 import {
   createKeyCommand,
@@ -62,4 +63,10 @@ export function registerLogoutCommand(
   return createLogoutCommand(
     bindLogoutCommandOperations(owners.services.agent, owners.oauthControl),
   );
+}
+
+export function registerAuthCommand(
+  owners: Pick<CommandContext, 'oauthControl'>,
+): SlashCommand {
+  return createAuthCommand(owners.oauthControl);
 }

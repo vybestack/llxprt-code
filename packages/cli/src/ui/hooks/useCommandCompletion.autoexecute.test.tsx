@@ -22,7 +22,7 @@ import { quitCommand } from '../commands/quitCommand.js';
 import { settingsCommand } from '../commands/settingsCommand.js';
 import { themeCommand } from '../commands/themeCommand.js';
 import { policiesCommand } from '../commands/policiesCommand.js';
-import { authCommand } from '../commands/authCommand.js';
+import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { setupGithubCommand } from '../commands/setupGithubCommand.js';
 import { bugCommand } from '../commands/bugCommand.js';
 import { chatCommand } from '../commands/chatCommand.js';
@@ -62,7 +62,9 @@ describe('autoExecute classifications — top-level commands', () => {
   });
 
   it('/auth should have autoExecute: true', () => {
-    expect(authCommand.autoExecute).toBe(true);
+    expect(createUnconfiguredBuiltinOwners().authCommand.autoExecute).toBe(
+      true,
+    );
   });
 
   it('/setup-github should have autoExecute: true', () => {

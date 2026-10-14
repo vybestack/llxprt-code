@@ -11,9 +11,7 @@ import type {
   AuthLockStatus,
   AuthLockRecoveryResult,
 } from '@vybestack/llxprt-code-auth';
-import type { CommandContext, MessageActionReturn } from './types.js';
-
-const mockContext: CommandContext = {} as CommandContext;
+import type { MessageActionReturn } from './types.js';
 
 function createMockOAuthManager(): OAuthManager & {
   inspectAuthLock: ReturnType<typeof vi.fn>;
@@ -100,9 +98,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     } satisfies AuthLockStatus);
 
     const executor = new AuthCommandExecutor(manager, () => {});
-    const result = asMessage(
-      await executor.execute(mockContext, 'codex lock status'),
-    );
+    const result = asMessage(await executor.execute('codex lock status'));
 
     expect(result.messageType).toBe('info');
     expect(result.content).toContain('No auth lock');
@@ -126,9 +122,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     } satisfies AuthLockStatus);
 
     const executor = new AuthCommandExecutor(manager, () => {});
-    const result = asMessage(
-      await executor.execute(mockContext, 'codex lock status'),
-    );
+    const result = asMessage(await executor.execute('codex lock status'));
 
     expect(result.messageType).toBe('info');
     expect(result.content).toContain('legacy');
@@ -156,9 +150,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     } satisfies AuthLockStatus);
 
     const executor = new AuthCommandExecutor(manager, () => {});
-    const result = asMessage(
-      await executor.execute(mockContext, 'codex lock status'),
-    );
+    const result = asMessage(await executor.execute('codex lock status'));
 
     expect(result.content).toContain('unknown (keychain is locked)');
   });
@@ -180,9 +172,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     } satisfies AuthLockStatus);
 
     const executor = new AuthCommandExecutor(manager, () => {});
-    const result = asMessage(
-      await executor.execute(mockContext, 'codex lock status'),
-    );
+    const result = asMessage(await executor.execute('codex lock status'));
 
     expect(result.messageType).toBe('info');
     expect(result.content).toContain('live');
@@ -201,9 +191,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     } satisfies AuthLockRecoveryResult);
 
     const executor = new AuthCommandExecutor(manager, () => {});
-    const result = asMessage(
-      await executor.execute(mockContext, 'codex unlock'),
-    );
+    const result = asMessage(await executor.execute('codex unlock'));
 
     expect(manager.recoverAuthLock).toHaveBeenCalledWith('codex', 'default');
     expect(result.messageType).toBe('info');
@@ -220,9 +208,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     } satisfies AuthLockRecoveryResult);
 
     const executor = new AuthCommandExecutor(manager, () => {});
-    const result = asMessage(
-      await executor.execute(mockContext, 'codex unlock'),
-    );
+    const result = asMessage(await executor.execute('codex unlock'));
 
     expect(result.messageType).toBe('info');
     expect(result.content).toContain('not recovered');
@@ -239,9 +225,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     } satisfies AuthLockRecoveryResult);
 
     const executor = new AuthCommandExecutor(manager, () => {});
-    const result = asMessage(
-      await executor.execute(mockContext, 'codex unlock work'),
-    );
+    const result = asMessage(await executor.execute('codex unlock work'));
 
     expect(manager.recoverAuthLock).toHaveBeenCalledWith('codex', 'work');
     expect(result.content).toContain('work');
@@ -259,7 +243,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
 
     const executor = new AuthCommandExecutor(manager, () => {});
     const result = asMessage(
-      await executor.execute(mockContext, 'codex unlock default --force'),
+      await executor.execute('codex unlock default --force'),
     );
 
     expect(manager.forceRecoverAuthLock).toHaveBeenCalledWith(
@@ -283,7 +267,6 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     const executor = new AuthCommandExecutor(manager, () => {});
     const result = asMessage(
       await executor.execute(
-        mockContext,
         'codex unlock --force --i-have-stopped-all-processes',
       ),
     );
@@ -300,10 +283,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
   it('rejects the acknowledgment flag without --force', async () => {
     const executor = new AuthCommandExecutor(manager, () => {});
     const result = asMessage(
-      await executor.execute(
-        mockContext,
-        'codex unlock --i-have-stopped-all-processes',
-      ),
+      await executor.execute('codex unlock --i-have-stopped-all-processes'),
     );
 
     expect(result).toMatchObject({
@@ -331,7 +311,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     } satisfies AuthLockStatus);
 
     const executor = new AuthCommandExecutor(manager, () => {});
-    await executor.execute(mockContext, 'codex lock status --verbose');
+    await executor.execute('codex lock status --verbose');
 
     expect(manager.inspectAuthLock).toHaveBeenCalledWith('codex', 'default');
   });
@@ -340,9 +320,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     manager.inspectAuthLock.mockRejectedValue(new Error('disk I/O error'));
 
     const executor = new AuthCommandExecutor(manager, () => {});
-    const result = asMessage(
-      await executor.execute(mockContext, 'codex lock status'),
-    );
+    const result = asMessage(await executor.execute('codex lock status'));
 
     expect(result).toMatchObject({
       messageType: 'error',
@@ -356,9 +334,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     );
 
     const executor = new AuthCommandExecutor(manager, () => {});
-    const result = asMessage(
-      await executor.execute(mockContext, 'codex unlock'),
-    );
+    const result = asMessage(await executor.execute('codex unlock'));
 
     expect(result).toMatchObject({
       messageType: 'error',
@@ -377,9 +353,7 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     } satisfies AuthLockRecoveryResult);
 
     const executor = new AuthCommandExecutor(manager, () => {});
-    const result = asMessage(
-      await executor.execute(mockContext, 'codex unlock'),
-    );
+    const result = asMessage(await executor.execute('codex unlock'));
 
     expect(result.content).toContain(
       'Warning: Recovery fence cleanup failed: permission denied',
@@ -398,7 +372,6 @@ describe('AuthCommandExecutor lock status/unlock commands (issue #2819)', () => 
     const executor = new AuthCommandExecutor(manager, () => {});
     const result = asMessage(
       await executor.execute(
-        mockContext,
         'codex unlock default --force --i-have-stopped-all-processes',
       ),
     );

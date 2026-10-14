@@ -11,6 +11,10 @@ import { createBaseurlCommand } from '../ui/commands/baseurlCommand.js';
 import { createKeyCommand } from '../ui/commands/keyCommand.js';
 import { createKeyfileCommand } from '../ui/commands/keyfileCommand.js';
 import { createLogoutCommand } from '../ui/commands/logoutCommand.js';
+import {
+  createAuthCommand,
+  type AuthCommandOperations,
+} from '../ui/commands/authCommand.js';
 import { createToolkeyCommand } from '../ui/commands/toolkeyCommand.js';
 import { createToolkeyfileCommand } from '../ui/commands/toolkeyfileCommand.js';
 import type { BuiltinCommandOwners } from '../services/BuiltinCommandLoader.js';
@@ -76,6 +80,37 @@ export function createUnconfiguredProviderCommand(): SlashCommand {
   });
 }
 
+export function unavailableAuthControl(): AuthCommandOperations {
+  const unavailable = (): never => {
+    throw new Error('Auth operations are unavailable in this registry fixture');
+  };
+  return {
+    getInteractiveAuthSessions: unavailable,
+    cancelInteractiveAuth: unavailable,
+    getSupportedProviders: unavailable,
+    listBuckets: unavailable,
+    isOAuthEnabled: unavailable,
+    isAuthenticated: unavailable,
+    peekStoredToken: unavailable,
+    getHigherPriorityAuth: unavailable,
+    toggleOAuthEnabled: unavailable,
+    authenticate: unavailable,
+    activateNamedLoginBucket: unavailable,
+    logoutAllBuckets: unavailable,
+    logout: unavailable,
+    clearSessionBucket: unavailable,
+    getAuthStatusWithBuckets: unavailable,
+    setSessionBucket: unavailable,
+    getAuthStatus: unavailable,
+    clearBrowserProfileAssociation: unavailable,
+    setBrowserProfileAssociation: unavailable,
+    inspectAuthLock: unavailable,
+    forceRecoverAuthLock: unavailable,
+    recoverAuthLock: unavailable,
+    clearProviderClientCache: unavailable,
+  };
+}
+
 export function createUnconfiguredCredentialCommands(): Pick<
   BuiltinCommandOwners,
   | 'keyCommand'
@@ -84,6 +119,7 @@ export function createUnconfiguredCredentialCommands(): Pick<
   | 'logoutCommand'
   | 'toolkeyCommand'
   | 'toolkeyfileCommand'
+  | 'authCommand'
 > {
   const unavailable = (): never => {
     throw new Error(
@@ -114,6 +150,7 @@ export function createUnconfiguredCredentialCommands(): Pick<
       updateBaseUrl: unavailable,
     }),
     logoutCommand: createLogoutCommand({ logout: unavailable }),
+    authCommand: createAuthCommand(unavailableAuthControl()),
     toolkeyCommand: createToolkeyCommand({
       getKey: unavailable,
       saveKey: unavailable,

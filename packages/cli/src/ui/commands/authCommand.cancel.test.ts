@@ -11,7 +11,7 @@ import {
   type InteractiveAuthChallenge,
 } from '@vybestack/llxprt-code-providers/auth.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { authCommand } from './authCommand.js';
+import { registerAuthCommand } from '../../__tests__/credential-command-test-owner.js';
 import type { MessageActionReturn } from './types.js';
 
 function createChallenge(
@@ -30,17 +30,17 @@ function createChallenge(
 async function executeCancel(
   coordinator: InteractiveAuthCoordinator,
 ): Promise<MessageActionReturn> {
-  const action = authCommand.action;
-  if (!action) {
-    throw new Error('Expected /auth to define an action');
-  }
-
   const context = createMockCommandContext({
     oauthControl: {
       getInteractiveAuthSessions: () => coordinator.getActiveSessions(),
       cancelInteractiveAuth: () => coordinator.cancelActiveSessions(),
     },
   });
+  const action = registerAuthCommand(context).action;
+  if (!action) {
+    throw new Error('Expected /auth to define an action');
+  }
+
   const result = await action(context, 'cancel');
   if (!result || result.type !== 'message') {
     throw new Error('Expected /auth cancel to return a message');

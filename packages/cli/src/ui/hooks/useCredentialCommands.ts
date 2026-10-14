@@ -10,6 +10,7 @@ import { ToolKeyStorage } from '@vybestack/llxprt-code-core';
 import type { LoadedSettings } from '../../config/settings.js';
 import type { BuiltinCommandOwners } from '../../services/BuiltinCommandLoader.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
+import { createAuthCommand } from '../commands/authCommand.js';
 import { createBaseurlCommand } from '../commands/baseurlCommand.js';
 import {
   bindBaseurlCommandOperations,
@@ -33,6 +34,7 @@ type CredentialCommands = Pick<
   | 'keyCommand'
   | 'toolkeyCommand'
   | 'toolkeyfileCommand'
+  | 'authCommand'
 >;
 
 /**
@@ -63,6 +65,10 @@ export function useCredentialCommands(
     () => createKeyCommand(bindKeyCommandOperations(api, config)),
     [api, config],
   );
+  const authCommand = useMemo(
+    () => createAuthCommand(oauthControl),
+    [oauthControl],
+  );
   const toolkeyCommands = useMemo(() => {
     const storage = new ToolKeyStorage();
     return {
@@ -76,6 +82,7 @@ export function useCredentialCommands(
       logoutCommand,
       keyfileCommand,
       keyCommand,
+      authCommand,
       ...toolkeyCommands,
     }),
     [
@@ -83,6 +90,7 @@ export function useCredentialCommands(
       logoutCommand,
       keyfileCommand,
       keyCommand,
+      authCommand,
       toolkeyCommands,
     ],
   );
