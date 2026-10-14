@@ -45,6 +45,16 @@ interface SerializationPlan {
 
 const encoder = new TextEncoder();
 
+/** The one failure text for a JSON request envelope over its byte limit. */
+export function envelopeTooLargeError(
+  maxEnvelopeBytes: number,
+  envelopeBytes: number,
+): RangeError {
+  return new RangeError(
+    `JSON request envelope exceeds ${maxEnvelopeBytes} bytes (${envelopeBytes} bytes)`,
+  );
+}
+
 function validateLimit(name: string, value: number): void {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new RangeError(`${name} must be a non-negative safe integer`);
@@ -499,9 +509,7 @@ export class BoundedJsonBody {
     validateLimit('maxEnvelopeBytes', limits.maxEnvelopeBytes);
     const plan = new PlanBuilder().build(value);
     if (plan.byteLength > limits.maxEnvelopeBytes) {
-      throw new RangeError(
-        `JSON request envelope exceeds ${limits.maxEnvelopeBytes} bytes (${plan.byteLength} bytes)`,
-      );
+      throw envelopeTooLargeError(limits.maxEnvelopeBytes, plan.byteLength);
     }
     if (plan.byteLength > 0 && limits.maxChunkBytes === 0) {
       throw new RangeError('JSON streaming chunk limit is zero');
