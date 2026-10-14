@@ -17,6 +17,8 @@ import {
 } from '../ui/commands/authCommand.js';
 import type { QuotaCommandOperations } from '../ui/commands/quotaCommand.js';
 import { createQuotaCommand } from '../ui/commands/quotaCommand.js';
+import { createMcpAuthCommand } from '../ui/commands/mcpAuth.js';
+import { createMcpCommand } from '../ui/commands/mcpCommand.js';
 import { createToolkeyCommand } from '../ui/commands/toolkeyCommand.js';
 import { createToolkeyfileCommand } from '../ui/commands/toolkeyfileCommand.js';
 import type { BuiltinCommandOwners } from '../services/BuiltinCommandLoader.js';
@@ -136,6 +138,7 @@ export function createUnconfiguredCredentialCommands(): Pick<
   | 'toolkeyfileCommand'
   | 'authCommand'
   | 'quotaCommand'
+  | 'mcpCommand'
 > {
   const unavailable = (): never => {
     throw new Error(
@@ -173,6 +176,14 @@ export function createUnconfiguredCredentialCommands(): Pick<
       baseUrlSetting: unavailable,
       fetchQuotaLines: unavailable,
     }),
+    mcpCommand: createMcpCommand(
+      createMcpAuthCommand({
+        isConfigured: () => false,
+        configuredServers: () => [],
+        authenticationRequiredServers: async () => [],
+        authenticate: unavailable,
+      }),
+    ),
     toolkeyCommand: createToolkeyCommand({
       getKey: unavailable,
       saveKey: unavailable,

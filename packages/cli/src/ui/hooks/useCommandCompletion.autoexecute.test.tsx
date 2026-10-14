@@ -100,14 +100,14 @@ describe('autoExecute classifications — subcommands', () => {
     expect(findSub(memoryCommand, 'add')?.autoExecute).not.toBe(true);
   });
 
-  it('/mcp list and refresh should have autoExecute: true', async () => {
-    const { mcpCommand } = await import('../commands/mcpCommand.js');
+  it('/mcp list and refresh should have autoExecute: true', () => {
+    const { mcpCommand } = createUnconfiguredBuiltinOwners();
     expect(findSub(mcpCommand, 'list')?.autoExecute).toBe(true);
     expect(findSub(mcpCommand, 'refresh')?.autoExecute).toBe(true);
   });
 
-  it('/mcp auth should have autoExecute: true', async () => {
-    const { mcpCommand } = await import('../commands/mcpCommand.js');
+  it('/mcp auth should have autoExecute: true', () => {
+    const { mcpCommand } = createUnconfiguredBuiltinOwners();
     expect(findSub(mcpCommand, 'auth')?.autoExecute).toBe(true);
   });
 

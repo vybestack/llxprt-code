@@ -8,12 +8,10 @@ import type {
   SlashCommand,
   SlashCommandActionReturn,
   CommandContext,
-  MessageActionReturn,
 } from './types.js';
 import { CommandKind } from './types.js';
 import type { RuntimeMcpServers } from './mcpDisplay.js';
 import { buildMcpStatusMessage } from './mcpDisplay.js';
-import { mcpAuthSchema, listOAuthServers, performMcpOAuth } from './mcpAuth.js';
 
 const getMcpStatus = async (
   context: CommandContext,
@@ -70,51 +68,6 @@ const getMcpStatus = async (
     messageType: 'info',
     content: message,
   };
-};
-
-const authCommand: SlashCommand = {
-  name: 'auth',
-  description: 'Authenticate with an OAuth-enabled MCP server',
-  kind: CommandKind.BUILT_IN,
-  schema: mcpAuthSchema,
-  autoExecute: true,
-  action: async (
-    context: CommandContext,
-    args: string,
-  ): Promise<MessageActionReturn> => {
-    const serverName = args.trim();
-    const { config } = context.services;
-
-    if (!config) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Configuration not loaded.',
-      };
-    }
-
-    const mcpServers: RuntimeMcpServers = Object.fromEntries(
-      (context.services.agent?.mcp.listServers() ?? []).map((server) => [
-        server.name,
-        server.config,
-      ]),
-    );
-
-    if (!serverName) {
-      return listOAuthServers(context.services.agent, mcpServers);
-    }
-
-    const server = mcpServers[serverName];
-    if (!server) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `MCP server '${serverName}' not found.`,
-      };
-    }
-
-    return performMcpOAuth(context, serverName);
-  },
 };
 
 const listCommand: SlashCommand = {
@@ -243,14 +196,14 @@ const refreshCommand: SlashCommand = {
   },
 };
 
-export const mcpCommand: SlashCommand = {
-  name: 'mcp',
-  description:
-    'list configured MCP servers and tools, or authenticate with OAuth-enabled servers',
-  kind: CommandKind.BUILT_IN,
-  subCommands: [listCommand, authCommand, reloadCommand, refreshCommand],
-  // Default action when no subcommand is provided
-  action: async (context: CommandContext, args: string) =>
-    // If no subcommand, run the list command
-    listCommand.action!(context, args),
-};
+export function createMcpCommand(authCommand: SlashCommand): SlashCommand {
+  return {
+    name: 'mcp',
+    description:
+      'list configured MCP servers and tools, or authenticate with OAuth-enabled servers',
+    kind: CommandKind.BUILT_IN,
+    subCommands: [listCommand, authCommand, reloadCommand, refreshCommand],
+    action: async (context: CommandContext, args: string) =>
+      listCommand.action!(context, args),
+  };
+}

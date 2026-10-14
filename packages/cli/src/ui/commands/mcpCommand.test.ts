@@ -6,8 +6,8 @@
 import { unsupportedApprovalPolicy } from '../../../../mcp/src/client/test-support/approval-policy.js';
 
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
-import { mcpCommand } from './mcpCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import { registerMcpCommand } from '../../__tests__/credential-command-test-owner.js';
 import { MCPServerStatus, DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 import type { MessageActionReturn } from './types.js';
 import type {
@@ -119,6 +119,7 @@ interface MockAgentOptions {
  */
 describe('mcpCommand', () => {
   let mockContext: ReturnType<typeof createMockCommandContext>;
+  let mcpCommand: ReturnType<typeof registerMcpCommand>;
   let mockConfig: {
     getMcpServers: ReturnType<typeof vi.fn>;
     getBlockedMcpServers: ReturnType<typeof vi.fn>;
@@ -205,6 +206,7 @@ describe('mcpCommand', () => {
         reloadCommands: vi.fn(),
       },
     });
+    mcpCommand = registerMcpCommand(mockContext);
   });
 
   describe('basic functionality', () => {

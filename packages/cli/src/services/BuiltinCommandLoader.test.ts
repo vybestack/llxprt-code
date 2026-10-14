@@ -84,13 +84,6 @@ void vi.mock('../ui/commands/toolsCommand.js', () => ({ toolsCommand: {} }));
 void vi.mock('../ui/commands/skillsCommand.js', () => ({
   skillsCommand: { name: 'skills' },
 }));
-void vi.mock('../ui/commands/mcpCommand.js', () => ({
-  mcpCommand: {
-    name: 'mcp',
-    description: 'MCP command',
-    kind: 'BUILT_IN',
-  },
-}));
 
 // Default the file to production behavior. The dedicated development case at
 // the end re-registers this module immediately before exercising uiprofile.

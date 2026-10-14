@@ -14,6 +14,7 @@ import type { KeyCommandOperations } from './keyCommand.js';
 import type { KeyfileCommandOperations } from './keyfileCommand.js';
 import type { LogoutCommandOperations } from './logoutCommand.js';
 import type { QuotaCommandOperations } from './quotaCommand.js';
+import type { McpAuthCommandOperations } from './mcpAuth.js';
 import { fetchAllQuotaInfo } from './statsQuota.js';
 
 const MISSING_CREDENTIAL_OWNER =
@@ -151,5 +152,34 @@ export function bindQuotaCommandOperations(
     fetch: api.fetch,
     baseUrlSetting: () => api.getEphemeralSetting('base-url'),
     fetchQuotaLines: () => fetchAllQuotaInfo(api, oauthControl),
+  };
+}
+
+
+export function bindMcpAuthCommandOperations(
+  agent: Agent | null,
+  config: CliUiRuntime | null,
+): McpAuthCommandOperations {
+  return {
+    isConfigured: () => config !== null,
+    configuredServers: () =>
+      (agent?.mcp.listServers() ?? []).map((server) => ({
+        name: server.name,
+        oauthEnabled: server.config.oauth?.enabled === true,
+      })),
+    authenticationRequiredServers: async () => {
+      if (agent === null) {
+        return [];
+      }
+      return (await agent.mcp.details()).servers
+        .filter((server) => server.requiresAuth)
+        .map((server) => server.name);
+    },
+    authenticate: async (serverName, displayListener) => {
+      if (agent === null) {
+        throw new Error('Agent is not available.');
+      }
+      await agent.mcp.authenticate(serverName, displayListener);
+    },
   };
 }

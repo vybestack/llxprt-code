@@ -18,11 +18,14 @@ import {
   bindKeyfileCommandOperations,
   bindLogoutCommandOperations,
   bindQuotaCommandOperations,
+  bindMcpAuthCommandOperations,
 } from '../commands/credentialCommandHost.js';
 import { createKeyCommand } from '../commands/keyCommand.js';
 import { createKeyfileCommand } from '../commands/keyfileCommand.js';
 import { createLogoutCommand } from '../commands/logoutCommand.js';
 import { createQuotaCommand } from '../commands/quotaCommand.js';
+import { createMcpAuthCommand } from '../commands/mcpAuth.js';
+import { createMcpCommand } from '../commands/mcpCommand.js';
 import { createToolkeyCommand } from '../commands/toolkeyCommand.js';
 import { createToolkeyfileCommand } from '../commands/toolkeyfileCommand.js';
 import { useOAuthControl } from '../contexts/OAuthControlContext.js';
@@ -38,6 +41,7 @@ type CredentialCommands = Pick<
   | 'toolkeyfileCommand'
   | 'authCommand'
   | 'quotaCommand'
+  | 'mcpCommand'
 >;
 
 /**
@@ -76,6 +80,13 @@ export function useCredentialCommands(
     () => createQuotaCommand(bindQuotaCommandOperations(api, oauthControl)),
     [api, oauthControl],
   );
+  const mcpCommand = useMemo(
+    () =>
+      createMcpCommand(
+        createMcpAuthCommand(bindMcpAuthCommandOperations(agent, config)),
+      ),
+    [agent, config],
+  );
   const toolkeyCommands = useMemo(() => {
     const storage = new ToolKeyStorage();
     return {
@@ -91,6 +102,7 @@ export function useCredentialCommands(
       keyCommand,
       authCommand,
       quotaCommand,
+      mcpCommand,
       ...toolkeyCommands,
     }),
     [
@@ -100,6 +112,7 @@ export function useCredentialCommands(
       keyCommand,
       authCommand,
       quotaCommand,
+      mcpCommand,
       toolkeyCommands,
     ],
   );
