@@ -1,3 +1,4 @@
+import type { AgentProviderFileOperations } from './provider-file-domain.js';
 import type { AgentModelParametersControl } from './model-parameters.js';
 import type { AgentSettingsControl } from './control/settings-control.js';
 import type { AgentToolFormatControl } from './control/tool-format-control.js';
@@ -1066,7 +1067,7 @@ export interface AgentLspControl {
   status(): Promise<LspStatusSnapshot>;
 }
 
-export interface Agent {
+export interface Agent extends AgentProviderFileOperations {
   readonly modelParameters: AgentModelParametersControl;
   readonly settings: AgentSettingsControl;
   readonly toolFormat: AgentToolFormatControl;

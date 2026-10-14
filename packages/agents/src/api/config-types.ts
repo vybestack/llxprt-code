@@ -39,7 +39,7 @@ import type {
   AgentRuntimeFactoryBindings,
   TokenStore,
 } from '@vybestack/llxprt-code-core';
-import type { RuntimeActivationBindings } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
+
 import type { WorkspaceDefinitionOwner } from '@vybestack/llxprt-code-core';
 import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 
@@ -409,7 +409,6 @@ export interface AgentConfig
   readonly runtimeFactoryBindings?: AgentRuntimeFactoryBindings;
   readonly tokenizerFactory?: RuntimeTokenizerFactory;
   readonly contentGeneratorFactory?: RuntimeContentGeneratorFactory<ContentGenerator>;
-  readonly runtimeActivationBindings?: RuntimeActivationBindings;
   readonly tokenStore?: TokenStore;
   readonly credentialAuthority?: CredentialAuthority;
   /**

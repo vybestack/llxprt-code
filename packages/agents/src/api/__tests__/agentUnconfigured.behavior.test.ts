@@ -14,6 +14,7 @@ import { ApprovalMode } from '@vybestack/llxprt-code-policy';
 import { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
 import { afterEach as disposeOwnedPolicies } from 'bun:test';
 import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers';
 
 import { buildTestMcpRuntime } from './helpers/buildCliStyleConfig.js';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
@@ -239,6 +240,11 @@ describe('AgentImpl: fail-closed when unconfigured (#2481)', () => {
       factories.tokenizerFactory,
       client,
     );
+    const providerFiles = new ProviderFileLifecycle({
+      maxFiles: 100,
+      maxBytes: 512 * 1024 * 1024,
+    });
+    sessionClient.bindProviderFiles(providerFiles, () => ({}));
     sessionClient.bindMcpRuntime(workspace);
     sessionClient.bindHooks();
     disposeOwnedPolicies(() => sessionClient.dispose());
