@@ -1,3 +1,4 @@
+import { AgentProviderFileDomain } from './provider-file-domain.js';
 import { assembleSettingsControl } from './control/settings-control.js';
 import { assembleToolFormatControl } from './control/tool-format-control.js';
 import { AuxiliaryWork } from '../core/auxiliary-work.js';
@@ -83,7 +84,7 @@ import type { SessionControl } from './control/sessionControl.js';
 import {
   assembleSessionControl,
   idleClient,
-  initialProviderState,
+  initializeProviderState,
   resetIdleChat,
 } from './session-control-assembly.js';
 import {
@@ -116,7 +117,6 @@ import {
 import type { EditorCallbacks } from './config-types.js';
 import {
   createAgentAuthState,
-  seedAgentAuthState,
   type AgentAuthState,
   type AuthWinner,
   computeAuthWinner,
@@ -174,7 +174,7 @@ export interface AgentProviderState {
  * @requirement:REQ-001
  * @requirement:REQ-003
  */
-export class AgentImpl implements Agent {
+export class AgentImpl extends AgentProviderFileDomain implements Agent {
   private readonly coordinator = new AgentExecutionCoordinator();
   readonly execution: Agent['execution'] = this.coordinator;
   private get activeRun(): ActiveRun | undefined {
@@ -283,8 +283,11 @@ export class AgentImpl implements Agent {
   readonly hasActiveProvider: Agent['hasActiveProvider'];
   readonly getProviderContextLimit: Agent['getProviderContextLimit'];
   readonly listAvailableModels: Agent['listAvailableModels'];
-
   readonly providerReads: Agent['providerReads'];
+
+  protected assertFileAdmission(): void {
+    this.coordinator.assertSettingsAdmission();
+  }
   readonly modelParameters: Agent['modelParameters'] =
     assembleModelParameterControl(
       (provider, key, value) =>
@@ -315,13 +318,18 @@ export class AgentImpl implements Agent {
     private readonly deps: AgentDeps,
     private readonly selectOwnerModel: (model: string) => Promise<void>,
   ) {
+    super(deps.sessionClient.providerFiles, deps.config.getSessionId());
     this.metrics = deps.settingsOwner.telemetry.localMetrics;
-    this.sessionClient = this.buildSessionClient();
     const reads = this.buildProviderReads();
     this.providerReads = reads.providerReads;
     this.hasActiveProvider = reads.hasActiveProvider;
     this.getProviderContextLimit = reads.getProviderContextLimit;
     this.listAvailableModels = reads.listAvailableModels;
+    this.sessionClient = idleClient(
+      deps.sessionClient.operations,
+      this.coordinator,
+      () => this.rebuild(),
+    );
     this.profilePersistence = assembleProfilePersistence(
       () => deps.config.getModel(),
       () => deps.config.getProvider(),
@@ -346,13 +354,11 @@ export class AgentImpl implements Agent {
     // genuine live objects dispose() tears down (no second bus, no clones).
     this.messageBus = deps.messageBus;
 
-    this.providerState = initialProviderState(deps.runtimeState);
     // @plan:PLAN-20260617-COREAPI.P18 @requirement:REQ-008
-    seedAgentAuthState(
+    this.providerState = initializeProviderState(
+      deps.runtimeState,
       deps.initialAuth,
       this.authState,
-      this.providerState,
-      deps.runtimeState.provider,
     );
     // Shared mutable holders threaded from finalizeAgent.
     this.editorCallbacksHolder = deps.editorCallbacksHolder;
@@ -425,11 +431,6 @@ export class AgentImpl implements Agent {
       () => this.deps.sessionClient.prepareProfileClientReplacement(),
       () => this.activeRun,
     )(changed, signal);
-
-  private buildSessionClient(): Agent['sessionClient'] {
-    const { operations } = this.deps.sessionClient;
-    return idleClient(operations, this.coordinator, () => this.rebuild());
-  }
 
   private buildSessionControl(): SessionControl {
     const config = this.deps.config;

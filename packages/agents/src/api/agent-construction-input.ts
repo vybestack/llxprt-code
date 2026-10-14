@@ -35,7 +35,6 @@ export interface AgentConstructionInput {
   editorCallbacks: AgentConfig['editorCallbacks'];
   toolSchedulerFactory: AgentConfig['toolSchedulerFactory'];
   runtimeFactoryBindings: AgentConfig['runtimeFactoryBindings'];
-  runtimeActivationBindings: AgentConfig['runtimeActivationBindings'];
   tokenStore: AgentConfig['tokenStore'];
 }
 
@@ -62,7 +61,6 @@ export function parseAgentConstruction(
     editorCallbacks,
     toolSchedulerFactory,
     runtimeFactoryBindings,
-    runtimeActivationBindings,
     tokenStore,
     credentialAuthority: _credentialAuthority,
     mediaOwner: suppliedMediaOwner,
@@ -93,7 +91,6 @@ export function parseAgentConstruction(
     editorCallbacks,
     toolSchedulerFactory,
     runtimeFactoryBindings,
-    runtimeActivationBindings,
     tokenStore,
     suppliedMediaOwner,
   };

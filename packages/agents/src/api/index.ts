@@ -50,7 +50,14 @@ export * from './event-types.js';
 export * from './agent.js';
 export type { SessionRecordingEvent } from './control/recordSessionEvent.js';
 export * from './event-schema.js';
-export { createAgent } from './createAgent.js';
+export {
+  createAgent,
+  createAgentWithRetainedProviderFiles,
+} from './createAgent.js';
+export type {
+  AgentRetainedProviderFile,
+  AgentProviderFileOperations,
+} from './provider-file-domain.js';
 export { fromConfig } from './fromConfig.js';
 export { listProviders, listTools } from './discovery.js';
 export { mapLoopStream, mapStreamEvent } from './eventAdapter.js';

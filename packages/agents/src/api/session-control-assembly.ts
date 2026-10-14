@@ -9,6 +9,20 @@ import {
 } from './control/sessionControl.js';
 import { createAgentSessionPersistence } from './control/recordedHistoryPersistence.js';
 import type { AgentProviderState } from './agentImpl.js';
+import {
+  seedAgentAuthState,
+  type AgentAuthState,
+} from './control/authState.js';
+
+export function initializeProviderState(
+  state: Parameters<typeof initialProviderState>[0],
+  initialAuth: Parameters<typeof seedAgentAuthState>[0],
+  authState: AgentAuthState,
+): AgentProviderState {
+  const selection = initialProviderState(state);
+  seedAgentAuthState(initialAuth, authState, selection, state.provider);
+  return selection;
+}
 
 export function initialProviderState(
   state: Pick<AgentProviderState, 'provider' | 'model' | 'baseUrl'> & {

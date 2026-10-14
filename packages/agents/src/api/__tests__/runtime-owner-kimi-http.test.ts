@@ -11,7 +11,6 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import type { OAuthToken, TokenStore } from '@vybestack/llxprt-code-core';
 import { initializePromptSystem } from '@vybestack/llxprt-code-core/core/prompts.js';
-import { createRuntimeActivationBindings } from '@vybestack/llxprt-code-providers/runtime.js';
 import { ProviderFileLifecycle } from '@vybestack/llxprt-code-providers/providerFilePolicy.js';
 import { createAgent, fromConfig, type Agent } from '../index.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
@@ -76,7 +75,6 @@ describe('public Agent same-label Kimi files', () => {
     async ({ failDeletion, adoptConfig }) => {
       const agents: Agent[] = [];
       const configs: Config[] = [];
-      const lifecycles: ProviderFileLifecycle[] = [];
       const deleted: string[] = [];
       const requests: string[] = [];
       let deletionFailed = false;
@@ -208,7 +206,6 @@ describe('public Agent same-label Kimi files', () => {
                   maxFiles: 10,
                   maxBytes: 1024 * 1024,
                 });
-                lifecycles[index] = lifecycle;
                 return fromConfig({
                   credentialAuthority: credentials().authority,
                   config,
@@ -225,29 +222,14 @@ describe('public Agent same-label Kimi files', () => {
                   },
                 });
               }
-              const base = createRuntimeActivationBindings();
               const options = {
+                credentialAuthority: credentials().authority,
                 provider: 'kimi',
                 model: 'kimi-k3',
                 workingDir: process.cwd(),
                 sessionId: 'same-kimi-label',
                 tokenStore: new MemoryStore(),
                 auth: { apiKey: `test-key-${index}`, baseUrl: endpoint },
-                runtimeActivationBindings: {
-                  ...base,
-                  setRuntimeContext(
-                    ...[settings, config, options]: Parameters<
-                      typeof base.setRuntimeContext
-                    >
-                  ) {
-                    settings.set('provider-files', 'session');
-                    settings.set('kimi.experimental-video', true);
-                    const lifecycle = options.providerFileLifecycle;
-                    if (lifecycle instanceof ProviderFileLifecycle)
-                      lifecycles[index] = lifecycle;
-                    return base.setRuntimeContext(settings, config, options);
-                  },
-                },
               };
               return createAgent(options);
             })(),
@@ -285,11 +267,11 @@ describe('public Agent same-label Kimi files', () => {
             ? ['distinct-caller-config-scope', 'distinct-caller-config-scope']
             : [],
         );
-        const stateBeforeRetry = lifecycles.map(
-          (owner) => owner.snapshot().retainedFiles,
+        const stateBeforeRetry = agents.map(
+          (owner) => owner.captureProviderFiles().retainedFiles,
         );
         const deletionBeforeRetry = [...deleted];
-        const retried = await lifecycles[0].retryDeletions();
+        const retried = await agents[0].retryProviderFileDeletions();
         expect(disposal === null ? '' : String(disposal)).toMatch(
           failDeletion ? /cleanup/ : /^$/,
         );
@@ -300,7 +282,7 @@ describe('public Agent same-label Kimi files', () => {
         expect(retried.failed).toBe(0);
         expect(deleted).toStrictEqual(['public-file-0']);
         expect(
-          lifecycles.map((owner) => owner.snapshot().retainedFiles),
+          agents.map((owner) => owner.captureProviderFiles().retainedFiles),
         ).toStrictEqual([0, 1]);
         releaseHeld();
         await second;

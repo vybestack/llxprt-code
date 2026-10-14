@@ -16,6 +16,10 @@ describe('Agent finalization collaborators', () => {
     const closing = engineGate();
     const release = engineGate();
     let releases = 0;
+    built.owner.bindProviderFiles(
+      built.handle.providerFileLifecycle,
+      (provider) => built.handle.oauthManager.composeRetryOperations(provider),
+    );
     const agent = await finalizeAgent(
       { provider: 'fake', model: 'fake-model' },
       { baseUrl: undefined },

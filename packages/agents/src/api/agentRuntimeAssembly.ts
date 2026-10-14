@@ -4,6 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { TokenStore } from '@vybestack/llxprt-code-auth';
+import type { ProviderManager } from '@vybestack/llxprt-code-providers';
+
+import {
+  acquirePreferredProviderManager,
+  acquirePreferredOAuth,
+  acquirePreferredSettings,
+  acquirePreferredFiles,
+  preparePreferredProviderCompletion,
+} from './preferred-provider-acquisition.js';
+import type { ParsedAgentConfig } from './config-schema.js';
+import type { AgentConfig } from './config-types.js';
+import type { AgentRetainedProviderFile } from './provider-file-domain.js';
+
 import {
   assembleSessionImages,
   type SessionImageSelection,
@@ -13,6 +28,7 @@ import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/tas
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 
 import { SessionClientOwner } from '../session/session-client-owner.js';
+import type { IsolatedRuntimeContextOptions } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
 
 /**
  * @plan:ISSUE-3222
@@ -28,12 +44,25 @@ import { SessionClientOwner } from '../session/session-client-owner.js';
 
 import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
-import type { SettingsService } from '@vybestack/llxprt-code-settings';
 import { buildAgentClientFactory } from './agentBootstrap.js';
+import type { resolveAuthType } from './agentBootstrap.js';
 import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
 import type { Agent } from './agent.js';
-import type { IsolatedRuntimeContextOptions } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
-import { registerProvidersOntoManager } from './createAgent.js';
+import {
+  activateCreatedSession,
+  cleanupFailedCreatedAgent,
+  finalizeAgent,
+  initializeCreatedClient,
+  registerProvidersOntoManager,
+  startAgentSession,
+} from './createAgent.js';
+import type { CreatedAgentMcpOptions } from './createAgent.js';
+import { createTaskRegistration } from './runtimeFactories.js';
+import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
+import {
+  assembleOwnedMcpRuntime,
+  bindCreatedSessionClient,
+} from './policyComposition.js';
 import type {
   AgentRuntimeFactoryBindings,
   RuntimeProviderManager,
@@ -42,6 +71,10 @@ import type {
   ContentGenerator,
 } from '@vybestack/llxprt-code-core';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
+import type { RuntimeKind } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
+import type { RuntimePolicyOwner } from '@vybestack/llxprt-code-core/policy/policy-owner.js';
+import type { EditorCallbacks, AgentSchedulerHandle } from './config-types.js';
+import type { SchedulerConstruction } from '../session/assembleSchedulerOwner.js';
 import type {
   OAuthManager,
   CredentialAuthority,
@@ -59,7 +92,6 @@ import { completeAdoptedAgent } from './adopted-agent-completion.js';
 import { cleanupFailedAdoption } from './fromConfig-cleanup.js';
 import { adoptedDefinitionCleanup } from './adopted-definition-assembly.js';
 import type { FromConfigOptions } from './config-types.js';
-import type { McpRuntimeOwner } from './mcpRuntimeAssembly.js';
 import type { HostGitHubBrokerOwner } from './host-github-broker-owner.js';
 
 const DEFAULT_MODEL = 'gemini-1.5-flash';
@@ -410,4 +442,294 @@ function finishAdoptionAssembly(
     (options.mcpOwnership ??
       (options.mcpRuntime === undefined ? 'agent' : 'caller')) === 'agent',
   );
+}
+
+export function assemblePreferredAgent(
+  config: Config,
+  parsed: ParsedAgentConfig,
+  runtimeId: string,
+  suppliedStore: TokenStore | undefined,
+  messageBus: MessageBus,
+  tokenizerSelection: AgentConfig['tokenizerFactory'],
+  contentSelection: AgentConfig['contentGeneratorFactory'],
+  profileReads:
+    | NonNullable<AgentConfig['definitionOwner']>['profileReads']
+    | undefined,
+  authority: CredentialAuthority,
+  retainedFiles: readonly AgentRetainedProviderFile[],
+  cleanupPartial: () => Promise<void>,
+  mcpOptions: CreatedAgentMcpOptions,
+  resolvedAuth: ReturnType<typeof resolveAuthType>,
+  mediaOwner: SessionMediaOwner,
+  agentClientFactory: AgentClientFactory | undefined,
+  taskToolRegistration:
+    | AgentRuntimeFactoryBindings['taskToolRegistration']
+    | undefined,
+  policyOwner: RuntimePolicyOwner,
+  github: HostGitHubBrokerOwner | undefined,
+  onApproval: AgentConfig['onApproval'],
+  onOAuthPrompt: AgentConfig['onOAuthPrompt'],
+  editorCallbacks: EditorCallbacks | undefined,
+  schedulerHandles: AgentSchedulerHandle[],
+  schedulerFactory: SchedulerConstruction,
+): Promise<Agent> {
+  return new PreferredAgentAssembly(
+    config,
+    parsed,
+    runtimeId,
+    suppliedStore,
+    messageBus,
+    tokenizerSelection,
+    contentSelection,
+    profileReads,
+    authority,
+    retainedFiles,
+    cleanupPartial,
+    mcpOptions,
+    resolvedAuth,
+    mediaOwner,
+    agentClientFactory,
+    taskToolRegistration,
+    policyOwner,
+    github,
+    onApproval,
+    onOAuthPrompt,
+    editorCallbacks,
+    schedulerHandles,
+    schedulerFactory,
+  ).assemble();
+}
+
+class PreferredAgentAssembly {
+  private settings!: SettingsService;
+  private settingsOwner!: SessionSettingsOwner;
+  private files!: ProviderFileLifecycle;
+  private manager!: ProviderManager;
+  private oauth!: OAuthManager;
+  private tokenizerFactory!: RuntimeTokenizerFactory;
+  private contentGeneratorFactory!: RuntimeContentGeneratorFactory<ContentGenerator>;
+  private release!: AcquisitionRelease;
+  private mcpRuntime!: McpRuntimeOwner;
+  private sessionClient: SessionClientOwner | undefined;
+  private agent!: Agent;
+
+  constructor(
+    private readonly config: Config,
+    private readonly parsed: ParsedAgentConfig,
+    private readonly runtimeId: string,
+    private readonly suppliedStore: TokenStore | undefined,
+    private readonly messageBus: MessageBus,
+    private readonly tokenizerSelection: AgentConfig['tokenizerFactory'],
+    private readonly contentSelection: AgentConfig['contentGeneratorFactory'],
+    private readonly profileReads:
+      | NonNullable<AgentConfig['definitionOwner']>['profileReads']
+      | undefined,
+    private readonly authority: CredentialAuthority,
+    private readonly retainedFiles: readonly AgentRetainedProviderFile[],
+    private readonly cleanupPartial: () => Promise<void>,
+    private readonly mcpOptions: CreatedAgentMcpOptions,
+    private readonly resolvedAuth: ReturnType<typeof resolveAuthType>,
+    private readonly mediaOwner: SessionMediaOwner,
+    private readonly agentClientFactory: AgentClientFactory | undefined,
+    private readonly taskToolRegistration:
+      | AgentRuntimeFactoryBindings['taskToolRegistration']
+      | undefined,
+    private readonly policyOwner: RuntimePolicyOwner,
+    private readonly github: HostGitHubBrokerOwner | undefined,
+    private readonly onApproval: AgentConfig['onApproval'],
+    private readonly onOAuthPrompt: AgentConfig['onOAuthPrompt'],
+    private readonly editorCallbacks: EditorCallbacks | undefined,
+    private readonly schedulerHandles: AgentSchedulerHandle[],
+    private readonly schedulerFactory: SchedulerConstruction,
+  ) {}
+
+  async assemble(): Promise<Agent> {
+    const release = new AcquisitionRelease();
+    let settings: SettingsService;
+    let settingsOwner: SessionSettingsOwner;
+    let files: ProviderFileLifecycle;
+    let manager: ProviderManager;
+    let oauth: OAuthManager;
+    let tokenizerFactory: RuntimeTokenizerFactory;
+    let contentGeneratorFactory: RuntimeContentGeneratorFactory<ContentGenerator>;
+    try {
+      settings = new SettingsService();
+      settingsOwner = acquirePreferredSettings(
+        this.config,
+        settings,
+        this.parsed,
+        release,
+      );
+      files = await acquirePreferredFiles(
+        this.config,
+        this.runtimeId,
+        this.retainedFiles,
+        release,
+      );
+      manager = acquirePreferredProviderManager(
+        this.config,
+        settings,
+        settingsOwner,
+        files,
+        this.runtimeId,
+        this.authority,
+        release,
+      );
+      ({ tokenizerFactory, contentGeneratorFactory } =
+        configureProviderRuntimeFactories(this.config, manager, {
+          tokenizerFactory: this.tokenizerSelection,
+          contentGeneratorFactory: this.contentSelection,
+        }));
+      oauth = acquirePreferredOAuth(
+        this.suppliedStore,
+        this.messageBus,
+        this.config,
+        settings,
+        manager,
+        this.runtimeId,
+        this.profileReads,
+        this.authority,
+        release,
+      );
+      await preparePreferredProviderCompletion(
+        this.config,
+        settings,
+        settingsOwner,
+        manager,
+        oauth,
+        this.runtimeId,
+        tokenizerFactory,
+      );
+    } catch (primary) {
+      return rejectPreferredAcquisition(
+        primary,
+        () => release.close(),
+        this.cleanupPartial,
+      );
+    }
+    this.settings = settings;
+    this.settingsOwner = settingsOwner;
+    this.files = files;
+    this.manager = manager;
+    this.oauth = oauth;
+    this.tokenizerFactory = tokenizerFactory;
+    this.contentGeneratorFactory = contentGeneratorFactory;
+    this.release = release;
+    await this.finish();
+    return this.agent;
+  }
+
+  private async finish(): Promise<void> {
+    let disposeMcpRuntime = async (): Promise<void> =>
+      this.policyOwner.dispose();
+    try {
+      const registration = createTaskRegistration(
+        this.mcpOptions.credentialAuthority,
+      );
+      const mcpRuntime = await assembleOwnedMcpRuntime(
+        this.config,
+        this.policyOwner.session.messageBus,
+        this.mcpOptions,
+        this.policyOwner,
+        this.settingsOwner,
+      );
+      disposeMcpRuntime = () => mcpRuntime.dispose();
+      this.mcpRuntime = mcpRuntime;
+      this.sessionClient = await bindCreatedSessionClient(
+        this.config,
+        this.settings,
+        this.settingsOwner,
+        this.manager,
+        this.oauth,
+        this.contentGeneratorFactory,
+        this.tokenizerFactory,
+        this.files,
+        this.mediaOwner,
+        this.agentClientFactory,
+        mcpRuntime,
+        this.taskToolRegistration?.(registration) ?? registration,
+        (this.parsed.harness?.forceConfirmations ?? true) &&
+          this.config.isInteractive(),
+        this.mcpOptions.imageOperation,
+      );
+      await this.initializeCreatedAgent();
+    } catch (primaryError) {
+      await cleanupFailedCreatedAgent(
+        primaryError,
+        () => this.release.close(),
+        this.config,
+        this.mediaOwner,
+        this.sessionClient,
+        disposeMcpRuntime,
+      );
+    }
+  }
+
+  private async initializeCreatedAgent(): Promise<void> {
+    const { settings, settingsOwner, manager, oauth, release, mcpRuntime } =
+      this;
+    const ownedSessionClient = this.sessionClient;
+    if (ownedSessionClient === undefined)
+      throw new Error('Preferred Agent client was not acquired');
+    await initializeCreatedClient(ownedSessionClient, this.github);
+    const activationOutcome = await activateCreatedSession(
+      this.parsed,
+      this.resolvedAuth,
+      this.config,
+      settings,
+      settingsOwner,
+      manager,
+      oauth,
+      (): RuntimeKind => 'agent',
+      this.policyOwner.session.messageBus,
+      mcpRuntime,
+      ownedSessionClient,
+    );
+    const agent = await finalizeAgent(
+      { ...this.parsed, ...activationOutcome },
+      this.resolvedAuth,
+      this.config,
+      manager,
+      oauth,
+      settings,
+      this.runtimeId,
+      settingsOwner,
+      (): RuntimeKind => 'agent',
+      () => release.close(),
+      this.onApproval,
+      this.onOAuthPrompt,
+      this.editorCallbacks,
+      this.schedulerHandles,
+      'agent',
+      () => mcpRuntime.dispose(),
+      mcpRuntime,
+      this.schedulerFactory,
+      undefined,
+      'config',
+      this.mediaOwner,
+      ownedSessionClient,
+      mcpRuntime.workspaceSkills.operations,
+    );
+    this.agent = await startAgentSession(agent);
+  }
+}
+
+async function rejectPreferredAcquisition(
+  primary: unknown,
+  closeProviderResources: () => Promise<void>,
+  closeSessionResources: () => Promise<void>,
+): Promise<never> {
+  const results = await Promise.allSettled([
+    closeProviderResources(),
+    Promise.resolve().then(closeSessionResources),
+  ]);
+  const failures = results.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : [],
+  );
+  if (failures.length > 0)
+    throw new AggregateError(
+      [primary, ...failures],
+      'Preferred Agent acquisition cleanup failed',
+    );
+  throw primary;
 }
