@@ -21,15 +21,25 @@ import { drain } from '../../../../agents/src/api/__tests__/helpers/agentHarness
 import { setupOwnerSessionRecording } from '../../cliSessionBootstrap.js';
 import { TaskLaunchOwner } from '../../../../agents/src/session/task-launch-owner.js';
 import { setImmediate } from 'node:timers/promises';
-import { clearCommand } from './clearCommand.js';
+import { createClearCommand } from './clearCommand.js';
+import { bindClearSession } from './simpleCommandHost.js';
 import { createContinueCommandForTest } from './__tests__/continue-command-test-owner.js';
 import type { HistoryItemWithoutId } from '../types.js';
 import type { CommandContext } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { assertDefined } from '../../__tests__/assertions.js';
 
-const clearAction = clearCommand.action;
-assertDefined(clearAction);
+async function clearAction(context: CommandContext, args: string) {
+  const action = createClearCommand(
+    bindClearSession(context.services.agent),
+    context.ui.setDebugMessage,
+    context.ui.addItem,
+    context.ui.updateHistoryTokenCount,
+    context.ui.clear,
+  ).action;
+  assertDefined(action);
+  return action(context, args);
+}
 async function runContinue(context: CommandContext, args: string) {
   const action = createContinueCommandForTest(() => context).action;
   assertDefined(action);

@@ -8,7 +8,7 @@
  */
 
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
-import { statsCommand } from '../statsCommand.js';
+import { registerStatsCommand } from '../../../__tests__/stats-command-test-owner.js';
 import { type CommandContext } from '../types.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import { MessageType } from '../../types.js';
@@ -23,7 +23,7 @@ describe('statsCommand - load balancer stats', () => {
 
   describe('lb subcommand', () => {
     it('should display load balancer stats when using "lb" subcommand', () => {
-      const lbSubCommand = statsCommand.subCommands?.find(
+      const lbSubCommand = registerStatsCommand(mockContext).subCommands?.find(
         (sc) => sc.name === 'lb',
       );
       assertDefined(lbSubCommand?.action);
@@ -39,7 +39,7 @@ describe('statsCommand - load balancer stats', () => {
     });
 
     it('should have correct subcommand metadata for "lb"', () => {
-      const lbSubCommand = statsCommand.subCommands?.find(
+      const lbSubCommand = registerStatsCommand(mockContext).subCommands?.find(
         (sc) => sc.name === 'lb',
       );
 
@@ -51,7 +51,7 @@ describe('statsCommand - load balancer stats', () => {
 
   describe('loadbalancer alias', () => {
     it('should have "loadbalancer" as an alternative name for "lb" subcommand', () => {
-      const lbSubCommand = statsCommand.subCommands?.find(
+      const lbSubCommand = registerStatsCommand(mockContext).subCommands?.find(
         (sc) => sc.name === 'lb',
       );
 
@@ -61,7 +61,7 @@ describe('statsCommand - load balancer stats', () => {
     });
 
     it('should have correct subcommand metadata for "lb" with alias', () => {
-      const lbSubCommand = statsCommand.subCommands?.find(
+      const lbSubCommand = registerStatsCommand(mockContext).subCommands?.find(
         (sc) => sc.name === 'lb',
       );
 
@@ -74,7 +74,7 @@ describe('statsCommand - load balancer stats', () => {
 
   describe('lb command functionality', () => {
     it('should have "lb" as primary name with "loadbalancer" as alias', () => {
-      const lbSubCommand = statsCommand.subCommands?.find(
+      const lbSubCommand = registerStatsCommand(mockContext).subCommands?.find(
         (sc) => sc.name === 'lb',
       );
 
@@ -84,7 +84,7 @@ describe('statsCommand - load balancer stats', () => {
     });
 
     it('should use MessageType.LB_STATS when invoked', () => {
-      const lbSubCommand = statsCommand.subCommands?.find(
+      const lbSubCommand = registerStatsCommand(mockContext).subCommands?.find(
         (sc) => sc.name === 'lb',
       );
 

@@ -1,11 +1,18 @@
-import { createSubagentCommand } from '../ui/commands/subagentCommand.js';
-import { bindSubagentCommand } from '../ui/commands/subagentCommandHost.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createStatsCommand } from '../ui/commands/statsCommand.js';
+import { createLoggingCommand } from '../ui/commands/loggingCommand.js';
+import { createAboutCommand } from '../ui/commands/aboutCommand.js';
+import { createClearCommand } from '../ui/commands/clearCommand.js';
+import { createInitCommand } from '../ui/commands/initCommand.js';
+import { createVimCommand } from '../ui/commands/vimCommand.js';
+import { createUiProfileCommand } from '../ui/commands/uiprofileCommand.js';
+import { createSubagentCommand } from '../ui/commands/subagentCommand.js';
+import { bindSubagentCommand } from '../ui/commands/subagentCommandHost.js';
 import { createExtensionsCommand } from '../ui/commands/extensionsCommand.js';
 import { bindExtensionsCommand } from '../ui/commands/extensionsCommandHost.js';
 import { createTodoCommand } from '../ui/commands/todoCommand.js';
@@ -303,6 +310,7 @@ export function createUnconfiguredBuiltinOwners(): BuiltinCommandOwners {
     ),
     toolsCommand: createToolsCommand(null, () => {}),
     ...unconfiguredWorkspaceCommands(),
+    ...unconfiguredPresentationCommands(),
     imageCommand: createImageCommand({
       workspaceRoot: undefined,
       runImageOperation: undefined,
@@ -330,6 +338,55 @@ export function createUnconfiguredBuiltinOwners(): BuiltinCommandOwners {
     providerCommand: createUnconfiguredProviderCommand(),
     profileCommand: createUnconfiguredProfileCommand(),
     ...createUnconfiguredCredentialCommands(),
+  };
+}
+
+function unconfiguredPresentationCommands() {
+  return {
+    statsCommand: createStatsCommand({
+      readStartTime: () => undefined,
+      readQuota: async () => [],
+      isOAuthAvailable: () => false,
+      discoverBuckets: async () => [],
+      addItem: () => 0,
+    }),
+    loggingCommand: createLoggingCommand({
+      isConfigured: false,
+      readTelemetry: () => ({}),
+      writeTelemetry: () => {},
+      readRuntimeTelemetry: () => ({}),
+      updateRuntimeTelemetry: async () => {},
+      getConversationLogPath: () => '',
+      getRedactionConfig: () => ({
+        redactApiKeys: true,
+        redactCredentials: true,
+        redactFilePaths: false,
+        redactUrls: false,
+        redactEmails: false,
+        redactPersonalInfo: false,
+      }),
+      addItem: () => 0,
+    }),
+    aboutCommand: createAboutCommand(
+      async () => ({
+        modelVersion: 'Unknown',
+        provider: 'Unknown',
+        baseURL: '',
+        ideClient: '',
+        keyfile: '',
+      }),
+      () => 0,
+    ),
+    clearCommand: createClearCommand(
+      null,
+      () => {},
+      () => 0,
+      () => {},
+      () => {},
+    ),
+    initCommand: createInitCommand(undefined, () => 0),
+    vimCommand: createVimCommand(async () => false),
+    uiProfileCommand: createUiProfileCommand(() => {}),
   };
 }
 

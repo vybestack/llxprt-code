@@ -6,22 +6,29 @@
 
 import type {
   SlashCommand,
-  CommandContext,
   MessageActionReturn,
   OpenDialogActionReturn,
   LoggingDialogData,
 } from './types.js';
 import { CommandKind } from './types.js';
-import type { LoadedSettings } from '../../config/settings.js';
-import { SettingScope } from '../../config/settings.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import type { CliUiRuntime } from '../cliUiRuntime.js';
+import type {
+  TelemetrySettings,
+  RedactionConfig,
+} from '@vybestack/llxprt-code-core';
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 
-export interface LoggingCommandContext {
-  config: CliUiRuntime;
-  settings: LoadedSettings;
+export interface LoggingCommandOperations {
+  readonly isConfigured: boolean;
+  readonly readTelemetry: () => TelemetrySettings;
+  readonly writeTelemetry: (value: TelemetrySettings) => void;
+  readonly readRuntimeTelemetry: () => TelemetrySettings;
+  readonly updateRuntimeTelemetry: (value: TelemetrySettings) => Promise<void>;
+  readonly getConversationLogPath: () => string;
+  readonly getRedactionConfig: () => RedactionConfig;
+  readonly addItem: UseHistoryManagerReturn['addItem'];
 }
 
 export type CommandResult = MessageActionReturn | OpenDialogActionReturn;
@@ -159,7 +166,7 @@ function parseRedactionUpdates(args: string[]): Record<string, boolean> {
 
 export async function handleLoggingCommand(
   args: string[],
-  context: LoggingCommandContext,
+  context: LoggingCommandOperations,
 ): Promise<CommandResult> {
   const subcommand = args[0];
 
@@ -189,11 +196,10 @@ export async function handleLoggingCommand(
 }
 
 async function handleLoggingStatus(
-  context: LoggingCommandContext,
+  context: LoggingCommandOperations,
 ): Promise<CommandResult> {
   // Read directly from settings, not from cached runtime state
-  const isLoggingEnabled =
-    context.settings.merged.telemetry.logConversations ?? false;
+  const isLoggingEnabled = context.readTelemetry().logConversations ?? false;
 
   const status = `Conversation Logging: ${isLoggingEnabled ? 'Enabled' : 'Disabled'}`;
 
@@ -206,17 +212,17 @@ async function handleLoggingStatus(
 
 async function handleEnableLogging(
   _args: string[],
-  context: LoggingCommandContext,
+  context: LoggingCommandOperations,
 ): Promise<CommandResult> {
   // Enable conversation logging through settings
-  context.settings.setValue(SettingScope.User, 'telemetry', {
-    ...context.settings.merged.telemetry,
+  context.writeTelemetry({
+    ...context.readTelemetry(),
     logConversations: true,
   });
 
   // Update the runtime state to reflect the new setting
-  await context.config.updateTelemetrySettings({
-    ...context.config.getTelemetrySettings(),
+  await context.updateRuntimeTelemetry({
+    ...context.readRuntimeTelemetry(),
     logConversations: true,
   });
 
@@ -228,16 +234,16 @@ async function handleEnableLogging(
 }
 
 async function handleDisableLogging(
-  context: LoggingCommandContext,
+  context: LoggingCommandOperations,
 ): Promise<CommandResult> {
-  context.settings.setValue(SettingScope.User, 'telemetry', {
-    ...context.settings.merged.telemetry,
+  context.writeTelemetry({
+    ...context.readTelemetry(),
     logConversations: false,
   });
 
   // Update the runtime state to reflect the new setting
-  await context.config.updateTelemetrySettings({
-    ...context.config.getTelemetrySettings(),
+  await context.updateRuntimeTelemetry({
+    ...context.readRuntimeTelemetry(),
     logConversations: false,
   });
 
@@ -251,7 +257,7 @@ async function handleDisableLogging(
 
 async function handleShowLogs(
   args: string[],
-  context: LoggingCommandContext,
+  context: LoggingCommandOperations,
 ): Promise<CommandResult> {
   // Parse number of lines from args (default to 50)
   const numLines = args[0] ? parseInt(args[0], 10) : 50;
@@ -265,7 +271,7 @@ async function handleShowLogs(
   }
 
   // Get the log path from config
-  const logPath = context.config.getConversationLogPath();
+  const logPath = context.getConversationLogPath();
   const expandedPath = logPath.replace('~', os.homedir());
 
   try {
@@ -328,11 +334,11 @@ async function handleShowLogs(
 
 async function handleRedactionSettings(
   args: string[],
-  context: LoggingCommandContext,
+  context: LoggingCommandOperations,
 ): Promise<CommandResult> {
   if (args.length === 0) {
     // Show current redaction settings
-    const redactionConfig = context.config.getRedactionConfig();
+    const redactionConfig = context.getRedactionConfig();
 
     const settings = [
       'Current Redaction Settings:',
@@ -368,8 +374,8 @@ async function handleRedactionSettings(
   }
 
   // Update telemetry settings
-  context.settings.setValue(SettingScope.User, 'telemetry', {
-    ...context.settings.merged.telemetry,
+  context.writeTelemetry({
+    ...context.readTelemetry(),
     ...updates,
   });
 
@@ -385,218 +391,222 @@ async function handleRedactionSettings(
 }
 
 // Subcommands for logging
-const statusCommand: SlashCommand = {
-  name: 'status',
-  description: 'show current logging status',
-  kind: CommandKind.BUILT_IN,
-  action: async (context: CommandContext) => {
-    if (!context.services.config) {
-      context.ui.addItem(
-        {
-          type: 'error',
-          text: 'Configuration not available',
-        },
-        Date.now(),
-      );
-      return;
-    }
-    const result = await handleLoggingStatus({
-      config: context.services.config,
-      settings: context.services.settings,
-    });
-    if (result.type === 'message') {
-      context.ui.addItem(
-        {
-          type: result.messageType,
-          text: result.content,
-        },
-        Date.now(),
-      );
-    }
-  },
-};
+async function showLoggingStatus(
+  operations: LoggingCommandOperations,
+): Promise<void> {
+  if (!operations.isConfigured) {
+    operations.addItem(
+      { type: 'error', text: 'Configuration not available' },
+      Date.now(),
+    );
+    return;
+  }
+  const result = await handleLoggingStatus(operations);
+  if (result.type === 'message')
+    operations.addItem(
+      { type: result.messageType, text: result.content },
+      Date.now(),
+    );
+}
+function createStatusCommand(
+  operations: LoggingCommandOperations,
+): SlashCommand {
+  return {
+    name: 'status',
+    description: 'show current logging status',
+    kind: CommandKind.BUILT_IN,
+    action: () => showLoggingStatus(operations),
+  };
+}
 
-const enableCommand: SlashCommand = {
-  name: 'enable',
-  description: 'enable conversation logging',
-  kind: CommandKind.BUILT_IN,
-  action: async (context: CommandContext, args: string) => {
-    if (!context.services.config) {
-      context.ui.addItem(
-        {
-          type: 'error',
-          text: 'Configuration not available',
-        },
-        Date.now(),
-      );
-      return;
-    }
-    const argsArray = splitArgs(args);
-    const result = await handleEnableLogging(argsArray, {
-      config: context.services.config,
-      settings: context.services.settings,
-    });
-    if (result.type === 'message') {
-      context.ui.addItem(
-        {
-          type: result.messageType,
-          text: result.content,
-        },
-        Date.now(),
-      );
-    }
-  },
-};
+function createEnableCommand(context: LoggingCommandOperations): SlashCommand {
+  return {
+    name: 'enable',
+    description: 'enable conversation logging',
+    kind: CommandKind.BUILT_IN,
+    action: async (_invocation: unknown, args: string) => {
+      if (!context.isConfigured) {
+        context.addItem(
+          {
+            type: 'error',
+            text: 'Configuration not available',
+          },
+          Date.now(),
+        );
+        return;
+      }
+      const argsArray = splitArgs(args);
+      const result = await handleEnableLogging(argsArray, context);
+      if (result.type === 'message') {
+        context.addItem(
+          {
+            type: result.messageType,
+            text: result.content,
+          },
+          Date.now(),
+        );
+      }
+    },
+  };
+}
 
-const disableCommand: SlashCommand = {
-  name: 'disable',
-  description: 'disable conversation logging',
-  kind: CommandKind.BUILT_IN,
-  action: async (context: CommandContext) => {
-    if (!context.services.config) {
-      context.ui.addItem(
-        {
-          type: 'error',
-          text: 'Configuration not available',
-        },
-        Date.now(),
-      );
-      return;
-    }
-    const result = await handleDisableLogging({
-      config: context.services.config,
-      settings: context.services.settings,
-    });
-    if (result.type === 'message') {
-      context.ui.addItem(
-        {
-          type: result.messageType,
-          text: result.content,
-        },
-        Date.now(),
-      );
-    }
-  },
-};
+function createDisableCommand(context: LoggingCommandOperations): SlashCommand {
+  return {
+    name: 'disable',
+    description: 'disable conversation logging',
+    kind: CommandKind.BUILT_IN,
+    action: async (_invocation: unknown) => {
+      if (!context.isConfigured) {
+        context.addItem(
+          {
+            type: 'error',
+            text: 'Configuration not available',
+          },
+          Date.now(),
+        );
+        return;
+      }
+      const result = await handleDisableLogging(context);
+      if (result.type === 'message') {
+        context.addItem(
+          {
+            type: result.messageType,
+            text: result.content,
+          },
+          Date.now(),
+        );
+      }
+    },
+  };
+}
 
-const redactionCommand: SlashCommand = {
-  name: 'redaction',
-  description: 'configure data redaction settings',
-  kind: CommandKind.BUILT_IN,
-  action: async (context: CommandContext, args: string) => {
-    if (!context.services.config) {
-      context.ui.addItem(
-        {
-          type: 'error',
-          text: 'Configuration not available',
-        },
-        Date.now(),
-      );
-      return;
-    }
-    const argsArray = splitArgs(args);
-    const result = await handleRedactionSettings(argsArray, {
-      config: context.services.config,
-      settings: context.services.settings,
-    });
-    if (result.type === 'message') {
-      context.ui.addItem(
-        {
-          type: result.messageType,
-          text: result.content,
-        },
-        Date.now(),
-      );
-    }
-  },
-};
+function createRedactionCommand(
+  context: LoggingCommandOperations,
+): SlashCommand {
+  return {
+    name: 'redaction',
+    description: 'configure data redaction settings',
+    kind: CommandKind.BUILT_IN,
+    action: async (_invocation: unknown, args: string) => {
+      if (!context.isConfigured) {
+        context.addItem(
+          {
+            type: 'error',
+            text: 'Configuration not available',
+          },
+          Date.now(),
+        );
+        return;
+      }
+      const argsArray = splitArgs(args);
+      const result = await handleRedactionSettings(argsArray, context);
+      if (result.type === 'message') {
+        context.addItem(
+          {
+            type: result.messageType,
+            text: result.content,
+          },
+          Date.now(),
+        );
+      }
+    },
+  };
+}
 
-const showCommand: SlashCommand = {
-  name: 'show',
-  description: 'show last N lines from conversation log (default 50)',
-  kind: CommandKind.BUILT_IN,
-  action: async (context: CommandContext, args: string) => {
-    if (!context.services.config) {
-      context.ui.addItem(
-        {
-          type: 'error',
-          text: 'Configuration not available',
-        },
-        Date.now(),
-      );
-      return;
-    }
-    const argsArray = splitArgs(args);
-    const result = await handleShowLogs(argsArray, {
-      config: context.services.config,
-      settings: context.services.settings,
-    });
-    if (result.type === 'message') {
-      context.ui.addItem(
-        {
-          type: result.messageType,
-          text: result.content,
-        },
-        Date.now(),
-      );
-      return;
-    }
+function createShowCommand(context: LoggingCommandOperations): SlashCommand {
+  return {
+    name: 'show',
+    description: 'show last N lines from conversation log (default 50)',
+    kind: CommandKind.BUILT_IN,
+    action: async (_invocation: unknown, args: string) => {
+      if (!context.isConfigured) {
+        context.addItem(
+          {
+            type: 'error',
+            text: 'Configuration not available',
+          },
+          Date.now(),
+        );
+        return;
+      }
+      const argsArray = splitArgs(args);
+      const result = await handleShowLogs(argsArray, context);
+      if (result.type === 'message') {
+        context.addItem(
+          {
+            type: result.messageType,
+            text: result.content,
+          },
+          Date.now(),
+        );
+        return;
+      }
 
-    // Format the log entries as text for now until dialog system is implemented
-    const entries = isLoggingDialogData(result.dialogData)
-      ? result.dialogData.entries
-      : [];
-    if (entries.length === 0) {
-      context.ui.addItem(
+      // Format the log entries as text for now until dialog system is implemented
+      const entries = isLoggingDialogData(result.dialogData)
+        ? result.dialogData.entries
+        : [];
+      if (entries.length === 0) {
+        context.addItem(
+          {
+            type: 'info',
+            text: 'No log entries found',
+          },
+          Date.now(),
+        );
+        return;
+      }
+
+      const formattedEntries = entries
+        .filter(isLogEntry)
+        .map(formatLogEntry)
+        .join('\n');
+
+      context.addItem(
         {
           type: 'info',
-          text: 'No log entries found',
+          text: `Conversation Logs (${entries.length} entries):\n${'─'.repeat(60)}\n${formattedEntries}\n${'─'.repeat(60)}`,
         },
         Date.now(),
       );
-      return;
-    }
-
-    const formattedEntries = entries
-      .filter(isLogEntry)
-      .map(formatLogEntry)
-      .join('\n');
-
-    context.ui.addItem(
-      {
-        type: 'info',
-        text: `Conversation Logs (${entries.length} entries):\n${'─'.repeat(60)}\n${formattedEntries}\n${'─'.repeat(60)}`,
-      },
-      Date.now(),
-    );
-  },
-};
+    },
+  };
+}
 
 // Main logging command with subcommands
-export const loggingCommand: SlashCommand = {
-  name: 'logging',
-  description: 'manage conversation logging settings',
-  kind: CommandKind.BUILT_IN,
-  subCommands: [
-    statusCommand,
-    enableCommand,
-    disableCommand,
-    redactionCommand,
-    showCommand,
-  ],
-  action: async (context: CommandContext, args: string) => {
-    // Default action shows status when no subcommand provided
-    if (normalizeCommandArgs(args).trim() === '') {
-      await statusCommand.action?.(context, '');
-      return;
-    }
-    // If args provided but no subcommand matched, show help
-    context.ui.addItem(
-      {
-        type: 'info',
-        text: 'Available logging commands:\n  status - show current status\n  enable - enable logging\n  disable - disable logging\n  redaction - configure redaction\n  show [N] - show last N lines from log (default 50)',
-      },
-      Date.now(),
-    );
-  },
-};
+export function createLoggingCommand(
+  context: LoggingCommandOperations,
+): SlashCommand {
+  const statusCommand = createStatusCommand(context);
+  const enableCommand = createEnableCommand(context);
+  const disableCommand = createDisableCommand(context);
+  const redactionCommand = createRedactionCommand(context);
+  const showCommand = createShowCommand(context);
+  return {
+    name: 'logging',
+    description: 'manage conversation logging settings',
+    kind: CommandKind.BUILT_IN,
+    subCommands: [
+      statusCommand,
+      enableCommand,
+      disableCommand,
+      redactionCommand,
+      showCommand,
+    ],
+    action: async (_invocation: unknown, args: string) => {
+      // Default action shows status when no subcommand provided
+      if (normalizeCommandArgs(args).trim() === '') {
+        await showLoggingStatus(context);
+        return;
+      }
+      // If args provided but no subcommand matched, show help
+      context.addItem(
+        {
+          type: 'info',
+          text: 'Available logging commands:\n  status - show current status\n  enable - enable logging\n  disable - disable logging\n  redaction - configure redaction\n  show [N] - show last N lines from log (default 50)',
+        },
+        Date.now(),
+      );
+    },
+  };
+}

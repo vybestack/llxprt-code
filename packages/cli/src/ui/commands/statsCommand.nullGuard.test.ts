@@ -14,7 +14,7 @@ import {
   afterEach,
   setSystemTime,
 } from 'bun:test';
-import { statsCommand } from './statsCommand.js';
+import { registerStatsCommand } from '../../__tests__/stats-command-test-owner.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
@@ -59,7 +59,7 @@ describe('statsCommand null sessionStartTime guard', () => {
   it('should show an error when sessionStartTime is null', async () => {
     mockContext.session.stats.sessionStartTime = null as unknown as Date;
 
-    await statsCommand.action!(mockContext, '');
+    await registerStatsCommand(mockContext).action!(mockContext, '');
 
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {
@@ -73,7 +73,7 @@ describe('statsCommand null sessionStartTime guard', () => {
   it('should show an error when sessionStartTime is undefined', async () => {
     mockContext.session.stats.sessionStartTime = undefined as unknown as Date;
 
-    await statsCommand.action!(mockContext, '');
+    await registerStatsCommand(mockContext).action!(mockContext, '');
 
     expect(mockContext.ui.addItem).toHaveBeenCalledWith(
       {

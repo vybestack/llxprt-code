@@ -13,7 +13,7 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { statsCommand } from './statsCommand.js';
+import { registerStatsCommand } from '../../__tests__/stats-command-test-owner.js';
 import type { CommandContext } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
@@ -21,8 +21,10 @@ import { discoverProviderBuckets } from './oauthBucketDiscovery.js';
 
 const optionalOAuthManagerMock = vi.fn();
 
-function getBucketsSubCommand() {
-  const sub = statsCommand.subCommands?.find((sc) => sc.name === 'buckets');
+function getBucketsSubCommand(context: CommandContext) {
+  const sub = registerStatsCommand(context).subCommands?.find(
+    (sc) => sc.name === 'buckets',
+  );
   if (!sub) {
     throw new Error('buckets subcommand not found');
   }
@@ -144,7 +146,7 @@ describe('/stats buckets subcommand', () => {
       getTokenStore: () => tokenStore,
     });
 
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
@@ -174,7 +176,7 @@ describe('/stats buckets subcommand', () => {
       getTokenStore: () => tokenStore,
     });
 
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
@@ -214,7 +216,7 @@ describe('/stats buckets subcommand', () => {
       getTokenStore: () => tokenStore,
     });
 
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
@@ -226,7 +228,7 @@ describe('/stats buckets subcommand', () => {
   it('shows the unavailable message when the runtime manager is genuinely absent', async () => {
     optionalOAuthManagerMock.mockReturnValue(null);
 
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
@@ -241,7 +243,7 @@ describe('/stats buckets subcommand', () => {
       getTokenStore: () => tokenStore,
     });
 
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
@@ -265,7 +267,7 @@ describe('/stats buckets subcommand', () => {
       getTokenStore: () => tokenStore,
     });
 
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
@@ -286,7 +288,7 @@ describe('/stats buckets subcommand', () => {
       getTokenStore: () => tokenStore,
     });
 
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
@@ -324,7 +326,7 @@ describe('/stats buckets subcommand', () => {
       getTokenStore: () => tokenStore,
     });
 
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
@@ -347,7 +349,7 @@ describe('/stats buckets subcommand', () => {
       getTokenStore: () => tokenStore,
     });
 
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
@@ -376,7 +378,7 @@ describe('/stats buckets subcommand', () => {
       getSupportedProviders: () => ['codex'],
       getTokenStore: () => tokenStore,
     });
-    await getBucketsSubCommand().action!(mockContext, '');
+    await getBucketsSubCommand(mockContext).action!(mockContext, '');
 
     const lastItem = getBucketResultItem(mockContext);
 
