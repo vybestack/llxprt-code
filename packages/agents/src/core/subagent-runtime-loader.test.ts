@@ -4,27 +4,55 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { describe, expect, it } from 'bun:test';
-import { CredentialAuthority } from '@vybestack/llxprt-code-providers/auth.js';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import { useOwnedCredentials } from '../api/__tests__/helpers/owned-credential-fixture.js';
 import { ProviderManager } from '@vybestack/llxprt-code-providers';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
 import { createAgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeState.js';
-import { buildIsolatedAgentConfig } from '../api/agentRuntimeAssembly.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { createSubagentProviderRuntime } from './subagentRuntimeSetup.js';
 import { buildSubagentRuntimeLoaderOptions } from './subagent-runtime-loader.js';
 
+async function closeLoaderFixture(
+  directory: string,
+  closers: ReadonlyArray<() => void | Promise<void>>,
+): Promise<void> {
+  const results = await Promise.allSettled(
+    closers.map((close) => Promise.resolve().then(close)),
+  );
+  await rm(directory, { recursive: true, force: true });
+  const failures = results.flatMap((result) =>
+    result.status === 'rejected' ? [result.reason] : [],
+  );
+  if (failures.length > 0)
+    throw new AggregateError(failures, 'Child loader fixture cleanup failed');
+}
+
 describe('explicit child runtime loader inputs', () => {
+  const credentials = useOwnedCredentials();
   it('loads independent history while capturing live child invocation and policy settings', async () => {
     const settings = new SettingsService();
     settings.set('activeProvider', 'openai');
     settings.set('context-limit', 8192);
-    const { config, mediaOwner } = buildIsolatedAgentConfig({
+    const directory = await mkdtemp(join(tmpdir(), 'explicit-child-loader-'));
+    const config = new Config({
       sessionId: 'explicit-child',
       model: 'child-model',
-      settingsService: settings,
+      targetDir: directory,
+      cwd: directory,
+      debugMode: false,
+      initialSettings: settings.getAllGlobalSettings(),
     });
+    const mediaOwner = new SessionMediaOwner(
+      config.projectTempDir,
+      config.getMediaStoreQuotaByteLimit(),
+    );
     const { settingsOwner } = createSessionSettingsFixture(config, settings);
     const runtime = createSubagentProviderRuntime('explicit-child', 'research');
     const manager = new ProviderManager(
@@ -35,7 +63,7 @@ describe('explicit child runtime loader inputs', () => {
       settings,
       config,
       runtime,
-      new CredentialAuthority(),
+      credentials().authority,
       settingsOwner,
     );
     const { tokenizerFactory, contentGeneratorFactory } =
@@ -100,9 +128,12 @@ describe('explicit child runtime loader inputs', () => {
       first.history.dispose();
       second.history.dispose();
     } finally {
-      manager.dispose();
-      await config.dispose();
-      await mediaOwner.dispose();
+      await closeLoaderFixture(directory, [
+        () => manager.dispose(),
+        () => settingsOwner.dispose(),
+        () => config.dispose(),
+        () => mediaOwner.dispose(),
+      ]);
     }
   });
 });

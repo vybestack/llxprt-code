@@ -1,3 +1,20 @@
+import {
+  ChildAgentAssembly,
+  type ChildAgentLaunch,
+} from './child-agent-assembly.js';
+import type {
+  ProfileDefinitionReads,
+  SubagentDefinitionReads,
+  WorkspaceTrustControlPort,
+} from '@vybestack/llxprt-code-core';
+import type { InteractiveAuthPromptOperation } from '@vybestack/llxprt-code-core/runtime/contracts/InteractiveAuthPrompt.js';
+import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
+import type { InstructionReadOperations } from '@vybestack/llxprt-code-core/services/workspace-memory-owner.js';
+import type { SessionHookOwner } from '@vybestack/llxprt-code-core/hooks/session-hook-owner.js';
+import type { ToolSelection } from '@vybestack/llxprt-code-tools';
+import type { loadAgentRuntime } from '@vybestack/llxprt-code-core/runtime/AgentRuntimeLoader.js';
+import type { SubAgentScope } from '../core/subagent.js';
+import type { SubagentLaunchResult } from '../core/subagentOrchestrator.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -28,7 +45,6 @@ import { assembleTaskSchemaPolicy } from '@vybestack/llxprt-code-core/config/tas
 import type { WorkspacePathOperations } from '@vybestack/llxprt-code-core/services/workspace-filesystem-owner.js';
 
 import { SessionClientOwner } from '../session/session-client-owner.js';
-import type { IsolatedRuntimeContextOptions } from '@vybestack/llxprt-code-providers/runtime/runtimeActivationBindings.js';
 
 /**
  * @plan:ISSUE-3222
@@ -42,8 +58,8 @@ import type { IsolatedRuntimeContextOptions } from '@vybestack/llxprt-code-provi
  * module-global state.
  */
 
-import { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
-import { Config } from '@vybestack/llxprt-code-core/config/config.js';
+import type { SessionMediaOwner } from '@vybestack/llxprt-code-core/storage/session-media-owner.js';
+import type { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { buildAgentClientFactory } from './agentBootstrap.js';
 import type { resolveAuthType } from './agentBootstrap.js';
 import type { AgentClientFactory } from '@vybestack/llxprt-code-core/core/clientContract.js';
@@ -53,7 +69,6 @@ import {
   cleanupFailedCreatedAgent,
   finalizeAgent,
   initializeCreatedClient,
-  registerProvidersOntoManager,
   startAgentSession,
 } from './createAgent.js';
 import type { CreatedAgentMcpOptions } from './createAgent.js';
@@ -93,43 +108,6 @@ import { cleanupFailedAdoption } from './fromConfig-cleanup.js';
 import { adoptedDefinitionCleanup } from './adopted-definition-assembly.js';
 import type { FromConfigOptions } from './config-types.js';
 import type { HostGitHubBrokerOwner } from './host-github-broker-owner.js';
-
-const DEFAULT_MODEL = 'gemini-1.5-flash';
-const DEFAULT_DEBUG_MODE = false;
-
-/** Inputs for {@link buildIsolatedAgentConfig}. */
-export interface IsolatedAgentConfigInputs {
-  readonly sessionId: string;
-  readonly workspaceDir?: string;
-  readonly model?: string;
-  readonly settingsService: SettingsService;
-  readonly runtimeFactoryBindings?: AgentRuntimeFactoryBindings;
-}
-
-/**
- * Builds the isolated-runtime Config for agent-owned runtimes (subagents,
- * compression, role runtimes): fresh Config with the provider-factory
- * construction defaults, then agent-owned factories and runtime managers.
- */
-export function buildIsolatedAgentConfig(inputs: IsolatedAgentConfigInputs): {
-  config: Config;
-  mediaOwner: SessionMediaOwner;
-} {
-  const workspaceDir = inputs.workspaceDir ?? process.cwd();
-  const config = new Config({
-    sessionId: inputs.sessionId,
-    targetDir: workspaceDir,
-    debugMode: DEFAULT_DEBUG_MODE,
-    cwd: workspaceDir,
-    model: inputs.model ?? DEFAULT_MODEL,
-    initialSettings: inputs.settingsService.getAllGlobalSettings(),
-  });
-  const mediaOwner = new SessionMediaOwner(
-    config.projectTempDir,
-    config.getMediaStoreQuotaByteLimit(),
-  );
-  return { config, mediaOwner };
-}
 
 /**
  * Extra teardown context for {@link cleanupFailedRuntimeBootstrap} beyond the
@@ -194,32 +172,6 @@ export async function cleanupFailedRuntimeBootstrap(
     );
   }
   throw primaryError;
-}
-
-export const prepareIsolatedProviders: NonNullable<
-  IsolatedRuntimeContextOptions['prepare']
-> = (context): void => {
-  registerProvidersOntoManager(
-    context.providerManager,
-    context.settingsService,
-    context.config,
-    context.oauthManager,
-  );
-};
-
-export async function disposeIsolatedMediaConfig(
-  config: Config,
-  mediaOwner: SessionMediaOwner,
-): Promise<void> {
-  const results = await Promise.allSettled([
-    config.dispose(),
-    mediaOwner.dispose(),
-  ]);
-  const failures = results.flatMap((result) =>
-    result.status === 'rejected' ? [result.reason] : [],
-  );
-  if (failures.length > 0)
-    throw new AggregateError(failures, 'Isolated media cleanup failed');
 }
 
 export async function disposeIsolatedMediaRuntime(
@@ -732,4 +684,49 @@ async function rejectPreferredAcquisition(
       'Preferred Agent acquisition cleanup failed',
     );
   throw primary;
+}
+
+export function assembleChildAgent(
+  data: ChildAgentLaunch,
+  authority: CredentialAuthority,
+  messageBus: MessageBus,
+  requestInteractiveAuth: InteractiveAuthPromptOperation | undefined,
+  profileReads: Pick<ProfileDefinitionReads, 'loadProfile'>,
+  subagentReads: Pick<
+    SubagentDefinitionReads,
+    'loadSubagent' | 'listSubagents'
+  >,
+  telemetry: RootTelemetry | undefined,
+  createChildSettings: () => SettingsService,
+  foregroundConfig: Config,
+  instructions: InstructionReadOperations,
+  workspacePaths: WorkspacePathOperations,
+  readMcpInstructions: () => string | undefined,
+  trust: WorkspaceTrustControlPort | undefined,
+  tools: ToolSelection | undefined,
+  hooks: SessionHookOwner | undefined,
+  clientFactory: AgentClientFactory | undefined,
+  runtimeLoader: typeof loadAgentRuntime,
+  scopeFactory: typeof SubAgentScope.create,
+): Promise<SubagentLaunchResult> {
+  return new ChildAgentAssembly(
+    data,
+    authority,
+    messageBus,
+    requestInteractiveAuth,
+    profileReads,
+    subagentReads,
+    telemetry,
+    createChildSettings,
+    foregroundConfig,
+    instructions,
+    workspacePaths,
+    readMcpInstructions,
+    trust,
+    tools,
+    hooks,
+    clientFactory,
+    runtimeLoader,
+    scopeFactory,
+  ).assemble();
 }
