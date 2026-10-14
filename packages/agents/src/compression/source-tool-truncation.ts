@@ -2,7 +2,7 @@
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { SourceCandidate } from './source-candidate.js';
-import { truncateOversizedToolResponsesUnified } from './toolResultTruncator.js';
+import { truncateToolResponsesInOnePass } from './toolResponseOnePass.js';
 
 interface SourceToolTruncationInput<S> {
   readonly historyService: HistoryService;
@@ -15,9 +15,11 @@ interface SourceToolTruncationInput<S> {
 
 /**
  * Last-resort tool-response truncation over durable history and the raw
- * pending rows, ranked by the existing disk ranking. History stubs are
- * written to the journal; pending stubs replace the candidate's pending
- * input. The projection after each replacement measures the rebuilt candidate.
+ * pending rows, ranked by the existing disk ranking. All replacements are
+ * decided in one pass; history stubs are written to the journal in one
+ * transaction and pending stubs replace the candidate's pending input. The
+ * projections measure the rebuilt candidate: one before and one per round.
+ * When no truncation can fit the limit nothing is replaced.
  */
 export async function truncateSourceToolResponses<S>(
   input: SourceToolTruncationInput<S>,
@@ -32,7 +34,7 @@ export async function truncateSourceToolResponses<S>(
       model,
     },
   );
-  const result = await truncateOversizedToolResponsesUnified(
+  const result = await truncateToolResponsesInOnePass(
     {
       historyService,
       logger,
@@ -45,9 +47,6 @@ export async function truncateSourceToolResponses<S>(
       computeProjected: async (working) =>
         (await candidate.estimateWithPending([...working])) +
         input.completionBudget,
-      resetBaseline: () => {
-        // Projection is recomputed from the rebuilt candidate.
-      },
       getRuntimeModel: () => model,
     },
     input.marginAdjustedLimit,
