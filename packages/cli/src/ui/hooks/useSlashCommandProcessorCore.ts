@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useUtilityCommands } from './useUtilityCommands.js';
 import { usePresentationCommands } from './usePresentationCommands.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useCallback, useMemo, useRef, useState } from 'react';
@@ -233,7 +234,8 @@ function useCommandState(
   config: CliUiRuntime | null,
   runtimeApi: ReturnType<typeof useRuntimeApi>,
   extensionsCommand: SlashCommand,
-  presentationCommands: ReturnType<typeof usePresentationCommands>,
+  presentationCommands: ReturnType<typeof usePresentationCommands> &
+    ReturnType<typeof useUtilityCommands>,
 ): SlashCommandProcessorState {
   const rec = useSwitch(agent?.session, rawRecording, recordingOwner);
   const modelCommand = useModelCommand(
@@ -339,7 +341,8 @@ type BuiltinCommandOwnerParts = Pick<
   | 'extensionsCommand'
   | 'subagentCommand'
 > & {
-  presentationCommands: ReturnType<typeof usePresentationCommands>;
+  presentationCommands: ReturnType<typeof usePresentationCommands> &
+    ReturnType<typeof useUtilityCommands>;
   historyCommandOwners: ReturnType<typeof useHistoryCommandOwners>;
   provider: SlashCommand;
   toolsCommand: SlashCommand;
@@ -728,21 +731,24 @@ function useRegisteredCommands(
     args.config,
     runtimeApi,
     extensionsCommand,
-    usePresentationCommands(
-      args.agent,
-      args.config,
-      args.settings,
-      runtimeApi,
-      args.addItem,
-      args.actions.setDebugMessage,
-      updateHistoryTokenCount,
-      args.clearItems,
-      args.refreshStatic,
-      args.settings.merged.ui.useAlternateBuffer === true &&
-        !(args.config?.getScreenReader() ?? false),
-      args.toggleVimEnabled,
-      args.actions.toggleDebugProfiler,
-    ),
+    {
+      ...useUtilityCommands(args.config, args.settings, args.addItem),
+      ...usePresentationCommands(
+        args.agent,
+        args.config,
+        args.settings,
+        runtimeApi,
+        args.addItem,
+        args.actions.setDebugMessage,
+        updateHistoryTokenCount,
+        args.clearItems,
+        args.refreshStatic,
+        args.settings.merged.ui.useAlternateBuffer === true &&
+          !(args.config?.getScreenReader() ?? false),
+        args.toggleVimEnabled,
+        args.actions.toggleDebugProfiler,
+      ),
+    },
   );
   reloadCommandsRef.current = state.reloadCommands;
   return state;

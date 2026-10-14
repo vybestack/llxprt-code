@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createStatsCommand } from '../ui/commands/statsCommand.js';
+import { createLoggingCommand } from '../ui/commands/loggingCommand.js';
 import { createAboutCommand } from '../ui/commands/aboutCommand.js';
 import { createClearCommand } from '../ui/commands/clearCommand.js';
 import { createInitCommand } from '../ui/commands/initCommand.js';
@@ -341,6 +343,30 @@ export function createUnconfiguredBuiltinOwners(): BuiltinCommandOwners {
 
 function unconfiguredPresentationCommands() {
   return {
+    statsCommand: createStatsCommand({
+      readStartTime: () => undefined,
+      readQuota: async () => [],
+      isOAuthAvailable: () => false,
+      discoverBuckets: async () => [],
+      addItem: () => 0,
+    }),
+    loggingCommand: createLoggingCommand({
+      isConfigured: false,
+      readTelemetry: () => ({}),
+      writeTelemetry: () => {},
+      readRuntimeTelemetry: () => ({}),
+      updateRuntimeTelemetry: async () => {},
+      getConversationLogPath: () => '',
+      getRedactionConfig: () => ({
+        redactApiKeys: true,
+        redactCredentials: true,
+        redactFilePaths: false,
+        redactUrls: false,
+        redactEmails: false,
+        redactPersonalInfo: false,
+      }),
+      addItem: () => 0,
+    }),
     aboutCommand: createAboutCommand(
       async () => ({
         modelVersion: 'Unknown',

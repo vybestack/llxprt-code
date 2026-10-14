@@ -79,7 +79,7 @@ describe('autoExecute classifications — top-level commands', () => {
 
 describe('autoExecute classifications — subcommands', () => {
   it('/stats session, model, tools should have autoExecute: true', async () => {
-    const { statsCommand } = await import('../commands/statsCommand.js');
+    const { statsCommand } = createUnconfiguredBuiltinOwners();
     expect(findSub(statsCommand, 'session')?.autoExecute).toBe(true);
     expect(findSub(statsCommand, 'model')?.autoExecute).toBe(true);
     expect(findSub(statsCommand, 'tools')?.autoExecute).toBe(true);

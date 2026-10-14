@@ -24,10 +24,8 @@ import { helpCommand } from '../ui/commands/helpCommand.js';
 import { ideCommand } from '../ui/commands/ideCommand.js';
 
 import { privacyCommand } from '../ui/commands/privacyCommand.js';
-import { loggingCommand } from '../ui/commands/loggingCommand.js';
 import { mouseCommand } from '../ui/commands/mouseCommand.js';
 import { quitCommand } from '../ui/commands/quitCommand.js';
-import { statsCommand } from '../ui/commands/statsCommand.js';
 import { themeCommand } from '../ui/commands/themeCommand.js';
 
 import { skillsCommand } from '../ui/commands/skillsCommand.js';
@@ -49,6 +47,8 @@ import { createPerfCommand } from '../ui/commands/perfCommand.js';
  * of the LLxprt Code application.
  */
 export interface BuiltinCommandOwners {
+  readonly statsCommand: SlashCommand;
+  readonly loggingCommand: SlashCommand;
   readonly aboutCommand: SlashCommand;
   readonly clearCommand: SlashCommand;
   readonly initCommand: SlashCommand;
@@ -164,13 +164,13 @@ export class BuiltinCommandLoader implements ICommandLoader {
       this.owners.mcpCommand,
       this.owners.memoryCommand,
       privacyCommand,
-      loggingCommand,
+      this.owners.loggingCommand,
       mouseCommand,
       ...(isDevelopment ? [this.owners.uiProfileCommand] : []),
       quitCommand,
       this.owners.restoreCommand,
       this.owners.quotaCommand,
-      statsCommand,
+      this.owners.statsCommand,
       themeCommand,
       this.owners.toolsCommand,
       ...this.resolveSkillsCommand(),
