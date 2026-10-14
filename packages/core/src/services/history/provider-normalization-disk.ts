@@ -30,20 +30,13 @@ export class ProviderNormalizationDisk {
     }
   }
 
-  /** Fails when the scratch directory was removed; call once per unit of row work. */
+  /** Fails when the scratch directory was removed; call once per stream or batch of rows. */
   verify(): void {
     this.storage.verify();
   }
 
-  private read(key: string, verify = false): unknown {
-    try {
-      if (verify) this.verify();
-      return this.storage.get(key);
-    } catch (error) {
-      if (error instanceof Error && 'code' in error && error.code === 'ENOENT')
-        return undefined;
-      throw error;
-    }
+  private read(key: string): unknown {
+    return this.storage.get(key);
   }
 
   private write(key: string, value: unknown): void {
@@ -86,7 +79,7 @@ export class ProviderNormalizationDisk {
   }
 
   row(stage: string, index: number): IContent {
-    const row = this.read(`row:${stage}:${index}`, true);
+    const row = this.read(`row:${stage}:${index}`);
     if (!isSpeakerContent(row))
       throw new Error('Missing or invalid provider normalization row');
     const boundary = row.metadata?.semanticMediaPurgeBoundary;

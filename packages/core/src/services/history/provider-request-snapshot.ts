@@ -3,6 +3,9 @@ import type { RowOwnership } from '../../recording/rowOwnership.js';
 import type { IContent } from './IContent.js';
 import type { ProviderNormalizationDisk } from './provider-normalization-disk.js';
 
+/** A reader checks that the scratch directory still exists every this many rows. */
+const SCRATCH_CHECK_ROWS = 64;
+
 export interface ProviderRequestRows {
   readonly count: number;
   readonly openReader: (
@@ -143,6 +146,11 @@ export class NormalizedProviderRequestSnapshot
     return disk.row('ordered', index);
   }
 
+  /** Throws when the request's scratch directory has been removed. */
+  verifyScratch(): void {
+    this.storage().verify();
+  }
+
   release(reader: ProviderSnapshotReader): void {
     this.readers.delete(reader);
   }
@@ -197,6 +205,7 @@ class ProviderSnapshotReader
         this.finish();
         return Promise.resolve({ done: true, value: undefined });
       }
+      if (this.index % SCRATCH_CHECK_ROWS === 0) owner.verifyScratch();
       const row = owner.read(this.index++);
       this.ownership?.retain(row);
       this.row = row;

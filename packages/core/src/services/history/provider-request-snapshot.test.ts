@@ -32,6 +32,10 @@ async function withRoot(
   }
 }
 
+async function drain(rows: AsyncIterable<IContent>): Promise<void> {
+  for await (const row of rows) expect(row.speaker).toBeDefined();
+}
+
 async function digest(rows: AsyncIterable<IContent>): Promise<string> {
   const hash = createHash('sha256');
   for await (const row of rows) hash.update(`${JSON.stringify(row)}\n`);
@@ -363,8 +367,8 @@ describe('normalized request disk faults', () => {
         try {
           await reader.next();
           rmSync(join(root, readdirSync(root)[0]), { recursive: true });
-          await expect(reader.next()).rejects.toThrow(
-            'Missing or invalid provider normalization row',
+          await expect(drain(reader)).rejects.toThrow(
+            'Provider normalization scratch directory is unavailable',
           );
           expect(ownership.snapshot().liveRows).toBe(0);
         } finally {

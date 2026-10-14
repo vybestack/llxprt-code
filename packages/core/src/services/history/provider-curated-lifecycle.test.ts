@@ -20,6 +20,10 @@ async function* source(
   for (let index = 0; index < size; index++)
     yield providerFixtureRow(index, bytes);
 }
+async function drainRows(rows: AsyncIterable<IContent>): Promise<void> {
+  for await (const row of rows) expect(row.speaker).toBeDefined();
+}
+
 async function withRoot(
   action: (root: string) => Promise<void>,
 ): Promise<void> {
@@ -141,8 +145,8 @@ describe('provider cursor backpressure and faults', () => {
       const stream = streamProviderContent(source(512), [], logger, { root });
       await stream.next();
       rmSync(join(root, readdirSync(root)[0]), { recursive: true });
-      await expect(stream.next()).rejects.toThrow(
-        'Missing or invalid provider normalization row',
+      await expect(drainRows(stream)).rejects.toThrow(
+        'Provider normalization scratch directory is unavailable',
       );
       expect(readdirSync(root)).toHaveLength(0);
     });

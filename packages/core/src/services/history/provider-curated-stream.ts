@@ -24,7 +24,10 @@ import {
 /** Rows of synchronous scratch work between event-loop yields. */
 const ROWS_PER_YIELD = 32;
 
-/** Yields to the event loop every ROWS_PER_YIELD rows and checks scratch and abort state on each row. */
+/**
+ * Yields to the event loop every ROWS_PER_YIELD rows, checks the scratch
+ * directory at each yield, and checks abort state on every row.
+ */
 class RowPacer {
   private rows = 0;
   constructor(
@@ -32,9 +35,11 @@ class RowPacer {
     private readonly signal?: AbortSignal,
   ) {}
   async next(): Promise<void> {
-    if (this.rows++ % ROWS_PER_YIELD === 0) await setImmediate();
+    if (this.rows++ % ROWS_PER_YIELD === 0) {
+      await setImmediate();
+      this.disk.verify();
+    }
     this.signal?.throwIfAborted();
-    this.disk.verify();
   }
 }
 

@@ -63,11 +63,19 @@ export class ProviderNormalizationStorage {
 
   /**
    * Unix FDs survive unlink, so callers verify the scratch directory still
-   * exists once per row of work instead of once per key operation.
+   * exists once per stream or batch of rows instead of once per key operation.
    */
   verify(): void {
     this.check();
-    statSync(this.directory);
+    try {
+      statSync(this.directory);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Provider normalization scratch directory is unavailable: ${reason}`,
+        { cause: error },
+      );
+    }
   }
 
   private flush(): void {

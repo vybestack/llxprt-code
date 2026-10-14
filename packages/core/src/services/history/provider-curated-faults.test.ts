@@ -40,7 +40,8 @@ describe('provider scratch admission failures', () => {
       try {
         yield providerFixtureRow(0);
         rmSync(join(root, readdirSync(root)[0]), { recursive: true });
-        yield providerFixtureRow(2);
+        for (let index = 2; index < 80; index++)
+          yield providerFixtureRow(index);
       } finally {
         closed = true;
       }
