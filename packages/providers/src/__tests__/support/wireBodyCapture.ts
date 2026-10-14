@@ -269,29 +269,39 @@ function rowsSelection(rows: readonly IContent[]): ProviderRequestSelection {
   });
 }
 
-function buildOptions(
+/** Everything about a history case except its rows. */
+export type HistoryRequestShape = Omit<
+  HistoryCase,
+  'id' | 'description' | 'rows'
+>;
+
+/**
+ * The call options one route sends for a history. The caller supplies the row
+ * stream, so a probe can feed rows from disk instead of from an array.
+ */
+export function buildRouteCallOptions(
   route: WireRoute,
-  history: HistoryCase,
-  source: RowSource,
+  shape: HistoryRequestShape,
+  contents: readonly IContent[] | AsyncIterable<IContent>,
   settings: SettingsService,
 ): GenerateChatOptions {
-  const options = streamCallOptions({
+  return streamCallOptions({
     providerName: route.providerName,
     settings,
-    contents: history.rows.map((row) => structuredClone(row)),
-    ...(history.tools === undefined ? {} : { tools: history.tools }),
-    ...(history.systemInstruction === undefined
+    contents,
+    ...(shape.tools === undefined ? {} : { tools: shape.tools }),
+    ...(shape.systemInstruction === undefined
       ? {}
-      : { systemInstruction: history.systemInstruction }),
+      : { systemInstruction: shape.systemInstruction }),
     runtimeId: `wire-body-golden.${route.id}`,
-    ephemerals: { ...route.ephemerals, ...history.ephemerals },
+    ephemerals: { ...route.ephemerals, ...shape.ephemerals },
     settingsOverrides: {
       ...(route.providerSettings === undefined
         ? {}
         : { provider: { ...route.providerSettings } }),
-      ...(history.globalSettings === undefined
+      ...(shape.globalSettings === undefined
         ? {}
-        : { global: { ...history.globalSettings } }),
+        : { global: { ...shape.globalSettings } }),
     },
     resolved: {
       model: route.model,
@@ -299,6 +309,20 @@ function buildOptions(
       authToken: API_KEY,
     },
   });
+}
+
+function buildOptions(
+  route: WireRoute,
+  history: HistoryCase,
+  source: RowSource,
+  settings: SettingsService,
+): GenerateChatOptions {
+  const options = buildRouteCallOptions(
+    route,
+    history,
+    history.rows.map((row) => structuredClone(row)),
+    settings,
+  );
   if (source === 'stream') return options;
   return {
     ...options,
