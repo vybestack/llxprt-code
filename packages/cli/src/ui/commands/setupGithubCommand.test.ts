@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { bindGithubSetup } from './setupGithubCommandHost.js';
+
 import { automock, waitFor } from '@vybestack/llxprt-code-test-utils';
 import os from 'node:os';
 import path from 'node:path';
@@ -20,7 +22,7 @@ import {
 } from 'bun:test';
 import * as gitUtils from '../../utils/gitUtils.js';
 import {
-  setupGithubCommand,
+  createSetupGithubCommand,
   updateGitignore,
   GITHUB_WORKFLOW_PATHS,
 } from './setupGithubCommand.js';
@@ -131,10 +133,9 @@ describe('setupGithubCommand', () => {
       >
     ).mockReturnValueOnce('fakeOpenCommand');
 
-    const result = (await setupGithubCommand.action?.(
-      makeContext(),
-      '',
-    )) as ToolActionReturn;
+    const result = (await createSetupGithubCommand(
+      bindGithubSetup(process.cwd(), undefined),
+    ).action?.(makeContext(), '')) as ToolActionReturn;
 
     const { command } = result.toolArgs;
 
@@ -212,10 +213,9 @@ describe('setupGithubCommand', () => {
       >
     ).mockReturnValueOnce('fakeOpenCommand');
 
-    const result = (await setupGithubCommand.action?.(
-      makeContext(),
-      '',
-    )) as ToolActionReturn;
+    const result = (await createSetupGithubCommand(
+      bindGithubSetup(process.cwd(), undefined),
+    ).action?.(makeContext(), '')) as ToolActionReturn;
 
     const { command } = result.toolArgs;
 
@@ -281,7 +281,9 @@ describe('setupGithubCommand', () => {
     });
 
     await expect(
-      setupGithubCommand.action?.(makeContext(), ''),
+      createSetupGithubCommand(
+        bindGithubSetup(process.cwd(), undefined),
+      ).action?.(makeContext(), ''),
     ).rejects.toThrow(/Invalid response code downloading.*404 - Not Found/);
   });
 
@@ -318,10 +320,9 @@ describe('setupGithubCommand', () => {
       gitUtils.getGitHubRepoInfo as Mock<typeof gitUtils.getGitHubRepoInfo>
     ).mockReturnValue({ owner: 'fake', repo: 'repo' });
 
-    const pending = setupGithubCommand.action?.(
-      makeContext(invocation.signal),
-      '',
-    );
+    const pending = createSetupGithubCommand(
+      bindGithubSetup(process.cwd(), undefined),
+    ).action?.(makeContext(invocation.signal), '');
     // The download is genuinely in flight; nothing has settled it yet.
     await waitFor(() => expect(downloadSignal).toBeDefined());
 

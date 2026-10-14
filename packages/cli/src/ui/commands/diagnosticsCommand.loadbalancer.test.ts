@@ -8,7 +8,7 @@
  */
 
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
-import { diagnosticsCommand } from './diagnosticsCommand.js';
+import { registerDiagnosticsCommand } from '../../__tests__/diagnostics-command-test-owner.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { MessageActionReturn } from '@vybestack/llxprt-code-core';
@@ -72,7 +72,7 @@ function addConfigStubs(mockContext: CommandContext): void {
 async function getDiagnosticsOutput(
   mockContext: CommandContext,
 ): Promise<string> {
-  const result = (await diagnosticsCommand.action!(
+  const result = (await registerDiagnosticsCommand(mockContext).action!(
     mockContext,
     '',
   )) as MessageActionReturn;

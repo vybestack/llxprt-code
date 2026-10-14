@@ -18,7 +18,6 @@ import { settingsCommand } from '../commands/settingsCommand.js';
 import { themeCommand } from '../commands/themeCommand.js';
 import { createPoliciesCommand } from '../commands/policiesCommand.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
-import { setupGithubCommand } from '../commands/setupGithubCommand.js';
 
 const modelCommand = createModelCommand(
   async () => {
@@ -61,7 +60,9 @@ describe('autoExecute classifications — top-level commands', () => {
   });
 
   it('/setup-github should have autoExecute: true', () => {
-    expect(setupGithubCommand.autoExecute).toBe(true);
+    expect(
+      createUnconfiguredBuiltinOwners().setupGithubCommand.autoExecute,
+    ).toBe(true);
   });
 
   it('/bug should NOT have autoExecute: true', () => {

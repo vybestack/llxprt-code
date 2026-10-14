@@ -3,6 +3,9 @@
  * Copyright 2026 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
+
+import { createSetupGithubCommand } from '../commands/setupGithubCommand.js';
+import { bindGithubSetup } from '../commands/setupGithubCommandHost.js';
 import { useMemo } from 'react';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import type { LoadedSettings } from '../../config/settings.js';
@@ -28,8 +31,18 @@ export function useHostCommands(
       ),
     [config],
   );
+  const setupGithubCommand = useMemo(
+    () =>
+      createSetupGithubCommand(
+        bindGithubSetup(
+          config?.getWorkingDir() ?? process.cwd(),
+          config?.getProxy(),
+        ),
+      ),
+    [config],
+  );
   return useMemo(
-    () => ({ ideCommand, permissionsCommand }),
-    [ideCommand, permissionsCommand],
+    () => ({ ideCommand, permissionsCommand, setupGithubCommand }),
+    [ideCommand, permissionsCommand, setupGithubCommand],
   );
 }

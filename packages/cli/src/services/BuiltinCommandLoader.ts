@@ -27,8 +27,6 @@ import { quitCommand } from '../ui/commands/quitCommand.js';
 import { themeCommand } from '../ui/commands/themeCommand.js';
 
 import { settingsCommand } from '../ui/commands/settingsCommand.js';
-import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
-import { diagnosticsCommand } from '../ui/commands/diagnosticsCommand.js';
 import { terminalSetupCommand } from '../ui/commands/terminalSetupCommand.js';
 import { debugCommand } from '../ui/commands/debugCommands.js';
 
@@ -42,6 +40,8 @@ import { setupCommand } from '../ui/commands/setupCommand.js';
  * of the LLxprt Code application.
  */
 export interface BuiltinCommandOwners {
+  readonly setupGithubCommand: SlashCommand;
+  readonly diagnosticsCommand: SlashCommand;
   readonly ideCommand: SlashCommand | null;
   readonly permissionsCommand: SlashCommand;
   readonly skillsCommand: SlashCommand;
@@ -183,10 +183,10 @@ export class BuiltinCommandLoader implements ICommandLoader {
       this.owners.toolkeyfileCommand, // @plan PLAN-20260206-TOOLKEY.P09 @requirement REQ-003
       this.owners.baseurlCommand,
       this.owners.toolFormatCommand,
-      setupGithubCommand,
+      this.owners.setupGithubCommand,
       this.owners.setCommand,
       this.owners.profileCommand,
-      diagnosticsCommand,
+      this.owners.diagnosticsCommand,
       terminalSetupCommand,
       debugCommand,
       this.owners.logoutCommand,
