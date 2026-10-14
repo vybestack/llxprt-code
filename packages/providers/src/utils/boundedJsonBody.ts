@@ -161,9 +161,16 @@ class PlanBuilder {
   private byteLength = 0;
 
   build(value: unknown): SerializationPlan {
-    if (!this.appendValue(value, '', false)) {
+    const plan = this.tryBuild(value, '');
+    if (plan === undefined) {
       throw new TypeError('JSON request body is not serializable');
     }
+    return plan;
+  }
+
+  /** The plan, or `undefined` when `JSON.stringify(value)` is `undefined`. */
+  tryBuild(value: unknown, key: string): SerializationPlan | undefined {
+    if (!this.appendValue(value, key, false)) return undefined;
     return { segments: this.segments, byteLength: this.byteLength };
   }
 
@@ -448,6 +455,33 @@ function* chunksFor(
   }
   const finalChunk = accumulator.finish();
   if (finalChunk !== undefined) yield finalChunk;
+}
+
+export interface JsonValueChunkOptions {
+  /** The member key `toJSON` receives, as `JSON.stringify` passes it. */
+  readonly key?: string;
+  readonly maxChunkBytes?: number;
+}
+
+/**
+ * The UTF-8 bytes of `JSON.stringify(value)` as chunks, produced one at a
+ * time without a whole-value buffer. Returns `undefined` when `JSON.stringify`
+ * would, so the caller can skip an object member exactly as it would.
+ * Each chunk is a fresh array the caller may keep.
+ */
+export function jsonValueChunks(
+  value: unknown,
+  options: JsonValueChunkOptions = {},
+): Generator<Uint8Array, void, unknown> | undefined {
+  const maxChunkBytes =
+    options.maxChunkBytes ?? DEFAULT_STREAMING_JSON_CHUNK_BYTES;
+  validateLimit('maxChunkBytes', maxChunkBytes);
+  if (maxChunkBytes === 0) {
+    throw new RangeError('JSON streaming chunk limit is zero');
+  }
+  const plan = new PlanBuilder().tryBuild(value, options.key ?? '');
+  if (plan === undefined) return undefined;
+  return chunksFor(plan.segments, maxChunkBytes, () => undefined);
 }
 
 export interface BoundedJsonStream {
