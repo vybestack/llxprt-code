@@ -34,7 +34,6 @@ import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/r
 
 import { type IProviderConfig } from '../types/IProviderConfig.js';
 import { firstTruthyString } from '../utils/falsyFallback.js';
-import { type ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
 
 import {
   BaseProvider,
@@ -43,7 +42,6 @@ import {
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { ToolFormatter } from '@vybestack/llxprt-code-tools/ToolFormatter.js';
 import { GemmaToolCallParser } from '@vybestack/llxprt-code-core/parsers/TextToolCallParser.js';
-import { type TextBlock } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { type IModel } from '../IModel.js';
 import { getOpenAIFallbackModels } from './openAIFallbackModels.js';
 import { type IProvider, type GenerateChatOptions } from '../IProvider.js';
@@ -72,8 +70,10 @@ import type {
   ChatRowInput,
   RequestContext,
 } from './OpenAIRequestPreparation.js';
-import { lazySpooledChatBody } from './OpenAIChatSpooledBody.js';
-import type { WireBodySpool } from '../utils/wire-body-spool.js';
+import type {
+  ChatContinuation,
+  ContinuationBody,
+} from './OpenAIChatContinuation.js';
 import type { RowsMediaInput } from '../openai-responses/responses-row-media.js';
 import {
   OpenAIPromptEnvelopeStore,
@@ -106,8 +106,8 @@ import { resolveRawTokenDeltaNotifier } from '../logging/attemptLifecycle.js';
 import type { ModelDefaultRule } from '../composition/providerAliases.js';
 import { createUnallowedModelParametersResolver as makeResolver } from '../openai-responses/unallowedModelParameters.js';
 
-import { buildContinuationMessages } from './OpenAIRequestBuilder.js';
-import { extractContinuationChunkText } from './OpenAIStreamChunkText.js';
+import type { ContinuationToolCall } from './OpenAIRequestBuilder.js';
+import { aiTextContent, continuationTexts } from './OpenAIStreamChunkText.js';
 import {
   createHttpAgents,
   resolveRuntimeKey,
@@ -129,7 +129,8 @@ interface DispatchResponseOptions {
   detectedFormat: string;
   streamingEnabled: boolean;
   abortSignal: AbortSignal | undefined;
-  spool: WireBodySpool;
+  /** Builds the request that follows tool calls with no text. */
+  continuation: ChatContinuation;
   client: OpenAI;
   mergedHeaders: Record<string, string> | undefined;
   baseURL: string | undefined;
@@ -667,21 +668,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         reasoningFieldName: options.reasoningFieldName,
         onRawTokenDelta: options.onRawTokenDelta,
       };
-      // The continuation request is the one place that needs the body as a
-      // value; it is parsed from the spool on first use (issue #854 D4).
-      const readRequestBody = lazySpooledChatBody(options.spool);
       yield* processStreamingResponse(
         options.response as AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>,
         options.model,
         options.detectedFormat,
         options.abortSignal,
-        readRequestBody,
-        () => readRequestBody().messages,
-        options.client,
-        options.mergedHeaders,
         options.baseURL,
         deps,
-        this.requestContinuationAfterToolCalls.bind(this),
+        (toolCalls) =>
+          this.requestContinuationAfterToolCalls(toolCalls, options),
       );
     } else {
       const deps = {
@@ -743,8 +738,15 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       preparedRequestContext ??
       (await this.prepareChatRequest(options, client, logger, mediaRequest));
 
-    const { model, detectedFormat, formattedTools, streamingEnabled, spool } =
-      requestContext;
+    const {
+      model,
+      detectedFormat,
+      formattedTools,
+      streamingEnabled,
+      spool,
+      dump,
+      continuation,
+    } = requestContext;
     const baseURL = options.resolved.baseURL ?? this.getBaseURL();
 
     this.logRequestContext(options, requestContext, baseURL, logger);
@@ -756,6 +758,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     const response = await executeApiRequest({
       client,
       spool,
+      dumpBody: dump,
       abortSignal,
       mergedHeaders,
       dumpMode,
@@ -777,7 +780,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
       detectedFormat,
       streamingEnabled,
       abortSignal,
-      spool,
+      continuation,
       client,
       mergedHeaders,
       baseURL,
@@ -934,75 +937,55 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
    * @issue #584, #764 (CodeRabbit review)
    */
   private async *requestContinuationAfterToolCalls(
-    toolCalls: Array<{
-      id: string;
-      type: 'function';
-      function: { name: string; arguments: string };
-    }>,
-    readMessages: () => OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-    readRequestBody: () => OpenAI.Chat.ChatCompletionCreateParams,
-    client: OpenAI,
-    abortSignal: AbortSignal | undefined,
-    model: string,
-    logger: DebugLogger,
-    mergedHeaders: Record<string, string> | undefined,
-    toolFormat: ToolFormat,
-    reasoningFieldName?: string,
-    onRawTokenDelta?: () => void,
+    toolCalls: ContinuationToolCall[],
+    request: Pick<
+      DispatchResponseOptions,
+      | 'continuation'
+      | 'client'
+      | 'abortSignal'
+      | 'model'
+      | 'logger'
+      | 'mergedHeaders'
+      | 'reasoningFieldName'
+      | 'onRawTokenDelta'
+    >,
   ): AsyncGenerator<IContent, void, unknown> {
-    const continuationMessages = buildContinuationMessages(
-      toolCalls,
-      readMessages(),
-      toolFormat,
-    );
+    const {
+      continuation,
+      client,
+      abortSignal,
+      model,
+      logger,
+      mergedHeaders,
+      reasoningFieldName,
+      onRawTokenDelta,
+    } = request;
+    let body: ContinuationBody | undefined;
 
     // Make a continuation request (wrap in try-catch since tools were already yielded)
     try {
-      const { executeBoundedStreamingChatRequest } = await import(
+      const { executeSpooledStreamingChatRequest } = await import(
         './OpenAIApiExecution.js'
       );
-      const continuationResponse = await executeBoundedStreamingChatRequest(
+      body = await continuation.build(toolCalls);
+      const continuationResponse = await executeSpooledStreamingChatRequest(
         client,
-        {
-          ...readRequestBody(),
-          messages: continuationMessages,
-          stream: true,
-        },
+        body.spool,
         abortSignal,
         mergedHeaders,
       );
 
       let accumulatedText = '';
 
-      // Process the continuation response
-      for await (const chunk of continuationResponse) {
-        if (abortSignal?.aborted === true) {
-          break;
-        }
-
-        // Continuation raw deltas are token-bearing output of the same
-        // attempt (issue #3473): each token-bearing delta (content,
-        // reasoning, or tool-call fragments) fires the raw-timing signal
-        // exactly once so the attempt window spans the whole continuation
-        // decode; only content changes visible output.
-        const sanitizedText = extractContinuationChunkText(
-          chunk,
-          logger,
-          reasoningFieldName,
-          onRawTokenDelta,
-        );
-        if (sanitizedText !== '') {
-          accumulatedText += sanitizedText;
-          yield {
-            speaker: 'ai',
-            blocks: [
-              {
-                type: 'text',
-                text: sanitizedText,
-              } as TextBlock,
-            ],
-          } as IContent;
-        }
+      for await (const sanitizedText of continuationTexts(
+        continuationResponse,
+        abortSignal,
+        logger,
+        reasoningFieldName,
+        onRawTokenDelta,
+      )) {
+        accumulatedText += sanitizedText;
+        yield aiTextContent(sanitizedText);
       }
 
       logger.debug(
@@ -1024,6 +1007,8 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         },
       );
       // Don't re-throw - tool calls were already successful
+    } finally {
+      body?.release();
     }
   }
 }

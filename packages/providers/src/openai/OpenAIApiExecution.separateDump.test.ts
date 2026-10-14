@@ -11,6 +11,7 @@ import {
   type ApiExecutionOptions,
 } from './OpenAIApiExecution.js';
 import { WireBodySpool } from '../utils/wire-body-spool.js';
+import { StreamedDumpBody } from '../utils/dumpSDKContext.js';
 import {
   createOpenAIRawPostTestAdapter,
   type RawPostTestHandler,
@@ -55,12 +56,17 @@ function spoolOf(body: unknown): WireBodySpool {
   return spool;
 }
 
+const dumpBody = new StreamedDumpBody(async function* () {
+  yield new TextEncoder().encode(JSON.stringify(requestBody));
+});
+
 function createBaseOptions(
   overrides: Partial<ApiExecutionOptions> = {},
 ): ApiExecutionOptions {
   return {
     client: createMockClient({ id: 'chatcmpl-test', choices: [] }),
     spool: spoolOf(requestBody),
+    dumpBody,
     abortSignal: undefined,
     mergedHeaders: undefined,
     dumpMode: 'on',
@@ -414,7 +420,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
       'openai',
       '/chat/completions',
-      requestBody,
+      dumpBody,
       'https://api.cerebras.ai/v1',
       { headers: undefined, transport: { type: 'http' } },
     );
@@ -460,7 +466,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
       'openai',
       '/chat/completions',
-      requestBody,
+      dumpBody,
       'https://api.cerebras.ai/v1',
       { headers: undefined, transport: { type: 'http' } },
     );
@@ -513,7 +519,7 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
       'openai',
       '/chat/completions',
-      requestBody,
+      dumpBody,
       'https://api.cerebras.ai/v1',
       { headers: undefined, transport: { type: 'http' } },
     );
@@ -638,6 +644,28 @@ describe('OpenAI executeApiRequest separate request/response dump', () => {
     expect(metadata?.headers).toStrictEqual({
       authorization: 'Bearer caller-token',
     });
+  });
+
+  it('should fail before sending when a dump is requested without a dump form', async () => {
+    const create = vi.fn().mockResolvedValue({ id: 'x', choices: [] });
+    const client = withRawPostAdapter({ chat: { completions: { create } } });
+
+    for (const dumpMode of ['on', 'error'] as const) {
+      const opts = createBaseOptions({ client, dumpMode, dumpBody: undefined });
+      await expect(executeApiRequest(opts)).rejects.toThrow(
+        'Chat dump requested but the request was prepared without a dump form',
+      );
+    }
+
+    expect(create).not.toHaveBeenCalled();
+    expect(dumpSDKRequestContextSpy).not.toHaveBeenCalled();
+  });
+
+  it('should hand the dump body, not a parsed request object, to the request dump', async () => {
+    const opts = createBaseOptions({ dumpMode: 'on' });
+    await executeApiRequest(opts);
+
+    expect(dumpSDKRequestContextSpy.mock.calls[0][2]).toBe(dumpBody);
   });
 
   it('should not dump on success when mode is error', async () => {

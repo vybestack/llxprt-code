@@ -5,7 +5,10 @@ import type { MediaBlock } from '@vybestack/llxprt-code-core/services/history/IC
 import type { UnsupportedMediaEntry } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { createScratchDirSync } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import type { PromptKeySink } from '../runtime/prompt-key-tee-writer.js';
-import { writePromptSegment } from '../runtime/prompt-segment-writers.js';
+import {
+  writePromptSegment,
+  type ExtraSegmentForm,
+} from '../runtime/prompt-segment-writers.js';
 import {
   Gpt56SourceProjection,
   type Gpt56SourceSegment,
@@ -49,10 +52,12 @@ function readLedger(path: string): readonly UnsupportedMediaEntry[] {
 }
 
 /**
- * Writes the estimator form of a chat body as it is converted: the `messages`
- * array one message at a time, the `tools` value, and a ledger of the media
- * that is replaced by a placeholder, one small line per block, appended as the
- * rows pass.
+ * Writes the prompt files of a chat body as it is converted: the estimator
+ * form of the `messages` array one message at a time and of the `tools` value,
+ * and a ledger of the media that is replaced by a placeholder, one small line
+ * per block, appended as the rows pass. When a dump was asked for the dump
+ * form of the messages is written beside their estimator form in the same
+ * pass; the tools are small and a dump reads them from the request.
  */
 export class ChatEstimatorFiles {
   readonly #root: string;
@@ -60,11 +65,17 @@ export class ChatEstimatorFiles {
   readonly #ledger: string;
   readonly #model: string;
   readonly #signal: AbortSignal | undefined;
+  readonly #messageForms: readonly ExtraSegmentForm[];
   readonly #segments: Gpt56SourceSegment[] = [];
 
-  private constructor(model: string, signal: AbortSignal | undefined) {
+  private constructor(
+    model: string,
+    signal: AbortSignal | undefined,
+    dump: boolean,
+  ) {
     this.#model = model;
     this.#signal = signal;
+    this.#messageForms = dump ? ['dump'] : [];
     this.#root = createScratchDirSync('openai-chat-prompt-keys-');
     this.#costs = join(this.#root, 'image-costs.jsonl');
     this.#ledger = join(this.#root, 'unsupported-media.jsonl');
@@ -77,8 +88,12 @@ export class ChatEstimatorFiles {
     }
   }
 
-  static create(model: string, signal?: AbortSignal): ChatEstimatorFiles {
-    return new ChatEstimatorFiles(model, signal);
+  static create(
+    model: string,
+    signal: AbortSignal | undefined,
+    dump: boolean,
+  ): ChatEstimatorFiles {
+    return new ChatEstimatorFiles(model, signal, dump);
   }
 
   /**
@@ -108,7 +123,7 @@ export class ChatEstimatorFiles {
     fill: (sink: PromptKeySink) => Promise<void>,
   ): Promise<void> {
     const written = await writePromptSegment(
-      { model: this.#model, signal: this.#signal, forms: [] },
+      { model: this.#model, signal: this.#signal, forms: this.#messageForms },
       'messages',
       this.#root,
       this.#costs,
@@ -129,6 +144,17 @@ export class ChatEstimatorFiles {
       (sink) => sink.value(tools),
     );
     this.#segments.push(written.segment);
+  }
+
+  /** The dump-form file of the messages, once they were written. */
+  dumpMessagesFile(): string {
+    const path = this.#segments.find(
+      (segment) => segment.promptKey === 'messages',
+    )?.dumpSource?.path;
+    if (path === undefined) {
+      throw new Error('The chat dump form was not written');
+    }
+    return path;
   }
 
   /** Hands the finished files to a projection, which owns them from here. */

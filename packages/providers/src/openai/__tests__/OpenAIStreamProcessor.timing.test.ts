@@ -198,10 +198,6 @@ function createProviderStream(
     'test-model',
     format,
     undefined,
-    () => ({ model: 'test-model', messages: [], stream: true }),
-    () => [],
-    new OpenAI({ apiKey: 'test-api-key' }),
-    undefined,
     undefined,
     { ...makeDeps(), onRawTokenDelta: options?.onRawTokenDelta },
     async function* () {

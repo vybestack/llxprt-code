@@ -14,6 +14,7 @@ import {
 } from './dumpContext.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import { dumpRequestContextBodyBytes } from './dumpSourceRequestStream.js';
+import { prettyJsonBytes } from './prettyJsonBytes.js';
 
 const logger = new DebugLogger('llxprt:core:dumpSDKContext');
 
@@ -32,6 +33,19 @@ export interface RequestDumpMetadata {
   headers?: Record<string, string>;
   transport?: RequestDumpTransport;
 }
+
+/**
+ * A request body that exists only as compact, already sanitized JSON bytes (a
+ * file on scratch disk). {@link dumpSDKRequestContext} streams it to the dump
+ * file re-indented as `JSON.stringify(value, null, 2)` prints it, so the file
+ * is the one an in-memory body would have produced.
+ */
+export class StreamedDumpBody {
+  constructor(readonly bytes: () => AsyncIterable<Uint8Array>) {}
+}
+
+/** Nesting level of the `body` member inside the dump file's request object. */
+const DUMP_BODY_DEPTH = 2;
 
 function resolveDumpHeaders(
   metadata: RequestDumpMetadata | undefined,
@@ -160,16 +174,25 @@ export async function dumpSDKRequestContext(
   baseURL?: string,
   metadata?: RequestDumpMetadata,
 ): Promise<DumpRequestResult> {
-  const url = buildSDKDumpUrl(providerName, endpoint, baseURL);
-
-  const request = buildSDKDumpRequest(url, requestParams, metadata);
-
   logger.debug(
     () =>
       `Dumping SDK request context for ${providerName}: endpoint=${endpoint}`,
   );
 
-  return dumpRequestContext(request, providerName);
+  if (requestParams instanceof StreamedDumpBody) {
+    return dumpSDKRequestContextBodyBytes(
+      providerName,
+      endpoint,
+      prettyJsonBytes(requestParams.bytes(), DUMP_BODY_DEPTH),
+      baseURL,
+      metadata,
+    );
+  }
+  const url = buildSDKDumpUrl(providerName, endpoint, baseURL);
+  return dumpRequestContext(
+    buildSDKDumpRequest(url, requestParams, metadata),
+    providerName,
+  );
 }
 
 /** Request dump whose body is streamed from encoded JSON bytes. */

@@ -468,14 +468,14 @@ export function buildMessagesWithReasoning(
       : null;
 
   const resolveToolCallId = (tc: ToolCallBlock): string => {
-    if (toolIdMapper) {
+    if (toolIdMapper !== null) {
       return toolIdMapper.resolveToolCallId(tc);
     }
     return normalizeToOpenAIToolId(tc.id);
   };
 
   const resolveToolResponseId = (tr: ToolResponseBlock): string => {
-    if (toolIdMapper) {
+    if (toolIdMapper !== null) {
       return toolIdMapper.resolveToolResponseId(tr);
     }
     return normalizeToOpenAIToolId(tr.callId);
@@ -618,39 +618,23 @@ export function validateToolMessageSequence(
   return validatedMessages;
 }
 
+/** A tool call the continuation request acknowledges. */
+export interface ContinuationToolCall {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+}
+
 /**
- * Builds continuation messages for requesting follow-up after tool calls.
- *
- * @param toolCalls - The tool calls to acknowledge
- * @param messagesWithSystem - The message history including system prompt
- * @param toolFormat - The tool format to use for message construction
- * @returns The continuation message sequence
+ * The messages that end a continuation request: the model's tool calls, an
+ * acknowledgement for each, and the user turn that asks it to go on. They
+ * follow the conversation so far, which the request writes row by row.
  */
-export function buildContinuationMessages(
-  toolCalls: Array<{
-    id: string;
-    type: 'function';
-    function: { name: string; arguments: string };
-  }>,
-  messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[],
+export function buildContinuationTail(
+  toolCalls: ContinuationToolCall[],
   toolFormat: ToolFormat | undefined,
 ): OpenAI.Chat.ChatCompletionMessageParam[] {
-  const sanitizedHistory = messagesWithSystem.map((message) => {
-    if (message.role !== 'assistant') {
-      return message;
-    }
-
-    const sanitizedAssistant = {
-      ...message,
-    } as OpenAI.Chat.ChatCompletionAssistantMessageParam & {
-      reasoning_content?: unknown;
-    };
-    delete sanitizedAssistant.reasoning_content;
-    return sanitizedAssistant;
-  });
-
   return [
-    ...sanitizedHistory,
     {
       role: 'assistant' as const,
       tool_calls: toolCalls,
@@ -676,6 +660,39 @@ export function buildContinuationMessages(
         'The tool calls above have been registered. Please continue with your response.',
     },
   ];
+}
+
+/**
+ * The continuation messages as one array: the history without its reasoning
+ * followed by {@link buildContinuationTail}. A send does not call this (it
+ * writes the history one row at a time); it is the reference the continuation
+ * request's bytes are compared with.
+ *
+ * @param toolCalls - The tool calls to acknowledge
+ * @param messagesWithSystem - The message history including system prompt
+ * @param toolFormat - The tool format to use for message construction
+ * @returns The continuation message sequence
+ */
+export function buildContinuationMessages(
+  toolCalls: ContinuationToolCall[],
+  messagesWithSystem: OpenAI.Chat.ChatCompletionMessageParam[],
+  toolFormat: ToolFormat | undefined,
+): OpenAI.Chat.ChatCompletionMessageParam[] {
+  const sanitizedHistory = messagesWithSystem.map((message) => {
+    if (message.role !== 'assistant') {
+      return message;
+    }
+
+    const sanitizedAssistant = {
+      ...message,
+    } as OpenAI.Chat.ChatCompletionAssistantMessageParam & {
+      reasoning_content?: unknown;
+    };
+    delete sanitizedAssistant.reasoning_content;
+    return sanitizedAssistant;
+  });
+
+  return [...sanitizedHistory, ...buildContinuationTail(toolCalls, toolFormat)];
 }
 
 function logOrphanedToolRemoval(

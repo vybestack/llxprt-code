@@ -25,15 +25,14 @@ import {
   bestEffortDump,
   dumpSDKErrorRequestResponse,
   type RequestDumpMetadata,
+  type StreamedDumpBody,
 } from '../utils/dumpSDKContext.js';
 import { type DumpMode } from '../utils/dumpContext.js';
 import { type OpenAITool } from './schemaConverter.js';
-import { withBoundedJsonHttpBody } from '../utils/boundedJsonBody.js';
 import {
   withSpooledJsonHttpBody,
   type WireBodySpool,
 } from '../utils/wire-body-spool.js';
-import { readSpooledChatBody } from './OpenAIChatSpooledBody.js';
 
 interface OpenAIRawPostOptions {
   readonly body: unknown;
@@ -55,6 +54,8 @@ export interface ApiExecutionOptions {
   client: OpenAIRawPostClient;
   /** The sealed request body; it is streamed with Content-Length equal to its size. */
   spool: WireBodySpool;
+  /** What a request dump records. Required when `dumpMode` asks for a dump. */
+  dumpBody?: StreamedDumpBody | undefined;
   abortSignal: AbortSignal | undefined;
   mergedHeaders: Record<string, string> | undefined;
   dumpMode: DumpMode | undefined;
@@ -97,7 +98,7 @@ function chatDumpMetadata(
 
 interface ErrorContext {
   /** Present only when error dumps are on. */
-  errorDumpBody: OpenAI.Chat.ChatCompletionCreateParams | undefined;
+  errorDumpBody: StreamedDumpBody | undefined;
   requestBaseId: string | undefined;
   baseURL: string | undefined;
   mergedHeaders: Record<string, string> | undefined;
@@ -257,31 +258,8 @@ function isChatCompletion(
   );
 }
 
-/**
- * Posts a body that exists as an object. Only the continuation request does
- * this, because it rewrites the messages of the first request (issue #854 D4).
- */
-export async function executeBoundedStreamingChatRequest(
-  client: OpenAIRawPostClient,
-  requestBody: OpenAI.Chat.ChatCompletionCreateParams,
-  abortSignal: AbortSignal | undefined,
-  mergedHeaders: Record<string, string> | undefined,
-): Promise<AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>> {
-  const response = await withBoundedJsonHttpBody(requestBody, (body) =>
-    client.post('/chat/completions', {
-      body: body.stream,
-      headers: boundedJsonHeaders(body.byteLength, mergedHeaders),
-      stream: true,
-      ...(abortSignal === undefined ? {} : { signal: abortSignal }),
-    }),
-  );
-  if (!isAsyncChatCompletionStream(response)) {
-    throw new TypeError('OpenAI streaming response is not async iterable');
-  }
-  return response;
-}
-
-async function executeSpooledStreamingChatRequest(
+/** Posts a sealed body as a streaming chat request (also the continuation). */
+export async function executeSpooledStreamingChatRequest(
   client: OpenAIRawPostClient,
   spool: WireBodySpool,
   abortSignal: AbortSignal | undefined,
@@ -321,22 +299,24 @@ async function executeSpooledNonStreamingChatRequest(
   return response;
 }
 
-/**
- * The body as an object for the dump contexts, read from the spool only when a
- * dump mode needs it (issue #854 D3c moves dumps onto the spool bytes).
- */
+/** The dump body, resolved once for the success dump and for the error dump. */
 interface DumpBodies {
-  readonly success: OpenAI.Chat.ChatCompletionCreateParams | undefined;
-  readonly error: OpenAI.Chat.ChatCompletionCreateParams | undefined;
+  readonly success: StreamedDumpBody | undefined;
+  readonly error: StreamedDumpBody | undefined;
 }
 
-function readDumpBodies(opts: ApiExecutionOptions): DumpBodies {
+function resolveDumpBodies(opts: ApiExecutionOptions): DumpBodies {
   const wantsSuccess = shouldDumpSDKContext(opts.dumpMode, false);
   const wantsError = shouldDumpSDKContext(opts.dumpMode, true);
   if (!wantsSuccess && !wantsError) {
     return { success: undefined, error: undefined };
   }
-  const body = readSpooledChatBody(opts.spool);
+  const body = opts.dumpBody;
+  if (body === undefined) {
+    throw new Error(
+      'Chat dump requested but the request was prepared without a dump form',
+    );
+  }
   return {
     success: wantsSuccess ? body : undefined,
     error: wantsError ? body : undefined,
@@ -536,7 +516,7 @@ export async function executeApiRequest(
   | AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>
   | OpenAI.Chat.Completions.ChatCompletion
 > {
-  const dump = readDumpBodies(opts);
+  const dump = resolveDumpBodies(opts);
 
   if (opts.streamingEnabled) {
     return executeStreamingRequest(opts, dump);

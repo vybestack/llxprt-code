@@ -37,6 +37,12 @@ export interface ChatBodyOptions {
   readonly toolFormat: ToolFormat | undefined;
   readonly config?: OutputLimitConfig;
   /**
+   * Leaves `reasoning_content` out of every message whatever the reasoning
+   * policy says. Nothing else about a message depends on it, so the bytes are
+   * those of the same body with the key deleted (the continuation request).
+   */
+  readonly omitReasoning?: boolean;
+  /**
    * Where the Kimi and Mistral id mappers keep their facts. Required for those
    * two formats and ignored for the others. The caller owns the store and
    * whatever backs it.
@@ -90,6 +96,11 @@ interface ConversionSettings {
   readonly config: OutputLimitConfig | undefined;
 }
 
+/** Whether the tool format maps call ids and so needs a {@link ToolIdStore}. */
+export function usesToolIdStore(format: ToolFormat | undefined): boolean {
+  return format === 'kimi' || format === 'mistral';
+}
+
 function createToolIdMapper(
   options: ChatBodyOptions,
 ): StreamingToolIdMapper | undefined {
@@ -141,9 +152,11 @@ function readSettings(options: ChatBodyOptions): ConversionSettings {
   const stripPolicy: unknown =
     readInvocationPolicyValue(ephemerals, 'reasoning.stripFromContext') ??
     'none';
-  const includeInContext = Boolean(
-    readInvocationPolicyValue(ephemerals, 'reasoning.includeInContext'),
-  );
+  const includeInContext =
+    options.omitReasoning !== true &&
+    Boolean(
+      readInvocationPolicyValue(ephemerals, 'reasoning.includeInContext'),
+    );
   return {
     stripPolicy,
     includeInContext,

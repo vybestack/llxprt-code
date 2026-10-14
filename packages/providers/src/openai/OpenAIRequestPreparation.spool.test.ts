@@ -15,7 +15,7 @@ import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { rowsSelection } from '../__tests__/support/wireBodyCapture.js';
 import { activeWireBodySpoolCount } from '../utils/wire-body-spool.js';
-import { readSpooledChatBody } from './OpenAIChatSpooledBody.js';
+import { readSpooledChatBody } from './__tests__/support/prepareRequestBody.js';
 import { buildMessagesWithReasoning } from './OpenAIRequestBuilder.js';
 import {
   prepareRequest,
@@ -57,6 +57,7 @@ function optionsFor(
   model: string,
   modelParams: Record<string, unknown> = {},
   requestRows = rowsSelection(rows),
+  ephemerals: Record<string, unknown> = {},
 ): NormalizedGenerateChatOptions {
   return {
     contents: [],
@@ -67,7 +68,7 @@ function optionsFor(
     invocation: createRuntimeInvocationContext({
       runtimeId: 'spool-test',
       providerName: 'openai',
-      ephemeralsSnapshot: { openai: modelParams },
+      ephemeralsSnapshot: { openai: modelParams, ...ephemerals },
     }),
     systemInstruction: 'be brief',
     resolved: { model, authToken: 'test-token' },
@@ -190,6 +191,86 @@ describe('prepareRequest spools the chat body', () => {
       },
     };
     const options = optionsFor(HISTORY, 'kimi-k2', {}, failing);
+
+    await expect(
+      prepareRequest(options, 'gpt-4o', undefined, logger, 'openai'),
+    ).rejects.toThrow('row source failed');
+    expect(activeWireBodySpoolCount()).toBe(startingSpools);
+    expect(scratchNames()).toStrictEqual(startingScratch);
+  });
+
+  it('writes the dump form beside the body only when dumpcontext asks for it', async () => {
+    const withoutDump = await prepare(optionsFor(HISTORY, 'gpt-4o'));
+    expect(withoutDump.dump).toBeUndefined();
+    const plainScratch = [...scratchNames()].filter(
+      (name) => !startingScratch.has(name),
+    );
+    expect(
+      plainScratch.some((name) => name.startsWith('openai-chat-prompt')),
+    ).toBe(false);
+    releaseAndExpectNothingLeaked();
+
+    for (const mode of ['on', 'error']) {
+      const options = optionsFor(
+        HISTORY,
+        'gpt-4o',
+        {},
+        rowsSelection(HISTORY),
+        { dumpcontext: mode },
+      );
+      const context = await prepare(options);
+      expect(context.dump).toBeDefined();
+      const parts: Uint8Array[] = [];
+      for await (const part of context.dump?.bytes() ?? []) parts.push(part);
+      const dumped: unknown = JSON.parse(Buffer.concat(parts).toString('utf8'));
+      const wire: unknown = JSON.parse(
+        JSON.stringify(readSpooledChatBody(context.spool)),
+      );
+      expect(dumped).toStrictEqual(wire);
+      expect(context.estimate).toBeUndefined();
+      releaseAndExpectNothingLeaked();
+    }
+  });
+
+  it('streams a large dump form in bounded chunks', async () => {
+    const rows: IContent[] = Array.from({ length: 160 }, (_, index) => ({
+      speaker: index % 2 === 0 ? 'human' : 'ai',
+      blocks: [{ type: 'text', text: `${index} ${'x'.repeat(30_000)}` }],
+    }));
+    const context = await prepare(
+      optionsFor(rows, 'gpt-4o', {}, rowsSelection(rows), {
+        dumpcontext: 'on',
+      }),
+    );
+
+    let total = 0;
+    let largest = 0;
+    for await (const part of context.dump?.bytes() ?? []) {
+      total += part.byteLength;
+      largest = Math.max(largest, part.byteLength);
+    }
+    expect(total).toBeGreaterThan(4_800_000);
+    expect(largest).toBeLessThanOrEqual(64 * 1024);
+    releaseAndExpectNothingLeaked();
+  });
+
+  it('removes the dump files with the request when a row fails mid-body', async () => {
+    const failing = {
+      ...rowsSelection(HISTORY),
+      openReader(signal?: AbortSignal) {
+        const inner = rowsSelection(HISTORY).openReader(signal);
+        return (async function* () {
+          let seen = 0;
+          for await (const row of inner) {
+            if (++seen === 3) throw new Error('row source failed');
+            yield row;
+          }
+        })();
+      },
+    };
+    const options = optionsFor(HISTORY, 'gpt-4o', {}, failing, {
+      dumpcontext: 'on',
+    });
 
     await expect(
       prepareRequest(options, 'gpt-4o', undefined, logger, 'openai'),

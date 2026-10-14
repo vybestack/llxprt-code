@@ -162,10 +162,6 @@ describe('OpenAI terminal finish metadata', () => {
               'test',
               'openai',
               undefined,
-              () => ({ model: 'test', messages: [], stream: true }),
-              () => [],
-              new OpenAI({ apiKey: 'test-only' }),
-              undefined,
               undefined,
               dependencies(),
               async function* () {

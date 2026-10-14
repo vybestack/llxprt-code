@@ -21,10 +21,15 @@ import type { ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js'
 import { convertToolsToOpenAI, type OpenAITool } from './schemaConverter.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';
 import {
-  writeChatMessages,
+  usesToolIdStore,
   type ChatBodyOptions,
   type ChatBodyRows,
 } from './OpenAIChatBodyBuilder.js';
+import { writeMessagesSegment } from './OpenAIChatMessagesSegment.js';
+import {
+  createChatContinuation,
+  type ChatContinuation,
+} from './OpenAIChatContinuation.js';
 import { extractModelParamsFromOptions } from './OpenAIClientFactory.js';
 import { sanitizePromptCacheKey } from '../openai-responses/sanitizePromptCacheKey.js';
 import { applyOpenAIChatReasoning } from './openai-chat-reasoning.js';
@@ -38,22 +43,19 @@ import {
   type ProviderMediaTransportCapabilities,
 } from '../providerMediaTransportCapabilities.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
-import { jsonValueChunks } from '../utils/boundedJsonBody.js';
-import {
-  StreamedSegment,
-  writeEnvelope,
-  type EnvelopeSink,
-} from '../utils/envelope-writer.js';
+import { StreamedSegment, writeEnvelope } from '../utils/envelope-writer.js';
 import { KeyedRowIndex } from '../utils/keyed-row-index.js';
 import { KeyedRowToolIdStore } from '../utils/keyed-row-tool-id-store.js';
 import { providerRowsOf } from '../utils/providerRows.js';
 import { WireBodySpool } from '../utils/wire-body-spool.js';
 import type { PromptKeySink } from '../runtime/prompt-key-tee-writer.js';
+import { shouldDump, type DumpMode } from '../utils/dumpContext.js';
+import type { StreamedDumpBody } from '../utils/dumpSDKContext.js';
 import {
   ChatEstimatorFiles,
-  writeEstimateMessage,
   type ChatPromptEstimate,
 } from './OpenAIChatEstimatorFiles.js';
+import { chatDumpBody } from './OpenAIChatDumpBody.js';
 
 /**
  * A prepared chat request: the sealed body on scratch disk and the scalars the
@@ -73,7 +75,17 @@ export interface RequestContext {
    * request is projected. The caller owns it once it has the request.
    */
   estimate: ChatPromptEstimate | undefined;
-  /** Disposes the spool and closes the tool id index. Idempotent. */
+  /**
+   * The body a request dump records, streamed from the dump-form files written
+   * with the body. Present only when the call's `dumpcontext` asks for a dump.
+   */
+  dump: StreamedDumpBody | undefined;
+  /**
+   * Builds the request that follows a reply of tool calls and no text, as a
+   * second spool over the same rows.
+   */
+  continuation: ChatContinuation;
+  /** Disposes the spool and the files, and closes the tool id index. Idempotent. */
   release(): void;
 }
 
@@ -308,52 +320,28 @@ async function callRows(
   return { rows: () => rows.openReader(signal) };
 }
 
-function usesToolIdStore(format: ToolFormat): boolean {
-  return format === 'kimi' || format === 'mistral';
-}
-
-/**
- * Writes the messages array: `[`, the system message, then each conversion
- * output behind a comma, `]`. Returns the number of messages written. When
- * `estimate` is given, the same messages are written to it in estimator form,
- * one at a time, with the same punctuation.
- */
-async function writeMessagesSegment(
-  sink: EnvelopeSink,
-  options: NormalizedGenerateChatOptions,
-  source: ChatBodyRows,
-  bodyOptions: ChatBodyOptions,
-  estimate: PromptKeySink | undefined,
-): Promise<number> {
-  const systemMessage = {
-    role: 'system',
-    content: options.systemInstruction ?? '',
-  };
-  sink.append('[');
-  estimate?.append('[');
-  const system = jsonValueChunks(systemMessage);
-  if (system === undefined) throw new Error('System message is not JSON');
-  for (const chunk of system) sink.append(chunk);
-  estimate?.value(systemMessage);
-  const converted = await writeChatMessages(source, bodyOptions, {
-    message(chunks, item) {
-      sink.append(',');
-      for (const chunk of chunks) sink.append(chunk);
-      if (estimate !== undefined) {
-        estimate.append(',');
-        writeEstimateMessage(estimate, item);
-      }
-    },
-  });
-  sink.append(']');
-  estimate?.append(']');
-  return converted + 1;
+/** Whether `dumpcontext` writes a request dump on success or on failure. */
+function wantsRequestDump(mode: unknown): boolean {
+  return (
+    shouldDump(mode as DumpMode | undefined, false) ||
+    shouldDump(mode as DumpMode | undefined, true)
+  );
 }
 
 interface SpooledChatBody {
   readonly spool: WireBodySpool;
   readonly messageCount: number;
   readonly estimate: ChatPromptEstimate | undefined;
+  readonly dump: StreamedDumpBody | undefined;
+  readonly continuation: ChatContinuation;
+}
+
+/** What the prompt files of a request are for. */
+interface ChatFileUse {
+  /** The estimator form is handed to a projection. */
+  readonly estimate: boolean;
+  /** The dump form is written for a request dump. */
+  readonly dump: boolean;
 }
 
 function chatBodyOptions(
@@ -361,12 +349,12 @@ function chatBodyOptions(
   format: ToolFormat,
   rowInput: ChatRowInput,
   toolIds: KeyedRowIndex | undefined,
-  estimator: ChatEstimatorFiles | undefined,
+  files: ChatEstimatorFiles | undefined,
 ): ChatBodyOptions {
   const mediaStage =
-    estimator === undefined
+    files === undefined
       ? rowInput.mediaStage
-      : estimator.listUnsupportedMedia(rowInput.mediaStage);
+      : files.listUnsupportedMedia(rowInput.mediaStage);
   return {
     reasoning: options,
     toolFormat: format,
@@ -378,34 +366,44 @@ function chatBodyOptions(
   };
 }
 
+function releaseChatBody(
+  spool: WireBodySpool,
+  toolIds: KeyedRowIndex | undefined,
+  files: ChatEstimatorFiles | undefined,
+): void {
+  try {
+    spool.dispose();
+  } finally {
+    try {
+      toolIds?.close();
+    } finally {
+      files?.discard();
+    }
+  }
+}
+
 /**
  * Spools the request body: the envelope's small members are written as
  * `JSON.stringify` would and the messages are converted and written one row
- * at a time. A failure disposes the spool, the tool id index and the
- * estimator files.
+ * at a time. A failure disposes the spool, the tool id index and the prompt
+ * files.
  */
 async function spoolChatBody(
   envelope: OpenAIChatRequestBody,
   options: NormalizedGenerateChatOptions,
   format: ToolFormat,
   rowInput: ChatRowInput,
-  withEstimate: boolean,
+  use: ChatFileUse,
 ): Promise<SpooledChatBody & { readonly release: () => void }> {
   const signal = getRequestSignal(options);
   const spool = WireBodySpool.create('openai-chat', { signal });
   let toolIds: KeyedRowIndex | undefined;
-  let estimator: ChatEstimatorFiles | undefined;
-  const release = (): void => {
-    try {
-      spool.dispose();
-    } finally {
-      toolIds?.close();
-    }
-  };
+  let files: ChatEstimatorFiles | undefined;
+  const release = (): void => releaseChatBody(spool, toolIds, files);
   try {
     if (usesToolIdStore(format)) toolIds = KeyedRowIndex.create('tool-ids');
-    if (withEstimate) {
-      estimator = ChatEstimatorFiles.create(envelope.model, signal);
+    if (use.estimate || use.dump) {
+      files = ChatEstimatorFiles.create(envelope.model, signal, use.dump);
     }
     const source = rowInput.rows ?? (await callRows(options));
     const bodyOptions = chatBodyOptions(
@@ -413,26 +411,54 @@ async function spoolChatBody(
       format,
       rowInput,
       toolIds,
-      estimator,
+      files,
     );
     let messageCount = 0;
     const messages = new StreamedSegment(async (sink) => {
       const write = (estimate: PromptKeySink | undefined): Promise<number> =>
-        writeMessagesSegment(sink, options, source, bodyOptions, estimate);
-      if (estimator === undefined) {
+        writeMessagesSegment(
+          sink,
+          options.systemInstruction,
+          source,
+          bodyOptions,
+          estimate,
+        );
+      if (files === undefined) {
         messageCount = await write(undefined);
       } else {
-        await estimator.writeMessages(async (estimate) => {
+        await files.writeMessages(async (estimate) => {
           messageCount = await write(estimate);
         });
       }
     });
     await writeEnvelope(spool, { ...envelope, messages });
     spool.seal();
-    await estimator?.writeTools(envelope.tools);
-    return { spool, messageCount, estimate: estimator?.seal(), release };
+    await files?.writeTools(envelope.tools);
+    return {
+      spool,
+      messageCount,
+      estimate: use.estimate ? files?.seal() : undefined,
+      dump:
+        use.dump && files !== undefined
+          ? chatDumpBody(envelope, files.dumpMessagesFile())
+          : undefined,
+      continuation: createChatContinuation({
+        envelope,
+        systemInstruction: options.systemInstruction,
+        signal,
+        source,
+        body: {
+          reasoning: options,
+          toolFormat: format,
+          config: bodyOptions.config,
+          ...(rowInput.mediaStage === undefined
+            ? {}
+            : { mediaStage: rowInput.mediaStage }),
+        },
+      }),
+      release,
+    };
   } catch (error) {
-    estimator?.discard();
     release();
     throw error;
   }
@@ -497,7 +523,10 @@ export async function prepareRequest(
     options,
     detectedFormat,
     rowInput,
-    withEstimate,
+    {
+      estimate: withEstimate,
+      dump: wantsRequestDump(ephemeralSettings['dumpcontext']),
+    },
   );
   return {
     model,

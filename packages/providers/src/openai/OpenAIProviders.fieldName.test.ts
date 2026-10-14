@@ -57,7 +57,7 @@ function makeChunk(
   };
 }
 
-type StreamDeps = Parameters<typeof processStreamingResponse>[9];
+type StreamDeps = Parameters<typeof processStreamingResponse>[5];
 
 function makeDeps(reasoningFieldName: string | undefined): StreamDeps {
   return {
@@ -88,15 +88,11 @@ async function runStreaming(
       'test-model',
       'openai',
       undefined,
-      {} as Parameters<typeof processStreamingResponse>[4],
-      () => [],
-      {} as Parameters<typeof processStreamingResponse>[6],
-      undefined,
       undefined,
       makeDeps(reasoningFieldName),
       async function* () {
         yield* [] as IContent[];
-      } as Parameters<typeof processStreamingResponse>[10],
+      } as Parameters<typeof processStreamingResponse>[6],
     ),
   );
 }

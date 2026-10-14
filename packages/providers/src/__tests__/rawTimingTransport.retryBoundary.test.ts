@@ -166,10 +166,6 @@ function makeRawTimingProvider(
         'test-model',
         'openai',
         undefined,
-        () => ({ model: 'test-model', messages: [], stream: true }),
-        () => [],
-        new OpenAI({ apiKey: 'test-api-key' }),
-        undefined,
         undefined,
         makeDeps(resolveRawTokenDeltaNotifier(options.metadata)),
         async function* () {

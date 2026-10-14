@@ -42,7 +42,7 @@ import {
   cleanThinkingContent,
   parseStreamingReasoningDelta,
 } from './OpenAIResponseParser.js';
-import { type ToolFormat } from '@vybestack/llxprt-code-tools/IToolFormatter.js';
+import { type ContinuationToolCall } from './OpenAIRequestBuilder.js';
 import {
   type StreamingState,
   createStreamingState,
@@ -78,25 +78,12 @@ export interface StreamProcessorDeps {
 
 /**
  * Continuation request issued after tool-calls-without-text (issue #584):
- * the same attempt decodes the continuation stream, so its raw deltas
- * take the resolved notifier and the configured reasoning field name.
+ * the same attempt decodes the continuation stream. The caller supplies the
+ * request, which it writes from its own rows, so the processor holds no
+ * request body.
  */
 type RequestContinuationFn = (
-  toolCalls: Array<{
-    id: string;
-    type: 'function';
-    function: { name: string; arguments: string };
-  }>,
-  readMessages: () => OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-  readRequestBody: () => OpenAI.Chat.ChatCompletionCreateParams,
-  client: OpenAI,
-  abortSignal: AbortSignal | undefined,
-  model: string,
-  logger: DebugLogger,
-  mergedHeaders: Record<string, string> | undefined,
-  toolFormat: ToolFormat,
-  reasoningFieldName?: string,
-  onRawTokenDelta?: () => void,
+  toolCalls: ContinuationToolCall[],
 ) => AsyncGenerator<IContent, void, unknown>;
 
 /**
@@ -610,12 +597,6 @@ async function* handleToolCallsWithoutText(
   state: StreamingState,
   model: string,
   baseURL: string | undefined,
-  readRequestBody: () => OpenAI.Chat.ChatCompletionCreateParams,
-  readMessages: () => OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-  client: OpenAI,
-  abortSignal: AbortSignal | undefined,
-  mergedHeaders: Record<string, string> | undefined,
-  detectedFormat: string,
   deps: StreamProcessorDeps,
   requestContinuation: RequestContinuationFn,
 ): AsyncGenerator<IContent, void, unknown> {
@@ -657,19 +638,7 @@ async function* handleToolCallsWithoutText(
     normalizeToOpenAIToolId,
   );
 
-  yield* requestContinuation(
-    toolCallsForHistory,
-    readMessages,
-    readRequestBody,
-    client,
-    abortSignal,
-    model,
-    deps.logger,
-    mergedHeaders,
-    detectedFormat as ToolFormat,
-    deps.reasoningFieldName,
-    deps.onRawTokenDelta,
-  );
+  yield* requestContinuation(toolCallsForHistory);
 }
 
 /**
@@ -753,10 +722,6 @@ export async function* processStreamingResponse(
   model: string,
   detectedFormat: string,
   abortSignal: AbortSignal | undefined,
-  readRequestBody: () => OpenAI.Chat.ChatCompletionCreateParams,
-  readMessages: () => OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-  client: OpenAI,
-  mergedHeaders: Record<string, string> | undefined,
   baseURL: string | undefined,
   deps: StreamProcessorDeps,
   requestContinuation: RequestContinuationFn,
@@ -798,12 +763,6 @@ export async function* processStreamingResponse(
     state,
     model,
     baseURL,
-    readRequestBody,
-    readMessages,
-    client,
-    abortSignal,
-    mergedHeaders,
-    detectedFormat,
     deps,
     requestContinuation,
   );

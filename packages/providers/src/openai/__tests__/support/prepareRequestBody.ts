@@ -2,11 +2,21 @@
 import type OpenAI from 'openai';
 import type { NormalizedGenerateChatOptions } from '../../../BaseProvider.js';
 import { rowsSelection } from '../../../__tests__/support/wireBodyCapture.js';
-import { readSpooledChatBody } from '../../OpenAIChatSpooledBody.js';
+import { readFileSync } from 'node:fs';
+import type { WireBodySpool } from '../../../utils/wire-body-spool.js';
 import {
   prepareRequest,
   type RequestContext,
 } from '../../OpenAIRequestPreparation.js';
+
+/** The sealed chat body parsed back into one object (tests only). */
+export function readSpooledChatBody(
+  spool: WireBodySpool,
+): OpenAI.Chat.ChatCompletionCreateParams {
+  return JSON.parse(
+    readFileSync(spool.path, 'utf8'),
+  ) as OpenAI.Chat.ChatCompletionCreateParams;
+}
 
 export type PreparedRequestBody = Omit<RequestContext, 'spool' | 'release'> & {
   readonly requestBody: OpenAI.Chat.ChatCompletionCreateParams;
