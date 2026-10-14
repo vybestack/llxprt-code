@@ -155,8 +155,17 @@ export class HookRunner {
       if (input.hook_event_name !== eventName)
         throw new Error('Hook input event mismatch');
       const { ConfigSource } = await import('./hookRegistry.js');
-      if (hookConfig.source === ConfigSource.Project && !this.isTrustedFolder())
-        throw new Error('Project hook blocked - folder not trusted');
+      if (hookConfig.source === ConfigSource.Project) {
+        if (!this.isTrustedFolder())
+          throw new Error('Project hook blocked - folder not trusted');
+        // Same project-trust cancellation as the legacy route: withdrawing
+        // trust must stop a running project hook, not only block new ones.
+        signal =
+          signal === undefined
+            ? this.projectSignal()
+            : AbortSignal.any([signal, this.projectSignal()]);
+        signal.throwIfAborted();
+      }
       if (!hookConfig.command) throw new Error('Command hook missing command');
     } catch (error) {
       return snapshotFailure(
