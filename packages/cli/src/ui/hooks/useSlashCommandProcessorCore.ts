@@ -4,13 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useCommandRuntimeState } from './useCommandRuntimeState.js';
+import { useRegisteredCommandReload } from './useRegisteredCommandReload.js';
+import { useResourceCommands } from './useResourceCommands.js';
+import { join } from 'node:path';
+import { createPerfCommand } from '../commands/perfCommand.js';
 import { useUtilityCommands } from './useUtilityCommands.js';
 import { usePresentationCommands } from './usePresentationCommands.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { createToolFormatCommand } from '../commands/toolformatCommand.js';
 import { createModelCommand } from '../commands/modelCommand.js';
-import { createSetCommand } from '../commands/setCommand.js';
+import { useSetCommand } from './useSetCommand.js';
 import { createProviderCommand } from '../commands/providerCommand.js';
 import { bindProviderCommandOperations } from '../commands/providerCommandHost.js';
 import { useCredentialCommands } from './useCredentialCommands.js';
@@ -62,10 +67,8 @@ import type {
 } from '@vybestack/llxprt-code-agents';
 import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import type { RecordingSwapCallbacks } from '../../services/performResume.js';
-import { useSessionStats } from '../contexts/SessionContext.js';
 import { useRuntimeApi } from '../contexts/RuntimeContext.js';
 import { useProviderAliasRefresh } from '../contexts/ProviderAliasRefreshContext.js';
-import { useOAuthControl } from '../contexts/OAuthControlContext.js';
 import type {
   HistoryItemWithoutId,
   SlashCommandProcessorResult,
@@ -88,12 +91,9 @@ import {
   useCommandContext,
   useCommandReload,
   useManagers,
-  usePendingHistory,
+  type usePendingHistory,
 } from './slashCommandProcessorSupport.js';
-import {
-  useSlashCommandCancellation,
-  type SlashCommandCancellation,
-} from './useSlashCommandCancellation.js';
+import { type SlashCommandCancellation } from './useSlashCommandCancellation.js';
 
 type WriteToolFormat = (
   format: ToolFormatOverrideLiteral | null,
@@ -158,10 +158,22 @@ function useHistoryCommandOwners(
   runtimeApi: ReturnType<typeof useRuntimeApi>,
 ): Pick<
   BuiltinCommandOwners,
-  'copyCommand' | 'compressCommand' | 'dumpcontextCommand' | 'restoreCommand'
+  | 'copyCommand'
+  | 'compressCommand'
+  | 'dumpcontextCommand'
+  | 'restoreCommand'
+  | 'perfCommand'
 > {
   return useMemo(
     () => ({
+      perfCommand: createPerfCommand({
+        snapshotCapability: config?.getPerfSnapshotCapability?.() ?? null,
+        tokenUsageDir: config
+          ? join(config.getProjectTempDir(), 'token-usage')
+          : undefined,
+        readHistory: () =>
+          agent?.agentClient.getHistoryService()?.getRawHistory() ?? null,
+      }),
       copyCommand: createCopyCommand(
         bindCopyCommandHistoryRead(
           () => agent?.agentClient.hasChatInitialized() ?? false,
@@ -235,7 +247,8 @@ function useCommandState(
   runtimeApi: ReturnType<typeof useRuntimeApi>,
   extensionsCommand: SlashCommand,
   presentationCommands: ReturnType<typeof usePresentationCommands> &
-    ReturnType<typeof useUtilityCommands>,
+    ReturnType<typeof useUtilityCommands> &
+    ReturnType<typeof useResourceCommands>,
 ): SlashCommandProcessorState {
   const rec = useSwitch(agent?.session, rawRecording, recordingOwner);
   const modelCommand = useModelCommand(
@@ -342,7 +355,8 @@ type BuiltinCommandOwnerParts = Pick<
   | 'subagentCommand'
 > & {
   presentationCommands: ReturnType<typeof usePresentationCommands> &
-    ReturnType<typeof useUtilityCommands>;
+    ReturnType<typeof useUtilityCommands> &
+    ReturnType<typeof useResourceCommands>;
   historyCommandOwners: ReturnType<typeof useHistoryCommandOwners>;
   provider: SlashCommand;
   toolsCommand: SlashCommand;
@@ -674,34 +688,6 @@ function useProviderCommand(
   );
 }
 
-function useSetCommand(settings: LoadedSettings): SlashCommand {
-  const api = useRuntimeApi();
-  const enableFuzzyFiltering = settings.merged.enableFuzzyFiltering ?? true;
-  return useMemo(
-    () =>
-      createSetCommand({
-        getEphemeralSettings: () => api.getEphemeralSettings(),
-        setEphemeralSetting: (key, value) =>
-          api.setEphemeralSetting(key, value),
-        getActiveModelParams: () => api.getActiveModelParams(),
-        setActiveModelParam: (key, value) =>
-          api.setActiveModelParam(key, value),
-        clearActiveModelParam: (key) => api.clearActiveModelParam(key),
-        isFuzzyFilteringEnabled: () => enableFuzzyFiltering,
-      }),
-    [api, enableFuzzyFiltering],
-  );
-}
-
-function useCommandRuntimeState(addItem: UseHistoryManagerReturn['addItem']) {
-  return {
-    oauthControl: useOAuthControl(),
-    cancellation: useSlashCommandCancellation(),
-    pending: usePendingHistory(addItem),
-    session: useSessionStats(),
-  };
-}
-
 function useRegisteredCommands(
   args: UseSlashCommandProcessorCoreArgs,
   runtimeApi: ReturnType<typeof useRuntimeApi>,
@@ -733,6 +719,12 @@ function useRegisteredCommands(
     extensionsCommand,
     {
       ...useUtilityCommands(args.config, args.settings, args.addItem),
+      ...useResourceCommands(
+        args.config,
+        args.settings,
+        args.addItem,
+        setPendingItem,
+      ),
       ...usePresentationCommands(
         args.agent,
         args.config,
@@ -823,13 +815,4 @@ export function useSlashCommandProcessorCore(
     commandContext,
     cancelActiveSlashCommand: cancellation.cancelActiveSlashCommand,
   };
-}
-
-function useRegisteredCommandReload() {
-  const reloadCommandsRef = useRef<() => void>(() => {});
-  const reloadRegisteredCommands = useCallback(
-    () => reloadCommandsRef.current(),
-    [],
-  );
-  return { reloadCommandsRef, reloadRegisteredCommands };
 }

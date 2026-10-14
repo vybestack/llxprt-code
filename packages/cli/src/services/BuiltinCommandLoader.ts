@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { join } from 'node:path';
 import { isDevelopment } from '../utils/installationInfo.js';
 import type {
   SlashCommand,
@@ -28,7 +27,6 @@ import { mouseCommand } from '../ui/commands/mouseCommand.js';
 import { quitCommand } from '../ui/commands/quitCommand.js';
 import { themeCommand } from '../ui/commands/themeCommand.js';
 
-import { skillsCommand } from '../ui/commands/skillsCommand.js';
 import { settingsCommand } from '../ui/commands/settingsCommand.js';
 import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
 import { diagnosticsCommand } from '../ui/commands/diagnosticsCommand.js';
@@ -37,7 +35,6 @@ import { debugCommand } from '../ui/commands/debugCommands.js';
 import { permissionsCommand } from '../ui/commands/permissionsCommand.js';
 
 import { setupCommand } from '../ui/commands/setupCommand.js';
-import { createPerfCommand } from '../ui/commands/perfCommand.js';
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P21
  */
@@ -47,6 +44,8 @@ import { createPerfCommand } from '../ui/commands/perfCommand.js';
  * of the LLxprt Code application.
  */
 export interface BuiltinCommandOwners {
+  readonly skillsCommand: SlashCommand;
+  readonly perfCommand: SlashCommand;
   readonly statsCommand: SlashCommand;
   readonly loggingCommand: SlashCommand;
   readonly aboutCommand: SlashCommand;
@@ -205,12 +204,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
        * @plan PLAN-20260214-SESSIONBROWSER.P21
        */
       this.owners.continueCommand,
-      createPerfCommand({
-        snapshotCapability: this.config?.getPerfSnapshotCapability?.() ?? null,
-        tokenUsageDir: this.config
-          ? join(this.config.getProjectTempDir(), 'token-usage')
-          : undefined,
-      }),
+      this.owners.perfCommand,
     ];
 
     return allDefinitions.filter((cmd): cmd is SlashCommand => cmd !== null);
@@ -243,6 +237,6 @@ export class BuiltinCommandLoader implements ICommandLoader {
         },
       ];
     }
-    return [skillsCommand];
+    return [this.owners.skillsCommand];
   }
 }

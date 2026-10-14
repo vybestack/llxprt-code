@@ -14,8 +14,14 @@ import { createPerfCommand } from './perfCommand.js';
 import type { CommandContext, SlashCommand } from './types.js';
 import type { IContent } from '@vybestack/llxprt-code-core';
 
-function memorySubCommand(): SlashCommand {
-  const command = createPerfCommand({ perfDir: '/tmp/perf-memory-test' });
+function memorySubCommand(context?: CommandContext): SlashCommand {
+  const command = createPerfCommand({
+    perfDir: '/tmp/perf-memory-test',
+    readHistory: () =>
+      context?.services.agent?.agentClient
+        .getHistoryService()
+        ?.getRawHistory() ?? null,
+  });
   const sub = command.subCommands?.find((s) => s.name === 'memory');
   if (sub === undefined) {
     throw new Error('/perf memory subcommand is not registered');
@@ -78,14 +84,20 @@ describe('/perf memory', () => {
         ],
       },
     ];
-    const output = await run(memorySubCommand(), contextWithHistory(history));
+    const output = await run(
+      memorySubCommand(contextWithHistory(history)),
+      contextWithHistory(history),
+    );
     expect(output).toContain('History Memory');
     expect(output).toContain('read_file');
     expect(output).toContain('across 1 history items');
   });
 
   it('says history is empty rather than printing an empty table', async () => {
-    const output = await run(memorySubCommand(), contextWithHistory([]));
+    const output = await run(
+      memorySubCommand(contextWithHistory([])),
+      contextWithHistory([]),
+    );
     expect(output).toContain('History is empty.');
   });
 
@@ -93,7 +105,7 @@ describe('/perf memory', () => {
     const context = {
       services: { config: null },
     } as unknown as CommandContext;
-    const output = await run(memorySubCommand(), context);
+    const output = await run(memorySubCommand(context), context);
     expect(output).toContain('History is not available');
   });
 
@@ -108,14 +120,17 @@ describe('/perf memory', () => {
         config: {},
       },
     } as unknown as CommandContext;
-    const output = await run(memorySubCommand(), context);
+    const output = await run(memorySubCommand(context), context);
     expect(output).toContain('History is not available');
   });
 
   it('does not require perf telemetry to be enabled', async () => {
     // createPerfCommand is constructed with no snapshotCapability, i.e. perf
     // telemetry off. The memory view reads live state, so it still works.
-    const command = createPerfCommand({ perfDir: '/tmp/perf-memory-test' });
+    const command = createPerfCommand({
+      perfDir: '/tmp/perf-memory-test',
+      readHistory: () => [],
+    });
     const sub = command.subCommands?.find((s) => s.name === 'memory');
     expect(sub).toBeDefined();
     const output = await run(requireSubcommand(sub), contextWithHistory([]));

@@ -200,6 +200,7 @@ describe('Finding C — production /perf report wiring', () => {
     };
 
     const cmd = createPerfCommand({
+      readHistory: () => null,
       perfDir,
       operations: capturingOps,
       snapshotCapability: capability,
@@ -227,7 +228,11 @@ describe('Finding C — production /perf report wiring', () => {
     ]);
 
     // No snapshotCapability: self-health is undefined → "unavailable".
-    const cmd = createPerfCommand({ perfDir, tokenUsageDir: tokenDir });
+    const cmd = createPerfCommand({
+      readHistory: () => null,
+      perfDir,
+      tokenUsageDir: tokenDir,
+    });
     const reportSub = cmd.subCommands!.find((s) => s.name === 'report')!;
     const result = await reportSub.action!({} as never, '');
 
@@ -254,6 +259,7 @@ describe('Finding C — production /perf report wiring', () => {
     };
 
     const cmd = createPerfCommand({
+      readHistory: () => null,
       perfDir,
       snapshotCapability: capability,
       tokenUsageDir: tokenDir,
@@ -283,6 +289,7 @@ describe('Finding C — production /perf report wiring', () => {
     };
 
     const cmd = createPerfCommand({
+      readHistory: () => null,
       perfDir,
       snapshotCapability: capability,
       tokenUsageDir: tokenDir,
@@ -330,7 +337,11 @@ describe('Finding C — production /perf report wiring', () => {
 
     // Use the DEFAULT production operations (real buildReport) with a real
     // token-usage directory. This is NOT a helper-only test.
-    const cmd = createPerfCommand({ perfDir, tokenUsageDir: tokenDir });
+    const cmd = createPerfCommand({
+      readHistory: () => null,
+      perfDir,
+      tokenUsageDir: tokenDir,
+    });
     const reportSub = cmd.subCommands!.find((s) => s.name === 'report')!;
     const result = await reportSub.action!({} as never, '');
 
@@ -350,7 +361,7 @@ describe('Finding C — production /perf report wiring', () => {
       ),
     ]);
 
-    const cmd = createPerfCommand({ perfDir });
+    const cmd = createPerfCommand({ readHistory: () => null, perfDir });
     const reportSub = cmd.subCommands!.find((s) => s.name === 'report')!;
     const result = await reportSub.action!({} as never, '');
 
@@ -383,7 +394,11 @@ describe('Finding C — production /perf report wiring', () => {
       },
     };
 
-    const cmd = createPerfCommand({ perfDir, operations: capturingOps });
+    const cmd = createPerfCommand({
+      readHistory: () => null,
+      perfDir,
+      operations: capturingOps,
+    });
     const reportSub = cmd.subCommands!.find((s) => s.name === 'report')!;
     await reportSub.action!({} as never, '');
 
