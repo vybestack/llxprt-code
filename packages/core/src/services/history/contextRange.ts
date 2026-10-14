@@ -115,29 +115,72 @@ function deriveRewoundSpan(
  * @requirement REQ-854-004
  */
 export function computeContextRange(history: Iterable<IContent>): ContextRange {
-  let firstSeq = 0;
-  let lastSeq = 0;
-  let totalEntries = 0;
-  let approximate = false;
-  let removedInterior: RemovedInteriorSpan[] = [];
-  for (const entry of history) {
+  const accumulator = new ContextRangeAccumulator();
+  for (const entry of history) accumulator.add(entry);
+  return accumulator.range();
+}
+
+/**
+ * Running form of {@link computeContextRange}: entries are added one at a
+ * time, so a full scan and an incremental one apply the same rules. The state
+ * is the boundary plus the merged compressed spans, whatever the length.
+ */
+export class ContextRangeAccumulator {
+  private firstSeq = 0;
+  private lastSeq = 0;
+  private totalEntries = 0;
+  private approximate = false;
+  private removedInterior: RemovedInteriorSpan[] = [];
+
+  add(entry: IContent): void {
     const seq = entry.metadata?.chronology?.seq ?? 0;
-    if (totalEntries === 0) firstSeq = seq;
-    lastSeq = seq;
-    totalEntries++;
+    if (this.totalEntries === 0) this.firstSeq = seq;
+    this.lastSeq = seq;
+    this.totalEntries++;
     if (entry.metadata?.chronology === undefined) {
-      approximate = true;
-      removedInterior = [];
+      this.approximate = true;
+      this.removedInterior = [];
     }
     const replaced = entry.metadata?.chronologyReplaced;
-    if (!approximate && replaced !== undefined) {
-      removedInterior = mergeRemovedInteriorSpans([
-        ...removedInterior,
+    if (!this.approximate && replaced !== undefined) {
+      this.removedInterior = mergeRemovedInteriorSpans([
+        ...this.removedInterior,
         { start: replaced.fromSeq, end: replaced.toSeq, reason: 'compressed' },
       ]);
     }
   }
-  return { firstSeq, lastSeq, totalEntries, removedInterior, approximate };
+
+  clone(): ContextRangeAccumulator {
+    const copy = new ContextRangeAccumulator();
+    copy.firstSeq = this.firstSeq;
+    copy.lastSeq = this.lastSeq;
+    copy.totalEntries = this.totalEntries;
+    copy.approximate = this.approximate;
+    copy.removedInterior = this.removedInterior.map((span) => ({ ...span }));
+    return copy;
+  }
+
+  range(): ContextRange {
+    return {
+      firstSeq: this.firstSeq,
+      lastSeq: this.lastSeq,
+      totalEntries: this.totalEntries,
+      removedInterior: this.removedInterior.map((span) => ({ ...span })),
+      approximate: this.approximate,
+    };
+  }
+
+  /** The boundary joined with the cumulative spans accumulated by mutations. */
+  snapshot(accumulatedSpans: readonly RemovedInteriorSpan[]): ContextRange {
+    const derived = this.range();
+    return {
+      ...derived,
+      removedInterior: mergeRemovedInteriorSpans([
+        ...accumulatedSpans,
+        ...derived.removedInterior,
+      ]),
+    };
+  }
 }
 
 /**
@@ -208,17 +251,9 @@ export function buildContextRangeSnapshot(
   history: Iterable<IContent>,
   accumulatedSpans: readonly RemovedInteriorSpan[],
 ): ContextRange {
-  const derived = computeContextRange(history);
-  return {
-    firstSeq: derived.firstSeq,
-    lastSeq: derived.lastSeq,
-    totalEntries: derived.totalEntries,
-    removedInterior: mergeRemovedInteriorSpans([
-      ...accumulatedSpans,
-      ...derived.removedInterior,
-    ]),
-    approximate: derived.approximate,
-  };
+  const accumulator = new ContextRangeAccumulator();
+  for (const entry of history) accumulator.add(entry);
+  return accumulator.snapshot(accumulatedSpans);
 }
 
 /**

@@ -76,13 +76,19 @@ function scanPrefix(
   signal?.throwIfAborted();
 }
 
+/**
+ * Fold the pinned durable bytes, then the pending overlay unless
+ * `pendingOverlay` is false. Returns whether a replace transaction was still
+ * open at the durable tail, before it was abandoned.
+ */
 function foldSnapshot(
   snapshot: PendingFoldSnapshot,
   directory: MutableRowDirectory,
   staged: ResolverDiskIndex,
   density: DurableDensityIndex,
   signal?: AbortSignal,
-): void {
+  pendingOverlay = true,
+): boolean {
   const tx = new ReplaceTransactionFold();
   if (snapshot.durableTail > 0) {
     const journal = snapshot.pinnedJournal;
@@ -119,14 +125,20 @@ function foldSnapshot(
       signal,
     );
   }
-  for (let slot = 0; slot < snapshot.pendingLength; slot++) {
+  const openAtDurableTail = tx.open !== null;
+  for (let slot = 0; pendingOverlay && slot < snapshot.pendingLength; slot++) {
     signal?.throwIfAborted();
     applyPending(directory, snapshot.pending.read(slot).op, slot, tx);
   }
   tx.abandon(directoryRowStore(directory));
+  return openAtDurableTail;
 }
 
-function readRow(snapshot: PendingFoldSnapshot, row: NumericRow): IContent {
+/** Decode the one addressed row of a pinned snapshot. */
+export function readSnapshotRow(
+  snapshot: PendingFoldSnapshot,
+  row: NumericRow,
+): IContent {
   if (row.source === 'pending') {
     if (row.pendingSlot >= snapshot.pendingLength)
       throw new Error('Pending cursor slot changed');
@@ -217,7 +229,7 @@ class SynchronousHistoryCursor implements HistoryReadCursor {
       index += step
     ) {
       this.check();
-      const row = readRow(this.snapshot, this.directory.rowAt(index));
+      const row = readSnapshotRow(this.snapshot, this.directory.rowAt(index));
       this.counters?.rowDecoded();
       try {
         this.counters?.ownership?.retain(row);
@@ -256,6 +268,72 @@ export function withSynchronousHistoryCursor<T>(
     return executePinnedCursor(snapshot, execute, counters, signal);
   } finally {
     snapshot.release();
+  }
+}
+
+/** Receives each decoded row with its directory entry; the row is borrowed for the call. */
+export type SnapshotRowVisitor = (content: IContent, row: NumericRow) => void;
+
+/** Decode `rows` one at a time under the read counters; nothing is retained. */
+export function visitSnapshotRows(
+  snapshot: PendingFoldSnapshot,
+  rows: Iterable<NumericRow>,
+  counters: JournalReadCounters | undefined,
+  visit: SnapshotRowVisitor,
+): void {
+  for (const row of rows) {
+    const content = readSnapshotRow(snapshot, row);
+    counters?.rowDecoded();
+    try {
+      counters?.ownership?.retain(content);
+      try {
+        visit(content, row);
+      } finally {
+        counters?.ownership?.release(content);
+      }
+    } finally {
+      counters?.rowReleased();
+    }
+  }
+}
+
+/**
+ * Fold a snapshot from byte zero and visit every row in order. Without the
+ * pending overlay the rows are exactly the durable prefix; the result says
+ * whether a replace transaction was still open at its tail, which a later
+ * incremental scan could not resume.
+ */
+export function scanSnapshotRows(
+  snapshot: PendingFoldSnapshot,
+  pendingOverlay: boolean,
+  counters: JournalReadCounters | undefined,
+  visit: SnapshotRowVisitor,
+): { readonly openTransaction: boolean } {
+  const directory = new MutableRowDirectory();
+  try {
+    let openTransaction: boolean;
+    const staged = new ResolverDiskIndex();
+    try {
+      const density = new DurableDensityIndex();
+      try {
+        openTransaction = foldSnapshot(
+          snapshot,
+          directory,
+          staged,
+          density,
+          undefined,
+          pendingOverlay,
+        );
+      } finally {
+        density.close();
+      }
+    } finally {
+      staged.close();
+    }
+    visitSnapshotRows(snapshot, directory.rows(), counters, visit);
+    return { openTransaction };
+  } finally {
+    directory.close();
   }
 }
 

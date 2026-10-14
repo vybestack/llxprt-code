@@ -40,10 +40,7 @@ import type { SessionRecordingService } from '../../recording/SessionRecordingSe
 import { isDeepStrictEqual } from 'node:util';
 import type { IContent, ToolResponseBlock } from './IContent.js';
 import { estimateContentTokens as estimateContentTokensImpl } from './historyTokenEstimation.js';
-import {
-  computeStatistics,
-  type ConversationStatistics,
-} from './curationDebugLogger.js';
+import type { ConversationStatistics } from './curationDebugLogger.js';
 export type { ToolPairingStreamOptions } from './historyToolPairing.js';
 import { isCuratedContent } from './historyCuration.js';
 import { streamProviderContentSnapshot } from './provider-request-snapshot.js';
@@ -924,9 +921,7 @@ export class HistoryService extends HistoryServiceReads {
    * Get conversation statistics
    */
   getStatistics(): ConversationStatistics {
-    return this.journal.withReadRows((cursor) =>
-      computeStatistics(cursor.rows()),
-    );
+    return this.journal.withRowSummary((summary) => summary.statistics());
   }
 
   /**

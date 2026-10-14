@@ -73,7 +73,6 @@ import {
   type ContextSummaryInfo,
 } from './historyEventTypes.js';
 import {
-  buildContextRangeSnapshot,
   contextSummaryOfEntry,
   firstEntryContextRange,
 } from './contextRange.js';
@@ -890,8 +889,8 @@ export abstract class HistoryServiceCore
    * @requirement REQ-854-004
    */
   getContextRange(): ContextRange {
-    return this.journal.withReadRows((cursor) =>
-      buildContextRangeSnapshot(cursor.rows(), this.spanWindow.get()),
+    return this.journal.withRowSummary((summary) =>
+      summary.contextRange(this.spanWindow.get()),
     );
   }
 

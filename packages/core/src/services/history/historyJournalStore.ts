@@ -105,6 +105,10 @@ import {
   parseFoldEvents,
 } from './historyJournalFold.js';
 import { DurableFoldCheckpoint } from '../../recording/durableFoldCheckpoint.js';
+import {
+  HistorySummaryTracker,
+  type HistoryRowSummary,
+} from './historySummaryTracker.js';
 import { HistoryPendingTickets } from './history-pending-tickets.js';
 import { HistoryFanoutFeed } from './historyFanoutFeed.js';
 import { HistoryRecorderFanout } from './historyRecorderFanout.js';
@@ -218,6 +222,7 @@ export class HistoryJournalStore {
   private disposal: Promise<void> | undefined;
   private readonly publicationOrdinals = new HistoryPublicationOrdinals();
   private readonly foldCheckpoint = new DurableFoldCheckpoint();
+  private readonly summaryTracker = new HistorySummaryTracker();
 
   constructor(
     recording?: SessionRecordingService,
@@ -444,6 +449,22 @@ export class HistoryJournalStore {
       this.attachmentCounters,
       signal,
     );
+  }
+
+  /**
+   * Scalar queries (statistics, context boundary, newest row) over a pinned
+   * snapshot. Appended rows are folded into a saved state; see
+   * {@link HistorySummaryTracker}. The summary is valid only inside `read`.
+   */
+  withRowSummary<T>(read: (summary: HistoryRowSummary) => T): T {
+    const snapshot = this.capturePendingFold();
+    try {
+      return read(
+        this.summaryTracker.summarize(snapshot, this.attachmentCounters),
+      );
+    } finally {
+      snapshot.release();
+    }
   }
 
   getLength(): number {
@@ -825,6 +846,7 @@ export class HistoryJournalStore {
   private async release(): Promise<void> {
     this.disposed = true;
     this.foldCheckpoint.dispose();
+    this.summaryTracker.dispose();
     const binding = this.binding;
     retireHistoryPending(binding);
     const steps = new DisposalSteps();

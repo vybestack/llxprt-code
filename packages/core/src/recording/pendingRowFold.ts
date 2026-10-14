@@ -54,7 +54,11 @@ function pendingOwnerCount(op: HistoryJournalOp): number {
   }
 }
 
-function pendingRow(content: IContent, slot: number, offset = 0): NumericRow {
+export function pendingRow(
+  content: IContent,
+  slot: number,
+  offset = 0,
+): NumericRow {
   const marker = content.metadata?.chronology?.seq;
   if (marker !== undefined && !validSeq(marker))
     throw new UnsupportedDurableFoldEvent('non_numeric_chronology');

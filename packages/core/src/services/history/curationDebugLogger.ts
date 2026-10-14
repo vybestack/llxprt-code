@@ -164,47 +164,64 @@ export function logQueuedDuringCompression(
   });
 }
 
-/** Compute conversation statistics from a history array. */
-export function computeStatistics(
-  history: Iterable<IContent>,
-): ConversationStatistics {
-  let userMessages = 0;
-  let aiMessages = 0;
-  let toolCalls = 0;
-  let toolResponses = 0;
-  let totalTokens = 0;
-  let hasTokens = false;
-  let totalMessages = 0;
+/**
+ * Running conversation statistics. Rows are added one at a time, so the same
+ * rule serves a full scan and an incremental one; the state is a handful of
+ * counters whatever the history length.
+ */
+export class StatisticsAccumulator {
+  private totalMessages = 0;
+  private userMessages = 0;
+  private aiMessages = 0;
+  private toolCalls = 0;
+  private toolResponses = 0;
+  private totalTokens = 0;
+  private hasTokens = false;
 
-  for (const content of history) {
-    totalMessages++;
+  add(content: IContent): void {
+    this.totalMessages++;
     if (content.speaker === 'human') {
-      userMessages++;
+      this.userMessages++;
     } else if (content.speaker === 'ai') {
-      aiMessages++;
+      this.aiMessages++;
     }
 
     for (const block of content.blocks) {
       if (block.type === 'tool_call') {
-        toolCalls++;
+        this.toolCalls++;
       } else if (block.type === 'tool_response') {
-        toolResponses++;
+        this.toolResponses++;
       }
     }
 
     const usageTokens = content.metadata?.usage?.totalTokens;
     if (typeof usageTokens === 'number' && Number.isFinite(usageTokens)) {
-      totalTokens += usageTokens;
-      hasTokens = true;
+      this.totalTokens += usageTokens;
+      this.hasTokens = true;
     }
   }
 
-  return {
-    totalMessages,
-    userMessages,
-    aiMessages,
-    toolCalls,
-    toolResponses,
-    totalTokens: hasTokens ? totalTokens : undefined,
-  };
+  clone(): StatisticsAccumulator {
+    return Object.assign(new StatisticsAccumulator(), this);
+  }
+
+  statistics(): ConversationStatistics {
+    return {
+      totalMessages: this.totalMessages,
+      userMessages: this.userMessages,
+      aiMessages: this.aiMessages,
+      toolCalls: this.toolCalls,
+      toolResponses: this.toolResponses,
+      totalTokens: this.hasTokens ? this.totalTokens : undefined,
+    };
+  }
+}
+
+/** Compute conversation statistics from a history array. */
+export function computeStatistics(
+  history: Iterable<IContent>,
+): ConversationStatistics {
+  const accumulator = new StatisticsAccumulator();
+  for (const content of history) accumulator.add(content);
+  return accumulator.statistics();
 }

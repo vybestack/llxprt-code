@@ -1,5 +1,6 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createHash } from 'node:crypto';
+import { readSync } from 'node:fs';
 import type { ResolverFileHandle } from './journalResolver.js';
 import type { MutableRowDirectory } from './mutableRowDirectory.js';
 
@@ -63,8 +64,36 @@ async function tailDigest(
       throw new Error('Durable journal truncated below pinned watermark');
     filled += read;
   }
-  if (buffer[length - 1] !== NEWLINE) return null;
+  return newlineTerminatedDigest(buffer);
+}
+
+function newlineTerminatedDigest(buffer: Buffer): string | null {
+  if (buffer[buffer.length - 1] !== NEWLINE) return null;
   return createHash('sha256').update(buffer).digest('hex');
+}
+
+/**
+ * Synchronous {@link tailDigest} over a pinned descriptor, for callers that
+ * resume an incremental scan without awaiting. Reads at most 4 KiB.
+ */
+export function tailDigestSync(fd: number, watermark: number): string | null {
+  const length = Math.min(watermark, TAIL_DIGEST_BYTES);
+  if (length === 0) return null;
+  const buffer = Buffer.alloc(length);
+  let filled = 0;
+  while (filled < length) {
+    const read = readSync(
+      fd,
+      buffer,
+      filled,
+      length - filled,
+      watermark - length + filled,
+    );
+    if (read === 0)
+      throw new Error('Durable journal truncated below pinned watermark');
+    filled += read;
+  }
+  return newlineTerminatedDigest(buffer);
 }
 
 /**
