@@ -12,44 +12,60 @@ interface SyscallCounts {
   readonly reset: () => void;
 }
 
+type Role = 'index' | 'values';
+
+function roleOfPath(path: string): Role | undefined {
+  if (path.endsWith('/values')) return 'values';
+  if (path.endsWith('/index') || path.endsWith('/index-next')) return 'index';
+  return undefined;
+}
+
 function countSyscalls(): SyscallCounts {
-  const roles = new Map<number, 'index' | 'values'>();
-  const originalOpen = fs.openSync;
-  const originalRead = fs.readSync;
-  const originalWrite = fs.writeSync;
-  const counts = { index: 0, values: 0 };
-  vi.spyOn(fs, 'openSync').mockImplementation((path, flags, mode) => {
-    const fd = originalOpen(path, flags, mode);
-    const name = String(path);
-    if (name.endsWith('/values')) roles.set(fd, 'values');
-    else if (name.endsWith('/index') || name.endsWith('/index-next'))
-      roles.set(fd, 'index');
-    return fd;
-  });
-  const tally = (fd: number): void => {
-    const role = roles.get(fd);
-    if (role !== undefined) counts[role]++;
+  // The spies call through to the real implementations; counts are derived
+  // from the recorded calls at assertion time. Descriptor numbers are reused
+  // after close, so each read/write is attributed to the latest preceding
+  // open that returned the same descriptor.
+  const openSpy = vi.spyOn(fs, 'openSync');
+  const readSpy = vi.spyOn(fs, 'readSync');
+  const writeSpy = vi.spyOn(fs, 'writeSync');
+  const skipped = { read: 0, write: 0 };
+  const opened = (): Array<{ order: number; fd: number; role?: Role }> =>
+    openSpy.mock.calls.flatMap((call, position) => {
+      const result = openSpy.mock.results[position];
+      if (result.type !== 'return') return [];
+      return [
+        {
+          order: openSpy.mock.invocationCallOrder[position],
+          fd: result.value,
+          role: roleOfPath(String(call[0])),
+        },
+      ];
+    });
+  const tally = (
+    spy: typeof readSpy | typeof writeSpy,
+    skip: number,
+  ): Record<Role, number> => {
+    const opens = opened();
+    const counts = { index: 0, values: 0 };
+    spy.mock.calls.slice(skip).forEach((call, offset) => {
+      const order = spy.mock.invocationCallOrder[skip + offset];
+      const owner = opens
+        .filter((open) => open.fd === call[0] && open.order < order)
+        .reduce<
+          (typeof opens)[number] | undefined
+        >((_, open) => open, undefined);
+      if (owner?.role !== undefined) counts[owner.role]++;
+    });
+    return counts;
   };
-  vi.spyOn(fs, 'readSync').mockImplementation(((
-    fd: number,
-    ...rest: never[]
-  ) => {
-    tally(fd);
-    return originalRead(fd, ...rest);
-  }) as typeof fs.readSync);
-  vi.spyOn(fs, 'writeSync').mockImplementation(((
-    fd: number,
-    ...rest: never[]
-  ) => {
-    tally(fd);
-    return originalWrite(fd, ...rest);
-  }) as typeof fs.writeSync);
+  const total = (role: Role): number =>
+    tally(readSpy, skipped.read)[role] + tally(writeSpy, skipped.write)[role];
   return {
-    index: () => counts.index,
-    values: () => counts.values,
+    index: () => total('index'),
+    values: () => total('values'),
     reset: () => {
-      counts.index = 0;
-      counts.values = 0;
+      skipped.read = readSpy.mock.calls.length;
+      skipped.write = writeSpy.mock.calls.length;
     },
   };
 }

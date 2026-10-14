@@ -5,22 +5,35 @@ import { DetachedHistoryJournal } from './detachedHistoryJournal.js';
 import { detachedRow } from './detached-rollback-test-helpers.js';
 
 function journalWrites(): { count: () => number } {
-  const descriptors = new Set<number>();
-  const originalOpen = fs.openSync;
-  const originalWrite = fs.writeSync;
-  let writes = 0;
-  vi.spyOn(fs, 'openSync').mockImplementation((path, flags, mode) => {
-    const fd = originalOpen(path, flags, mode);
-    if (String(path).includes('history-detached-')) descriptors.add(fd);
-    return fd;
-  });
-  vi.spyOn(fs, 'writeSync').mockImplementation(
-    (fd: number, data: NodeJS.ArrayBufferView, ...rest: number[]): number => {
-      if (descriptors.has(fd)) writes++;
-      return originalWrite(fd, data, ...rest);
+  // Call-through spies; counts are read from the recorded calls at assertion
+  // time. Descriptor numbers are reused after close, so each write is
+  // attributed to the latest preceding open that returned its descriptor.
+  const openSpy = vi.spyOn(fs, 'openSync');
+  const writeSpy = vi.spyOn(fs, 'writeSync');
+  return {
+    count: () => {
+      const opens = openSpy.mock.calls.flatMap((call, position) => {
+        const result = openSpy.mock.results[position];
+        if (result.type !== 'return') return [];
+        return [
+          {
+            order: openSpy.mock.invocationCallOrder[position],
+            fd: result.value,
+            tracked: String(call[0]).includes('history-detached-'),
+          },
+        ];
+      });
+      return writeSpy.mock.calls.filter((call, position) => {
+        const order = writeSpy.mock.invocationCallOrder[position];
+        const owner = opens
+          .filter((open) => open.fd === call[0] && open.order < order)
+          .reduce<
+            (typeof opens)[number] | undefined
+          >((_, open) => open, undefined);
+        return owner?.tracked === true;
+      }).length;
     },
-  );
-  return { count: () => writes };
+  };
 }
 
 describe('detached journal buffered appends', () => {
