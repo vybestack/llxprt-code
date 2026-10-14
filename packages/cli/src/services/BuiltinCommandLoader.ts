@@ -46,10 +46,7 @@ import { debugCommand } from '../ui/commands/debugCommands.js';
 import { subagentCommand } from '../ui/commands/subagentCommand.js';
 import { permissionsCommand } from '../ui/commands/permissionsCommand.js';
 
-import { todoCommand } from '../ui/commands/todoCommand.js';
 import { setupCommand } from '../ui/commands/setupCommand.js';
-import { tasksCommands } from '../ui/commands/tasksCommand.js';
-import { hooksCommand } from '../ui/commands/hooksCommand.js';
 import { createPerfCommand } from '../ui/commands/perfCommand.js';
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P21
@@ -60,6 +57,9 @@ import { createPerfCommand } from '../ui/commands/perfCommand.js';
  * of the LLxprt Code application.
  */
 export interface BuiltinCommandOwners {
+  readonly hooksCommand: SlashCommand;
+  readonly taskCommand: SlashCommand;
+  readonly todoCommand: SlashCommand;
   readonly modelCommand: SlashCommand;
   readonly toolFormatCommand: SlashCommand;
   readonly setCommand: SlashCommand;
@@ -196,10 +196,12 @@ export class BuiltinCommandLoader implements ICommandLoader {
       permissionsCommand,
       this.owners.policiesCommand,
       this.owners.dumpcontextCommand,
-      todoCommand,
+      this.owners.todoCommand,
       setupCommand,
-      ...tasksCommands,
-      ...(this.config?.getEnableHooksUI() === true ? [hooksCommand] : []),
+      this.owners.taskCommand,
+      ...(this.config?.getEnableHooksUI() === true
+        ? [this.owners.hooksCommand]
+        : []),
       /**
        * @plan PLAN-20260214-SESSIONBROWSER.P21
        */

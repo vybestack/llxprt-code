@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, vi } from 'bun:test';
-import { todoCommand } from './todoCommand.js';
+import { registerTodoCommand } from '../../__tests__/todo-command-test-owner.js';
 import type { CommandContext } from './types.js';
 import type { Todo } from '@vybestack/llxprt-code-core';
 import * as fc from 'fast-check';
@@ -80,7 +80,7 @@ describe('todoCommand', () => {
         { id: '2', content: 'Task 2', status: 'in_progress' },
       ]);
 
-      const clearSubcommand = todoCommand.subCommands?.find(
+      const clearSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'clear',
       );
       expect(clearSubcommand).toBeDefined();
@@ -103,7 +103,7 @@ describe('todoCommand', () => {
     it('handles clearing empty task list gracefully', async () => {
       const ctx = createMockContext([]);
 
-      const clearSubcommand = todoCommand.subCommands?.find(
+      const clearSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'clear',
       );
 
@@ -135,7 +135,7 @@ describe('todoCommand', () => {
         },
       ]);
 
-      const showSubcommand = todoCommand.subCommands?.find(
+      const showSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'show',
       );
 
@@ -161,7 +161,7 @@ describe('todoCommand', () => {
     it('displays message when task list is empty', async () => {
       const ctx = createMockContext([]);
 
-      const showSubcommand = todoCommand.subCommands?.find(
+      const showSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'show',
       );
 
@@ -189,7 +189,7 @@ describe('todoCommand', () => {
         { id: '3', content: 'Task 3', status: 'pending' },
       ]);
 
-      const addSubcommand = todoCommand.subCommands?.find(
+      const addSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'add',
       );
 
@@ -217,7 +217,7 @@ describe('todoCommand', () => {
         { id: '1', content: 'Task 1', status: 'pending' },
       ]);
 
-      const addSubcommand = todoCommand.subCommands?.find(
+      const addSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'add',
       );
 
@@ -253,7 +253,7 @@ describe('todoCommand', () => {
         },
       ]);
 
-      const addSubcommand = todoCommand.subCommands?.find(
+      const addSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'add',
       );
 
@@ -280,7 +280,7 @@ describe('todoCommand', () => {
         { id: '1', content: 'Task 1', status: 'pending' },
       ]);
 
-      const addSubcommand = todoCommand.subCommands?.find(
+      const addSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'add',
       );
 
@@ -303,7 +303,7 @@ describe('todoCommand', () => {
         },
       ]);
 
-      const addSubcommand = todoCommand.subCommands?.find(
+      const addSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'add',
       );
 
@@ -328,7 +328,7 @@ describe('todoCommand', () => {
         { id: '1', content: 'Task 1', status: 'pending' },
       ]);
 
-      const addSubcommand = todoCommand.subCommands?.find(
+      const addSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'add',
       );
 
@@ -361,7 +361,7 @@ describe('todoCommand', () => {
         { id: '3', content: 'Task 3', status: 'pending' },
       ]);
 
-      const removeSubcommand = todoCommand.subCommands?.find(
+      const removeSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'remove',
       );
 
@@ -400,7 +400,7 @@ describe('todoCommand', () => {
         },
       ]);
 
-      const removeSubcommand = todoCommand.subCommands?.find(
+      const removeSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'remove',
       );
 
@@ -436,7 +436,7 @@ describe('todoCommand', () => {
         },
       ]);
 
-      const removeSubcommand = todoCommand.subCommands?.find(
+      const removeSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'remove',
       );
 
@@ -463,7 +463,7 @@ describe('todoCommand', () => {
         },
       ]);
 
-      const removeSubcommand = todoCommand.subCommands?.find(
+      const removeSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'remove',
       );
 
@@ -493,7 +493,7 @@ describe('todoCommand', () => {
         { id: '5', content: 'Task 5', status: 'pending' },
       ]);
 
-      const removeSubcommand = todoCommand.subCommands?.find(
+      const removeSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'remove',
       );
 
@@ -524,7 +524,7 @@ describe('todoCommand', () => {
         { id: '3', content: 'Task 3', status: 'pending' },
       ]);
 
-      const removeSubcommand = todoCommand.subCommands?.find(
+      const removeSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'remove',
       );
 
@@ -553,7 +553,7 @@ describe('todoCommand', () => {
         { id: '3', content: 'Task 3', status: 'pending' },
       ]);
 
-      const removeSubcommand = todoCommand.subCommands?.find(
+      const removeSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'remove',
       );
 
@@ -586,7 +586,7 @@ describe('todoCommand', () => {
         { id: '5', content: 'Task 5', status: 'pending' },
       ]);
 
-      const removeSubcommand = todoCommand.subCommands?.find(
+      const removeSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'remove',
       );
 
@@ -615,7 +615,7 @@ describe('todoCommand', () => {
         { id: '3', content: 'Task 3', status: 'pending' },
       ]);
 
-      const removeSubcommand = todoCommand.subCommands?.find(
+      const removeSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'remove',
       );
 
@@ -665,7 +665,7 @@ describe('todoCommand', () => {
           async ([todos, start, end]) => {
             const ctx = createMockContext(todos as Todo[]);
 
-            const removeSubcommand = todoCommand.subCommands?.find(
+            const removeSubcommand = registerTodoCommand(ctx).subCommands?.find(
               (cmd) => cmd.name === 'remove',
             );
 
@@ -700,7 +700,7 @@ describe('todoCommand', () => {
         { id: '1', content: 'Task 1', status: 'pending' },
       ]);
 
-      const removeSubcommand = todoCommand.subCommands?.find(
+      const removeSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'remove',
       );
 

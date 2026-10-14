@@ -48,7 +48,7 @@ import { renderHook, waitFor } from '../../../__tests__/render.js';
 import { TodoProvider } from '../TodoProvider.js';
 import { useTodoContext } from '../TodoContext.js';
 import { createTodoObservationSubscription } from '../../../observation/jspWiring.js';
-import { todoCommand } from '../../commands/todoCommand.js';
+import { registerTodoCommand } from '../../../__tests__/todo-command-test-owner.js';
 import { shouldClearTodos } from '../../hooks/useTodoPausePreserver.js';
 import type { CommandContext } from '../../commands/types.js';
 
@@ -209,10 +209,13 @@ async function runSubcommand(
   name: string,
   args: string,
 ): Promise<string[]> {
-  const sub = todoCommand.subCommands?.find((c) => c.name === name);
+  const errors: string[] = [];
+  const context = commandContextFrom(live, errors);
+  const sub = registerTodoCommand(context).subCommands?.find(
+    (c) => c.name === name,
+  );
   const action = sub?.action;
   if (!action) throw new Error(`task subcommand "${name}" has no action`);
-  const errors: string[] = [];
   await act(async () => {
     // The action may be sync (most task operations) or async; normalize so a
     // sync return is awaited without an await-thenable lint violation.

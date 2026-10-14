@@ -16,12 +16,14 @@ import { createCompressCommand } from './compressCommand.js';
 import { bindCompressCommand } from './compressCommandHost.js';
 import { createPoliciesCommand } from './policiesCommand.js';
 import { bindPoliciesCommand } from './policiesCommandHost.js';
-import { taskCommand } from './tasksCommand.js';
+import {
+  registerTaskCommand,
+  registerHooksCommand,
+} from '../../__tests__/hook-task-command-test-owner.js';
 import {
   registerBaseurlCommand,
   registerLogoutCommand,
 } from '../../__tests__/credential-command-test-owner.js';
-import { hooksCommand } from './hooksCommand.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core';
 import { MessageType } from '../types.js';
 import type { CommandContext } from './types.js';
@@ -157,7 +159,9 @@ describe('tasksCommand — agent surface', () => {
       tasks: { list: listMock } as unknown as AgentTasksControl,
     });
 
-    const listSub = taskCommand.subCommands?.find((c) => c.name === 'list');
+    const listSub = registerTaskCommand(context).subCommands?.find(
+      (c) => c.name === 'list',
+    );
     expect(listSub).toBeDefined();
     await listSub!.action!(context, '');
 
@@ -185,7 +189,9 @@ describe('tasksCommand — agent surface', () => {
       } as unknown as AgentTasksControl,
     });
 
-    const endSub = taskCommand.subCommands?.find((c) => c.name === 'end');
+    const endSub = registerTaskCommand(context).subCommands?.find(
+      (c) => c.name === 'end',
+    );
     expect(endSub).toBeDefined();
     await endSub!.action!(context, 'coder-abc123');
 
@@ -293,7 +299,7 @@ describe('hooksCommand — agent surface', () => {
       hooks: { listHooks, enable } as unknown as AgentHookControl,
     });
 
-    const enableSub = hooksCommand.subCommands?.find(
+    const enableSub = registerHooksCommand(context).subCommands?.find(
       (c) => c.name === 'enable',
     );
     expect(enableSub).toBeDefined();
@@ -316,7 +322,7 @@ describe('hooksCommand — agent surface', () => {
       hooks: { listHooks, disable } as unknown as AgentHookControl,
     });
 
-    const disableSub = hooksCommand.subCommands?.find(
+    const disableSub = registerHooksCommand(context).subCommands?.find(
       (c) => c.name === 'disable',
     );
     expect(disableSub).toBeDefined();
@@ -338,7 +344,7 @@ describe('hooksCommand — agent surface', () => {
       hooks: { listHooks, setDisabledHooks } as unknown as AgentHookControl,
     });
 
-    const disableAllSub = hooksCommand.subCommands?.find(
+    const disableAllSub = registerHooksCommand(context).subCommands?.find(
       (c) => c.name === 'disable-all',
     );
     expect(disableAllSub).toBeDefined();
@@ -363,7 +369,7 @@ describe('hooksCommand — agent surface', () => {
       hooks: { listHooks, setDisabledHooks } as unknown as AgentHookControl,
     });
 
-    const enableAllSub = hooksCommand.subCommands?.find(
+    const enableAllSub = registerHooksCommand(context).subCommands?.find(
       (c) => c.name === 'enable-all',
     );
     expect(enableAllSub).toBeDefined();

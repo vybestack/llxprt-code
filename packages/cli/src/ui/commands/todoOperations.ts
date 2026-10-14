@@ -14,7 +14,7 @@ import * as path from 'path';
 import type { Todo } from '@vybestack/llxprt-code-core';
 import { Storage } from '@vybestack/llxprt-code-settings';
 import { MessageType } from '../types.js';
-import type { CommandContext } from './types.js';
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
 
 export const LIST_ITEM_LABEL = 'TO' + 'DO';
 
@@ -26,7 +26,12 @@ const RANGE_POSITION_SOURCE = '^(\\d+)-(\\d+)$';
 const SUBTASK_POSITION_PATTERN = new RegExp(SUBTASK_POSITION_SOURCE);
 const RANGE_POSITION_PATTERN = new RegExp(RANGE_POSITION_SOURCE);
 
-export type AddItemFn = CommandContext['ui']['addItem'];
+export type AddItemFn = UseHistoryManagerReturn['addItem'];
+
+export interface TodoCommandOperations {
+  readonly readTodos: () => Todo[];
+  readonly updateTodos: (todos: Todo[]) => void;
+}
 
 export function addError(ctx: AddItemFn, text: string): void {
   ctx({ type: MessageType.ERROR, text }, Date.now());
@@ -36,13 +41,12 @@ export function addInfo(ctx: AddItemFn, text: string): void {
   ctx({ type: MessageType.INFO, text }, Date.now());
 }
 
-export function requireTodoContext(
-  context: CommandContext,
-): context is CommandContext & {
-  todoContext: NonNullable<CommandContext['todoContext']>;
-} {
-  if (!context.todoContext) {
-    addError(context.ui.addItem, `${LIST_ITEM_LABEL} context not available`);
+export function requireTodoOperations(
+  operations: TodoCommandOperations | null,
+  addItem: AddItemFn,
+): operations is TodoCommandOperations {
+  if (operations === null) {
+    addError(addItem, `${LIST_ITEM_LABEL} context not available`);
     return false;
   }
   return true;
@@ -193,10 +197,6 @@ export function validateRange(
   return { start, end };
 }
 
-export type TodoContext = CommandContext & {
-  todoContext: NonNullable<CommandContext['todoContext']>;
-};
-
 /**
  * Parse saved task-list file content, handling both the current envelope
  * format ({ todos: [...], paused: boolean }) and the legacy bare-array
@@ -226,14 +226,14 @@ export function parseTodoFileContent(content: string): Todo[] {
  * Apply a status change to a single parent task and report the result.
  */
 export function applyStatusChange(
-  context: TodoContext,
+  operations: TodoCommandOperations,
+  addItem: AddItemFn,
   posStr: string,
   newStatus: 'in_progress' | 'pending',
   statusLabel: string,
 ): void {
-  const { todos } = context.todoContext;
+  const todos = operations.readTodos();
   const parsed = parsePosition(posStr, todos);
-  const addItem = context.ui.addItem;
 
   if (!validateExistingParent(addItem, parsed, todos, posStr)) return;
   if (!rejectSubtaskPosition(addItem, parsed)) return;
@@ -242,7 +242,7 @@ export function applyStatusChange(
   const todo = { ...newTodos[parsed.parentIndex], status: newStatus };
   newTodos[parsed.parentIndex] = todo;
 
-  context.todoContext.updateTodos(newTodos);
+  operations.updateTodos(newTodos);
   addInfo(
     addItem,
     `Set ${LIST_ITEM_LABEL} ${posStr} to ${statusLabel}: "${todo.content}"`,
@@ -253,13 +253,14 @@ export function applyStatusChange(
  * Add a subtask at a parsed position.
  */
 export function addSubtaskAtPosition(
-  context: TodoContext,
+  operations: TodoCommandOperations,
+  addItem: AddItemFn,
   parsed: ParsedPosition,
   posStr: string,
   description: string,
   newId: string,
 ): void {
-  const { todos } = context.todoContext;
+  const todos = operations.readTodos();
   const newTodos = [...todos];
   const parent = { ...newTodos[parsed.parentIndex] };
   parent.subtasks = parent.subtasks ? [...parent.subtasks] : [];
@@ -272,24 +273,22 @@ export function addSubtaskAtPosition(
   parent.subtasks.splice(parsed.subtaskIndex!, 0, newSubtask);
   newTodos[parsed.parentIndex] = parent;
 
-  context.todoContext.updateTodos(newTodos);
-  addInfo(
-    context.ui.addItem,
-    `Added subtask at position ${posStr}: "${description}"`,
-  );
+  operations.updateTodos(newTodos);
+  addInfo(addItem, `Added subtask at position ${posStr}: "${description}"`);
 }
 
 /**
  * Add a top-level task at a parsed position.
  */
 export function addTaskAtPosition(
-  context: TodoContext,
+  operations: TodoCommandOperations,
+  addItem: AddItemFn,
   parsed: ParsedPosition,
   posStr: string,
   description: string,
   newId: string,
 ): void {
-  const { todos } = context.todoContext;
+  const todos = operations.readTodos();
   const newTodo: Todo = {
     id: newId,
     content: description,
@@ -299,9 +298,9 @@ export function addTaskAtPosition(
   const newTodos = [...todos];
   newTodos.splice(parsed.parentIndex, 0, newTodo);
 
-  context.todoContext.updateTodos(newTodos);
+  operations.updateTodos(newTodos);
   addInfo(
-    context.ui.addItem,
+    addItem,
     `Added ${LIST_ITEM_LABEL} at position ${posStr}: "${description}"`,
   );
 }
@@ -310,12 +309,12 @@ export function addTaskAtPosition(
  * Remove a subtask at a parsed position.
  */
 export function removeSubtaskAtPosition(
-  context: TodoContext,
+  operations: TodoCommandOperations,
+  addItem: AddItemFn,
   parsed: ParsedPosition,
   posStr: string,
 ): void {
-  const { todos } = context.todoContext;
-  const addItem = context.ui.addItem;
+  const todos = operations.readTodos();
   const newTodos = [...todos];
   const parent = newTodos[parsed.parentIndex];
 
@@ -329,7 +328,7 @@ export function removeSubtaskAtPosition(
   clonedParent.subtasks.splice(parsed.subtaskIndex!, 1);
   newTodos[parsed.parentIndex] = clonedParent;
 
-  context.todoContext.updateTodos(newTodos);
+  operations.updateTodos(newTodos);
   addInfo(addItem, `Removed 1 ${LIST_ITEM_LABEL}(s)`);
 }
 
@@ -337,12 +336,12 @@ export function removeSubtaskAtPosition(
  * Remove a single parent task at a parsed position.
  */
 export function removeTaskAtPosition(
-  context: TodoContext,
+  operations: TodoCommandOperations,
+  addItem: AddItemFn,
   parsed: ParsedPosition,
   posStr: string,
 ): void {
-  const { todos } = context.todoContext;
-  const addItem = context.ui.addItem;
+  const todos = operations.readTodos();
 
   if (parsed.parentIndex >= todos.length) {
     addError(
@@ -354,7 +353,7 @@ export function removeTaskAtPosition(
 
   const newTodos = [...todos];
   newTodos.splice(parsed.parentIndex, 1);
-  context.todoContext.updateTodos(newTodos);
+  operations.updateTodos(newTodos);
   addInfo(addItem, `Removed 1 ${LIST_ITEM_LABEL}(s)`);
 }
 
@@ -362,11 +361,12 @@ export function removeTaskAtPosition(
  * Remove a range of tasks (1-based inclusive) and report the result.
  */
 export function removeRangeOfTasks(
-  context: TodoContext,
+  operations: TodoCommandOperations,
+  addItem: AddItemFn,
   start: number,
   end: number,
 ): void {
-  const { todos } = context.todoContext;
+  const todos = operations.readTodos();
   const newTodos = [...todos];
   let removeCount = 0;
   for (let i = end - 1; i >= start - 1; i--) {
@@ -374,8 +374,8 @@ export function removeRangeOfTasks(
     removeCount++;
   }
 
-  context.todoContext.updateTodos(newTodos);
-  addInfo(context.ui.addItem, `Removed ${removeCount} ${LIST_ITEM_LABEL}(s)`);
+  operations.updateTodos(newTodos);
+  addInfo(addItem, `Removed ${removeCount} ${LIST_ITEM_LABEL}(s)`);
 }
 
 export interface TodoSessionFile {
@@ -415,24 +415,21 @@ export function getTodoSessionFiles(): TodoSessionFile[] {
  * Delete all saved session files from disk.
  */
 export function deleteAllSessions(
-  context: CommandContext,
+  addItem: AddItemFn,
   files: ReadonlyArray<{ path: string }>,
 ): void {
   const count = files.length;
   files.forEach((file) => {
     fs.unlinkSync(file.path);
   });
-  addInfo(
-    context.ui.addItem,
-    `Deleted ${count} saved ${LIST_ITEM_LABEL} session(s)`,
-  );
+  addInfo(addItem, `Deleted ${count} saved ${LIST_ITEM_LABEL} session(s)`);
 }
 
 /**
  * Delete a range of saved session files (1-based inclusive).
  */
 export function deleteSessionRange(
-  context: CommandContext,
+  addItem: AddItemFn,
   files: ReadonlyArray<{ path: string }>,
   start: number,
   end: number,
@@ -443,7 +440,7 @@ export function deleteSessionRange(
     deleteCount++;
   }
   addInfo(
-    context.ui.addItem,
+    addItem,
     `Deleted ${deleteCount} saved ${LIST_ITEM_LABEL} session(s)`,
   );
 }
@@ -452,60 +449,61 @@ export function deleteSessionRange(
  * Delete a single saved session file (1-based).
  */
 export function deleteSingleSession(
-  context: CommandContext,
+  addItem: AddItemFn,
   files: ReadonlyArray<{ path: string }>,
   sessionNum: number,
 ): void {
   const selectedFile = files[sessionNum - 1];
   fs.unlinkSync(selectedFile.path);
-  addInfo(context.ui.addItem, `Deleted 1 saved ${LIST_ITEM_LABEL} session(s)`);
+  addInfo(addItem, `Deleted 1 saved ${LIST_ITEM_LABEL} session(s)`);
 }
 
 /**
  * Reset all todos to pending status.
  */
-export function undoAllTodos(context: TodoContext): void {
-  const { todos } = context.todoContext;
+export function undoAllTodos(
+  operations: TodoCommandOperations,
+  addItem: AddItemFn,
+): void {
+  const todos = operations.readTodos();
   const newTodos = todos.map((todo) => ({
     ...todo,
     status: 'pending' as const,
   }));
   const count = todos.length;
-  context.todoContext.updateTodos(newTodos);
-  addInfo(
-    context.ui.addItem,
-    `Reset ${count} ${LIST_ITEM_LABEL}(s) to pending`,
-  );
+  operations.updateTodos(newTodos);
+  addInfo(addItem, `Reset ${count} ${LIST_ITEM_LABEL}(s) to pending`);
 }
 
 /**
  * Reset a range of todos to pending status (1-based inclusive).
  */
 export function undoRangeOfTodos(
-  context: TodoContext,
+  operations: TodoCommandOperations,
+  addItem: AddItemFn,
   start: number,
   end: number,
 ): void {
-  const { todos } = context.todoContext;
+  const todos = operations.readTodos();
   const newTodos = [...todos];
   let resetCount = 0;
   for (let i = start - 1; i < end; i++) {
     newTodos[i] = { ...newTodos[i], status: 'pending' };
     resetCount++;
   }
-  context.todoContext.updateTodos(newTodos);
-  addInfo(
-    context.ui.addItem,
-    `Reset ${resetCount} ${LIST_ITEM_LABEL}(s) to pending`,
-  );
+  operations.updateTodos(newTodos);
+  addInfo(addItem, `Reset ${resetCount} ${LIST_ITEM_LABEL}(s) to pending`);
 }
 
 /**
  * Reset a single task at a parsed position to pending.
  */
-export function undoSingleTodo(context: TodoContext, posStr: string): void {
-  const { todos } = context.todoContext;
-  const addItem = context.ui.addItem;
+export function undoSingleTodo(
+  operations: TodoCommandOperations,
+  addItem: AddItemFn,
+  posStr: string,
+): void {
+  const todos = operations.readTodos();
   const parsed = parsePosition(posStr, todos);
 
   if (!validateExistingParent(addItem, parsed, todos, posStr)) return;
@@ -517,6 +515,6 @@ export function undoSingleTodo(context: TodoContext, posStr: string): void {
     status: 'pending',
   };
 
-  context.todoContext.updateTodos(newTodos);
+  operations.updateTodos(newTodos);
   addInfo(addItem, `Reset 1 ${LIST_ITEM_LABEL}(s) to pending`);
 }

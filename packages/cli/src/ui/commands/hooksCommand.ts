@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { type SlashCommand, CommandKind } from './types.js';
 import {
-  type CommandContext,
-  type SlashCommand,
-  CommandKind,
-} from './types.js';
-import { MessageType, type HistoryItemHooksList } from '../types.js';
+  MessageType,
+  type HistoryItemHooksList,
+  type HistoryItemWithoutId,
+} from '../types.js';
 import {
   type HookRegistryEntry,
   type HookEventName,
@@ -39,391 +39,163 @@ function mapHookInfoToEntries(hooks: readonly HookInfo[]): HookRegistryEntry[] {
   }));
 }
 
-/**
- * List all registered hooks
- */
-async function listHooks(context: CommandContext): Promise<void> {
-  const agent = context.services.agent;
-
-  if (agent) {
-    const agentHooks = agent.hooks.listHooks();
-    if (agentHooks.length === 0) {
-      context.ui.addItem(
-        {
-          type: MessageType.INFO,
-          text: 'No hooks registered.',
-        },
-        Date.now(),
-      );
-      return;
-    }
-    const historyItem: HistoryItemHooksList = {
-      type: MessageType.HOOKS_LIST,
-      hooks: mapHookInfoToEntries(agentHooks),
-    };
-    context.ui.addItem(historyItem);
-    return;
-  }
-
-  const { config } = context.services;
-  if (!config) {
-    context.ui.addItem(
-      {
-        type: MessageType.ERROR,
-        text: 'Configuration not loaded.',
-      },
-      Date.now(),
-    );
-    return;
-  }
-
-  context.ui.addItem(
-    {
-      type: MessageType.INFO,
-      text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
-    },
-    Date.now(),
-  );
+export interface HooksCommandOperations {
+  readonly isConfigured: boolean;
+  readonly isAvailable: boolean;
+  readonly listHooks: () => readonly HookInfo[];
+  readonly enable: (name: string) => void;
+  readonly disable: (name: string) => void;
+  readonly setDisabledHooks: (names: readonly string[]) => void;
 }
 
-/**
- * Check whether a hook with the given name is registered on the Agent surface.
- * Emits an error message via context.ui if not found.
- * Returns true if the hook exists, false otherwise.
- */
-function resolveAgentHook(
-  agent: NonNullable<CommandContext['services']['agent']>,
-  hookName: string,
-  context: CommandContext,
+type AddHookItem = (item: HistoryItemWithoutId, timestamp?: number) => void;
+
+function requireHookOwner(
+  operations: HooksCommandOperations,
+  addItem: AddHookItem,
 ): boolean {
-  const allHooks = agent.hooks.listHooks();
-  const found = allHooks.some((h) => h.name === hookName);
-  if (!found) {
-    context.ui.addItem(
-      {
-        type: MessageType.ERROR,
-        text: `Hook '${hookName}' not found.`,
-      },
-      Date.now(),
-    );
-    return false;
-  }
-  return true;
-}
-
-/**
- * Enable a hook by name
- */
-async function enableHook(
-  context: CommandContext,
-  hookName: string,
-): Promise<void> {
-  const { config } = context.services;
-  const agent = context.services.agent;
-
-  if (agent) {
-    if (!resolveAgentHook(agent, hookName, context)) {
-      return;
-    }
-    agent.hooks.enable(hookName);
-    context.ui.addItem(
-      {
-        type: MessageType.INFO,
-        text: `Enabled hook '${hookName}'.`,
-      },
-      Date.now(),
-    );
-    return;
-  }
-
-  if (!config) {
-    context.ui.addItem(
-      {
-        type: MessageType.ERROR,
-        text: 'Configuration not loaded.',
-      },
-      Date.now(),
-    );
-    return;
-  }
-
-  context.ui.addItem(
-    {
-      type: MessageType.INFO,
-      text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
-    },
-    Date.now(),
-  );
-}
-
-/**
- * Disable a hook by name
- */
-async function disableHook(
-  context: CommandContext,
-  hookName: string,
-): Promise<void> {
-  const { config } = context.services;
-  const agent = context.services.agent;
-
-  if (agent) {
-    if (!resolveAgentHook(agent, hookName, context)) {
-      return;
-    }
-    agent.hooks.disable(hookName);
-    context.ui.addItem(
-      {
-        type: MessageType.INFO,
-        text: `Disabled hook '${hookName}'.`,
-      },
-      Date.now(),
-    );
-    return;
-  }
-
-  if (!config) {
-    context.ui.addItem(
-      {
-        type: MessageType.ERROR,
-        text: 'Configuration not loaded.',
-      },
-      Date.now(),
-    );
-    return;
-  }
-
-  context.ui.addItem(
-    {
-      type: MessageType.INFO,
-      text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
-    },
-    Date.now(),
-  );
-}
-
-/**
- * Enable all hooks
- */
-async function enableAllHooks(context: CommandContext): Promise<void> {
-  const { config } = context.services;
-  const agent = context.services.agent;
-
-  if (agent) {
-    const allHooks = agent.hooks.listHooks();
-    if (allHooks.length === 0) {
-      context.ui.addItem(
-        {
+  if (operations.isAvailable) return true;
+  addItem(
+    operations.isConfigured
+      ? {
           type: MessageType.INFO,
-          text: 'No hooks registered.',
-        },
-        Date.now(),
-      );
-      return;
-    }
-    agent.hooks.setDisabledHooks([]);
-    context.ui.addItem(
-      {
-        type: MessageType.INFO,
-        text: `Enabled all ${allHooks.length} hook(s).`,
-      },
-      Date.now(),
-    );
-    await listHooks(context);
-    return;
-  }
-
-  if (!config) {
-    context.ui.addItem(
-      {
-        type: MessageType.ERROR,
-        text: 'Configuration not loaded.',
-      },
-      Date.now(),
-    );
-    return;
-  }
-
-  context.ui.addItem(
-    {
-      type: MessageType.INFO,
-      text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
-    },
+          text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
+        }
+      : { type: MessageType.ERROR, text: 'Configuration not loaded.' },
     Date.now(),
   );
+  return false;
 }
 
-/**
- * Disable all hooks
- */
-async function disableAllHooks(context: CommandContext): Promise<void> {
-  const { config } = context.services;
-  const agent = context.services.agent;
-
-  if (agent) {
-    const allHooks = agent.hooks.listHooks();
-    if (allHooks.length === 0) {
-      context.ui.addItem(
-        {
-          type: MessageType.INFO,
-          text: 'No hooks registered.',
-        },
-        Date.now(),
-      );
-      return;
-    }
-    const allHookNames = allHooks.map((h) => h.name);
-    agent.hooks.setDisabledHooks(allHookNames);
-    context.ui.addItem(
-      {
-        type: MessageType.INFO,
-        text: `Disabled all ${allHooks.length} hook(s).`,
-      },
-      Date.now(),
-    );
-    await listHooks(context);
-    return;
-  }
-
-  if (!config) {
-    context.ui.addItem(
-      {
-        type: MessageType.ERROR,
-        text: 'Configuration not loaded.',
-      },
+function listHooks(
+  operations: HooksCommandOperations,
+  addItem: AddHookItem,
+): void {
+  if (!requireHookOwner(operations, addItem)) return;
+  const hooks = operations.listHooks();
+  if (hooks.length === 0) {
+    addItem(
+      { type: MessageType.INFO, text: 'No hooks registered.' },
       Date.now(),
     );
     return;
   }
-
-  context.ui.addItem(
-    {
-      type: MessageType.INFO,
-      text: 'Hook execution requires an active Agent. Enable hooks in settings with hooksConfig.enabled.',
-    },
-    Date.now(),
-  );
+  const item: HistoryItemHooksList = {
+    type: MessageType.HOOKS_LIST,
+    hooks: mapHookInfoToEntries(hooks),
+  };
+  addItem(item);
 }
 
-async function completeHookNames(
-  context: CommandContext,
-  partialArg: string,
-): Promise<string[]> {
-  return (
-    context.services.agent?.hooks
-      .listHooks()
-      .map((hook) => hook.name)
-      .filter((name) => name.startsWith(partialArg)) ?? []
-  );
-}
-
-const listCommand: SlashCommand = {
-  name: 'list',
-  description: 'List all registered hooks',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  action: async (context: CommandContext) => {
-    await listHooks(context);
-  },
-};
-
-const enableCommand: SlashCommand = {
-  name: 'enable',
-  description: 'Enable a hook by name',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  action: async (context: CommandContext, args: string) => {
-    const hookName = args.trim();
-    if (!hookName) {
-      context.ui.addItem(
-        {
-          type: MessageType.ERROR,
-          text: 'Usage: /hooks enable <hook-name>',
-        },
-        Date.now(),
-      );
-      return;
-    }
-    await enableHook(context, hookName);
-  },
-  completion: completeHookNames,
-};
-
-const disableCommand: SlashCommand = {
-  name: 'disable',
-  description: 'Disable a hook by name',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  action: async (context: CommandContext, args: string) => {
-    const hookName = args.trim();
-    if (!hookName) {
-      context.ui.addItem(
-        {
-          type: MessageType.ERROR,
-          text: 'Usage: /hooks disable <hook-name>',
-        },
-        Date.now(),
-      );
-      return;
-    }
-    await disableHook(context, hookName);
-  },
-  completion: completeHookNames,
-};
-
-const enableAllCommand: SlashCommand = {
-  name: 'enable-all',
-  description: 'Enable all registered hooks',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  action: async (context: CommandContext) => {
-    await enableAllHooks(context);
-  },
-};
-
-const disableAllCommand: SlashCommand = {
-  name: 'disable-all',
-  description: 'Disable all registered hooks',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  action: async (context: CommandContext) => {
-    await disableAllHooks(context);
-  },
-};
-
-export const hooksCommand: SlashCommand = {
-  name: 'hooks',
-  description: 'View, enable, or disable hooks',
-  kind: CommandKind.BUILT_IN,
-  subCommands: [
-    listCommand,
-    enableCommand,
-    disableCommand,
-    enableAllCommand,
-    disableAllCommand,
-  ],
-  action: async (context: CommandContext, args: string) => {
-    // Default action when no subcommand is provided - show the list
-    if (!args || args.trim() === '') {
-      await listHooks(context);
-    } else {
-      // Try to parse as a subcommand
-      const tokens = args.trim().split(/\s+/);
-      const subCommandName = tokens[0];
-      const subArgs = tokens.slice(1).join(' ');
-
-      const subCommand = [
-        listCommand,
-        enableCommand,
-        disableCommand,
-        enableAllCommand,
-        disableAllCommand,
-      ].find((cmd) => cmd.name === subCommandName);
-
-      if (subCommand?.action) {
-        await subCommand.action(context, subArgs);
-      } else {
-        await listHooks(context);
+function createNamedHookCommand(
+  operations: HooksCommandOperations,
+  addItem: AddHookItem,
+  name: 'enable' | 'disable',
+): SlashCommand {
+  return {
+    name,
+    description: `${name === 'enable' ? 'Enable' : 'Disable'} a hook by name`,
+    kind: CommandKind.BUILT_IN,
+    autoExecute: true,
+    action: async (_invocation, args): Promise<void> => {
+      const hookName = args.trim();
+      if (!hookName) {
+        addItem(
+          {
+            type: MessageType.ERROR,
+            text: `Usage: /hooks ${name} <hook-name>`,
+          },
+          Date.now(),
+        );
+        return;
       }
-    }
-  },
-};
+      if (!requireHookOwner(operations, addItem)) return;
+      if (!operations.listHooks().some((hook) => hook.name === hookName)) {
+        addItem(
+          { type: MessageType.ERROR, text: `Hook '${hookName}' not found.` },
+          Date.now(),
+        );
+        return;
+      }
+      if (name === 'enable') operations.enable(hookName);
+      else operations.disable(hookName);
+      addItem(
+        {
+          type: MessageType.INFO,
+          text: `${name === 'enable' ? 'Enabled' : 'Disabled'} hook '${hookName}'.`,
+        },
+        Date.now(),
+      );
+    },
+    completion: async (_invocation, partialArg): Promise<string[]> =>
+      operations
+        .listHooks()
+        .map((hook) => hook.name)
+        .filter((hook) => hook.startsWith(partialArg)),
+  };
+}
+
+function createAllHooksCommand(
+  operations: HooksCommandOperations,
+  addItem: AddHookItem,
+  enable: boolean,
+): SlashCommand {
+  return {
+    name: enable ? 'enable-all' : 'disable-all',
+    description: `${enable ? 'Enable' : 'Disable'} all registered hooks`,
+    kind: CommandKind.BUILT_IN,
+    autoExecute: true,
+    action: async (): Promise<void> => {
+      if (!requireHookOwner(operations, addItem)) return;
+      const hooks = operations.listHooks();
+      if (hooks.length === 0) {
+        addItem(
+          { type: MessageType.INFO, text: 'No hooks registered.' },
+          Date.now(),
+        );
+        return;
+      }
+      operations.setDisabledHooks(enable ? [] : hooks.map((hook) => hook.name));
+      addItem(
+        {
+          type: MessageType.INFO,
+          text: `${enable ? 'Enabled' : 'Disabled'} all ${hooks.length} hook(s).`,
+        },
+        Date.now(),
+      );
+      listHooks(operations, addItem);
+    },
+  };
+}
+
+export function createHooksCommand(
+  operations: HooksCommandOperations,
+  addItem: AddHookItem,
+): SlashCommand {
+  const subCommands: SlashCommand[] = [
+    {
+      name: 'list',
+      description: 'List all registered hooks',
+      kind: CommandKind.BUILT_IN,
+      autoExecute: true,
+      action: async (): Promise<void> => listHooks(operations, addItem),
+    },
+    createNamedHookCommand(operations, addItem, 'enable'),
+    createNamedHookCommand(operations, addItem, 'disable'),
+    createAllHooksCommand(operations, addItem, true),
+    createAllHooksCommand(operations, addItem, false),
+  ];
+  return {
+    name: 'hooks',
+    description: 'View, enable, or disable hooks',
+    kind: CommandKind.BUILT_IN,
+    subCommands,
+    action: async (invocation, args): Promise<void> => {
+      const [name, ...rest] = args.trim().split(/\s+/);
+      const subCommand = subCommands.find((entry) => entry.name === name);
+      if (subCommand?.action)
+        await subCommand.action(invocation, rest.join(' '));
+      else listHooks(operations, addItem);
+    },
+  };
+}

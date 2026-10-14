@@ -10,7 +10,8 @@
  */
 
 import { describe, it, expect, vi } from 'bun:test';
-import { todoCommand, parsePosition } from './todoCommand.js';
+import { registerTodoCommand } from '../../__tests__/todo-command-test-owner.js';
+import { parsePosition } from './todoOperations.js';
 import type { CommandContext } from './types.js';
 import type { Todo } from '@vybestack/llxprt-code-core';
 import * as fc from 'fast-check';
@@ -83,7 +84,7 @@ describe('todoCommand', () => {
     it('displays sorted task history with current session first', async () => {
       const ctx = createMockContext([]);
 
-      const listSubcommand = todoCommand.subCommands?.find(
+      const listSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'list',
       );
 
@@ -108,7 +109,7 @@ describe('todoCommand', () => {
     it('handles empty task directory gracefully', async () => {
       const ctx = createMockContext([]);
 
-      const listSubcommand = todoCommand.subCommands?.find(
+      const listSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'list',
       );
 
@@ -137,7 +138,7 @@ describe('todoCommand', () => {
     it('loads task session at position 1', async () => {
       const ctx = createMockContext([]);
 
-      const loadSubcommand = todoCommand.subCommands?.find(
+      const loadSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'load',
       );
       expect(loadSubcommand).toBeDefined();
@@ -168,7 +169,7 @@ describe('todoCommand', () => {
     it('shows error when loading out-of-range session', async () => {
       const ctx = createMockContext([]);
 
-      const loadSubcommand = todoCommand.subCommands?.find(
+      const loadSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'load',
       );
 
@@ -193,7 +194,7 @@ describe('todoCommand', () => {
     it('shows usage help when no number is provided', async () => {
       const ctx = createMockContext([]);
 
-      const loadSubcommand = todoCommand.subCommands?.find(
+      const loadSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'load',
       );
 
@@ -218,7 +219,7 @@ describe('todoCommand', () => {
     it('shows error when number format is invalid', async () => {
       const ctx = createMockContext([]);
 
-      const loadSubcommand = todoCommand.subCommands?.find(
+      const loadSubcommand = registerTodoCommand(ctx).subCommands?.find(
         (cmd) => cmd.name === 'load',
       );
 
@@ -383,10 +384,10 @@ describe('todoCommand', () => {
             const ctx = createMockContext(initialTodos as Todo[]);
             const initialLength = initialTodos.length;
 
-            const addSubcommand = todoCommand.subCommands?.find(
+            const addSubcommand = registerTodoCommand(ctx).subCommands?.find(
               (cmd) => cmd.name === 'add',
             );
-            const removeSubcommand = todoCommand.subCommands?.find(
+            const removeSubcommand = registerTodoCommand(ctx).subCommands?.find(
               (cmd) => cmd.name === 'remove',
             );
 
