@@ -17,6 +17,7 @@ import {
   placeSystemInstruction,
 } from '../../../AnthropicRequestPreparation.js';
 import { formatContextPrefix } from '../../../../utils/systemPromptPlacement.js';
+import { writeTableMessages } from '../../emit.js';
 import { finishWireRequest, leadsMergedMessage } from '../../finish.js';
 import { MessageTable } from '../../message-table.js';
 import {
@@ -169,13 +170,16 @@ export function cachedOracle(
   return { json: JSON.stringify(messages), evidence };
 }
 
-/** The same messages from the table builder, the table passes and the table cache controls. */
-export async function cachedCandidate(
+/** Builds and finishes a table for `rows`; the caller closes it. */
+async function finishedTable(
   rows: readonly IContent[],
   settings: WireSettings,
   cache: CacheSettings,
-  extra: WireExtras = {},
-): Promise<CachedWire> {
+  extra: WireExtras,
+): Promise<{
+  table: MessageTable;
+  evidence: SemanticMediaPurgeCacheWriteEvidence | undefined;
+}> {
   const table = new MessageTable();
   try {
     await buildValidatedWireTable(
@@ -200,7 +204,44 @@ export async function cachedCandidate(
           ? undefined
           : { ttl: cache.ttl, mediaPurgeBoundary: cache.mediaPurge === true },
     });
+    return { table, evidence };
+  } catch (error) {
+    table.close();
+    throw error;
+  }
+}
+
+/** The same messages from the table builder, the table passes and the table cache controls. */
+export async function cachedCandidate(
+  rows: readonly IContent[],
+  settings: WireSettings,
+  cache: CacheSettings,
+  extra: WireExtras = {},
+): Promise<CachedWire> {
+  const { table, evidence } = await finishedTable(rows, settings, cache, extra);
+  try {
     return { json: JSON.stringify(tableMessages(table)), evidence };
+  } finally {
+    table.close();
+  }
+}
+
+/** The messages as the emit walk writes them into a request body. */
+export async function emittedCandidate(
+  rows: readonly IContent[],
+  settings: WireSettings,
+  cache: CacheSettings,
+  extra: WireExtras = {},
+): Promise<string> {
+  const { table } = await finishedTable(rows, settings, cache, extra);
+  try {
+    const parts: Uint8Array[] = [];
+    const encoder = new TextEncoder();
+    writeTableMessages(table, {
+      append: (data) =>
+        parts.push(typeof data === 'string' ? encoder.encode(data) : data),
+    });
+    return new TextDecoder().decode(Buffer.concat(parts));
   } finally {
     table.close();
   }

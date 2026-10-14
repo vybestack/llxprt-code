@@ -9,7 +9,11 @@ import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/r
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { tryConsumeTransportAttempt } from '../transportAttemptBudget.js';
 import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
-import { createAnthropicApiCall } from './AnthropicApiExecution.js';
+import type { AnthropicApiCall } from './AnthropicApiExecution.js';
+import {
+  sendRequestFromBody,
+  type AnthropicSendRequest,
+} from './AnthropicSendRequest.js';
 import {
   isAnthropicImageDimensionLimitError,
   parseAnthropicImageDimensionLimit,
@@ -19,11 +23,6 @@ import {
   ensureImageRecoveryState,
 } from './AnthropicImageSanitizer.js';
 import type { AnthropicRateLimitInfo } from './AnthropicRateLimitHandler.js';
-import type { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
-
-type AnthropicRequestContext = Awaited<
-  ReturnType<typeof prepareAnthropicRequest>
->;
 
 type ExecutedAnthropicCall = {
   response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
@@ -34,10 +33,10 @@ type ExecutedAnthropicCall = {
 export interface ImageRecoveryDeps {
   readonly execute: (
     options: NormalizedGenerateChatOptions,
-    requestContext: AnthropicRequestContext,
-    apiCallWithResponse: ReturnType<typeof createAnthropicApiCall>,
+    request: AnthropicSendRequest,
+    apiCallWithResponse: AnthropicApiCall,
     rateLimitLogger: { debug: (fn: () => string) => void },
-    headers: Parameters<typeof createAnthropicApiCall>[2],
+    headers: Record<string, string>,
     isOAuth: boolean,
     authToken: string,
   ) => Promise<ExecutedAnthropicCall>;
@@ -63,10 +62,10 @@ export interface ImageRecoveryDeps {
 export async function executeImageDimensionRecovery(
   deps: ImageRecoveryDeps,
   error: unknown,
-  requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
+  request: AnthropicSendRequest,
   options: NormalizedGenerateChatOptions,
-  initialClient: Parameters<typeof createAnthropicApiCall>[0],
-  customHeaders: Parameters<typeof createAnthropicApiCall>[2],
+  initialClient: Anthropic,
+  customHeaders: Record<string, string>,
   rateLimitLogger: { debug: (fn: () => string) => void },
   isOAuth: boolean,
   authToken: string,
@@ -82,7 +81,7 @@ export async function executeImageDimensionRecovery(
   const state = ensureImageRecoveryState(options);
   if (state.recoveryUsed) return undefined;
   const configuredBudget = resolveAnthropicImageBudget(
-    requestContext.configEphemerals,
+    request.facts.configEphemerals,
   );
   const errorLimit = parseAnthropicImageDimensionLimit(error);
   const recoveryBudget = resolveRecoveryImageBudget(
@@ -90,8 +89,10 @@ export async function executeImageDimensionRecovery(
     errorLimit,
   );
   if (recoveryBudget === undefined) return undefined;
+  // The recovery retry sends a sanitized copy of the whole body, so the body
+  // is read back as an object here, on this error path only.
   const sanitized = sanitizeAnthropicRequestBodyImages(
-    requestContext.requestBody,
+    await request.body(),
     recoveryBudget,
   );
   if (sanitized.replacedCount === 0) return undefined;
@@ -114,15 +115,11 @@ export async function executeImageDimensionRecovery(
     () =>
       '[AnthropicProvider] Image dimension 400: sanitized oversized image block(s), retrying once',
   );
+  const retryRequest = sendRequestFromBody(request.facts, sanitized.body);
   const retryResult = await deps.execute(
     options,
-    { ...requestContext, requestBody: sanitized.body },
-    createAnthropicApiCall(
-      initialClient,
-      sanitized.body,
-      customHeaders,
-      options.invocation.signal,
-    ),
+    retryRequest,
+    retryRequest.call(initialClient, customHeaders, options.invocation.signal),
     rateLimitLogger,
     customHeaders,
     isOAuth,

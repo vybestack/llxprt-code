@@ -11,7 +11,10 @@ import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/r
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderToolset } from '../IProvider.js';
 import type { RequestScopedBody } from '../utils/requestScopedBody.js';
-import type { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
+import type {
+  AnthropicRequestContext,
+  AnthropicRequestFacts,
+} from './AnthropicRequestPreparation.js';
 
 /**
  * Shapes and pure helpers used by AnthropicProvider, kept beside it so the
@@ -26,7 +29,7 @@ export function hasHeaderName(
 }
 
 export interface PreparedAnthropicPromptEnvelope {
-  readonly requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>;
+  readonly requestContext: AnthropicRequestContext;
   readonly isOAuth: boolean;
   readonly authToken: string;
   readonly mediaRequest: ResolvedMediaRequest;
@@ -53,7 +56,7 @@ export function isAnthropicMessageStream(
 
 export function withSemanticMediaPurgeCacheEvidence(
   content: IContent,
-  requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
+  requestContext: AnthropicRequestFacts,
 ): IContent {
   const evidence = requestContext.semanticMediaPurgeCacheWriteEvidence;
   const cacheCreationTokens =

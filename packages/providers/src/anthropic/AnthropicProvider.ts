@@ -49,7 +49,11 @@ import {
   getContextWindowForModel as getContextWindowForModelFn,
   getLatestClaudeModel as getLatestClaudeModelFn,
 } from './AnthropicModelData.js';
-import { prepareAnthropicRequest } from './AnthropicRequestPreparation.js';
+import {
+  prepareAnthropicRequest,
+  type AnthropicPlanParams,
+  type AnthropicRequestFacts,
+} from './AnthropicRequestPreparation.js';
 import {
   isAnthropicOAuthBaseURL,
   createMediaSupportPredicate,
@@ -64,15 +68,26 @@ import {
 } from '../runtime/promptEnvelopeProjections.js';
 import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
 import {
-  dropTransportRows,
-  openTransportRowsMedia,
-} from '../utils/transportRows.js';
+  dropProjectionRows,
+  openProjectionRowsMedia,
+} from './AnthropicProjectionRows.js';
 import {
   buildAnthropicRequestHeaders,
   withCredentialHeader,
-  createAnthropicApiCall,
   executeAnthropicApiCall,
+  type AnthropicApiCall,
 } from './AnthropicApiExecution.js';
+import {
+  requestBodyForDump,
+  sendRequestFromBody,
+  sendRequestFromPrepared,
+  sendRequestFromSpool,
+  type AnthropicSendRequest,
+} from './AnthropicSendRequest.js';
+import {
+  anthropicRowsOf,
+  prepareSpooledAnthropicRequest,
+} from './AnthropicSpooledRequest.js';
 import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
 import {
   createAnthropicMissingCredentialError,
@@ -81,6 +96,8 @@ import {
 import { getImageRecoveryState } from './AnthropicImageSanitizer.js';
 import { executeImageDimensionRecovery } from './AnthropicImageRecovery.js';
 import { findRequestCommitState } from '../retryRequestContext.js';
+import { getRequestSignal } from '../utils/abortSignal.js';
+import { resolveRowsMedia } from '../openai-responses/responses-row-media.js';
 
 import { registerAnthropicRequestCleanup } from './AnthropicRequestCleanup.js';
 import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
@@ -159,21 +176,34 @@ export class AnthropicProvider extends BaseProvider {
     return { ...options, ...inputs };
   }
 
-  private resolveMediaRequest(
-    options: NormalizedGenerateChatOptions,
-  ): Promise<ResolvedMediaRequest> {
-    const { contents, invocation } = options;
-    const media = captureRequestMediaInput(
+  private captureMedia(options: NormalizedGenerateChatOptions) {
+    return captureRequestMediaInput(
       options.metadata['logicalRequestId'],
-      invocation.runtimeId,
+      options.invocation.runtimeId,
       this.requestMediaBudgetBytes,
       this.requestMediaResolver,
     );
-    return readsRequestRowsAtTransport(options)
-      ? openTransportRowsMedia(options, media)
-      : resolveRequestMedia(media, contents, invocation.signal);
   }
 
+  /**
+   * The media request of a projection: the call's rows are read into the one
+   * history array the estimated body is built from (see AnthropicProjectionRows).
+   */
+  private resolveProjectionMediaRequest(
+    options: NormalizedGenerateChatOptions,
+  ): Promise<ResolvedMediaRequest> {
+    const media = this.captureMedia(options);
+    return readsRequestRowsAtTransport(options)
+      ? openProjectionRowsMedia(options, media)
+      : resolveRequestMedia(media, options.contents, options.invocation.signal);
+  }
+
+  /**
+   * A send with a prepared envelope uses that envelope's media request. Any
+   * other send gets a fresh owner for the leases of the rows it resolves; its
+   * rows are never read here, media is resolved one row at a time while the
+   * body is written.
+   */
   private async resolveTransportPreparation(
     options: NormalizedGenerateChatOptions,
   ): Promise<AnthropicTransportPreparation> {
@@ -183,8 +213,18 @@ export class AnthropicProvider extends BaseProvider {
     if (token !== undefined && prepared === undefined) {
       throw new Error('Unknown Anthropic prompt-envelope transport token');
     }
-    const mediaRequest =
-      prepared?.mediaRequest ?? (await this.resolveMediaRequest(options));
+    if (prepared === undefined) {
+      return {
+        prepared,
+        mediaRequest: await resolveRequestMedia(
+          this.captureMedia(options),
+          [],
+          getRequestSignal(options),
+        ),
+        effectiveOptions: options,
+      };
+    }
+    const { mediaRequest } = prepared;
     try {
       return {
         prepared,
@@ -640,64 +680,43 @@ export class AnthropicProvider extends BaseProvider {
     preparation: AnthropicTransportPreparation,
   ): AsyncIterableIterator<IContent> {
     const { prepared, mediaRequest, effectiveOptions } = preparation;
+    const signal = effectiveOptions.invocation.signal;
     const { client: initialClient, authToken } = await this.buildProviderClient(
       effectiveOptions,
       effectiveOptions.resolved.telemetry,
       prepared?.authToken,
     );
     const isOAuth = prepared?.isOAuth ?? this.classifyOAuthToken(authToken);
-    const requestContext =
-      prepared?.requestContext ??
-      (await this.prepareRequestContext(effectiveOptions, isOAuth, authToken));
-    if (prepared === undefined && readsRequestRowsAtTransport(effectiveOptions))
-      dropTransportRows(mediaRequest);
-    // Issue #854 P05b4: the wire body is owned by a request-scoped lease and
-    // the media request's finish releases it, so the body arrays are spliced
-    // once the transport call settles (any outcome) instead of outliving it.
-    // A source-route preparation already holds that lease for the one body.
-    if (prepared?.bodyLease === undefined) {
-      const requestBodyLease = acquireRequestScopedBody(
-        'anthropic',
-        requestContext.requestBody,
-      );
-      mediaRequest.registerCleanup(() => {
-        void requestBodyLease.release();
-      });
-    }
-
+    const request = await this.resolveSendRequest(
+      preparation,
+      isOAuth,
+      authToken,
+    );
     const customHeaders = buildAnthropicRequestHeaders({
       baseHeaders: this.getCustomHeaders() ?? {},
       isOAuth,
-      wantCaching: requestContext.wantCaching,
-      ttl: requestContext.ttl,
-      cacheLogger: requestContext.cacheLogger,
-      model: String(requestContext.requestBody['model']),
-      thinking: requestContext.requestBody['thinking'],
+      wantCaching: request.facts.wantCaching,
+      ttl: request.facts.ttl,
+      cacheLogger: request.facts.cacheLogger,
+      model: request.model,
+      thinking: request.thinking,
     });
     const rateLimitLogger = this.getRateLimitLogger();
-    await this.applyRateLimitThrottling(
-      requestContext,
-      rateLimitLogger,
-      effectiveOptions.invocation.signal,
-    );
+    await this.applyRateLimitThrottling(request.facts, rateLimitLogger, signal);
 
     // H2: if a prior outer attempt already sanitized this request's images,
     // reuse the sanitized body instead of resending the poisoned original.
-    const effectiveRequestBody =
-      getImageRecoveryState(effectiveOptions)?.sanitizedBody ??
-      requestContext.requestBody;
-    const apiCallWithResponse = createAnthropicApiCall(
-      initialClient,
-      effectiveRequestBody,
-      customHeaders,
-      effectiveOptions.invocation.signal,
-    );
+    const sanitizedBody =
+      getImageRecoveryState(effectiveOptions)?.sanitizedBody;
+    const effectiveRequest =
+      sanitizedBody === undefined
+        ? request
+        : sendRequestFromBody(request.facts, sanitizedBody);
 
     const executed = await this.executeWithImageRecovery(
       effectiveOptions,
-      requestContext,
-      effectiveRequestBody,
-      apiCallWithResponse,
+      effectiveRequest,
+      effectiveRequest.call(initialClient, customHeaders, signal),
       initialClient,
       customHeaders,
       rateLimitLogger,
@@ -710,11 +729,37 @@ export class AnthropicProvider extends BaseProvider {
     if (rateLimitInfo) this.lastRateLimitInfo = rateLimitInfo;
     yield* this.yieldResponse(
       response,
-      requestContext,
+      request.facts,
       effectiveOptions,
       isOAuth,
       rateLimitLogger,
     );
+  }
+
+  /**
+   * The request to send. A projected send uses the body its projection built
+   * (one request-scoped lease per body). Any other send writes its body to a
+   * request-scoped spool one row at a time; the media request's finish
+   * disposes the spool and the message table.
+   */
+  private async resolveSendRequest(
+    preparation: AnthropicTransportPreparation,
+    isOAuth: boolean,
+    authToken: string,
+  ): Promise<AnthropicSendRequest> {
+    const { prepared, mediaRequest, effectiveOptions } = preparation;
+    if (prepared !== undefined) {
+      return sendRequestFromPrepared(prepared, mediaRequest);
+    }
+    const media = this.captureMedia(effectiveOptions);
+    const signal = getRequestSignal(effectiveOptions);
+    const spooled = await prepareSpooledAnthropicRequest(
+      this.planParams(effectiveOptions, isOAuth, authToken),
+      await anthropicRowsOf(effectiveOptions),
+      (rows) => resolveRowsMedia(rows, media, mediaRequest, signal),
+    );
+    mediaRequest.registerCleanup(spooled.release);
+    return sendRequestFromSpool(spooled);
   }
 
   /**
@@ -725,16 +770,10 @@ export class AnthropicProvider extends BaseProvider {
    */
   private async executeWithImageRecovery(
     options: NormalizedGenerateChatOptions,
-    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
-    effectiveRequestBody: Awaited<
-      ReturnType<typeof prepareAnthropicRequest>
-    >['requestBody'],
-    apiCallWithResponse: () => Promise<{
-      data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
-      response: Response | undefined;
-    }>,
-    initialClient: Parameters<typeof createAnthropicApiCall>[0],
-    customHeaders: Parameters<typeof createAnthropicApiCall>[2],
+    request: AnthropicSendRequest,
+    apiCallWithResponse: AnthropicApiCall,
+    initialClient: Anthropic,
+    customHeaders: Record<string, string>,
     rateLimitLogger: { debug: (fn: () => string) => void },
     isOAuth: boolean,
     authToken: string,
@@ -746,7 +785,7 @@ export class AnthropicProvider extends BaseProvider {
     try {
       const result = await this.executeApiCall(
         options,
-        { ...requestContext, requestBody: effectiveRequestBody },
+        request,
         apiCallWithResponse,
         rateLimitLogger,
         customHeaders,
@@ -761,7 +800,7 @@ export class AnthropicProvider extends BaseProvider {
           errorsLogger: this.getErrorsLogger(),
         },
         error,
-        requestContext,
+        request,
         options,
         initialClient,
         customHeaders,
@@ -775,11 +814,11 @@ export class AnthropicProvider extends BaseProvider {
     }
   }
 
-  private async prepareRequestContext(
+  private planParams(
     options: NormalizedGenerateChatOptions,
     isOAuth: boolean,
     authToken: string,
-  ) {
+  ): AnthropicPlanParams {
     // Issue #3172: placement is declared from the RESOLVED-token fact and
     // resolved through the shared policy, never re-derived from isOAuth here.
     const placement = resolveSystemPromptPlacement(
@@ -787,8 +826,7 @@ export class AnthropicProvider extends BaseProvider {
         resolved: { ...options.resolved, authToken },
       }),
     );
-    return prepareAnthropicRequest({
-      content: options.contents,
+    return {
       tools: options.tools,
       options,
       isOAuth,
@@ -801,6 +839,17 @@ export class AnthropicProvider extends BaseProvider {
       logger: this.getLogger(),
       toolsLogger: this.getToolsLogger(),
       cacheLogger: this.getCacheLogger(),
+    };
+  }
+
+  private prepareRequestContext(
+    options: NormalizedGenerateChatOptions,
+    isOAuth: boolean,
+    authToken: string,
+  ) {
+    return prepareAnthropicRequest({
+      content: options.contents,
+      ...this.planParams(options, isOAuth, authToken),
     });
   }
 
@@ -819,7 +868,7 @@ export class AnthropicProvider extends BaseProvider {
   ): Promise<PromptEnvelopeProjection> {
     const normalized = await this.normalizeOptionsForProjection(options);
     const sourceRoute = readsRequestRowsAtTransport(normalized);
-    const mediaRequest = await this.resolveMediaRequest(normalized);
+    const mediaRequest = await this.resolveProjectionMediaRequest(normalized);
     const resolvedOptions = {
       ...normalized,
       contents: mediaRequest.withContents((contents) => contents),
@@ -846,7 +895,7 @@ export class AnthropicProvider extends BaseProvider {
       if (sourceRoute) {
         // The one SDK body is built; the transient neutral rows go away and
         // the same lease serves estimation, send and retry.
-        dropTransportRows(mediaRequest);
+        dropProjectionRows(mediaRequest);
         const bodyLease = acquireRequestScopedBody(
           'anthropic',
           requestContext.requestBody,
@@ -891,7 +940,7 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   private async applyRateLimitThrottling(
-    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
+    requestContext: AnthropicRequestFacts,
     rateLimitLogger: { debug: (fn: () => string) => void },
     signal?: AbortSignal,
   ): Promise<void> {
@@ -917,11 +966,8 @@ export class AnthropicProvider extends BaseProvider {
 
   private async executeApiCall(
     options: NormalizedGenerateChatOptions,
-    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
-    apiCallWithResponse: () => Promise<{
-      data: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>;
-      response: Response | undefined;
-    }>,
+    request: AnthropicSendRequest,
+    apiCallWithResponse: AnthropicApiCall,
     rateLimitLogger: { debug: (fn: () => string) => void },
     headers: Record<string, string> | undefined,
     isOAuth: boolean,
@@ -942,8 +988,8 @@ export class AnthropicProvider extends BaseProvider {
       apiCallFn: apiCallWithResponse,
       dumpMode,
       baseURL,
-      requestBody: requestContext.requestBody,
-      streamingEnabled: requestContext.streamingEnabled,
+      requestBody: await requestBodyForDump(dumpMode, request),
+      streamingEnabled: request.facts.streamingEnabled,
       headers: dumpHeaders,
       rateLimitLogger,
     });
@@ -951,7 +997,7 @@ export class AnthropicProvider extends BaseProvider {
 
   private async *yieldResponse(
     response: Anthropic.Message | AsyncIterable<Anthropic.MessageStreamEvent>,
-    requestContext: Awaited<ReturnType<typeof prepareAnthropicRequest>>,
+    requestContext: AnthropicRequestFacts,
     options: NormalizedGenerateChatOptions,
     isOAuth: boolean,
     rateLimitLogger: { debug: (fn: () => string) => void },

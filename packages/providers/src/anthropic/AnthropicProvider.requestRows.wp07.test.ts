@@ -29,9 +29,20 @@ import { TEST_PROVIDER_CONFIG } from '../__tests__/providerTestConfig.js';
 import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 import { createAnthropicRawPostTestAdapter } from '../__tests__/rawPostTestAdapters.js';
 import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
+import { activeWireBodySpoolCount } from '../utils/wire-body-spool.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+import { readdirSync } from 'node:fs';
 import { AnthropicProvider } from './AnthropicProvider.js';
 
 const mockMessagesCreate = vi.fn();
+
+/**
+ * Request bodies alive: leases over built bodies (projected sends) plus spools
+ * (every other send).
+ */
+function liveBodies(): number {
+  return activeRequestBodyCount() + activeWireBodySpoolCount();
+}
 
 void vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
@@ -396,7 +407,7 @@ describe('Anthropic transport-owned request rows body (WP07)', () => {
       drain(harness.provider.generateChatCompletion(wrong)),
     ).rejects.toThrow('Provider request rows count changed');
     expect(mockMessagesCreate).not.toHaveBeenCalled();
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(liveBodies()).toBe(0);
   });
 });
 
@@ -407,13 +418,13 @@ describe('Anthropic request rows preparation lifecycle (WP07)', () => {
     mockMessagesCreate.mockReset();
   });
 
-  it('holds one request body lease for estimate and send, released after the call', async () => {
+  it('holds one request body for estimate and send, released after the call', async () => {
     const harness = makeHarness(scenario);
     const probe = probeRows(scenario.rows);
     const options = rowsOptions(harness, scenario, probe);
-    const before = activeRequestBodyCount();
+    const before = liveBodies();
     const projection = await harness.provider.projectPromptEnvelope(options);
-    expect(activeRequestBodyCount()).toBe(before + 1);
+    expect(liveBodies()).toBe(before + 1);
     expect(probe.opened()).toBe(1);
     // The estimate graph is derived from the one body on demand, not kept.
     const first = projection.finalizedProjection;
@@ -423,7 +434,7 @@ describe('Anthropic request rows preparation lifecycle (WP07)', () => {
 
     let during = -1;
     mockMessagesCreate.mockImplementation(async () => {
-      during = activeRequestBodyCount();
+      during = liveBodies();
       return okResponse(false);
     });
     await drain(
@@ -433,7 +444,7 @@ describe('Anthropic request rows preparation lifecycle (WP07)', () => {
       }),
     );
     expect(during).toBe(before + 1);
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(liveBodies()).toBe(before);
     // Send reused the prepared body: the rows were read once, at projection.
     expect(probe.opened()).toBe(1);
     expect(sentBodies()).toStrictEqual(await sendArray(scenario));
@@ -464,11 +475,11 @@ describe('Anthropic request rows preparation lifecycle (WP07)', () => {
   it('releases an unsent preparation and refuses later estimation', async () => {
     const harness = makeHarness(scenario);
     const options = rowsOptions(harness, scenario, probeRows(scenario.rows));
-    const before = activeRequestBodyCount();
+    const before = liveBodies();
     const projection = await harness.provider.projectPromptEnvelope(options);
-    expect(activeRequestBodyCount()).toBe(before + 1);
+    expect(liveBodies()).toBe(before + 1);
     await projection.releaseIfUnsent?.();
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(liveBodies()).toBe(before);
     expect(() => projection.finalizedProjection).toThrow(
       'consumed after release',
     );
@@ -478,26 +489,26 @@ describe('Anthropic request rows preparation lifecycle (WP07)', () => {
   it('releases the body when the send fails', async () => {
     const harness = makeHarness(scenario);
     const options = rowsOptions(harness, scenario, probeRows(scenario.rows));
-    const before = activeRequestBodyCount();
+    const before = liveBodies();
     mockMessagesCreate.mockRejectedValue(new Error('transport exploded'));
     await expect(
       drain(harness.provider.generateChatCompletion(options)),
     ).rejects.toThrow('transport exploded');
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(liveBodies()).toBe(before);
   });
 
   it('releases the body when the consumer returns mid-stream', async () => {
     const streaming: Scenario = { rows: toolTurns, streaming: true };
     const harness = makeHarness(streaming);
     const options = rowsOptions(harness, streaming, probeRows(streaming.rows));
-    const before = activeRequestBodyCount();
+    const before = liveBodies();
     mockMessagesCreate.mockResolvedValue(okResponse(true));
     const iterator = harness.provider.generateChatCompletion(options);
     const first = await iterator.next();
     expect(first.done).toBe(false);
-    expect(activeRequestBodyCount()).toBe(before + 1);
+    expect(liveBodies()).toBe(before + 1);
     await iterator.return?.();
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(liveBodies()).toBe(before);
   });
 
   it('releases the body when the request is aborted during the call', async () => {
@@ -509,7 +520,7 @@ describe('Anthropic request rows preparation lifecycle (WP07)', () => {
       probeRows(scenario.rows),
       controller.signal,
     );
-    const before = activeRequestBodyCount();
+    const before = liveBodies();
     mockMessagesCreate.mockImplementation(async () => {
       controller.abort(new Error('aborted mid call'));
       throw controller.signal.reason;
@@ -517,7 +528,7 @@ describe('Anthropic request rows preparation lifecycle (WP07)', () => {
     await expect(
       drain(harness.provider.generateChatCompletion(options)),
     ).rejects.toThrow('aborted mid call');
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(liveBodies()).toBe(before);
   });
 
   it('never opens the rows when cancelled before the first pull', async () => {
@@ -526,13 +537,13 @@ describe('Anthropic request rows preparation lifecycle (WP07)', () => {
     controller.abort(new Error('cancelled early'));
     const probe = probeRows(scenario.rows);
     const options = rowsOptions(harness, scenario, probe, controller.signal);
-    const before = activeRequestBodyCount();
+    const before = liveBodies();
     await expect(
       drain(harness.provider.generateChatCompletion(options)),
     ).rejects.toThrow('cancelled early');
     expect(probe.pulled()).toBe(0);
     expect(mockMessagesCreate).not.toHaveBeenCalled();
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(liveBodies()).toBe(before);
   });
 
   it('closes the reader and sends nothing when cancelled after the first chunk', async () => {
@@ -542,14 +553,104 @@ describe('Anthropic request rows preparation lifecycle (WP07)', () => {
       controller.abort(new Error('cancelled after first chunk'));
     });
     const options = rowsOptions(harness, scenario, probe, controller.signal);
-    const before = activeRequestBodyCount();
+    const before = liveBodies();
     await expect(
       harness.provider.projectPromptEnvelope(options),
     ).rejects.toThrow('cancelled after first chunk');
     expect(probe.pulled()).toBe(1);
     expect(probe.returned()).toBe(1);
     expect(mockMessagesCreate).not.toHaveBeenCalled();
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(liveBodies()).toBe(before);
+  });
+});
+
+function scratchNames(): Set<string> {
+  return new Set(readdirSync(getScratchRoot()));
+}
+
+describe('Anthropic spooled send (issue #854 E4)', () => {
+  const scenario: Scenario = { rows: toolTurns, tools: WEATHER_TOOL };
+
+  beforeEach(() => {
+    mockMessagesCreate.mockReset();
+  });
+
+  it('posts the sealed spool size as the content-length of the bytes it streams', async () => {
+    mockMessagesCreate.mockResolvedValue(okResponse(false));
+    const harness = makeHarness(scenario);
+    await drain(
+      harness.provider.generateChatCompletion(
+        rowsOptions(harness, scenario, probeRows(scenario.rows)),
+      ),
+    );
+    const [body, callOptions] = mockMessagesCreate.mock.calls[0] as [
+      unknown,
+      { headers: Record<string, string> },
+    ];
+    expect(callOptions.headers['content-length']).toBe(
+      String(Buffer.byteLength(JSON.stringify(body))),
+    );
+  });
+
+  it('keeps the body on scratch disk while the request is in flight and removes it afterwards', async () => {
+    const harness = makeHarness(scenario);
+    const startingScratch = scratchNames();
+    let scratchDuringSend = startingScratch;
+    mockMessagesCreate.mockImplementation(async () => {
+      scratchDuringSend = scratchNames();
+      return okResponse(false);
+    });
+    await drain(
+      harness.provider.generateChatCompletion(
+        rowsOptions(harness, scenario, probeRows(scenario.rows)),
+      ),
+    );
+    expect(scratchDuringSend.size).toBeGreaterThan(startingScratch.size);
+    expect(scratchNames()).toStrictEqual(startingScratch);
+  });
+
+  it('removes the spool and the message table when the rows fail while the body is written', async () => {
+    const harness = makeHarness(scenario);
+    const startingScratch = scratchNames();
+    const before = liveBodies();
+    const options = rowsOptions(
+      harness,
+      scenario,
+      probeRows(scenario.rows, () => {
+        throw new Error('row source failed');
+      }),
+    );
+    await expect(
+      drain(harness.provider.generateChatCompletion(options)),
+    ).rejects.toThrow('row source failed');
+    expect(mockMessagesCreate).not.toHaveBeenCalled();
+    expect(liveBodies()).toBe(before);
+    expect(scratchNames()).toStrictEqual(startingScratch);
+  });
+
+  it('removes the spool and the message table when the consumer returns mid-stream', async () => {
+    const streaming: Scenario = { rows: toolTurns, streaming: true };
+    const harness = makeHarness(streaming);
+    const startingScratch = scratchNames();
+    mockMessagesCreate.mockResolvedValue(okResponse(true));
+    const iterator = harness.provider.generateChatCompletion(
+      rowsOptions(harness, streaming, probeRows(streaming.rows)),
+    );
+    await iterator.next();
+    expect(scratchNames().size).toBeGreaterThan(startingScratch.size);
+    await iterator.return?.();
+    expect(scratchNames()).toStrictEqual(startingScratch);
+  });
+
+  it('leaves the rows of a history array the caller handed over unchanged', async () => {
+    mockMessagesCreate.mockResolvedValue(okResponse(false));
+    const harness = makeHarness(scenario);
+    const rows = structuredClone(scenario.rows);
+    await drain(
+      harness.provider.generateChatCompletion(arrayOptions(harness, scenario)),
+    );
+    expect(rows).toStrictEqual(scenario.rows);
+    expect(sentBodies()).toHaveLength(1);
   });
 });
 
@@ -609,9 +710,9 @@ describe('Anthropic request rows image recovery retry bytes (WP07)', () => {
       route === 'array'
         ? arrayOptions(harness, scenario)
         : rowsOptions(harness, scenario, probeRows(rows));
-    const before = activeRequestBodyCount();
+    const before = liveBodies();
     await drain(harness.provider.generateChatCompletion(options));
-    expect(activeRequestBodyCount()).toBe(before);
+    expect(liveBodies()).toBe(before);
     return sentBodies();
   }
 

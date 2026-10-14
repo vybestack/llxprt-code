@@ -19,7 +19,10 @@
  *
  * - The OpenAI chat send path, including the Kimi file pre-pass, imports none
  *   of them (D3a, D5).
- * - E (Anthropic) must remove the `anthropic/` entry.
+ * - The Anthropic send path imports none of them (E4). The Anthropic
+ *   projection route still builds one history array in
+ *   `anthropic/AnthropicProjectionRows.ts`, which reads rows itself and so is
+ *   invisible to this test; E5 deletes that file.
  * - F1 removes the shared normalization and load-balancing seams.
  *
  * The list may only shrink. A file that imports a banned symbol without an
@@ -69,9 +72,6 @@ const pending = (reason: string): AllowedImporter => ({
 const ALLOWED_IMPORTERS: Readonly<Record<string, AllowedImporter>> = {
   'packages/providers/src/openai-vercel/OpenAIVercelProvider.ts': PERMANENT,
 
-  'packages/providers/src/anthropic/AnthropicProvider.ts': pending(
-    'step E (Anthropic) must remove this entry',
-  ),
   'packages/providers/src/BaseProviderNormalization.ts': pending(
     'step F1 retires the normalization collect for the owning providers',
   ),
@@ -84,7 +84,7 @@ const ALLOWED_IMPORTERS: Readonly<Record<string, AllowedImporter>> = {
 };
 
 /** Lower this when a pending entry is removed. It never goes up. */
-const PENDING_CEILING = 4;
+const PENDING_CEILING = 3;
 
 const NAMED_IMPORT =
   /(?:import|export)\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g;

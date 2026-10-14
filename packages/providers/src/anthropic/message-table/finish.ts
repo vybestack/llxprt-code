@@ -258,6 +258,8 @@ export interface WireRequestOptions extends FinishPassOptions {
   readonly contextPrefix?: string;
   /** Present when prompt caching is on. */
   readonly caching?: RequestCacheOptions;
+  /** Where the cache decisions are logged; defaults to `logger`. */
+  readonly cacheLogger?: Logger;
 }
 
 /**
@@ -271,7 +273,8 @@ export function finishWireRequest(
   options: WireRequestOptions,
 ): SemanticMediaPurgeCacheWriteEvidence | undefined {
   finishWireTable(table, options);
-  const { caching, contextPrefix, logger } = options;
+  const { caching, contextPrefix } = options;
+  const logger = options.cacheLogger ?? options.logger;
   if (contextPrefix !== undefined && contextPrefix !== '') {
     placeContextPrefix(table, { text: contextPrefix, ttl: caching?.ttl });
     if (caching !== undefined)
