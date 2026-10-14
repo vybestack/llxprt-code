@@ -2,19 +2,20 @@
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { AnthropicConversationConversionOptions as AnthropicMessageConversionOptions } from './AnthropicMessageNormalizer.js';
 import type { AnthropicMessageBlock } from './AnthropicMessageNormalizer.js';
-import { AnthropicDumpTable, type DumpMessage } from './anthropicDumpTable.js';
+import { AnthropicDumpTable } from './anthropicDumpTable.js';
+import type { TableMessage } from './message-table/message-table.js';
 import { buildAnthropicRawTable } from './anthropicDumpRaw.js';
 import {
-  filterDumpOrphans,
-  repairDumpAdjacency,
-  mergeDumpRoles,
-} from './anthropicDumpValidation.js';
+  filterOrphans,
+  repairAdjacency,
+  mergeRoles,
+} from './message-table/validation.js';
 import { modelSupportsPrefill } from './AnthropicModelData.js';
 import { dumpBlockValue } from './anthropicDumpBlockValue.js';
 
 function important(
   block: AnthropicMessageBlock,
-  role: DumpMessage['role'],
+  role: TableMessage['role'],
 ): boolean {
   return role === 'user'
     ? block.type === 'tool_result'
@@ -25,7 +26,7 @@ function nonempty(block: AnthropicMessageBlock): boolean {
 }
 async function* contentBlocks(
   table: AnthropicDumpTable,
-  message: DumpMessage,
+  message: TableMessage,
 ): AsyncIterable<unknown> {
   if (message.ordered !== true) {
     for (const entry of table.entries(message))
@@ -43,7 +44,7 @@ async function* contentBlocks(
 }
 function contentValue(
   table: AnthropicDumpTable,
-  message: DumpMessage,
+  message: TableMessage,
 ): string | AsyncIterable<unknown> {
   const placeholder =
     message.role === 'user' ? '[Empty message]' : '[No content generated]';
@@ -61,9 +62,9 @@ export async function* buildAnthropicDumpStream(
   const table = new AnthropicDumpTable();
   try {
     await buildAnthropicRawTable(source, table, options);
-    filterDumpOrphans(table);
-    repairDumpAdjacency(table);
-    mergeDumpRoles(table);
+    filterOrphans(table);
+    repairAdjacency(table);
+    mergeRoles(table);
     if (table.head === -1) {
       yield { role: 'user', content: 'Hello' };
       return;

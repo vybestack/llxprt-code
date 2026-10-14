@@ -1,9 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { StreamJsonString } from '../utils/streamJsonString.js';
-import type {
-  AnthropicDumpTable,
-  StoredMessageBlock,
-} from './anthropicDumpTable.js';
+import type { AnthropicDumpTable } from './anthropicDumpTable.js';
+import type { StoredMessageBlock } from './message-table/message-table.js';
 async function* prefixedText(
   table: AnthropicDumpTable,
   block: StoredMessageBlock,
@@ -11,12 +9,7 @@ async function* prefixedText(
   let leading = true;
   let hasPrefix = false;
   if (block.dumpPrefixHead !== undefined) {
-    for (const entry of table.entries({
-      role: 'user',
-      head: block.dumpPrefixHead,
-      tail: -1,
-      next: -1,
-    })) {
+    for (const entry of table.chain(block.dumpPrefixHead)) {
       const original = entry.block.type === 'text' ? entry.block.text : '';
       const text = leading ? original.trimStart() : original;
       if (text === '') continue;
@@ -40,13 +33,7 @@ async function* mediaContent(
     text: new StreamJsonString(() => prefixedText(table, block)),
   };
   if (block.dumpMediaHead !== undefined)
-    for (const entry of table.entries({
-      role: 'user',
-      head: block.dumpMediaHead,
-      tail: -1,
-      next: -1,
-    }))
-      yield entry.block;
+    for (const entry of table.chain(block.dumpMediaHead)) yield entry.block;
 }
 export function dumpBlockValue(
   table: AnthropicDumpTable,

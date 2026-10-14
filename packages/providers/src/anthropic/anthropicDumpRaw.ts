@@ -13,11 +13,12 @@ import {
 } from './AnthropicMessageNormalizer.js';
 import { DumpScratch } from '../utils/dumpScratch.js';
 import { appendChainResults } from './anthropicDumpChainResults.js';
-import type { AnthropicDumpTable, DumpMessage } from './anthropicDumpTable.js';
+import type { AnthropicDumpTable } from './anthropicDumpTable.js';
+import type { TableMessage } from './message-table/message-table.js';
 
 function appendChainRow(
   table: AnthropicDumpTable,
-  record: DumpMessage,
+  record: TableMessage,
   row: IContent,
   category: number,
   index: number,

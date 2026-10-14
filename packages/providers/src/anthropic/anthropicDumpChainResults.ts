@@ -8,17 +8,18 @@ import {
   convertBlockToAnthropicPart,
   type AnthropicConversationConversionOptions,
 } from './AnthropicMessageNormalizer.js';
-import type {
-  AnthropicDumpTable,
-  DumpMessage,
-  StoredMessageBlock,
-} from './anthropicDumpTable.js';
+import type { AnthropicDumpTable } from './anthropicDumpTable.js';
+import {
+  newMessage,
+  type StoredMessageBlock,
+  type TableMessage,
+} from './message-table/message-table.js';
 
 function addDescriptors(
   table: AnthropicDumpTable,
   row: IContent,
-  prefix: DumpMessage,
-  media: DumpMessage,
+  prefix: TableMessage,
+  media: TableMessage,
   index: number,
   options: AnthropicConversationConversionOptions,
 ): void {
@@ -43,9 +44,9 @@ function descriptors(
   start: number,
   end: number,
   options: AnthropicConversationConversionOptions,
-): { prefix: DumpMessage; media: DumpMessage } {
-  const prefix: DumpMessage = { role: 'user', head: -1, tail: -1, next: -1 };
-  const media: DumpMessage = { role: 'user', head: -1, tail: -1, next: -1 };
+): { prefix: TableMessage; media: TableMessage } {
+  const prefix = newMessage('user');
+  const media = newMessage('user');
   for (let index = start; index <= end; index++) {
     addDescriptors(table, rows.read(index), prefix, media, index, options);
   }
@@ -53,10 +54,10 @@ function descriptors(
 }
 function addResults(
   table: AnthropicDumpTable,
-  target: DumpMessage,
+  target: TableMessage,
   row: IContent,
-  prefix: DumpMessage,
-  media: DumpMessage,
+  prefix: TableMessage,
+  media: TableMessage,
   options: AnthropicConversationConversionOptions,
 ): void {
   for (const block of row.blocks) {
