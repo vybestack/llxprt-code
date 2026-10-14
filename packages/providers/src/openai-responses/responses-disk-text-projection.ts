@@ -39,7 +39,7 @@ import {
   type StatefulParentHit,
 } from './openAIResponsesStateful.js';
 import {
-  buildRequestContext,
+  buildResponsesRequestShell,
   type RebuildMode,
   type PreparedResponsesRequestContext,
   type ResponsesExecutorDeps,
@@ -83,7 +83,7 @@ async function selectRowsStateful(
   );
   if (plan.kind === 'settled')
     return {
-      stateful: { enabled: plan.enabled, parentId: undefined, content: [] },
+      stateful: { enabled: plan.enabled, parentId: undefined },
       skipRows: 0,
     };
   let hit: StatefulParentHit | undefined;
@@ -117,7 +117,6 @@ async function selectRowsStateful(
     stateful: {
       enabled: true,
       parentId: selection.parentId,
-      content: [],
       ...(selection.parentRetainedTokens === undefined
         ? {}
         : { parentRetainedTokens: selection.parentRetainedTokens }),
@@ -158,13 +157,7 @@ export function assertDiskTextShape(
   request: ResponsesRequest,
   deps: ResponsesExecutorDeps,
 ): Readonly<Record<string, unknown>> {
-  return resolveResponsesRequestShape(
-    request,
-    [],
-    resolveInvocationEphemerals(request),
-    deps,
-    false,
-  ).requestOverrides;
+  return resolveResponsesRequestShape(request, deps).requestOverrides;
 }
 
 /** A source token's stateful decision must still hold when it is sent. */
@@ -216,15 +209,7 @@ export async function buildDiskTextResponsesContext(
     rows,
     mode,
   );
-  const prepared = await buildRequestContext(
-    request,
-    [],
-    ephemerals,
-    deps,
-    mode.forceStateless,
-    mode.forceParentless,
-    stateful,
-  );
+  const prepared = await buildResponsesRequestShell(request, deps, stateful);
   try {
     const prompt = await serializeResponsesPromptEnvelope({
       model: prepared.request.model,
@@ -326,7 +311,6 @@ export function diskTextProjection(
   releaseIfUnsent: () => Promise<void>,
 ): PromptEnvelopeProjection {
   const prompt = prepared.sourcePrompt;
-  if (prompt === undefined) throw new Error('Missing disk text prompt');
   return {
     model: prompt.model,
     protocol: prompt.protocol,

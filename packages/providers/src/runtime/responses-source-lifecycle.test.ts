@@ -70,7 +70,6 @@ describe('Responses source deterministic lifecycle', () => {
       expect((await b.next()).value).toStrictEqual(row);
       expect((await b.next()).done).toBe(false);
       await b.return?.();
-      expect(owner.isMaterialized).toBe(false);
     } finally {
       await owner.dispose();
     }

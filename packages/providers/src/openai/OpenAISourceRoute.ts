@@ -92,15 +92,10 @@ export async function resolveResponsesSendContext(
     return buildDiskTextResponsesContext(request, deps);
   }
   if (
-    prepared.sourcePrompt === undefined ||
-    (options.stagedRows !== undefined &&
-      prepared.rowsStagedFromContents !== true)
+    options.stagedRows !== undefined &&
+    prepared.rowsStagedFromContents !== true
   ) {
-    throw new Error(
-      prepared.sourcePrompt === undefined
-        ? 'Disk text selection requires a source-backed prepared token'
-        : 'Source token requires its transport-read request rows',
-    );
+    throw new Error('Source token requires its transport-read request rows');
   }
   assertDiskTextShape(request, deps);
   assertPreparedStatefulUnchanged(request, deps, prepared);

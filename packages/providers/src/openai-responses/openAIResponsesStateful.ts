@@ -22,7 +22,6 @@ import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
 export interface StatefulConversation {
   enabled: boolean;
   parentId: string | undefined;
-  content: IContent[];
   parentRetainedTokens?: number;
 }
 
@@ -104,89 +103,6 @@ function readObservedRetainedTokens(
   return Number.isSafeInteger(retainedTokens) ? retainedTokens : undefined;
 }
 
-/**
- * Determine whether the conversation should use OpenAI Responses server-side
- * statefulness (`store=true` + `previous_response_id`).
- *
- * When a stored parent AI turn exists in `content` (matching the endpoint),
- * the returned `content` is trimmed to just the turns AFTER that parent —
- * the server replays the parent's chain server-side. When no eligible parent
- * is found, full history is returned with `enabled: true` and no parent id,
- * starting a fresh stored chain.
- *
- * Parameters:
- * - `rawBaseURL` — the resolved endpoint URL; an AI entry's
- *   `metadata.providerBaseURL` must equal this to qualify as a parent, so a
- *   parent issued by one endpoint is never sent to another (#3134 Fix 2).
- * - `isRejectedParent` — reports whether a specific response id has already
- *   been refused by the backend. Such an id is skipped so the scan falls
- *   through to an older parent, or to none at all (#3134 Fix 1).
- *
- *   This is deliberately per-id rather than a session-wide switch. Codex
- *   parents are scoped to the WebSocket connection that produced them, so a
- *   resumed session (`--continue`) loads history whose stored markers are
- *   already dead. Suppressing statefulness for the whole session on the first
- *   rejection meant such a session replayed the full history on every
- *   subsequent turn and never started a new chain. Skipping only the dead id
- *   lets the retry send full history once; that response becomes the newest
- *   stored turn, and because the scan takes the NEWEST eligible parent the
- *   very next turn chains from it. The chain re-establishes itself.
- * - `forceParentless` — #3446: a parent-not-found rejection over the
- *   WebSocket transport means every stored parent may be scoped to a dead
- *   connection, so the one-shot recovery sends full history with no parent
- *   while remaining stateful (the response is stamped stored and the newest
- *   turn re-chains immediately). Statefulness otherwise being enabled is
- *   required; when it would be disabled anyway the regular disabled shape is
- *   returned.
- */
-export function computeStatefulConversation(
-  options: {
-    readonly invocation: {
-      readonly modelBehavior: Readonly<Record<string, unknown>>;
-    };
-  },
-  content: IContent[],
-  invocationEphemerals: Record<string, unknown>,
-  explicitUserStore: boolean | undefined,
-  isCodex: boolean,
-  rawBaseURL: string,
-  isRejectedParent: (responseId: string) => boolean,
-  statefulTransportSupported: boolean,
-  logger: DebugLogger,
-  forceParentless = false,
-): StatefulConversation {
-  const plan = planStatefulConversation(
-    options,
-    invocationEphemerals,
-    explicitUserStore,
-    isCodex,
-    rawBaseURL,
-    isRejectedParent,
-    statefulTransportSupported,
-    logger,
-    forceParentless,
-  );
-  if (plan.kind === 'settled') {
-    return { enabled: plan.enabled, parentId: undefined, content };
-  }
-  // Scan from the newest entry backwards for the most recent stored AI turn.
-  let hit: StatefulParentHit | undefined;
-  for (let index = content.length - 1; index >= 0 && hit === undefined; index--)
-    hit = parentHitOf(content[index], index, plan);
-  const selection = selectStatefulParent(hit, content.length, logger);
-  return {
-    enabled: true,
-    parentId: selection.parentId,
-    content:
-      selection.parentId === undefined
-        ? content
-        : content.slice(selection.skipRows),
-    ...(selection.parentRetainedTokens === undefined
-      ? {}
-      : { parentRetainedTokens: selection.parentRetainedTokens }),
-  };
-}
-
 export type StatefulPlan =
   | { readonly kind: 'settled'; readonly enabled: boolean }
   | {
@@ -210,7 +126,36 @@ export interface StatefulSelection {
 
 /**
  * Decides, before any history is read, whether this turn is not stateful,
- * stateful without a parent, or needs the history scanned for a parent.
+ * stateful without a parent, or needs the history scanned for a parent
+ * (OpenAI Responses server-side statefulness: `store=true` +
+ * `previous_response_id`). When a scan finds a stored parent AI turn whose
+ * `providerBaseURL` equals `rawBaseURL`, the server replays the parent's chain,
+ * so only the rows after it are sent.
+ *
+ * Parameters:
+ * - `rawBaseURL` -- the resolved endpoint URL; an AI entry's
+ *   `metadata.providerBaseURL` must equal this to qualify as a parent, so a
+ *   parent issued by one endpoint is never sent to another (#3134 Fix 2).
+ * - `isRejectedParent` -- reports whether a specific response id has already
+ *   been refused by the backend. Such an id is skipped so the scan falls
+ *   through to an older parent, or to none at all (#3134 Fix 1).
+ *
+ *   This is deliberately per-id rather than a session-wide switch. Codex
+ *   parents are scoped to the WebSocket connection that produced them, so a
+ *   resumed session (`--continue`) loads history whose stored markers are
+ *   already dead. Suppressing statefulness for the whole session on the first
+ *   rejection meant such a session replayed the full history on every
+ *   subsequent turn and never started a new chain. Skipping only the dead id
+ *   lets the retry send full history once; that response becomes the newest
+ *   stored turn, and because the scan takes the NEWEST eligible parent the
+ *   very next turn chains from it. The chain re-establishes itself.
+ * - `forceParentless` -- #3446: a parent-not-found rejection over the
+ *   WebSocket transport means every stored parent may be scoped to a dead
+ *   connection, so the one-shot recovery sends full history with no parent
+ *   while remaining stateful (the response is stamped stored and the newest
+ *   turn re-chains immediately). Statefulness otherwise being enabled is
+ *   required; when it would be disabled anyway the regular disabled shape is
+ *   returned.
  */
 export function planStatefulConversation(
   options: {

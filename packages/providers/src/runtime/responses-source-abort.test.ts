@@ -4,6 +4,7 @@ import { parseOutputLimits } from '@vybestack/llxprt-code-core/utils/toolOutputL
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { collectContents } from '../utils/collectContents.js';
 import { requestScopedContents } from '../utils/requestScopedBody.js';
 import { serializeResponsesPromptEnvelope } from './responses-source-serializer.js';
 import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
@@ -123,7 +124,7 @@ describe('Responses pending-source abort ownership', () => {
 });
 
 describe('Responses aborted history fencing', () => {
-  it('fences new readers and materialization before the pending source settles', async () => {
+  it('fences new readers before the pending source settles', async () => {
     const started = gate();
     const blocked = gate();
     const controller = new AbortController();
@@ -155,17 +156,17 @@ describe('Responses aborted history fencing', () => {
         () => 'resolved',
         (error: unknown) => error,
       );
-    const materialized = owner.materialize().then(
+    const collected = collectContents(owner.stream()).then(
       () => 'resolved',
       (error: unknown) => error,
     );
     try {
       expect(await checkpoint(reopened)).toBe(reason);
-      expect(await checkpoint(materialized)).toBe(reason);
+      expect(await checkpoint(collected)).toBe(reason);
       expect(pulls).toBe(1);
     } finally {
       blocked.release();
-      await Promise.all([observed, reopened, materialized]);
+      await Promise.all([observed, reopened, collected]);
       await reader.return?.();
       await owner.dispose();
     }

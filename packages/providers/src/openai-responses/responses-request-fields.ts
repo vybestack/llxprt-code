@@ -1,11 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import type { ResponsesExecutorDeps } from './openAIResponsesExecutor.js';
 import type { ResponsesRequest } from './responses-request.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  buildOpenAIResponsesInput,
-  type ResponsesInputBuildContext,
-} from './OpenAIResponsesInputBuilder.js';
+import type { ResponsesInputBuildContext } from './OpenAIResponsesInputBuilder.js';
 import { resolveRuntimeAuthToken } from '../utils/authToken.js';
 import { convertToolsToOpenAIResponses } from './schemaConverter.js';
 import {
@@ -55,18 +51,6 @@ export async function resolveApiKey(
 
 export function isResponsesPdfEnabled(options: ResponsesRequest): boolean {
   return options.pdfEnabled;
-}
-
-export function buildInput(
-  options: ResponsesRequest,
-  patchedContent: IContent[],
-  deps: ResponsesExecutorDeps,
-  serverSideParentActive: boolean = false,
-): ResponsesInputItem[] {
-  return buildOpenAIResponsesInput(
-    patchedContent,
-    responsesInputContext(options, deps, serverSideParentActive),
-  );
 }
 
 export function responsesInputContext(

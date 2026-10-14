@@ -342,7 +342,6 @@ describe('Responses source ownership', () => {
       expect((await a.next()).value).toStrictEqual(pair[1]);
       await a.return?.();
       await b.return?.();
-      expect(owner.isMaterialized).toBe(false);
     } finally {
       await owner.dispose();
     }

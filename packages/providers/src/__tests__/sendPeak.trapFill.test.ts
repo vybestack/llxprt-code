@@ -6,8 +6,9 @@
 
 /**
  * Issue #854 step A2: control for the peak-during-send probe. With
- * `ISSUE854_SEND_TRAP=fill` the probe forces the lazy Responses fill path (#3858):
- * the whole history array, its patched copy and the whole `ResponsesInputItem[]`.
+ * `ISSUE854_SEND_TRAP=fill` the probe reproduces the lazy Responses fill path
+ * (#3858, deleted in step C3): the whole history array, its patched copy and
+ * the whole `ResponsesInputItem[]`.
  * The run on the openai-responses disk route, which passes without the trap,
  * must then break the growth bound. A probe that cannot see this proves
  * nothing about the routes it passes. The trap lives in test support only.

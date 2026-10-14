@@ -1,6 +1,7 @@
 import {
   captureResponsesTestRequest,
   type ResponsesTestDeps,
+  executeResponsesTestRequest,
 } from './responses-request.test-helpers.js';
 /**
  * @license
@@ -26,7 +27,6 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { Storage } from '@vybestack/llxprt-code-storage';
-import { executeOpenAIResponsesRequest } from './openAIResponsesExecutor.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
@@ -177,7 +177,7 @@ async function drainExpectingError(
   options: NormalizedGenerateChatOptions,
 ): Promise<unknown> {
   try {
-    for await (const _chunk of executeOpenAIResponsesRequest(
+    for await (const _chunk of executeResponsesTestRequest(
       captureResponsesTestRequest(options, buildDeps()),
       buildDeps(),
     )) {

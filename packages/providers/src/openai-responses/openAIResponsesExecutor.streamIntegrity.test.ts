@@ -1,6 +1,7 @@
 import {
   captureResponsesTestRequest,
   type ResponsesTestDeps,
+  executeResponsesTestRequest,
 } from './responses-request.test-helpers.js';
 /**
  * @license
@@ -25,7 +26,6 @@ import {
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { executeOpenAIResponsesRequest } from './openAIResponsesExecutor.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { GenerateChatOptions, IProvider } from '../IProvider.js';
 import type { IModel } from '../IModel.js';
@@ -199,7 +199,7 @@ function createExecutorProvider(deps: ResponsesTestDeps): IProvider {
       if (!isNormalizedOptions(options)) {
         throw new Error('test provider requires normalized options');
       }
-      yield* executeOpenAIResponsesRequest(
+      yield* executeResponsesTestRequest(
         captureResponsesTestRequest(
           { ...options, contents: await collectContents(options.contents) },
           deps,
@@ -251,7 +251,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC1/AC2', () =>
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const { messages, error } = await drainWithPossibleRejection(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps()),
         buildDeps(),
       ),
@@ -272,7 +272,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC1/AC2', () =>
       ephemerals: { retries: 3, retrywait: 0 },
     });
     const messages: IContent[] = [];
-    for await (const chunk of executeOpenAIResponsesRequest(
+    for await (const chunk of executeResponsesTestRequest(
       captureResponsesTestRequest(options, buildDeps()),
       buildDeps(),
     )) {
@@ -330,7 +330,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC3', () => {
     );
     const options = buildNormalizedOptions();
     const { error } = await drainWithPossibleRejection(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps()),
         buildDeps(),
       ),
@@ -354,7 +354,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC3', () => {
     );
     const options = buildNormalizedOptions();
     const messages: IContent[] = [];
-    for await (const chunk of executeOpenAIResponsesRequest(
+    for await (const chunk of executeResponsesTestRequest(
       captureResponsesTestRequest(options, buildDeps()),
       buildDeps(),
     )) {
@@ -429,7 +429,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC4 terminal', 
       );
       const options = buildNormalizedOptions();
       const { messages, error } = await drainWithPossibleRejection(
-        executeOpenAIResponsesRequest(
+        executeResponsesTestRequest(
           captureResponsesTestRequest(options, buildDeps()),
           buildDeps(),
         ),
@@ -458,7 +458,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC4 boundaries'
         }),
     );
     const single = await drainWithPossibleRejection(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(buildNormalizedOptions(), buildDeps()),
         buildDeps(),
       ),
@@ -471,7 +471,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC4 boundaries'
       async () => new Response(encodeSse([fixture.event, CREATED_EVENT])),
     );
     const split = await drainWithPossibleRejection(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(buildNormalizedOptions(), buildDeps()),
         buildDeps(),
       ),
@@ -506,7 +506,7 @@ describe('OpenAI Responses HTTP/SSE stream integrity @issue:3049 AC4 boundaries'
     );
     const options = buildNormalizedOptions();
     const { error } = await drainWithPossibleRejection(
-      executeOpenAIResponsesRequest(
+      executeResponsesTestRequest(
         captureResponsesTestRequest(options, buildDeps()),
         buildDeps(),
       ),

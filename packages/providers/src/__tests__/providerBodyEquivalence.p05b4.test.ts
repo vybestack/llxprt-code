@@ -710,20 +710,20 @@ describe('P05b4 openai-responses body equivalence @plan:PLAN-20260917-ISSUE854.P
     ).toBe('byte-identical');
   });
 
-  it('openai-responses: eager-array stream and lazy one-shot stream yield byte-identical bodies', async () => {
+  it('openai-responses: two sends of the same history stream yield byte-identical bodies', async () => {
     const rows = seededOpLog(0x1a2b3);
-    const eager = await captureResponsesBodies(rows, async () =>
+    const first = await captureResponsesBodies(rows, async () =>
       streamingSseResponse(),
     );
-    const lazy = await captureResponsesBodies(rows, async () =>
+    const second = await captureResponsesBodies(rows, async () =>
       streamingSseResponse(),
     );
-    const eagerBody = eager[0]?.bodyText ?? '';
-    const lazyBody = lazy[0]?.bodyText ?? '';
+    const firstBody = first[0]?.bodyText ?? '';
+    const secondBody = second[0]?.bodyText ?? '';
     expect(
-      byteEquals(eagerBody, lazyBody)
+      byteEquals(firstBody, secondBody)
         ? 'byte-identical'
-        : describeByteMismatch(eagerBody, lazyBody),
+        : describeByteMismatch(firstBody, secondBody),
     ).toBe('byte-identical');
   });
 });

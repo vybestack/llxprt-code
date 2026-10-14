@@ -13,9 +13,10 @@
  * carries a trap hook.
  *
  * - `array`: reads every row into an `IContent[]` and holds it for the send.
- * - `fill`: does what the lazy Responses fill path does (issue #3858): reads
- *   every row into an array, patches it with the synthetic tool responses
- *   (two more copies) and builds the whole `ResponsesInputItem[]`.
+ * - `fill`: does what the lazy Responses fill path did before step C3 deleted
+ *   it (issue #3858): reads every row into an array, patches it with the
+ *   synthetic tool responses (two more copies) and builds the whole
+ *   `ResponsesInputItem[]`.
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';

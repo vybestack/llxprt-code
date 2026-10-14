@@ -178,19 +178,11 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     const prepared =
       token === undefined ? undefined : this.preparedPromptEnvelopes.get(token);
     if (
-      prepared?.sourcePrompt !== undefined &&
+      prepared !== undefined &&
       prepared.rowsStagedFromContents !== true &&
       !readsRequestRowsAtTransport(contentsOrOptions)
     )
       throw new Error('Source token requires its transport-read request rows');
-    if (
-      readsRequestRowsAtTransport(contentsOrOptions) &&
-      prepared !== undefined &&
-      prepared.sourcePrompt === undefined
-    )
-      throw new Error(
-        'Disk text selection requires a source-backed prepared token',
-      );
     if (readsRequestRowsAtTransport(contentsOrOptions) && token === undefined)
       return this.generateWithOwnProjection(contentsOrOptions);
     return super.generateChatCompletion(contentsOrOptions);

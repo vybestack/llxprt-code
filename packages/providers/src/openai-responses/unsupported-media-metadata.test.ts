@@ -4,7 +4,7 @@ import type { IContent } from '@vybestack/llxprt-code-core/services/history/ICon
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { replayableContents } from '../utils/collectContents.js';
 import { acquireRequestRows } from '../utils/requestRowsLease.js';
-import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
+import { promptKeyWorkspaces } from './__tests__/support/projection-workspace-fixture.js';
 import { sourcePromptText as promptText } from './__tests__/support/source-prompt-text.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 
@@ -195,7 +195,7 @@ describe('ordinary Responses media projection counts', () => {
 
 describe('ordinary Responses media projection transport', () => {
   it('transports the projected substitutions with one source read and releases its prepared owner', async () => {
-    const leasesBefore = activeRequestBodyCount();
+    const workspacesBefore = promptKeyWorkspaces().length;
     const bodies: string[] = [];
     const server = Bun.serve({
       hostname: '127.0.0.1',
@@ -227,7 +227,7 @@ describe('ordinary Responses media projection transport', () => {
     const call = scope.options;
     const projection = await provider.projectPromptEnvelope(call);
     try {
-      expect(activeRequestBodyCount() - leasesBefore).toBe(1);
+      expect(promptKeyWorkspaces().length - workspacesBefore).toBe(1);
       expect(
         projection.unsupportedMedia.map((entry) => entry.mediaType),
       ).toStrictEqual(['pdf', 'pdf', 'audio', 'audio', 'video', 'unknown']);
@@ -245,7 +245,7 @@ describe('ordinary Responses media projection transport', () => {
       expect(body).not.toContain('"type":"input_file"');
       expect(body).not.toContain('https://example.com/audio.wav');
       expect(source.reads()).toBe(rows.length);
-      expect(activeRequestBodyCount() - leasesBefore).toBe(0);
+      expect(promptKeyWorkspaces().length - workspacesBefore).toBe(0);
     } finally {
       await projection.releaseIfUnsent?.();
       await scope.close();

@@ -98,9 +98,7 @@ async function* streamOverWebSocketWithRenewal(
         rebuilt.request,
         {
           ...baseOptions,
-          ...(rebuilt.streamWebSocketFrame === undefined
-            ? {}
-            : { requestFrameBytes: rebuilt.streamWebSocketFrame }),
+          requestFrameBytes: rebuilt.streamWebSocketFrame,
         },
         () => streamOverHttp(rebuilt, deps),
         deps.onWebSocketFallback,
@@ -128,9 +126,7 @@ async function buildWebSocketStreamOptions(
     includeThinkingInResponse: params.includeThinkingInResponse,
     responsesStored: params.responsesStored,
     onStreamLiveness: params.normalizedOptions.onStreamLiveness,
-    ...(params.streamWebSocketFrame === undefined
-      ? {}
-      : { requestFrameBytes: params.streamWebSocketFrame }),
+    requestFrameBytes: params.streamWebSocketFrame,
   };
 }
 

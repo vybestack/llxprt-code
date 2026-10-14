@@ -17,7 +17,7 @@ import { SettingsService } from '@vybestack/llxprt-code-settings';
 import type { NormalizedGenerateChatOptions } from '../../BaseProvider.js';
 import { loadProviderAliasEntries } from '../../composition/providerAliases.js';
 import { computeModelDefaults } from '../../runtime/providerMutations.js';
-import { buildRequestContext } from '../openAIResponsesExecutor.js';
+import { buildDiskTextResponsesContext } from '../responses-disk-text-projection.js';
 import type { OpenAIResponsesRequest } from '../OpenAIResponsesTypes.js';
 
 const PROVIDER_NAME = 'openai-responses';
@@ -139,12 +139,12 @@ async function build(fixture: RequestFixture): Promise<BuiltFixture> {
     'llxprt:providers:openai-responses:issue3255-test',
   );
   const baseURL = fixture.baseURL ?? BASE_URL;
-  const context = await buildRequestContext(
-    captureResponsesTestRequest(options, createDeps(logger, baseURL)),
-    [...options.contents],
-    { ...options.invocation.ephemerals },
-    createDeps(logger, baseURL),
+  const deps = createDeps(logger, baseURL);
+  const context = await buildDiskTextResponsesContext(
+    captureResponsesTestRequest(options, deps),
+    deps,
   );
+  await context.mediaRequest.release();
   return { request: context.request, logger };
 }
 

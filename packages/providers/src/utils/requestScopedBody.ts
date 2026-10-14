@@ -15,7 +15,6 @@
  */
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import { collectContents } from './collectContents.js';
 import { closeSync, openSync, readSync, rmSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import { deserialize, serialize } from 'node:v8';
@@ -137,12 +136,10 @@ export function activeRequestBodyCount(): number {
 /**
  * Request-owned history with a disk-backed replay prefix. Each upload opens
  * a cursor and pulls rows on demand; retries reread the snapshot before
- * advancing the one-shot source. Context-dependent rebuilds still materialize
- * an array explicitly. Disposal closes the source, cursors and snapshot.
+ * advancing the one-shot source. Disposal closes the source, cursors and
+ * snapshot. There is deliberately no way to collect the rows into an array.
  */
 export interface RequestScopedContents {
-  materialize(): Promise<IContent[]>;
-  readonly isMaterialized: boolean;
   stream(): AsyncIterable<IContent>;
   dispose(): Promise<void>;
 }
@@ -154,7 +151,6 @@ class ProgressiveRequestContents implements RequestScopedContents {
   private byteLength = 0;
   private reader: AsyncIterator<IContent> | undefined;
   private nextRow: Promise<void> | undefined;
-  private drain: Promise<IContent[]> | undefined;
   private disposal: Promise<void> | undefined;
   private exhausted = false;
   private disposed = false;
@@ -163,10 +159,6 @@ class ProgressiveRequestContents implements RequestScopedContents {
     private readonly source: AsyncIterable<IContent>,
     private readonly signal?: AbortSignal,
   ) {}
-
-  get isMaterialized(): boolean {
-    return this.drain !== undefined;
-  }
 
   private assertLive(): void {
     this.signal?.throwIfAborted();
@@ -235,12 +227,6 @@ class ProgressiveRequestContents implements RequestScopedContents {
     }
   }
 
-  async materialize(): Promise<IContent[]> {
-    this.assertLive();
-    this.drain ??= collectContents(this.stream());
-    return this.drain;
-  }
-
   dispose(): Promise<void> {
     if (this.disposal !== undefined) return this.disposal;
     this.disposed = true;
@@ -254,7 +240,6 @@ class ProgressiveRequestContents implements RequestScopedContents {
     } finally {
       this.reader = undefined;
       this.nextRow = undefined;
-      this.drain = undefined;
       for (const cursor of this.cursors) closeSync(cursor);
       this.cursors.clear();
       const storage = this.storage;

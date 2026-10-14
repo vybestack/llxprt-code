@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
+import { collectContents } from './collectContents.js';
 import { requestScopedContents } from './requestScopedBody.js';
 
 function source() {
@@ -55,9 +56,9 @@ describe('request-owned progressive history', () => {
     await expect(reader.next()).rejects.toThrow(
       'Request contents were disposed',
     );
-    await expect(owner.materialize()).rejects.toThrow(
-      'Request contents were disposed',
-    );
+    await expect(
+      owner.stream()[Symbol.asyncIterator]().next(),
+    ).rejects.toThrow('Request contents were disposed');
   });
 });
 
@@ -78,8 +79,8 @@ describe('request history failure and concurrent readers', () => {
       },
     });
     const attempts = await Promise.allSettled([
-      owner.materialize(),
-      owner.materialize(),
+      collectContents(owner.stream()),
+      collectContents(owner.stream()),
     ]);
     expect(attempts).toMatchObject([
       { status: 'rejected', reason: { message: 'history read failed' } },
@@ -88,13 +89,13 @@ describe('request history failure and concurrent readers', () => {
     expect(closed).toBe(true);
     await owner.dispose();
   });
-  it('shares in-flight source reads between streaming and materialization', async () => {
+  it('shares in-flight source reads between two readers', async () => {
     const history = source();
     const owner = requestScopedContents(history.rows);
     const reader = owner.stream()[Symbol.asyncIterator]();
     const [head, rows] = await Promise.all([
       reader.next(),
-      owner.materialize(),
+      collectContents(owner.stream()),
     ]);
     expect({ head: head.value, rows }).toMatchObject({
       head: { blocks: [{ text: 'alpha' }] },

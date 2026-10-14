@@ -1,4 +1,7 @@
-import { captureResponsesTestRequest } from '../responses-request.test-helpers.js';
+import {
+  captureResponsesTestRequest,
+  executeResponsesTestRequest,
+} from '../responses-request.test-helpers.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -42,7 +45,6 @@ import type {
   WebSocketTransport,
 } from '../openAIResponsesWebSocketTransport.js';
 import type { OpenAIResponsesRequest } from '../OpenAIResponsesTypes.js';
-import { executeOpenAIResponsesRequest } from '../openAIResponsesExecutor.js';
 import { createRuntimeConfigStub } from '@vybestack/llxprt-code-test-utils/core/runtime.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { streamCallOptions } from '../../__tests__/streamCallOptions.js';
@@ -209,7 +211,7 @@ function registerCodexRemediationCase2(): void {
             { speaker: 'human', blocks: [{ type: 'text', text: 'new q' }] },
           ];
           await drainHarness(
-            executeOpenAIResponsesRequest(
+            executeResponsesTestRequest(
               captureResponsesTestRequest(
                 buildOptions(contents),
                 buildDeps({ getWebSocketTransport: () => transport }),
@@ -258,7 +260,7 @@ function registerCodexRemediationCase3(): void {
             previous_response_id: 'resp_user_supplied',
           };
           await drainHarness(
-            executeOpenAIResponsesRequest(
+            executeResponsesTestRequest(
               captureResponsesTestRequest(
                 buildOptions(contents, ephemerals),
                 buildDeps({ getWebSocketTransport: () => transport }),
@@ -305,7 +307,7 @@ function registerCodexRemediationCase4(): void {
             },
           ];
           await drainHarness(
-            executeOpenAIResponsesRequest(
+            executeResponsesTestRequest(
               captureResponsesTestRequest(
                 buildOptions(contents),
                 buildDeps({ getWebSocketTransport: () => transport }),
@@ -356,7 +358,7 @@ function registerCodexRemediationCase5(): void {
             'responses-stateful': 'false',
           };
           await drainHarness(
-            executeOpenAIResponsesRequest(
+            executeResponsesTestRequest(
               captureResponsesTestRequest(
                 buildOptions(contents, ephemerals),
                 buildDeps({ getWebSocketTransport: () => transport }),
@@ -407,7 +409,7 @@ function registerCodexRemediationCase6(): void {
             'responses-stateful': 'true',
           };
           await drainHarness(
-            executeOpenAIResponsesRequest(
+            executeResponsesTestRequest(
               captureResponsesTestRequest(
                 buildOptions(contents, ephemerals),
                 buildDeps({ getWebSocketTransport: () => transport }),
@@ -443,7 +445,7 @@ function registerCodexRemediationCase7(): void {
             { speaker: 'human', blocks: [{ type: 'text', text: 'q1' }] },
           ];
           const messages = await drainHarness(
-            executeOpenAIResponsesRequest(
+            executeResponsesTestRequest(
               captureResponsesTestRequest(
                 buildOptions(contents, { 'responses-stateful': false }),
                 buildDeps({ getWebSocketTransport: () => transport }),
@@ -507,7 +509,7 @@ function registerCodexRemediationCase8(): void {
             { speaker: 'human', blocks: [{ type: 'text', text: 'q2' }] },
           ];
           await drainHarness(
-            executeOpenAIResponsesRequest(
+            executeResponsesTestRequest(
               captureResponsesTestRequest(
                 buildOptions(contents),
                 buildDeps({ getWebSocketTransport: () => transport }),
@@ -566,7 +568,7 @@ function registerCodexRemediationCase9(): void {
             },
           ];
           const turn1Output = await drainHarness(
-            executeOpenAIResponsesRequest(
+            executeResponsesTestRequest(
               captureResponsesTestRequest(
                 buildOptions(turn1Contents),
                 buildDeps({ getWebSocketTransport: () => transport1 }),
@@ -617,7 +619,7 @@ function registerCodexRemediationCase9(): void {
           });
           try {
             await drainHarness(
-              executeOpenAIResponsesRequest(
+              executeResponsesTestRequest(
                 captureResponsesTestRequest(
                   buildOptions(turn2Contents),
                   buildDeps({ getWebSocketTransport: () => transport2 }),

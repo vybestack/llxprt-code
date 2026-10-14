@@ -17,14 +17,10 @@ const context = {
 /** Counts every pass over the stored request rows. */
 class CountingContents implements RequestScopedContents {
   passes = 0;
-  readonly isMaterialized = false;
   constructor(private readonly rows: readonly IContent[]) {}
   async *stream(): AsyncIterableIterator<IContent> {
     this.passes += 1;
     for (const row of this.rows) yield row;
-  }
-  materialize(): Promise<IContent[]> {
-    return Promise.resolve([...this.rows]);
   }
   dispose(): Promise<void> {
     return Promise.resolve();

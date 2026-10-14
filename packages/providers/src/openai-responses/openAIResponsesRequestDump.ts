@@ -140,14 +140,6 @@ function dumpRequest(
   signal: AbortSignal | undefined,
 ): ReturnType<typeof dumpSDKRequestContext> {
   const source = requestContext.sourcePrompt;
-  if (source === undefined)
-    return dumpSDKRequestContext(
-      deps.providerName,
-      '/responses',
-      requestContext.request,
-      baseURL,
-      metadata,
-    );
   // Stream the sanitized disk body; the request object holds empty placeholders.
   return dumpSDKRequestContextBodyBytes(
     deps.providerName,
