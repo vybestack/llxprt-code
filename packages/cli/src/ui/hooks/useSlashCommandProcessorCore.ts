@@ -16,6 +16,13 @@ import { useChatCommand } from './useChatCommand.js';
 import { createContinueCommand } from '../commands/continueCommand.js';
 import { bindContinueCommandOperations } from '../commands/continueCommandHost.js';
 import { createCopyCommand } from '../commands/copyCommand.js';
+import { createTodoCommand } from '../commands/todoCommand.js';
+import { createHooksCommand } from '../commands/hooksCommand.js';
+import { createTaskCommand } from '../commands/tasksCommand.js';
+import {
+  bindHooksCommand,
+  bindTaskCommand,
+} from '../commands/hookTaskCommandHost.js';
 import { createToolsCommand } from '../commands/toolsCommand.js';
 import { bindToolsCommand } from '../commands/toolsCommandHost.js';
 import { createDirectoryCommand } from '../commands/directoryCommand.js';
@@ -190,11 +197,31 @@ function useHistoryCommandOwners(
   );
 }
 
+function useTodoCommandOwner(
+  todos: TodoContextValue | undefined,
+  addItem: UseHistoryManagerReturn['addItem'],
+): SlashCommand {
+  return useMemo(
+    () =>
+      createTodoCommand(
+        todos
+          ? {
+              readTodos: () => todos.todos,
+              updateTodos: (value) => todos.updateTodos(value),
+            }
+          : null,
+        addItem,
+      ),
+    [todos, addItem],
+  );
+}
+
 function useCommandState(
   settings: LoadedSettings,
   agent: Agent | null,
   addItem: UseHistoryManagerReturn['addItem'],
   setMemoryFileCount: (count: number) => void,
+  todoContext: TodoContextValue | undefined,
   reloadCommands: () => void,
   refreshProviderAliases: () => Promise<void>,
   rawRecording: RecordingIntegration | undefined,
@@ -261,6 +288,7 @@ function useCommandState(
     toolFormatCommand,
     setCommand,
     provider,
+    todoCommand: useTodoCommandOwner(todoContext, addItem),
     ...workspaceCommands,
     credentialCommands,
   });
@@ -314,6 +342,9 @@ type BuiltinCommandOwnerParts = Pick<
   imageCommand: SlashCommand;
   bugCommand: SlashCommand;
   policiesCommand: SlashCommand;
+  hooksCommand: SlashCommand;
+  taskCommand: SlashCommand;
+  todoCommand: SlashCommand;
   credentialCommands: ReturnType<typeof useCredentialCommands>;
 };
 
@@ -334,6 +365,9 @@ function useBuiltinCommandOwners(
     imageCommand,
     bugCommand,
     policiesCommand,
+    hooksCommand,
+    taskCommand,
+    todoCommand,
     credentialCommands,
   } = parts;
   return useMemo(
@@ -351,6 +385,9 @@ function useBuiltinCommandOwners(
       imageCommand,
       bugCommand,
       policiesCommand,
+      hooksCommand,
+      taskCommand,
+      todoCommand,
       ...credentialCommands,
     }),
     [
@@ -367,6 +404,9 @@ function useBuiltinCommandOwners(
       imageCommand,
       bugCommand,
       policiesCommand,
+      hooksCommand,
+      taskCommand,
+      todoCommand,
       credentialCommands,
     ],
   );
@@ -411,6 +451,8 @@ function useWorkspaceCommandOwners(
   toolsCommand: SlashCommand;
   directoryCommand: SlashCommand;
   imageCommand: SlashCommand;
+  hooksCommand: SlashCommand;
+  taskCommand: SlashCommand;
 } {
   const memoryCommand = useMemoryCommandOwner(
     config,
@@ -426,6 +468,15 @@ function useWorkspaceCommandOwners(
     memoryCommand,
     bugCommand,
     policiesCommand,
+    hooksCommand: useMemo(
+      () =>
+        createHooksCommand(bindHooksCommand(agent, config !== null), addItem),
+      [agent, config, addItem],
+    ),
+    taskCommand: useMemo(
+      () => createTaskCommand(bindTaskCommand(agent), addItem),
+      [agent, addItem],
+    ),
     toolsCommand: useToolsCommandOwner(agent, addItem),
     directoryCommand: useDirectoryCommandOwner(
       config,
@@ -645,6 +696,7 @@ export function useSlashCommandProcessorCore(
     args.agent,
     args.addItem,
     args.setLlxprtMdFileCount,
+    args.todoContext,
     reloadRegisteredCommands,
     refreshProviderAliases,
     args.recordingIntegration,

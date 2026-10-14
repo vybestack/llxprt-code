@@ -7,7 +7,7 @@ import { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { WorkspaceTrustLifecycle } from '@vybestack/llxprt-code-core/services/workspace-trust-lifecycle.js';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'bun:test';
-import { hooksCommand } from './hooksCommand.js';
+import { registerHooksCommand } from '../../__tests__/hook-task-command-test-owner.js';
 import { MessageType } from '../types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import type { CommandContext } from './types.js';
@@ -164,7 +164,9 @@ describe('hooksCommand', () => {
 
   describe('list command', () => {
     it('should list all hooks', async () => {
-      const listCmd = hooksCommand.subCommands!.find((s) => s.name === 'list')!;
+      const listCmd = registerHooksCommand(context).subCommands!.find(
+        (s) => s.name === 'list',
+      )!;
       await listCmd.action!(context, '');
 
       expect(context.ui.addItem).toHaveBeenCalledWith(
@@ -182,7 +184,9 @@ describe('hooksCommand', () => {
         },
       });
 
-      const listCmd = hooksCommand.subCommands!.find((s) => s.name === 'list')!;
+      const listCmd = registerHooksCommand(contextNoConfig).subCommands!.find(
+        (s) => s.name === 'list',
+      )!;
       await listCmd.action!(contextNoConfig, '');
 
       expect(contextNoConfig.ui.addItem).toHaveBeenCalledWith(
@@ -199,7 +203,9 @@ describe('hooksCommand', () => {
         services: { agent: null },
       });
 
-      const listCmd = hooksCommand.subCommands!.find((s) => s.name === 'list')!;
+      const listCmd = registerHooksCommand(contextNoHooks).subCommands!.find(
+        (s) => s.name === 'list',
+      )!;
       await listCmd.action!(contextNoHooks, '');
 
       expect(contextNoHooks.ui.addItem).toHaveBeenCalledWith(
@@ -214,7 +220,7 @@ describe('hooksCommand', () => {
 
   describe('enable command', () => {
     it('should enable a hook by name', async () => {
-      const enableCmd = hooksCommand.subCommands!.find(
+      const enableCmd = registerHooksCommand(context).subCommands!.find(
         (s) => s.name === 'enable',
       )!;
       await enableCmd.action!(context, 'hook3');
@@ -233,7 +239,7 @@ describe('hooksCommand', () => {
     });
 
     it('should show error if hook not found', async () => {
-      const enableCmd = hooksCommand.subCommands!.find(
+      const enableCmd = registerHooksCommand(context).subCommands!.find(
         (s) => s.name === 'enable',
       )!;
       await enableCmd.action!(context, 'nonexistent');
@@ -248,7 +254,7 @@ describe('hooksCommand', () => {
     });
 
     it('should show usage error if no hook name provided', async () => {
-      const enableCmd = hooksCommand.subCommands!.find(
+      const enableCmd = registerHooksCommand(context).subCommands!.find(
         (s) => s.name === 'enable',
       )!;
       await enableCmd.action!(context, '');
@@ -265,7 +271,7 @@ describe('hooksCommand', () => {
 
   describe('disable command', () => {
     it('should disable a hook by name', async () => {
-      const disableCmd = hooksCommand.subCommands!.find(
+      const disableCmd = registerHooksCommand(context).subCommands!.find(
         (s) => s.name === 'disable',
       )!;
       await disableCmd.action!(context, 'hook1');
@@ -284,7 +290,7 @@ describe('hooksCommand', () => {
     });
 
     it('should show error if hook not found', async () => {
-      const disableCmd = hooksCommand.subCommands!.find(
+      const disableCmd = registerHooksCommand(context).subCommands!.find(
         (s) => s.name === 'disable',
       )!;
       await disableCmd.action!(context, 'nonexistent');
@@ -299,7 +305,7 @@ describe('hooksCommand', () => {
     });
 
     it('should show usage error if no hook name provided', async () => {
-      const disableCmd = hooksCommand.subCommands!.find(
+      const disableCmd = registerHooksCommand(context).subCommands!.find(
         (s) => s.name === 'disable',
       )!;
       await disableCmd.action!(context, '');
@@ -316,7 +322,7 @@ describe('hooksCommand', () => {
 
   describe('enable-all command', () => {
     it('should enable all hooks', async () => {
-      const enableAllCmd = hooksCommand.subCommands!.find(
+      const enableAllCmd = registerHooksCommand(context).subCommands!.find(
         (s) => s.name === 'enable-all',
       )!;
       await enableAllCmd.action!(context, '');
@@ -349,7 +355,7 @@ describe('hooksCommand', () => {
     it('should show info if no hooks registered', async () => {
       const contextEmpty = await makeContext([]);
 
-      const enableAllCmd = hooksCommand.subCommands!.find(
+      const enableAllCmd = registerHooksCommand(contextEmpty).subCommands!.find(
         (s) => s.name === 'enable-all',
       )!;
       await enableAllCmd.action!(contextEmpty, '');
@@ -370,9 +376,9 @@ describe('hooksCommand', () => {
         },
       });
 
-      const enableAllCmd = hooksCommand.subCommands!.find(
-        (s) => s.name === 'enable-all',
-      )!;
+      const enableAllCmd = registerHooksCommand(
+        contextNoConfig,
+      ).subCommands!.find((s) => s.name === 'enable-all')!;
       await enableAllCmd.action!(contextNoConfig, '');
 
       expect(contextNoConfig.ui.addItem).toHaveBeenCalledWith(
@@ -389,9 +395,9 @@ describe('hooksCommand', () => {
         services: { agent: null },
       });
 
-      const enableAllCmd = hooksCommand.subCommands!.find(
-        (s) => s.name === 'enable-all',
-      )!;
+      const enableAllCmd = registerHooksCommand(
+        contextNoHooks,
+      ).subCommands!.find((s) => s.name === 'enable-all')!;
       await enableAllCmd.action!(contextNoHooks, '');
 
       expect(contextNoHooks.ui.addItem).toHaveBeenCalledWith(
@@ -406,7 +412,7 @@ describe('hooksCommand', () => {
 
   describe('disable-all command', () => {
     it('should disable all hooks', async () => {
-      const disableAllCmd = hooksCommand.subCommands!.find(
+      const disableAllCmd = registerHooksCommand(context).subCommands!.find(
         (s) => s.name === 'disable-all',
       )!;
       await disableAllCmd.action!(context, '');
@@ -443,9 +449,9 @@ describe('hooksCommand', () => {
     it('should show info if no hooks registered', async () => {
       const contextEmpty = await makeContext([]);
 
-      const disableAllCmd = hooksCommand.subCommands!.find(
-        (s) => s.name === 'disable-all',
-      )!;
+      const disableAllCmd = registerHooksCommand(
+        contextEmpty,
+      ).subCommands!.find((s) => s.name === 'disable-all')!;
       await disableAllCmd.action!(contextEmpty, '');
 
       expect(contextEmpty.ui.addItem).toHaveBeenCalledWith(
@@ -464,9 +470,9 @@ describe('hooksCommand', () => {
         },
       });
 
-      const disableAllCmd = hooksCommand.subCommands!.find(
-        (s) => s.name === 'disable-all',
-      )!;
+      const disableAllCmd = registerHooksCommand(
+        contextNoConfig,
+      ).subCommands!.find((s) => s.name === 'disable-all')!;
       await disableAllCmd.action!(contextNoConfig, '');
 
       expect(contextNoConfig.ui.addItem).toHaveBeenCalledWith(
@@ -483,9 +489,9 @@ describe('hooksCommand', () => {
         services: { agent: null },
       });
 
-      const disableAllCmd = hooksCommand.subCommands!.find(
-        (s) => s.name === 'disable-all',
-      )!;
+      const disableAllCmd = registerHooksCommand(
+        contextNoHooks,
+      ).subCommands!.find((s) => s.name === 'disable-all')!;
       await disableAllCmd.action!(contextNoHooks, '');
 
       expect(contextNoHooks.ui.addItem).toHaveBeenCalledWith(
@@ -500,7 +506,7 @@ describe('hooksCommand', () => {
 
   describe('completion', () => {
     it('should provide hook name completions', async () => {
-      const enableCmd = hooksCommand.subCommands!.find(
+      const enableCmd = registerHooksCommand(context).subCommands!.find(
         (s) => s.name === 'enable',
       )!;
 
@@ -510,7 +516,7 @@ describe('hooksCommand', () => {
     });
 
     it('should filter completions by partial arg', async () => {
-      const enableCmd = hooksCommand.subCommands!.find(
+      const enableCmd = registerHooksCommand(context).subCommands!.find(
         (s) => s.name === 'enable',
       )!;
 
@@ -526,7 +532,7 @@ describe('hooksCommand', () => {
         },
       });
 
-      const enableCmd = hooksCommand.subCommands!.find(
+      const enableCmd = registerHooksCommand(contextNoConfig).subCommands!.find(
         (s) => s.name === 'enable',
       )!;
 
@@ -538,7 +544,7 @@ describe('hooksCommand', () => {
 
   describe('default action', () => {
     it('should list hooks when no subcommand is provided', async () => {
-      await hooksCommand.action!(context, '');
+      await registerHooksCommand(context).action!(context, '');
 
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -549,7 +555,7 @@ describe('hooksCommand', () => {
     });
 
     it('should list hooks when unknown subcommand is provided', async () => {
-      await hooksCommand.action!(context, 'unknown');
+      await registerHooksCommand(context).action!(context, 'unknown');
 
       expect(context.ui.addItem).toHaveBeenCalledWith(
         expect.objectContaining({
