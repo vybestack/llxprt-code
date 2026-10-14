@@ -8,7 +8,7 @@ import { describe, it, expect, vi } from 'bun:test';
 import { createCompletionHandler } from '../schema/index.js';
 import { parseCommandArguments } from '../../hooks/slashCommandPathUtils.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
-import { subagentCommand, subagentNameSchema } from '../subagentCommand.js';
+import { registerSubagentCommand } from '../../../__tests__/subagent-command-test-owner.js';
 import { assertDefined } from '../../../__tests__/assertions.js';
 
 type MockSubagentDetail = {
@@ -69,21 +69,22 @@ const invoke = async (
     commandPathLength: 2,
   },
 ) => {
-  const saveCommand = subagentCommand.subCommands?.find(
+  const context = createContext();
+  const saveCommand = registerSubagentCommand(context).subCommands?.find(
     (cmd) => cmd.name === 'save',
   );
 
   assertDefined(saveCommand?.schema);
 
   const handler = createCompletionHandler(saveCommand.schema);
-  return handler(createContext(), input, fullLine);
+  return handler(context, input, fullLine);
 };
 
 describe('subagent schema resolver integration @plan:PLAN-20250214-AUTOCOMPLETE.P08 @requirement:REQ-002 @requirement:REQ-003 @requirement:REQ-005', () => {
   it('has separate create command for interactive wizard', () => {
-    const createCommand = subagentCommand.subCommands?.find(
-      (cmd) => cmd.name === 'create',
-    );
+    const createCommand = registerSubagentCommand(
+      createContext(),
+    ).subCommands?.find((cmd) => cmd.name === 'create');
 
     expect(createCommand).toBeDefined();
     expect(createCommand?.description).toMatch(/create.*interactive/i);
@@ -162,8 +163,10 @@ describe('subagent schema resolver integration @plan:PLAN-20250214-AUTOCOMPLETE.
   });
 });
 
-const getSubCommand = (subName: string) =>
-  subagentCommand.subCommands?.find((cmd) => cmd.name === subName);
+const getSubCommand = (subName: string, context = createContext()) =>
+  registerSubagentCommand(context).subCommands?.find(
+    (cmd) => cmd.name === subName,
+  );
 
 function nullableSubcommand(
   subcommand: ReturnType<typeof getSubCommand>,
@@ -185,7 +188,8 @@ const invokeSub = async (
   fullLine: string,
   input: Parameters<ReturnType<typeof createCompletionHandler>>[1],
 ) => {
-  const sub = getSubCommand(subName);
+  const context = createContext();
+  const sub = getSubCommand(subName, context);
 
   assertDefined(sub?.schema);
 
@@ -247,6 +251,8 @@ describe('subagent name completer edge cases @issue:1115', () => {
       },
     });
 
+    const subagentNameSchema = getSubCommand('edit', ctx)?.schema;
+    assertDefined(subagentNameSchema);
     const handler = createCompletionHandler(subagentNameSchema);
     const result = await handler(
       ctx,
@@ -267,6 +273,8 @@ describe('subagent name completer edge cases @issue:1115', () => {
       services: {},
     });
 
+    const subagentNameSchema = getSubCommand('edit', ctx)?.schema;
+    assertDefined(subagentNameSchema);
     const handler = createCompletionHandler(subagentNameSchema);
     const result = await handler(
       ctx,
@@ -292,6 +300,8 @@ describe('subagent name completer edge cases @issue:1115', () => {
       },
     });
 
+    const subagentNameSchema = getSubCommand('edit', ctx)?.schema;
+    assertDefined(subagentNameSchema);
     const handler = createCompletionHandler(subagentNameSchema);
     const result = await handler(
       ctx,
@@ -321,7 +331,7 @@ describe.each(['edit', 'show', 'delete'])(
         [],
         true,
         nullableSubcommand(sub),
-        subagentCommand.subCommands,
+        registerSubagentCommand(createContext()).subCommands,
       );
 
       expect(result.leafSupportsArguments).toBe(true);
@@ -334,7 +344,7 @@ describe.each(['edit', 'show', 'delete'])(
         ['ag'],
         false,
         nullableSubcommand(sub),
-        subagentCommand.subCommands,
+        registerSubagentCommand(createContext()).subCommands,
       );
 
       expect(result.argumentPartial).toBe('ag');

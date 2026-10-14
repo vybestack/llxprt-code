@@ -37,10 +37,7 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { configureProviderRuntimeFactories } from '@vybestack/llxprt-code-providers/composition.js';
 import { beginCliRuntimeRegistration } from '@vybestack/llxprt-code-providers/runtime/cliForegroundRuntime.js';
-import {
-  generateAutoPrompt,
-  type AutoPromptRuntime,
-} from './autoPromptGenerator.js';
+import { bindAutoPromptGeneration } from './autoPromptGeneration.js';
 
 const cleanups: Array<() => Promise<void>> = [];
 
@@ -154,18 +151,6 @@ async function owner(
   };
 }
 
-function liveRuntime(source: {
-  sessionClient: SessionClientOwner;
-}): AutoPromptRuntime {
-  return {
-    getProvider: () => 'anthropic',
-    get agentClient() {
-      return source.sessionClient.getAgentClient();
-    },
-    sessionClient: source.sessionClient,
-  };
-}
-
 describe('auto prompt explicit client ownership', () => {
   afterEach(() => {
     fixtureFilesystem = undefined;
@@ -183,11 +168,12 @@ describe('auto prompt explicit client ownership', () => {
     const unrelated = beginCliRuntimeRegistration(b.settings, b.config, {
       runtimeId: 'failure-scope',
     });
-    const result = await generateAutoPrompt(
-      liveRuntime(a),
-      'Review code',
-      a.config.getContentGeneratorConfig(),
-    ).catch((error: unknown) => error);
+    const result = await bindAutoPromptGeneration(
+      () => 'anthropic',
+      () => a.sessionClient.getAgentClient(),
+      () => a.sessionClient.createDetachedAgentClient(),
+      () => a.config.getContentGeneratorConfig(),
+    )('Review code').catch((error: unknown) => error);
     unrelated.dispose();
     expect(a.requests).toHaveLength(1);
     expect(result).toBeInstanceOf(Error);
@@ -202,11 +188,12 @@ describe('auto prompt explicit client ownership', () => {
     const unrelated = beginCliRuntimeRegistration(b.settings, b.config, {
       runtimeId: 'owner-b',
     });
-    const result = await generateAutoPrompt(
-      liveRuntime(a),
-      'Review code',
-      a.config.getContentGeneratorConfig(),
-    );
+    const result = await bindAutoPromptGeneration(
+      () => 'anthropic',
+      () => a.sessionClient.getAgentClient(),
+      () => a.sessionClient.createDetachedAgentClient(),
+      () => a.config.getContentGeneratorConfig(),
+    )('Review code');
     unrelated.dispose();
     expect(result).toBe('  owner-a: expanded prompt\n');
     expect(a.requests).toHaveLength(1);
@@ -217,18 +204,12 @@ describe('auto prompt explicit client ownership', () => {
     it(`releases detached client event subscriptions after ${failure ? 'failure' : 'success'}`, async () => {
       const detached = await owner('detached-owner', failure);
       expect(detached.readModelListenerCount()).toBe(1);
-      const runtime: AutoPromptRuntime = {
-        getProvider: () => 'gemini',
-        get agentClient() {
-          return detached.sessionClient.getAgentClient();
-        },
-        sessionClient: detached.sessionClient,
-      };
-      const result = await generateAutoPrompt(
-        runtime,
-        'Review code',
-        detached.client.getContentGeneratorConfig(),
-      ).then(
+      const result = await bindAutoPromptGeneration(
+        () => 'gemini',
+        () => detached.sessionClient.getAgentClient(),
+        () => detached.sessionClient.createDetachedAgentClient(),
+        () => detached.client.getContentGeneratorConfig(),
+      )('Review code').then(
         (text) => ({ text }),
         (error: unknown) => ({ error }),
       );

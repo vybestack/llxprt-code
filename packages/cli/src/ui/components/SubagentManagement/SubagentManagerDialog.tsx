@@ -1,11 +1,9 @@
-import type { AutoPromptRuntime } from '../../utils/autoPromptGenerator.js';
 /**
  * @license
  * Copyright 2025 Vybestack LLC
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { Agent } from '@vybestack/llxprt-code-agents';
 import type React from 'react';
 import { useState, useCallback, useEffect } from 'react';
 import { Box, Text } from 'ink';
@@ -242,14 +240,13 @@ function useCreateHandler(
           throw new Error(
             'Configuration service unavailable. Set up the CLI before using auto mode.',
           );
-        const { generateAutoPrompt } = await import(
-          '../../utils/autoPromptGenerator.js'
+        const { bindAutoPromptOperation } = await import(
+          '../../commands/subagentCommandHost.js'
         );
-        finalPrompt = await generateAutoPrompt(
-          requireAutoPromptAgent(runtimeCommandContext?.services.agent),
-          systemPrompt,
-          config.getContentGeneratorConfig(),
-        );
+        finalPrompt = await bindAutoPromptOperation(
+          runtimeCommandContext?.services.agent ?? null,
+          config,
+        )(systemPrompt);
       }
       await subagentManager.saveSubagent(name, profile, finalPrompt);
       onClose();
@@ -704,19 +701,3 @@ export const SubagentManagerDialog: React.FC<SubagentManagerDialogProps> = ({
     />
   );
 };
-
-function requireAutoPromptAgent(
-  agent: Agent | null | undefined,
-): AutoPromptRuntime {
-  if (!agent) throw new Error('Session agent is unavailable');
-  return {
-    getProvider: () => agent.getProvider(),
-    get agentClient() {
-      return agent.agentClient;
-    },
-    sessionClient: {
-      createDetachedAgentClient: (id) =>
-        agent.sessionClient.createDetachedAgentClient(id),
-    },
-  };
-}

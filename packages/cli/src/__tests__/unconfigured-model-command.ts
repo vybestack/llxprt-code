@@ -1,3 +1,5 @@
+import { createSubagentCommand } from '../ui/commands/subagentCommand.js';
+import { bindSubagentCommand } from '../ui/commands/subagentCommandHost.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -333,6 +335,19 @@ export function createUnconfiguredBuiltinOwners(): BuiltinCommandOwners {
 
 function unconfiguredWorkspaceCommands() {
   return {
+    subagentCommand: createSubagentCommand(
+      bindSubagentCommand(
+        undefined,
+        undefined,
+        async () => [],
+        () => true,
+        async () => {
+          throw new Error('Agent unavailable');
+        },
+        false,
+        () => 0,
+      ),
+    ),
     extensionsCommand: createExtensionsCommand(
       bindExtensionsCommand(
         null,

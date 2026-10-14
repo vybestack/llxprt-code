@@ -58,7 +58,7 @@ describe('detached auto prompt client', () => {
       throw new Error('Missing owned session media store');
     await primary.startChat();
     const client = await createDetachedAutoPromptClient(
-      created,
+      () => created.sessionClient.createDetachedAgentClient(),
       primary.getContentGeneratorConfig(),
     );
     const output = await client.generateDirectMessage(
@@ -90,7 +90,10 @@ describe('detached auto prompt client', () => {
     const primary = created.agentClient;
     await primary.startChat();
     await expect(
-      createDetachedAutoPromptClient(created, undefined),
+      createDetachedAutoPromptClient(
+        () => created.sessionClient.createDetachedAgentClient(),
+        undefined,
+      ),
     ).rejects.toThrow('Content generator configuration is unavailable');
     await primary.addHistory({
       speaker: 'human',
