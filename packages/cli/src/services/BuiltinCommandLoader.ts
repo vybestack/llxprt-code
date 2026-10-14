@@ -17,19 +17,14 @@ import type {
   ExtensionEnablementSource,
 } from '../ui/cliUiRuntime.js';
 import type { ICommandLoader } from './types.js';
-import { aboutCommand } from '../ui/commands/aboutCommand.js';
-import { clearCommand } from '../ui/commands/clearCommand.js';
 import { docsCommand } from '../ui/commands/docsCommand.js';
 
 import { editorCommand } from '../ui/commands/editorCommand.js';
 import { helpCommand } from '../ui/commands/helpCommand.js';
 import { ideCommand } from '../ui/commands/ideCommand.js';
 
-import { initCommand } from '../ui/commands/initCommand.js';
-
 import { privacyCommand } from '../ui/commands/privacyCommand.js';
 import { loggingCommand } from '../ui/commands/loggingCommand.js';
-import { uiprofileCommand } from '../ui/commands/uiprofileCommand.js';
 import { mouseCommand } from '../ui/commands/mouseCommand.js';
 import { quitCommand } from '../ui/commands/quitCommand.js';
 import { statsCommand } from '../ui/commands/statsCommand.js';
@@ -37,7 +32,6 @@ import { themeCommand } from '../ui/commands/themeCommand.js';
 
 import { skillsCommand } from '../ui/commands/skillsCommand.js';
 import { settingsCommand } from '../ui/commands/settingsCommand.js';
-import { vimCommand } from '../ui/commands/vimCommand.js';
 import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
 import { diagnosticsCommand } from '../ui/commands/diagnosticsCommand.js';
 import { terminalSetupCommand } from '../ui/commands/terminalSetupCommand.js';
@@ -55,6 +49,11 @@ import { createPerfCommand } from '../ui/commands/perfCommand.js';
  * of the LLxprt Code application.
  */
 export interface BuiltinCommandOwners {
+  readonly aboutCommand: SlashCommand;
+  readonly clearCommand: SlashCommand;
+  readonly initCommand: SlashCommand;
+  readonly vimCommand: SlashCommand;
+  readonly uiProfileCommand: SlashCommand | null;
   readonly extensionsCommand: SlashCommand;
   readonly subagentCommand: SlashCommand;
   readonly hooksCommand: SlashCommand;
@@ -147,11 +146,11 @@ export class BuiltinCommandLoader implements ICommandLoader {
    */
   private registerBuiltinCommands(): SlashCommand[] {
     const allDefinitions: Array<SlashCommand | null> = [
-      aboutCommand,
+      this.owners.aboutCommand,
       this.owners.authCommand,
       this.owners.bugCommand,
       this.owners.chatCommand,
-      clearCommand,
+      this.owners.clearCommand,
       this.owners.compressCommand,
       this.owners.copyCommand,
       docsCommand,
@@ -161,13 +160,13 @@ export class BuiltinCommandLoader implements ICommandLoader {
       helpCommand,
       ideCommand(this.config),
       this.owners.imageCommand,
-      initCommand,
+      this.owners.initCommand,
       this.owners.mcpCommand,
       this.owners.memoryCommand,
       privacyCommand,
       loggingCommand,
       mouseCommand,
-      ...(isDevelopment ? [uiprofileCommand] : []),
+      ...(isDevelopment ? [this.owners.uiProfileCommand] : []),
       quitCommand,
       this.owners.restoreCommand,
       this.owners.quotaCommand,
@@ -176,7 +175,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       this.owners.toolsCommand,
       ...this.resolveSkillsCommand(),
       settingsCommand,
-      vimCommand,
+      this.owners.vimCommand,
       this.owners.providerCommand,
       this.owners.modelCommand,
       this.owners.keyCommand,

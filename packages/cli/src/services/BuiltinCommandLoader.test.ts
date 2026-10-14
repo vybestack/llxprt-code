@@ -19,22 +19,6 @@ void vi.mock('../ui/commands/profileCommand.js', () => ({
   },
 }));
 
-void vi.mock('../ui/commands/uiprofileCommand.js', () => ({
-  uiprofileCommand: {
-    name: 'uiprofile',
-    description: 'UI Profile command',
-    kind: CommandKind.BUILT_IN,
-  },
-}));
-
-void vi.mock('../ui/commands/aboutCommand.js', () => ({
-  aboutCommand: {
-    name: 'about',
-    description: 'About the CLI',
-    kind: CommandKind.BUILT_IN,
-  },
-}));
-
 void vi.mock('../ui/commands/ideCommand.js', () => ({
   ideCommand: vi.fn().mockReturnValue({
     name: 'ide',
@@ -57,7 +41,6 @@ import type { Config } from '@vybestack/llxprt-code-core';
 import { CommandKind } from '../ui/commands/types.js';
 
 void vi.mock('../ui/commands/bugCommand.js', () => ({ bugCommand: {} }));
-void vi.mock('../ui/commands/clearCommand.js', () => ({ clearCommand: {} }));
 void vi.mock('../ui/commands/compressCommand.js', () => ({
   compressCommand: {},
 }));

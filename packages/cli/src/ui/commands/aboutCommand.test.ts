@@ -14,7 +14,8 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { aboutCommand } from './aboutCommand.js';
+import { createAboutCommand } from './aboutCommand.js';
+import { bindAboutDetails } from './aboutCommandHost.js';
 import { type CommandContext } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import * as versionUtils from '../../utils/version.js';
@@ -34,6 +35,7 @@ void vi.mock('../../utils/version.js', () => ({
 describe('aboutCommand', () => {
   const getRuntimeApiMock = runtimeMocks.getRuntimeApiMock;
   let mockContext: CommandContext;
+  let aboutCommand: ReturnType<typeof createAboutCommand>;
   const originalPlatform = process.platform;
   const originalEnv = { ...process.env };
 
@@ -73,6 +75,14 @@ describe('aboutCommand', () => {
     ).mockResolvedValue('test-version');
     vi.spyOn(mockContext.services.config!, 'getModel').mockReturnValue(
       'test-model',
+    );
+    aboutCommand = createAboutCommand(
+      bindAboutDetails(
+        mockContext.runtimeApi,
+        mockContext.services.config,
+        mockContext.services.settings,
+      ),
+      mockContext.ui.addItem,
     );
     process.env.GOOGLE_CLOUD_PROJECT = 'test-gcp-project';
     Object.defineProperty(process, 'platform', {

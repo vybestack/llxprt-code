@@ -9,12 +9,9 @@
 
 import { describe, it, expect } from 'bun:test';
 import type { SlashCommand } from '../commands/types.js';
-import { aboutCommand } from '../commands/aboutCommand.js';
-import { clearCommand } from '../commands/clearCommand.js';
 import { docsCommand } from '../commands/docsCommand.js';
 import { editorCommand } from '../commands/editorCommand.js';
 import { helpCommand } from '../commands/helpCommand.js';
-import { initCommand } from '../commands/initCommand.js';
 import { createModelCommand } from '../commands/modelCommand.js';
 import { quitCommand } from '../commands/quitCommand.js';
 import { settingsCommand } from '../commands/settingsCommand.js';
@@ -39,14 +36,14 @@ function findSub(cmd: SlashCommand, name: string): SlashCommand | undefined {
 
 describe('autoExecute classifications — top-level commands', () => {
   it.each<[string, SlashCommand]>([
-    ['about', aboutCommand],
-    ['clear', clearCommand],
+    ['about', createUnconfiguredBuiltinOwners().aboutCommand],
+    ['clear', createUnconfiguredBuiltinOwners().clearCommand],
     ['compress', createUnconfiguredBuiltinOwners().compressCommand],
     ['copy', createUnconfiguredBuiltinOwners().copyCommand],
     ['docs', docsCommand],
     ['editor', editorCommand],
     ['help', helpCommand],
-    ['init', initCommand],
+    ['init', createUnconfiguredBuiltinOwners().initCommand],
     ['model', modelCommand],
     ['quit', quitCommand],
     ['settings', settingsCommand],

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { usePresentationCommands } from './usePresentationCommands.js';
 import type { CliUiRuntime } from '../cliUiRuntime.js';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { createToolFormatCommand } from '../commands/toolformatCommand.js';
@@ -232,6 +233,7 @@ function useCommandState(
   config: CliUiRuntime | null,
   runtimeApi: ReturnType<typeof useRuntimeApi>,
   extensionsCommand: SlashCommand,
+  presentationCommands: ReturnType<typeof usePresentationCommands>,
 ): SlashCommandProcessorState {
   const rec = useSwitch(agent?.session, rawRecording, recordingOwner);
   const modelCommand = useModelCommand(
@@ -289,6 +291,7 @@ function useCommandState(
     todoCommand: useTodoCommandOwner(todoContext, addItem),
     subagentCommand: useSubagentCommand(agent, config, settings, addItem),
     extensionsCommand,
+    presentationCommands,
     ...workspaceCommands,
     credentialCommands,
   });
@@ -336,6 +339,7 @@ type BuiltinCommandOwnerParts = Pick<
   | 'extensionsCommand'
   | 'subagentCommand'
 > & {
+  presentationCommands: ReturnType<typeof usePresentationCommands>;
   historyCommandOwners: ReturnType<typeof useHistoryCommandOwners>;
   provider: SlashCommand;
   toolsCommand: SlashCommand;
@@ -357,6 +361,7 @@ function useBuiltinCommandOwners(
     chatCommand,
     continueCommand,
     historyCommandOwners,
+    presentationCommands,
     modelCommand,
     toolFormatCommand,
     setCommand,
@@ -379,6 +384,7 @@ function useBuiltinCommandOwners(
       chatCommand,
       continueCommand,
       ...historyCommandOwners,
+      ...presentationCommands,
       modelCommand,
       toolFormatCommand,
       setCommand,
@@ -400,6 +406,7 @@ function useBuiltinCommandOwners(
       chatCommand,
       continueCommand,
       historyCommandOwners,
+      presentationCommands,
       modelCommand,
       toolFormatCommand,
       setCommand,
@@ -697,6 +704,7 @@ function useRegisteredCommands(
   runtimeApi: ReturnType<typeof useRuntimeApi>,
   refreshProviderAliases: () => Promise<void>,
   setPendingItem: (item: HistoryItemWithoutId | null) => void,
+  updateHistoryTokenCount: (count: number) => void,
 ): SlashCommandProcessorState {
   const { reloadCommandsRef, reloadRegisteredCommands } =
     useRegisteredCommandReload();
@@ -720,6 +728,21 @@ function useRegisteredCommands(
     args.config,
     runtimeApi,
     extensionsCommand,
+    usePresentationCommands(
+      args.agent,
+      args.config,
+      args.settings,
+      runtimeApi,
+      args.addItem,
+      args.actions.setDebugMessage,
+      updateHistoryTokenCount,
+      args.clearItems,
+      args.refreshStatic,
+      args.settings.merged.ui.useAlternateBuffer === true &&
+        !(args.config?.getScreenReader() ?? false),
+      args.toggleVimEnabled,
+      args.actions.toggleDebugProfiler,
+    ),
   );
   reloadCommandsRef.current = state.reloadCommands;
   return state;
@@ -737,6 +760,7 @@ export function useSlashCommandProcessorCore(
     api,
     refreshProviderAliases,
     pending.setPendingItem,
+    session.updateHistoryTokenCount,
   );
   const commandContext = useCommandContext({
     runtimeApi: api,
