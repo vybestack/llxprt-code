@@ -31,8 +31,22 @@ function ownedSource(
   return Object.freeze({ path, encoding: source.encoding ?? 'utf8' });
 }
 
+/** The prompt-bearing request keys of each wire protocol, in request order. */
+const PROMPT_KEYS: Readonly<
+  Record<Gpt56SourceProjectionOptions['protocol'], readonly string[]>
+> = Object.freeze({
+  'openai-responses': ['instructions', 'input', 'tools'],
+  'openai-chat': ['messages', 'tools'],
+  'anthropic-messages': ['system', 'messages', 'tools'],
+});
+
 export interface Gpt56SourceSegment {
-  readonly promptKey: 'instructions' | 'input' | 'tools' | 'messages';
+  readonly promptKey:
+    | 'instructions'
+    | 'input'
+    | 'tools'
+    | 'messages'
+    | 'system';
   readonly source: O200kDiskSource;
   /**
    * The file holds a raw string value (not a JSON document). Non-o200k
@@ -53,7 +67,7 @@ export interface Gpt56SourceSegment {
 }
 
 export interface Gpt56SourceProjectionOptions {
-  readonly protocol: 'openai-responses' | 'openai-chat';
+  readonly protocol: 'openai-responses' | 'openai-chat' | 'anthropic-messages';
   readonly directory: string;
   readonly segments: readonly Gpt56SourceSegment[];
   readonly imageCosts?: Gpt56ImageCostsSource;
@@ -64,7 +78,8 @@ export interface Gpt56SourceProjectionOptions {
  * Takes exclusive ownership of a sealed directory of complete prompt-key
  * segments. Callers must finish writes before construction and must not mutate
  * or remove files after transfer. Disposal waits for all estimator leases.
- * This opt-in contract is not produced by any provider projection route.
+ * Only the Responses disk route produces this contract today; the chat and
+ * Anthropic protocols are declared for the spooled send paths (issue #854).
  */
 export class Gpt56SourceProjection {
   readonly kind = 'llxprt-gpt56-source-prompt-v1';
@@ -83,10 +98,7 @@ export class Gpt56SourceProjection {
     this.signal = options.signal;
     this.#directory = resolve(options.directory);
     const keys = new Set<string>();
-    const allowed =
-      options.protocol === 'openai-responses'
-        ? ['instructions', 'input', 'tools']
-        : ['messages', 'tools'];
+    const allowed = PROMPT_KEYS[options.protocol];
     this.promptSegments = Object.freeze(
       options.segments.map((segment) => {
         if (!allowed.includes(segment.promptKey))

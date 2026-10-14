@@ -87,4 +87,45 @@ describe('sealed GPT-5.6 source ownership', () => {
     ).toThrow('Invalid prompt key');
     await owner.dispose();
   });
+
+  it('accepts system, messages and tools for the Anthropic protocol', async () => {
+    const directory = join(root, 'anthropic');
+    mkdirSync(directory, { recursive: true });
+    const segments = ['system', 'messages', 'tools'] as const;
+    for (const key of segments) writeFileSync(join(directory, key), key);
+    const owner = new Gpt56SourceProjection({
+      protocol: 'anthropic-messages',
+      directory,
+      segments: segments.map((promptKey) => ({
+        promptKey,
+        source: { path: join(directory, promptKey) },
+      })),
+    });
+    expect(
+      owner.promptSegments.map((segment) => segment.promptKey),
+    ).toStrictEqual(['system', 'messages', 'tools']);
+    await owner.dispose();
+  });
+
+  it.each([
+    ['openai-chat', 'system'],
+    ['anthropic-messages', 'input'],
+    ['anthropic-messages', 'instructions'],
+  ] as const)(
+    'rejects the %s protocol with the %s key',
+    (protocol, promptKey) => {
+      const directory = join(root, 'wrong');
+      mkdirSync(directory, { recursive: true });
+      const path = join(directory, promptKey);
+      writeFileSync(path, 'x');
+      expect(
+        () =>
+          new Gpt56SourceProjection({
+            protocol,
+            directory,
+            segments: [{ promptKey, source: { path } }],
+          }),
+      ).toThrow('Invalid prompt key');
+    },
+  );
 });
