@@ -12,7 +12,8 @@ import type {
   AgentHookControl,
   AgentAuthControl,
 } from '@vybestack/llxprt-code-agents';
-import { compressCommand } from './compressCommand.js';
+import { createCompressCommand } from './compressCommand.js';
+import { bindCompressCommand } from './compressCommandHost.js';
 import { policiesCommand } from './policiesCommand.js';
 import { taskCommand } from './tasksCommand.js';
 import {
@@ -42,7 +43,13 @@ describe('compressCommand — agent surface', () => {
       compress: compressMock,
     });
 
-    await compressCommand.action!(context, '');
+    const command = createCompressCommand(
+      bindCompressCommand({
+        compress: compressMock,
+        agentClient: { hasChatInitialized: () => true },
+      } as unknown as Agent),
+    );
+    await command.action!(context, '');
 
     expect(compressMock).toHaveBeenCalledTimes(1);
     expect(compressMock).toHaveBeenCalledWith(
@@ -73,7 +80,13 @@ describe('compressCommand — agent surface', () => {
       },
     });
 
-    await compressCommand.action!(context, '');
+    const command = createCompressCommand(
+      bindCompressCommand({
+        compress: compressMock,
+        agentClient: { hasChatInitialized: () => true },
+      } as unknown as Agent),
+    );
+    await command.action!(context, '');
 
     expect(compressMock).toHaveBeenCalledTimes(1);
     expect(getAgentClient).not.toHaveBeenCalled();
@@ -368,10 +381,15 @@ describe('error paths — agent surface rejections', () => {
       compress: compressMock,
     });
 
-    await compressCommand.action!(context, '');
+    const command = createCompressCommand(
+      bindCompressCommand({
+        compress: compressMock,
+        agentClient: { hasChatInitialized: () => true },
+      } as unknown as Agent),
+    );
+    await command.action!(context, '');
 
-    // Agent rejection triggers fallback to Config path, which also fails
-    // (no real chat in mock context), resulting in an error message.
+    // The owner operation surfaces the rejected compression as an error.
     const addItem = context.ui.addItem as ReturnType<typeof vi.fn>;
     const errorCall = addItem.mock.calls.find(
       (call) => call[0]?.type === MessageType.ERROR,

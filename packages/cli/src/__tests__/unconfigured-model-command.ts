@@ -28,6 +28,13 @@ import { createProfileCommand } from '../ui/commands/profileCommand.js';
 import { createProfileSchemas } from '../ui/commands/profileSchemas.js';
 import { createChatOwnerCommand } from '../ui/commands/chatOwnerCommand.js';
 import { createContinueCommand } from '../ui/commands/continueCommand.js';
+import { createCopyCommand } from '../ui/commands/copyCommand.js';
+import { createCompressCommand } from '../ui/commands/compressCommand.js';
+import { createDumpcontextCommand } from '../ui/commands/dumpcontextCommand.js';
+import {
+  bindCopyCommandClipboard,
+  bindCopyCommandHistoryRead,
+} from '../ui/commands/copyCommandHost.js';
 
 export function createUnconfiguredModelCommand(): SlashCommand {
   return createModelCommand(
@@ -246,6 +253,29 @@ export function createUnconfiguredChatCommand(): SlashCommand {
 export function createUnconfiguredBuiltinOwners(): BuiltinCommandOwners {
   return {
     chatCommand: createUnconfiguredChatCommand(),
+    compressCommand: createCompressCommand(async () => {
+      throw new Error('Chat instance not available for compression.');
+    }),
+    restoreCommand: null,
+    dumpcontextCommand: createDumpcontextCommand({
+      dumpDirectory: '',
+      readMode: () => undefined,
+      writeMode: () => {
+        throw new Error('Context dumping is unavailable.');
+      },
+      dumpNow: async () => ({
+        type: 'message',
+        messageType: 'error',
+        content: 'Context dumping is unavailable.',
+      }),
+    }),
+    copyCommand: createCopyCommand(
+      bindCopyCommandHistoryRead(
+        () => false,
+        async () => [],
+      ),
+      bindCopyCommandClipboard(),
+    ),
     continueCommand: createContinueCommand({
       isInteractive: () => false,
       listContinueTargets: async () => [],

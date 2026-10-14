@@ -4,54 +4,55 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { copyToClipboard } from '../utils/commandUtils.js';
+import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 import type { SlashCommand, SlashCommandActionReturn } from './types.js';
 import { CommandKind } from './types.js';
-import { debugLogger } from '@vybestack/llxprt-code-telemetry';
 
-export const copyCommand: SlashCommand = {
-  name: 'copy',
-  description: 'Copy the last result or code snippet to clipboard',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  action: async (context, _args): Promise<SlashCommandActionReturn | void> => {
-    const client = context.services.agent?.agentClient;
+export type CopyCommandOutput =
+  | { readonly kind: 'no-chat' }
+  | { readonly kind: 'no-output' }
+  | { readonly kind: 'empty' }
+  | { readonly kind: 'text'; readonly text: string };
 
-    // Check if chat is initialized before accessing it
-    if (client == null || client.hasChatInitialized() !== true) {
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: 'No chat history available yet',
-      };
-    }
+export type CopyCommand = Omit<SlashCommand, 'action'> & {
+  action: () => Promise<SlashCommandActionReturn>;
+};
 
-    const chat = client.getChat();
-    const history = chat.getHistory();
+export function createCopyCommand(
+  readLatestAiOutput: () => Promise<CopyCommandOutput>,
+  copyToClipboard: (text: string) => Promise<void>,
+): CopyCommand {
+  return {
+    name: 'copy',
+    description: 'Copy the last result or code snippet to clipboard',
+    kind: CommandKind.BUILT_IN,
+    autoExecute: true,
+    action: async (): Promise<SlashCommandActionReturn> => {
+      const output = await readLatestAiOutput();
+      if (output.kind === 'no-chat') {
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: 'No chat history available yet',
+        };
+      }
+      if (output.kind === 'no-output') {
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: 'No output in history',
+        };
+      }
+      if (output.kind === 'empty') {
+        return {
+          type: 'message',
+          messageType: 'info',
+          content: 'Last AI output contains no text to copy.',
+        };
+      }
 
-    // Get the last message from the AI (ai speaker)
-    const lastAiMessage = history.filter((item) => item.speaker === 'ai').pop();
-
-    if (!lastAiMessage) {
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: 'No output in history',
-      };
-    }
-    // Extract text from the blocks
-    const lastAiOutput = lastAiMessage.blocks
-      .filter(
-        (block): block is { type: 'text'; text: string } =>
-          block.type === 'text',
-      )
-      .map((block) => block.text)
-      .join('');
-
-    if (lastAiOutput) {
       try {
-        await copyToClipboard(lastAiOutput);
-
+        await copyToClipboard(output.text);
         return {
           type: 'message',
           messageType: 'info',
@@ -60,19 +61,12 @@ export const copyCommand: SlashCommand = {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         debugLogger.debug(message);
-
         return {
           type: 'message',
           messageType: 'error',
           content: `Failed to copy to the clipboard. ${message}`,
         };
       }
-    } else {
-      return {
-        type: 'message',
-        messageType: 'info',
-        content: 'Last AI output contains no text to copy.',
-      };
-    }
-  },
-};
+    },
+  };
+}

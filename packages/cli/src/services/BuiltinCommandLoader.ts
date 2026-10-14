@@ -20,8 +20,6 @@ import type { ICommandLoader } from './types.js';
 import { aboutCommand } from '../ui/commands/aboutCommand.js';
 import { bugCommand } from '../ui/commands/bugCommand.js';
 import { clearCommand } from '../ui/commands/clearCommand.js';
-import { compressCommand } from '../ui/commands/compressCommand.js';
-import { copyCommand } from '../ui/commands/copyCommand.js';
 import { docsCommand } from '../ui/commands/docsCommand.js';
 import { directoryCommand } from '../ui/commands/directoryCommand.js';
 import { editorCommand } from '../ui/commands/editorCommand.js';
@@ -37,7 +35,6 @@ import { loggingCommand } from '../ui/commands/loggingCommand.js';
 import { uiprofileCommand } from '../ui/commands/uiprofileCommand.js';
 import { mouseCommand } from '../ui/commands/mouseCommand.js';
 import { quitCommand } from '../ui/commands/quitCommand.js';
-import { restoreCommand } from '../ui/commands/restoreCommand.js';
 import { statsCommand } from '../ui/commands/statsCommand.js';
 import { themeCommand } from '../ui/commands/themeCommand.js';
 import { toolsCommand } from '../ui/commands/toolsCommand.js';
@@ -51,7 +48,7 @@ import { debugCommand } from '../ui/commands/debugCommands.js';
 import { subagentCommand } from '../ui/commands/subagentCommand.js';
 import { permissionsCommand } from '../ui/commands/permissionsCommand.js';
 import { policiesCommand } from '../ui/commands/policiesCommand.js';
-import { dumpcontextCommand } from '../ui/commands/dumpcontextCommand.js';
+
 import { todoCommand } from '../ui/commands/todoCommand.js';
 import { setupCommand } from '../ui/commands/setupCommand.js';
 import { tasksCommands } from '../ui/commands/tasksCommand.js';
@@ -80,6 +77,10 @@ export interface BuiltinCommandOwners {
   readonly profileCommand: SlashCommand;
   readonly chatCommand: SlashCommand;
   readonly continueCommand: SlashCommand;
+  readonly copyCommand: SlashCommand;
+  readonly compressCommand: SlashCommand;
+  readonly dumpcontextCommand: SlashCommand;
+  readonly restoreCommand: SlashCommand | null;
   readonly toolkeyCommand: SlashCommand;
   readonly toolkeyfileCommand: SlashCommand;
 }
@@ -148,8 +149,8 @@ export class BuiltinCommandLoader implements ICommandLoader {
       bugCommand,
       this.owners.chatCommand,
       clearCommand,
-      compressCommand,
-      copyCommand,
+      this.owners.compressCommand,
+      this.owners.copyCommand,
       docsCommand,
       directoryCommand,
       editorCommand,
@@ -165,7 +166,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       mouseCommand,
       ...(isDevelopment ? [uiprofileCommand] : []),
       quitCommand,
-      restoreCommand(this.config),
+      this.owners.restoreCommand,
       this.owners.quotaCommand,
       statsCommand,
       themeCommand,
@@ -191,7 +192,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       subagentCommand,
       permissionsCommand,
       policiesCommand,
-      dumpcontextCommand,
+      this.owners.dumpcontextCommand,
       todoCommand,
       setupCommand,
       ...tasksCommands,
