@@ -132,7 +132,12 @@ describe('LoadBalancingProvider', () => {
           // Make 4 requests to verify round-robin cycling
           for (let i = 0; i < 4; i++) {
             const iterator = provider.generateChatCompletion({
-              contents: [{ role: 'user', parts: [{ text: `test ${i}` }] }],
+              contents: [
+                {
+                  speaker: 'human',
+                  blocks: [{ type: 'text', text: `test ${i}` }],
+                },
+              ],
             });
             for await (const _chunk of iterator) {
               // Consume
@@ -192,7 +197,9 @@ describe('LoadBalancingProvider', () => {
 
         try {
           const iterator = provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+            ],
           });
           for await (const _chunk of iterator) {
             // Consume
@@ -255,7 +262,9 @@ describe('LoadBalancingProvider', () => {
 
         try {
           const iterator = provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+            ],
           });
           for await (const _chunk of iterator) {
             // Consume
@@ -320,7 +329,9 @@ describe('LoadBalancingProvider', () => {
 
         try {
           const iterator = provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+            ],
             settings: settingsService,
             config,
             runtime: { settingsService, config },
@@ -409,7 +420,9 @@ describe('LoadBalancingProvider', () => {
 
         try {
           const iterator = provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+            ],
             settings: settingsService,
             config,
             runtime: { settingsService, config },
@@ -476,7 +489,9 @@ describe('LoadBalancingProvider', () => {
         try {
           const completion = (async () => {
             for await (const _chunk of provider.generateChatCompletion({
-              contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+              contents: [
+                { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+              ],
               settings: settingsService,
               config,
               runtime: { settingsService, config },
@@ -543,7 +558,9 @@ describe('LoadBalancingProvider', () => {
 
         try {
           const iterator = provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+            ],
           });
           for await (const _chunk of iterator) {
             // Consume
@@ -606,7 +623,9 @@ describe('LoadBalancingProvider', () => {
 
         try {
           const iterator = provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+            ],
           });
           for await (const _chunk of iterator) {
             // Consume
@@ -669,7 +688,9 @@ describe('LoadBalancingProvider', () => {
 
         try {
           const iterator = provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+            ],
           });
           for await (const _chunk of iterator) {
             // Consume
@@ -740,7 +761,12 @@ describe('LoadBalancingProvider', () => {
           // Make 4 requests to cycle through both auth tokens twice
           for (let i = 0; i < 4; i++) {
             const iterator = provider.generateChatCompletion({
-              contents: [{ role: 'user', parts: [{ text: `test ${i}` }] }],
+              contents: [
+                {
+                  speaker: 'human',
+                  blocks: [{ type: 'text', text: `test ${i}` }],
+                },
+              ],
             });
             for await (const _chunk of iterator) {
               // Consume
@@ -806,7 +832,12 @@ describe('LoadBalancingProvider', () => {
         try {
           for (let i = 0; i < 4; i++) {
             const iterator = provider.generateChatCompletion({
-              contents: [{ role: 'user', parts: [{ text: `test ${i}` }] }],
+              contents: [
+                {
+                  speaker: 'human',
+                  blocks: [{ type: 'text', text: `test ${i}` }],
+                },
+              ],
             });
             for await (const _chunk of iterator) {
               // Consume

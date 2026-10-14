@@ -6,50 +6,21 @@
 
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { OutputLimitConfig } from '@vybestack/llxprt-code-core/utils/toolOutputLimiter.js';
-import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { HistoryDumpSource } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { AnthropicConversationConversionOptions as AnthropicMessageConversionOptions } from '../anthropic/AnthropicMessageNormalizer.js';
 import { buildOpenAIDumpStream } from '../openai/openAIDumpStream.js';
 import { buildAnthropicDumpStream } from '../anthropic/anthropicDumpStream.js';
-import { convertToAnthropicMessages } from '../anthropic/AnthropicMessageNormalizer.js';
-import {
-  buildMessagesWithReasoning,
-  type ReasoningMessageOptions,
-} from '../openai/OpenAIRequestBuilder.js';
+import type { ReasoningMessageOptions } from '../openai/OpenAIRequestBuilder.js';
 
-function createOptions(
+/** Reasoning options for a `/dump` conversion under the given policy. */
+export function openAIDumpOptions(
   policy: Readonly<Record<string, unknown>> = {},
 ): ReasoningMessageOptions {
   return { invocation: { ephemerals: policy } };
 }
 
-export function buildOpenAIDumpMessages(
-  history: IContent[],
-  policy?: Readonly<Record<string, unknown>>,
-  config?: OutputLimitConfig,
-): unknown[] {
-  return buildMessagesWithReasoning(
-    history,
-    createOptions(policy),
-    'openai',
-    config,
-  );
-}
-
-export function buildAnthropicDumpMessages(
-  history: IContent[],
-  policy?: Readonly<Record<string, unknown>>,
-  config?: OutputLimitConfig,
-  model?: string,
-  baseURL?: string,
-): unknown[] {
-  return convertToAnthropicMessages(
-    history,
-    createAnthropicOptions(policy, config, model, baseURL),
-  );
-}
-
-function createAnthropicOptions(
+/** Anthropic conversion options for a `/dump` under the given policy. */
+export function anthropicDumpOptions(
   policy?: Readonly<Record<string, unknown>>,
   config?: OutputLimitConfig,
   model?: string,
@@ -74,25 +45,30 @@ function createAnthropicOptions(
   };
 }
 
-function normalizeProviderName(providerName: string): string {
-  return providerName.toLowerCase().trim();
-}
+export type DumpProviderFamily = 'openai' | 'anthropic' | 'other';
 
-function isOpenAICompatibleProvider(providerName: string): boolean {
-  const provider = normalizeProviderName(providerName);
-  return (
+/**
+ * The wire family a `/dump` is converted for. Gemini-family names are
+ * `other`: Gemini wire conversion is owned by the
+ * @vybestack/llxprt-plugin-google-gemini plugin (#2763), never by the base
+ * package.
+ */
+export function dumpProviderFamily(providerName: string): DumpProviderFamily {
+  const provider = providerName.toLowerCase().trim();
+  if (
     provider === 'openai' ||
     provider === 'openaivercel' ||
     provider.startsWith('openai-')
-  );
+  ) {
+    return 'openai';
+  }
+  if (provider === 'anthropic' || provider.startsWith('anthropic-')) {
+    return 'anthropic';
+  }
+  return 'other';
 }
 
-function isAnthropicCompatibleProvider(providerName: string): boolean {
-  const provider = normalizeProviderName(providerName);
-  return provider === 'anthropic' || provider.startsWith('anthropic-');
-}
-
-function withModel(
+export function withModel(
   body: Record<string, unknown>,
   model: string | undefined,
 ): Record<string, unknown> {
@@ -100,48 +76,6 @@ function withModel(
     return body;
   }
   return { model, ...body };
-}
-
-export function buildProviderDumpBody(params: {
-  providerName: string;
-  history: IContent[];
-  policy?: Readonly<Record<string, unknown>>;
-  config?: OutputLimitConfig;
-  model?: string;
-  baseURL?: string;
-}): Record<string, unknown> {
-  if (isOpenAICompatibleProvider(params.providerName)) {
-    return withModel(
-      {
-        messages: buildOpenAIDumpMessages(
-          params.history,
-          params.policy,
-          params.config,
-        ),
-      },
-      params.model,
-    );
-  }
-  if (isAnthropicCompatibleProvider(params.providerName)) {
-    return withModel(
-      {
-        messages: buildAnthropicDumpMessages(
-          params.history,
-          params.policy,
-          params.config,
-          params.model,
-          params.baseURL,
-        ),
-      },
-      params.model,
-    );
-  }
-  // Gemini-family provider names intentionally fall through to the default
-  // `{ history }` body: Gemini wire conversion is owned by the
-  // @vybestack/llxprt-plugin-google-gemini plugin (#2763), never by the base
-  // package. Callers that need a real Gemini body must ask the runtime
-  // provider (see the CLI dumpcontext command).
-  return { history: params.history };
 }
 
 export function buildProviderDumpBodyStream(params: {
@@ -152,24 +86,25 @@ export function buildProviderDumpBodyStream(params: {
   model?: string;
   baseURL?: string;
 }): Record<string, unknown> {
-  if (isOpenAICompatibleProvider(params.providerName)) {
+  const family = dumpProviderFamily(params.providerName);
+  if (family === 'openai') {
     return withModel(
       {
         messages: buildOpenAIDumpStream(
           params.history,
-          createOptions(params.policy),
+          openAIDumpOptions(params.policy),
           params.config,
         ),
       },
       params.model,
     );
   }
-  if (isAnthropicCompatibleProvider(params.providerName)) {
+  if (family === 'anthropic') {
     return withModel(
       {
         messages: buildAnthropicDumpStream(
           params.history,
-          createAnthropicOptions(
+          anthropicDumpOptions(
             params.policy,
             params.config,
             params.model,
@@ -180,5 +115,7 @@ export function buildProviderDumpBodyStream(params: {
       params.model,
     );
   }
+  // Callers that need a real Gemini body must ask the runtime provider (see
+  // the CLI dumpcontext command).
   return { history: params.history.rows() };
 }

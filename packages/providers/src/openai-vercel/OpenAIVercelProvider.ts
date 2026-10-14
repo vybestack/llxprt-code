@@ -53,10 +53,7 @@ import { isQwenBaseURL } from '../utils/qwenEndpoint.js';
 import { isAbortSignal } from '../utils/abortSignal.js';
 import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
 import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
-import {
-  dropTransportRows,
-  openTransportRowsMedia,
-} from '../utils/transportRows.js';
+import { dropTransportRows, openTransportRowsMedia } from './transportRows.js';
 import { shouldRetryOnStatus } from '../utils/retryStrategy.js';
 import { filterThinkingForContext } from '../reasoning/reasoningUtils.js';
 import { resolveToolFormat } from '../utils/toolFormatDetection.js';

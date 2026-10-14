@@ -12,10 +12,8 @@ import {
   buildChronologyTrace,
   type ChronologyTraceEntry,
 } from '@vybestack/llxprt-code-core/services/history/historyChronology.js';
-import {
-  buildProviderDumpBody,
-  buildProviderDumpBodyStream,
-} from './providerRequestConversion.js';
+import { buildProviderDumpBodyStream } from './providerRequestConversion.js';
+import { buildProviderDumpBody } from './__tests__/support/arrayDumpBody.js';
 import { dumpRequestContext, dumpRequestContextStream } from './dumpContext.js';
 import { streamPrettyJson } from './streamPrettyJson.js';
 import { collectJournalRowsForAssertions } from '@vybestack/llxprt-code-test-utils/core/collect-rows-for-assertions.js';

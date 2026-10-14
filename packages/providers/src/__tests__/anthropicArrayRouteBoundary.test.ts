@@ -23,13 +23,11 @@ const ARRAY_ROUTE_SYMBOLS: ReadonlySet<string> = new Set([
 
 /**
  * The files that may import them. `AnthropicRequestPreparation.ts` defines
- * `prepareAnthropicRequest` on top of the converter. The history `/dump`
- * builder (`utils/providerRequestConversion.ts`) is outside the request send
- * and goes with the shared seams in step F1.
+ * `prepareAnthropicRequest` on top of the converter. The history-array `/dump`
+ * builder moved to `utils/__tests__/support/arrayDumpBody.ts` (issue #854 F1).
  */
 const ALLOWED_IMPORTERS: readonly string[] = [
   'packages/providers/src/anthropic/AnthropicRequestPreparation.ts',
-  'packages/providers/src/utils/providerRequestConversion.ts',
 ];
 
 const NAMED_IMPORT =

@@ -176,15 +176,16 @@ function blankedSourceInputs(
 /**
  * Materialize the caller's history source for provider use (issue #854
  * P05b4). A call that carries `requestRows` and a provider that reads them at
- * its transport receive no collected history. A provider that decides its
- * route after normalization (`deferContents`) receives the history later, from
- * {@link attachDeferredHistory}; every other call collects eagerly here.
+ * its transport receive no collected history. A provider on the rows route
+ * (`stagesRows`) receives its history later, from {@link attachDeferredHistory}.
+ * Only a provider that keeps arrays by decision (the Vercel provider and the
+ * Gemini plugin, GitHub #3869) is handed a collected array here.
  */
 export async function materializeCallOptions(
   contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
   maybeTools: ProviderToolset | undefined,
   readsRowsAtTransport = false,
-  deferContents = false,
+  stagesRows = false,
 ): Promise<MaterializedGenerateChatOptions> {
   if (readsRowsAtTransport && !isAsyncIterableContents(contentsOrOptions)) {
     return {
@@ -193,35 +194,27 @@ export async function materializeCallOptions(
       ...blankedSourceInputs(contentsOrOptions),
     };
   }
-  const historySource = historySourceOf(contentsOrOptions);
-  const contents = deferContents ? [] : await collectContents(historySource);
-  const rows = isAsyncIterableContents(contentsOrOptions)
-    ? undefined
-    : contentsOrOptions.requestRows;
-  if (rows !== undefined && !deferContents && contents.length !== rows.count)
+  const contents = stagesRows
+    ? []
+    : await collectContents(historySourceOf(contentsOrOptions));
+  if (isAsyncIterableContents(contentsOrOptions)) {
+    return { contents, tools: maybeTools };
+  }
+  const rows = contentsOrOptions.requestRows;
+  if (rows !== undefined && !stagesRows && contents.length !== rows.count)
     throw new Error('Provider request rows count changed');
-  return isAsyncIterableContents(contentsOrOptions)
-    ? { contents, tools: maybeTools }
-    : { ...copyRequestSelection(contentsOrOptions), contents };
+  return { ...copyRequestSelection(contentsOrOptions), contents };
 }
 
 /**
- * Completes a call normalized with `deferContents`. When the provider takes
- * the rows route, the history is staged on the request's scratch disk one row
- * at a time and the call carries `requestRows`, so no history array exists;
- * otherwise the history is collected as eager normalization would have.
+ * Completes a call normalized for the rows route. The history is staged on the
+ * request's scratch disk one row at a time and the call carries `requestRows`,
+ * so no history array exists.
  */
 export async function attachDeferredHistory(
   normalized: NormalizedGenerateChatOptions,
   contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
-  takesRowsRoute: boolean,
 ): Promise<NormalizedGenerateChatOptions> {
-  if (!takesRowsRoute) {
-    normalized.contents = await collectContents(
-      historySourceOf(contentsOrOptions),
-    );
-    return normalized;
-  }
   const source = isAsyncIterableContents(contentsOrOptions)
     ? { contents: contentsOrOptions, tools: normalized.tools }
     : contentsOrOptions;

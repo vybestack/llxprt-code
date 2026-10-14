@@ -209,10 +209,6 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
   }
 
   /** A call without `requestRows` is sent from rows staged on disk. */
-  protected override decidesRowsRoute(): boolean {
-    return true;
-  }
-
   protected override takesRowsRoute(): boolean {
     return true;
   }

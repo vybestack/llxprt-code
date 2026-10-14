@@ -57,10 +57,7 @@ import {
 } from '@vybestack/llxprt-code-providers/utils/request-media-resolution.js';
 import { readsRequestRowsAtTransport } from '@vybestack/llxprt-code-providers/BaseProviderNormalization.js';
 import { acquireRequestScopedBody } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
-import {
-  dropTransportRows,
-  openTransportRowsMedia,
-} from '@vybestack/llxprt-code-providers/utils/transportRows.js';
+import { dropTransportRows, openTransportRowsMedia } from './transportRows.js';
 
 /**
  * Represents the default Gemini provider.

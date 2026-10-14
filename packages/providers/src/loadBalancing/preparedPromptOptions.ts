@@ -13,12 +13,10 @@ import type {
 } from './loadBalancerTypes.js';
 import { estimateSelectedProviderPrompt } from './loadBalancerPromptEstimator.js';
 import {
-  estimateRequestTokens,
   estimateRowSourceTokens,
   type EstimationResult,
 } from './loadBalancerTokenEstimator.js';
 import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
-import { collectContents } from '../utils/collectContents.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import { resolveSubProfileModel } from './subProfileHelpers.js';
 
@@ -56,22 +54,17 @@ export async function estimatePreparedPrompt(
       'configure the selected provider to expose its finalized prompt projection',
     );
   }
-  const requestRows = options.requestRows;
-  if (requestRows !== undefined) {
-    // Fold the neutral selection from its repeatable reader; the request is
-    // never collected into an array just to be estimated.
-    return estimateRowSourceTokens(
-      {
-        count: requestRows.count,
-        open: () => requestRows.openReader(),
-      },
-      subProfile.providerName,
-      model,
-      { tokenizerFactory },
-    );
+  const { requestRows } = options;
+  if (requestRows === undefined) {
+    throw new Error('Load balancer estimation requires staged request rows');
   }
-  return estimateRequestTokens(
-    await collectContents(options.contents),
+  // Fold the neutral selection from its repeatable reader; the request is
+  // never collected into an array just to be estimated.
+  return estimateRowSourceTokens(
+    {
+      count: requestRows.count,
+      open: () => requestRows.openReader(),
+    },
     subProfile.providerName,
     model,
     { tokenizerFactory },

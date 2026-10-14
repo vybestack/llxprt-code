@@ -13,7 +13,10 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { ProviderRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import {
+  assertRowIndex,
+  type ProviderRequestSelection,
+} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { GenerateChatOptions } from '@vybestack/llxprt-code-providers/IProvider.js';
 import { activeRequestBodyCount } from '@vybestack/llxprt-code-providers/utils/requestScopedBody.js';
 import {
@@ -109,6 +112,11 @@ function probeRows(rows: IContent[], onPull?: () => void): RowProbe {
           returned += 1;
         }
       })();
+    },
+    readAt: (index: number, signal?: AbortSignal) => {
+      signal?.throwIfAborted();
+      assertRowIndex(index, rows.length);
+      return rows[index];
     },
     close: () => undefined,
   });

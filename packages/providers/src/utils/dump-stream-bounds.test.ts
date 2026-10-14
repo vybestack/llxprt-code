@@ -22,10 +22,8 @@ function loadHeap(): JscHeap {
 const { heapSize, heapStats } = loadHeap();
 import { randomBytes } from 'node:crypto';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  buildProviderDumpBody,
-  buildProviderDumpBodyStream,
-} from './providerRequestConversion.js';
+import { buildProviderDumpBodyStream } from './providerRequestConversion.js';
+import { buildProviderDumpBody } from './__tests__/support/arrayDumpBody.js';
 import { streamPrettyJson } from './streamPrettyJson.js';
 import { pairedEstimate } from '@vybestack/llxprt-code-test-utils/core/retained-growth.js';
 

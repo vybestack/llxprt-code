@@ -1,10 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import {
-  buildProviderDumpBody,
-  buildProviderDumpBodyStream,
-} from './providerRequestConversion.js';
+import { buildProviderDumpBodyStream } from './providerRequestConversion.js';
+import { buildProviderDumpBody } from './__tests__/support/arrayDumpBody.js';
 import { streamPrettyJson } from './streamPrettyJson.js';
 
 const cases: readonly IContent[] = [

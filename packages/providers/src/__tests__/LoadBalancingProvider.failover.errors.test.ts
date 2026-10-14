@@ -775,7 +775,9 @@ function registerSettingsCase1(getContext: () => TestContext): void {
 
       try {
         const iterator = provider.generateChatCompletion({
-          contents: [{ role: 'user', parts: [{ text: 'test' }] }],
+          contents: [
+            { speaker: 'human', blocks: [{ type: 'text', text: 'test' }] },
+          ],
           settings: settingsService,
           config,
           runtime: { settingsService, config },

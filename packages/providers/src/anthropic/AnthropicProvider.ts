@@ -61,7 +61,10 @@ import { findAnthropicToolSchema } from './AnthropicToolSchema.js';
 import { firstTruthyString } from '../utils/falsyFallback.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { projectAnthropicPromptEnvelopeFromSource } from '../runtime/promptEnvelopeProjections.js';
-import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
+import {
+  closeStagedRowsAfterFailure,
+  readsRequestRowsAtTransport,
+} from '../BaseProviderNormalization.js';
 import {
   buildAnthropicRequestHeaders,
   withCredentialHeader,
@@ -74,7 +77,6 @@ import {
   type AnthropicSendRequest,
 } from './AnthropicSendRequest.js';
 import {
-  anthropicRowsOf,
   prepareSpooledAnthropicRequest,
   registerSpooledRequestCleanup,
   type SpooledAnthropicRequest,
@@ -87,6 +89,7 @@ import { getImageRecoveryState } from './AnthropicImageSanitizer.js';
 import { executeImageDimensionRecovery } from './AnthropicImageRecovery.js';
 import { findRequestCommitState } from '../retryRequestContext.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
+import { providerRowsOf } from '../utils/providerRows.js';
 import { resolveRowsMedia } from '../openai-responses/responses-row-media.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { ImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
@@ -141,6 +144,11 @@ export class AnthropicProvider extends BaseProvider {
 
   /** The transport reads `requestRows` itself (issue #854 WP07). */
   protected override ownsRequestRowsTransport(): boolean {
+    return true;
+  }
+
+  /** A call without `requestRows` is sent from rows staged on disk. */
+  protected override takesRowsRoute(): boolean {
     return true;
   }
 
@@ -735,7 +743,7 @@ export class AnthropicProvider extends BaseProvider {
     const signal = getRequestSignal(options);
     const spooled = await prepareSpooledAnthropicRequest(
       this.planParams(options, isOAuth, authToken),
-      await anthropicRowsOf(options),
+      await providerRowsOf(options),
       (rows) => resolveRowsMedia(rows, media, mediaRequest, signal),
       { recoveryBudget },
     );
@@ -847,15 +855,29 @@ export class AnthropicProvider extends BaseProvider {
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection> {
     const normalized = await this.normalizeOptionsForProjection(options);
+    try {
+      return await this.projectNormalized(normalized);
+    } catch (error) {
+      return closeStagedRowsAfterFailure(normalized.stagedRows, error);
+    }
+  }
+
+  private async projectNormalized(
+    normalized: NormalizedGenerateChatOptions,
+  ): Promise<PromptEnvelopeProjection> {
     const media = this.captureMedia(normalized);
     const signal = getRequestSignal(normalized);
     const mediaRequest = await resolveRequestMedia(media, [], signal);
+    const { stagedRows } = normalized;
+    // Rows staged from `contents` stay open until the projection is released.
+    if (stagedRows !== undefined)
+      mediaRequest.registerCleanup(() => stagedRows.close());
     try {
       const authToken = await this.resolveProjectionAuthToken(normalized);
       const isOAuth = this.classifyOAuthToken(authToken);
       const spooled = await prepareSpooledAnthropicRequest(
         this.planParams(normalized, isOAuth, authToken),
-        await anthropicRowsOf(normalized),
+        await providerRowsOf(normalized),
         (rows) => resolveRowsMedia(rows, media, mediaRequest, signal),
         { estimate: true },
       );

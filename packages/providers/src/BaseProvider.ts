@@ -720,15 +720,11 @@ export abstract class BaseProvider implements IProvider {
   ): AsyncIterableIterator<IContent>;
 
   /**
-   * Whether a call without `requestRows` may be sent from rows staged on disk;
-   * {@link BaseProvider.takesRowsRoute} decides once it is normalized (#854 C2).
+   * Whether a call is sent from rows staged on the request's scratch disk
+   * instead of a collected history array (issue #854). A provider on the rows
+   * route reads `options.requestRows` and never sees `options.contents`.
    */
-  protected decidesRowsRoute(): boolean {
-    return false;
-  }
-
-  /** Whether this normalized call is sent from staged rows. */
-  protected takesRowsRoute(_options: NormalizedGenerateChatOptions): boolean {
+  protected takesRowsRoute(): boolean {
     return false;
   }
 
@@ -843,23 +839,19 @@ export abstract class BaseProvider implements IProvider {
       !isAsyncIterableContents(contentsOrOptions) &&
       readsRequestRowsAtTransport(contentsOrOptions) &&
       this.ownsRequestRowsTransport();
-    const deferContents = !readsRowsAtTransport && this.decidesRowsRoute();
+    const stagesRows = !readsRowsAtTransport && this.takesRowsRoute();
     const normalized = await this.normalizeProvidedOptions(
       await materializeCallOptions(
         contentsOrOptions,
         maybeTools,
         readsRowsAtTransport,
-        deferContents,
+        stagesRows,
       ),
       maybeTools,
       resolveAuthentication,
     );
-    return deferContents
-      ? attachDeferredHistory(
-          normalized,
-          contentsOrOptions,
-          this.takesRowsRoute(normalized),
-        )
+    return stagesRows
+      ? attachDeferredHistory(normalized, contentsOrOptions)
       : normalized;
   }
 

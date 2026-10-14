@@ -29,11 +29,6 @@ import {
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/DebugLogger.js';
 import { delay } from '@vybestack/llxprt-code-core/utils/delay.js';
 import { LoadBalancerFailoverError } from './errors.js';
-import {
-  collectContents,
-  isAsyncIterableContents,
-  replayableContents,
-} from './utils/collectContents.js';
 import { getAttemptLifecycleObserver } from './logging/attemptLifecycle.js';
 import {
   notifyBackendStart,
@@ -51,10 +46,7 @@ import { BackendMetricsCollector } from './loadBalancing/backendMetrics.js';
 import { extractFailoverSettings as extractFailoverSettingsFromEphemeral } from './loadBalancing/failoverSettings.js';
 import { isTimeoutError } from './loadBalancing/streamTimeout.js';
 import { buildExtendedStats } from './loadBalancing/statsBuilder.js';
-import {
-  buildRoundRobinResolvedOptions as buildRoundRobinResolvedOptionsExternal,
-  normalizeLoadBalancerOptions,
-} from './loadBalancing/resolvedOptionsBuilder.js';
+import { buildRoundRobinResolvedOptions as buildRoundRobinResolvedOptionsExternal } from './loadBalancing/resolvedOptionsBuilder.js';
 import {
   assertMemberAuthCurrent,
   resolveMemberAuthentication,
@@ -98,6 +90,10 @@ import {
   optionsWithPromptProjection,
   optionsWithRequestRows,
 } from './loadBalancing/preparedPromptOptions.js';
+import {
+  runStagedCall,
+  stageCallOptions,
+} from './loadBalancing/stagedCallOptions.js';
 import { getTargetContextLimit } from './loadBalancing/targetContextLimit.js';
 import {
   loadBalancerModels,
@@ -407,26 +403,6 @@ export class LoadBalancingProvider
     });
   }
 
-  private async replayableCallOptions(
-    optionsOrContent: GenerateChatOptions | AsyncIterable<IContent>,
-    tools: ProviderToolset | undefined,
-    signal: AbortSignal | undefined,
-  ): Promise<GenerateChatOptions> {
-    if (isAsyncIterableContents(optionsOrContent)) {
-      return {
-        contents: replayableContents(await collectContents(optionsOrContent)),
-        tools,
-        ...(signal && { metadata: { abortSignal: signal } }),
-      };
-    }
-    if (optionsOrContent.requestRows !== undefined) return optionsOrContent;
-    const options = normalizeLoadBalancerOptions(optionsOrContent);
-    return {
-      ...options,
-      contents: replayableContents(await collectContents(options.contents)),
-    };
-  }
-
   generateChatCompletion(
     options: GenerateChatOptions,
   ): AsyncIterableIterator<IContent>;
@@ -441,10 +417,17 @@ export class LoadBalancingProvider
     signal?: AbortSignal,
   ): AsyncIterableIterator<IContent> {
     // A neutral requestRows selection is already repeatable and pinned: every
-    // attempt reopens it, so nothing is collected here. Only the legacy
-    // contents stream is collected once and replayed per attempt (issue #854).
+    // attempt reopens it. A one-shot contents stream is staged on scratch disk
+    // once, so each attempt reopens the same rows (issue #854).
+    const staged = await stageCallOptions(optionsOrContent, tools, signal);
+    yield* runStagedCall(staged, (options) => this.sendStagedCall(options));
+  }
+
+  private async *sendStagedCall(
+    stagedOptions: GenerateChatOptions,
+  ): AsyncIterableIterator<IContent> {
     const { promptEnvelopeTransportToken: peekToken, ...callOptions } =
-      await this.replayableCallOptions(optionsOrContent, tools, signal);
+      stagedOptions;
     const options: GenerateChatOptions = callOptions;
     // The send projects the member it selects itself, so a peek's delegate
     // lease (issue #854) is spent once the send starts. The spent token is

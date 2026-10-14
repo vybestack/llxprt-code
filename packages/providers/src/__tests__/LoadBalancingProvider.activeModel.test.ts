@@ -96,7 +96,9 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
       try {
         await drain(
           provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'one' }] }],
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'one' }] },
+            ],
           }),
         );
         const stats = provider.getStats();
@@ -130,7 +132,9 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
         // First request → 'fast' (gemini-flash)
         await drain(
           provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'one' }] }],
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'one' }] },
+            ],
           }),
         );
         let stats = provider.getStats();
@@ -140,7 +144,9 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
         // Second request → 'smart' (gpt-4)
         await drain(
           provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'two' }] }],
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'two' }] },
+            ],
           }),
         );
         stats = provider.getStats();
@@ -175,7 +181,9 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
       try {
         await drain(
           provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'one' }] }],
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'one' }] },
+            ],
           }),
         );
         const stats = provider.getStats();
@@ -205,7 +213,9 @@ describe('LoadBalancingProvider active-model stats (issue #2193)', () => {
       try {
         await drain(
           provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'one' }] }],
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'one' }] },
+            ],
           }),
         );
         let stats = provider.getStats();

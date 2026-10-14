@@ -6,11 +6,15 @@
 
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import { getRequestSignal } from './abortSignal.js';
-import { resolveRequestMedia } from './request-media-resolution.js';
+import type { NormalizedGenerateChatOptions } from '@vybestack/llxprt-code-providers/BaseProvider.js';
+import { getRequestSignal } from '@vybestack/llxprt-code-providers/utils/abortSignal.js';
+import { resolveRequestMedia } from '@vybestack/llxprt-code-providers/utils/request-media-resolution.js';
 
 /**
+ * The Gemini plugin keeps whole-history arrays by decision (GitHub #3869).
+ * These helpers are its copy of the transport-rows reader; the providers
+ * package no longer offers one.
+ *
  * Reads the call's `requestRows` inside a concrete transport. The neutral rows
  * are only a transient input to the one body the SDK or wire format needs, so
  * callers drop them with {@link dropTransportRows} as soon as that body exists.

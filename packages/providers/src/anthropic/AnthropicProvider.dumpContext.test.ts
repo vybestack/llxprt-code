@@ -10,6 +10,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'bun:test';
 import { AnthropicProvider } from './AnthropicProvider.js';
 import * as dumpContextModule from '../utils/dumpContext.js';
 import * as dumpSDKContextModule from '../utils/dumpSDKContext.js';
+import { inMemoryRequestSelection } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import {
   createAnthropicRawPostTestAdapter,
@@ -22,6 +23,12 @@ async function readDumpedBody(body: unknown): Promise<unknown> {
   const chunks: Uint8Array[] = [];
   for await (const chunk of body.bytes()) chunks.push(chunk);
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
+function helloRows() {
+  return inMemoryRequestSelection([
+    { speaker: 'human', blocks: [{ type: 'text', text: 'Hello' }] },
+  ]);
 }
 
 function createAnthropicDumpClient(handler: RawPostTestHandler): object {
@@ -68,12 +75,8 @@ describe('AnthropicProvider dumpContext integration', () => {
 
   it('should NOT dump context when mode is off', async () => {
     const options: NormalizedGenerateChatOptions = {
-      contents: [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Hello' }],
-        },
-      ],
+      contents: [],
+      requestRows: helloRows(),
       tools: undefined,
       systemInstruction: 'test system prompt',
       resolved: {
@@ -122,12 +125,8 @@ describe('AnthropicProvider dumpContext integration', () => {
 
   it('should dump context when mode is on', async () => {
     const options: NormalizedGenerateChatOptions = {
-      contents: [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Hello' }],
-        },
-      ],
+      contents: [],
+      requestRows: helloRows(),
       tools: undefined,
       systemInstruction: 'test system prompt',
       resolved: {
@@ -188,12 +187,8 @@ describe('AnthropicProvider dumpContext integration', () => {
 
   it('should dump context only on error when mode is error', async () => {
     const options: NormalizedGenerateChatOptions = {
-      contents: [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Hello' }],
-        },
-      ],
+      contents: [],
+      requestRows: helloRows(),
       tools: undefined,
       systemInstruction: 'test system prompt',
       resolved: {
@@ -242,12 +237,8 @@ describe('AnthropicProvider dumpContext integration', () => {
 
   it('should dump context on error when mode is error', async () => {
     const options: NormalizedGenerateChatOptions = {
-      contents: [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Hello' }],
-        },
-      ],
+      contents: [],
+      requestRows: helloRows(),
       tools: undefined,
       systemInstruction: 'test system prompt',
       resolved: {
@@ -348,12 +339,8 @@ describe('AnthropicProvider dumpContext integration', () => {
 
   it('should not dump context in provider when mode is now', async () => {
     const options: NormalizedGenerateChatOptions = {
-      contents: [
-        {
-          speaker: 'human',
-          blocks: [{ type: 'text', text: 'Hello' }],
-        },
-      ],
+      contents: [],
+      requestRows: helloRows(),
       tools: undefined,
       systemInstruction: 'test system prompt',
       resolved: {

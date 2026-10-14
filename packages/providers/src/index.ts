@@ -190,11 +190,6 @@ export {
   dumpRequestContext,
   dumpRequestContextStream,
 } from './utils/dumpContext.js';
-export {
-  buildAnthropicDumpMessages,
-  buildOpenAIDumpMessages,
-  buildProviderDumpBody,
-  buildProviderDumpBodyStream,
-} from './utils/providerRequestConversion.js';
+export { buildProviderDumpBodyStream } from './utils/providerRequestConversion.js';
 export { wrapStreamWithDump } from './utils/dumpSDKContext.js';
 export { streamPrettyJson } from './utils/streamPrettyJson.js';

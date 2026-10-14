@@ -5,25 +5,25 @@
  */
 
 /**
- * Issue #854 step C3: import boundary for the history-array seams.
+ * Issue #854 steps C3 and F1: import boundary for the history-array seams.
  *
  * A send path must not collect the history into an `IContent[]`. The functions
  * that do are `collectContents` (drains a stream into an array) and the
  * transport-rows helpers `readTransportRows`, `openTransportRowsMedia` and
  * `dropTransportRows` (read a selection into an array and resolve media over
- * it). Product code may import them only from the files listed below.
+ * it). Product code may import them only from the files listed below, and every
+ * entry is a declared array exception (GitHub #3869):
  *
- * The end state is two files: the Vercel provider, and the Gemini plugin when
- * it lands. Both keep their arrays by the owner's decision (GitHub #3869).
- * Everything else is pending work that removes its entry:
+ * - The Vercel provider keeps its arrays and owns its copy of the transport
+ *   rows helpers.
+ * - The Gemini plugin keeps its arrays and owns its own copy of them.
+ * - `BaseProviderNormalization.ts` collects the history for a provider that is
+ *   neither on the rows route nor reads rows at its transport. In this tree
+ *   that is the Vercel provider and the Gemini plugin; the OpenAI chat, OpenAI
+ *   Responses and Anthropic providers take the rows route and never reach it.
  *
- * - The OpenAI chat send path, including the Kimi file pre-pass, imports none
- *   of them (D3a, D5).
- * - The Anthropic send path imports none of them (E4), and neither does its
- *   projection, estimate or request dump (E5). The array converter
- *   `convertToAnthropicMessages` is kept as the reference the table route is
- *   compared with; `anthropicArrayRouteBoundary.test.ts` lists its importers.
- * - F1 removes the shared normalization and load-balancing seams.
+ * The load balancer, the Kimi file pre-pass, the Anthropic projection and the
+ * request dumps import none of them.
  *
  * The list may only shrink. A file that imports a banned symbol without an
  * entry fails this test, and so does an entry whose file no longer imports one
@@ -35,7 +35,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
 const REPO_ROOT = resolve(__dirname, '..', '..', '..', '..');
-const PACKAGES_DIR = join(REPO_ROOT, 'packages');
+const SOURCE_ROOTS = [join(REPO_ROOT, 'packages'), join(REPO_ROOT, 'plugins')];
 
 const BANNED_SYMBOLS: ReadonlySet<string> = new Set([
   'collectContents',
@@ -60,31 +60,16 @@ const PERMANENT: AllowedImporter = {
   disposition: 'permanent',
   reason: 'declared array exception (GitHub #3869)',
 };
-const pending = (reason: string): AllowedImporter => ({
-  disposition: 'pending',
-  reason,
-});
 
-/**
- * Keys are repo-relative paths. The Gemini plugin has no source in this tree
- * yet; when it lands its importing file is added here as `PERMANENT`.
- */
+/** Keys are repo-relative paths. */
 const ALLOWED_IMPORTERS: Readonly<Record<string, AllowedImporter>> = {
   'packages/providers/src/openai-vercel/OpenAIVercelProvider.ts': PERMANENT,
-
-  'packages/providers/src/BaseProviderNormalization.ts': pending(
-    'step F1 retires the normalization collect for the owning providers',
-  ),
-  'packages/providers/src/LoadBalancingProvider.ts': pending(
-    'step F1 moves load balancing onto the staged row reader',
-  ),
-  'packages/providers/src/loadBalancing/preparedPromptOptions.ts': pending(
-    'step F1 moves load balancing onto the staged row reader',
-  ),
+  'plugins/google-gemini/src/gemini/GeminiProvider.ts': PERMANENT,
+  'packages/providers/src/BaseProviderNormalization.ts': PERMANENT,
 };
 
-/** Lower this when a pending entry is removed. It never goes up. */
-const PENDING_CEILING = 3;
+/** No work is pending: every entry above is a declared exception. */
+const PENDING_CEILING = 0;
 
 const NAMED_IMPORT =
   /(?:import|export)\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g;
@@ -117,17 +102,18 @@ function isProductSource(path: string): boolean {
   return !/(^|\/)(collectContents|transportRows)\.ts$/.test(path);
 }
 
+function sourceDirs(): string[] {
+  return SOURCE_ROOTS.filter((root) => existsSync(root))
+    .flatMap((root) => readdirSync(root).map((pkg) => join(root, pkg, 'src')))
+    .filter((src) => existsSync(src));
+}
+
 function productSourceFiles(): string[] {
-  const files: string[] = [];
-  for (const pkg of readdirSync(PACKAGES_DIR)) {
-    const src = join(PACKAGES_DIR, pkg, 'src');
-    if (!existsSync(src)) continue;
-    const entries = readdirSync(src, { recursive: true, encoding: 'utf8' });
-    for (const entry of entries) {
-      if (isProductSource(entry)) files.push(join(src, entry));
-    }
-  }
-  return files;
+  return sourceDirs().flatMap((src) =>
+    readdirSync(src, { recursive: true, encoding: 'utf8' })
+      .filter(isProductSource)
+      .map((entry) => join(src, entry)),
+  );
 }
 
 function importers(): Map<string, string[]> {
@@ -171,6 +157,8 @@ describe('history-array seam import boundary (issue #854 C3)', () => {
       .map(([file]) => file);
     expect(permanent).toStrictEqual([
       'packages/providers/src/openai-vercel/OpenAIVercelProvider.ts',
+      'plugins/google-gemini/src/gemini/GeminiProvider.ts',
+      'packages/providers/src/BaseProviderNormalization.ts',
     ]);
   });
 });

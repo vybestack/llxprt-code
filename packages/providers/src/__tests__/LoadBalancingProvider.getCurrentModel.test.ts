@@ -87,7 +87,9 @@ describe('LoadBalancingProvider.getCurrentModel (issue #2379)', () => {
         // First request selects 'zai' (round-robin starts at index 0).
         await drain(
           provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'one' }] }],
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'one' }] },
+            ],
           }),
         );
 
@@ -114,13 +116,17 @@ describe('LoadBalancingProvider.getCurrentModel (issue #2379)', () => {
       try {
         await drain(
           provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'one' }] }],
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'one' }] },
+            ],
           }),
         );
         // Second request selects 'smart' (round-robin index 1).
         await drain(
           provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'two' }] }],
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'two' }] },
+            ],
           }),
         );
 
@@ -156,7 +162,9 @@ describe('LoadBalancingProvider.getCurrentModel (issue #2379)', () => {
       try {
         await drain(
           provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'one' }] }],
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'one' }] },
+            ],
           }),
         );
 
@@ -185,7 +193,9 @@ describe('LoadBalancingProvider.getCurrentModel (issue #2379)', () => {
       try {
         await drain(
           provider.generateChatCompletion({
-            contents: [{ role: 'user', parts: [{ text: 'one' }] }],
+            contents: [
+              { speaker: 'human', blocks: [{ type: 'text', text: 'one' }] },
+            ],
           }),
         );
 

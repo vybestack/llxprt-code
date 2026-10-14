@@ -195,16 +195,7 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
     return true;
   }
 
-  /**
-   * Whether a call is a Responses call depends on the resolved model and
-   * endpoint, so the history of a call without `requestRows` is attached after
-   * normalization (issue #854 C2).
-   */
-  protected override decidesRowsRoute(): boolean {
-    return true;
-  }
-
-  /** Chat and Responses calls both read their rows from disk. */
+  /** Chat and Responses calls both read their rows from disk (issue #854). */
   protected override takesRowsRoute(): boolean {
     return true;
   }

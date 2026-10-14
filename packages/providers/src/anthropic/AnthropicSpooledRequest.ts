@@ -4,15 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import {
-  inMemoryRequestSelection,
-  type ProviderRequestRows,
-} from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
+import { type ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { ImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
-import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
-import { providerRowsOf } from '../utils/providerRows.js';
 import { wantsRequestDump } from '../utils/dumpContext.js';
 import type { StreamedDumpBody } from '../utils/dumpSDKContext.js';
 import { envelopeDumpBody } from '../utils/envelopeDumpBody.js';
@@ -65,20 +60,6 @@ export interface SpooledAnthropicRequest {
    * A projection built from the prompt files is disposed by its own owner.
    */
   release(): void;
-}
-
-/**
- * The rows a send reads. A call with `requestRows` reads that selection. A
- * call whose caller handed over a history array (normalization collected it
- * before the transport saw the call) reads that array in place; nothing is
- * copied and no array is built here.
- */
-export function anthropicRowsOf(
-  options: NormalizedGenerateChatOptions,
-): Promise<ProviderRequestRows> {
-  return options.requestRows === undefined
-    ? Promise.resolve(inMemoryRequestSelection(options.contents))
-    : providerRowsOf(options);
 }
 
 /** The formatted system instruction when placement puts it in the context. */
