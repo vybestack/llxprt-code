@@ -117,7 +117,7 @@ describe('PerfCommand (P11, AC-9)', () => {
       JSON.stringify(makeOperation()),
     ]);
 
-    const cmd = createPerfCommand({ perfDir: dir });
+    const cmd = createPerfCommand({ readHistory: () => null, perfDir: dir });
     const inspectSub = cmd.subCommands!.find((s) => s.name === 'inspect')!;
     const result = await inspectSub.action!({} as never, '');
 
@@ -130,7 +130,7 @@ describe('PerfCommand (P11, AC-9)', () => {
   });
 
   it('/perf inspect on empty directory shows zero counts', async () => {
-    const cmd = createPerfCommand({ perfDir: dir });
+    const cmd = createPerfCommand({ readHistory: () => null, perfDir: dir });
     const inspectSub = cmd.subCommands!.find((s) => s.name === 'inspect')!;
     const result = await inspectSub.action!({} as never, '');
 
@@ -147,7 +147,7 @@ describe('PerfCommand (P11, AC-9)', () => {
       JSON.stringify(makeOperation({ operation_elapsed_ms: 1000 })),
     ]);
 
-    const cmd = createPerfCommand({ perfDir: dir });
+    const cmd = createPerfCommand({ readHistory: () => null, perfDir: dir });
     const reportSub = cmd.subCommands!.find((s) => s.name === 'report')!;
     const result = await reportSub.action!({} as never, '');
 
@@ -163,7 +163,7 @@ describe('PerfCommand (P11, AC-9)', () => {
       JSON.stringify(makeOperation()),
     ]);
 
-    const cmd = createPerfCommand({ perfDir: dir });
+    const cmd = createPerfCommand({ readHistory: () => null, perfDir: dir });
     const reportSub = cmd.subCommands!.find((s) => s.name === 'report')!;
     const result = await reportSub.action!({} as never, '');
 
@@ -191,7 +191,7 @@ describe('PerfCommand (P11, AC-9)', () => {
       ),
     ]);
 
-    const cmd = createPerfCommand({ perfDir: dir });
+    const cmd = createPerfCommand({ readHistory: () => null, perfDir: dir });
     const reportSub = cmd.subCommands!.find((s) => s.name === 'report')!;
     const result = await reportSub.action!({} as never, '--baseline 0.10.0');
 
@@ -212,7 +212,7 @@ describe('PerfCommand (P11, AC-9)', () => {
       ),
     ]);
 
-    const cmd = createPerfCommand({ perfDir: dir });
+    const cmd = createPerfCommand({ readHistory: () => null, perfDir: dir });
     const reportSub = cmd.subCommands!.find((s) => s.name === 'report')!;
     const result = await reportSub.action!({} as never, '--baseline abc1234');
 
@@ -221,7 +221,7 @@ describe('PerfCommand (P11, AC-9)', () => {
   });
 
   it('/perf report --baseline (no value) rejects with useful error', async () => {
-    const cmd = createPerfCommand({ perfDir: dir });
+    const cmd = createPerfCommand({ readHistory: () => null, perfDir: dir });
     const reportSub = cmd.subCommands!.find((s) => s.name === 'report')!;
     const result = await reportSub.action!({} as never, '--baseline');
 
@@ -231,7 +231,7 @@ describe('PerfCommand (P11, AC-9)', () => {
   });
 
   it('/perf report --baseline --other rejects malformed', async () => {
-    const cmd = createPerfCommand({ perfDir: dir });
+    const cmd = createPerfCommand({ readHistory: () => null, perfDir: dir });
     const reportSub = cmd.subCommands!.find((s) => s.name === 'report')!;
     const result = await reportSub.action!({} as never, '--baseline --other');
 
@@ -241,7 +241,7 @@ describe('PerfCommand (P11, AC-9)', () => {
   });
 
   it('/perf report with unexpected argument rejects', async () => {
-    const cmd = createPerfCommand({ perfDir: dir });
+    const cmd = createPerfCommand({ readHistory: () => null, perfDir: dir });
     const reportSub = cmd.subCommands!.find((s) => s.name === 'report')!;
     const result = await reportSub.action!({} as never, 'unexpected-arg');
 
@@ -262,7 +262,7 @@ describe('PerfCommand (P11, AC-9)', () => {
     const staleTime = new Date(Date.now() - 300_000); // 5 min ago
     await fs.utimes(join(dir, 'stale.claim'), staleTime, staleTime);
 
-    const cmd = createPerfCommand({ perfDir: dir });
+    const cmd = createPerfCommand({ readHistory: () => null, perfDir: dir });
     const deleteSub = cmd.subCommands!.find((s) => s.name === 'delete')!;
     const result = await deleteSub.action!({} as never, '');
 
@@ -290,7 +290,7 @@ describe('PerfCommand (P11, AC-9)', () => {
       JSON.stringify(makeOperation()),
     ]);
 
-    const cmd = createPerfCommand({ perfDir: dir });
+    const cmd = createPerfCommand({ readHistory: () => null, perfDir: dir });
     const deleteSub = cmd.subCommands!.find((s) => s.name === 'delete')!;
     const result = await deleteSub.action!({} as never, '');
 
@@ -305,7 +305,7 @@ describe('PerfCommand (P11, AC-9)', () => {
   // --- /perf (no args) ---
 
   it('/perf with no snapshot capability says unavailable honestly', async () => {
-    const cmd = createPerfCommand({ perfDir: dir });
+    const cmd = createPerfCommand({ readHistory: () => null, perfDir: dir });
     const result = await cmd.action!({} as never, '');
 
     expect(isMessage(result)).toBe(true);
@@ -336,6 +336,7 @@ describe('PerfCommand (P11, AC-9)', () => {
     };
 
     const cmd = createPerfCommand({
+      readHistory: () => null,
       perfDir: dir,
       snapshotCapability: capability,
     });
@@ -383,6 +384,7 @@ describe('PerfCommand (P11, AC-9)', () => {
     };
 
     const cmd = createPerfCommand({
+      readHistory: () => null,
       perfDir: dir,
       snapshotCapability: capability,
     });
@@ -396,7 +398,11 @@ describe('PerfCommand (P11, AC-9)', () => {
     expect(msg.content).not.toContain('-10489984 B');
   });
   it('/perf with null snapshot capability says unavailable', async () => {
-    const cmd = createPerfCommand({ perfDir: dir, snapshotCapability: null });
+    const cmd = createPerfCommand({
+      readHistory: () => null,
+      perfDir: dir,
+      snapshotCapability: null,
+    });
     const result = await cmd.action!({} as never, '');
 
     const msg = result as MessageActionReturn;
@@ -404,7 +410,7 @@ describe('PerfCommand (P11, AC-9)', () => {
   });
 
   it('/perf with unknown subcommand returns error', async () => {
-    const cmd = createPerfCommand({ perfDir: dir });
+    const cmd = createPerfCommand({ readHistory: () => null, perfDir: dir });
     const result = await cmd.action!({} as never, 'unknownsub');
 
     const msg = result as MessageActionReturn;
@@ -435,6 +441,7 @@ describe('PerfCommand (P11, AC-9)', () => {
     const err = new Error('permission denied') as NodeJS.ErrnoException;
     err.code = 'EACCES';
     const cmd = createPerfCommand({
+      readHistory: () => null,
       perfDir: dir,
       operations: errnoOperations('inspect', err),
     });
@@ -451,6 +458,7 @@ describe('PerfCommand (P11, AC-9)', () => {
     const err = new Error('read-only') as NodeJS.ErrnoException;
     err.code = 'EROFS';
     const cmd = createPerfCommand({
+      readHistory: () => null,
       perfDir: dir,
       operations: errnoOperations('report', err),
     });
@@ -466,6 +474,7 @@ describe('PerfCommand (P11, AC-9)', () => {
     const err = new Error('no space') as NodeJS.ErrnoException;
     err.code = 'ENOSPC';
     const cmd = createPerfCommand({
+      readHistory: () => null,
       perfDir: dir,
       operations: errnoOperations('delete', err),
     });
@@ -479,6 +488,7 @@ describe('PerfCommand (P11, AC-9)', () => {
 
   it('/perf inspect allows a non-errno internal error to reject', async () => {
     const cmd = createPerfCommand({
+      readHistory: () => null,
       perfDir: dir,
       operations: errnoOperations('inspect', new TypeError('internal bug')),
     });
@@ -490,6 +500,7 @@ describe('PerfCommand (P11, AC-9)', () => {
 
   it('/perf report allows a non-errno internal error to reject', async () => {
     const cmd = createPerfCommand({
+      readHistory: () => null,
       perfDir: dir,
       operations: errnoOperations('report', new RangeError('internal bug')),
     });
@@ -501,6 +512,7 @@ describe('PerfCommand (P11, AC-9)', () => {
 
   it('/perf delete allows a non-errno internal error to reject', async () => {
     const cmd = createPerfCommand({
+      readHistory: () => null,
       perfDir: dir,
       operations: errnoOperations('delete', new TypeError('internal bug')),
     });
@@ -541,14 +553,22 @@ describe('PerfCommand (P11, AC-9)', () => {
     };
     // Minimal config: truthy so ideCommand/restoreCommand are evaluated, but
     // they short-circuit to null when their accessors return undefined/false.
-    const loader = new BuiltinCommandLoader(createUnconfiguredBuiltinOwners(), {
-      getPerfSnapshotCapability: () => capability,
-      getProjectTempDir: () => join(tmpdir(), 'token-usage'),
-      getIdeClient: () => undefined,
-      getCheckpointingEnabled: () => false,
-      getEnableHooksUI: () => false,
-      isSkillsSupportEnabled: () => false,
-    } as never);
+    const loader = new BuiltinCommandLoader(
+      {
+        ...createUnconfiguredBuiltinOwners(),
+        perfCommand: createPerfCommand({
+          readHistory: () => null,
+          snapshotCapability: capability,
+        }),
+      },
+      {
+        getProjectTempDir: () => join(tmpdir(), 'token-usage'),
+        getIdeClient: () => undefined,
+        getCheckpointingEnabled: () => false,
+        getEnableHooksUI: () => false,
+        isSkillsSupportEnabled: () => false,
+      } as never,
+    );
     const commands = loader.loadCommandsSync();
     const perf = commands.find((c) => c.name === 'perf')!;
     const result = (await perf.action!({} as never, '')) as MessageActionReturn;

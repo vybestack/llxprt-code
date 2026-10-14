@@ -56,9 +56,6 @@ void vi.mock('../ui/commands/privacyCommand.js', () => ({
 void vi.mock('../ui/commands/quitCommand.js', () => ({ quitCommand: {} }));
 void vi.mock('../ui/commands/statsCommand.js', () => ({ statsCommand: {} }));
 void vi.mock('../ui/commands/themeCommand.js', () => ({ themeCommand: {} }));
-void vi.mock('../ui/commands/skillsCommand.js', () => ({
-  skillsCommand: { name: 'skills' },
-}));
 
 // Default the file to production behavior. The dedicated development case at
 // the end re-registers this module immediately before exercising uiprofile.

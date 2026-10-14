@@ -1,3 +1,5 @@
+import { createPerfCommand } from '../ui/commands/perfCommand.js';
+import { createSkillsCommand } from '../ui/commands/skillsCommand.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -310,6 +312,7 @@ export function createUnconfiguredBuiltinOwners(): BuiltinCommandOwners {
     ),
     toolsCommand: createToolsCommand(null, () => {}),
     ...unconfiguredWorkspaceCommands(),
+    ...unconfiguredResourceCommands(),
     ...unconfiguredPresentationCommands(),
     imageCommand: createImageCommand({
       workspaceRoot: undefined,
@@ -443,6 +446,30 @@ function unconfiguredWorkspaceCommands() {
       saveCoreMemory: async () => {
         throw new Error('Core memory storage is unavailable.');
       },
+    }),
+  };
+}
+
+function unconfiguredResourceCommands() {
+  return {
+    perfCommand: createPerfCommand({ readHistory: () => null }),
+    skillsCommand: createSkillsCommand({
+      isConfigured: false,
+      isAvailable: false,
+      list: () => [],
+      find: () => undefined,
+      isAdminEnabled: () => false,
+      enable: () => {
+        throw new Error('Skill owner unavailable');
+      },
+      disable: () => {
+        throw new Error('Skill owner unavailable');
+      },
+      reload: async () => {
+        throw new Error('Skill owner unavailable');
+      },
+      addItem: () => 0,
+      setPendingItem: () => {},
     }),
   };
 }
