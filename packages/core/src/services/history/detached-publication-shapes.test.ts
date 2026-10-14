@@ -19,6 +19,7 @@ import { createRowCounters } from '../../recording/journalCounters.js';
 import { HistoryJournalStore } from './historyJournalStore.js';
 import { DetachedHistoryJournal } from './detachedHistoryJournal.js';
 import { DetachedHistoryPublication } from './detachedHistoryPublication.js';
+import { HistoryRowOrigins } from './historyRowOrigins.js';
 import { detachedRow } from './detached-rollback-test-helpers.js';
 import type { IContent } from './IContent.js';
 
@@ -45,6 +46,13 @@ function detached(
   const journal = new DetachedHistoryJournal();
   scratch.journals.push(journal);
   for (const row of rows) journal.append(structuredClone(row));
+  // A captured journal knows the origin of each row; these rows are unowned.
+  journal.adoptOrigins(
+    HistoryRowOrigins.capture({
+      length: rows.length,
+      originAt: () => undefined,
+    }),
+  );
   return journal;
 }
 

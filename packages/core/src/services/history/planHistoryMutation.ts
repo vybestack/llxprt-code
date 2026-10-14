@@ -4,9 +4,11 @@ import type { RowOwnership } from '../../recording/rowOwnership.js';
 import type { IContent } from './IContent.js';
 import {
   replaceAllOps,
+  replaceOwnedRowsOps,
   restoreRowsOps,
   type OpenReplaceTracker,
 } from './historyReplaceOps.js';
+import type { HistoryRowOrigins } from './historyRowOrigins.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
 import { planDiskDensityMutation } from './historyDiskDensity.js';
 import { historyOriginId } from './historyOriginId.js';
@@ -77,14 +79,28 @@ export function planDensityMutation(
 function* replacementOps(
   previous: HistoryRowSource,
   next: HistoryRowSource,
+  nextOrigins?: HistoryRowOrigins,
 ): Generator<HistoryJournalOp, void, unknown> {
   if (previous.length === 0) {
-    for (const content of next) yield { kind: 'content', content };
+    let index = 0;
+    for (const content of next)
+      yield contentOp(content, nextOrigins?.originAt(index++));
   } else if (next.length === 0) {
     yield rewindAllOp(previous);
-  } else {
+  } else if (nextOrigins === undefined) {
     yield* replaceAllOps(next);
+  } else {
+    yield* replaceOwnedRowsOps(nextOrigins.owned(next));
   }
+}
+
+function contentOp(
+  content: IContent,
+  origin: string | undefined,
+): HistoryJournalOp {
+  return origin === undefined
+    ? { kind: 'content', content }
+    : { kind: 'content', content, origin };
 }
 
 /**
@@ -119,11 +135,14 @@ export async function compensateMutation(
   // Every admitted prefix contains at most the old rows plus the new rows.
   // A count-only rewind clears it even if admission stopped before a row
   // needed by a seq-addressed inverse. Replay without another projection.
+  // Only the count-only rewind is the failed operation's own record. The rows
+  // put back return under the origins they had, not the operation's origin.
   for (const op of restoreRowsOps(
     previousHistory,
+    previousHistory.origins,
     previousHistory.length + nextHistory.length,
   )) {
-    journal.apply(stamped(op));
+    journal.apply(op.kind === 'rewind' ? stamped(op) : op);
     if (awaitDurability) await journal.waitForDurable();
   }
 }
@@ -219,7 +238,9 @@ function preferDetachedReplay(
 }
 
 /**
- * Plan the journal ops that turn `previous` into `next`:
+ * Plan the journal ops that turn `previous` into `next`. `nextOrigins` is
+ * given when `next` puts back rows that had owners (a rollback): the rows the
+ * plan writes then keep the origin they had, instead of becoming unowned.
  *
  *  - strict marked prefix, shorter → one `rewind` (count + cut seq);
  *  - strict marked prefix, longer → `content` rows for the appended tail;
@@ -231,9 +252,10 @@ export function* planHistoryMutation(
   previous: HistoryRowSource,
   next: HistoryRowSource,
   ownership?: RowOwnership,
+  nextOrigins?: HistoryRowOrigins,
 ): Generator<HistoryJournalOp, void, unknown> {
   if (preferDetachedReplay(previous, next)) {
-    yield* replacementOps(previous, next);
+    yield* replacementOps(previous, next, nextOrigins);
     return;
   }
   if (next.length === previous.length && isMarkedPrefix(previous, next)) {
@@ -246,7 +268,7 @@ export function* planHistoryMutation(
   ) {
     yield* retainedValueOps(previous, next, previous.length, ownership);
     for (let index = previous.length; index < next.length; index++) {
-      yield { kind: 'content', content: historyRowAt(next, index) };
+      yield contentOp(historyRowAt(next, index), nextOrigins?.originAt(index));
     }
     return;
   }
@@ -269,12 +291,14 @@ export function* planHistoryMutation(
         itemsCompressed: previous.length,
       },
     };
+    const summaryOrigin = nextOrigins?.originAt(0);
     yield {
       kind: 'compressed',
       summary: historyRowAt(next, 0),
       itemsCompressed: previous.length,
+      ...(summaryOrigin === undefined ? {} : { origin: summaryOrigin }),
     };
     return;
   }
-  yield* replacementOps(previous, next);
+  yield* replacementOps(previous, next, nextOrigins);
 }

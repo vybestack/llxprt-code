@@ -424,6 +424,7 @@ async function commitDetachedHistory(
     host.journal,
     host.ownership,
     options.origin,
+    restoredState === undefined ? undefined : next.origins,
   );
   const scope = host.journal.openPublication();
   try {

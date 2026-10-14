@@ -11,7 +11,9 @@ import {
   type PendingRowFold,
 } from '../../recording/pendingRowFold.js';
 import type { JournalReadCounters } from '../../recording/journalCounters.js';
+import type { HistoryReadCursor } from '../../recording/synchronousHistoryCursor.js';
 import { createScratchDirSync } from '../../storage/scratch-root.js';
+import { HistoryRowOrigins } from './historyRowOrigins.js';
 
 export interface HistoryIndexedRows extends Iterable<IContent> {
   readonly length: number;
@@ -112,6 +114,7 @@ export class HistoryMutationSnapshot implements Iterable<IContent> {
     }
   >();
   private closed = false;
+  private rowOrigins: HistoryRowOrigins | undefined;
   private readonly iterators = new Map<
     object,
     Generator<IContent, void, unknown>
@@ -146,6 +149,29 @@ export class HistoryMutationSnapshot implements Iterable<IContent> {
 
   get hasPendingRows(): boolean {
     return this.pendingCount > 0;
+  }
+
+  /**
+   * The origin each snapshot row has in the journal right now. The snapshot
+   * keeps content only, and a compensation that puts rows back needs the
+   * origins from before the mutation wrote anything, so they are read here,
+   * before the first admission.
+   */
+  captureOrigins(cursor: HistoryReadCursor): void {
+    this.activeSource();
+    if (cursor.length !== this.count)
+      throw new Error('History changed between the snapshot and its mutation');
+    const captured = HistoryRowOrigins.capture(cursor);
+    this.rowOrigins?.close();
+    this.rowOrigins = captured;
+  }
+
+  /** The origins captured by {@link captureOrigins}; fails if none were. */
+  get origins(): HistoryRowOrigins {
+    this.activeSource();
+    if (this.rowOrigins === undefined)
+      throw new Error('History mutation snapshot has no captured row origins');
+    return this.rowOrigins;
   }
 
   private activeSource(): PendingRowFold {
@@ -279,12 +305,16 @@ export class HistoryMutationSnapshot implements Iterable<IContent> {
 
   private closeStorage(): void {
     try {
-      closeSync(this.index);
+      this.rowOrigins?.close();
     } finally {
       try {
-        closeSync(this.rows);
+        closeSync(this.index);
       } finally {
-        rmSync(this.root, { recursive: true, force: true });
+        try {
+          closeSync(this.rows);
+        } finally {
+          rmSync(this.root, { recursive: true, force: true });
+        }
       }
     }
   }

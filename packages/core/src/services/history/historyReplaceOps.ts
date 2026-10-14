@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import type { IContent } from './IContent.js';
 import type { HistoryJournalOp } from './historyJournalStore.js';
+import type { HistoryRowOrigins } from './historyRowOrigins.js';
 
 /**
  * Journal ops that replace the whole history with `rows` as one replace
@@ -57,16 +58,20 @@ export function* replaceOwnedRowsOps(
  * Ops that make the journal hold exactly `rows` again, whatever prefix of a
  * failed mutation it contains. `admittedBound` is an upper bound of the
  * journal's row count, used when `rows` is empty and a rewind clears it.
+ * `origins` holds the origin each of `rows` had before the failed mutation, so
+ * a restored row returns to the origins that owned it and rows that were
+ * unowned stay unowned.
  */
 export function* restoreRowsOps(
   rows: Iterable<IContent> & { readonly length: number },
+  origins: HistoryRowOrigins,
   admittedBound: number,
 ): Generator<HistoryJournalOp, void, unknown> {
   if (rows.length === 0) {
     yield { kind: 'rewind', itemsRemoved: admittedBound };
     return;
   }
-  yield* replaceAllOps(rows);
+  yield* replaceOwnedRowsOps(origins.owned(rows));
 }
 
 /** Tracks the replace transaction that admitted ops have left open, if any. */

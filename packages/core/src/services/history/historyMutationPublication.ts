@@ -30,6 +30,8 @@ export class HistoryMutationPublication {
     input: HistoryMutationInput,
   ): void | Promise<void> {
     const streaming = input.streamPublication === true;
+    // Before anything is admitted: compensation restores these origins.
+    this.journal.withReadRows((cursor) => previous.captureOrigins(cursor));
     this.origin =
       input.options.origin === undefined
         ? undefined

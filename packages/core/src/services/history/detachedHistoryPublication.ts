@@ -12,6 +12,8 @@ import { journalPublicationOwners } from './historyPublicationOwners.js';
 import type { DetachedHistoryJournal } from './detachedHistoryJournal.js';
 import { densityShapeOps } from './detachedDensityOps.js';
 import { historyOriginId } from './historyOriginId.js';
+import { replaceOwnedRowsOps } from './historyReplaceOps.js';
+import type { HistoryRowOrigins } from './historyRowOrigins.js';
 
 interface TruncationCut {
   readonly itemsRemoved: number;
@@ -76,6 +78,7 @@ function rowsUnchanged(
 function compressionOps(
   previous: DetachedHistoryJournal,
   next: DetachedHistoryJournal,
+  nextOrigins: HistoryRowOrigins | undefined,
 ): HistoryJournalOp[] | undefined {
   if (next.length !== 1 || previous.length === 0) return undefined;
   let fromSeq: number | undefined;
@@ -89,6 +92,7 @@ function compressionOps(
   let summary: IContent | undefined;
   for (const row of next) summary = row;
   if (summary === undefined) return undefined;
+  const summaryOrigin = nextOrigins?.originAt(0);
   return [
     {
       kind: 'compressionDetail',
@@ -98,7 +102,12 @@ function compressionOps(
         itemsCompressed: previous.length,
       },
     },
-    { kind: 'compressed', summary, itemsCompressed: previous.length },
+    {
+      kind: 'compressed',
+      summary,
+      itemsCompressed: previous.length,
+      ...(summaryOrigin === undefined ? {} : { origin: summaryOrigin }),
+    },
   ];
 }
 
@@ -118,11 +127,19 @@ export class DetachedHistoryPublication {
   private transaction: ReplaceTransaction | null = null;
   private releaseEnvelope = (): void => {};
 
+  /**
+   * `rowOrigins` is given when the candidate puts back rows that had owners (a
+   * rollback to a checkpoint): each row is then written under the origin it
+   * had, and the publication names no origin of its own.
+   */
   constructor(
     private readonly journal: HistoryJournalStore,
     private readonly ownership?: RowOwnership,
     origin?: object,
+    private readonly rowOrigins?: HistoryRowOrigins,
   ) {
+    if (origin !== undefined && rowOrigins !== undefined)
+      throw new Error('A restoring publication cannot name an origin');
     this.origin = origin === undefined ? undefined : historyOriginId(origin);
   }
 
@@ -145,7 +162,9 @@ export class DetachedHistoryPublication {
         return;
       }
     }
-    const compression = appendOnly ? undefined : compressionOps(previous, next);
+    const compression = appendOnly
+      ? undefined
+      : compressionOps(previous, next, this.rowOrigins);
     if (compression !== undefined) {
       for (const op of compression) await this.admitShape(op, signal);
       return;
@@ -171,7 +190,7 @@ export class DetachedHistoryPublication {
       const ordinal = index++;
       if (!appendOnly || ordinal >= previous.length)
         await this.admit(
-          { kind: 'content', content },
+          this.rowOp(content, ordinal),
           signal,
           ordinal < next.length - 1 || awaitFinalCommit,
         );
@@ -193,9 +212,10 @@ export class DetachedHistoryPublication {
     const { txId } = open;
     this.transaction = open;
     await this.admit({ kind: 'replaceBegin', txId }, signal);
+    let ordinal = 0;
     for (const content of next)
       await this.admit(
-        { kind: 'content', content, tx: txId },
+        this.rowOp(content, ordinal++, txId),
         signal,
         true,
         () => {
@@ -211,6 +231,21 @@ export class DetachedHistoryPublication {
       },
     );
     signal?.throwIfAborted();
+  }
+
+  /** A row of the candidate; a restoring publication keeps the origin the row had. */
+  private rowOp(
+    content: IContent,
+    ordinal: number,
+    tx?: string,
+  ): HistoryJournalOp {
+    const origin = this.rowOrigins?.originAt(ordinal);
+    return {
+      kind: 'content',
+      content,
+      ...(tx === undefined ? {} : { tx }),
+      ...(origin === undefined ? {} : { origin }),
+    };
   }
 
   private async admitShape(
@@ -254,18 +289,27 @@ export class DetachedHistoryPublication {
       await this.admit({ kind: 'rewind', itemsRemoved: next.length });
       return;
     }
-    const txId = randomUUID();
-    await this.admit({ kind: 'replaceBegin', txId });
-    for (const content of previous)
-      await this.admit({ kind: 'content', content, tx: txId });
-    await this.admit({
-      kind: 'replaceCommit',
-      txId,
-      rowCount: previous.length,
-    });
+    // The failed operation's origin does not apply here: each previous row
+    // returns under the origin it had, and unowned rows stay unowned.
+    for (const op of replaceOwnedRowsOps(previous.origins.owned(previous)))
+      await this.admitOp(op);
   }
 
-  private async admit(
+  private admit(
+    op: HistoryJournalOp,
+    signal?: AbortSignal,
+    awaitCommit = true,
+    onDurable?: () => void,
+  ): Promise<void> {
+    return this.admitOp(
+      this.origin === undefined ? op : { ...op, origin: this.origin },
+      signal,
+      awaitCommit,
+      onDurable,
+    );
+  }
+
+  private async admitOp(
     op: HistoryJournalOp,
     signal?: AbortSignal,
     awaitCommit = true,
@@ -277,9 +321,7 @@ export class DetachedHistoryPublication {
       this.ownership,
     );
     try {
-      this.journal.apply(
-        this.origin === undefined ? op : { ...op, origin: this.origin },
-      );
+      this.journal.apply(op);
       this.admittedCount++;
       const releaseEnvelope = trackMutationOwners(
         this.journal.capturePublicationOwners(),

@@ -10,6 +10,7 @@ import type { RowOwnership } from '../../recording/rowOwnership.js';
 
 import type { PendingFoldSnapshot } from '../../recording/pendingFoldSnapshot.js';
 import { sanitizeProviderContentForSerialization } from './historyCloneUtils.js';
+import { HistoryRowOrigins } from './historyRowOrigins.js';
 
 async function waitForCaptureAcknowledgement(
   operation: () => Promise<void>,
@@ -58,6 +59,11 @@ export async function captureDetachedHistory(
   settleTokens?: () => Promise<void>,
 ): Promise<void> {
   signal?.throwIfAborted();
+  // Read before the first await: the journal cannot change between this and
+  // the pinned fold below, and the fold carries no origins of its own.
+  previous.adoptOrigins(
+    journal.withReadRows((cursor) => HistoryRowOrigins.capture(cursor)),
+  );
   let captured: PendingFoldSnapshot | undefined = journal.capturePendingFold();
   let releaseOwners = (): void => {};
   let folding = false;
@@ -69,6 +75,8 @@ export async function captureDetachedHistory(
     } finally {
       await source.close();
     }
+    if (previous.origins.length !== previous.length)
+      throw new Error('History changed while its rows were captured');
     journal.adoptMutationBoundary(captured.durableTail);
     if (settleTokens !== undefined)
       await waitForCaptureAcknowledgement(settleTokens, signal);

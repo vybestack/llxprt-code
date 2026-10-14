@@ -16,6 +16,7 @@ import { HistoryJournalStore } from './historyJournalStore.js';
 import type { HistoryJournalOp } from './historyJournalStore.js';
 import { HistoryDensityRows } from './historyDensityRows.js';
 import { replaceAllOps, restoreRowsOps } from './historyReplaceOps.js';
+import { HistoryRowOrigins } from './historyRowOrigins.js';
 import { planHistoryMutation, planMutation } from './planHistoryMutation.js';
 import type { HistoryMutationInput } from './historyBatchContracts.js';
 import type { IContent } from './IContent.js';
@@ -108,7 +109,17 @@ const SCENARIOS: readonly Scenario[] = [
     name: 'compensation / repair rollback / clear restore (restoreRowsOps)',
     before: NEW,
     complete: OLD,
-    write: (recorder) => applyOps(recorder, restoreRowsOps(OLD, 7)),
+    write: async (recorder) => {
+      const origins = HistoryRowOrigins.capture({
+        length: OLD.length,
+        originAt: () => undefined,
+      });
+      try {
+        await applyOps(recorder, restoreRowsOps(OLD, origins, 7));
+      } finally {
+        origins.close();
+      }
+    },
   },
   {
     name: 'clear restore (replaceAllOps)',

@@ -6,6 +6,7 @@ import { isRecord, isSpeakerContent } from './historyJournalGuards.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { createScratchDirSync } from '../../storage/scratch-root.js';
 import { TailBufferedFile } from './tailBufferedFile.js';
+import type { HistoryRowOrigins } from './historyRowOrigins.js';
 
 const stalled = 'Detached journal I/O made no progress';
 const rowsBufferBytes = 64 * 1024;
@@ -36,6 +37,7 @@ export class DetachedHistoryJournal implements Iterable<IContent> {
   private rowOffset = 0;
   private markerOffset = 0;
   private closed = false;
+  private rowOrigins: HistoryRowOrigins | undefined;
 
   constructor(private readonly ownership?: RowOwnership) {
     this.root = createScratchDirSync('history-detached-');
@@ -66,6 +68,25 @@ export class DetachedHistoryJournal implements Iterable<IContent> {
 
   private assertOpen(): void {
     if (this.closed) throw new Error('Detached journal is closed');
+  }
+
+  /**
+   * Take ownership of the origins the captured rows had in the journal. The
+   * rows hold content only; rolling back to this copy needs each row's owner.
+   */
+  adoptOrigins(origins: HistoryRowOrigins): void {
+    this.assertOpen();
+    if (this.rowOrigins !== undefined)
+      throw new Error('Detached journal already has row origins');
+    this.rowOrigins = origins;
+  }
+
+  /** The origin each row had when captured; fails for a journal that was not captured. */
+  get origins(): HistoryRowOrigins {
+    this.assertOpen();
+    if (this.rowOrigins === undefined)
+      throw new Error('Detached journal has no captured row origins');
+    return this.rowOrigins;
   }
 
   append(row: IContent): void {
@@ -177,6 +198,11 @@ export class DetachedHistoryJournal implements Iterable<IContent> {
     if (this.closed) return;
     this.closed = true;
     const failures = cleanup(this.root, this.descriptors);
+    try {
+      this.rowOrigins?.close();
+    } catch (error) {
+      failures.push(error);
+    }
     if (failures.length > 0)
       throw new AggregateError(failures, 'Detached journal cleanup failed');
   }

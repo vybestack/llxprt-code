@@ -2,6 +2,7 @@
 import type { IContent, ToolCallBlock } from './IContent.js';
 import type { HistoryReadCursor } from '../../recording/synchronousHistoryCursor.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
+import { HistoryRowOrigins } from './historyRowOrigins.js';
 import type {
   HistoryJournalStore,
   HistoryJournalOp,
@@ -21,6 +22,7 @@ export class HistoryValidationRepair {
   readonly next: HistoryDensityRows;
   readonly inserted: HistoryDensityRows;
   private readonly index: HistoryRepairIndex;
+  private origins: HistoryRowOrigins | undefined;
   private addressed = true;
   private admitted = 0;
   private readonly replacements = new OpenReplaceTracker();
@@ -48,6 +50,8 @@ export class HistoryValidationRepair {
   }
 
   capture(cursor: HistoryReadCursor, stamp: (row: IContent) => IContent): void {
+    this.origins?.close();
+    this.origins = HistoryRowOrigins.capture(cursor);
     let position = 0;
     for (const row of cursor.rows()) {
       const seq = row.metadata?.chronology?.seq;
@@ -138,8 +142,11 @@ export class HistoryValidationRepair {
       journal.apply(abort);
       this.replacements.observe(abort);
     } else {
+      if (this.origins === undefined)
+        throw new Error('Validation repair has no captured row origins');
       for (const op of restoreRowsOps(
         this.previous,
+        this.origins,
         this.previous.length + this.inserted.length,
       ))
         journal.apply(op);
@@ -148,6 +155,14 @@ export class HistoryValidationRepair {
   }
 
   close(): void {
+    try {
+      this.origins?.close();
+    } finally {
+      this.closeRows();
+    }
+  }
+
+  private closeRows(): void {
     try {
       this.index.close();
     } finally {

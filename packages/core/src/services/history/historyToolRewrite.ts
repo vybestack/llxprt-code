@@ -139,7 +139,12 @@ function restoreRows(
     replacements.observe(abort);
     return;
   }
-  for (const op of planHistoryMutation(next, previous, input.ownership))
+  for (const op of planHistoryMutation(
+    next,
+    previous,
+    input.ownership,
+    previous.origins,
+  ))
     input.journal.apply(op);
 }
 
