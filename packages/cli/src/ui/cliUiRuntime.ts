@@ -239,8 +239,7 @@ export interface UiToolRegistryInfo {
 
 /**
  * Tool-registry SOURCE capability. This is a bare-source read-model (part of
- * {@link StreamRuntimeBareSource}) consumed by the focused MCP/auto-prompt
- * boundaries ({@link McpCommandRuntime}, the auto-prompt runtime) and by the
+ * {@link StreamRuntimeBareSource}) consumed by the auto-prompt runtime and the
  * settings dialog's dynamic tool-settings derivation. It is intentionally NOT
  * re-exposed as a projected `tools` slice on {@link StreamRuntime}: the
  * streaming/UI path lists tools through the public `agent.tools` surface
@@ -958,19 +957,6 @@ export function buildSlashCommandRuntime(
       ? { getPerfSnapshotCapability: () => perfSnapshotCapability }
       : {},
   );
-}
-
-/**
- * MCP-command boundary: the focused capability slice that MCP display and
- * auth commands actually need.
- */
-export interface McpCommandRuntime {
-  getMcpServers(): Record<string, MCPServerConfig> | undefined;
-  getBlockedMcpServers():
-    | Array<{ name: string; extensionName: string }>
-    | undefined;
-  listPrompts: WorkspacePromptSelection['listPrompts'];
-  listResources: WorkspaceResourceSelection['listResources'];
 }
 
 /**

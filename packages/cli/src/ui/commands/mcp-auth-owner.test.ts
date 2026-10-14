@@ -11,7 +11,7 @@ import {
   internalConfig,
 } from '../../../../agents/src/api/__tests__/helpers/agentHarness.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { mcpCommand } from './mcpCommand.js';
+import { registerMcpCommand } from '../../__tests__/credential-command-test-owner.js';
 
 describe('CLI MCP authentication', () => {
   it('belongs to the public Agent disposal lifetime', async () => {
@@ -65,7 +65,7 @@ describe('CLI MCP authentication', () => {
     context.ui.reloadCommands = () => {
       reloads++;
     };
-    const action = mcpCommand.subCommands?.find(
+    const action = registerMcpCommand(context).subCommands?.find(
       (command) => command.name === 'auth',
     )?.action;
     if (!action) throw new Error('Missing MCP auth command');

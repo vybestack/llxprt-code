@@ -32,7 +32,7 @@ import { helpCommand } from '../ui/commands/helpCommand.js';
 import { ideCommand } from '../ui/commands/ideCommand.js';
 import { imageCommand } from '../ui/commands/imageCommand.js';
 import { initCommand } from '../ui/commands/initCommand.js';
-import { mcpCommand } from '../ui/commands/mcpCommand.js';
+
 import { memoryCommand } from '../ui/commands/memoryCommand.js';
 import { privacyCommand } from '../ui/commands/privacyCommand.js';
 import { loggingCommand } from '../ui/commands/loggingCommand.js';
@@ -80,6 +80,7 @@ export interface BuiltinCommandOwners {
   readonly logoutCommand: SlashCommand;
   readonly authCommand: SlashCommand;
   readonly quotaCommand: SlashCommand;
+  readonly mcpCommand: SlashCommand;
   readonly toolkeyCommand: SlashCommand;
   readonly toolkeyfileCommand: SlashCommand;
 }
@@ -159,7 +160,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       ideCommand(this.config),
       imageCommand,
       initCommand,
-      mcpCommand,
+      this.owners.mcpCommand,
       memoryCommand,
       privacyCommand,
       loggingCommand,

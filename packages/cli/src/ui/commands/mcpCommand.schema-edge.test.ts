@@ -6,8 +6,10 @@
 import { unsupportedApprovalPolicy } from '../../../../mcp/src/client/test-support/approval-policy.js';
 
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
-import { mcpCommand } from './mcpCommand.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
+import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
+
+const { mcpCommand } = createUnconfiguredBuiltinOwners();
 import { MCPServerStatus, DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 import type { MessageActionReturn } from './types.js';
 import type {

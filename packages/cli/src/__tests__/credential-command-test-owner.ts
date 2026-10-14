@@ -9,6 +9,7 @@ import {
   bindKeyfileCommandOperations,
   bindLogoutCommandOperations,
   bindQuotaCommandOperations,
+  bindMcpAuthCommandOperations,
 } from '../ui/commands/credentialCommandHost.js';
 import { createAuthCommand } from '../ui/commands/authCommand.js';
 import { createBaseurlCommand } from '../ui/commands/baseurlCommand.js';
@@ -19,6 +20,8 @@ import {
 import { createKeyfileCommand } from '../ui/commands/keyfileCommand.js';
 import { createLogoutCommand } from '../ui/commands/logoutCommand.js';
 import { createQuotaCommand } from '../ui/commands/quotaCommand.js';
+import { createMcpAuthCommand } from '../ui/commands/mcpAuth.js';
+import { createMcpCommand } from '../ui/commands/mcpCommand.js';
 import type { CommandContext, SlashCommand } from '../ui/commands/types.js';
 
 /**
@@ -78,5 +81,17 @@ export function registerQuotaCommand(
 ): SlashCommand {
   return createQuotaCommand(
     bindQuotaCommandOperations(owners.runtimeApi, owners.oauthControl),
+  );
+}
+
+
+export function registerMcpCommand(context: CommandContext): SlashCommand {
+  return createMcpCommand(
+    createMcpAuthCommand(
+      bindMcpAuthCommandOperations(
+        context.services.agent,
+        context.services.config,
+      ),
+    ),
   );
 }

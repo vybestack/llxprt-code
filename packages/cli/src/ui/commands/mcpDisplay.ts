@@ -13,7 +13,6 @@ import type {
   McpServerDetail,
 } from '@vybestack/llxprt-code-agents';
 import { MCPServerStatus } from '@vybestack/llxprt-code-mcp';
-import type { McpCommandRuntime } from '../cliUiRuntime.js';
 
 export const COLOR_GREEN = '\u001b[32m';
 export const COLOR_YELLOW = '\u001b[33m';
@@ -25,12 +24,6 @@ export const RESET_COLOR = '\u001b[0m';
 export const MAX_MCP_RESOURCES_TO_SHOW = 10;
 
 export type RuntimeMcpServers = Record<string, MCPServerConfig | undefined>;
-
-// @plan:ISSUE-2376 — the /mcp status + schema rendering is fully migrated to the
-// Agent surface (agent.mcp.details()); this alias is retained solely for
-// mcpAuth.ts, whose OAuth-restart flow still needs the #2384 McpCommandRuntime
-// (getMcpClientManager/getAgentClient) and is orthogonal to the display path.
-export type RuntimeMcpServices = McpCommandRuntime;
 
 export const getResourceName = (resource: McpResourceInfo): string =>
   resource.name ?? resource.uri;

@@ -220,11 +220,13 @@ describe('#2373 config boundary guard', () => {
     expect(input).not.toMatch(/config:\s*CliUiRuntime\b/);
   });
 
-  it('keeps the MCP command path on an explicit MCP runtime boundary', () => {
+  it('keeps MCP display and auth commands independent of the legacy runtime bag', () => {
     const display = read('ui/commands/mcpDisplay.ts');
     const command = read('ui/commands/mcpCommand.ts');
+    const auth = read('ui/commands/mcpAuth.ts');
 
-    expect(display).toMatch(/RuntimeMcpServices\s*=\s*McpCommandRuntime/);
+    expect(display).not.toMatch(/McpCommandRuntime|RuntimeMcpServices/);
+    expect(auth).not.toMatch(/McpCommandRuntime|RuntimeMcpServices/);
     expect(display).not.toMatch(/Omit<CliUiRuntime/);
     expect(display).not.toMatch(/asRuntimeConfig/);
     expect(command).not.toMatch(/asRuntimeConfig/);
