@@ -61,7 +61,7 @@ import {
   withCounters,
   writeRawJournal,
   type ResumeRequest,
-} from './p05dTestKit.js';
+} from './__tests__/support/p05dTestKit.js';
 import { CONTINUE_LATEST, resumeSession } from './resumeSession.js';
 import type { IContent } from '../services/history/IContent.js';
 

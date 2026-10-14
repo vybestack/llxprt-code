@@ -1,8 +1,8 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { appendFileSync } from 'node:fs';
 import { expect } from 'bun:test';
-import type { HistoryJournalStore } from './historyJournalStore.js';
-import type { RowOwnership } from '../../recording/rowOwnership.js';
+import type { HistoryJournalStore } from '../../historyJournalStore.js';
+import type { RowOwnership } from '../../../../recording/rowOwnership.js';
 
 export function scalarFailureMessage(execute: () => void): string | undefined {
   try {

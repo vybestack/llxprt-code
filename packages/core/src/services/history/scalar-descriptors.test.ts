@@ -10,7 +10,7 @@ import { withSynchronousHistoryCursor } from '../../recording/synchronousHistory
 import {
   expectNoScalarOwners,
   scalarFailureMessage,
-} from './scalar-test-evidence.js';
+} from './__tests__/support/scalar-test-evidence.js';
 
 describe('scalar cursor pinned descriptor cleanup', () => {
   it.each(['return', 'fault', 'abort', 'unlink'])(

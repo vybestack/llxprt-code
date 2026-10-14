@@ -34,7 +34,7 @@ import { replaySession } from './ReplayEngine.js';
 import { SessionDiscovery } from './SessionDiscovery.js';
 import { resumeSession } from './resumeSession.js';
 import { deleteSession } from './sessionManagement.js';
-import { collectRows } from './p05dTestKit.js';
+import { collectRows } from './__tests__/support/p05dTestKit.js';
 import type { IContent } from '../services/history/IContent.js';
 import {
   PROJECT_HASH,

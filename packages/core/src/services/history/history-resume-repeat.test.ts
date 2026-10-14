@@ -14,7 +14,7 @@ import { HistoryService } from './HistoryService.js';
 import {
   createRecordedSession,
   PROJECT_HASH,
-} from '../../recording/p05dTestKit.js';
+} from '../../recording/__tests__/support/p05dTestKit.js';
 import { resumeSession } from '../../recording/resumeSession.js';
 
 interface JournalShape {

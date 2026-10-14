@@ -30,25 +30,25 @@ import { expect } from 'bun:test';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { SessionDiscovery } from './SessionDiscovery.js';
-import { SessionRecordingService } from './SessionRecordingService.js';
+import { SessionDiscovery } from '../../SessionDiscovery.js';
+import { SessionRecordingService } from '../../SessionRecordingService.js';
 import {
   type ContinueTarget,
   type SessionRecordingServiceConfig,
   type SessionSummary,
-} from './types.js';
+} from '../../types.js';
 import {
   type ResumeError,
   type ResumeRequest,
   type ResumeResult,
-} from './resumeSession.js';
+} from '../../resumeSession.js';
 import {
   type ForkError,
   type ForkResult,
   type SessionTransitionServiceOptions,
-} from './SessionTransitionService.js';
-import type { JournalCursor } from './journalCursor.js';
-import type { IContent } from '../services/history/IContent.js';
+} from '../../SessionTransitionService.js';
+import type { JournalCursor } from '../../journalCursor.js';
+import type { IContent } from '../../../services/history/IContent.js';
 
 // ---------------------------------------------------------------------------
 // Calibration constants (shellPtyMemory style: documented regimes)
@@ -70,13 +70,13 @@ export const PROJECT_HASH = 'p05d-project-hash';
 // Proposed journalCounters.ts surface (temporary test-kit copy)
 // ---------------------------------------------------------------------------
 
-export { createRowCounters } from './journalCounters.js';
+export { createRowCounters } from '../../journalCounters.js';
 export type {
   JournalReadCounters,
   JournalReadStats,
   RowCounters,
-} from './journalCounters.js';
-import type { JournalReadCounters } from './journalCounters.js';
+} from '../../journalCounters.js';
+import type { JournalReadCounters } from '../../journalCounters.js';
 
 export function withCounters<T extends object>(
   base: T,
@@ -98,11 +98,11 @@ export function transitionOptions(
 export type {
   BoundedDiscoveryOptions,
   BoundedContinueTargets,
-} from './SessionDiscovery.js';
+} from '../../SessionDiscovery.js';
 import type {
   BoundedDiscoveryOptions,
   BoundedContinueTargets,
-} from './SessionDiscovery.js';
+} from '../../SessionDiscovery.js';
 
 export function callBoundedDiscovery(
   chatsDir: string,

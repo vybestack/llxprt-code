@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import {
   createRecordedSession,
   PROJECT_HASH,
-} from '../../recording/p05dTestKit.js';
+} from '../../recording/__tests__/support/p05dTestKit.js';
 import {
   resumeSession,
   type ResumeResult,

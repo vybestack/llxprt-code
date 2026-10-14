@@ -55,7 +55,7 @@ import {
   SMALL_N,
   transitionOptions,
   type RecordedSession,
-} from './p05dTestKit.js';
+} from './__tests__/support/p05dTestKit.js';
 
 let chatsDir: string;
 let tempRoot: string;

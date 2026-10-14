@@ -71,7 +71,7 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
 import type { TodoContinuationService } from './TodoContinuationService.js';
-import { installChatSessionFactoryConfigFixture } from './chatSessionFactoryConfigFixture.js';
+import { installChatSessionFactoryConfigFixture } from './__tests__/support/chatSessionFactoryConfigFixture.js';
 
 const createFixtureConfig = installChatSessionFactoryConfigFixture();
 

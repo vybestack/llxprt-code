@@ -47,7 +47,7 @@ import {
   SMALL_N,
   withCounters,
   writeRawJournal,
-} from './p05dTestKit.js';
+} from './__tests__/support/p05dTestKit.js';
 
 describe('P05d peak decoded-row counters @issue:854', () => {
   it('counter factory computes peak from decode/release pairs (kit self-check)', () => {

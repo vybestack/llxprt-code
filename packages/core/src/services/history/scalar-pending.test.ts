@@ -12,7 +12,7 @@ import {
   recordScalarOwners,
   expectEmptyScalarJournal,
   expectNoScalarOwners,
-} from './scalar-test-evidence.js';
+} from './__tests__/support/scalar-test-evidence.js';
 import {
   batchRow,
   withBatchFixture,

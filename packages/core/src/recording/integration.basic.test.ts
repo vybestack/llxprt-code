@@ -1,4 +1,4 @@
-import { collectRows } from './p05dTestKit.js';
+import { collectRows } from './__tests__/support/p05dTestKit.js';
 /**
  * Copyright 2025 Vybestack LLC
  *

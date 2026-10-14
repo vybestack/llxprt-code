@@ -6,7 +6,10 @@ import * as path from 'node:path';
 import { JournalResolver, type SurvivorInterval } from './journalResolver.js';
 import { replaySession } from './eager-replay.test.helpers.js';
 import { createRowCounters } from './journalCounters.js';
-import { writeRawJournal, buildContents } from './p05dTestKit.js';
+import {
+  writeRawJournal,
+  buildContents,
+} from './__tests__/support/p05dTestKit.js';
 
 let dir: string;
 

@@ -143,7 +143,7 @@ import type { AgentRuntimeState } from '@vybestack/llxprt-code-core/runtime/Agen
 import type { ContentGenerator } from '@vybestack/llxprt-code-core/core/contentGenerator.js';
 import type { TodoContinuationService } from '../TodoContinuationService.js';
 import type { LocalMediaStore } from '@vybestack/llxprt-code-core/storage/local-media-store.js';
-import { installChatSessionFactoryConfigFixture } from '../chatSessionFactoryConfigFixture.js';
+import { installChatSessionFactoryConfigFixture } from './support/chatSessionFactoryConfigFixture.js';
 import { createChatSession } from '../ChatSessionFactory.js';
 import { createOwnerPolicyFixture } from './session-policy-fixture.js';
 import { observeStoredHistoryReuse } from './chat-session-factory-history-test-observation.js';
