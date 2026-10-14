@@ -22,7 +22,6 @@ import { clearCommand } from '../ui/commands/clearCommand.js';
 import { docsCommand } from '../ui/commands/docsCommand.js';
 
 import { editorCommand } from '../ui/commands/editorCommand.js';
-import { extensionsCommand } from '../ui/commands/extensionsCommand.js';
 import { helpCommand } from '../ui/commands/helpCommand.js';
 import { ideCommand } from '../ui/commands/ideCommand.js';
 
@@ -57,6 +56,7 @@ import { createPerfCommand } from '../ui/commands/perfCommand.js';
  * of the LLxprt Code application.
  */
 export interface BuiltinCommandOwners {
+  readonly extensionsCommand: SlashCommand;
   readonly hooksCommand: SlashCommand;
   readonly taskCommand: SlashCommand;
   readonly todoCommand: SlashCommand;
@@ -157,7 +157,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       docsCommand,
       this.owners.directoryCommand,
       editorCommand,
-      extensionsCommand,
+      this.owners.extensionsCommand,
       helpCommand,
       ideCommand(this.config),
       this.owners.imageCommand,

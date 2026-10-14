@@ -16,6 +16,7 @@ import { useChatCommand } from './useChatCommand.js';
 import { createContinueCommand } from '../commands/continueCommand.js';
 import { bindContinueCommandOperations } from '../commands/continueCommandHost.js';
 import { createCopyCommand } from '../commands/copyCommand.js';
+import { useExtensionCommand } from './useExtensionCommand.js';
 import { createTodoCommand } from '../commands/todoCommand.js';
 import { createHooksCommand } from '../commands/hooksCommand.js';
 import { createTaskCommand } from '../commands/tasksCommand.js';
@@ -229,6 +230,7 @@ function useCommandState(
   recordingSwapCallbacks: RecordingSwapCallbacks | undefined,
   config: CliUiRuntime | null,
   runtimeApi: ReturnType<typeof useRuntimeApi>,
+  extensionsCommand: SlashCommand,
 ): SlashCommandProcessorState {
   const rec = useSwitch(agent?.session, rawRecording, recordingOwner);
   const modelCommand = useModelCommand(
@@ -289,6 +291,7 @@ function useCommandState(
     setCommand,
     provider,
     todoCommand: useTodoCommandOwner(todoContext, addItem),
+    extensionsCommand,
     ...workspaceCommands,
     credentialCommands,
   });
@@ -333,6 +336,7 @@ type BuiltinCommandOwnerParts = Pick<
   | 'modelCommand'
   | 'toolFormatCommand'
   | 'setCommand'
+  | 'extensionsCommand'
 > & {
   historyCommandOwners: ReturnType<typeof useHistoryCommandOwners>;
   provider: SlashCommand;
@@ -369,6 +373,7 @@ function useBuiltinCommandOwners(
     taskCommand,
     todoCommand,
     credentialCommands,
+    extensionsCommand,
   } = parts;
   return useMemo(
     () => ({
@@ -388,6 +393,7 @@ function useBuiltinCommandOwners(
       hooksCommand,
       taskCommand,
       todoCommand,
+      extensionsCommand,
       ...credentialCommands,
     }),
     [
@@ -408,6 +414,7 @@ function useBuiltinCommandOwners(
       taskCommand,
       todoCommand,
       credentialCommands,
+      extensionsCommand,
     ],
   );
 }
@@ -684,13 +691,20 @@ function useCommandRuntimeState(addItem: UseHistoryManagerReturn['addItem']) {
   };
 }
 
-export function useSlashCommandProcessorCore(
+function useRegisteredCommands(
   args: UseSlashCommandProcessorCoreArgs,
-): SlashCommandProcessorCoreResult {
-  const api = useRuntimeApi();
-  const refreshProviderAliases = useProviderAliasRefresh();
+  runtimeApi: ReturnType<typeof useRuntimeApi>,
+  refreshProviderAliases: () => Promise<void>,
+  setPendingItem: (item: HistoryItemWithoutId | null) => void,
+): SlashCommandProcessorState {
   const { reloadCommandsRef, reloadRegisteredCommands } =
     useRegisteredCommandReload();
+  const extensionsCommand = useExtensionCommand(
+    args.config,
+    args.addItem,
+    setPendingItem,
+    args.actions.dispatchExtensionStateUpdate,
+  );
   const state = useCommandState(
     args.settings,
     args.agent,
@@ -703,11 +717,26 @@ export function useSlashCommandProcessorCore(
     args.recordingOwner,
     args.recordingSwapCallbacks,
     args.config,
-    api,
+    runtimeApi,
+    extensionsCommand,
   );
   reloadCommandsRef.current = state.reloadCommands;
+  return state;
+}
+
+export function useSlashCommandProcessorCore(
+  args: UseSlashCommandProcessorCoreArgs,
+): SlashCommandProcessorCoreResult {
+  const api = useRuntimeApi();
+  const refreshProviderAliases = useProviderAliasRefresh();
   const { oauthControl, cancellation, pending, session } =
     useCommandRuntimeState(args.addItem);
+  const state = useRegisteredCommands(
+    args,
+    api,
+    refreshProviderAliases,
+    pending.setPendingItem,
+  );
   const commandContext = useCommandContext({
     runtimeApi: api,
     refreshProviderAliases,

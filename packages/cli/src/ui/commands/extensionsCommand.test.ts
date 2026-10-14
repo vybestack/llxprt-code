@@ -7,8 +7,8 @@
 import type { LlxprtExtension } from '@vybestack/llxprt-code-core';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { MessageType } from '../types.js';
-import { extensionsCommand } from './extensionsCommand.js';
-import { type CommandContext } from './types.js';
+import { registerExtensionsCommand } from '../../__tests__/extensions-command-test-owner.js';
+import type { SlashCommand, type CommandContext } from './types.js';
 import { describe, it, expect, vi, beforeEach } from 'bun:test';
 import { type ExtensionUpdateAction } from '../state/extensions.js';
 import { assertDefined } from '../../__tests__/assertions.js';
@@ -39,6 +39,7 @@ function completeScheduledUpdate(
 
 describe('extensionsCommand', () => {
   let mockContext: CommandContext;
+  let extensionsCommand: SlashCommand;
   const mockDispatchExtensionState = vi.fn();
 
   beforeEach(() => {
@@ -55,6 +56,7 @@ describe('extensionsCommand', () => {
         dispatchExtensionStateUpdate: mockDispatchExtensionState,
       },
     });
+    extensionsCommand = registerExtensionsCommand(mockContext);
   });
 
   describe('list', () => {
@@ -86,11 +88,16 @@ describe('extensionsCommand', () => {
   });
 
   describe('update', () => {
-    const updateAction = extensionsCommand.subCommands?.find(
-      (cmd) => cmd.name === 'update',
-    )?.action;
-
-    assertDefined(updateAction);
+    const updateAction: NonNullable<SlashCommand['action']> = async (
+      context,
+      args,
+    ) => {
+      const action = extensionsCommand.subCommands?.find(
+        (cmd) => cmd.name === 'update',
+      )?.action;
+      assertDefined(action);
+      return action(context, args);
+    };
 
     it('should show usage if no args are provided', async () => {
       await updateAction(mockContext, '');
@@ -263,11 +270,16 @@ describe('extensionsCommand', () => {
     });
 
     describe('completion', () => {
-      const updateCompletion = extensionsCommand.subCommands?.find(
-        (cmd) => cmd.name === 'update',
-      )?.completion;
-
-      assertDefined(updateCompletion);
+      const updateCompletion: NonNullable<SlashCommand['completion']> = async (
+        context,
+        partialArg,
+      ) => {
+        const completion = extensionsCommand.subCommands?.find(
+          (cmd) => cmd.name === 'update',
+        )?.completion;
+        assertDefined(completion);
+        return completion(context, partialArg);
+      };
 
       const extensionOne: LlxprtExtension = {
         name: 'ext-one',

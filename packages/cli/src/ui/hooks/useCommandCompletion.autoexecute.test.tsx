@@ -112,16 +112,12 @@ describe('autoExecute classifications — subcommands', () => {
   });
 
   it('/extensions list should have autoExecute: true', async () => {
-    const { extensionsCommand } = await import(
-      '../commands/extensionsCommand.js'
-    );
+    const { extensionsCommand } = createUnconfiguredBuiltinOwners();
     expect(findSub(extensionsCommand, 'list')?.autoExecute).toBe(true);
   });
 
   it('/extensions update should NOT have autoExecute: true', async () => {
-    const { extensionsCommand } = await import(
-      '../commands/extensionsCommand.js'
-    );
+    const { extensionsCommand } = createUnconfiguredBuiltinOwners();
     expect(findSub(extensionsCommand, 'update')?.autoExecute).not.toBe(true);
   });
 });
