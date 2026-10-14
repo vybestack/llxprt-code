@@ -6,6 +6,14 @@ import {
   DEFAULT_STREAMING_JSON_CHUNK_BYTES,
 } from './boundedJsonBody.js';
 
+/** The byte length `jsonValueBytes(value)` yields, without streaming it. */
+export function jsonValueByteLength(value: unknown): number {
+  return new BoundedJsonBody(value, {
+    maxChunkBytes: DEFAULT_STREAMING_JSON_CHUNK_BYTES,
+    maxEnvelopeBytes: DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
+  }).byteLength;
+}
+
 export async function* jsonValueBytes(
   value: unknown,
 ): AsyncIterable<Uint8Array> {
@@ -28,13 +36,35 @@ export async function* jsonValueBytes(
   }
 }
 
+/** Fails when a body overruns its declared length, or ends short of it. */
+function assertServedLength(
+  served: number,
+  declared: number | undefined,
+  finished: boolean,
+): void {
+  if (declared === undefined) return;
+  if (served > declared || (finished && served !== declared)) {
+    throw new Error(
+      `Request body served ${served} bytes but declared ${declared}`,
+    );
+  }
+}
+
 export class ProgressiveJsonBody {
   private disposed = false;
   private readonly handles = new Set<BoundedJsonStream>();
 
   private bytes: (() => AsyncIterable<Uint8Array>) | undefined;
 
-  constructor(bytes: () => AsyncIterable<Uint8Array>) {
+  /**
+   * `byteLength` is the length the caller declares to the transport. A stream
+   * that ends having served a different number of bytes fails, so a wrong
+   * Content-Length cannot go out silently.
+   */
+  constructor(
+    bytes: () => AsyncIterable<Uint8Array>,
+    readonly byteLength?: number,
+  ) {
     this.bytes = bytes;
   }
 
@@ -47,6 +77,7 @@ export class ProgressiveJsonBody {
   createStreamHandle(): BoundedJsonStream {
     if (this.disposed) throw new Error('JSON request body was disposed');
     let iterator: AsyncIterator<Uint8Array> | undefined = this.openIterator();
+    const declared = this.byteLength;
     let total = 0;
     let stopped = false;
     let closing: Promise<void> | undefined;
@@ -70,11 +101,13 @@ export class ProgressiveJsonBody {
             const next = await iterator.next();
             if (stopped) return;
             if (next.done === true) {
+              assertServedLength(total, declared, true);
               await close();
               controller.close();
               return;
             }
             total += next.value.byteLength;
+            assertServedLength(total, declared, false);
             if (total > DEFAULT_HTTP_JSON_ENVELOPE_BYTES) {
               throw new RangeError('JSON request envelope exceeds byte limit');
             }

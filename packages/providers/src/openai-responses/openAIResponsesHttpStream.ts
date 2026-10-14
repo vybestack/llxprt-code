@@ -97,6 +97,12 @@ export interface StreamResponsesParams {
   materializeRequestBody?: () => Promise<void>;
   streamRequestBody?: () => AsyncIterable<Uint8Array>;
   /**
+   * Disk source route: the exact byte length `streamRequestBody` yields, so
+   * the upload declares a Content-Length. Left unset when the length is not
+   * known before the first byte, which sends the request chunked.
+   */
+  streamRequestBodyLength?: () => Promise<number>;
+  /**
    * Disk source route: the request as a diagnostic dump records it, because
    * `request` holds empty placeholders for input, instructions and tools.
    */
@@ -181,6 +187,15 @@ function bodyTransportDescription(
   return 'Request body transport: lazy streaming-json (materializes at first byte pull)';
 }
 
+function contentLengthHeader(
+  body: BoundedJsonBody | LazyBoundedJsonBody | ProgressiveJsonBody,
+): Record<string, string> {
+  if (body instanceof LazyBoundedJsonBody) return {};
+  return body.byteLength === undefined
+    ? {}
+    : { 'Content-Length': String(body.byteLength) };
+}
+
 export async function* streamOverHttp(
   params: StreamResponsesParams,
   deps: ResponsesExecutorDeps,
@@ -193,7 +208,8 @@ export async function* streamOverHttp(
   // Issue #854 P05b4: with a lazily-wired request the body serializes at its
   // first byte pull, so the fetch call initiates before the history source is
   // drained (the in-flight backpressure contract). Content-Length is unknown
-  // at header time for a lazy body, so the request goes out chunked.
+  // at header time for a lazy body, so the request goes out chunked. The disk
+  // source route knows its length from its segment files and declares it.
   const lazyBody =
     params.materializeRequestBody === undefined
       ? undefined
@@ -204,7 +220,10 @@ export async function* streamOverHttp(
   const body =
     params.streamRequestBody === undefined
       ? (lazyBody ?? new BoundedJsonBody(params.request, bodyOptions))
-      : new ProgressiveJsonBody(params.streamRequestBody);
+      : new ProgressiveJsonBody(
+          params.streamRequestBody,
+          await params.streamRequestBodyLength?.(),
+        );
   const headers = {
     ...(await buildResponsesHeaders(
       params.apiKey,
@@ -213,9 +232,7 @@ export async function* streamOverHttp(
       params.normalizedOptions,
       deps,
     )),
-    ...(body instanceof BoundedJsonBody
-      ? { 'Content-Length': String(body.byteLength) }
-      : {}),
+    ...contentLengthHeader(body),
   };
   deps.logger.debug(() => bodyTransportDescription(body));
   deps.logger.debug(

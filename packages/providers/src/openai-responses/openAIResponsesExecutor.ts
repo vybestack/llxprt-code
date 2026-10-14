@@ -81,7 +81,10 @@ import {
 } from './progressive-responses-body.js';
 import type { resolveMediaCapabilities } from './openAIResponsesRequestState.js';
 import type { ResponsesSourcePrompt } from '../runtime/responses-source-serializer.js';
-import { diskResponsesBodyBytes } from './responses-disk-body.js';
+import {
+  diskResponsesBodyBytes,
+  diskResponsesBodyLength,
+} from './responses-disk-body.js';
 
 /**
  * Provider-specific capabilities that the executor needs to do its work.
@@ -670,6 +673,12 @@ function buildStreamParams(
       : {
           streamRequestBody: () =>
             diskResponsesBodyBytes(requestContext.request, source, abortSignal),
+          streamRequestBodyLength: () =>
+            diskResponsesBodyLength(
+              requestContext.request,
+              source,
+              abortSignal,
+            ),
           streamWebSocketFrame: () =>
             diskResponsesBodyBytes(
               createFrameRequest(requestContext.request),

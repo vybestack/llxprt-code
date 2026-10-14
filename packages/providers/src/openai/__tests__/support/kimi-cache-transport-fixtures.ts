@@ -7,6 +7,7 @@ import { createOpenAIAliasProvider } from '../../../composition/aliasProviderFac
 import type { ProviderAliasEntry } from '../../../composition/providerAliases.js';
 import { declaredMediaTransportCapabilities } from '../../../providerMediaTransportCapabilities.js';
 import { ProviderFileLifecycle } from '../../../providerFilePolicy.js';
+import { OpenAIResponsesProvider } from '../../../openai-responses/OpenAIResponsesProvider.js';
 import type { OpenAIProvider } from '../../OpenAIProvider.js';
 
 export function inputUrl(input: string | URL | Request): string {
@@ -141,3 +142,82 @@ export interface RecordedChatRequest {
 }
 
 export const originalFetch = globalThis.fetch;
+
+export interface ResponsesWireCapture {
+  readonly streamed: boolean;
+  readonly contentLength: string | null;
+  readonly wireBody: string;
+}
+
+const RESPONSES_MEDIA_HISTORY: readonly IContent[] = [
+  {
+    speaker: 'human',
+    blocks: [
+      { type: 'text', text: 'describe' },
+      {
+        type: 'media',
+        encoding: 'base64',
+        mimeType: 'image/png',
+        data: 'QUJD',
+      },
+    ],
+  },
+];
+
+/**
+ * Sends the media history through the real `openai-responses` provider and
+ * records what the transport was handed. `rows` supplies the replayable
+ * request rows the disk text route reads; without it the provider reads the
+ * one-shot `contents` stream.
+ */
+export async function captureResponsesWire(
+  source: 'contents' | 'rows',
+): Promise<ResponsesWireCapture> {
+  let wireBody = '';
+  let streamed = false;
+  let contentLength: string | null = 'missing';
+  globalThis.fetch = Object.assign(
+    async (
+      input: Parameters<typeof fetch>[0],
+      init: Parameters<typeof fetch>[1],
+    ) => {
+      const body = init?.body ?? (input instanceof Request ? input.body : null);
+      streamed = body instanceof ReadableStream;
+      contentLength = new Headers(init?.headers).get('content-length');
+      wireBody = await bodyText(body);
+      return new Response(
+        'data: {"type":"response.completed","response":{"id":"resp-streamed","status":"completed","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}\n\n',
+        { status: 200 },
+      );
+    },
+    { preconnect: originalFetch.preconnect },
+  );
+  const provider = new OpenAIResponsesProvider(
+    'test-key',
+    'https://api.openai.com/v1',
+  );
+  const options = streamCallOptions({
+    providerName: provider.name,
+    contents: [...RESPONSES_MEDIA_HISTORY],
+    resolved: {
+      model: 'gpt-5.5',
+      baseURL: 'https://api.openai.com/v1',
+      authToken: 'test-key',
+    },
+  });
+  const rows = {
+    count: RESPONSES_MEDIA_HISTORY.length,
+    openReader: (): AsyncGenerator<IContent, void> =>
+      (async function* (): AsyncGenerator<IContent, void> {
+        for (const row of RESPONSES_MEDIA_HISTORY) yield structuredClone(row);
+      })(),
+    close: (): void => undefined,
+  };
+  const iterator = provider.generateChatCompletion(
+    source === 'rows'
+      ? { ...options, requestRows: rows, contentCount: rows.count }
+      : options,
+  );
+  for await (const content of iterator) void content;
+  return { streamed, contentLength, wireBody };
+}

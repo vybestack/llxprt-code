@@ -123,9 +123,12 @@
       ]
     },
     "openai-responses": {
+      "chunkedUntil": {
+        "stream": "one-shot contents with no requestRows takes the lazy progressive body, whose length is unknown before the first byte; C2 routes it through the disk text route and C3 deletes the lazy body"
+      },
       "contentLength": {
         "stream": "absent",
-        "rows": "absent"
+        "rows": "present"
       },
       "cases": [
         "text-only",

@@ -16,11 +16,11 @@ import { RequestMediaResolver } from '@vybestack/llxprt-code-core/storage/reques
 import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { ProviderFileLifecycle } from '../providerFilePolicy.js';
-import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
 import {
   inputUrl,
   bodyText,
   isRecordedChatRequest,
+  captureResponsesWire,
   createKimiProvider,
   mediaHistory,
   send,
@@ -676,65 +676,27 @@ function registerProviderBehavior7(): void {
 
 function registerProviderBehavior8(): void {
   describe('provider fixture 8', () => {
-    it('streams a bounded JSON body on a declared Responses HTTP transport', async () => {
-      let wireBody = '';
-
-      let streamed = false;
-      let contentLength: string | null = 'missing';
-      globalThis.fetch = Object.assign(
-        async (
-          input: Parameters<typeof fetch>[0],
-          init: Parameters<typeof fetch>[1],
-        ) => {
-          const body =
-            init?.body ?? (input instanceof Request ? input.body : null);
-          streamed = body instanceof ReadableStream;
-          contentLength = new Headers(init?.headers).get('content-length');
-          wireBody = await bodyText(body);
-          return new Response(
-            'data: {"type":"response.completed","response":{"id":"resp-streamed","status":"completed","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}\n\n',
-            { status: 200 },
-          );
-        },
-        { preconnect: originalFetch.preconnect },
-      );
-      const provider = new OpenAIResponsesProvider(
-        'test-key',
-        'https://api.openai.com/v1',
-      );
-      const contents: IContent[] = [
-        {
-          speaker: 'human',
-          blocks: [
-            { type: 'text', text: 'describe' },
-            {
-              type: 'media',
-              encoding: 'base64',
-              mimeType: 'image/png',
-              data: 'QUJD',
-            },
-          ],
-        },
-      ];
-      const iterator = provider.generateChatCompletion(
-        streamCallOptions({
-          providerName: provider.name,
-          contents,
-          resolved: {
-            model: 'gpt-5.5',
-            baseURL: 'https://api.openai.com/v1',
-            authToken: 'test-key',
-          },
-        }),
-      );
-
-      for await (const content of iterator) void content;
+    it('streams a bounded JSON body with its Content-Length on a declared Responses HTTP transport', async () => {
+      const { streamed, contentLength, wireBody } =
+        await captureResponsesWire('rows');
 
       expect(streamed).toBe(true);
-      // The body is pulled on demand, so its length is unknown when headers
-      // are sent and the request goes out chunked instead of with a length.
+      expect(contentLength).toBe(
+        String(new TextEncoder().encode(wireBody).byteLength),
+      );
+      expect(wireBody).toBe(JSON.stringify(JSON.parse(wireBody)));
+      expect(wireBody).toContain('data:image/png;base64,QUJD');
+    });
+
+    it('streams a one-shot contents request chunked until it is read from request rows', async () => {
+      const { streamed, contentLength, wireBody } =
+        await captureResponsesWire('contents');
+
+      expect(streamed).toBe(true);
+      // The lazy contents-only route converts its media rows while the body
+      // streams, so its length is unknown when headers are sent. It moves to
+      // the length-declaring disk route with the no-requestRows step (C2).
       expect(contentLength).toBeNull();
-      expect(new TextEncoder().encode(wireBody).byteLength).toBeGreaterThan(0);
       expect(wireBody).toBe(JSON.stringify(JSON.parse(wireBody)));
       expect(wireBody).toContain('data:image/png;base64,QUJD');
     });

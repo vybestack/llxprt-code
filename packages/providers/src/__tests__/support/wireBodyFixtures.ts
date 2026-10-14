@@ -45,6 +45,11 @@ export interface RouteFixture {
 export interface RouteManifestEntry {
   /** Content-Length behaviour of every case on this route, per row source. */
   readonly contentLength: Readonly<Record<RowSource, ContentLengthBehavior>>;
+  /**
+   * Why a row source on this route is still sent chunked, and which later
+   * step removes that. Only valid for a source whose behaviour is `absent`.
+   */
+  readonly chunkedUntil?: Readonly<Partial<Record<RowSource, string>>>;
   readonly cases: readonly string[];
 }
 

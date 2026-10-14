@@ -1,10 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { open } from 'node:fs/promises';
+import { open, stat } from 'node:fs/promises';
+import type { O200kDiskSource } from '../tokenizers/o200k-disk-source.js';
 import type {
   Gpt56SourceProjection,
   Gpt56SourceSegment,
 } from '../tokenizers/gpt56-source-projection.js';
-import { jsonValueBytes } from '../utils/progressive-json-body.js';
+import {
+  jsonValueByteLength,
+  jsonValueBytes,
+} from '../utils/progressive-json-body.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
 
 function utf16Chunk(
@@ -25,15 +29,23 @@ function utf16Chunk(
 /** `wire` carries media bytes for transport; `dump` is the diagnostic form. */
 export type DiskBodyMedia = 'wire' | 'dump';
 
+function segmentSource(
+  segment: Gpt56SourceSegment,
+  media: DiskBodyMedia,
+): O200kDiskSource {
+  const source = media === 'wire' ? segment.wireSource : segment.dumpSource;
+  if (source === undefined)
+    throw new Error(`Responses source segment has no ${media} bytes`);
+  return source;
+}
+
 async function* segmentBytes(
   segment: Gpt56SourceSegment,
   media: DiskBodyMedia,
   signal?: AbortSignal,
 ): AsyncGenerator<Uint8Array, void> {
   signal?.throwIfAborted();
-  const wire = media === 'wire' ? segment.wireSource : segment.dumpSource;
-  if (wire === undefined)
-    throw new Error(`Responses source segment has no ${media} bytes`);
+  const wire = segmentSource(segment, media);
   const reader = await open(wire.path, 'r');
   try {
     const string = wire.encoding === 'utf16le';
@@ -57,6 +69,40 @@ async function* segmentBytes(
   }
 }
 
+/**
+ * The request as an ordered list of pieces. The byte generator and the length
+ * function both walk this one list, so the length cannot describe a different
+ * body than the bytes.
+ */
+type BodyPart =
+  | { readonly kind: 'literal'; readonly bytes: Uint8Array }
+  | { readonly kind: 'value'; readonly value: unknown }
+  | { readonly kind: 'segment'; readonly segment: Gpt56SourceSegment };
+
+function* parts(
+  request: OpenAIResponsesRequest,
+  projection: Gpt56SourceProjection,
+  signal?: AbortSignal,
+): Generator<BodyPart, void> {
+  let prefix = '{';
+  for (const key of Object.keys(request)) {
+    signal?.throwIfAborted();
+    const value: unknown = Reflect.get(request, key);
+    if (value === undefined) continue;
+    yield {
+      kind: 'literal',
+      bytes: Buffer.from(`${prefix}${JSON.stringify(key)}:`),
+    };
+    const segment = projection.promptSegments.find(
+      (entry) => entry.promptKey === key,
+    );
+    if (segment === undefined) yield { kind: 'value', value };
+    else yield { kind: 'segment', segment };
+    prefix = ',';
+  }
+  yield { kind: 'literal', bytes: Buffer.from('}') };
+}
+
 export async function* diskResponsesBodyBytes(
   request: OpenAIResponsesRequest,
   projection: Gpt56SourceProjection,
@@ -65,20 +111,50 @@ export async function* diskResponsesBodyBytes(
 ): AsyncGenerator<Uint8Array, void> {
   const release = projection.acquire();
   try {
-    let prefix = '{';
-    for (const key of Object.keys(request)) {
-      signal?.throwIfAborted();
-      const value: unknown = Reflect.get(request, key);
-      if (value === undefined) continue;
-      yield Buffer.from(`${prefix}${JSON.stringify(key)}:`);
-      const segment = projection.promptSegments.find(
-        (entry) => entry.promptKey === key,
-      );
-      if (segment === undefined) yield* jsonValueBytes(value);
-      else yield* segmentBytes(segment, media, signal);
-      prefix = ',';
+    for (const part of parts(request, projection, signal)) {
+      if (part.kind === 'literal') yield part.bytes;
+      else if (part.kind === 'value') yield* jsonValueBytes(part.value);
+      else yield* segmentBytes(part.segment, media, signal);
     }
-    yield Buffer.from('}');
+  } finally {
+    await release();
+  }
+}
+
+/**
+ * UTF-8 segments are stored as the wire bytes, so their file size is their
+ * length. A raw string is stored as UTF-16 and escaped as it is read, so its
+ * length is counted by running that same read over the (small) file.
+ */
+async function segmentLength(
+  segment: Gpt56SourceSegment,
+  media: DiskBodyMedia,
+  signal?: AbortSignal,
+): Promise<number> {
+  const source = segmentSource(segment, media);
+  if (source.encoding !== 'utf16le') return (await stat(source.path)).size;
+  let length = 0;
+  for await (const bytes of segmentBytes(segment, media, signal))
+    length += bytes.byteLength;
+  return length;
+}
+
+/** The byte length `diskResponsesBodyBytes` yields for the same arguments. */
+export async function diskResponsesBodyLength(
+  request: OpenAIResponsesRequest,
+  projection: Gpt56SourceProjection,
+  signal?: AbortSignal,
+  media: DiskBodyMedia = 'wire',
+): Promise<number> {
+  const release = projection.acquire();
+  try {
+    let length = 0;
+    for (const part of parts(request, projection, signal)) {
+      if (part.kind === 'literal') length += part.bytes.byteLength;
+      else if (part.kind === 'value') length += jsonValueByteLength(part.value);
+      else length += await segmentLength(part.segment, media, signal);
+    }
+    return length;
   } finally {
     await release();
   }

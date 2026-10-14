@@ -116,11 +116,27 @@ function uniformBehavior(
   return seen[0];
 }
 
+/**
+ * Row sources that still send chunked, with the step that fixes each. The
+ * manifest records them, and `verifyCorpus` fails if one is listed for a
+ * source that already declares a length.
+ */
+const CHUNKED_UNTIL: Readonly<
+  Partial<Record<string, Readonly<Partial<Record<RowSource, string>>>>>
+> = {
+  'openai-responses': {
+    stream:
+      'one-shot contents with no requestRows takes the lazy progressive body, whose length is unknown before the first byte; C2 routes it through the disk text route and C3 deletes the lazy body',
+  },
+};
+
 function manifestEntry(
   route: string,
   cases: RecordedCases,
 ): RouteManifestEntry {
+  const chunkedUntil = CHUNKED_UNTIL[route];
   return {
+    ...(chunkedUntil === undefined ? {} : { chunkedUntil }),
     contentLength: {
       stream: uniformBehavior(route, 'stream', cases),
       rows: uniformBehavior(route, 'rows', cases),
