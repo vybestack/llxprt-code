@@ -82,11 +82,20 @@ function createNormalizedOptions(
   } as NormalizedGenerateChatOptions;
 }
 
-async function rowsOf(input: ChatRowInput | undefined): Promise<IContent[]> {
-  if (input?.rows === undefined) throw new Error('expected prepared rows');
-  const rows: IContent[] = [];
-  for await (const row of input.rows.rows()) rows.push(row);
-  return rows;
+async function* asyncRows(rows: readonly IContent[]): AsyncGenerator<IContent> {
+  for (const row of rows) yield structuredClone(row);
+}
+
+/** The rows as the chat body is written from them: through the media stage. */
+async function stagedRows(
+  input: ChatRowInput | undefined,
+  rows: readonly IContent[],
+): Promise<IContent[]> {
+  if (input?.mediaStage === undefined)
+    throw new Error('expected a media stage');
+  const staged: IContent[] = [];
+  for await (const row of input.mediaStage(asyncRows(rows))) staged.push(row);
+  return staged;
 }
 
 type KimiMediaProcessor = {
@@ -193,11 +202,12 @@ describe('OpenAIProvider Kimi media preprocessing', () => {
       mediaRequest,
       MEDIA_INPUT,
     );
+    // The upload record lives as long as the request that owns it.
+    const rows = await stagedRows(result, createContents());
     await mediaRequest.release();
 
     expect(filesCreate).toHaveBeenCalledTimes(1);
     expect(filesCreate.mock.calls[0][0].purpose).toBe('video');
-    const rows = await rowsOf(result);
     expect(rows[0].blocks[1]).toStrictEqual({
       type: 'media',
       mimeType: 'video/mp4',

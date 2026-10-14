@@ -90,8 +90,8 @@ interface ChatProjectionPreparationDeps {
     options: NormalizedGenerateChatOptions,
   ) => Promise<string>;
   /**
-   * The Kimi file pre-pass. Returns the rows to convert when it applies and
-   * `undefined` when the request has no pre-pass.
+   * The Kimi file pre-pass. Returns the media stage the body is written
+   * through when it applies and `undefined` when the request has no pre-pass.
    */
   readonly processMedia: (
     options: NormalizedGenerateChatOptions,
@@ -137,8 +137,8 @@ export interface PreparedOpenAIChatProjection {
 /**
  * An unprojected send builds its one chat body inside the transport and hands
  * its spool to the media request, which disposes it when the call ends. The
- * rows come from the Kimi pre-pass when it ran, otherwise from the call with
- * their stored media resolved as they are read.
+ * media stage comes from the Kimi pre-pass when it ran, otherwise it resolves
+ * the call's stored media as the rows are read.
  */
 export async function prepareOwnedOpenAIChatRequest(
   options: NormalizedGenerateChatOptions,

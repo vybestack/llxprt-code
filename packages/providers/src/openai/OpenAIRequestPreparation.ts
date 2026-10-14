@@ -90,12 +90,12 @@ export interface RequestContext {
 }
 
 /**
- * Where the rows of one request come from. By default the call's own rows are
- * read and no media is resolved; the caller supplies the media stage, or rows
- * it already prepared (the Kimi file pre-pass).
+ * How the rows of one request are prepared. The call's own rows are always
+ * read; by default no media is resolved, and the caller supplies the media
+ * stage that resolves stored media and, for the Kimi file pre-pass, replaces
+ * uploaded blocks with their references.
  */
 export interface ChatRowInput {
-  readonly rows?: ChatBodyRows;
   readonly mediaStage?: ChatBodyOptions['mediaStage'];
 }
 
@@ -405,7 +405,7 @@ async function spoolChatBody(
     if (use.estimate || use.dump) {
       files = ChatEstimatorFiles.create(envelope.model, signal, use.dump);
     }
-    const source = rowInput.rows ?? (await callRows(options));
+    const source = await callRows(options);
     const bodyOptions = chatBodyOptions(
       options,
       format,

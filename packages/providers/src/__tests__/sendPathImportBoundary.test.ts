@@ -17,8 +17,8 @@
  * it lands. Both keep their arrays by the owner's decision (GitHub #3869).
  * Everything else is pending work that removes its entry:
  *
- * - D5 (Kimi file pre-pass per row) must remove the `openai/` entry. The chat
- *   send path itself imports none of them since D3a.
+ * - The OpenAI chat send path, including the Kimi file pre-pass, imports none
+ *   of them (D3a, D5).
  * - E (Anthropic) must remove the `anthropic/` entry.
  * - F1 removes the shared normalization and load-balancing seams.
  *
@@ -69,9 +69,6 @@ const pending = (reason: string): AllowedImporter => ({
 const ALLOWED_IMPORTERS: Readonly<Record<string, AllowedImporter>> = {
   'packages/providers/src/openai-vercel/OpenAIVercelProvider.ts': PERMANENT,
 
-  'packages/providers/src/openai/kimi-provider-file-preparation.ts': pending(
-    'step D5 (Kimi file pre-pass per row) must remove this entry',
-  ),
   'packages/providers/src/anthropic/AnthropicProvider.ts': pending(
     'step E (Anthropic) must remove this entry',
   ),
@@ -87,7 +84,7 @@ const ALLOWED_IMPORTERS: Readonly<Record<string, AllowedImporter>> = {
 };
 
 /** Lower this when a pending entry is removed. It never goes up. */
-const PENDING_CEILING = 5;
+const PENDING_CEILING = 4;
 
 const NAMED_IMPORT =
   /(?:import|export)\s+(?:type\s+)?\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g;

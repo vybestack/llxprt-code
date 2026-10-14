@@ -694,8 +694,9 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   }
 
   /**
-   * Kimi-only media pre-pass (see {@link prepareKimiProviderFiles}): the rows
-   * to write the body from, or `undefined` when the request has no pre-pass.
+   * Kimi-only media pre-pass (see {@link prepareKimiProviderFiles}): the media
+   * stage to write the body through, or `undefined` when the request has no
+   * pre-pass.
    */
   private maybeProcessKimiMedia(
     options: NormalizedGenerateChatOptions,
