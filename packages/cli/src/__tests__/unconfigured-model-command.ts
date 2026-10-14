@@ -1,3 +1,5 @@
+import { createPermissionsCommand } from '../ui/commands/permissionsCommand.js';
+import { bindPermissionCommit } from '../ui/commands/permissionsCommandHost.js';
 import { createPerfCommand } from '../ui/commands/perfCommand.js';
 import { createSkillsCommand } from '../ui/commands/skillsCommand.js';
 /**
@@ -286,6 +288,11 @@ export function createUnconfiguredChatCommand(): SlashCommand {
 
 export function createUnconfiguredBuiltinOwners(): BuiltinCommandOwners {
   return {
+    ideCommand: null,
+    permissionsCommand: createPermissionsCommand(
+      () => process.cwd(),
+      bindPermissionCommit(null),
+    ),
     chatCommand: createUnconfiguredChatCommand(),
     compressCommand: createCompressCommand(async () => {
       throw new Error('Chat instance not available for compression.');

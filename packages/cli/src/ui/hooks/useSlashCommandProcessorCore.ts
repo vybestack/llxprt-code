@@ -6,6 +6,7 @@
 
 import { useCommandRuntimeState } from './useCommandRuntimeState.js';
 import { useRegisteredCommandReload } from './useRegisteredCommandReload.js';
+import { useHostCommands } from './useHostCommands.js';
 import { useResourceCommands } from './useResourceCommands.js';
 import { join } from 'node:path';
 import { createPerfCommand } from '../commands/perfCommand.js';
@@ -232,6 +233,13 @@ function useTodoCommandOwner(
   );
 }
 
+type RegisteredPresentationCommands = ReturnType<
+  typeof usePresentationCommands
+> &
+  ReturnType<typeof useUtilityCommands> &
+  ReturnType<typeof useResourceCommands> &
+  ReturnType<typeof useHostCommands>;
+
 function useCommandState(
   settings: LoadedSettings,
   agent: Agent | null,
@@ -246,9 +254,7 @@ function useCommandState(
   config: CliUiRuntime | null,
   runtimeApi: ReturnType<typeof useRuntimeApi>,
   extensionsCommand: SlashCommand,
-  presentationCommands: ReturnType<typeof usePresentationCommands> &
-    ReturnType<typeof useUtilityCommands> &
-    ReturnType<typeof useResourceCommands>,
+  presentationCommands: RegisteredPresentationCommands,
 ): SlashCommandProcessorState {
   const rec = useSwitch(agent?.session, rawRecording, recordingOwner);
   const modelCommand = useModelCommand(
@@ -354,9 +360,7 @@ type BuiltinCommandOwnerParts = Pick<
   | 'extensionsCommand'
   | 'subagentCommand'
 > & {
-  presentationCommands: ReturnType<typeof usePresentationCommands> &
-    ReturnType<typeof useUtilityCommands> &
-    ReturnType<typeof useResourceCommands>;
+  presentationCommands: RegisteredPresentationCommands;
   historyCommandOwners: ReturnType<typeof useHistoryCommandOwners>;
   provider: SlashCommand;
   toolsCommand: SlashCommand;
@@ -718,6 +722,7 @@ function useRegisteredCommands(
     runtimeApi,
     extensionsCommand,
     {
+      ...useHostCommands(args.config, args.settings, args.addItem),
       ...useUtilityCommands(args.config, args.settings, args.addItem),
       ...useResourceCommands(
         args.config,
