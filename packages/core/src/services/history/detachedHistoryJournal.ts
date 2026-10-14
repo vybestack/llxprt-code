@@ -1,10 +1,15 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { closeSync, openSync, readSync, rmSync, writeSync } from 'node:fs';
+import { closeSync, openSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { IContent, ChronologyMarker } from './IContent.js';
 import { isRecord, isSpeakerContent } from './historyJournalGuards.js';
 import type { RowOwnership } from '../../recording/rowOwnership.js';
 import { createScratchDirSync } from '../../storage/scratch-root.js';
+import { TailBufferedFile } from './tailBufferedFile.js';
+
+const stalled = 'Detached journal I/O made no progress';
+const rowsBufferBytes = 64 * 1024;
+const sideBufferBytes = 32 * 1024;
 
 function isMarker(value: unknown): value is ChronologyMarker {
   if (!isRecord(value)) return false;
@@ -23,9 +28,10 @@ interface OriginalMarker {
 
 export class DetachedHistoryJournal implements Iterable<IContent> {
   private readonly root: string;
-  private readonly rows: number;
-  private readonly index: number;
-  private readonly markers: number;
+  private readonly rows: TailBufferedFile;
+  private readonly index: TailBufferedFile;
+  private readonly markers: TailBufferedFile;
+  private readonly descriptors: readonly number[];
   private count = 0;
   private rowOffset = 0;
   private markerOffset = 0;
@@ -35,11 +41,14 @@ export class DetachedHistoryJournal implements Iterable<IContent> {
     this.root = createScratchDirSync('history-detached-');
     const opened: number[] = [];
     try {
-      this.rows = openSync(join(this.root, 'rows'), 'w+');
-      opened.push(this.rows);
-      this.index = openSync(join(this.root, 'index'), 'w+');
-      opened.push(this.index);
-      this.markers = openSync(join(this.root, 'markers'), 'w+');
+      opened.push(openSync(join(this.root, 'rows'), 'w+'));
+      opened.push(openSync(join(this.root, 'index'), 'w+'));
+      opened.push(openSync(join(this.root, 'markers'), 'w+'));
+      this.descriptors = opened;
+      const [rows, index, markers] = opened;
+      this.rows = new TailBufferedFile(rows, rowsBufferBytes, stalled);
+      this.index = new TailBufferedFile(index, sideBufferBytes, stalled);
+      this.markers = new TailBufferedFile(markers, sideBufferBytes, stalled);
     } catch (error) {
       const failures = cleanup(this.root, opened);
       if (failures.length > 0)
@@ -69,17 +78,29 @@ export class DetachedHistoryJournal implements Iterable<IContent> {
           chronology: row.metadata?.chronology,
         }),
       );
+      const bytes = Buffer.from(JSON.stringify(row));
       const address = Buffer.alloc(32);
+      address.writeDoubleLE(this.rowOffset, 0);
+      address.writeDoubleLE(bytes.length, 8);
       address.writeDoubleLE(this.markerOffset, 16);
       address.writeDoubleLE(marker.length, 24);
-      transfer(this.markers, marker, this.markerOffset, true);
-      transfer(this.index, address, this.count * 32, true);
-      this.writeRow(this.count, row);
+      this.markers.write(marker, this.markerOffset);
+      this.rows.write(bytes, this.rowOffset);
+      this.index.write(address, this.count * 32);
       this.markerOffset += marker.length;
+      this.rowOffset += bytes.length;
       this.count++;
     } finally {
       this.ownership?.release(row);
     }
+  }
+
+  /** Writes out and frees the append buffers, surfacing any failed write. */
+  settle(): void {
+    this.assertOpen();
+    this.markers.release();
+    this.rows.release();
+    this.index.release();
   }
 
   private address(index: number): Buffer {
@@ -87,7 +108,7 @@ export class DetachedHistoryJournal implements Iterable<IContent> {
     if (!Number.isInteger(index) || index < 0 || index >= this.count)
       throw new Error('Detached journal ordinal is invalid');
     const address = Buffer.alloc(32);
-    transfer(this.index, address, index * 32, false);
+    this.index.read(address, index * 32);
     return address;
   }
 
@@ -96,19 +117,19 @@ export class DetachedHistoryJournal implements Iterable<IContent> {
     if (!Number.isInteger(index) || index < 0 || index > this.count)
       throw new Error('Detached journal ordinal is invalid');
     const address = Buffer.alloc(32);
-    transfer(this.index, address, index * 32, false);
+    this.index.read(address, index * 32);
     const bytes = Buffer.from(JSON.stringify(row));
-    transfer(this.rows, bytes, this.rowOffset, true);
+    this.rows.write(bytes, this.rowOffset);
     address.writeDoubleLE(this.rowOffset, 0);
     address.writeDoubleLE(bytes.length, 8);
-    transfer(this.index, address, index * 32, true);
+    this.index.write(address, index * 32);
     this.rowOffset += bytes.length;
   }
 
   readRow(index: number): IContent {
     const address = this.address(index);
     const bytes = Buffer.alloc(address.readDoubleLE(8));
-    transfer(this.rows, bytes, address.readDoubleLE(0), false);
+    this.rows.read(bytes, address.readDoubleLE(0));
     const row: unknown = JSON.parse(bytes.toString('utf8'));
     if (!isSpeakerContent(row)) throw new Error('Invalid detached journal row');
     return row;
@@ -117,7 +138,7 @@ export class DetachedHistoryJournal implements Iterable<IContent> {
   readOriginalMarker(index: number): OriginalMarker {
     const address = this.address(index);
     const bytes = Buffer.alloc(address.readDoubleLE(24));
-    transfer(this.markers, bytes, address.readDoubleLE(16), false);
+    this.markers.read(bytes, address.readDoubleLE(16));
     const value: unknown = JSON.parse(bytes.toString('utf8'));
     if (!isRecord(value) || typeof value.hadMetadata !== 'boolean')
       throw new Error('Invalid detached marker record');
@@ -155,7 +176,7 @@ export class DetachedHistoryJournal implements Iterable<IContent> {
   close(): void {
     if (this.closed) return;
     this.closed = true;
-    const failures = cleanup(this.root, [this.rows, this.index, this.markers]);
+    const failures = cleanup(this.root, this.descriptors);
     if (failures.length > 0)
       throw new AggregateError(failures, 'Detached journal cleanup failed');
   }
@@ -176,32 +197,4 @@ function cleanup(root: string, files: readonly number[]): unknown[] {
     failures.push(error);
   }
   return failures;
-}
-
-function transfer(
-  fd: number,
-  bytes: Buffer,
-  offset: number,
-  write: boolean,
-): void {
-  let transferred = 0;
-  while (transferred < bytes.length) {
-    const count = write
-      ? writeSync(
-          fd,
-          bytes,
-          transferred,
-          bytes.length - transferred,
-          offset + transferred,
-        )
-      : readSync(
-          fd,
-          bytes,
-          transferred,
-          bytes.length - transferred,
-          offset + transferred,
-        );
-    if (count === 0) throw new Error('Detached journal I/O made no progress');
-    transferred += count;
-  }
 }

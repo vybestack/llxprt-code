@@ -46,6 +46,7 @@ async function copyRows(
     );
     if (index % 128 === 0) await setImmediate();
   }
+  previous.settle();
   signal?.throwIfAborted();
 }
 
