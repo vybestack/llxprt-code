@@ -8,6 +8,7 @@ import { base64Code, dataHeader } from './prompt-data-uri-scanner.js';
 const omitted = '[binary media bytes omitted]';
 const chunkCharacters = 8192;
 const headerCharacters = 256 + 174764 * 2;
+const bufferBytes = 64 * 1024;
 
 function highSurrogate(code: number): boolean {
   return code >= 0xd800 && code <= 0xdbff;
@@ -38,12 +39,18 @@ function imageMime(value: unknown): boolean {
  */
 export type PromptKeyMode = 'estimator' | 'wire' | 'dump';
 
-/** A request-local writer, retaining only scalar file handles and counters. */
+/**
+ * A request-local writer. It retains file handles, counters and one fixed
+ * 64 KiB buffer that is flushed when full and on close; the file is complete
+ * only after `close()` returns.
+ */
 export class PromptKeyDiskWriter {
   readonly #fd: number;
   readonly #costFd: number;
   readonly #model: string;
   readonly #signal: AbortSignal | undefined;
+  readonly #buffer = Buffer.allocUnsafe(bufferBytes);
+  #buffered = 0;
   imageCount = 0;
 
   constructor(
@@ -68,7 +75,20 @@ export class PromptKeyDiskWriter {
 
   append(text: string): void {
     this.#signal?.throwIfAborted();
-    this.write(this.#fd, Buffer.from(text, this.encoding));
+    const size = Buffer.byteLength(text, this.encoding);
+    if (size > bufferBytes) {
+      this.flush();
+      this.write(this.#fd, Buffer.from(text, this.encoding));
+      return;
+    }
+    if (this.#buffered + size > bufferBytes) this.flush();
+    this.#buffered += this.#buffer.write(text, this.#buffered, this.encoding);
+  }
+
+  private flush(): void {
+    const pending = this.#buffered;
+    this.#buffered = 0;
+    if (pending > 0) this.write(this.#fd, this.#buffer.subarray(0, pending));
   }
 
   private write(fd: number, bytes: Buffer): void {
@@ -201,9 +221,13 @@ export class PromptKeyDiskWriter {
 
   close(): void {
     try {
-      closeSync(this.#fd);
+      this.flush();
     } finally {
-      closeSync(this.#costFd);
+      try {
+        closeSync(this.#fd);
+      } finally {
+        closeSync(this.#costFd);
+      }
     }
   }
 }
