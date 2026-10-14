@@ -18,7 +18,7 @@ import {
   afterEach,
   type Mock,
 } from 'bun:test';
-import { createBugCommand } from './bugCommand.js';
+import { createBugCommand, type BugCommandOperations } from './bugCommand.js';
 import type { SlashCommand } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { getCliVersion } from '../../utils/version.js';
@@ -65,7 +65,14 @@ describe('bugCommand', () => {
     );
     setEnv('SANDBOX', 'gemini-test');
     browserLaunchDisabled = false;
-    command = createBugCommand({
+    const operations: BugCommandOperations = {
+      getModel: () => 'Unknown',
+      getReportUrlTemplate: () => undefined,
+      getIdeDisplayName: () => '',
+      getConversationHistory: () => undefined,
+      addItem: () => 0,
+    };
+    command = createBugCommand(operations, {
       openUrl: mockOpen,
       isBrowserLaunchDisabledDuringTests: () => browserLaunchDisabled,
     });
@@ -82,13 +89,24 @@ describe('bugCommand', () => {
         config: {
           getModel: () => 'gemini-pro',
           getBugCommand: () => undefined,
-          getIdeClient: () => ({
-            getDetectedIdeDisplayName: () => 'VSCode',
-          }),
-          getIdeMode: () => true,
+          getIdeClient: () => undefined,
+          getIdeMode: () => false,
         },
       },
     });
+    command = createBugCommand(
+      {
+        getModel: () => 'gemini-pro',
+        getReportUrlTemplate: () => undefined,
+        getIdeDisplayName: () => '',
+        getConversationHistory: () => undefined,
+        addItem: () => 0,
+      },
+      {
+        openUrl: mockOpen,
+        isBrowserLaunchDisabledDuringTests: () => browserLaunchDisabled,
+      },
+    );
 
     await command.action!(mockContext, 'A test bug');
 
@@ -102,7 +120,6 @@ describe('bugCommand', () => {
 * **Terminal Name:** Test Terminal
 * **Terminal Background:** #000000
 * **Kitty Keyboard Protocol:** Supported
-* **IDE Client:** VSCode
 `;
     const expectedUrl =
       'https://github.com/vybestack/llxprt-code/issues/new?template=bug_report.yml&title=A%20test%20bug&info=' +
@@ -119,13 +136,24 @@ describe('bugCommand', () => {
         config: {
           getModel: () => 'gemini-pro',
           getBugCommand: () => ({ urlTemplate: customTemplate }),
-          getIdeClient: () => ({
-            getDetectedIdeDisplayName: () => 'VSCode',
-          }),
-          getIdeMode: () => true,
+          getIdeClient: () => undefined,
+          getIdeMode: () => false,
         },
       },
     });
+    command = createBugCommand(
+      {
+        getModel: () => 'gemini-pro',
+        getReportUrlTemplate: () => customTemplate,
+        getIdeDisplayName: () => '',
+        getConversationHistory: () => undefined,
+        addItem: () => 0,
+      },
+      {
+        openUrl: mockOpen,
+        isBrowserLaunchDisabledDuringTests: () => browserLaunchDisabled,
+      },
+    );
     await command.action!(mockContext, 'A custom bug');
 
     const expectedInfo = `
@@ -138,7 +166,6 @@ describe('bugCommand', () => {
 * **Terminal Name:** Test Terminal
 * **Terminal Background:** #000000
 * **Kitty Keyboard Protocol:** Supported
-* **IDE Client:** VSCode
 `;
     const expectedUrl = customTemplate
       .replace('{title}', encodeURIComponent('A custom bug'))

@@ -9,7 +9,10 @@ import type {
   ToolInfo,
   McpPromptInfo,
   McpResourceInfo,
-  Agent,
+  McpServerInfo,
+  McpBlockedServer,
+  McpDiscoveryState,
+  McpDetailStatus,
   McpServerDetail,
 } from '@vybestack/llxprt-code-agents';
 import { MCPServerStatus } from '@vybestack/llxprt-code-mcp';
@@ -411,8 +414,15 @@ function resolveConnectionStatus(status: string | undefined): MCPServerStatus {
   }
 }
 
+export interface McpStatusReads {
+  readonly listServers: () => readonly McpServerInfo[];
+  readonly listBlockedServers: () => readonly McpBlockedServer[];
+  readonly discoveryState: () => McpDiscoveryState;
+  readonly readDetails: () => Promise<McpDetailStatus>;
+}
+
 export async function buildMcpStatusMessage(
-  agent: Agent | null,
+  reads: McpStatusReads,
   serverNames: string[],
   mcpServers: RuntimeMcpServers,
   blockedMcpServers: ReadonlyArray<{ name: string; extensionName?: string }>,
@@ -420,12 +430,8 @@ export async function buildMcpStatusMessage(
   showSchema: boolean,
   showTips: boolean,
 ): Promise<string> {
-  if (agent === null) {
-    return '';
-  }
-
   const statuses = new Map(
-    agent.mcp.listServers().map((server) => [server.name, server.status]),
+    reads.listServers().map((server) => [server.name, server.status]),
   );
   const connectingServers = serverNames.filter(
     (name) => statuses.get(name) === 'connecting',
@@ -435,7 +441,7 @@ export async function buildMcpStatusMessage(
   // singleton is never written by the real McpClientManager startup path, so
   // reading it here caused /mcp list to diverge from actual server state
   // (issue #2516).
-  const discoveryState = agent.mcp.discoveryState();
+  const discoveryState = reads.discoveryState();
 
   let message = '';
 
@@ -456,11 +462,7 @@ export async function buildMcpStatusMessage(
   // (which don't depend on details).
   let detailByServer = new Map<string, McpServerDetail>();
   try {
-    const details = await agent.mcp.details({
-      includeTools: true,
-      includePrompts: true,
-      includeResources: true,
-    });
+    const details = await reads.readDetails();
     detailByServer = new Map(details.servers.map((s) => [s.name, s]));
   } catch (error) {
     message += `${COLOR_YELLOW}Failed to load MCP tool details: ${error instanceof Error ? error.message : String(error)}${RESET_COLOR}\n\n`;

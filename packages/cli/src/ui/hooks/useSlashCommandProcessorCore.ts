@@ -5,7 +5,7 @@
  */
 
 import type { CliUiRuntime } from '../cliUiRuntime.js';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { createToolFormatCommand } from '../commands/toolformatCommand.js';
 import { createModelCommand } from '../commands/modelCommand.js';
 import { createSetCommand } from '../commands/setCommand.js';
@@ -16,6 +16,18 @@ import { useChatCommand } from './useChatCommand.js';
 import { createContinueCommand } from '../commands/continueCommand.js';
 import { bindContinueCommandOperations } from '../commands/continueCommandHost.js';
 import { createCopyCommand } from '../commands/copyCommand.js';
+import { createToolsCommand } from '../commands/toolsCommand.js';
+import { bindToolsCommand } from '../commands/toolsCommandHost.js';
+import { createDirectoryCommand } from '../commands/directoryCommand.js';
+import { bindDirectoryCommand } from '../commands/directoryCommandHost.js';
+import { createMemoryCommand } from '../commands/memoryCommand.js';
+import { bindMemoryCommand } from '../commands/memoryCommandHost.js';
+import { createImageCommand } from '../commands/imageCommand.js';
+import { bindImageCommand } from '../commands/imageCommandHost.js';
+import { createBugCommand } from '../commands/bugCommand.js';
+import { bindBugCommand } from '../commands/bugCommandHost.js';
+import { createPoliciesCommand } from '../commands/policiesCommand.js';
+import { bindPoliciesCommand } from '../commands/policiesCommandHost.js';
 import {
   bindCopyCommandClipboard,
   bindCopyCommandHistoryRead,
@@ -179,11 +191,11 @@ function useHistoryCommandOwners(
 }
 
 function useCommandState(
-  selectModel: (model: string) => Promise<ModelChangeResult>,
-  readToolFormat: () => Promise<ToolFormatState>,
-  writeToolFormat: WriteToolFormat,
   settings: LoadedSettings,
   agent: Agent | null,
+  addItem: UseHistoryManagerReturn['addItem'],
+  setMemoryFileCount: (count: number) => void,
+  reloadCommands: () => void,
   refreshProviderAliases: () => Promise<void>,
   rawRecording: RecordingIntegration | undefined,
   recordingOwner: 'agent' | 'raw' | undefined,
@@ -192,11 +204,20 @@ function useCommandState(
   runtimeApi: ReturnType<typeof useRuntimeApi>,
 ): SlashCommandProcessorState {
   const rec = useSwitch(agent?.session, rawRecording, recordingOwner);
-  const modelCommand = useModelCommand(selectModel, rec);
+  const modelCommand = useModelCommand(
+    useMemo(() => runtimeApi.setActiveModel.bind(runtimeApi), [runtimeApi]),
+    rec,
+  );
   const provider = useProviderCommand(agent, refreshProviderAliases, rec);
   const toolFormatCommand = useToolFormatCommand(
-    readToolFormat,
-    writeToolFormat,
+    useMemo(
+      () => runtimeApi.getActiveToolFormatState.bind(runtimeApi),
+      [runtimeApi],
+    ),
+    useMemo(
+      () => runtimeApi.setActiveToolFormatOverride.bind(runtimeApi),
+      [runtimeApi],
+    ),
   );
   const setCommand = useSetCommand(settings);
   const credentialCommands = useCredentialCommands(
@@ -204,6 +225,8 @@ function useCommandState(
     settings,
     config,
     rec,
+    addItem,
+    reloadCommands,
   );
   const chatCommand = useChatCommand(
     agent,
@@ -217,12 +240,103 @@ function useCommandState(
     config,
     recordingOwner,
   );
+  const workspaceCommands = useWorkspaceCommandOwners(
+    config,
+    agent,
+    recordingOwner,
+    rawRecording,
+    addItem,
+    setMemoryFileCount,
+  );
   const historyCommandOwners = useHistoryCommandOwners(
     agent,
     config,
     runtimeApi,
   );
-  const builtins = useMemo<BuiltinCommandOwners>(
+  const builtins = useBuiltinCommandOwners({
+    chatCommand,
+    continueCommand,
+    historyCommandOwners,
+    modelCommand,
+    toolFormatCommand,
+    setCommand,
+    provider,
+    ...workspaceCommands,
+    credentialCommands,
+  });
+  return { builtins, ...useRegistryState(builtins, config) };
+}
+
+function useDirectoryCommandOwner(
+  config: CliUiRuntime | null,
+  agent: Agent | null,
+  recordingOwner: 'agent' | 'raw' | undefined,
+  recordingIntegration: RecordingIntegration | undefined,
+  addItem: UseHistoryManagerReturn['addItem'],
+  setMemoryFileCount: (count: number) => void,
+): SlashCommand {
+  return useMemo(
+    () =>
+      createDirectoryCommand(
+        bindDirectoryCommand(
+          config,
+          agent,
+          recordingOwner,
+          recordingIntegration,
+          addItem,
+          setMemoryFileCount,
+        ),
+      ),
+    [
+      config,
+      agent,
+      recordingOwner,
+      recordingIntegration,
+      addItem,
+      setMemoryFileCount,
+    ],
+  );
+}
+
+type BuiltinCommandOwnerParts = Pick<
+  BuiltinCommandOwners,
+  | 'chatCommand'
+  | 'continueCommand'
+  | 'modelCommand'
+  | 'toolFormatCommand'
+  | 'setCommand'
+> & {
+  historyCommandOwners: ReturnType<typeof useHistoryCommandOwners>;
+  provider: SlashCommand;
+  toolsCommand: SlashCommand;
+  directoryCommand: SlashCommand;
+  memoryCommand: SlashCommand;
+  imageCommand: SlashCommand;
+  bugCommand: SlashCommand;
+  policiesCommand: SlashCommand;
+  credentialCommands: ReturnType<typeof useCredentialCommands>;
+};
+
+function useBuiltinCommandOwners(
+  parts: BuiltinCommandOwnerParts,
+): BuiltinCommandOwners {
+  const {
+    chatCommand,
+    continueCommand,
+    historyCommandOwners,
+    modelCommand,
+    toolFormatCommand,
+    setCommand,
+    provider,
+    toolsCommand,
+    directoryCommand,
+    memoryCommand,
+    imageCommand,
+    bugCommand,
+    policiesCommand,
+    credentialCommands,
+  } = parts;
+  return useMemo(
     () => ({
       chatCommand,
       continueCommand,
@@ -231,20 +345,119 @@ function useCommandState(
       toolFormatCommand,
       setCommand,
       providerCommand: provider,
+      toolsCommand,
+      directoryCommand,
+      memoryCommand,
+      imageCommand,
+      bugCommand,
+      policiesCommand,
       ...credentialCommands,
     }),
     [
       chatCommand,
       continueCommand,
+      historyCommandOwners,
       modelCommand,
       toolFormatCommand,
       setCommand,
       provider,
+      toolsCommand,
+      directoryCommand,
+      memoryCommand,
+      imageCommand,
+      bugCommand,
+      policiesCommand,
       credentialCommands,
-      historyCommandOwners,
     ],
   );
-  return { builtins, ...useRegistryState(builtins, config) };
+}
+
+function useBugCommandOwner(
+  config: CliUiRuntime | null,
+  agent: Agent | null,
+  addItem: UseHistoryManagerReturn['addItem'],
+): SlashCommand {
+  return useMemo(
+    () => createBugCommand(bindBugCommand(config, agent, addItem)),
+    [config, agent, addItem],
+  );
+}
+
+function useMemoryCommandOwner(
+  config: CliUiRuntime | null,
+  addItem: UseHistoryManagerReturn['addItem'],
+  setMemoryFileCount: (count: number) => void,
+): SlashCommand {
+  return useMemo(
+    () =>
+      createMemoryCommand(
+        bindMemoryCommand(config, addItem, setMemoryFileCount),
+      ),
+    [config, addItem, setMemoryFileCount],
+  );
+}
+
+function useWorkspaceCommandOwners(
+  config: CliUiRuntime | null,
+  agent: Agent | null,
+  recordingOwner: 'agent' | 'raw' | undefined,
+  recordingIntegration: RecordingIntegration | undefined,
+  addItem: UseHistoryManagerReturn['addItem'],
+  setMemoryFileCount: (count: number) => void,
+): {
+  memoryCommand: SlashCommand;
+  bugCommand: SlashCommand;
+  policiesCommand: SlashCommand;
+  toolsCommand: SlashCommand;
+  directoryCommand: SlashCommand;
+  imageCommand: SlashCommand;
+} {
+  const memoryCommand = useMemoryCommandOwner(
+    config,
+    addItem,
+    setMemoryFileCount,
+  );
+  const bugCommand = useBugCommandOwner(config, agent, addItem);
+  const policiesCommand = useMemo(
+    () => createPoliciesCommand(bindPoliciesCommand(() => agent)),
+    [agent],
+  );
+  return {
+    memoryCommand,
+    bugCommand,
+    policiesCommand,
+    toolsCommand: useToolsCommandOwner(agent, addItem),
+    directoryCommand: useDirectoryCommandOwner(
+      config,
+      agent,
+      recordingOwner,
+      recordingIntegration,
+      addItem,
+      setMemoryFileCount,
+    ),
+    imageCommand: useImageCommandOwner(config, agent, addItem),
+  };
+}
+
+function useImageCommandOwner(
+  config: CliUiRuntime | null,
+  agent: Agent | null,
+  addItem: UseHistoryManagerReturn['addItem'],
+): SlashCommand {
+  return useMemo(
+    () => createImageCommand(bindImageCommand(config, agent, addItem)),
+    [config, agent, addItem],
+  );
+}
+
+function useToolsCommandOwner(
+  agent: Agent | null,
+  addItem: UseHistoryManagerReturn['addItem'],
+): SlashCommand {
+  return useMemo(
+    () => createToolsCommand(bindToolsCommand(agent), addItem),
+    [agent, addItem],
+  );
 }
 
 function useContinueCommandOwner(
@@ -411,19 +624,28 @@ function useSetCommand(settings: LoadedSettings): SlashCommand {
   );
 }
 
+function useCommandRuntimeState(addItem: UseHistoryManagerReturn['addItem']) {
+  return {
+    oauthControl: useOAuthControl(),
+    cancellation: useSlashCommandCancellation(),
+    pending: usePendingHistory(addItem),
+    session: useSessionStats(),
+  };
+}
+
 export function useSlashCommandProcessorCore(
   args: UseSlashCommandProcessorCoreArgs,
 ): SlashCommandProcessorCoreResult {
   const api = useRuntimeApi();
   const refreshProviderAliases = useProviderAliasRefresh();
-  const oauthControl = useOAuthControl();
-  const session = useSessionStats();
+  const { reloadCommandsRef, reloadRegisteredCommands } =
+    useRegisteredCommandReload();
   const state = useCommandState(
-    useMemo(() => api.setActiveModel.bind(api), [api]),
-    useMemo(() => api.getActiveToolFormatState.bind(api), [api]),
-    useMemo(() => api.setActiveToolFormatOverride.bind(api), [api]),
     args.settings,
     args.agent,
+    args.addItem,
+    args.setLlxprtMdFileCount,
+    reloadRegisteredCommands,
     refreshProviderAliases,
     args.recordingIntegration,
     args.recordingOwner,
@@ -431,8 +653,9 @@ export function useSlashCommandProcessorCore(
     args.config,
     api,
   );
-  const cancellation = useSlashCommandCancellation();
-  const pending = usePendingHistory(args.addItem);
+  reloadCommandsRef.current = state.reloadCommands;
+  const { oauthControl, cancellation, pending, session } =
+    useCommandRuntimeState(args.addItem);
   const commandContext = useCommandContext({
     runtimeApi: api,
     refreshProviderAliases,
@@ -471,12 +694,10 @@ export function useSlashCommandProcessorCore(
     state.setCommands,
     args.agent,
   );
-  const handleSlashCommand = useCallback(
-    (
-      ...input: Parameters<
-        SlashCommandProcessorCoreResult['handleSlashCommand']
-      >
-    ): Promise<SlashCommandProcessorResult | false> =>
+  const handleSlashCommand = useCallback<
+    SlashCommandProcessorCoreResult['handleSlashCommand']
+  >(
+    (...input) =>
       processSlashCommand(
         buildHandlerDeps(args, state, pending, commandContext, cancellation),
         ...input,
@@ -490,4 +711,13 @@ export function useSlashCommandProcessorCore(
     commandContext,
     cancelActiveSlashCommand: cancellation.cancelActiveSlashCommand,
   };
+}
+
+function useRegisteredCommandReload() {
+  const reloadCommandsRef = useRef<() => void>(() => {});
+  const reloadRegisteredCommands = useCallback(
+    () => reloadCommandsRef.current(),
+    [],
+  );
+  return { reloadCommandsRef, reloadRegisteredCommands };
 }

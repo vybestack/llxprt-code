@@ -22,6 +22,7 @@ import { createLogoutCommand } from '../ui/commands/logoutCommand.js';
 import { createQuotaCommand } from '../ui/commands/quotaCommand.js';
 import { createMcpAuthCommand } from '../ui/commands/mcpAuth.js';
 import { createMcpCommand } from '../ui/commands/mcpCommand.js';
+import { bindMcpCommand } from '../ui/commands/mcpCommandHost.js';
 import type { CommandContext, SlashCommand } from '../ui/commands/types.js';
 
 /**
@@ -91,6 +92,12 @@ export function registerMcpCommand(context: CommandContext): SlashCommand {
         context.services.agent,
         context.services.config,
       ),
+    ),
+    bindMcpCommand(
+      context.services.config,
+      context.services.agent,
+      context.ui.addItem,
+      context.ui.reloadCommands,
     ),
   );
 }

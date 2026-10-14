@@ -26,6 +26,8 @@ import { createLogoutCommand } from '../commands/logoutCommand.js';
 import { createQuotaCommand } from '../commands/quotaCommand.js';
 import { createMcpAuthCommand } from '../commands/mcpAuth.js';
 import { createMcpCommand } from '../commands/mcpCommand.js';
+import { bindMcpCommand } from '../commands/mcpCommandHost.js';
+import type { UseHistoryManagerReturn } from './useHistoryManager.js';
 import { createProfileCommand } from '../commands/profileCommand.js';
 import { bindProfileCommandOperations } from '../commands/profileCommandHost.js';
 import { createToolkeyCommand } from '../commands/toolkeyCommand.js';
@@ -83,6 +85,8 @@ export function useCredentialCommands(
   settings: LoadedSettings,
   config: CliUiRuntime | null,
   recordProviderSwitch: (provider: string, model: string) => Promise<void>,
+  addItem: UseHistoryManagerReturn['addItem'],
+  reloadCommands: () => void,
 ): CredentialCommands {
   const api = useRuntimeApi();
   const oauthControl = useOAuthControl();
@@ -114,8 +118,9 @@ export function useCredentialCommands(
     () =>
       createMcpCommand(
         createMcpAuthCommand(bindMcpAuthCommandOperations(agent, config)),
+        bindMcpCommand(config, agent, addItem, reloadCommands),
       ),
-    [agent, config],
+    [agent, config, addItem, reloadCommands],
   );
   const profileCommand = useMemo(
     () =>

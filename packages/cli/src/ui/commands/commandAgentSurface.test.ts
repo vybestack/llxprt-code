@@ -14,7 +14,8 @@ import type {
 } from '@vybestack/llxprt-code-agents';
 import { createCompressCommand } from './compressCommand.js';
 import { bindCompressCommand } from './compressCommandHost.js';
-import { policiesCommand } from './policiesCommand.js';
+import { createPoliciesCommand } from './policiesCommand.js';
+import { bindPoliciesCommand } from './policiesCommandHost.js';
 import { taskCommand } from './tasksCommand.js';
 import {
   registerBaseurlCommand,
@@ -104,7 +105,10 @@ describe('policiesCommand — agent surface', () => {
       } as unknown as AgentPolicyControl,
     });
 
-    const result = policiesCommand.action!(context, '') as {
+    const command = createPoliciesCommand(
+      bindPoliciesCommand(() => context.services.agent ?? null),
+    );
+    const result = command.action!(context, '') as {
       type: string;
       messageType: string;
     };
@@ -123,7 +127,10 @@ describe('policiesCommand — agent surface', () => {
       } as unknown as AgentPolicyControl,
     });
 
-    const result = policiesCommand.action!(context, 'menu') as {
+    const command = createPoliciesCommand(
+      bindPoliciesCommand(() => context.services.agent ?? null),
+    );
+    const result = command.action!(context, 'menu') as {
       type: string;
       dialog: string;
     };
