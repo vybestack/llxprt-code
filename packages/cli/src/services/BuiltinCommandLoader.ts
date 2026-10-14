@@ -18,7 +18,6 @@ import type {
 } from '../ui/cliUiRuntime.js';
 import type { ICommandLoader } from './types.js';
 import { aboutCommand } from '../ui/commands/aboutCommand.js';
-import { authCommand } from '../ui/commands/authCommand.js';
 import { bugCommand } from '../ui/commands/bugCommand.js';
 import { chatCommand } from '../ui/commands/chatCommand.js';
 import { chatOwnerCommand } from '../ui/commands/chatOwnerCommand.js';
@@ -80,6 +79,7 @@ export interface BuiltinCommandOwners {
   readonly keyfileCommand: SlashCommand;
   readonly baseurlCommand: SlashCommand;
   readonly logoutCommand: SlashCommand;
+  readonly authCommand: SlashCommand;
   readonly toolkeyCommand: SlashCommand;
   readonly toolkeyfileCommand: SlashCommand;
 }
@@ -145,7 +145,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
   private registerBuiltinCommands(): SlashCommand[] {
     const allDefinitions: Array<SlashCommand | null> = [
       aboutCommand,
-      authCommand,
+      this.owners.authCommand,
       bugCommand,
       this.recordingOwner === 'agent' ? chatOwnerCommand : chatCommand,
       clearCommand,

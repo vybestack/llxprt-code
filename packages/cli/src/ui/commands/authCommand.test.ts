@@ -7,8 +7,6 @@
 import { describe, it, expect, beforeEach, vi, setSystemTime } from 'bun:test';
 import { AuthCommandExecutor } from './authCommand.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-providers/auth.js';
-import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import type { CommandContext } from './types.js';
 
 // Mock browser profile discovery so tests never touch real disk. The source
 // imports discoverBrowserProfiles from the public core barrel
@@ -54,7 +52,6 @@ const mockOAuthManager = {
 
 describe('AuthCommandExecutor OAuth Support', () => {
   let executor: AuthCommandExecutor;
-  let mockContext: CommandContext;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -64,23 +61,12 @@ describe('AuthCommandExecutor OAuth Support', () => {
     logoutAllBucketsMock.mockReset();
     activateNamedLoginBucketMock.mockReset();
     executor = new AuthCommandExecutor(mockOAuthManager, () => {});
-    mockContext = createMockCommandContext({
-      services: {
-        config: null,
-        agent: null,
-        settings: {} as never,
-        git: undefined,
-        logger: {} as never,
-      },
-      ui: {} as never,
-      session: {} as never,
-    });
   });
 
   describe('@requirement REQ-001: OAuth-only authentication menu', () => {
     it('@given user enters /auth @when no provider specified @then shows OAuth menu only', async () => {
       // When: User enters /auth without provider
-      const result = await executor.execute(mockContext);
+      const result = await executor.execute();
 
       // Then: Should show OAuth dialog
       expect(result).toStrictEqual({
@@ -91,7 +77,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
     it('@given OAuth menu displayed @when menu shown @then no API key options visible', async () => {
       // When: User enters /auth without provider
-      const result = await executor.execute(mockContext);
+      const result = await executor.execute();
 
       // Then: Should return dialog action (OAuth-only architecture)
       expect(result).toStrictEqual({
@@ -114,7 +100,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: User enters /auth claudecode (without action)
-      const result = await executor.execute(mockContext, 'claudecode');
+      const result = await executor.execute('claudecode');
 
       // Then: Should show provider status
       expect(mockIsEnabled).toHaveBeenCalledWith('claudecode');
@@ -148,7 +134,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         (mockOAuthManager.getHigherPriorityAuth as unknown) =
           mockGetHigherPriority;
 
-        const result = await executor.execute(mockContext, 'claudecode');
+        const result = await executor.execute('claudecode');
 
         expect(result).toStrictEqual({
           type: 'message',
@@ -177,7 +163,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: User enters /auth claudecode enable
-      const result = await executor.execute(mockContext, 'claudecode enable');
+      const result = await executor.execute('claudecode enable');
 
       // Then: Should toggle OAuth enablement and return success
       expect(mockToggleOAuth).toHaveBeenCalledWith('claudecode');
@@ -199,7 +185,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: User enters /auth codex disable
-      const result = await executor.execute(mockContext, 'codex disable');
+      const result = await executor.execute('codex disable');
 
       // Then: Should toggle OAuth enablement and return success
       expect(mockToggleOAuth).toHaveBeenCalledWith('codex');
@@ -221,7 +207,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: User enters /auth with leading/trailing spaces
-      const result = await executor.execute(mockContext, '  claudecode  ');
+      const result = await executor.execute('  claudecode  ');
 
       // Then: Should trim and show provider status
       expect(mockIsEnabled).toHaveBeenCalledWith('claudecode');
@@ -235,7 +221,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
     it('@given user enters /auth claudecode invalid @when invalid action specified @then returns error', async () => {
       // When: User enters invalid action
-      const result = await executor.execute(mockContext, 'claudecode invalid');
+      const result = await executor.execute('claudecode invalid');
 
       // Then: Should return error message
       expect(result).toStrictEqual({
@@ -253,7 +239,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       expect(executor).toBeInstanceOf(AuthCommandExecutor);
 
       // When: Execute without provider (shows menu)
-      const result = await executor.execute(mockContext);
+      const result = await executor.execute();
 
       // Then: Should return dialog action (OAuth-only, no API key options)
       expect(result).toStrictEqual({
@@ -270,7 +256,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       (mockOAuthManager.getSupportedProviders as unknown) = mockGetSupported;
 
       // When: User enters unknown provider
-      const result = await executor.execute(mockContext, 'unknown-provider');
+      const result = await executor.execute('unknown-provider');
 
       // Then: Should return error message
       expect(result).toStrictEqual({
@@ -283,7 +269,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
     it('@given empty provider string @when trimmed to empty @then shows menu', async () => {
       // When: User enters empty or whitespace-only provider
-      const result = await executor.execute(mockContext, '   ');
+      const result = await executor.execute('   ');
 
       // Then: Should show OAuth menu
       expect(result).toStrictEqual({
@@ -313,7 +299,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: Enable OAuth
-      const result = await executor.execute(mockContext, 'claudecode enable');
+      const result = await executor.execute('claudecode enable');
 
       // Then: Should enable OAuth and show success message
       expect(mockToggleOAuth).toHaveBeenCalledWith('claudecode');
@@ -335,7 +321,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: Disable OAuth
-      const result = await executor.execute(mockContext, 'codex disable');
+      const result = await executor.execute('codex disable');
 
       // Then: Should disable OAuth and show success message
       expect(mockToggleOAuth).toHaveBeenCalledWith('codex');
@@ -355,7 +341,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: Try to enable already enabled OAuth
-      const result = await executor.execute(mockContext, 'claudecode enable');
+      const result = await executor.execute('claudecode enable');
 
       // Then: Should show already enabled message
       expect(result).toStrictEqual({
@@ -374,7 +360,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: Try to disable already disabled OAuth
-      const result = await executor.execute(mockContext, 'codex disable');
+      const result = await executor.execute('codex disable');
 
       // Then: Should show already disabled message
       expect(result).toStrictEqual({
@@ -397,7 +383,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: Enabling OAuth with higher priority auth present
-      const result = await executor.execute(mockContext, 'claudecode enable');
+      const result = await executor.execute('claudecode enable');
 
       // Then: Should show warning about precedence
       expect(result).toStrictEqual({
@@ -421,7 +407,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: Enable OAuth for provider
-      await executor.execute(mockContext, 'claudecode enable');
+      await executor.execute('claudecode enable');
 
       // Then: OAuth manager should save the enabled state
       expect(mockToggleOAuth).toHaveBeenCalledWith('claudecode');
@@ -486,7 +472,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: User attempts OAuth enable
-      const result = await executor.execute(mockContext, 'claudecode enable');
+      const result = await executor.execute('claudecode enable');
 
       // Then: Should return error message
       expect(result).toStrictEqual({
@@ -509,7 +495,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         mockGetHigherPriority;
 
       // When: User attempts OAuth disable
-      const result = await executor.execute(mockContext, 'codex disable');
+      const result = await executor.execute('codex disable');
 
       // Then: Should return user-friendly error message
       expect(result).toStrictEqual({
@@ -530,7 +516,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      const result = await executor.execute(mockContext, 'Codex enable');
+      const result = await executor.execute('Codex enable');
 
       expect(mockToggleOAuth).toHaveBeenCalledWith('codex');
       expect(result).toStrictEqual({
@@ -549,7 +535,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      const result = await executor.execute(mockContext, 'CLAUDECODE');
+      const result = await executor.execute('CLAUDECODE');
 
       expect(mockIsEnabled).toHaveBeenCalledWith('claudecode');
       expect(mockIsAuthenticated).toHaveBeenCalledWith('claudecode');
@@ -569,7 +555,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      const result = await executor.execute(mockContext, 'Claudecode ENABLE');
+      const result = await executor.execute('Claudecode ENABLE');
 
       expect(mockToggleOAuth).toHaveBeenCalledWith('claudecode');
       expect(result).toStrictEqual({
@@ -583,7 +569,8 @@ describe('AuthCommandExecutor OAuth Support', () => {
   describe('Command interface compliance', () => {
     it('@given auth command @when checking properties @then has correct OAuth description', async () => {
       // Import the actual command to test its properties
-      const { authCommand } = await import('./authCommand.js');
+      const { createAuthCommand } = await import('./authCommand.js');
+      const authCommand = createAuthCommand(mockOAuthManager);
       expect(authCommand.name).toBe('auth');
       expect(authCommand.description).toBe(
         'Manage OAuth authentication for providers',
@@ -600,10 +587,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         { directoryName: 'Profile 1', displayName: 'Work' },
       ]);
 
-      const result = await executor.execute(
-        mockContext,
-        'claudecode create mybucket',
-      );
+      const result = await executor.execute('claudecode create mybucket');
 
       const expectedContent = [
         'Discovered Chrome profiles for claudecode bucket "mybucket":',
@@ -629,7 +613,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         discoverBrowserProfiles as unknown as ReturnType<typeof vi.fn>
       ).mockReturnValue([]);
 
-      const result = await executor.execute(mockContext, 'claudecode create');
+      const result = await executor.execute('claudecode create');
 
       expect(result).toMatchObject({ type: 'message', messageType: 'info' });
       expect((result as { content: string }).content).toContain(
@@ -648,10 +632,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         { directoryName: 'Profile 1', displayName: 'Work' },
       ]);
 
-      const result = await executor.execute(
-        mockContext,
-        'claudecode profile workbucket 2',
-      );
+      const result = await executor.execute('claudecode profile workbucket 2');
 
       expect(setBrowserProfileAssociationMock).toHaveBeenCalledWith(
         'claudecode',
@@ -670,7 +651,6 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
     it('@given literal directory selector @when profile set by name @then stores directory without displayName', async () => {
       const result = await executor.execute(
-        mockContext,
         'claudecode profile mybucket MyCustomDir',
       );
 
@@ -691,10 +671,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         { directoryName: 'Default', displayName: 'Personal' },
       ]);
 
-      const result = await executor.execute(
-        mockContext,
-        'claudecode profile mybucket 9',
-      );
+      const result = await executor.execute('claudecode profile mybucket 9');
 
       expect(setBrowserProfileAssociationMock).not.toHaveBeenCalled();
       expect(result).toMatchObject({ type: 'message', messageType: 'error' });
@@ -709,10 +686,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
         new Error('session activation failed'),
       );
 
-      const result = await executor.execute(
-        mockContext,
-        'claudecode login mybucket',
-      );
+      const result = await executor.execute('claudecode login mybucket');
 
       expect(mockAuthenticate).toHaveBeenCalled();
       expect(result).toStrictEqual({
@@ -725,7 +699,6 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
     it('@given traversal selector @when profile selector has path separators @then returns error', async () => {
       const result = await executor.execute(
-        mockContext,
         'claudecode profile mybucket ../etc',
       );
 
@@ -738,7 +711,6 @@ describe('AuthCommandExecutor OAuth Support', () => {
 
     it('@given whitespace-padded --clear flag @when profile clear @then clears association', async () => {
       const result = await executor.execute(
-        mockContext,
         'claudecode profile mybucket   --clear   ',
       );
 
@@ -752,7 +724,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
     });
 
     it('@given missing bucket @when profile without bucket @then returns error', async () => {
-      const result = await executor.execute(mockContext, 'claudecode profile');
+      const result = await executor.execute('claudecode profile');
 
       expect(result).toMatchObject({ type: 'message', messageType: 'error' });
       expect((result as { content: string }).content).toContain(
@@ -761,10 +733,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
     });
 
     it('@given missing selector @when profile without selector @then returns error', async () => {
-      const result = await executor.execute(
-        mockContext,
-        'claudecode profile mybucket',
-      );
+      const result = await executor.execute('claudecode profile mybucket');
 
       expect(result).toMatchObject({ type: 'message', messageType: 'error' });
       expect((result as { content: string }).content).toContain(
@@ -778,7 +747,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const mockAuthenticate = vi.fn().mockResolvedValue(undefined);
       (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
 
-      const result = await executor.execute(mockContext, 'claudecode login');
+      const result = await executor.execute('claudecode login');
 
       expect(mockAuthenticate).toHaveBeenCalledWith('claudecode', undefined, {
         signalAuthCompletion: true,
@@ -794,10 +763,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const mockAuthenticate = vi.fn().mockResolvedValue(undefined);
       (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
 
-      const result = await executor.execute(
-        mockContext,
-        'claudecode login mybucket',
-      );
+      const result = await executor.execute('claudecode login mybucket');
 
       expect(mockAuthenticate).toHaveBeenCalledWith('claudecode', 'mybucket', {
         signalAuthCompletion: true,
@@ -817,7 +783,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       mockOAuthManager.isAuthenticated = vi.fn().mockResolvedValue(true);
       mockOAuthManager.logout = vi.fn().mockResolvedValue(undefined);
 
-      const result = await executor.execute(mockContext, 'claudecode logout');
+      const result = await executor.execute('claudecode logout');
 
       expect(mockOAuthManager.logout).toHaveBeenCalledWith(
         'claudecode',
@@ -834,10 +800,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
     it('@given /auth claudecode logout --all @when executed @then routes logoutAllBuckets to claudecode', async () => {
       logoutAllBucketsMock.mockResolvedValue(undefined);
 
-      const result = await executor.execute(
-        mockContext,
-        'claudecode logout --all',
-      );
+      const result = await executor.execute('claudecode logout --all');
 
       expect(logoutAllBucketsMock).toHaveBeenCalledWith('claudecode');
       expect(clearSessionBucketMock).not.toHaveBeenCalled();
@@ -856,7 +819,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
     });
 
     it('@given /auth anthropic @when executed @then returns targeted redirect message', async () => {
-      const result = await executor.execute(mockContext, 'anthropic');
+      const result = await executor.execute('anthropic');
 
       expect(result).toMatchObject({ type: 'message', messageType: 'info' });
       const content = (result as { content: string }).content;
@@ -873,7 +836,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
       (mockOAuthManager.logout as unknown) = mockLogout;
 
-      await executor.execute(mockContext, 'anthropic');
+      await executor.execute('anthropic');
 
       expect(mockToggleOAuth).not.toHaveBeenCalled();
       expect(mockAuthenticate).not.toHaveBeenCalled();
@@ -884,7 +847,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const mockToggleOAuth = vi.fn();
       (mockOAuthManager.toggleOAuthEnabled as unknown) = mockToggleOAuth;
 
-      const result = await executor.execute(mockContext, 'anthropic enable');
+      const result = await executor.execute('anthropic enable');
 
       expect(result).toMatchObject({ type: 'message', messageType: 'info' });
       expect((result as { content: string }).content).toContain(
@@ -900,7 +863,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       const mockAuthenticate = vi.fn();
       (mockOAuthManager.authenticate as unknown) = mockAuthenticate;
 
-      const result = await executor.execute(mockContext, 'anthropic login');
+      const result = await executor.execute('anthropic login');
 
       expect(result).toMatchObject({ type: 'message', messageType: 'info' });
       expect((result as { content: string }).content).toContain(
@@ -921,7 +884,7 @@ describe('AuthCommandExecutor OAuth Support', () => {
       (mockOAuthManager.getHigherPriorityAuth as unknown) =
         mockGetHigherPriority;
 
-      const result = await executor.execute(mockContext, 'claudecode');
+      const result = await executor.execute('claudecode');
 
       expect(result).toMatchObject({ type: 'message', messageType: 'info' });
       expect(mockIsEnabled).toHaveBeenCalledWith('claudecode');

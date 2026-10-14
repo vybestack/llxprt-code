@@ -30,13 +30,19 @@ void vi.mock('@vybestack/llxprt-code-core', () => ({
   })),
 }));
 
-import { authCommand } from './authCommand.js';
-import type { CommandContext } from './types.js';
+import { registerAuthCommand } from '../../__tests__/credential-command-test-owner.js';
+import type { CommandContext, SlashCommandActionReturn } from './types.js';
 
-// authCommand.action is optional in the SlashCommand type; assert presence once.
-const action = authCommand.action;
-if (!action) {
-  throw new Error('authCommand.action is not defined');
+// SlashCommand.action is optional in the type; assert presence once per command.
+function runAuth(
+  context: CommandContext,
+  args: string,
+): Promise<SlashCommandActionReturn | void> {
+  const action = registerAuthCommand(context).action;
+  if (!action) {
+    throw new Error('authCommand.action is not defined');
+  }
+  return Promise.resolve(action(context, args));
 }
 
 describe('auth command action rejects partial runtime infrastructure (issue #2300)', () => {
@@ -61,7 +67,7 @@ describe('auth command action rejects partial runtime infrastructure (issue #230
   });
 
   it('throws instead of synthesizing OAuth infrastructure when the owner control cannot resolve it', async () => {
-    await expect(action(context, 'gemini status')).rejects.toThrow(
+    await expect(runAuth(context, 'gemini status')).rejects.toThrow(
       /Auth command requires registered OAuth runtime infrastructure: .*unavailable/,
     );
   });
@@ -77,7 +83,7 @@ describe('auth command action rejects partial runtime infrastructure (issue #230
       getAuthStatusWithBuckets: async () => [],
     };
 
-    const result = await action(context, 'gemini status');
+    const result = await runAuth(context, 'gemini status');
 
     expect(result).toMatchObject({
       type: 'message',

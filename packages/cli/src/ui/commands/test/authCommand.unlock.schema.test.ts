@@ -6,7 +6,7 @@
 
 import { beforeEach, describe, it, expect } from 'bun:test';
 import { createCompletionHandler } from '../schema/index.js';
-import { authCommand } from '../authCommand.js';
+import { createUnconfiguredBuiltinOwners } from '../../../__tests__/unconfigured-model-command.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import type {
   CommandArgumentSchema,
@@ -42,7 +42,7 @@ describe('authCommand unlock schema completion (Finding 8)', () => {
   });
 
   function getProviderSchema(): CommandArgumentSchema {
-    const schema = authCommand.schema;
+    const schema = createUnconfiguredBuiltinOwners().authCommand.schema;
     if (schema === undefined) {
       throw new Error('authCommand has no schema');
     }

@@ -18,7 +18,7 @@ import {
   OAuthControlProvider,
   useOAuthControl,
 } from './OAuthControlContext.js';
-import { authCommand } from '../commands/authCommand.js';
+import { createAuthCommand } from '../commands/authCommand.js';
 
 installTestWorkspaceFilesystem();
 installWorkspaceRuntimeFixture();
@@ -81,7 +81,7 @@ describe('interactive runtime owner bridge OAuth status', () => {
       </OAuthControlProvider>,
     );
     try {
-      if (!captured.left || !captured.right || !authCommand.action)
+      if (!captured.left || !captured.right)
         throw new Error('OAuth root unavailable');
       const leftControl = captured.left;
       const rightControl = captured.right;
@@ -112,17 +112,24 @@ describe('interactive runtime owner bridge OAuth status', () => {
       expect(
         rightStatus.find((status) => status.provider === 'codex')?.oauthEnabled,
       ).not.toBe(true);
-      const rightContext = createMockCommandContext({
-        oauthControl: rightControl,
+      // The command is registered against the right owner. The invocation
+      // carries the left owner's control, which must not be consulted.
+      const authCommand = createAuthCommand(rightControl);
+      if (!authCommand.action) throw new Error('auth command has no action');
+      const invocationContext = createMockCommandContext({
+        oauthControl: leftControl,
       });
-      Object.defineProperty(rightContext, 'runtimeApi', {
+      Object.defineProperty(invocationContext, 'runtimeApi', {
         get: () => {
           throw new Error(
             'OAuth status must not resolve a generic runtime API',
           );
         },
       });
-      const statusResult = await authCommand.action(rightContext, 'claudecode');
+      const statusResult = await authCommand.action(
+        invocationContext,
+        'claudecode',
+      );
       expect(statusResult).toMatchObject({
         type: 'message',
         messageType: 'info',
