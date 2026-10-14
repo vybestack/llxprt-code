@@ -5,7 +5,10 @@
  */
 
 import type Anthropic from '@anthropic-ai/sdk';
-import { shouldDumpSDKContext } from '../utils/dumpSDKContext.js';
+import {
+  shouldDumpSDKContext,
+  type StreamedDumpBody,
+} from '../utils/dumpSDKContext.js';
 import type { DumpMode } from '../utils/dumpContext.js';
 import type { WireBodySpool } from '../utils/wire-body-spool.js';
 import {
@@ -13,17 +16,14 @@ import {
   createSpooledAnthropicApiCall,
   type AnthropicApiCall,
 } from './AnthropicApiExecution.js';
-import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
-import type { PreparedAnthropicPromptEnvelope } from './AnthropicProviderInternals.js';
 import type { AnthropicRequestFacts } from './AnthropicRequestPreparation.js';
 import type { SpooledAnthropicRequest } from './AnthropicSpooledRequest.js';
 
 /**
  * A request ready to send: the facts the transport and the response path
- * need, the headers' model and thinking inputs, how to post it, and the body
- * as an object for the two consumers that need one (a request dump, and image
- * recovery's sanitized retry).
+ * need, the headers' model and thinking inputs, how to post it, what a request
+ * dump records, and the body as an object for the one consumer that needs it
+ * (image recovery's sanitized retry).
  */
 export interface AnthropicSendRequest {
   readonly facts: AnthropicRequestFacts;
@@ -31,10 +31,16 @@ export interface AnthropicSendRequest {
   readonly thinking: unknown;
   /**
    * The body as an object. For a built body this is the body itself; for a
-   * spool it is the spool read back whole, so ask for it only when a dump or
-   * a recovery retry needs the object.
+   * spool it is the spool read back whole, so ask for it only when a recovery
+   * retry needs the object.
    */
   readonly body: () => Promise<Record<string, unknown>>;
+  /**
+   * What a request dump records: the body object, or for a spool the dump
+   * body streamed from the files written with it. Absent when the request was
+   * prepared without a dump form.
+   */
+  readonly dump: Record<string, unknown> | StreamedDumpBody | undefined;
   readonly call: (
     client: Anthropic,
     headers: Record<string, string>,
@@ -52,32 +58,10 @@ export function sendRequestFromBody(
     model: String(requestBody['model']),
     thinking: requestBody['thinking'],
     body: () => Promise.resolve(requestBody),
+    dump: requestBody,
     call: (client, headers, signal) =>
       createAnthropicApiCall(client, requestBody, headers, signal),
   };
-}
-
-/**
- * A projected send uses the body its projection built. Issue #854 P05b4: that
- * wire body is owned by a request-scoped lease and the media request's finish
- * releases it. A source-route preparation already holds the lease for the one
- * body.
- */
-export function sendRequestFromPrepared(
-  prepared: PreparedAnthropicPromptEnvelope,
-  mediaRequest: ResolvedMediaRequest,
-): AnthropicSendRequest {
-  const { requestContext } = prepared;
-  if (prepared.bodyLease === undefined) {
-    const requestBodyLease = acquireRequestScopedBody(
-      'anthropic',
-      requestContext.requestBody,
-    );
-    mediaRequest.registerCleanup(() => {
-      void requestBodyLease.release();
-    });
-  }
-  return sendRequestFromBody(requestContext, requestContext.requestBody);
 }
 
 /** Reads a sealed spool back as the JSON object it holds. */
@@ -112,6 +96,7 @@ export function sendRequestFromSpool(
     model: String(envelope['model']),
     thinking: envelope['thinking'],
     body: () => readSpooledBody(spool),
+    dump: request.dump,
     call: (client, headers, signal) =>
       createSpooledAnthropicApiCall(
         client,
@@ -127,15 +112,23 @@ export function sendRequestFromSpool(
 const NO_DUMP_BODY: Readonly<Record<string, unknown>> = Object.freeze({});
 
 /**
- * The body object a request dump records. A spool is read back whole only
- * when `dumpcontext` asks for a dump on success or on failure.
+ * The body a request dump records. Nothing is read unless `dumpcontext` asks
+ * for a dump on success or on failure, and a spool is never read back whole.
  */
 export function requestBodyForDump(
   dumpMode: DumpMode | undefined,
   request: AnthropicSendRequest,
-): Promise<Record<string, unknown>> {
-  return shouldDumpSDKContext(dumpMode, false) ||
-    shouldDumpSDKContext(dumpMode, true)
-    ? request.body()
-    : Promise.resolve({ ...NO_DUMP_BODY });
+): Record<string, unknown> | StreamedDumpBody {
+  if (
+    !shouldDumpSDKContext(dumpMode, false) &&
+    !shouldDumpSDKContext(dumpMode, true)
+  ) {
+    return { ...NO_DUMP_BODY };
+  }
+  if (request.dump === undefined) {
+    throw new Error(
+      'Anthropic dump requested but the request was prepared without a dump form',
+    );
+  }
+  return request.dump;
 }

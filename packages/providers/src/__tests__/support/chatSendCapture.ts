@@ -104,12 +104,18 @@ function callOptions(
   };
 }
 
+/**
+ * Sends the history through the real provider. With `projected` the call is
+ * projected first and the send carries the projection's transport token, the
+ * way the agent layer sends.
+ */
 async function send(
   route: WireRoute,
   history: HistoryCase,
   source: RowSource,
   media: MediaBinding | undefined,
   captured: CapturedWireRequest[],
+  projected = false,
 ): Promise<void> {
   const restore = installFakeTransport(route, captured);
   try {
@@ -118,8 +124,20 @@ async function send(
       media === undefined || history.usesMediaReferences !== true
         ? created
         : bindProviderMedia(created, media.resolver, media.budgetBytes);
+    const options = callOptions(route, history, source);
+    const projection = projected
+      ? await provider.projectPromptEnvelope?.(options)
+      : undefined;
+    if (projected && projection === undefined) {
+      throw new Error(`${provider.name} projected no prompt envelope`);
+    }
     for await (const item of provider.generateChatCompletion(
-      callOptions(route, history, source),
+      projection === undefined
+        ? options
+        : {
+            ...options,
+            promptEnvelopeTransportToken: projection.transportToken,
+          },
     )) {
       void item;
     }
@@ -174,7 +192,8 @@ export function rejectedResponse(): Response {
 /**
  * Sends with `dumpcontext` set to `mode` and returns the request dump file
  * text, its timestamp replaced by a constant. Dumps go to a private cache
- * directory. Mode `error` dumps only when the request fails.
+ * directory. Mode `error` dumps only when the request fails. A `projected`
+ * send is projected first and sent with the projection's token.
  */
 export async function captureRequestDump(
   route: WireRoute,
@@ -183,6 +202,7 @@ export async function captureRequestDump(
   media: MediaBinding | undefined,
   mode: 'on' | 'error',
   respond: () => Response = route.respond,
+  projected = false,
 ): Promise<string> {
   const home = await mkdtemp(join(tmpdir(), 'chat-dump-golden-'));
   const saved = {
@@ -200,10 +220,10 @@ export async function captureRequestDump(
     const captured: CapturedWireRequest[] = [];
     if (mode === 'error') {
       await expect(
-        send(dumping, history, source, media, captured),
+        send(dumping, history, source, media, captured, projected),
       ).rejects.toBeDefined();
     } else {
-      await send(dumping, history, source, media, captured);
+      await send(dumping, history, source, media, captured, projected);
     }
     const dumpDir = join(Storage.getGlobalCacheDir(), 'dumps');
     const requestFiles = (await readdir(dumpDir)).filter((name) =>

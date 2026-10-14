@@ -61,6 +61,12 @@ export interface WireBuildOptions
    * given, and it runs once per build (it registers media leases).
    */
   readonly mediaStage?: MediaStage;
+  /**
+   * Sees every row of the conversion pass once, in order, after its media is
+   * resolved and before it is projected. The extra resolutions a chain makes
+   * on single rows do not call it.
+   */
+  readonly observeRow?: (row: IContent) => void;
   readonly signal?: AbortSignal;
   /** Defaults to {@link appendWireChainResults}. */
   readonly chainResults?: ChainResultsAppender;
@@ -501,6 +507,7 @@ export async function buildWireTable(
   let index = -1;
   for await (const resolved of stream) {
     index++;
+    options.observeRow?.(resolved);
     const row =
       index <= state.skipThrough
         ? undefined

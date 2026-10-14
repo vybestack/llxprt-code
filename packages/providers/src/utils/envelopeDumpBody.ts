@@ -1,7 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { createReadStream } from 'node:fs';
-import { sanitizeDiagnosticData } from '../utils/mediaDiagnostics.js';
-import { StreamedDumpBody } from '../utils/dumpSDKContext.js';
+import { sanitizeDiagnosticData } from './mediaDiagnostics.js';
+import { StreamedDumpBody } from './dumpSDKContext.js';
 
 /** Bytes read from a dump-form file per chunk. */
 const DUMP_READ_BYTES = 64 * 1024;
@@ -29,14 +29,14 @@ function omitted(value: unknown): boolean {
 }
 
 /**
- * The body a dump file records, as compact JSON: the members of the request
- * envelope in their wire order, sanitized for diagnostics (media summarized,
- * sensitive keys left out), with `messages` taken from the dump-form file
- * written while the body was spooled. The other members are small (tools and
+ * The body a dump file records, as compact JSON: the members of a Messages or
+ * Chat Completions request envelope in their wire order, sanitized for
+ * diagnostics (media summarized, sensitive keys left out), with `messages`
+ * taken from the dump-form file written while the body was spooled. The other members are small (tools and
  * request parameters, never the history) and are sanitized as values. It is
  * what `JSON.stringify(sanitizeDiagnosticData(body))` yields for the same body.
  */
-async function* chatDumpBodyBytes(
+async function* envelopeDumpBodyBytes(
   envelope: Readonly<Record<string, unknown>>,
   messagesFile: string,
 ): AsyncGenerator<Uint8Array> {
@@ -61,9 +61,11 @@ async function* chatDumpBodyBytes(
  * messages. It is read when a dump is written, so a request that never dumps
  * pays nothing, and the messages are never held in memory.
  */
-export function chatDumpBody(
+export function envelopeDumpBody(
   envelope: Readonly<Record<string, unknown>>,
   messagesFile: string,
 ): StreamedDumpBody {
-  return new StreamedDumpBody(() => chatDumpBodyBytes(envelope, messagesFile));
+  return new StreamedDumpBody(() =>
+    envelopeDumpBodyBytes(envelope, messagesFile),
+  );
 }

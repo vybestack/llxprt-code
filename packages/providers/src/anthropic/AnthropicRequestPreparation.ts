@@ -786,7 +786,12 @@ export function planAnthropicRequest(
 }
 
 /**
- * Prepare complete Anthropic API request context
+ * Prepare the complete Anthropic API request context as one message array.
+ *
+ * This is the array reference route: no production code calls it (the send,
+ * the projection, the estimate and the request dump go through
+ * `prepareSpooledAnthropicRequest`). Tests compare the table route's bytes
+ * with it.
  */
 export async function prepareAnthropicRequest(
   params: PrepareRequestParams,

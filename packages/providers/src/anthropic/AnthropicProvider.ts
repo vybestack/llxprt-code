@@ -50,27 +50,18 @@ import {
   getLatestClaudeModel as getLatestClaudeModelFn,
 } from './AnthropicModelData.js';
 import {
-  prepareAnthropicRequest,
   type AnthropicPlanParams,
   type AnthropicRequestFacts,
 } from './AnthropicRequestPreparation.js';
 import {
   isAnthropicOAuthBaseURL,
-  createMediaSupportPredicate,
   ANTHROPIC_DEFAULT_BASE_URL,
 } from './AnthropicEndpointUtils.js';
 import { findAnthropicToolSchema } from './AnthropicToolSchema.js';
 import { firstTruthyString } from '../utils/falsyFallback.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import {
-  projectAnthropicPromptEnvelope,
-  projectAnthropicPromptEnvelopeOnDemand,
-} from '../runtime/promptEnvelopeProjections.js';
+import { projectAnthropicPromptEnvelopeFromSource } from '../runtime/promptEnvelopeProjections.js';
 import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
-import {
-  dropProjectionRows,
-  openProjectionRowsMedia,
-} from './AnthropicProjectionRows.js';
 import {
   buildAnthropicRequestHeaders,
   withCredentialHeader,
@@ -80,15 +71,14 @@ import {
 import {
   requestBodyForDump,
   sendRequestFromBody,
-  sendRequestFromPrepared,
   sendRequestFromSpool,
   type AnthropicSendRequest,
 } from './AnthropicSendRequest.js';
 import {
   anthropicRowsOf,
   prepareSpooledAnthropicRequest,
+  registerSpooledRequestCleanup,
 } from './AnthropicSpooledRequest.js';
-import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
 import {
   createAnthropicMissingCredentialError,
   resolveAnthropicCredential,
@@ -98,9 +88,6 @@ import { executeImageDimensionRecovery } from './AnthropicImageRecovery.js';
 import { findRequestCommitState } from '../retryRequestContext.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import { resolveRowsMedia } from '../openai-responses/responses-row-media.js';
-
-import { registerAnthropicRequestCleanup } from './AnthropicRequestCleanup.js';
-import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import {
   finishMediaRequest,
@@ -186,19 +173,6 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
-   * The media request of a projection: the call's rows are read into the one
-   * history array the estimated body is built from (see AnthropicProjectionRows).
-   */
-  private resolveProjectionMediaRequest(
-    options: NormalizedGenerateChatOptions,
-  ): Promise<ResolvedMediaRequest> {
-    const media = this.captureMedia(options);
-    return readsRequestRowsAtTransport(options)
-      ? openProjectionRowsMedia(options, media)
-      : resolveRequestMedia(media, options.contents, options.invocation.signal);
-  }
-
-  /**
    * A send with a prepared envelope uses that envelope's media request. Any
    * other send gets a fresh owner for the leases of the rows it resolves; its
    * rows are never read here, media is resolved one row at a time while the
@@ -224,19 +198,11 @@ export class AnthropicProvider extends BaseProvider {
         effectiveOptions: options,
       };
     }
-    const { mediaRequest } = prepared;
-    try {
-      return {
-        prepared,
-        mediaRequest,
-        effectiveOptions: {
-          ...options,
-          contents: mediaRequest.withContents((contents) => contents),
-        },
-      };
-    } catch (error) {
-      return finishMediaRequest(mediaRequest, { status: 'failed', error });
-    }
+    return {
+      prepared,
+      mediaRequest: prepared.mediaRequest,
+      effectiveOptions: options,
+    };
   }
 
   /**
@@ -737,10 +703,10 @@ export class AnthropicProvider extends BaseProvider {
   }
 
   /**
-   * The request to send. A projected send uses the body its projection built
-   * (one request-scoped lease per body). Any other send writes its body to a
-   * request-scoped spool one row at a time; the media request's finish
-   * disposes the spool and the message table.
+   * The request to send. A projected send posts the spool its projection
+   * wrote. Any other send writes its body to a request-scoped spool one row
+   * at a time. Either way the media request's finish disposes the spool, the
+   * message table and the prompt files.
    */
   private async resolveSendRequest(
     preparation: AnthropicTransportPreparation,
@@ -748,9 +714,7 @@ export class AnthropicProvider extends BaseProvider {
     authToken: string,
   ): Promise<AnthropicSendRequest> {
     const { prepared, mediaRequest, effectiveOptions } = preparation;
-    if (prepared !== undefined) {
-      return sendRequestFromPrepared(prepared, mediaRequest);
-    }
+    if (prepared !== undefined) return sendRequestFromSpool(prepared.spooled);
     const media = this.captureMedia(effectiveOptions);
     const signal = getRequestSignal(effectiveOptions);
     const spooled = await prepareSpooledAnthropicRequest(
@@ -758,7 +722,7 @@ export class AnthropicProvider extends BaseProvider {
       await anthropicRowsOf(effectiveOptions),
       (rows) => resolveRowsMedia(rows, media, mediaRequest, signal),
     );
-    mediaRequest.registerCleanup(spooled.release);
+    registerSpooledRequestCleanup(mediaRequest, spooled);
     return sendRequestFromSpool(spooled);
   }
 
@@ -842,98 +806,65 @@ export class AnthropicProvider extends BaseProvider {
     };
   }
 
-  private prepareRequestContext(
-    options: NormalizedGenerateChatOptions,
-    isOAuth: boolean,
-    authToken: string,
-  ) {
-    return prepareAnthropicRequest({
-      content: options.contents,
-      ...this.planParams(options, isOAuth, authToken),
-    });
-  }
-
   /**
    * Project the finalized Anthropic Messages envelope (issue #2817).
    *
-   * Runs the SAME `prepareAnthropicRequest` path transport uses, so the
-   * estimate is derived from the exact `requestBody` that will be sent. Request
-   * preparation still resolves prompt-bearing inputs such as memory and tools,
-   * but no client is constructed and no credential is exchanged. The OAuth
-   * flavor only selects tool-name prefixing and cache formatting, so it is
-   * derived from the already-resolved token when one is present.
+   * Runs the SAME spooled preparation the transport uses, so the estimate is
+   * derived from the exact body that will be sent: the rows are converted one
+   * at a time and the estimator form of `system`, `messages` and `tools` is
+   * written in the same pass. The projection and the later send share the one
+   * spool. Request preparation still resolves prompt-bearing inputs such as
+   * memory and tools, but no client is constructed and no credential is
+   * exchanged. The OAuth flavor only selects tool-name prefixing and cache
+   * formatting, so it is derived from the already-resolved token when one is
+   * present.
    */
   async projectPromptEnvelope(
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection> {
     const normalized = await this.normalizeOptionsForProjection(options);
-    const sourceRoute = readsRequestRowsAtTransport(normalized);
-    const mediaRequest = await this.resolveProjectionMediaRequest(normalized);
-    const resolvedOptions = {
-      ...normalized,
-      contents: mediaRequest.withContents((contents) => contents),
-    };
+    const media = this.captureMedia(normalized);
+    const signal = getRequestSignal(normalized);
+    const mediaRequest = await resolveRequestMedia(media, [], signal);
     try {
-      const authToken = await this.resolveProjectionAuthToken(resolvedOptions);
+      const authToken = await this.resolveProjectionAuthToken(normalized);
       const isOAuth = this.classifyOAuthToken(authToken);
-      const requestContext = await this.prepareRequestContext(
-        resolvedOptions,
-        isOAuth,
-        authToken,
+      const spooled = await prepareSpooledAnthropicRequest(
+        this.planParams(normalized, isOAuth, authToken),
+        await anthropicRowsOf(normalized),
+        (rows) => resolveRowsMedia(rows, media, mediaRequest, signal),
+        true,
       );
-      const transportToken = Object.freeze({});
-      // Issue #3693: on zai endpoints url-encoded image blocks are
-      // serialized as placeholders, so the projection must report them
-      // as unsupported alongside audio/video.
-      const projectionOptions = {
-        transportToken,
-        unsupportedMedia: collectUnsupportedMedia(
-          resolvedOptions.contents,
-          createMediaSupportPredicate(resolvedOptions.resolved.baseURL),
-        ),
-      };
-      if (sourceRoute) {
-        // The one SDK body is built; the transient neutral rows go away and
-        // the same lease serves estimation, send and retry.
-        dropProjectionRows(mediaRequest);
-        const bodyLease = acquireRequestScopedBody(
-          'anthropic',
-          requestContext.requestBody,
-        );
-        mediaRequest.registerCleanup(() => {
-          void bodyLease.release();
-        });
-        this.preparedPromptEnvelopes.set(transportToken, {
-          requestContext,
-          isOAuth,
-          authToken,
-          mediaRequest,
-          bodyLease,
-          sourceInputs: {
-            systemInstruction: resolvedOptions.systemInstruction,
-            tools: resolvedOptions.tools,
-          },
-        });
-        return projectAnthropicPromptEnvelopeOnDemand(() => bodyLease.value, {
-          ...projectionOptions,
-          releaseIfUnsent: mediaRequest.release,
-        });
+      registerSpooledRequestCleanup(mediaRequest, spooled);
+      const { estimate } = spooled;
+      if (estimate === undefined) {
+        throw new Error('A projected request carries its estimator files');
       }
-      registerAnthropicRequestCleanup(mediaRequest, requestContext.requestBody);
+      const transportToken = Object.freeze({});
+      const projection = projectAnthropicPromptEnvelopeFromSource(
+        estimate.projection,
+        {
+          model: String(spooled.envelope['model']),
+          unsupportedMedia: estimate.unsupportedMedia,
+          transportToken,
+          releaseIfUnsent: mediaRequest.release,
+        },
+      );
       this.preparedPromptEnvelopes.set(transportToken, {
-        requestContext,
+        spooled,
         isOAuth,
         authToken,
         mediaRequest,
+        ...(readsRequestRowsAtTransport(normalized)
+          ? {
+              sourceInputs: {
+                systemInstruction: normalized.systemInstruction,
+                tools: normalized.tools,
+              },
+            }
+          : {}),
       });
-      const projection = projectAnthropicPromptEnvelope(
-        requestContext.requestBody,
-        projectionOptions,
-      );
-      return {
-        ...projection,
-        releaseIfUnsent: mediaRequest.release,
-      };
+      return projection;
     } catch (error) {
       return finishMediaRequest(mediaRequest, { status: 'failed', error });
     }
@@ -988,7 +919,7 @@ export class AnthropicProvider extends BaseProvider {
       apiCallFn: apiCallWithResponse,
       dumpMode,
       baseURL,
-      requestBody: await requestBodyForDump(dumpMode, request),
+      requestBody: requestBodyForDump(dumpMode, request),
       streamingEnabled: request.facts.streamingEnabled,
       headers: dumpHeaders,
       rateLimitLogger,

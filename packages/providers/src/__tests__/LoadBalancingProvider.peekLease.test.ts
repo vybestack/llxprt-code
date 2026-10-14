@@ -35,7 +35,26 @@ import { replayableContents } from '../utils/collectContents.js';
 import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
 import { withGpt56DiskSources } from '../tokenizers/gpt56-disk-tokenizer-factory.js';
 import { serializeResponsesPromptEnvelope } from '../runtime/responses-source-serializer.js';
-import { projectAnthropicPromptEnvelopeOnDemand } from '../runtime/promptEnvelopeProjections.js';
+import { projectAnthropicPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
+
+/**
+ * A projection over a leased legacy body: the prompt graph is derived from
+ * `readBody()` on every access, which throws once the lease is released.
+ */
+function leasedBodyProjection(
+  readBody: () => unknown,
+  releaseIfUnsent: () => Promise<void>,
+): PromptEnvelopeProjection {
+  return Object.freeze({
+    ...projectAnthropicPromptEnvelope(readBody()),
+    get finalizedProjection() {
+      return projectAnthropicPromptEnvelope(readBody()).finalizedProjection;
+    },
+    legacyEstimate: () =>
+      projectAnthropicPromptEnvelope(readBody()).legacyEstimate(),
+    releaseIfUnsent,
+  });
+}
 
 const scratch = mkdtempSync(join(tmpdir(), 'lb-peek-lease-'));
 const factory = createRuntimeTokenizerFactory();
@@ -244,15 +263,13 @@ describe('load-balancer peek keeps the delegate source alive (issue #854)', () =
     const delegate: IProvider = {
       name: 'prov-b',
       projectPromptEnvelope: async () =>
-        projectAnthropicPromptEnvelopeOnDemand(
+        leasedBodyProjection(
           () => {
             if (!bodyLeased) throw new Error('Request body lease released');
             return body;
           },
-          {
-            releaseIfUnsent: async () => {
-              bodyLeased = false;
-            },
+          async () => {
+            bodyLeased = false;
           },
         ),
       async *generateChatCompletion(): AsyncGenerator<IContent> {

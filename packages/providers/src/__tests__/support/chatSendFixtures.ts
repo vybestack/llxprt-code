@@ -3,7 +3,8 @@
 /**
  * Issue #854 D3c/D4: golden fixtures for the chat sends the one-request corpus
  * cannot see (request dump files, continuation requests). One JSON file per
- * kind and route in `__tests__/fixtures/chat-send/`, regenerated with the same
+ * kind and route in `__tests__/fixtures/chat-send/` (Anthropic dump files in
+ * `__tests__/fixtures/anthropic-send/`), regenerated with the same
  * switch as the wire-body corpus:
  *
  *   WIRE_BODY_GOLDEN_UPDATE=1 bun test src/__tests__/<test file>
@@ -25,12 +26,16 @@ export interface TextRecord {
 
 const MAX_STORED_TEXT_BYTES = 16 * 1024;
 
-const FIXTURE_DIR = join(
+const FIXTURES_ROOT = join(
   dirname(fileURLToPath(import.meta.url)),
   '..',
   'fixtures',
-  'chat-send',
 );
+
+/** The fixture directory of the OpenAI chat sends. */
+export const CHAT_SEND_FIXTURES = join(FIXTURES_ROOT, 'chat-send');
+/** The fixture directory of the Anthropic sends. */
+export const ANTHROPIC_SEND_FIXTURES = join(FIXTURES_ROOT, 'anthropic-send');
 
 export function textRecord(text: string): TextRecord {
   const bytes = Buffer.from(text, 'utf8');
@@ -62,12 +67,15 @@ export function describeTextDifference(
   return `${head}\nfirst difference at char ${at}: expected ${excerpt(expected.text)} got ${excerpt(actual.text)}`;
 }
 
-function fixturePath(name: string): string {
-  return join(FIXTURE_DIR, `${name}.json`);
+function fixturePath(directory: string, name: string): string {
+  return join(directory, `${name}.json`);
 }
 
-export function readFixture<T>(name: string): Readonly<Record<string, T>> {
-  const path = fixturePath(name);
+export function readFixture<T>(
+  name: string,
+  directory: string = CHAT_SEND_FIXTURES,
+): Readonly<Record<string, T>> {
+  const path = fixturePath(directory, name);
   if (!existsSync(path)) {
     throw new Error(
       `missing golden fixture ${path}; regenerate intentionally with WIRE_BODY_GOLDEN_UPDATE=1`,
@@ -79,7 +87,11 @@ export function readFixture<T>(name: string): Readonly<Record<string, T>> {
 export function writeFixture(
   name: string,
   cases: Readonly<Record<string, unknown>>,
+  directory: string = CHAT_SEND_FIXTURES,
 ): void {
-  mkdirSync(FIXTURE_DIR, { recursive: true });
-  writeFileSync(fixturePath(name), `${JSON.stringify(cases, null, 2)}\n`);
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(
+    fixturePath(directory, name),
+    `${JSON.stringify(cases, null, 2)}\n`,
+  );
 }

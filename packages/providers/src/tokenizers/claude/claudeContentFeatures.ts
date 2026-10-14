@@ -126,3 +126,16 @@ export function extractClaudeContentFeatures(
     whitespaceCodePoints,
   });
 }
+
+/** The signals of a text made of `a` followed by `b`. */
+export function addClaudeContentFeatures(
+  a: ClaudeContentFeatures,
+  b: ClaudeContentFeatures,
+): ClaudeContentFeatures {
+  return Object.freeze({
+    codePoints: a.codePoints + b.codePoints,
+    nonAsciiCodePoints: a.nonAsciiCodePoints + b.nonAsciiCodePoints,
+    structuralCodePoints: a.structuralCodePoints + b.structuralCodePoints,
+    whitespaceCodePoints: a.whitespaceCodePoints + b.whitespaceCodePoints,
+  });
+}

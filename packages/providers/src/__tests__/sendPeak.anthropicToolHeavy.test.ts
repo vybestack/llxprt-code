@@ -11,7 +11,9 @@
  * posted with a Content-Length equal to the sealed size, so the peak does not
  * grow with the body. Before E4 the route built the whole request in memory
  * (heap growth +18.8 MB text-only, +25.7 MB tool-heavy) and the bounds tests
- * were `test.failing`.
+ * were `test.failing`. Each send is preceded by the projection and token
+ * estimate the agent runs, written in the same pass as estimator-form files,
+ * so the measured window covers the estimate too (issue #854 E5).
  *
  * The measurement is split into one file per shape so each file runs its own
  * child process and carries half the work against the per-test limit (the
@@ -27,6 +29,7 @@ const measured = sharedSendPeak('anthropic-cache-1h', {
   source: 'rows',
   shapes: ['tool-heavy'],
   rounds: 1,
+  estimate: true,
 });
 
 describe('peak memory while sending, the anthropic provider, tool-heavy', () => {

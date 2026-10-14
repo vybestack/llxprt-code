@@ -19,10 +19,10 @@
  *
  * - The OpenAI chat send path, including the Kimi file pre-pass, imports none
  *   of them (D3a, D5).
- * - The Anthropic send path imports none of them (E4). The Anthropic
- *   projection route still builds one history array in
- *   `anthropic/AnthropicProjectionRows.ts`, which reads rows itself and so is
- *   invisible to this test; E5 deletes that file.
+ * - The Anthropic send path imports none of them (E4), and neither does its
+ *   projection, estimate or request dump (E5). The array converter
+ *   `convertToAnthropicMessages` is kept as the reference the table route is
+ *   compared with; `anthropicArrayRouteBoundary.test.ts` lists its importers.
  * - F1 removes the shared normalization and load-balancing seams.
  *
  * The list may only shrink. A file that imports a banned symbol without an

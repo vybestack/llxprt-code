@@ -8,18 +8,38 @@
  * Behavioral test: AnthropicProvider.projectPromptEnvelope must project the
  * SAME finalized request body that transport sends (issue #2817 acceptance A3).
  *
- * This exercises the REAL provider preparation path (prepareAnthropicRequest)
- * through projectPromptEnvelope, proving the estimate reflects history,
- * pending content, system instructions, and tools without rebuilding the
- * payload outside the provider.
+ * This exercises the REAL provider preparation path (the spooled request
+ * table route) through projectPromptEnvelope, proving the estimate reflects
+ * history, pending content, system instructions, and tools without rebuilding
+ * the payload outside the provider. Estimates are read from the projection's
+ * estimator-form segment files with the production tokenizer factory.
  *
  * @requirement:REQ-PE-001 (issue #2817 acceptance A3, A9, A10)
  */
 
 import { describe, expect, it, vi } from 'bun:test';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
+import {
+  estimatePromptEnvelope,
+  type PromptEnvelopeProjection,
+} from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
+import { createRuntimeTokenizerFactory } from '../composition/runtimeTokenizerFactory.js';
 import { PROJECTION_REVISION } from '../runtime/promptEnvelopeProjections.js';
 import { AnthropicProvider } from './AnthropicProvider.js';
+
+const factory = createRuntimeTokenizerFactory();
+
+async function estimatedTokens(
+  provider: AnthropicProvider,
+  projection: PromptEnvelopeProjection,
+): Promise<number> {
+  const estimate = await estimatePromptEnvelope(
+    provider.name,
+    projection,
+    factory,
+  );
+  return estimate.estimatedPromptTokens;
+}
 
 void vi.mock('@vybestack/llxprt-code-core/core/prompts.js', () => ({
   getCoreSystemPromptAsync: vi.fn(async () => 'core-prompt'),
@@ -120,8 +140,8 @@ describe('AnthropicProvider.projectPromptEnvelope (issue #2817 A3)', () => {
       }),
     );
 
-    const smallTokens = await small.legacyEstimate();
-    const largeTokens = await large.legacyEstimate();
+    const smallTokens = await estimatedTokens(provider, small);
+    const largeTokens = await estimatedTokens(provider, large);
     expect(largeTokens).toBeGreaterThan(smallTokens);
   });
 
@@ -150,8 +170,8 @@ describe('AnthropicProvider.projectPromptEnvelope (issue #2817 A3)', () => {
       }),
     );
 
-    const withoutTokens = await withoutTools.legacyEstimate();
-    const withTokens = await withTools.legacyEstimate();
+    const withoutTokens = await estimatedTokens(provider, withoutTools);
+    const withTokens = await estimatedTokens(provider, withTools);
     expect(withTokens).toBeGreaterThan(withoutTokens);
   });
 
@@ -191,8 +211,8 @@ describe('AnthropicProvider.projectPromptEnvelope (issue #2817 A3)', () => {
     expect(projection.model).toBe(normalizedProjection.model);
     expect(projection.protocol).toBe(normalizedProjection.protocol);
     expect(projection.method).toBe(normalizedProjection.method);
-    expect(await projection.legacyEstimate()).toBe(
-      await normalizedProjection.legacyEstimate(),
+    expect(await estimatedTokens(provider, projection)).toBe(
+      await estimatedTokens(provider, normalizedProjection),
     );
   });
 
@@ -245,7 +265,7 @@ describe('AnthropicProvider.projectPromptEnvelope (issue #2817 A3)', () => {
     );
 
     expect(projection.unsupportedMedia).toStrictEqual([]);
-    expect(await projection.legacyEstimate()).toBeGreaterThan(0);
+    expect(await estimatedTokens(provider, projection)).toBeGreaterThan(0);
   });
 
   it('counts a longer system instruction as more finalized system material', async () => {
@@ -265,8 +285,8 @@ describe('AnthropicProvider.projectPromptEnvelope (issue #2817 A3)', () => {
         'Always answer with extensive detail, follow every formatting rule, explain assumptions, and avoid unsupported speculation in every response.',
     });
 
-    const withoutTokens = await withoutInstruction.legacyEstimate();
-    const withTokens = await withLongInstruction.legacyEstimate();
+    const withoutTokens = await estimatedTokens(provider, withoutInstruction);
+    const withTokens = await estimatedTokens(provider, withLongInstruction);
     expect(withTokens).toBeGreaterThan(withoutTokens);
   });
 

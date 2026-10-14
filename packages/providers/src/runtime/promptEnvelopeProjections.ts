@@ -71,6 +71,18 @@ type ProjectionIdentity = Pick<
   'protocol' | 'method' | 'projectionRevision'
 >;
 
+const ANTHROPIC_IDENTITY: ProjectionIdentity = {
+  protocol: 'anthropic-messages',
+  method: 'messages/v1',
+  projectionRevision: PROJECTION_REVISION,
+};
+
+const CHAT_IDENTITY: ProjectionIdentity = {
+  protocol: 'openai-chat',
+  method: 'chat/completions/v1',
+  projectionRevision: PROJECTION_REVISION,
+};
+
 function buildEstimationProjection(
   requestBody: unknown,
   promptKeys: readonly string[],
@@ -314,68 +326,14 @@ export function projectAnthropicPromptEnvelope(
   return buildProjection(
     requestBody,
     PROMPT_KEYS['anthropic-messages'],
-    {
-      protocol: 'anthropic-messages',
-      method: 'messages/v1',
-      projectionRevision: PROJECTION_REVISION,
-    },
+    ANTHROPIC_IDENTITY,
     options,
   );
 }
 
-type OnDemandProjectionOptions = ProjectionOptions & {
+type SourceProjectionOptions = ProjectionOptions & {
   readonly releaseIfUnsent: () => Promise<void>;
-};
-
-/**
- * Projection over a body that stays owned by its transport. The prompt
- * graph is derived from `readBody()` on every estimate access and is not
- * kept, so only the transport's one request body is alive between estimates
- * (issue #854). `readBody` throws once the body's lease was released.
- */
-function projectOnDemand(
-  readBody: () => unknown,
-  promptKeys: readonly string[],
-  identity: ProjectionIdentity,
-  options: OnDemandProjectionOptions,
-): PromptEnvelopeProjection {
-  const estimation = () =>
-    buildEstimationProjection(readBody(), promptKeys, identity.protocol);
-  return Object.freeze({
-    model: extractModelOrThrow(readBody(), identity),
-    protocol: identity.protocol,
-    method: identity.method,
-    projectionRevision: identity.projectionRevision,
-    unsupportedMedia: freezeUnsupportedMedia(options.unsupportedMedia),
-    transportToken: options.transportToken ?? EMPTY_TRANSPORT_TOKEN,
-    get finalizedProjection() {
-      return estimation().finalizedProjection;
-    },
-    legacyEstimate: () => estimation().legacyEstimate(),
-    releaseIfUnsent: options.releaseIfUnsent,
-  });
-}
-
-export function projectAnthropicPromptEnvelopeOnDemand(
-  readBody: () => unknown,
-  options: OnDemandProjectionOptions,
-): PromptEnvelopeProjection {
-  return projectOnDemand(
-    readBody,
-    PROMPT_KEYS['anthropic-messages'],
-    {
-      protocol: 'anthropic-messages',
-      method: 'messages/v1',
-      projectionRevision: PROJECTION_REVISION,
-    },
-    options,
-  );
-}
-
-const CHAT_IDENTITY: ProjectionIdentity = {
-  protocol: 'openai-chat',
-  method: 'chat/completions/v1',
-  projectionRevision: PROJECTION_REVISION,
+  readonly model: string;
 };
 
 const sourceEstimatorOnly = (): Promise<number> =>
@@ -384,26 +342,41 @@ const sourceEstimatorOnly = (): Promise<number> =>
   );
 
 /**
- * Projection of a chat request whose prompt keys are sealed estimator-form
- * files. The estimator reads the files in bounded chunks, so no body or
- * message array exists at estimate time. The projection's owner disposes the
- * files; `releaseIfUnsent` is the media request's release.
+ * Projection of a request whose prompt keys are sealed estimator-form files.
+ * The estimator reads the files in bounded chunks, so no body or message array
+ * exists at estimate time. The projection's owner disposes the files;
+ * `releaseIfUnsent` is the media request's release.
  */
-export function projectOpenAIChatPromptEnvelopeFromSource(
+function projectFromSource(
+  identity: ProjectionIdentity,
   source: Gpt56SourceProjection,
-  options: OnDemandProjectionOptions & { readonly model: string },
+  options: SourceProjectionOptions,
 ): PromptEnvelopeProjection {
   return Object.freeze({
-    model: extractModelOrThrow({ model: options.model }, CHAT_IDENTITY),
-    protocol: CHAT_IDENTITY.protocol,
-    method: CHAT_IDENTITY.method,
-    projectionRevision: CHAT_IDENTITY.projectionRevision,
+    model: extractModelOrThrow({ model: options.model }, identity),
+    protocol: identity.protocol,
+    method: identity.method,
+    projectionRevision: identity.projectionRevision,
     unsupportedMedia: freezeUnsupportedMedia(options.unsupportedMedia),
     transportToken: options.transportToken ?? EMPTY_TRANSPORT_TOKEN,
     finalizedProjection: source,
     legacyEstimate: sourceEstimatorOnly,
     releaseIfUnsent: options.releaseIfUnsent,
   });
+}
+
+export function projectAnthropicPromptEnvelopeFromSource(
+  source: Gpt56SourceProjection,
+  options: SourceProjectionOptions,
+): PromptEnvelopeProjection {
+  return projectFromSource(ANTHROPIC_IDENTITY, source, options);
+}
+
+export function projectOpenAIChatPromptEnvelopeFromSource(
+  source: Gpt56SourceProjection,
+  options: SourceProjectionOptions,
+): PromptEnvelopeProjection {
+  return projectFromSource(CHAT_IDENTITY, source, options);
 }
 
 export function projectOpenAIChatPromptEnvelope(
@@ -413,11 +386,7 @@ export function projectOpenAIChatPromptEnvelope(
   return buildProjection(
     requestBody,
     PROMPT_KEYS['openai-chat'],
-    {
-      protocol: 'openai-chat',
-      method: 'chat/completions/v1',
-      projectionRevision: PROJECTION_REVISION,
-    },
+    CHAT_IDENTITY,
     options,
   );
 }

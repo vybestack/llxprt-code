@@ -80,7 +80,7 @@ export function isZaiAnthropicEndpoint(baseURL?: string): boolean {
 }
 
 /**
- * Media-support predicate for `collectUnsupportedMedia` on the Anthropic
+ * Media-support predicate for the unsupported-media list of the Anthropic
  * path: pdf and image blocks are supported, except that url-encoded image
  * blocks count as unsupported on zai endpoints (#3693), where the converter
  * serializes them as placeholders and the projection must match. Takes the

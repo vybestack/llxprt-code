@@ -10,11 +10,8 @@ import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderToolset } from '../IProvider.js';
-import type { RequestScopedBody } from '../utils/requestScopedBody.js';
-import type {
-  AnthropicRequestContext,
-  AnthropicRequestFacts,
-} from './AnthropicRequestPreparation.js';
+import type { AnthropicRequestFacts } from './AnthropicRequestPreparation.js';
+import type { SpooledAnthropicRequest } from './AnthropicSpooledRequest.js';
 
 /**
  * Shapes and pure helpers used by AnthropicProvider, kept beside it so the
@@ -29,12 +26,11 @@ export function hasHeaderName(
 }
 
 export interface PreparedAnthropicPromptEnvelope {
-  readonly requestContext: AnthropicRequestContext;
+  /** The one prepared body: the projection estimates it, the send posts it. */
+  readonly spooled: SpooledAnthropicRequest;
   readonly isOAuth: boolean;
   readonly authToken: string;
   readonly mediaRequest: ResolvedMediaRequest;
-  /** Source route: the lease of the one prepared SDK body. */
-  readonly bodyLease?: RequestScopedBody<Record<string, unknown>>;
   /** Source route: inputs the blanked send options must get back. */
   readonly sourceInputs?: {
     readonly systemInstruction: string | undefined;

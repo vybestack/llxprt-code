@@ -32,6 +32,7 @@ import {
   bestEffortDump,
   dumpSDKErrorRequestResponse,
   type RequestDumpMetadata,
+  type StreamedDumpBody,
 } from '../utils/dumpSDKContext.js';
 import {
   type AnthropicRateLimitInfo,
@@ -220,7 +221,8 @@ export interface ApiExecutionParams {
   }>;
   dumpMode: DumpMode | undefined;
   baseURL: string;
-  requestBody: Record<string, unknown>;
+  /** What the request dump records: the body, or a body streamed from files. */
+  requestBody: Record<string, unknown> | StreamedDumpBody;
   streamingEnabled: boolean;
   headers?: Record<string, string>;
   rateLimitLogger: { debug: (fn: () => string) => void };

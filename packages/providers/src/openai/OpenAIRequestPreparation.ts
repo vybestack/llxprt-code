@@ -49,13 +49,14 @@ import { KeyedRowToolIdStore } from '../utils/keyed-row-tool-id-store.js';
 import { providerRowsOf } from '../utils/providerRows.js';
 import { WireBodySpool } from '../utils/wire-body-spool.js';
 import type { PromptKeySink } from '../runtime/prompt-key-tee-writer.js';
-import { shouldDump, type DumpMode } from '../utils/dumpContext.js';
+import { wantsRequestDump } from '../utils/dumpContext.js';
 import type { StreamedDumpBody } from '../utils/dumpSDKContext.js';
 import {
-  ChatEstimatorFiles,
+  createChatEstimatorFiles,
+  type ChatEstimatorFiles,
   type ChatPromptEstimate,
 } from './OpenAIChatEstimatorFiles.js';
-import { chatDumpBody } from './OpenAIChatDumpBody.js';
+import { envelopeDumpBody } from '../utils/envelopeDumpBody.js';
 
 /**
  * A prepared chat request: the sealed body on scratch disk and the scalars the
@@ -320,14 +321,6 @@ async function callRows(
   return { rows: () => rows.openReader(signal) };
 }
 
-/** Whether `dumpcontext` writes a request dump on success or on failure. */
-function wantsRequestDump(mode: unknown): boolean {
-  return (
-    shouldDump(mode as DumpMode | undefined, false) ||
-    shouldDump(mode as DumpMode | undefined, true)
-  );
-}
-
 interface SpooledChatBody {
   readonly spool: WireBodySpool;
   readonly messageCount: number;
@@ -403,7 +396,7 @@ async function spoolChatBody(
   try {
     if (usesToolIdStore(format)) toolIds = KeyedRowIndex.create('tool-ids');
     if (use.estimate || use.dump) {
-      files = ChatEstimatorFiles.create(envelope.model, signal, use.dump);
+      files = createChatEstimatorFiles(envelope.model, signal, use.dump);
     }
     const source = await callRows(options);
     const bodyOptions = chatBodyOptions(
@@ -440,7 +433,7 @@ async function spoolChatBody(
       estimate: use.estimate ? files?.seal() : undefined,
       dump:
         use.dump && files !== undefined
-          ? chatDumpBody(envelope, files.dumpMessagesFile())
+          ? envelopeDumpBody(envelope, files.dumpMessagesFile())
           : undefined,
       continuation: createChatContinuation({
         envelope,

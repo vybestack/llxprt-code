@@ -85,10 +85,37 @@ function laterResult(
   throw new Error('Tool id index lists a result the message does not hold');
 }
 
+/**
+ * The results one assistant message pulled out of later messages. Most
+ * messages pull none, so the disk store opens with the first removal rather
+ * than once per message.
+ */
+class Removals {
+  #store: DumpScratch<Removal> | undefined;
+
+  get length(): number {
+    return this.#store?.length ?? 0;
+  }
+
+  append(removal: Removal): void {
+    this.#store ??= new DumpScratch<Removal>();
+    this.#store.append(removal);
+  }
+
+  read(index: number): Removal {
+    if (this.#store === undefined) throw new RangeError('No removals');
+    return this.#store.read(index);
+  }
+
+  close(): void {
+    this.#store?.close();
+  }
+}
+
 function removeCollected(
   table: MessageTable,
   toolIds: ToolIdIndex,
-  removals: DumpScratch<Removal>,
+  removals: Removals,
 ): void {
   for (let index = 0; index < removals.length; index++) {
     const removal = removals.read(index);
@@ -116,7 +143,7 @@ function collectResult(
   insertedFrom: number,
   nextId: number,
   wanted: string,
-  into: { collected: TableMessage; removals: DumpScratch<Removal> },
+  into: { collected: TableMessage; removals: Removals },
 ): void {
   const locations = toolIds.results(wanted);
   if (locations.some((location) => location.message === nextId)) return;
@@ -147,7 +174,7 @@ function repairAdjacent(
   nextId: number,
 ): void {
   const collected = newMessage('user');
-  const removals = new DumpScratch<Removal>();
+  const removals = new Removals();
   try {
     for (const entry of table.entries(message))
       if (entry.block.type === 'tool_use')

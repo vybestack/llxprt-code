@@ -16,6 +16,14 @@ import {
   type RawPostTestHandler,
 } from '../__tests__/rawPostTestAdapters.js';
 
+/** The JSON a request dump records, whether it was given as a value or streamed. */
+async function readDumpedBody(body: unknown): Promise<unknown> {
+  if (!(body instanceof dumpSDKContextModule.StreamedDumpBody)) return body;
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of body.bytes()) chunks.push(chunk);
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+}
+
 function createAnthropicDumpClient(handler: RawPostTestHandler): object {
   return {
     ...createAnthropicRawPostTestAdapter(handler),
@@ -256,6 +264,20 @@ describe('AnthropicProvider dumpContext integration', () => {
       }),
     };
 
+    // The request dump streams its body from files that exist only while the
+    // request does, so the body is read when the dump is written.
+    let dumpedBody: unknown;
+    dumpSDKRequestContextSpy.mockImplementation(
+      async (_provider: string, _endpoint: string, body: unknown) => {
+        dumpedBody = await readDumpedBody(body);
+        return {
+          baseId: '20260101-120000-anthropic-test12',
+          requestFilename: '20260101-120000-anthropic-test12-request.json',
+          dumpDir: '/tmp/.llxprt/dumps',
+        };
+      },
+    );
+
     // Mock failed API call
     const apiError = new Error('API Error: Rate limit exceeded');
     vi.spyOn(
@@ -281,9 +303,7 @@ describe('AnthropicProvider dumpContext integration', () => {
     expect(dumpSDKRequestContextSpy).toHaveBeenCalledWith(
       'anthropic',
       '/v1/messages',
-      expect.objectContaining({
-        model: 'claude-sonnet-4-5-20250929',
-      }),
+      expect.any(dumpSDKContextModule.StreamedDumpBody),
       'https://api.anthropic.com',
       expect.objectContaining({
         headers: expect.objectContaining({
@@ -295,6 +315,7 @@ describe('AnthropicProvider dumpContext integration', () => {
         transport: { type: 'http' },
       }),
     );
+    expect(dumpedBody).toMatchObject({ model: 'claude-sonnet-4-5-20250929' });
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledTimes(1);
     expect(dumpSDKResponseContextSpy).toHaveBeenCalledWith(
       '20260101-120000-anthropic-test12',

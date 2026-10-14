@@ -1,5 +1,5 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { DumpScratch } from '../../utils/dumpScratch.js';
 import {
   SCALE_SCENARIOS,
@@ -101,5 +101,26 @@ describe('the measurement method', () => {
     const counts = await operationsAt(SCALE_SCENARIOS[0], 5);
     expect(counts.tableReads).toBeGreaterThan(0);
     expect(counts.tableWrites).toBeGreaterThan(0);
+  });
+});
+
+describe('the wire build opens no storage per message', () => {
+  /** Scratch stores a wire build opens, counted by the closes it makes. */
+  async function scratchStoresAt(units: number): Promise<number> {
+    const closes = spyOn(DumpScratch.prototype, 'close');
+    try {
+      await wireOperationsAt(SCALE_SCENARIOS[0], units);
+      return closes.mock.calls.length;
+    } finally {
+      closes.mockRestore();
+    }
+  }
+
+  it('answered calls cost the same number of scratch stores at 4x the rows', async () => {
+    // A scratch store is a directory and two files; one per assistant message
+    // made a long history spend most of its time creating and removing them.
+    const small = await scratchStoresAt(SMALL);
+    const large = await scratchStoresAt(LARGE);
+    expect({ small, large }).toStrictEqual({ small, large: small });
   });
 });
