@@ -23,7 +23,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { withRecordingLifetimeFixture } from '../../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
-import { continueCommand } from '../continueCommand.js';
+import { createContinueCommandForTest } from './continue-command-test-owner.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
 import {
   exportSessionMediaPackage,
@@ -96,6 +96,7 @@ function isPerformResumeAction(
 
 describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
   let ctx: CommandContext;
+  const continueCommand = createContinueCommandForTest(() => ctx);
 
   beforeEach(() => {
     ctx = createMockCommandContext();
@@ -130,6 +131,7 @@ describe('continueCommand @plan:PLAN-20260214-SESSIONBROWSER.P19', () => {
           },
         },
       });
+      ctx = commandContext;
       const result = await continueCommand.action!(
         commandContext,
         `export ${sessionInfo.id} ${destination}`,

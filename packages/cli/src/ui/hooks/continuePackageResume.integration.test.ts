@@ -60,7 +60,7 @@ import {
   type SessionMetadata,
 } from '@vybestack/llxprt-code-core';
 import { HistoryService } from '@vybestack/llxprt-code-core/services/history/HistoryService.js';
-import { continueCommand } from '../commands/continueCommand.js';
+import { createContinueCommandForTest } from '../commands/__tests__/continue-command-test-owner.js';
 import type { SlashCommandProcessorActions } from './slashCommandProcessor.js';
 import {
   processSlashCommand,
@@ -360,6 +360,7 @@ async function createHandlerDeps(
     },
     recordingSwapCallbacks: callbacks,
   });
+  const continueCommand = createContinueCommandForTest(() => commandContext);
   return {
     commands: [continueCommand],
     config: {

@@ -22,7 +22,7 @@ import { setupOwnerSessionRecording } from '../../cliSessionBootstrap.js';
 import { TaskLaunchOwner } from '../../../../agents/src/session/task-launch-owner.js';
 import { setImmediate } from 'node:timers/promises';
 import { clearCommand } from './clearCommand.js';
-import { continueCommand } from './continueCommand.js';
+import { createContinueCommandForTest } from './__tests__/continue-command-test-owner.js';
 import type { HistoryItemWithoutId } from '../types.js';
 import type { CommandContext } from './types.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
@@ -30,8 +30,11 @@ import { assertDefined } from '../../__tests__/assertions.js';
 
 const clearAction = clearCommand.action;
 assertDefined(clearAction);
-const continueAction = continueCommand.action;
-assertDefined(continueAction);
+async function runContinue(context: CommandContext, args: string) {
+  const action = createContinueCommandForTest(() => context).action;
+  assertDefined(action);
+  return action(context, args);
+}
 const hookInput = z.object({
   hook_event_name: z.string(),
   session_id: z.string(),
@@ -203,7 +206,7 @@ console.log(JSON.stringify({systemMessage: input.hook_event_name + ' feedback'})
           target.kind === 'session' && target.session.sessionId === oldId,
       ),
     ).toBe(true);
-    const result = await continueAction(context, oldId);
+    const result = await runContinue(context, oldId);
     if (result?.type !== 'perform_resume')
       throw new Error('Expected resume action');
     const history = await agent.session.resumeSession(result.sessionRef);

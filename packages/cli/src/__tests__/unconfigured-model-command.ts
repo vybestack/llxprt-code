@@ -27,6 +27,7 @@ import { createToolFormatCommand } from '../ui/commands/toolformatCommand.js';
 import { createProfileCommand } from '../ui/commands/profileCommand.js';
 import { createProfileSchemas } from '../ui/commands/profileSchemas.js';
 import { createChatOwnerCommand } from '../ui/commands/chatOwnerCommand.js';
+import { createContinueCommand } from '../ui/commands/continueCommand.js';
 
 export function createUnconfiguredModelCommand(): SlashCommand {
   return createModelCommand(
@@ -245,6 +246,20 @@ export function createUnconfiguredChatCommand(): SlashCommand {
 export function createUnconfiguredBuiltinOwners(): BuiltinCommandOwners {
   return {
     chatCommand: createUnconfiguredChatCommand(),
+    continueCommand: createContinueCommand({
+      isInteractive: () => false,
+      listContinueTargets: async () => [],
+      exportSession: async () => {
+        throw new Error(
+          'Session export is unavailable in this registry fixture',
+        );
+      },
+      validateSessionPackage: async () => {
+        throw new Error(
+          'Package import is unavailable in this registry fixture',
+        );
+      },
+    }),
     modelCommand: createUnconfiguredModelCommand(),
     toolFormatCommand: createUnconfiguredToolFormatCommand(),
     setCommand: createUnconfiguredSetCommand(),

@@ -19,7 +19,7 @@ import {
   type LockHandle,
 } from '@vybestack/llxprt-code-core';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { continueCommand } from '../commands/continueCommand.js';
+import { createContinueCommand } from '../commands/continueCommand.js';
 import { createTurnStore } from '../stores/turn/turnStore.js';
 import {
   processSlashCommand,
@@ -105,6 +105,14 @@ describe('processSlashCommand /continue <id> with an unreadable recording presen
       commands.addItem(item, timestamp);
     };
     const projectRoot = join(root, 'project');
+    const continueCommand = createContinueCommand({
+      isInteractive: () => true,
+      listContinueTargets: async () => [],
+      exportSession: async () => undefined,
+      validateSessionPackage: async () => {
+        throw new Error('Package validation is not used by this test');
+      },
+    });
     return {
       commands: [continueCommand],
       config: {

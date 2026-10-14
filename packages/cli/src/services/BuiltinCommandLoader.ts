@@ -60,7 +60,6 @@ import { createPerfCommand } from '../ui/commands/perfCommand.js';
 /**
  * @plan PLAN-20260214-SESSIONBROWSER.P21
  */
-import { continueCommand } from '../ui/commands/continueCommand.js';
 
 /**
  * Loads the core, hard-coded slash commands that are an integral part
@@ -80,6 +79,7 @@ export interface BuiltinCommandOwners {
   readonly mcpCommand: SlashCommand;
   readonly profileCommand: SlashCommand;
   readonly chatCommand: SlashCommand;
+  readonly continueCommand: SlashCommand;
   readonly toolkeyCommand: SlashCommand;
   readonly toolkeyfileCommand: SlashCommand;
 }
@@ -199,7 +199,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       /**
        * @plan PLAN-20260214-SESSIONBROWSER.P21
        */
-      continueCommand,
+      this.owners.continueCommand,
       createPerfCommand({
         snapshotCapability: this.config?.getPerfSnapshotCapability?.() ?? null,
         tokenUsageDir: this.config
