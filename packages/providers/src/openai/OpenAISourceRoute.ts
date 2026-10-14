@@ -21,6 +21,7 @@ import {
 } from '../openai-responses/responses-disk-text-projection.js';
 import type {
   OpenAIPromptEnvelopeStore,
+  OpenAISourceInputs,
   PreparedOpenAIPromptEnvelope,
 } from './OpenAIPromptEnvelopeStore.js';
 
@@ -45,32 +46,60 @@ export function restorePreparedSourceInputs(
   return { ...options, ...inputs };
 }
 
+/** The prompt inputs a source-route projection keeps for `restorePreparedSourceInputs`. */
+export function preparedSourceInputs(options: NormalizedGenerateChatOptions): {
+  readonly sourceInputs?: OpenAISourceInputs;
+} {
+  return readsRequestRowsAtTransport(options)
+    ? {
+        sourceInputs: {
+          systemInstruction: options.systemInstruction,
+          tools: options.tools,
+        },
+      }
+    : {};
+}
+
 /**
- * The prepared Responses context of one send. On the source route the rows
- * are read by the disk text route (the same one the openai-responses provider
- * uses), either from the projection's token or built here when the caller
- * sent rows without a projection; array-backed sends carry no context unless
- * a projection prepared one.
+ * Builds the Responses context a projection keeps for its send. Rows staged
+ * from `contents` stay open for the stateful rebuilds until the request's media
+ * is released.
+ */
+export async function buildProjectionResponsesContext(
+  request: ResponsesRequest,
+  deps: ResponsesExecutorDeps,
+  stagedRows: NormalizedGenerateChatOptions['stagedRows'],
+): Promise<PreparedResponsesRequestContext> {
+  const built = await buildDiskTextResponsesContext(request, deps);
+  if (stagedRows === undefined) return built;
+  built.mediaRequest.registerCleanup(() => stagedRows.close());
+  return { ...built, rowsStagedFromContents: true };
+}
+
+/**
+ * The prepared Responses context of one send. Responses requests always read
+ * their rows from disk (the same disk text route the openai-responses
+ * provider uses): the context comes from the projection's token, or is built
+ * here when the caller sent rows without a projection.
  */
 export async function resolveResponsesSendContext(
   options: NormalizedGenerateChatOptions,
   request: ResponsesRequest,
   deps: ResponsesExecutorDeps,
   prepared: PreparedResponsesRequestContext | undefined,
-): Promise<PreparedResponsesRequestContext | undefined> {
-  const sourceRoute = readsRequestRowsAtTransport(options);
-  if (!sourceRoute) {
-    if (prepared?.sourcePrompt !== undefined) {
-      throw new Error('Source token requires its transport-read request rows');
-    }
-    return prepared;
-  }
+): Promise<PreparedResponsesRequestContext> {
   if (prepared === undefined) {
     return buildDiskTextResponsesContext(request, deps);
   }
-  if (prepared.sourcePrompt === undefined) {
+  if (
+    prepared.sourcePrompt === undefined ||
+    (options.stagedRows !== undefined &&
+      prepared.rowsStagedFromContents !== true)
+  ) {
     throw new Error(
-      'Disk text selection requires a source-backed prepared token',
+      prepared.sourcePrompt === undefined
+        ? 'Disk text selection requires a source-backed prepared token'
+        : 'Source token requires its transport-read request rows',
     );
   }
   assertDiskTextShape(request, deps);

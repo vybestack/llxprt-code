@@ -15,7 +15,6 @@ import {
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
-import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
 
 function history(rows = 512, padding = 70_000) {
   let opened = 0;
@@ -65,6 +64,7 @@ async function runRetry(
   padding = 70_000,
 ): Promise<{ text: string; completeBodies: number }> {
   const source = history(rows, padding);
+  const scratchBefore = requestScratchEntries();
   const saved = globalThis.fetch;
   let attempts = 0;
   const bodies: string[] = [];
@@ -75,7 +75,6 @@ async function runRetry(
       init?: RequestInit,
     ): Promise<Response> => {
       attempts += 1;
-      expect(activeRequestBodyCount()).toBe(1);
       if (!(init?.body instanceof ReadableStream))
         throw new Error('Expected upload stream');
       if (attempts === 1 && partial) {
@@ -85,10 +84,11 @@ async function runRetry(
           if (next.done) throw new Error('Upload ended early');
           first.push(next.value);
         }
+        // The whole history was staged before the first byte.
         expect(source.state()).toStrictEqual({
           opened: 1,
-          pulled: 1,
-          closed: false,
+          pulled: rows,
+          closed: true,
         });
         await reader.cancel();
         throw new Error('fetch failed');
@@ -133,7 +133,7 @@ async function runRetry(
     );
     if (partial)
       expect(bodies[0]?.startsWith(Buffer.concat(first).toString())).toBe(true);
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(requestScratchEntries()).toStrictEqual(scratchBefore);
     return { text: output.join(''), completeBodies: bodies.length };
   } finally {
     globalThis.fetch = saved;
@@ -144,15 +144,10 @@ function diskReplayHistory() {
   const references: Array<WeakRef<IContent>> = [];
   let pulled = 0;
   let closed = false;
-  let release: () => void = () => {};
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
   const contents: AsyncIterable<IContent> = {
     async *[Symbol.asyncIterator]() {
       try {
         for (let index = 0; index < 512; index += 1) {
-          if (index === 1) await gate;
           const row: IContent = {
             speaker: 'human',
             blocks: [{ type: 'text', text: `${index}:${'x'.repeat(70_000)}` }],
@@ -169,16 +164,35 @@ function diskReplayHistory() {
   return {
     contents,
     references,
-    release: () => release(),
     state: () => ({ pulled, closed }),
   };
 }
 
-/** Request snapshot workspaces currently present in the process scratch root. */
-function requestSnapshots(): string[] {
+/** Staged-rows workspaces currently present in the process scratch root. */
+function stagedRowWorkspaces(): string[] {
   return readdirSync(getScratchRoot()).filter((name) =>
-    name.startsWith('responses-request-snapshot-'),
+    name.startsWith('provider-normalization-'),
   );
+}
+
+/** Scratch entries a request creates: staged rows and prompt-key files. */
+function requestScratchEntries(): string[] {
+  return readdirSync(getScratchRoot())
+    .filter(
+      (name) =>
+        name.startsWith('provider-normalization-') ||
+        name.startsWith('responses-prompt-keys-'),
+    )
+    .sort();
+}
+
+function directoryBytes(path: string): number {
+  let total = 0;
+  for (const entry of readdirSync(path, { withFileTypes: true })) {
+    const child = join(path, entry.name);
+    total += entry.isDirectory() ? directoryBytes(child) : statSync(child).size;
+  }
+  return total;
 }
 
 function retryEndpoint(
@@ -196,27 +210,16 @@ function retryEndpoint(
       if (request.body === null) throw new Error('Missing HTTP upload');
       const reader = request.body.getReader();
       const hash = createHash('sha256');
-      let prefix = '';
       for (;;) {
         const next = await reader.read();
         if (next.done) break;
         hash.update(next.value);
-        if (digests.length === 0 && prefix.length < 100) {
-          prefix += new TextDecoder().decode(next.value);
-          if (prefix.includes('0:')) {
-            await Bun.sleep(0);
-            expect(source.state().pulled).toBe(1);
-            source.release();
-          }
-        }
       }
       reader.releaseLock();
       digests.push(hash.digest('hex'));
-      const snapshots = requestSnapshots();
-      expect(snapshots).toHaveLength(1);
-      snapshotSizes.push(
-        statSync(join(getScratchRoot(), snapshots[0], 'rows')).size,
-      );
+      const staged = stagedRowWorkspaces();
+      expect(staged).toHaveLength(1);
+      snapshotSizes.push(directoryBytes(join(getScratchRoot(), staged[0])));
       retainedBytes.push((await settledHeap()) - baselineHeap);
       liveCounts.push(
         source.references.filter((reference) => reference.deref() !== undefined)
@@ -230,7 +233,7 @@ function retryEndpoint(
   return { server, digests, liveCounts, retainedBytes, snapshotSizes };
 }
 
-describe('progressive Responses upload retry', () => {
+describe('staged Responses upload retry', () => {
   it('replays an interrupted input part and emits the response once', async () => {
     expect(await runRetry(true)).toStrictEqual({
       text: 'finished',
@@ -287,15 +290,13 @@ async function replayScenario(): Promise<number[]> {
     expect(endpoint.digests).toStrictEqual([expected, expected]);
     expect(source.state()).toStrictEqual({ pulled: 512, closed: true });
     expect(output.join('')).toBe('finished');
-    expect(activeRequestBodyCount()).toBe(0);
     for (const count of endpoint.liveCounts)
       expect(count).toBeLessThanOrEqual(2);
     expect(endpoint.snapshotSizes[0]).toBeGreaterThan(9 * 1024 * 1024);
     expect(endpoint.snapshotSizes[1]).toBe(endpoint.snapshotSizes[0]);
-    expect(requestSnapshots()).toStrictEqual([]);
+    expect(requestScratchEntries()).toStrictEqual([]);
     return endpoint.retainedBytes;
   } finally {
-    source.release();
     await endpoint.server.stop(true);
     removeScratchRoot();
     if (previousTmpdir === undefined) delete process.env.TMPDIR;
@@ -319,7 +320,8 @@ describe('bounded Responses text HTTP replay', () => {
 });
 
 describe('bounded Responses text HTTP cancellation', () => {
-  it('closes a cold source when the first-row HTTP upload is cancelled', async () => {
+  it('closes the source and removes the scratch files when the HTTP upload is cancelled', async () => {
+    const scratchBefore = requestScratchEntries();
     const source = history();
     const controller = new AbortController();
     const saved = globalThis.fetch;
@@ -332,7 +334,7 @@ describe('bounded Responses text HTTP cancellation', () => {
           throw new Error('Expected upload stream');
         const reader = init.body.getReader();
         for (let pull = 0; pull < 4; pull += 1) await reader.read();
-        expect(source.state().pulled).toBe(1);
+        expect(source.state().pulled).toBe(512);
         controller.abort(new Error('cancel upload'));
         await reader.cancel();
         throw controller.signal.reason;
@@ -358,10 +360,10 @@ describe('bounded Responses text HTTP cancellation', () => {
       await expect(request.next()).rejects.toThrow('cancel upload');
       expect(source.state()).toStrictEqual({
         opened: 1,
-        pulled: 1,
+        pulled: 512,
         closed: true,
       });
-      expect(activeRequestBodyCount()).toBe(0);
+      expect(requestScratchEntries()).toStrictEqual(scratchBefore);
     } finally {
       globalThis.fetch = saved;
     }

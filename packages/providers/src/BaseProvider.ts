@@ -5,10 +5,7 @@
  */
 
 import type { RequestMediaResolutionService } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
-import {
-  readInvocationPolicyRecord,
-  readInvocationPolicyValue,
-} from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
+import { readInvocationPolicyValue } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { composeProviderOwner, type ProviderOwner } from './providerOwner.js';
 /**
  * Base provider class with authentication precedence logic
@@ -23,17 +20,15 @@ import {
 import {
   type IProvider,
   type GenerateChatOptions,
+  type MaterializedGenerateChatOptions,
   type ProviderRuntimeOptions,
   type ProviderToolset,
 } from './IProvider.js';
 import { type IModel } from './IModel.js';
 import { type IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { firstTruthyString } from './utils/falsyFallback.js';
-import {
-  isAsyncIterableContents,
-  isOneShotContentsSource,
-} from './utils/collectContents.js';
-import { type RequestScopedContents } from './utils/requestScopedBody.js';
+import { isAsyncIterableContents } from './utils/collectContents.js';
+import type { RequestRowsScope } from './utils/requestRowsLease.js';
 import { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 // @plan:PLAN-20260608-ISSUE1586.P15 — auth types from auth package
 import {
@@ -53,7 +48,9 @@ import {
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import {
   assertProviderRequestData,
+  attachDeferredHistory,
   materializeCallOptions,
+  readProviderSettings,
   isRuntimeInvocationContext,
   normalizeProviderGenerateChatOptions,
   readsRequestRowsAtTransport,
@@ -95,21 +92,16 @@ export interface BaseProviderConfig {
 export interface NormalizedGenerateChatOptions
   extends Omit<GenerateChatOptions, 'contents'> {
   /**
-   * Request-scoped materialization of the incoming history stream
-   * (issue #854, PLAN-20260917-ISSUE854.P05b3): normalization collects the
-   * stream once and provider implementations read the plain array.
-   *
-   * Providers that declare {@link BaseProvider.materializesContentsAtTransport}
-   * leave this empty on the wire path and drain
-   * {@link NormalizedGenerateChatOptions.requestContents} inside their
-   * transport's request-scoped lease instead (issue #854 P05b4).
+   * The incoming history, collected once at normalization. Empty when the
+   * provider reads the call's rows at its transport (`requestRows`).
    */
   contents: IContent[];
   /**
-   * The uncollected one-shot history source, present only when the provider
-   * materializes contents at the transport (issue #854 P05b4).
+   * The staging of a call that arrived without `requestRows` and was sent
+   * from rows kept on disk (issue #854 C2). The call's owner closes it when
+   * the request ends; the close is idempotent.
    */
-  requestContents?: RequestScopedContents;
+  stagedRows?: Pick<RequestRowsScope, 'close'>;
   userMemory?: UserMemoryInput; // @plan PLAN-20251023-STATELESS-HARDENING.P08: User memory from runtime context
   invocation: RuntimeInvocationContext;
   tools?: ProviderToolset;
@@ -690,7 +682,7 @@ export abstract class BaseProvider implements IProvider {
             return await withContext(() => iterator.return!(value));
           } finally {
             if (normalizedOptions !== undefined)
-              await this.releaseUnstartedOptions(normalizedOptions);
+              await this.releaseNormalizedOptions(normalizedOptions);
           }
         }
         return { done: true, value: undefined } as IteratorResult<IContent>;
@@ -707,7 +699,7 @@ export abstract class BaseProvider implements IProvider {
           throw error;
         } finally {
           if (normalizedOptions !== undefined)
-            await this.releaseUnstartedOptions(normalizedOptions);
+            await this.releaseNormalizedOptions(normalizedOptions);
         }
       },
       [Symbol.asyncIterator]() {
@@ -728,12 +720,15 @@ export abstract class BaseProvider implements IProvider {
   ): AsyncIterableIterator<IContent>;
 
   /**
-   * Whether this provider drains the history source inside its transport's
-   * request-scoped lease instead of at normalization (issue #854 P05b4).
-   * Default false: normalization collects, and provider implementations keep
-   * reading the plain array.
+   * Whether a call without `requestRows` may be sent from rows staged on disk;
+   * {@link BaseProvider.takesRowsRoute} decides once it is normalized (#854 C2).
    */
-  protected materializesContentsAtTransport(): boolean {
+  protected decidesRowsRoute(): boolean {
+    return false;
+  }
+
+  /** Whether this normalized call is sent from staged rows. */
+  protected takesRowsRoute(_options: NormalizedGenerateChatOptions): boolean {
     return false;
   }
 
@@ -748,6 +743,16 @@ export abstract class BaseProvider implements IProvider {
   protected async releaseUnstartedOptions(
     _options: NormalizedGenerateChatOptions,
   ): Promise<void> {}
+
+  private async releaseNormalizedOptions(
+    options: NormalizedGenerateChatOptions,
+  ): Promise<void> {
+    try {
+      await this.releaseUnstartedOptions(options);
+    } finally {
+      await options.stagedRows?.close();
+    }
+  }
 
   /**
    * Normalize caller-supplied chat options for prompt-envelope projection
@@ -817,7 +822,7 @@ export abstract class BaseProvider implements IProvider {
       } finally {
         normalized.resolved.authToken = '';
         delete normalized.resolved.authFailure;
-        await this.releaseUnstartedOptions(normalized);
+        await this.releaseNormalizedOptions(normalized);
       }
     }.call(this);
   }
@@ -834,43 +839,41 @@ export abstract class BaseProvider implements IProvider {
     maybeTools?: ProviderToolset,
     resolveAuthentication: boolean = true,
   ): Promise<NormalizedGenerateChatOptions> {
-    // P05b4: one-shot streams defer the drain to the transport's
-    // request-scoped lease; arrays and replayable streams collect eagerly.
-    const lazyWireContents =
-      this.materializesContentsAtTransport() &&
-      isOneShotContentsSource(contentsOrOptions);
     const readsRowsAtTransport =
       !isAsyncIterableContents(contentsOrOptions) &&
       readsRequestRowsAtTransport(contentsOrOptions) &&
       this.ownsRequestRowsTransport();
-    const providedOptions = await materializeCallOptions(
-      contentsOrOptions,
+    const deferContents = !readsRowsAtTransport && this.decidesRowsRoute();
+    const normalized = await this.normalizeProvidedOptions(
+      await materializeCallOptions(
+        contentsOrOptions,
+        maybeTools,
+        readsRowsAtTransport,
+        deferContents,
+      ),
       maybeTools,
-      lazyWireContents,
-      readsRowsAtTransport,
+      resolveAuthentication,
     );
+    return deferContents
+      ? attachDeferredHistory(
+          normalized,
+          contentsOrOptions,
+          this.takesRowsRoute(normalized),
+        )
+      : normalized;
+  }
+
+  private async normalizeProvidedOptions(
+    providedOptions: MaterializedGenerateChatOptions,
+    maybeTools: ProviderToolset | undefined,
+    resolveAuthentication: boolean,
+  ): Promise<NormalizedGenerateChatOptions> {
     const owner = this.owner;
     const capturedPolicy = captureInvocationEphemerals({
       ...this.providerConfig?.readConnectionPolicy?.(),
       ...owner.capturePolicy(),
     });
-    const providerSettingsSnapshot = {
-      ...readInvocationPolicyRecord(capturedPolicy[this.name]),
-    };
-    const providerSettings = {
-      temperature:
-        typeof providerSettingsSnapshot.temperature === 'number'
-          ? providerSettingsSnapshot.temperature
-          : undefined,
-      maxTokens:
-        typeof providerSettingsSnapshot.maxTokens === 'number'
-          ? providerSettingsSnapshot.maxTokens
-          : undefined,
-      streaming:
-        typeof providerSettingsSnapshot.streaming === 'boolean'
-          ? providerSettingsSnapshot.streaming
-          : undefined,
-    };
+    const providerSettings = readProviderSettings(capturedPolicy, this.name);
     const selectedPolicy = isRuntimeInvocationContext(
       providedOptions.invocation,
     )
@@ -878,23 +881,14 @@ export abstract class BaseProvider implements IProvider {
       : capturedPolicy;
     const resolvedBaseURL = this.computeBaseURL(selectedPolicy);
     const resolvedModel = this.computeModel(selectedPolicy);
-    const configuredHeaders = getProviderCustomHeaders(this.providerConfig);
-    const ephemeralsSnapshot = selectedPolicy;
     const providerDefaults = captureInvocationEphemerals(
       this.captureProviderDefaults(),
     );
     const { token: resolvedAuth, failure: authFailure } =
       await this.admitAuthentication(
         owner,
-        {
-          ...providedOptions,
-          metadata: {
-            ...providedOptions.metadata,
-            profileId:
-              providedOptions.metadata?.profileId ??
-              readInvocationPolicyValue(ephemeralsSnapshot, 'currentProfile'),
-          },
-        },
+        providedOptions,
+        selectedPolicy,
         resolvedBaseURL,
         resolveAuthentication,
       );
@@ -907,15 +901,16 @@ export abstract class BaseProvider implements IProvider {
       resolvedModel,
       resolvedBaseURL,
       providerSettings,
-      ephemeralsSnapshot,
+      ephemeralsSnapshot: selectedPolicy,
       providerDefaults,
-      configuredHeaders: configuredHeaders ?? {},
+      configuredHeaders: getProviderCustomHeaders(this.providerConfig) ?? {},
     });
   }
 
   private async admitAuthentication(
     owner: ProviderOwner,
     providedOptions: ProviderRuntimeOptions,
+    policy: Readonly<Record<string, unknown>>,
     resolvedBaseURL: string | undefined,
     resolveAuthentication: boolean,
   ): Promise<{
@@ -926,7 +921,9 @@ export abstract class BaseProvider implements IProvider {
       return { token: providedOptions.resolved?.authToken ?? '' };
     const runtimeId = providedOptions.invocation?.runtimeId;
     const { authIntent } = providedOptions.metadata ?? {};
-    const profileId = providedOptions.metadata?.profileId;
+    const profileId =
+      providedOptions.metadata?.profileId ??
+      readInvocationPolicyValue(policy, 'currentProfile');
     const authInput: Parameters<ProviderOwner['readAuthentication']>[0] = {
       includeOAuth: this.isOAuthEligible(
         providedOptions.resolved?.baseURL ?? resolvedBaseURL,

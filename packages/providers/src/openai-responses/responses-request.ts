@@ -18,8 +18,6 @@ import type { ResolvedAuthToken } from '../types/providerRuntime.js';
 
 export interface ResponsesRequest {
   readonly contents: IContent[];
-  /** Lazily-wired request-scoped contents (issue #854 P05b4). */
-  readonly requestContents?: NormalizedGenerateChatOptions['requestContents'];
   /** Pinned disk selection read at transport; present only on the source route. */
   readonly requestRows?: ProviderRequestRows;
   readonly contentCount?: number;
@@ -76,7 +74,6 @@ export function captureResponsesRequest(
   const logicalRequestId = options.metadata['logicalRequestId'];
   return Object.freeze({
     contents: options.contents,
-    requestContents: options.requestContents,
     requestRows: options.requestRows,
     contentCount: options.contentCount,
     tools: options.tools,

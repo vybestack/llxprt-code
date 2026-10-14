@@ -5,16 +5,15 @@
  */
 
 /**
- * Issue #854 step A2: the openai-responses provider, lazy route (a one-shot row stream, no requestRows), tool-heavy history.
+ * Issue #854 steps A2 and C2: the openai-responses provider with a one-shot row
+ * stream and no requestRows, tool-heavy history.
  *
- * This route builds the whole request in memory today, so its peak grows with
- * the body and the bounds tests are marked `test.failing`. They turn into
- * errors once the route is fixed; the step that fixes it must change
- * `test.failing` to `it` below. The byte checks are ordinary tests, so a
- * crashed probe cannot pass as an expected failure.
+ * The provider stages the stream on disk and sends it through the disk text
+ * route, so the peak does not grow with the body. The byte checks are
+ * ordinary tests, so a crashed probe cannot pass as a bounds failure.
  */
 
-import { describe, expect, it, test } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { SEND_PEAK_BOUND_BYTES } from './support/sendPeakMeasurement.js';
 import { shapeRun, sharedSendPeak } from './support/sendPeakRunner.js';
 
@@ -22,12 +21,11 @@ const TEST_TIMEOUT_MS = 170000;
 const measured = sharedSendPeak('openai-responses', {
   source: 'stream',
   shapes: ['tool-heavy'],
-  rounds: 1,
 });
 
-describe('peak memory while sending, the openai-responses provider, lazy route (a one-shot row stream, no requestRows), tool-heavy history', () => {
+describe('peak memory while sending, the openai-responses provider, one-shot row stream (no requestRows), tool-heavy history', () => {
   it(
-    'tool-heavy: sends the bytes the route sends today with a matching content-length',
+    'tool-heavy: sends the bytes the route sent before it moved to disk with a matching content-length',
     async () => {
       const { verdict } = shapeRun(await measured(), 'tool-heavy');
       expect(verdict.bytesMatchOracle).toBe(true);
@@ -36,7 +34,7 @@ describe('peak memory while sending, the openai-responses provider, lazy route (
     TEST_TIMEOUT_MS,
   );
 
-  test.failing(
+  it(
     'tool-heavy: grows no more than 1 MiB from a 1 MiB to an 8 MiB body and retains no more than 1 MiB',
     async () => {
       const { verdict } = shapeRun(await measured(), 'tool-heavy');

@@ -6,7 +6,8 @@ import { createProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtim
 import { captureProviderInvocation } from '@vybestack/llxprt-code-core/runtime/providerRequestContext.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
-import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
+import { readdirSync } from 'node:fs';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 
 const toolSchema = {
   type: 'object',
@@ -25,6 +26,17 @@ const toolSchema = {
   required: ['sentinel', 'nested', 'branch'],
   additionalProperties: false,
 };
+
+/** Scratch entries a request creates: staged rows and prompt-key files. */
+function requestScratchEntries(): string[] {
+  return readdirSync(getScratchRoot())
+    .filter(
+      (name) =>
+        name.startsWith('provider-normalization-') ||
+        name.startsWith('responses-prompt-keys-'),
+    )
+    .sort();
+}
 
 function rowText(index: number, padding: number): string {
   return `row-${index}:"\\\n雪🧪:${'x'.repeat(padding)}`;
@@ -79,9 +91,16 @@ function expectedBody(rows: number, padding: number): string {
 async function readWire(
   init: RequestInit | undefined,
   history: ReturnType<typeof source>,
+  rows: number,
 ): Promise<string> {
-  expect(history.state()).toStrictEqual({ pulled: 0, opens: 0, closed: false });
-  expect(activeRequestBodyCount()).toBe(1);
+  // The length is declared from the staged rows, so every row is read and the
+  // source closed before the first BODY byte.
+  expect(history.state()).toStrictEqual({
+    pulled: rows,
+    opens: 1,
+    closed: true,
+  });
+  expect(requestScratchEntries()).not.toStrictEqual([]);
   if (init?.body === null || init?.body === undefined)
     throw new Error('Missing request BODY');
   const body = new Response(init.body).body;
@@ -93,14 +112,12 @@ async function readWire(
   let row = await reader.read();
   while (!row.done) {
     maxChunk = Math.max(maxChunk, row.value.byteLength);
-    expect(activeRequestBodyCount()).toBe(1);
     chunks.push(decoder.decode(row.value, { stream: true }));
     row = await reader.read();
   }
   chunks.push(decoder.decode());
   expect(maxChunk).toBeGreaterThan(0);
   expect(maxChunk).toBeLessThanOrEqual(64 * 1024);
-  expect(activeRequestBodyCount()).toBe(1);
   return chunks.join('');
 }
 
@@ -118,6 +135,7 @@ function makeBodyRuntime() {
 async function runBody(rows: number, padding: number): Promise<number> {
   const { invocation } = makeBodyRuntime();
   const history = source(rows, padding);
+  const scratchBefore = requestScratchEntries();
   const originalFetch = globalThis.fetch;
   let wire = '';
   globalThis.fetch = Object.assign(
@@ -125,7 +143,7 @@ async function runBody(rows: number, padding: number): Promise<number> {
       _input: Parameters<typeof fetch>[0],
       init?: Parameters<typeof fetch>[1],
     ): Promise<Response> => {
-      wire = await readWire(init, history);
+      wire = await readWire(init, history, rows);
       return new Response(
         'data: {"type":"response.completed","response":{"id":"resp_independent","status":"completed","output":[]}}\n\ndata: [DONE]\n\n',
         { status: 200, headers: { 'content-type': 'text/event-stream' } },
@@ -170,7 +188,7 @@ async function runBody(rows: number, padding: number): Promise<number> {
       opens: 1,
       closed: true,
     });
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(requestScratchEntries()).toStrictEqual(scratchBefore);
     if (padding > 0)
       expect(Buffer.byteLength(wire)).toBeGreaterThan(9 * 1024 * 1024);
     return history.state().pulled;
@@ -179,7 +197,7 @@ async function runBody(rows: number, padding: number): Promise<number> {
   }
 }
 
-describe('independent real provider first-pull BODY and flat declaration sentinels', () => {
+describe('independent real provider staged BODY and flat declaration sentinels', () => {
   it.each([
     [512, 0],
     [8192, 0],

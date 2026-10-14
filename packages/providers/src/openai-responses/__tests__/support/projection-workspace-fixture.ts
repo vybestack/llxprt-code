@@ -3,15 +3,8 @@ import { readAtOf } from '../../../__tests__/requestRowsTestSupport.js';
 import { tmpdir } from 'node:os';
 import { afterEach, beforeEach, expect } from 'bun:test';
 import { createHash } from 'node:crypto';
-import {
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  writeFileSync,
-} from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { deserialize } from 'node:v8';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ProviderRequestRows } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import {
@@ -20,11 +13,14 @@ import {
 } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { createRuntimeInvocationContext } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import type { GenerateChatOptions } from '../../../IProvider.js';
+import { acquireRequestRows } from '../../../utils/requestRowsLease.js';
+import type { RequestRowsScope } from '../../../utils/requestRowsLease.js';
 import {
   projectionGate,
   projectionInstructions,
   projectionModel,
   projectionRuntime,
+  type ProjectionRuntime,
 } from './projection-ownership-fixture.js';
 export function singleAttemptOptions(
   options: GenerateChatOptions,
@@ -76,28 +72,21 @@ export function registerProjectionWorkspace(): () => string {
   return () => root;
 }
 
-/** Lists request snapshot workspaces in the process scratch root. */
+/**
+ * Lists the request's staged-rows workspaces in the process scratch root: the
+ * rows a call without `requestRows` is staged into before its body is built.
+ */
 export function snapshotWorkspaces(_fixtureRoot?: string): string[] {
-  return readdirSync(getScratchRoot()).filter((name) =>
-    name.startsWith('responses-request-snapshot-'),
-  );
+  return readdirSync(getScratchRoot())
+    .filter((name) => name.startsWith('provider-normalization-'))
+    .sort();
 }
 
-export function reopenSnapshot(
-  root: string,
-  name: string,
-): readonly IContent[] {
-  const bytes = readFileSync(join(getScratchRoot(), name, 'rows'));
-  const rows: IContent[] = [];
-  for (let offset = 0; offset < bytes.length; ) {
-    const length = bytes.readDoubleLE(offset);
-    const row: IContent = deserialize(
-      bytes.subarray(offset + 8, offset + 8 + length),
-    );
-    rows.push(row);
-    offset += 8 + length;
-  }
-  return rows;
+/** Lists the prompt-key file workspaces the request body is served from. */
+export function promptKeyWorkspaces(_fixtureRoot?: string): string[] {
+  return readdirSync(getScratchRoot())
+    .filter((name) => name.startsWith('responses-prompt-keys-'))
+    .sort();
 }
 
 export function workspaceRows(failure?: () => void): {
@@ -209,25 +198,49 @@ export function workspaceEndpoint(
   return { server, arrived, uploaded, readBody, respond, observations };
 }
 
+/**
+ * A projection runtime whose plain-rows options are staged once by the
+ * request's owner, the way the retry and logging wrappers hand rows to a
+ * provider; `closeRows` ends that ownership.
+ */
+export type WorkspaceRuntime = ProjectionRuntime & {
+  readonly closeRows: () => Promise<void>;
+};
+
 export async function withWorkspaceRuntime<T>(
   root: string,
   consume: (
-    setup: Awaited<ReturnType<typeof projectionRuntime>>,
+    setup: WorkspaceRuntime,
     http: ReturnType<typeof workspaceEndpoint>,
   ) => Promise<T>,
   retry = false,
 ): Promise<T> {
   const http = workspaceEndpoint(root, retry);
-  const setup = await projectionRuntime(
+  const runtime = await projectionRuntime(
     `http://127.0.0.1:${http.server.port}/v1`,
     root,
   );
+  const scopes: RequestRowsScope[] = [];
+  const setup: WorkspaceRuntime = {
+    ...runtime,
+    options: (rows, signal, ephemerals) => {
+      const options = runtime.options(rows, signal, ephemerals);
+      if (options.requestRows !== undefined) return options;
+      const scope = acquireRequestRows(options);
+      scopes.push(scope);
+      return scope.options;
+    },
+    closeRows: async () => {
+      await Promise.all(scopes.splice(0).map((scope) => scope.close()));
+    },
+  };
   try {
     return await consume(setup, http);
   } finally {
     http.readBody.release();
     http.respond.release();
     await http.server.stop(true);
+    await setup.closeRows();
     await setup.config.dispose();
   }
 }

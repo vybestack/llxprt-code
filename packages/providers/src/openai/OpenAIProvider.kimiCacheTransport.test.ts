@@ -688,15 +688,14 @@ function registerProviderBehavior8(): void {
       expect(wireBody).toContain('data:image/png;base64,QUJD');
     });
 
-    it('streams a one-shot contents request chunked until it is read from request rows', async () => {
+    it('streams a one-shot contents request with its Content-Length on a declared Responses HTTP transport', async () => {
       const { streamed, contentLength, wireBody } =
         await captureResponsesWire('contents');
 
       expect(streamed).toBe(true);
-      // The lazy contents-only route converts its media rows while the body
-      // streams, so its length is unknown when headers are sent. It moves to
-      // the length-declaring disk route with the no-requestRows step (C2).
-      expect(contentLength).toBeNull();
+      expect(contentLength).toBe(
+        String(new TextEncoder().encode(wireBody).byteLength),
+      );
       expect(wireBody).toBe(JSON.stringify(JSON.parse(wireBody)));
       expect(wireBody).toContain('data:image/png;base64,QUJD');
     });

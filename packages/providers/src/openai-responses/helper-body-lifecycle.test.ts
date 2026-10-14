@@ -3,7 +3,21 @@ import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { streamCallOptions } from '../__tests__/streamCallOptions.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
-import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
+import { readdirSync } from 'node:fs';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
+
+/** Scratch entries a request creates: staged rows and prompt-key files. */
+function requestScratchEntries(): string[] {
+  return readdirSync(getScratchRoot())
+    .filter(
+      (name) =>
+        name.startsWith('provider-normalization-') ||
+        name.startsWith('responses-prompt-keys-'),
+    )
+    .sort();
+}
+
+const FULL_HISTORY = { opened: 1, pulled: 512, closed: true };
 
 function historySource() {
   let opened = 0;
@@ -52,12 +66,10 @@ async function captureBody(
   init: RequestInit | undefined,
   history: ReturnType<typeof historySource>,
 ): Promise<void> {
-  expect(history.state()).toStrictEqual({
-    opened: 0,
-    pulled: 0,
-    closed: false,
-  });
-  expect(activeRequestBodyCount()).toBe(1);
+  // The length is declared from the staged rows, so the whole history is read
+  // and its source closed before the first BODY byte.
+  expect(history.state()).toStrictEqual(FULL_HISTORY);
+  expect(requestScratchEntries()).not.toStrictEqual([]);
   if (!(init?.body instanceof ReadableStream))
     throw new Error('Expected streamed BODY');
   const wire: unknown = JSON.parse(await new Response(init.body).text());
@@ -94,12 +106,8 @@ async function cancelBody(
   pulls: number,
   readAbort: boolean,
 ): Promise<never> {
-  expect(history.state()).toStrictEqual({
-    opened: 0,
-    pulled: 0,
-    closed: false,
-  });
-  expect(activeRequestBodyCount()).toBe(1);
+  expect(history.state()).toStrictEqual(FULL_HISTORY);
+  expect(requestScratchEntries()).not.toStrictEqual([]);
   if (!(init?.body instanceof ReadableStream))
     throw new Error('Expected streamed BODY');
   const reader = init.body.getReader();
@@ -111,7 +119,6 @@ async function cancelBody(
     if (pull === 3) {
       expect(new TextDecoder().decode(next.value).endsWith('x')).toBe(true);
     }
-    expect(history.state().pulled).toBe(1);
   }
   controller.abort(new DOMException('BODY cancelled', 'AbortError'));
   if (readAbort) {
@@ -120,7 +127,7 @@ async function cancelBody(
     await reader.cancel(controller.signal.reason);
     expect((await reader.read()).done).toBe(true);
   }
-  expect(history.state()).toMatchObject({ pulled: 1 });
+  expect(history.state()).toStrictEqual(FULL_HISTORY);
   expect(bytes).toBeGreaterThan(0);
   throw controller.signal.reason;
 }
@@ -131,6 +138,7 @@ async function runProvider(
   readAbort = false,
 ): Promise<ReturnType<ReturnType<typeof historySource>['state']>> {
   const history = historySource();
+  const scratchBefore = requestScratchEntries();
   const controller = new AbortController();
   const options = optionsFor(history.contents, controller.signal);
   const originalFetch = globalThis.fetch;
@@ -166,7 +174,7 @@ async function runProvider(
     } else {
       await drain();
     }
-    expect(activeRequestBodyCount()).toBe(0);
+    expect(requestScratchEntries()).toStrictEqual(scratchBefore);
     return history.state();
   } finally {
     globalThis.fetch = originalFetch;
@@ -174,31 +182,16 @@ async function runProvider(
 }
 
 describe('real Responses BODY through relocated helper', () => {
-  it('carries cold history and full flat declarations into BODY bytes', async () => {
-    expect(await runProvider(false)).toStrictEqual({
-      opened: 1,
-      pulled: 512,
-      closed: true,
-    });
+  it('stages the whole history before the BODY and carries full flat declarations into BODY bytes', async () => {
+    expect(await runProvider(false)).toStrictEqual(FULL_HISTORY);
   });
-  it('closes producer and releases the BODY lease without draining all rows on cancellation', async () => {
-    const state = await runProvider(true);
-    expect(state.opened).toBe(1);
-    expect(state.closed).toBe(true);
-    expect(state.pulled).toBeLessThan(512);
+  it('closes the producer and removes the scratch files when the upload is cancelled', async () => {
+    expect(await runProvider(true)).toStrictEqual(FULL_HISTORY);
   });
-  it('cancels inside a large input part without pulling the next history row', async () => {
-    expect(await runProvider(true, 4)).toStrictEqual({
-      opened: 1,
-      pulled: 1,
-      closed: true,
-    });
+  it('cancels inside a large input part and removes the scratch files', async () => {
+    expect(await runProvider(true, 4)).toStrictEqual(FULL_HISTORY);
   });
-  it('stops a mid-part upload on the signal without a transport reader cancel', async () => {
-    expect(await runProvider(true, 4, true)).toStrictEqual({
-      opened: 1,
-      pulled: 1,
-      closed: true,
-    });
+  it('stops a mid-part upload on the signal without a transport reader cancel and removes the scratch files', async () => {
+    expect(await runProvider(true, 4, true)).toStrictEqual(FULL_HISTORY);
   });
 });

@@ -18,6 +18,7 @@ import type { IProvider, GenerateChatOptions } from '../IProvider.js';
 import { withFetchPreconnect } from '../../../test-utils/src/fetch-test-helpers.js';
 import { OpenAIProvider } from '../openai/OpenAIProvider.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
+import { sourcePromptText } from './__tests__/support/source-prompt-text.js';
 
 function gate(): { promise: Promise<void>; open(): void } {
   let open = (): void => {};
@@ -216,10 +217,11 @@ describe('provider request ownership', () => {
         mutateOwner(settings, provider.name);
         resume.open();
         const projection = await projecting;
-        expect(JSON.stringify(projection?.finalizedProjection)).toContain(
+        if (projection === undefined) throw new Error('Expected a projection');
+        expect(await sourcePromptText(projection)).toContain(
           'original tool payload',
         );
-        await projection?.releaseIfUnsent?.();
+        await projection.releaseIfUnsent?.();
         expect(resolver.accounting().activeRequestCount).toBe(0);
       });
 

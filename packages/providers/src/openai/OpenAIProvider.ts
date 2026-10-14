@@ -66,11 +66,8 @@ import {
 } from './openaiModelPolicy.js';
 import {
   executeOpenAIResponsesRequest,
-  buildResponsesRequestContextForProjection,
-  isResponsesPdfEnabled,
   type ResponsesExecutorDeps,
 } from '../openai-responses/openAIResponsesExecutor.js';
-import { buildDiskTextResponsesContext } from '../openai-responses/responses-disk-text-projection.js';
 import type { prepareRequest } from './OpenAIRequestPreparation.js';
 import {
   OpenAIPromptEnvelopeStore,
@@ -82,14 +79,15 @@ import {
   readOpenAIMediaSupport,
   withProjectionModel,
 } from './OpenAIPromptProjectionPreparation.js';
-import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
+import { closeStagedRowsAfterFailure } from '../BaseProviderNormalization.js';
 import {
+  buildProjectionResponsesContext,
+  preparedSourceInputs,
   resolveChatMediaRequest,
   resolveResponsesSendContext,
   restorePreparedSourceInputs,
 } from './OpenAISourceRoute.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 import {
   finishMediaRequest,
@@ -189,6 +187,22 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
   /** The transport reads `requestRows` itself (issue #854 WP08). */
   protected override ownsRequestRowsTransport(): boolean {
     return true;
+  }
+
+  /**
+   * Whether a call is a Responses call depends on the resolved model and
+   * endpoint, so the history of a call without `requestRows` is attached after
+   * normalization (issue #854 C2).
+   */
+  protected override decidesRowsRoute(): boolean {
+    return true;
+  }
+
+  /** Responses calls read their rows from disk; chat still collects them. */
+  protected override takesRowsRoute(
+    options: NormalizedGenerateChatOptions,
+  ): boolean {
+    return this.resolveAdmittedTransport(options).useResponses;
   }
 
   /**
@@ -803,35 +817,28 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
         () => this.getModel() || this.getDefaultModel(),
       ),
     );
-    const useResponses = this.resolveTransport(
-      normalized.resolved.model,
-      normalized.resolved.baseURL ?? this.baseProviderConfig.baseURL,
-      normalized.invocation.ephemerals,
-    ).useResponses;
-    const request = this.captureResponsesRequest(normalized);
+    return this.prepareProjection(normalized).catch((error: unknown) =>
+      closeStagedRowsAfterFailure(normalized.stagedRows, error),
+    );
+  }
+
+  private prepareProjection(
+    normalized: NormalizedGenerateChatOptions,
+  ): Promise<PromptEnvelopeProjection> {
     return prepareOpenAIPromptProjection({
-      normalized,
-      ...(readsRequestRowsAtTransport(normalized)
-        ? {
-            sourceInputs: {
-              systemInstruction: normalized.systemInstruction,
-              tools: normalized.tools,
-            },
-          }
-        : {}),
-      useResponses,
+      ...preparedSourceInputs(normalized),
+      useResponses: this.resolveTransport(
+        normalized.resolved.model,
+        normalized.resolved.baseURL ?? this.baseProviderConfig.baseURL,
+        normalized.invocation.ephemerals,
+      ).useResponses,
       store: this.preparedPromptEnvelopes,
-      responsesPdfEnabled: isResponsesPdfEnabled(request),
       prepareResponses: () =>
-        readsRequestRowsAtTransport(normalized)
-          ? buildDiskTextResponsesContext(
-              request,
-              this.buildResponsesExecutorDeps(),
-            )
-          : buildResponsesRequestContextForProjection(
-              request,
-              this.buildResponsesExecutorDeps(),
-            ),
+        buildProjectionResponsesContext(
+          this.captureResponsesRequest(normalized),
+          this.buildResponsesExecutorDeps(),
+          normalized.stagedRows,
+        ),
       prepareChat: () =>
         prepareOpenAIChatProjection(
           normalized,
@@ -839,8 +846,6 @@ export class OpenAIProvider extends BaseProvider implements IProvider {
           this.requestMediaResolver,
           this.requestMediaBudgetBytes,
         ),
-      collectUnsupported: (preparedOptions, supports) =>
-        collectUnsupportedMedia(preparedOptions.contents, supports),
     });
   }
 

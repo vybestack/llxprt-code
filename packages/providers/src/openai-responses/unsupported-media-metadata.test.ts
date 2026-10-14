@@ -1,10 +1,11 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { describe, expect, it } from 'bun:test';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
-import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
 import { createProviderCallOptions } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import { replayableContents } from '../utils/collectContents.js';
+import { acquireRequestRows } from '../utils/requestRowsLease.js';
 import { activeRequestBodyCount } from '../utils/requestScopedBody.js';
+import { sourcePromptText as promptText } from './__tests__/support/source-prompt-text.js';
 import { OpenAIResponsesProvider } from './OpenAIResponsesProvider.js';
 
 function oneReadContents(rows: readonly IContent[]): {
@@ -39,19 +40,6 @@ function options(
     resolved: { model: 'gpt-4o', baseURL },
     ephemerals: { 'media.pdf.enabled': pdfEnabled },
   });
-}
-
-function promptText(projection: PromptEnvelopeProjection): string {
-  const finalized = projection.finalizedProjection;
-  if (
-    typeof finalized !== 'object' ||
-    finalized === null ||
-    !('promptText' in finalized) ||
-    typeof finalized.promptText !== 'string'
-  ) {
-    throw new Error('Expected ordinary finalized prompt text');
-  }
-  return finalized.promptText;
 }
 
 function mediaRows(audioData = 'AAAA'): IContent[] {
@@ -148,16 +136,11 @@ describe('ordinary Responses media projection metadata', () => {
         expect(unbranded.unsupportedMedia).toStrictEqual(
           eager.unsupportedMedia,
         );
-        expect(unbranded.finalizedProjection).toStrictEqual(
-          eager.finalizedProjection,
-        );
+        const unbrandedText = await promptText(unbranded);
+        expect(unbrandedText).toBe(await promptText(eager));
         expect(source.reads()).toBe(rows.length);
-        expect(promptText(unbranded)).not.toContain(
-          'https://example.com/audio.wav',
-        );
-        expect(promptText(unbranded)).toContain(
-          'https://example.com/image.png',
-        );
+        expect(unbrandedText).not.toContain('https://example.com/audio.wav');
+        expect(unbrandedText).toContain('https://example.com/image.png');
       } finally {
         await unbranded.releaseIfUnsent?.();
         await eager.releaseIfUnsent?.();
@@ -183,10 +166,7 @@ describe('ordinary Responses media projection counts', () => {
         small.unsupportedMedia.map((entry) => entry.mediaType),
       ).toStrictEqual(['audio', 'audio', 'video', 'unknown']);
       expect(large.unsupportedMedia).toStrictEqual(small.unsupportedMedia);
-      expect(await large.legacyEstimate()).toBe(await small.legacyEstimate());
-      expect(large.finalizedProjection).toStrictEqual(
-        small.finalizedProjection,
-      );
+      expect(await promptText(large)).toBe(await promptText(small));
     } finally {
       await small.releaseIfUnsent?.();
       await large.releaseIfUnsent?.();
@@ -204,7 +184,7 @@ describe('ordinary Responses media projection counts', () => {
     );
     try {
       expect(projection.unsupportedMedia).toStrictEqual([]);
-      expect(promptText(projection)).toContain(
+      expect(await promptText(projection)).toContain(
         'Unsupported audio in this sentence is text.',
       );
     } finally {
@@ -234,12 +214,17 @@ describe('ordinary Responses media projection transport', () => {
     );
     const rows = mediaRows();
     const source = oneReadContents(rows);
-    const call = options(
-      provider,
-      source.contents,
-      false,
-      `http://127.0.0.1:${server.port}/v1`,
+    // Callers hand the provider rows staged once by acquireRequestRows, so the
+    // projection and the send read the one-shot source a single time.
+    const scope = acquireRequestRows(
+      options(
+        provider,
+        source.contents,
+        false,
+        `http://127.0.0.1:${server.port}/v1`,
+      ),
     );
+    const call = scope.options;
     const projection = await provider.projectPromptEnvelope(call);
     try {
       expect(activeRequestBodyCount() - leasesBefore).toBe(1);
@@ -263,6 +248,7 @@ describe('ordinary Responses media projection transport', () => {
       expect(activeRequestBodyCount() - leasesBefore).toBe(0);
     } finally {
       await projection.releaseIfUnsent?.();
+      await scope.close();
       await server.stop(true);
     }
   });

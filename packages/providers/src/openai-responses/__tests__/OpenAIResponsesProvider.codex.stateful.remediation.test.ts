@@ -84,6 +84,18 @@ registerCodexRemediationCase7();
 registerCodexRemediationCase8();
 registerCodexRemediationCase9();
 
+async function sentRequestOf(
+  request: OpenAIResponsesRequest,
+  options: StreamResponseOptions,
+): Promise<OpenAIResponsesRequest> {
+  if (options.requestFrameBytes === undefined) return structuredClone(request);
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of options.requestFrameBytes()) chunks.push(chunk);
+  return JSON.parse(
+    new TextDecoder().decode(Buffer.concat(chunks)),
+  ) as OpenAIResponsesRequest;
+}
+
 /**
  * Wrapper to satisfy the RecordingTransport pattern used by the existing test
  * file. We reuse the TestableCodexProvider approach for the provider-level
@@ -97,7 +109,9 @@ class RecordingTransport implements WebSocketTransport {
     request: OpenAIResponsesRequest,
     options: StreamResponseOptions,
   ): AsyncIterableIterator<IContent> {
-    this.sentRequests.push(structuredClone(request));
+    // A disk-backed request carries its content as frame bytes; record what
+    // the socket would send.
+    this.sentRequests.push(await sentRequestOf(request, options));
     this.lastOptions = options;
     yield { speaker: 'ai', blocks: [{ type: 'text', text: 'ok' }] };
     yield {

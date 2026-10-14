@@ -83,14 +83,6 @@ export abstract class OpenAIResponsesProviderBase extends BaseProvider {
     return this.isCodexMode();
   }
 
-  /**
-   * The transport drains the one-shot history inside its request-scoped lease
-   * when the wire body is first pulled, rather than during normalization.
-   */
-  protected override materializesContentsAtTransport(): boolean {
-    return true;
-  }
-
   protected isCodexMode(): boolean {
     return this.baseProviderConfig.oauthProvider === 'codex';
   }

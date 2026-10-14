@@ -41,20 +41,13 @@ import {
   applyCodexRequestSettings,
   applyPromptCaching,
 } from './responses-request-fields.js';
-import {
-  resolveRequestContents,
-  createRequestContentsFiller,
-} from './responses-content-filler.js';
 import { dumpFinalizedRequest } from './openAIResponsesRequestDump.js';
 import { SyntheticToolResponseHandler } from '../openai/syntheticToolResponses.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ResponsesRequest } from './responses-request.js';
 import { requireAssembledSystemInstruction } from '../utils/systemPromptPlacement.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
-import {
-  acquireRequestScopedBody,
-  type RequestScopedContents,
-} from '../utils/requestScopedBody.js';
+import { acquireRequestScopedBody } from '../utils/requestScopedBody.js';
 import { isPreviousResponseNotFoundError } from './openAIResponsesStatefulRecovery.js';
 import type { DebugLogger } from '@vybestack/llxprt-code-core/debug/index.js';
 import type { OpenAIResponsesRequest } from './OpenAIResponsesTypes.js';
@@ -75,10 +68,6 @@ import {
 } from '../utils/request-media-resolution.js';
 import type { StreamResponsesParams } from './openAIResponsesHttpStream.js';
 import { streamResponses } from './openAIResponsesStreaming.js';
-import {
-  progressiveResponsesInput,
-  responsesBodyBytes,
-} from './progressive-responses-body.js';
 import type { resolveMediaCapabilities } from './openAIResponsesRequestState.js';
 import type { ResponsesSourcePrompt } from '../runtime/responses-source-serializer.js';
 import {
@@ -176,6 +165,11 @@ export interface PreparedResponsesRequestContext {
   readonly rebuildFromRows?: (
     mode: RebuildMode,
   ) => Promise<PreparedResponsesRequestContext>;
+  /**
+   * The provider staged the rows from the call's `contents`, so a send that
+   * carries `contents` instead of `requestRows` may use this context.
+   */
+  readonly rowsStagedFromContents?: boolean;
 }
 
 export interface RebuildMode {
@@ -205,7 +199,7 @@ export async function buildResponsesRequestContextForProjection(
   forceParentless = false,
 ): Promise<PreparedResponsesRequestContext> {
   const patchedContent = SyntheticToolResponseHandler.patchMessageHistory(
-    await resolveRequestContents(options),
+    options.contents,
   );
   return buildRequestContext(
     options,
@@ -222,111 +216,6 @@ interface ResponsesExecutionSetup {
   readonly invocationEphemerals: Record<string, unknown>;
   readonly requestContext: RequestContext;
   readonly dumpResult: Awaited<ReturnType<typeof dumpFinalizedRequest>>;
-  /**
-   * Lazily-wired transport only (issue #854 P05b4): fills the request context
-   * from the memoized history source. Invoked at the first pull of the lazy
-   * wire body (or before a WebSocket send), i.e. INSIDE the request-scoped
-   * lease — the transport call is already initiated at that point.
-   */
-  readonly materializeRequestBody?: () => Promise<void>;
-  readonly streamRequestBody?: () => AsyncIterable<Uint8Array>;
-}
-
-function createDeferredBodySetup(
-  options: ResponsesRequest,
-  deps: ResponsesExecutorDeps,
-  invocationEphemerals: Record<string, unknown>,
-  requestContext: RequestContext,
-  owner: RequestScopedContents,
-  abortSignal: AbortSignal | undefined,
-): Pick<
-  ResponsesExecutionSetup,
-  'materializeRequestBody' | 'streamRequestBody'
-> {
-  const materializeRequestBody = createRequestContentsFiller(
-    options,
-    deps,
-    invocationEphemerals,
-    requestContext,
-  );
-  const shape = resolveResponsesRequestShape(
-    options,
-    [],
-    invocationEphemerals,
-    deps,
-    false,
-    false,
-  );
-  return {
-    materializeRequestBody,
-    ...(!shape.stateful.enabled
-      ? {
-          streamRequestBody: () =>
-            responsesBodyBytes(
-              requestContext.request,
-              progressiveResponsesInput(
-                owner,
-                requestContext.request,
-                (rows) => buildInput(options, rows, deps),
-                materializeRequestBody,
-                abortSignal,
-              ),
-              abortSignal,
-            ),
-        }
-      : {}),
-  };
-}
-
-async function prepareDeferredResponsesExecution(
-  options: ResponsesRequest,
-  deps: ResponsesExecutorDeps,
-  invocationEphemerals: Record<string, unknown>,
-  owner: RequestScopedContents,
-  abortSignal: AbortSignal | undefined,
-): Promise<ResponsesExecutionSetup> {
-  // Issue #854 P05b4 lazily-wired transport: build a content-free shell so
-  // the history source stays unpulled while the transport initiates; the
-  // filler applies the content-derived pieces inside the request-scoped
-  // lease at the lazy body's first pull.
-  const shell = await buildRequestContext(
-    options,
-    [],
-    invocationEphemerals,
-    deps,
-  );
-  const requestContext = await resolveResponsesTransportContext(
-    options,
-    shell,
-    deps,
-  );
-  try {
-    const dumpResult = await dumpFinalizedRequest(
-      requestContext,
-      invocationEphemerals,
-      deps,
-      options,
-    );
-    return {
-      abortSignal,
-      invocationEphemerals,
-      requestContext,
-      dumpResult,
-      ...createDeferredBodySetup(
-        options,
-        deps,
-        invocationEphemerals,
-        requestContext,
-        owner,
-        abortSignal,
-      ),
-    };
-  } catch (error) {
-    return finishMediaRequest(requestContext.mediaRequest, {
-      status: 'failed',
-      error,
-    });
-  }
 }
 
 async function prepareResponsesExecution(
@@ -338,18 +227,6 @@ async function prepareResponsesExecution(
     requireAssembledSystemInstruction(options.systemInstruction);
   const abortSignal = getRequestSignal(options);
   const invocationEphemerals = resolveInvocationEphemerals(options);
-  if (
-    preparedRequestContext === undefined &&
-    options.requestContents !== undefined
-  ) {
-    return prepareDeferredResponsesExecution(
-      options,
-      deps,
-      invocationEphemerals,
-      options.requestContents,
-      abortSignal,
-    );
-  }
   const prepared =
     preparedRequestContext ??
     (await buildResponsesRequestContextForProjection(
@@ -383,26 +260,8 @@ export async function* executeOpenAIResponsesRequest(
   deps: ResponsesExecutorDeps,
   preparedRequestContext?: PreparedResponsesRequestContext,
 ): AsyncIterableIterator<IContent> {
-  try {
-    yield* executeResponsesRequest(options, deps, preparedRequestContext);
-  } finally {
-    await options.requestContents?.dispose();
-  }
-}
-
-async function* executeResponsesRequest(
-  options: ResponsesRequest,
-  deps: ResponsesExecutorDeps,
-  preparedRequestContext?: PreparedResponsesRequestContext,
-): AsyncIterableIterator<IContent> {
-  const {
-    abortSignal,
-    invocationEphemerals,
-    requestContext,
-    dumpResult,
-    materializeRequestBody,
-    streamRequestBody,
-  } = await prepareResponsesExecution(options, deps, preparedRequestContext);
+  const { abortSignal, invocationEphemerals, requestContext, dumpResult } =
+    await prepareResponsesExecution(options, deps, preparedRequestContext);
   const streamParams: StreamResponsesParams = {
     ...buildStreamParams(
       requestContext,
@@ -411,8 +270,6 @@ async function* executeResponsesRequest(
       options,
       dumpResult,
     ),
-    ...(materializeRequestBody === undefined ? {} : { materializeRequestBody }),
-    ...(streamRequestBody === undefined ? {} : { streamRequestBody }),
     rebuildStateless: async () => {
       await requestContext.mediaRequest.release();
       return buildStatelessTurn(

@@ -5,23 +5,24 @@
  */
 
 /**
- * P05b4 in-flight backpressure and cancellation (issue #854 criterion 3/5).
+ * P05b4 request rows, request cleanup (issue #854 criterion 3/5), rewritten for C2.
  *
- * Target contract: the provider consumes the history stream AT the transport,
- * so when the transport is slow the stream pull pauses (in-flight bound) and
- * an aborted request does not leak the materialized body.
- *
- * RED classification against current HEAD: the laziness/bound assertions fail
- * as a REAL BEHAVIOR GAP — BaseProvider.collectContents drains the whole
- * stream before the transport is touched, so the source is fully consumed
- * while the transport is still blocked. No implementation is fixed in this
- * session; the failures define the target.
+ * A request without `requestRows` is sent from rows staged on the request's
+ * scratch disk: every row is read, one at a time, before the first request
+ * byte, because the body length is declared (Content-Length) from the
+ * sealed files. These tests therefore no longer assert that the source is
+ * left partly unread while the transport is slow. They assert what the
+ * memory goal needs instead: no more than a bounded number of rows are alive
+ * during the read, the request body is served from the scratch files, and an
+ * aborted request leaves neither live rows nor scratch files behind.
  *
  * @plan:PLAN-20260917-ISSUE854.P05b4
  * @requirement:G6
  * @requirement:G2
  */
 
+import { gcAndSweep } from 'bun:jsc';
+import { readdirSync } from 'node:fs';
 import { collectedWithin } from '@vybestack/llxprt-code-test-utils/core/settled-heap.js';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -35,12 +36,15 @@ import {
 } from '@vybestack/llxprt-code-test-utils/core/providerCallOptions.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from '../IProvider.js';
+import { getScratchRoot } from '@vybestack/llxprt-code-core/storage/scratch-root.js';
 import { OpenAIResponsesProvider } from '../openai-responses/OpenAIResponsesProvider.js';
 import { withRequestSignal } from '../utils/abortSignal.js';
 
 const originalFetch = globalThis.fetch;
 
 const ROW_COUNT = 40;
+/** Rows allowed alive at once while the request rows are read. */
+const LIVE_ROW_BOUND = 2;
 
 function streamCallOptions(
   init: ProviderCallOptionsInit & { contents: AsyncIterable<IContent> },
@@ -51,34 +55,55 @@ function streamCallOptions(
 interface CountingSource {
   readonly stream: AsyncIterable<IContent>;
   readonly pullCount: () => number;
-  readonly fullyDrained: () => boolean;
+  /** The most rows from earlier pulls found alive when a later pull began. */
+  readonly peakLive: () => number;
+  /** Weak references to every row the source ever produced. */
+  readonly rows: () => ReadonlyArray<WeakRef<object>>;
+}
+
+async function collectGarbage(): Promise<void> {
+  await sleep(0);
+  gcAndSweep();
 }
 
 /**
- * One-shot counting source: the facade's provider-facing stream. pullCount
- * reports how many rows the consumer has PULLED so far.
+ * One-shot source that builds each row when it is pulled and keeps only weak
+ * references, so a row stays alive only while a consumer holds it. At each
+ * pull it counts the earlier rows that are still alive; `retain` turns it into
+ * a control that keeps every row, which the census must report.
  */
-function countingSource(seedText: string): CountingSource {
+function countingSource(seedText: string, retain = false): CountingSource {
   let pulled = 0;
-  const rows: IContent[] = [];
-  for (let index = 0; index < ROW_COUNT; index += 1) {
-    rows.push({
+  let peakLive = 0;
+  const refs: Array<WeakRef<object>> = [];
+  const retained: IContent[] = [];
+  const makeRow = (index: number): IContent => {
+    const row: IContent = {
       speaker: index % 2 === 0 ? 'human' : 'ai',
       blocks: [{ type: 'text', text: `${seedText}-${index}` }],
-    });
-  }
+    };
+    refs.push(new WeakRef<object>(row));
+    if (retain) retained.push(row);
+    return row;
+  };
   const stream: AsyncIterable<IContent> = {
     async *[Symbol.asyncIterator]() {
-      for (const row of rows) {
+      for (let index = 0; index < ROW_COUNT; index += 1) {
+        await collectGarbage();
+        peakLive = Math.max(
+          peakLive,
+          refs.filter((ref) => ref.deref() !== undefined).length,
+        );
         pulled += 1;
-        yield row;
+        yield makeRow(index);
       }
     },
   };
   return {
     stream,
     pullCount: () => pulled,
-    fullyDrained: () => pulled >= ROW_COUNT,
+    peakLive: () => peakLive,
+    rows: () => refs,
   };
 }
 
@@ -143,77 +168,128 @@ function cleanup(): void {
   globalThis.fetch = originalFetch;
 }
 
-describe('P05b4 transport backpressure and cancellation @plan:PLAN-20260917-ISSUE854.P05b4', () => {
+/** Scratch entries this request creates: staged rows and prompt segment files. */
+function requestScratchEntries(): string[] {
+  return readdirSync(getScratchRoot())
+    .filter(
+      (name) =>
+        name.startsWith('provider-normalization-') ||
+        name.startsWith('responses-prompt-keys-'),
+    )
+    .sort();
+}
+
+function invocationFor(harness: ProviderHarness) {
+  return createRuntimeInvocationContext({
+    runtimeId: harness.runtime.runtimeId,
+    runtimeMetadata: harness.runtime.metadata,
+    providerName: 'openai-responses',
+    ephemeralsSnapshot: { 'prompt-caching': 'off' },
+  });
+}
+
+function newProvider(): OpenAIResponsesProvider {
+  return new OpenAIResponsesProvider(
+    'test-api-key',
+    'https://api.openai.com/v1',
+  );
+}
+
+describe('P05b4 request rows are staged on disk before the body is sent @plan:PLAN-20260917-ISSUE854.P05b4', () => {
   afterEach(cleanup);
 
-  it('stream pull pauses while the transport is slow (source not fully drained before transport consumes)', async () => {
+  it('the census reports a source that retains its rows', async () => {
+    const control = countingSource('control', true);
+    for await (const row of control.stream) void row;
+    expect(control.pullCount()).toBe(ROW_COUNT);
+    expect(control.peakLive()).toBe(ROW_COUNT - 1);
+    const dropping = countingSource('dropping');
+    for await (const row of dropping.stream) void row;
+    expect(dropping.peakLive()).toBeLessThanOrEqual(LIVE_ROW_BOUND);
+  });
+
+  it('reads every row before the first request byte with a bounded number of rows alive, then serves the body from scratch files', async () => {
     const harness = makeHarness('p05b4-backpressure');
     const source = countingSource('bp');
+    const scratchBefore = requestScratchEntries();
     let releaseGate: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => {
       releaseGate = resolve;
     });
-    let fetchEntered = false;
+    const atFetch: {
+      pulled?: number;
+      scratch?: string[];
+      streamed?: boolean;
+      contentLength?: string | null;
+      bodyBytes?: number;
+    } = {};
     globalThis.fetch = Object.assign(
-      async (): Promise<Response> => {
-        fetchEntered = true;
+      async (
+        _input: Parameters<typeof fetch>[0],
+        init?: Parameters<typeof fetch>[1],
+      ): Promise<Response> => {
+        // No body byte has been read yet.
+        atFetch.pulled = source.pullCount();
+        atFetch.scratch = requestScratchEntries();
+        atFetch.streamed = init?.body instanceof ReadableStream;
+        atFetch.contentLength = new Headers(init?.headers).get(
+          'content-length',
+        );
         await gate;
+        atFetch.bodyBytes = (
+          await new Response(init?.body).arrayBuffer()
+        ).byteLength;
         return sseSuccess();
       },
       { preconnect: originalFetch.preconnect },
     );
-    const invocation = createRuntimeInvocationContext({
-      runtimeId: harness.runtime.runtimeId,
-      runtimeMetadata: harness.runtime.metadata,
-      providerName: 'openai-responses',
-      ephemeralsSnapshot: { 'prompt-caching': 'off' },
-    });
     const options = streamCallOptions({
       providerName: 'openai-responses',
       settings: harness.settings,
       config: harness.runtime.config,
       runtime: harness.runtime,
-      invocation,
+      invocation: invocationFor(harness),
       contents: source.stream,
     });
-    const provider = new OpenAIResponsesProvider(
-      'test-api-key',
-      'https://api.openai.com/v1',
-    );
     const drained = (async () => {
-      for await (const _chunk of provider.generateChatCompletion(options)) {
+      for await (const _chunk of newProvider().generateChatCompletion(
+        options,
+      )) {
         // drain
       }
     })();
-    const entered = await waitFor(() => fetchEntered, 2000);
+    const entered = await waitFor(() => atFetch.pulled !== undefined, 5000);
     expect(entered).toBe(true);
-    // TARGET CONTRACT: while the transport is blocked, only a bounded prefix
-    // of the history stream has been pulled. Current behavior drains the
-    // whole stream before the transport call, so pulled === ROW_COUNT here
-    // and this assertion fails (the documented red).
-    expect(source.fullyDrained()).toBe(false);
-    expect(source.pullCount()).toBeLessThan(ROW_COUNT);
+    // The length is declared from the sealed files, so every row is read
+    // before the transport call starts.
+    expect(atFetch.pulled).toBe(ROW_COUNT);
+    expect(source.peakLive()).toBeLessThanOrEqual(LIVE_ROW_BOUND);
+    // The body is a stream over scratch files created for this request.
+    expect(atFetch.streamed).toBe(true);
+    expect(atFetch.scratch?.length).toBeGreaterThan(scratchBefore.length);
+    expect(
+      atFetch.scratch?.some((name) =>
+        name.startsWith('responses-prompt-keys-'),
+      ),
+    ).toBe(true);
     releaseGate?.();
     await drained;
+    const { bodyBytes } = atFetch;
+    if (bodyBytes === undefined) throw new Error('Expected the sent body size');
+    expect(bodyBytes).toBeGreaterThan(0);
+    expect(Number(atFetch.contentLength)).toBe(bodyBytes);
+    expect(requestScratchEntries()).toStrictEqual(scratchBefore);
   });
 });
 
 describe('P05b4 aborted transport and released rows @plan:PLAN-20260917-ISSUE854.P05b4', () => {
   afterEach(cleanup);
 
-  it('abort during a blocked transport surfaces the abort and does not leak the materialized rows', async () => {
+  it('abort during a blocked transport surfaces the abort, keeps no row alive and removes the scratch files', async () => {
     const harness = makeHarness('p05b4-abort');
     const source = countingSource('abort');
+    const scratchBefore = requestScratchEntries();
     const controller = new AbortController();
-    const probes: Array<WeakRef<object>> = [];
-    const probeStream: AsyncIterable<IContent> = {
-      async *[Symbol.asyncIterator]() {
-        for await (const row of source.stream) {
-          probes.push(new WeakRef<object>(row));
-          yield row;
-        }
-      },
-    };
     let fetchEntered = false;
     let rejectFetch: ((reason: unknown) => void) | undefined;
     const fetchGate = new Promise<Response>((_resolve, reject) => {
@@ -233,33 +309,23 @@ describe('P05b4 aborted transport and released rows @plan:PLAN-20260917-ISSUE854
       },
       { preconnect: originalFetch.preconnect },
     );
-    const invocation = createRuntimeInvocationContext({
-      runtimeId: harness.runtime.runtimeId,
-      runtimeMetadata: harness.runtime.metadata,
-      providerName: 'openai-responses',
-      ephemeralsSnapshot: { 'prompt-caching': 'off' },
-    });
     const baseOptions = streamCallOptions({
       providerName: 'openai-responses',
       settings: harness.settings,
       config: harness.runtime.config,
       runtime: harness.runtime,
-      invocation,
-      contents: probeStream,
+      invocation: invocationFor(harness),
+      contents: source.stream,
     });
     const options = withRequestSignal(baseOptions, controller.signal);
-    const provider = new OpenAIResponsesProvider(
-      'test-api-key',
-      'https://api.openai.com/v1',
-    );
-    const settled = provider
+    const settled = newProvider()
       .generateChatCompletion(options)
       .next()
       .then(
         () => 'completed' as const,
         (error: unknown) => error,
       );
-    const entered = await waitFor(() => fetchEntered, 2000);
+    const entered = await waitFor(() => fetchEntered, 5000);
     expect(entered).toBe(true);
     controller.abort(new Error('test abort'));
     const outcome = await settled;
@@ -269,10 +335,11 @@ describe('P05b4 aborted transport and released rows @plan:PLAN-20260917-ISSUE854
       abortError.name === 'AbortError' ||
         /abort/i.test(`${abortError.name}: ${abortError.message}`),
     ).toBe(true);
-    // TARGET CONTRACT: an aborted request must not have consumed the whole
-    // history stream, and the pulled rows must be collectible after GC.
-    expect(source.fullyDrained()).toBe(false);
+    // Every row was read before the request started, and none stays alive.
+    expect(source.pullCount()).toBe(ROW_COUNT);
+    expect(source.peakLive()).toBeLessThanOrEqual(LIVE_ROW_BOUND);
     await sleep(10);
-    expect(await countRetainedAfterGc(probes)).toBe(0);
+    expect(await countRetainedAfterGc(source.rows())).toBe(0);
+    expect(requestScratchEntries()).toStrictEqual(scratchBefore);
   });
 });

@@ -7,6 +7,7 @@
 import type { CredentialResolutionError } from '@vybestack/llxprt-code-auth';
 import {
   createRuntimeInvocationContext,
+  readInvocationPolicyRecord,
   type RuntimeInvocationContext,
 } from '@vybestack/llxprt-code-core/runtime/RuntimeInvocationContext.js';
 import { MissingProviderRuntimeError } from './errors.js';
@@ -24,7 +25,11 @@ import {
   collectContents,
   isAsyncIterableContents,
 } from './utils/collectContents.js';
-import { requestScopedContents } from './utils/requestScopedBody.js';
+import {
+  acquireRequestRows,
+  type RequestRowsScope,
+} from './utils/requestRowsLease.js';
+import { providerRowsOf } from './utils/providerRows.js';
 import { copyProviderRequestOptions } from './requestAdmission.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { GenerateChatOptions } from './IProvider.js';
@@ -46,6 +51,12 @@ interface ResolvedRuntimeShape {
   authToken?: unknown;
 }
 
+interface ProviderSettings {
+  temperature?: number;
+  maxTokens?: number;
+  streaming?: boolean;
+}
+
 interface NormalizationDependencies {
   providerName: string;
   maybeTools?: ProviderToolset;
@@ -53,11 +64,7 @@ interface NormalizationDependencies {
   authFailure?: CredentialResolutionError;
   resolvedModel: string;
   resolvedBaseURL?: string;
-  providerSettings: {
-    temperature?: number;
-    maxTokens?: number;
-    streaming?: boolean;
-  };
+  providerSettings: ProviderSettings;
   ephemeralsSnapshot: Readonly<Record<string, unknown>>;
   providerDefaults: Readonly<Record<string, unknown>>;
   configuredHeaders: Readonly<Record<string, string>>;
@@ -147,48 +154,114 @@ function historySourceOf(
 }
 
 /**
+ * The prompt inputs a source-route send gives up because its prepared token
+ * already carries them (issue #854 WP08).
+ */
+function blankedSourceInputs(
+  options: Pick<GenerateChatOptions, 'promptEnvelopeTransportToken'>,
+): Pick<
+  GenerateChatOptions,
+  'systemInstruction' | 'tools' | 'userMemory' | 'systemPromptAssembler'
+> {
+  return options.promptEnvelopeTransportToken === undefined
+    ? {}
+    : {
+        systemInstruction: '',
+        tools: [],
+        userMemory: undefined,
+        systemPromptAssembler: undefined,
+      };
+}
+
+/**
  * Materialize the caller's history source for provider use (issue #854
- * P05b4). One-shot streams defer the drain to the transport's
- * request-scoped lease; arrays and replayable streams collect eagerly
- * (nothing extra is retained; pre-submission validation stays put).
+ * P05b4). A call that carries `requestRows` and a provider that reads them at
+ * its transport receive no collected history. A provider that decides its
+ * route after normalization (`deferContents`) receives the history later, from
+ * {@link attachDeferredHistory}; every other call collects eagerly here.
  */
 export async function materializeCallOptions(
   contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
   maybeTools: ProviderToolset | undefined,
-  lazyWireContents: boolean,
   readsRowsAtTransport = false,
+  deferContents = false,
 ): Promise<MaterializedGenerateChatOptions> {
   if (readsRowsAtTransport && !isAsyncIterableContents(contentsOrOptions)) {
     return {
       ...copyRequestSelection(contentsOrOptions),
       contents: [],
-      ...(contentsOrOptions.promptEnvelopeTransportToken === undefined
-        ? {}
-        : {
-            systemInstruction: '',
-            tools: [],
-            userMemory: undefined,
-            systemPromptAssembler: undefined,
-          }),
+      ...blankedSourceInputs(contentsOrOptions),
     };
   }
   const historySource = historySourceOf(contentsOrOptions);
-  const contents = lazyWireContents ? [] : await collectContents(historySource);
+  const contents = deferContents ? [] : await collectContents(historySource);
   const rows = isAsyncIterableContents(contentsOrOptions)
     ? undefined
     : contentsOrOptions.requestRows;
-  if (rows !== undefined && !lazyWireContents && contents.length !== rows.count)
+  if (rows !== undefined && !deferContents && contents.length !== rows.count)
     throw new Error('Provider request rows count changed');
-  const providedOptions: MaterializedGenerateChatOptions =
-    isAsyncIterableContents(contentsOrOptions)
-      ? { contents, tools: maybeTools }
-      : { ...copyRequestSelection(contentsOrOptions), contents };
-  if (lazyWireContents) {
-    // The memoized drain is shared by every later consumer (estimation,
-    // projection, retries) so the one-shot source is read exactly once.
-    providedOptions.requestContents = requestScopedContents(historySource);
+  return isAsyncIterableContents(contentsOrOptions)
+    ? { contents, tools: maybeTools }
+    : { ...copyRequestSelection(contentsOrOptions), contents };
+}
+
+/**
+ * Completes a call normalized with `deferContents`. When the provider takes
+ * the rows route, the history is staged on the request's scratch disk one row
+ * at a time and the call carries `requestRows`, so no history array exists;
+ * otherwise the history is collected as eager normalization would have.
+ */
+export async function attachDeferredHistory(
+  normalized: NormalizedGenerateChatOptions,
+  contentsOrOptions: AsyncIterable<IContent> | GenerateChatOptions,
+  takesRowsRoute: boolean,
+): Promise<NormalizedGenerateChatOptions> {
+  if (!takesRowsRoute) {
+    normalized.contents = await collectContents(
+      historySourceOf(contentsOrOptions),
+    );
+    return normalized;
   }
-  return providedOptions;
+  const source = isAsyncIterableContents(contentsOrOptions)
+    ? { contents: contentsOrOptions, tools: normalized.tools }
+    : contentsOrOptions;
+  const scope = acquireRequestRows(
+    source,
+    undefined,
+    getRequestSignal(normalized),
+  );
+  try {
+    const rows = await providerRowsOf(scope.options);
+    return {
+      ...normalized,
+      contents: [],
+      requestRows: { ...rows, close: () => scope.close() },
+      contentCount: rows.count,
+      stagedRows: scope,
+      ...blankedSourceInputs(normalized),
+    };
+  } catch (error) {
+    return closeStagedRowsAfterFailure(scope, error);
+  }
+}
+
+/**
+ * Closes the staging of a call that failed and rethrows the failure. A close
+ * that also fails is reported together with the primary failure.
+ */
+export async function closeStagedRowsAfterFailure(
+  staged: Pick<RequestRowsScope, 'close'> | undefined,
+  error: unknown,
+): Promise<never> {
+  try {
+    await staged?.close();
+  } catch (closeError) {
+    throw new AggregateError(
+      [error, closeError],
+      'Request failed and its staged rows could not be closed',
+    );
+  }
+  throw error;
 }
 
 export function assertProviderRequestData(
@@ -407,5 +480,23 @@ export function normalizeProviderGenerateChatOptions(
     metadata: guard.metadata,
     resolved,
     invocation,
+  };
+}
+
+/** The provider's own temperature, token limit and streaming policy. */
+export function readProviderSettings(
+  capturedPolicy: Readonly<Record<string, unknown>>,
+  providerName: string,
+): ProviderSettings {
+  const snapshot = readInvocationPolicyRecord(capturedPolicy[providerName]);
+  return {
+    temperature:
+      typeof snapshot.temperature === 'number'
+        ? snapshot.temperature
+        : undefined,
+    maxTokens:
+      typeof snapshot.maxTokens === 'number' ? snapshot.maxTokens : undefined,
+    streaming:
+      typeof snapshot.streaming === 'boolean' ? snapshot.streaming : undefined,
   };
 }

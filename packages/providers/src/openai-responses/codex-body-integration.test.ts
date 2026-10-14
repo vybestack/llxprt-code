@@ -52,7 +52,10 @@ async function transportBody(
       _input: Parameters<typeof fetch>[0],
       init?: Parameters<typeof fetch>[1],
     ): Promise<Response> => {
-      expect(pulled).toBe(0);
+      // The body length is declared from the staged rows, so the history is
+      // fully read and its source closed before the request starts.
+      expect(pulled).toBe(1);
+      expect(closed).toBe(true);
       if (init?.body === undefined || init.body === null)
         throw new Error('Missing streamed body');
       wire = await new Response(init.body).text();
@@ -135,7 +138,7 @@ describe('Codex identity and streamed BODY integration', () => {
     expect(ordinary.getDefaultModel()).toBe('o3-mini');
   });
 
-  it('keeps history cold until HTTP BODY pull, closes it, and releases the BODY lease', async () => {
+  it('reads history before the HTTP request, closes it, and serves the BODY from scratch files', async () => {
     const schema = {
       type: 'object',
       properties: { value: { type: 'integer', minimum: 0 } },

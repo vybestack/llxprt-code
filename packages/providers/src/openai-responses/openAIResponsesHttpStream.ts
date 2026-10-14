@@ -54,7 +54,6 @@ import {
   BoundedJsonBody,
   DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
   DEFAULT_STREAMING_JSON_CHUNK_BYTES,
-  LazyBoundedJsonBody,
 } from '../utils/boundedJsonBody.js';
 import { ProgressiveJsonBody } from '../utils/progressive-json-body.js';
 
@@ -89,17 +88,11 @@ export interface StreamResponsesParams {
   normalizedOptions: ResponsesRequest;
   dumpBaseId?: string;
   dumpMode?: DumpMode;
-  /**
-   * Finalizes content-dependent request fields from request-owned history.
-   * Stateful and WebSocket requests require this complete shape; stateless
-   * HTTP uploads can supply streamRequestBody for demand-driven input.
-   */
-  materializeRequestBody?: () => Promise<void>;
+  /** Disk source route: the request body bytes, read from segment files. */
   streamRequestBody?: () => AsyncIterable<Uint8Array>;
   /**
    * Disk source route: the exact byte length `streamRequestBody` yields, so
-   * the upload declares a Content-Length. Left unset when the length is not
-   * known before the first byte, which sends the request chunked.
+   * the upload declares a Content-Length.
    */
   streamRequestBodyLength?: () => Promise<number>;
   /**
@@ -114,7 +107,7 @@ export interface StreamResponsesParams {
 interface FetchStreamParams {
   responsesURL: string;
   headers: Record<string, string>;
-  body: BoundedJsonBody | LazyBoundedJsonBody | ProgressiveJsonBody;
+  body: BoundedJsonBody | ProgressiveJsonBody;
   abortSignal?: AbortSignal;
   includeThinkingInResponse: boolean;
   responsesStored: boolean;
@@ -178,19 +171,16 @@ function transportCleanupError(
 }
 
 function bodyTransportDescription(
-  body: BoundedJsonBody | LazyBoundedJsonBody | ProgressiveJsonBody,
+  body: BoundedJsonBody | ProgressiveJsonBody,
 ): string {
   if (body instanceof BoundedJsonBody)
     return `Request body transport: streaming-json, envelopeBytes=${body.byteLength}`;
-  if (body instanceof ProgressiveJsonBody)
-    return 'Request body transport: demand-driven streaming-json';
-  return 'Request body transport: lazy streaming-json (materializes at first byte pull)';
+  return `Request body transport: demand-driven streaming-json, envelopeBytes=${body.byteLength}`;
 }
 
 function contentLengthHeader(
-  body: BoundedJsonBody | LazyBoundedJsonBody | ProgressiveJsonBody,
+  body: BoundedJsonBody | ProgressiveJsonBody,
 ): Record<string, string> {
-  if (body instanceof LazyBoundedJsonBody) return {};
   return body.byteLength === undefined
     ? {}
     : { 'Content-Length': String(body.byteLength) };
@@ -205,21 +195,11 @@ export async function* streamOverHttp(
     maxChunkBytes: DEFAULT_STREAMING_JSON_CHUNK_BYTES,
     maxEnvelopeBytes: DEFAULT_HTTP_JSON_ENVELOPE_BYTES,
   };
-  // Issue #854 P05b4: with a lazily-wired request the body serializes at its
-  // first byte pull, so the fetch call initiates before the history source is
-  // drained (the in-flight backpressure contract). Content-Length is unknown
-  // at header time for a lazy body, so the request goes out chunked. The disk
-  // source route knows its length from its segment files and declares it.
-  const lazyBody =
-    params.materializeRequestBody === undefined
-      ? undefined
-      : new LazyBoundedJsonBody(async () => {
-          await params.materializeRequestBody?.();
-          return new BoundedJsonBody(params.request, bodyOptions);
-        });
+  // The disk source route knows its length from its segment files and
+  // declares it; the array route builds a bounded body.
   const body =
     params.streamRequestBody === undefined
-      ? (lazyBody ?? new BoundedJsonBody(params.request, bodyOptions))
+      ? new BoundedJsonBody(params.request, bodyOptions)
       : new ProgressiveJsonBody(
           params.streamRequestBody,
           await params.streamRequestBodyLength?.(),
@@ -377,7 +357,7 @@ async function* fetchStreamWithRetries(
 async function fetchResponse(params: {
   responsesURL: string;
   headers: Record<string, string>;
-  body: BoundedJsonBody | LazyBoundedJsonBody | ProgressiveJsonBody;
+  body: BoundedJsonBody | ProgressiveJsonBody;
   abortSignal?: AbortSignal;
 }): Promise<Response> {
   const requestBody = params.body.createStreamHandle();

@@ -18,18 +18,18 @@ import { captureResponsesRequest } from './responses-request.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { OAuthManager } from '@vybestack/llxprt-code-auth';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
-import { readsRequestRowsAtTransport } from '../BaseProviderNormalization.js';
+import {
+  closeStagedRowsAfterFailure,
+  readsRequestRowsAtTransport,
+} from '../BaseProviderNormalization.js';
 import type { PromptEnvelopeProjection } from '@vybestack/llxprt-code-core/runtime/contracts/PromptEstimation.js';
-import { projectOpenAIResponsesPromptEnvelope } from '../runtime/promptEnvelopeProjections.js';
 import { OpenAIResponsesProviderBase } from './OpenAIResponsesProviderBase.js';
 import {
   executeOpenAIResponsesRequest,
-  buildResponsesRequestContextForProjection,
-  isResponsesPdfEnabled,
+  type PreparedResponsesRequestContext,
   type ResponsesExecutorDeps,
 } from './openAIResponsesExecutor.js';
 import type { GenerateChatOptions, ProviderToolset } from '../IProvider.js';
-import { collectUnsupportedMedia } from '../utils/mediaUtils.js';
 import {
   createCodexResponsesWebSocketTransport,
   type WebSocketTransport,
@@ -72,7 +72,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
   private readonly rejectedStatefulParents = new Set<string>();
   private readonly preparedPromptEnvelopes = new WeakMap<
     object,
-    Awaited<ReturnType<typeof buildResponsesRequestContextForProjection>>
+    PreparedResponsesRequestContext
   >();
 
   constructor(
@@ -179,6 +179,7 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
       token === undefined ? undefined : this.preparedPromptEnvelopes.get(token);
     if (
       prepared?.sourcePrompt !== undefined &&
+      prepared.rowsStagedFromContents !== true &&
       !readsRequestRowsAtTransport(contentsOrOptions)
     )
       throw new Error('Source token requires its transport-read request rows');
@@ -212,6 +213,15 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
   }
 
   protected override ownsRequestRowsTransport(): boolean {
+    return true;
+  }
+
+  /** A call without `requestRows` is sent from rows staged on disk. */
+  protected override decidesRowsRoute(): boolean {
+    return true;
+  }
+
+  protected override takesRowsRoute(): boolean {
     return true;
   }
 
@@ -250,39 +260,28 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
     options: NormalizedGenerateChatOptions,
   ): AsyncIterableIterator<IContent> {
     const request = this.captureRequest(options);
-    if (readsRequestRowsAtTransport(options)) {
-      assertDiskTextShape(request, this.buildExecutorDeps());
-      if (options.promptEnvelopeTransportToken === undefined)
-        throw new Error(
-          'Explicit Responses disk text send requires a prepared projection token',
-        );
-    }
+    assertDiskTextShape(request, this.buildExecutorDeps());
+    const token = options.promptEnvelopeTransportToken;
+    if (token === undefined && options.stagedRows === undefined)
+      throw new Error(
+        'Explicit Responses disk text send requires a prepared projection token',
+      );
     const preparedRequestContext =
-      options.promptEnvelopeTransportToken === undefined
-        ? undefined
-        : this.preparedPromptEnvelopes.get(
-            options.promptEnvelopeTransportToken,
-          );
-    if (
-      preparedRequestContext?.sourcePrompt !== undefined &&
-      readsRequestRowsAtTransport(options)
-    )
+      token === undefined
+        ? await buildDiskTextResponsesContext(request, this.buildExecutorDeps())
+        : this.preparedPromptEnvelopes.get(token);
+    if (preparedRequestContext === undefined) {
+      throw new Error(
+        'Unknown OpenAI Responses prompt-envelope transport token',
+      );
+    }
+    if (token !== undefined)
       assertPreparedStatefulUnchanged(
         request,
         this.buildExecutorDeps(),
         preparedRequestContext,
       );
-    if (
-      options.promptEnvelopeTransportToken !== undefined &&
-      preparedRequestContext === undefined
-    ) {
-      throw new Error(
-        'Unknown OpenAI Responses prompt-envelope transport token',
-      );
-    }
-    if (options.promptEnvelopeTransportToken !== undefined) {
-      this.preparedPromptEnvelopes.delete(options.promptEnvelopeTransportToken);
-    }
+    if (token !== undefined) this.preparedPromptEnvelopes.delete(token);
     yield* executeOpenAIResponsesRequest(
       request,
       this.buildExecutorDeps(),
@@ -293,10 +292,19 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
   private async projectDiskTextEnvelope(
     normalized: NormalizedGenerateChatOptions,
   ): Promise<PromptEnvelopeProjection> {
-    const prepared = await buildDiskTextResponsesContext(
+    const built = await buildDiskTextResponsesContext(
       this.captureRequest(normalized),
       this.buildExecutorDeps(),
     );
+    // Rows the provider staged from `contents` stay open for the stateful
+    // rebuilds until the request's media is released.
+    const { stagedRows } = normalized;
+    const prepared: PreparedResponsesRequestContext =
+      stagedRows === undefined
+        ? built
+        : { ...built, rowsStagedFromContents: true };
+    if (stagedRows !== undefined)
+      prepared.mediaRequest.registerCleanup(() => stagedRows.close());
     const token = Object.freeze({});
     this.preparedPromptEnvelopes.set(token, prepared);
     try {
@@ -315,70 +323,17 @@ export class OpenAIResponsesProvider extends OpenAIResponsesProviderBase {
 
   /**
    * Project the finalized OpenAI Responses envelope (issue #2817) using the
-   * SAME `buildRequestContext` path transport consumes, so the estimate is
-   * derived from the exact `request` that will be sent.
+   * SAME disk text context transport consumes, so the estimate is derived
+   * from the exact request that will be sent.
    */
   async projectPromptEnvelope(
     options: GenerateChatOptions,
   ): Promise<PromptEnvelopeProjection> {
     const normalized = await this.normalizeOptionsForProjection(options);
-    if (readsRequestRowsAtTransport(normalized))
-      return this.projectDiskTextEnvelope(normalized);
-    const requestContents = normalized.requestContents;
-    const request = this.captureRequest(normalized);
-    let prepared:
-      | Awaited<ReturnType<typeof buildResponsesRequestContextForProjection>>
-      | undefined;
     try {
-      const requestContext = await buildResponsesRequestContextForProjection(
-        request,
-        this.buildExecutorDeps(),
-      );
-      prepared = requestContext;
-      requestContext.mediaRequest.registerCleanup(() =>
-        requestContents?.dispose(),
-      );
-      const transportToken = Object.freeze({});
-      const pdfEnabled = isResponsesPdfEnabled(request);
-      const projection = projectOpenAIResponsesPromptEnvelope(
-        requestContext.request,
-        {
-          transportToken,
-          unsupportedMedia: requestContext.mediaRequest.withContents(
-            (contents) =>
-              collectUnsupportedMedia(
-                contents,
-                (_block, category) =>
-                  category === 'image' || (category === 'pdf' && pdfEnabled),
-              ),
-          ),
-        },
-        requestContext.projectionContext,
-      );
-      this.preparedPromptEnvelopes.set(transportToken, requestContext);
-      return {
-        ...projection,
-        releaseIfUnsent: async () => {
-          if (!this.preparedPromptEnvelopes.delete(transportToken)) return;
-          await requestContext.mediaRequest.release();
-        },
-      };
+      return await this.projectDiskTextEnvelope(normalized);
     } catch (error) {
-      if (prepared !== undefined) {
-        return finishMediaRequest(prepared.mediaRequest, {
-          status: 'failed',
-          error,
-        });
-      }
-      try {
-        await requestContents?.dispose();
-      } catch (releaseError) {
-        throw new AggregateError(
-          [error, releaseError],
-          'Responses projection failed and request contents disposal also failed',
-        );
-      }
-      throw error;
+      return closeStagedRowsAfterFailure(normalized.stagedRows, error);
     }
   }
 }
