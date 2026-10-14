@@ -1,6 +1,7 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { mkdtempSync, rmSync } from 'node:fs';
 import { ProviderNormalizationStorage } from './provider-normalization-storage.js';
+import { StageRowLog } from './stageRowLog.js';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type { IContent } from './IContent.js';
@@ -16,6 +17,8 @@ export type ProviderBlockPointer = z.infer<typeof pointerSchema>;
 export class ProviderNormalizationDisk {
   private readonly directory: string;
   private readonly storage: ProviderNormalizationStorage;
+  /** Rows are written once and read by position, so each stage keeps them in its own log. */
+  private readonly rowLogs = new Map<string, StageRowLog>();
   private semanticBoundaryIdentity: object | undefined;
   /** One counter per stage; the row payloads stay on disk. */
   private readonly lengths = new Map<string, number>();
@@ -72,14 +75,24 @@ export class ProviderNormalizationDisk {
       }
       this.semanticBoundaryIdentity = boundary.boundaryId;
     }
-    const index = this.number(`length:${stage}`) ?? 0;
-    this.write(`row:${stage}:${index}`, row);
+    let log = this.rowLogs.get(stage);
+    if (log === undefined) {
+      log = new StageRowLog(this.directory, stage);
+      this.rowLogs.set(stage, log);
+    }
+    const index = log.append(JSON.stringify(row));
     this.setNumber(`length:${stage}`, index + 1);
     return index;
   }
 
+  private rowText(stage: string, index: number): string | undefined {
+    const log = this.rowLogs.get(stage);
+    return log?.has(index) === true ? log.read(index) : undefined;
+  }
+
   row(stage: string, index: number): IContent {
-    const row = this.read(`row:${stage}:${index}`);
+    const text = this.rowText(stage, index);
+    const row: unknown = text === undefined ? undefined : JSON.parse(text);
     if (!isSpeakerContent(row))
       throw new Error('Missing or invalid provider normalization row');
     const boundary = row.metadata?.semanticMediaPurgeBoundary;
@@ -111,6 +124,8 @@ export class ProviderNormalizationDisk {
   close(): void {
     this.semanticBoundaryIdentity = undefined;
     try {
+      for (const log of this.rowLogs.values()) log.close();
+      this.rowLogs.clear();
       this.storage.close();
     } finally {
       rmSync(this.directory, { recursive: true, force: true });
