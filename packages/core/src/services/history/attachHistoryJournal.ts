@@ -184,24 +184,58 @@ interface OwnedEntry {
   readonly origin: string | undefined;
 }
 
-/** Row origin ids sit on the journal line, not on the resolved content. */
-async function lineOrigin(
-  handle: FileHandle,
-  entry: ResolvedEntry,
-): Promise<string | undefined> {
-  const buffer = Buffer.alloc(entry.length);
-  const { bytesRead } = await handle.read(
-    buffer,
-    0,
-    entry.length,
-    entry.offset,
-  );
-  if (bytesRead !== entry.length)
-    throw new Error('History attachment source line was truncated');
-  const origin = (
-    JSON.parse(buffer.toString('utf8')) as { payload?: { origin?: unknown } }
-  ).payload?.origin;
-  return typeof origin === 'string' ? origin : undefined;
+/** The origin of one journal line, read once however many rows the line holds. */
+interface LineOrigin {
+  readonly offset: number;
+  readonly length: number;
+  readonly origin: string | undefined;
+}
+
+/**
+ * Row origin ids sit on the journal line, not on the resolved content. A
+ * semantic purge record carries the whole history in one line, so every row it
+ * resolves points at that same line; parsing the line per row would read it
+ * once per row. The reader keeps the origin of the most recent line and of the
+ * longest line seen, which is the only line that can hold many rows, so a
+ * single-row line resolved between purge rows does not evict it.
+ */
+class LineOriginReader {
+  private recent: LineOrigin | undefined;
+  private longest: LineOrigin | undefined;
+
+  constructor(private readonly handle: FileHandle) {}
+
+  async originOf(entry: ResolvedEntry): Promise<string | undefined> {
+    const known = [this.recent, this.longest].find(
+      (line) => line?.offset === entry.offset && line.length === entry.length,
+    );
+    if (known !== undefined) return known.origin;
+    const line = {
+      offset: entry.offset,
+      length: entry.length,
+      origin: await this.readOrigin(entry),
+    };
+    this.recent = line;
+    if (this.longest === undefined || line.length > this.longest.length)
+      this.longest = line;
+    return line.origin;
+  }
+
+  private async readOrigin(entry: ResolvedEntry): Promise<string | undefined> {
+    const buffer = Buffer.alloc(entry.length);
+    const { bytesRead } = await this.handle.read(
+      buffer,
+      0,
+      entry.length,
+      entry.offset,
+    );
+    if (bytesRead !== entry.length)
+      throw new Error('History attachment source line was truncated');
+    const origin = (
+      JSON.parse(buffer.toString('utf8')) as { payload?: { origin?: unknown } }
+    ).payload?.origin;
+    return typeof origin === 'string' ? origin : undefined;
+  }
 }
 
 /**
@@ -216,8 +250,9 @@ async function* ownedEntries(
 ): AsyncIterable<OwnedEntry> {
   const handle = await open(stagedPath, 'r');
   try {
+    const lines = new LineOriginReader(handle);
     for await (const entry of resolver.resolve()) {
-      const origin = await lineOrigin(handle, entry);
+      const origin = await lines.originOf(entry);
       if (accept === undefined || accept(origin))
         yield { content: entry.content, origin };
     }
