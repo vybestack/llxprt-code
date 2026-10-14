@@ -1,7 +1,14 @@
 /** Copyright 2026 Vybestack LLC. Licensed under the Apache License, Version 2.0. */
 import { afterEach, describe, expect, it } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -98,5 +105,80 @@ describe('startup sweep of dead scratch roots', () => {
 
     expect(sweepDeadScratchRoots(dir)).toStrictEqual([basename(dead)]);
     expect(existsSync(live)).toBe(true);
+  });
+});
+
+describe('sweep at scratch root creation', () => {
+  const parents: string[] = [];
+  afterEach(() => {
+    for (const parent of parents.splice(0))
+      rmSync(parent, { recursive: true, force: true });
+  });
+
+  function runChild(script: string, tmp: string) {
+    return spawnSync('bun', ['-e', script], {
+      encoding: 'utf8',
+      env: { ...process.env, TMPDIR: tmp },
+    });
+  }
+
+  it('removes dead roots and keeps live and own roots when the first root is created', () => {
+    const tmp = realpathSync(mkdtempSync(join(tmpdir(), 'scratch-startup-')));
+    parents.push(tmp);
+    const exited = spawnSync('bun', ['-e', '0']);
+    const dead = join(tmp, `llxprt-scratch-${exited.pid}-abc123`);
+    const live = join(tmp, `llxprt-scratch-${process.pid}-abc123`);
+    mkdirSync(join(dead, 'leftover'), { recursive: true });
+    mkdirSync(live);
+
+    const script = `
+      import { getScratchRoot } from ${JSON.stringify(MODULE)};
+      getScratchRoot();
+    `;
+    const result = runChild(script, tmp);
+
+    expect(result.status).toBe(0);
+    expect(existsSync(dead)).toBe(false);
+    expect(existsSync(live)).toBe(true);
+  });
+
+  it('does not sweep again when the root is recreated in the same process', () => {
+    const tmp = realpathSync(mkdtempSync(join(tmpdir(), 'scratch-once-')));
+    parents.push(tmp);
+    const exited = spawnSync('bun', ['-e', '0']);
+    const late = join(tmp, `llxprt-scratch-${exited.pid}-abc123`);
+
+    const script = `
+      import { existsSync, mkdirSync } from 'node:fs';
+      import { getScratchRoot, removeScratchRoot } from ${JSON.stringify(MODULE)};
+      getScratchRoot();
+      removeScratchRoot();
+      mkdirSync(${JSON.stringify(late)});
+      getScratchRoot();
+      process.stdout.write(String(existsSync(${JSON.stringify(late)})));
+    `;
+    const result = runChild(script, tmp);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('true');
+  });
+
+  it('keeps sweeping the remaining roots when one entry cannot be removed', () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'scratch-fail-')));
+    parents.push(dir);
+    const blocked = join(dir, 'llxprt-scratch-999998-abc123');
+    const removable = join(dir, 'llxprt-scratch-999999-abc123');
+    mkdirSync(join(blocked, 'inner'), { recursive: true });
+    mkdirSync(removable);
+    chmodSync(blocked, 0o500);
+
+    try {
+      const removed = sweepDeadScratchRoots(dir, () => false);
+      expect(removed).toStrictEqual(['llxprt-scratch-999999-abc123']);
+      expect(existsSync(removable)).toBe(false);
+      expect(existsSync(blocked)).toBe(true);
+    } finally {
+      chmodSync(blocked, 0o700);
+    }
   });
 });
