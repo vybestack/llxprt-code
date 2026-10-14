@@ -21,8 +21,20 @@ const PAGE_SLOTS = 64;
 const PAGE_BYTES = PAGE_SLOTS * WIDTH;
 /** The new table is written through at most this many resident pages. */
 const REHASH_PAGES = 64;
+/**
+ * Membership filter over every stored key. Most lookups ask about flags that
+ * were never set, and a key it rejects is certainly absent, so those lookups
+ * skip the index. Its size is fixed, so it does not grow with the history; a
+ * crowded filter only sends more lookups to the index.
+ */
+const FILTER_BITS = 1 << 21;
+const FILTER_HASHES = 3;
 /** Appended values are batched into one sequential write of at most this many bytes. */
 const VALUE_BUFFER_BYTES = 256 * 1024;
+
+function digest(key: string): Buffer {
+  return createHash('sha256').update(key).digest();
+}
 
 function transfer(
   fd: number,
@@ -124,6 +136,9 @@ export class ProviderNormalizationStorage {
   private closed = false;
   /** The last probe, kept so a write right after a read of the same key skips the search. */
   private probed: Probe | undefined;
+  /** The digest of a key the filter just rejected, so storing it next does not hash it again. */
+  private rejected: { readonly key: string; readonly hash: Buffer } | undefined;
+  private readonly filter = new Uint8Array(FILTER_BITS / 8);
 
   constructor(private readonly directory: string) {
     this.index = openSync(join(directory, 'index'), 'wx+', 0o600);
@@ -211,8 +226,26 @@ export class ProviderNormalizationStorage {
     return { key: record.key, value: record.value };
   }
 
-  private search(key: string): Found {
-    const hash = createHash('sha256').update(key).digest();
+  private filterBit(hash: Buffer, round: number): number {
+    return hash.readUInt32LE(4 + round * 4) & (FILTER_BITS - 1);
+  }
+
+  private mayContain(hash: Buffer): boolean {
+    for (let round = 0; round < FILTER_HASHES; round++) {
+      const bit = this.filterBit(hash, round);
+      if ((this.filter[bit >> 3] & (1 << (bit & 7))) === 0) return false;
+    }
+    return true;
+  }
+
+  private remember(hash: Buffer): void {
+    for (let round = 0; round < FILTER_HASHES; round++) {
+      const bit = this.filterBit(hash, round);
+      this.filter[bit >> 3] |= 1 << (bit & 7);
+    }
+  }
+
+  private search(key: string, hash: Buffer): Found {
     let slot = hash.readUInt32LE(0) % this.capacity;
     for (let scanned = 0; scanned < this.capacity; ) {
       const span = Math.min(
@@ -243,7 +276,14 @@ export class ProviderNormalizationStorage {
 
   get(key: string): unknown {
     this.check();
-    const { probe, record } = this.search(key);
+    const hash = digest(key);
+    this.probed = undefined;
+    if (!this.mayContain(hash)) {
+      this.rejected = { key, hash };
+      return undefined;
+    }
+    this.rejected = undefined;
+    const { probe, record } = this.search(key, hash);
     this.probed = { ...probe, occupied: record !== undefined };
     return record?.value;
   }
@@ -254,6 +294,8 @@ export class ProviderNormalizationStorage {
     const { hash, slot, address, occupied } =
       this.probed?.key === key ? this.probed : this.probe(key);
     this.probed = undefined;
+    this.rejected = undefined;
+    this.remember(hash);
     const bytes = Buffer.from(JSON.stringify({ key, value }));
     const start = this.end;
     this.append(bytes);
@@ -265,7 +307,8 @@ export class ProviderNormalizationStorage {
   }
 
   private probe(key: string): Probe {
-    const { probe, record } = this.search(key);
+    const hash = this.rejected?.key === key ? this.rejected.hash : digest(key);
+    const { probe, record } = this.search(key, hash);
     return { ...probe, occupied: record !== undefined };
   }
 
@@ -280,6 +323,7 @@ export class ProviderNormalizationStorage {
 
   private grow(): void {
     this.probed = undefined;
+    this.rejected = undefined;
     const capacity = this.capacity * 2;
     const nextPath = join(this.directory, 'index-next');
     const next = openSync(nextPath, 'w+', 0o600);

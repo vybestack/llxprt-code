@@ -110,19 +110,50 @@ describe('ProviderNormalizationStorage filesystem work', () => {
     expect(calls.values()).toBe(1);
   });
 
-  it('locates a key once when it is updated right after being read', () => {
+  it('locates a stored key once when it is updated right after being read', () => {
     const calls = countSyscalls();
     storage = new ProviderNormalizationStorage(directory);
     for (let key = 0; key < 1000; key++) storage.set(`k:${key}`, key);
-    expect(storage.get('k:absent')).toBeUndefined();
     calls.reset();
-    expect(storage.get('k:absent')).toBeUndefined();
+    expect(storage.get('k:5')).toBe(5);
     const lookup = calls.index();
     calls.reset();
-    expect(storage.get('k:absent')).toBeUndefined();
-    storage.set('k:absent', 1);
+    expect(storage.get('k:5')).toBe(5);
+    storage.set('k:5', 6);
     expect(calls.index()).toBe(lookup + 1);
-    expect(storage.get('k:absent')).toBe(1);
+    expect(storage.get('k:5')).toBe(6);
+  });
+
+  it('answers a lookup of a key that was never stored without touching the index', () => {
+    const calls = countSyscalls();
+    storage = new ProviderNormalizationStorage(directory);
+    for (let key = 0; key < 1000; key++) storage.set(`k:${key}`, key);
+    calls.reset();
+    for (let key = 0; key < 200; key++)
+      expect(storage.get(`absent:${key}`)).toBeUndefined();
+    expect(calls.index()).toBeLessThanOrEqual(2);
+  });
+
+  it('locates a key once when it is stored right after a lookup found nothing', () => {
+    const calls = countSyscalls();
+    storage = new ProviderNormalizationStorage(directory);
+    for (let key = 0; key < 1000; key++) storage.set(`k:${key}`, key);
+    calls.reset();
+    storage.set('fresh:direct', 1);
+    const direct = calls.index();
+    calls.reset();
+    expect(storage.get('fresh:read')).toBeUndefined();
+    storage.set('fresh:read', 1);
+    expect(calls.index()).toBeLessThanOrEqual(direct);
+    expect(storage.get('fresh:read')).toBe(1);
+    expect(storage.get('fresh:direct')).toBe(1);
+  });
+
+  it('finds every stored key after growth despite the negative-lookup filter', () => {
+    storage = new ProviderNormalizationStorage(directory);
+    for (let key = 0; key < 30_000; key++) storage.set(`k:${key}`, key);
+    for (let key = 0; key < 30_000; key += 7)
+      expect(storage.get(`k:${key}`)).toBe(key);
   });
 
   it('reports an unavailable scratch directory from verify', () => {
