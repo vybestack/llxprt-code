@@ -9,11 +9,13 @@ import { PolicyControl } from '../../../../agents/src/api/control/policyControl.
 import { createMockAgent } from '../../__tests__/mockAgent.js';
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { policiesCommand } from './policiesCommand.js';
+import { createPoliciesCommand } from './policiesCommand.js';
+import { bindPoliciesCommand } from './policiesCommandHost.js';
 import {
   type CommandContext,
   type MessageActionReturn,
   type OpenDialogActionReturn,
+  type SlashCommand,
 } from './types.js';
 import { PolicyDecision } from '@vybestack/llxprt-code-core';
 import { assertDefined } from '../../__tests__/assertions.js';
@@ -44,6 +46,7 @@ function makePolicy(): PolicyControl {
 
 describe('policiesCommand', () => {
   let mockContext: CommandContext;
+  let policiesCommand: SlashCommand;
   afterEach(async () => {
     for (const owner of ownedPolicies.splice(0)) await owner.dispose();
   });
@@ -54,6 +57,9 @@ describe('policiesCommand', () => {
         config: null,
       },
     } as unknown as CommandContext;
+    policiesCommand = createPoliciesCommand(
+      bindPoliciesCommand(() => mockContext.services.agent ?? null),
+    );
   });
 
   describe('structure', () => {

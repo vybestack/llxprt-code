@@ -4,24 +4,29 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type {
-  SlashCommand,
-  SlashCommandActionReturn,
-  CommandContext,
-} from './types.js';
+import type { UseHistoryManagerReturn } from '../hooks/useHistoryManager.js';
+import type { SlashCommand, SlashCommandActionReturn } from './types.js';
 import { CommandKind } from './types.js';
-import type { RuntimeMcpServers } from './mcpDisplay.js';
+import type { RuntimeMcpServers, McpStatusReads } from './mcpDisplay.js';
 import { buildMcpStatusMessage } from './mcpDisplay.js';
 
+export interface McpCommandOperations {
+  readonly isConfigured: boolean;
+  readonly status: McpStatusReads | null;
+  readonly reload: () => Promise<void>;
+  readonly refresh: () => Promise<void>;
+  readonly addItem: UseHistoryManagerReturn['addItem'];
+  readonly reloadCommands: () => void;
+}
+
 const getMcpStatus = async (
-  context: CommandContext,
+  operations: McpCommandOperations,
   showDescriptions: boolean,
   showSchema: boolean,
   showTips: boolean = false,
 ): Promise<SlashCommandActionReturn> => {
-  const { config } = context.services;
-  const agent = context.services.agent;
-  if (!config) {
+  const { status } = operations;
+  if (!operations.isConfigured) {
     return {
       type: 'message',
       messageType: 'error',
@@ -29,7 +34,7 @@ const getMcpStatus = async (
     };
   }
 
-  if (!agent) {
+  if (!status) {
     return {
       type: 'message',
       messageType: 'error',
@@ -38,10 +43,10 @@ const getMcpStatus = async (
   }
 
   const mcpServers: RuntimeMcpServers = Object.fromEntries(
-    agent.mcp.listServers().map((server) => [server.name, server.config]),
+    status.listServers().map((server) => [server.name, server.config]),
   );
   const serverNames = Object.keys(mcpServers);
-  const blockedMcpServers = agent.mcp.listBlockedServers();
+  const blockedMcpServers = status.listBlockedServers();
 
   if (serverNames.length === 0 && blockedMcpServers.length === 0) {
     const docsUrl =
@@ -54,7 +59,7 @@ const getMcpStatus = async (
   }
 
   const message = await buildMcpStatusMessage(
-    agent,
+    status,
     serverNames,
     mcpServers,
     blockedMcpServers,
@@ -70,140 +75,123 @@ const getMcpStatus = async (
   };
 };
 
-const listCommand: SlashCommand = {
-  name: 'list',
-  description: 'List configured MCP servers and tools',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  action: async (context: CommandContext, args: string) => {
-    const lowerCaseArgs = args.toLowerCase().split(/\s+/).filter(Boolean);
+export function createMcpCommand(
+  authCommand: SlashCommand,
+  operations: McpCommandOperations,
+): SlashCommand {
+  const listCommand: SlashCommand = {
+    name: 'list',
+    description: 'List configured MCP servers and tools',
+    kind: CommandKind.BUILT_IN,
+    autoExecute: true,
+    action: async (_invocation, args: string) => {
+      const lowerCaseArgs = args.toLowerCase().split(/\s+/).filter(Boolean);
+      const hasDesc = lowerCaseArgs.includes('desc');
+      const hasNodesc = lowerCaseArgs.includes('nodesc');
+      const showSchema = lowerCaseArgs.includes('schema');
+      const showDescriptions = !hasNodesc && (hasDesc || showSchema);
+      const showTips = lowerCaseArgs.length === 0;
+      return getMcpStatus(operations, showDescriptions, showSchema, showTips);
+    },
+  };
 
-    const hasDesc = lowerCaseArgs.includes('desc');
-    const hasNodesc = lowerCaseArgs.includes('nodesc');
-    const showSchema = lowerCaseArgs.includes('schema');
-
-    // Show descriptions if `desc` or `schema` is present,
-    // but `nodesc` takes precedence and disables them.
-    const showDescriptions = !hasNodesc && (hasDesc || showSchema);
-
-    // Show tips only when no arguments are provided
-    const showTips = lowerCaseArgs.length === 0;
-
-    return getMcpStatus(context, showDescriptions, showSchema, showTips);
-  },
-};
-
-const reloadCommand: SlashCommand = {
-  name: 'reload',
-  description: 'Reloads MCP server configuration from disk.',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  action: async (
-    context: CommandContext,
-  ): Promise<SlashCommandActionReturn> => {
-    const { config } = context.services;
-    const agent = context.services.agent;
-    if (!config) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Configuration not loaded.',
-      };
-    }
-    if (!agent) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Could not retrieve tools from the agent.',
-      };
-    }
-    context.ui.addItem(
-      {
-        type: 'info',
-        text: 'Reloading MCP configuration from disk...',
-      },
-      Date.now(),
-    );
-    try {
-      await agent.mcp.reload();
-    } catch (error) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Failed to reload MCP configuration: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      };
-    }
-    context.ui.reloadCommands();
-    return getMcpStatus(context, false, false, false);
-  },
-};
-
-const refreshCommand: SlashCommand = {
-  name: 'refresh',
-  description: 'Restarts MCP servers.',
-  kind: CommandKind.BUILT_IN,
-  autoExecute: true,
-  action: async (
-    context: CommandContext,
-  ): Promise<SlashCommandActionReturn> => {
-    const { config } = context.services;
-    const agent = context.services.agent;
-    if (!config) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Configuration not loaded.',
-      };
-    }
-
-    if (!agent) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: 'Could not retrieve tools from the agent.',
-      };
-    }
-
-    context.ui.addItem(
-      {
-        type: 'info',
-        text: 'Restarting MCP servers...',
-      },
-      Date.now(),
-    );
-
-    // agent.mcp.refresh() re-runs discovery and restarts servers; a failing
-    // server (or transport) rejects here. Surface it as a user-friendly error
-    // instead of letting it escape as an unhandled rejection.
-    try {
-      await agent.mcp.refresh();
-    } catch (error) {
-      return {
-        type: 'message',
-        messageType: 'error',
-        content: `Failed to restart MCP servers: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      };
-    }
-
-    // Reload the slash commands to reflect the changes.
-    context.ui.reloadCommands();
-
-    return getMcpStatus(context, false, false, false);
-  },
-};
-
-export function createMcpCommand(authCommand: SlashCommand): SlashCommand {
   return {
     name: 'mcp',
     description:
       'list configured MCP servers and tools, or authenticate with OAuth-enabled servers',
     kind: CommandKind.BUILT_IN,
-    subCommands: [listCommand, authCommand, reloadCommand, refreshCommand],
-    action: async (context: CommandContext, args: string) =>
-      listCommand.action!(context, args),
+    subCommands: [
+      listCommand,
+      authCommand,
+      createReloadCommand(operations),
+      createRefreshCommand(operations),
+    ],
+    action: async (invocation, args: string) =>
+      listCommand.action!(invocation, args),
+  };
+}
+
+function createReloadCommand(operations: McpCommandOperations): SlashCommand {
+  return {
+    name: 'reload',
+    description: 'Reloads MCP server configuration from disk.',
+    kind: CommandKind.BUILT_IN,
+    autoExecute: true,
+    action: async (): Promise<SlashCommandActionReturn> => {
+      if (!operations.isConfigured) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Configuration not loaded.',
+        };
+      }
+      const { status } = operations;
+      if (status === null) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Could not retrieve tools from the agent.',
+        };
+      }
+      operations.addItem(
+        { type: 'info', text: 'Reloading MCP configuration from disk...' },
+        Date.now(),
+      );
+      try {
+        await operations.reload();
+      } catch (error) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Failed to reload MCP configuration: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        };
+      }
+      operations.reloadCommands();
+      return getMcpStatus(operations, false, false, false);
+    },
+  };
+}
+function createRefreshCommand(operations: McpCommandOperations): SlashCommand {
+  return {
+    name: 'refresh',
+    description: 'Restarts MCP servers.',
+    kind: CommandKind.BUILT_IN,
+    autoExecute: true,
+    action: async (): Promise<SlashCommandActionReturn> => {
+      if (!operations.isConfigured) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Configuration not loaded.',
+        };
+      }
+      const { status } = operations;
+      if (status === null) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: 'Could not retrieve tools from the agent.',
+        };
+      }
+      operations.addItem(
+        { type: 'info', text: 'Restarting MCP servers...' },
+        Date.now(),
+      );
+      try {
+        await operations.refresh();
+      } catch (error) {
+        return {
+          type: 'message',
+          messageType: 'error',
+          content: `Failed to restart MCP servers: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        };
+      }
+      operations.reloadCommands();
+      return getMcpStatus(operations, false, false, false);
+    },
   };
 }

@@ -19,10 +19,9 @@ import { createModelCommand } from '../commands/modelCommand.js';
 import { quitCommand } from '../commands/quitCommand.js';
 import { settingsCommand } from '../commands/settingsCommand.js';
 import { themeCommand } from '../commands/themeCommand.js';
-import { policiesCommand } from '../commands/policiesCommand.js';
+import { createPoliciesCommand } from '../commands/policiesCommand.js';
 import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
 import { setupGithubCommand } from '../commands/setupGithubCommand.js';
-import { bugCommand } from '../commands/bugCommand.js';
 
 const modelCommand = createModelCommand(
   async () => {
@@ -52,7 +51,7 @@ describe('autoExecute classifications — top-level commands', () => {
     ['quit', quitCommand],
     ['settings', settingsCommand],
     ['theme', themeCommand],
-    ['policies', policiesCommand],
+    ['policies', createPoliciesCommand({ getPolicyInfo: () => null })],
   ])('/%s should have autoExecute: true', (_name, command) => {
     expect(command).toBeDefined();
     expect(command.autoExecute).toBe(true);
@@ -69,7 +68,9 @@ describe('autoExecute classifications — top-level commands', () => {
   });
 
   it('/bug should NOT have autoExecute: true', () => {
-    expect(bugCommand.autoExecute).not.toBe(true);
+    expect(createUnconfiguredBuiltinOwners().bugCommand.autoExecute).not.toBe(
+      true,
+    );
   });
 
   it('/chat should NOT have autoExecute: true', () => {
@@ -88,14 +89,14 @@ describe('autoExecute classifications — subcommands', () => {
   });
 
   it('/memory show, list, refresh should have autoExecute: true', async () => {
-    const { memoryCommand } = await import('../commands/memoryCommand.js');
+    const { memoryCommand } = createUnconfiguredBuiltinOwners();
     expect(findSub(memoryCommand, 'show')?.autoExecute).toBe(true);
     expect(findSub(memoryCommand, 'list')?.autoExecute).toBe(true);
     expect(findSub(memoryCommand, 'refresh')?.autoExecute).toBe(true);
   });
 
   it('/memory add should NOT have autoExecute: true', async () => {
-    const { memoryCommand } = await import('../commands/memoryCommand.js');
+    const { memoryCommand } = createUnconfiguredBuiltinOwners();
     expect(findSub(memoryCommand, 'add')?.autoExecute).not.toBe(true);
   });
 

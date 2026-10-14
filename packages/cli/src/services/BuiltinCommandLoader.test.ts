@@ -67,14 +67,12 @@ void vi.mock('../ui/commands/extensionsCommand.js', () => ({
   extensionsCommand: () => ({}),
 }));
 void vi.mock('../ui/commands/helpCommand.js', () => ({ helpCommand: {} }));
-void vi.mock('../ui/commands/memoryCommand.js', () => ({ memoryCommand: {} }));
 void vi.mock('../ui/commands/privacyCommand.js', () => ({
   privacyCommand: {},
 }));
 void vi.mock('../ui/commands/quitCommand.js', () => ({ quitCommand: {} }));
 void vi.mock('../ui/commands/statsCommand.js', () => ({ statsCommand: {} }));
 void vi.mock('../ui/commands/themeCommand.js', () => ({ themeCommand: {} }));
-void vi.mock('../ui/commands/toolsCommand.js', () => ({ toolsCommand: {} }));
 void vi.mock('../ui/commands/skillsCommand.js', () => ({
   skillsCommand: { name: 'skills' },
 }));

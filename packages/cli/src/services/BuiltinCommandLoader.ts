@@ -18,18 +18,16 @@ import type {
 } from '../ui/cliUiRuntime.js';
 import type { ICommandLoader } from './types.js';
 import { aboutCommand } from '../ui/commands/aboutCommand.js';
-import { bugCommand } from '../ui/commands/bugCommand.js';
 import { clearCommand } from '../ui/commands/clearCommand.js';
 import { docsCommand } from '../ui/commands/docsCommand.js';
-import { directoryCommand } from '../ui/commands/directoryCommand.js';
+
 import { editorCommand } from '../ui/commands/editorCommand.js';
 import { extensionsCommand } from '../ui/commands/extensionsCommand.js';
 import { helpCommand } from '../ui/commands/helpCommand.js';
 import { ideCommand } from '../ui/commands/ideCommand.js';
-import { imageCommand } from '../ui/commands/imageCommand.js';
+
 import { initCommand } from '../ui/commands/initCommand.js';
 
-import { memoryCommand } from '../ui/commands/memoryCommand.js';
 import { privacyCommand } from '../ui/commands/privacyCommand.js';
 import { loggingCommand } from '../ui/commands/loggingCommand.js';
 import { uiprofileCommand } from '../ui/commands/uiprofileCommand.js';
@@ -37,7 +35,7 @@ import { mouseCommand } from '../ui/commands/mouseCommand.js';
 import { quitCommand } from '../ui/commands/quitCommand.js';
 import { statsCommand } from '../ui/commands/statsCommand.js';
 import { themeCommand } from '../ui/commands/themeCommand.js';
-import { toolsCommand } from '../ui/commands/toolsCommand.js';
+
 import { skillsCommand } from '../ui/commands/skillsCommand.js';
 import { settingsCommand } from '../ui/commands/settingsCommand.js';
 import { vimCommand } from '../ui/commands/vimCommand.js';
@@ -47,7 +45,6 @@ import { terminalSetupCommand } from '../ui/commands/terminalSetupCommand.js';
 import { debugCommand } from '../ui/commands/debugCommands.js';
 import { subagentCommand } from '../ui/commands/subagentCommand.js';
 import { permissionsCommand } from '../ui/commands/permissionsCommand.js';
-import { policiesCommand } from '../ui/commands/policiesCommand.js';
 
 import { todoCommand } from '../ui/commands/todoCommand.js';
 import { setupCommand } from '../ui/commands/setupCommand.js';
@@ -67,6 +64,12 @@ export interface BuiltinCommandOwners {
   readonly toolFormatCommand: SlashCommand;
   readonly setCommand: SlashCommand;
   readonly providerCommand: SlashCommand;
+  readonly toolsCommand: SlashCommand;
+  readonly directoryCommand: SlashCommand;
+  readonly memoryCommand: SlashCommand;
+  readonly imageCommand: SlashCommand;
+  readonly bugCommand: SlashCommand;
+  readonly policiesCommand: SlashCommand;
   readonly keyCommand: SlashCommand;
   readonly keyfileCommand: SlashCommand;
   readonly baseurlCommand: SlashCommand;
@@ -146,21 +149,21 @@ export class BuiltinCommandLoader implements ICommandLoader {
     const allDefinitions: Array<SlashCommand | null> = [
       aboutCommand,
       this.owners.authCommand,
-      bugCommand,
+      this.owners.bugCommand,
       this.owners.chatCommand,
       clearCommand,
       this.owners.compressCommand,
       this.owners.copyCommand,
       docsCommand,
-      directoryCommand,
+      this.owners.directoryCommand,
       editorCommand,
       extensionsCommand,
       helpCommand,
       ideCommand(this.config),
-      imageCommand,
+      this.owners.imageCommand,
       initCommand,
       this.owners.mcpCommand,
-      memoryCommand,
+      this.owners.memoryCommand,
       privacyCommand,
       loggingCommand,
       mouseCommand,
@@ -170,7 +173,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       this.owners.quotaCommand,
       statsCommand,
       themeCommand,
-      toolsCommand,
+      this.owners.toolsCommand,
       ...this.resolveSkillsCommand(),
       settingsCommand,
       vimCommand,
@@ -191,7 +194,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       this.owners.logoutCommand,
       subagentCommand,
       permissionsCommand,
-      policiesCommand,
+      this.owners.policiesCommand,
       this.owners.dumpcontextCommand,
       todoCommand,
       setupCommand,

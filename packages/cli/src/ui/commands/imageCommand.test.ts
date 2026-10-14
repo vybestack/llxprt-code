@@ -6,10 +6,11 @@
 
 import { waitFor } from '@vybestack/llxprt-code-test-utils';
 import { describe, it, expect, vi } from 'bun:test';
-import { imageCommand } from './imageCommand.js';
+import { createImageCommand } from './imageCommand.js';
+import { bindImageCommand } from './imageCommandHost.js';
 import { assertTruthy } from '../../__tests__/assertions.js';
 import { MessageType } from '../types.js';
-import type { CommandContext } from './types.js';
+import type { CommandContext, SlashCommand } from './types.js';
 
 function completeImageOperation(signal: AbortSignal): {
   absoluteOutputPath: string;
@@ -66,6 +67,22 @@ function makeMockContext(overrides?: {
   } as unknown as CommandContext;
 }
 
+function createTestCommand(context: CommandContext): SlashCommand {
+  return createImageCommand(
+    bindImageCommand(
+      context.services.config,
+      context.services.agent,
+      context.ui.addItem,
+    ),
+  );
+}
+
+const imageCommand = createImageCommand({
+  workspaceRoot: undefined,
+  runImageOperation: undefined,
+  addItem: () => 0,
+});
+
 describe('imageCommand', () => {
   it('has name "image" and is a built-in command', () => {
     expect(imageCommand.name).toBe('image');
@@ -87,7 +104,7 @@ describe('imageCommand', () => {
 
   it('shows an error item for malformed input (missing prompt)', async () => {
     const ctx = makeMockContext();
-    await imageCommand.action?.(ctx, 'out.png');
+    await createTestCommand(ctx).action?.(ctx, 'out.png');
     const calls = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls;
     const errorCall = calls.find(
       (c) => (c[0] as { type: string }).type === MessageType.ERROR,
@@ -98,7 +115,7 @@ describe('imageCommand', () => {
 
   it('shows an error item for -- separator', async () => {
     const ctx = makeMockContext();
-    await imageCommand.action?.(ctx, '-- out.png "prompt"');
+    await createTestCommand(ctx).action?.(ctx, '-- out.png "prompt"');
     const calls = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls;
     const errorCall = calls.find(
       (c) => (c[0] as { type: string }).type === MessageType.ERROR,
@@ -111,7 +128,7 @@ describe('imageCommand', () => {
 
   it('reports unavailable when no image runner is configured', async () => {
     const ctx = makeMockContext();
-    await imageCommand.action?.(ctx, 'out.png "draw a cat"');
+    await createTestCommand(ctx).action?.(ctx, 'out.png "draw a cat"');
     const calls = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls;
     const errorCall = calls.find(
       (c) => (c[0] as { type: string }).type === MessageType.ERROR,
@@ -125,7 +142,7 @@ describe('imageCommand', () => {
       absoluteOutputPath: '/workspace/out.png',
     });
     const ctx = makeMockContext({ runImageOperation: runner });
-    await imageCommand.action?.(ctx, 'out.png "draw a cat"');
+    await createTestCommand(ctx).action?.(ctx, 'out.png "draw a cat"');
     expect(runner).toHaveBeenCalledWith({
       prompt: 'draw a cat',
       outputPath: 'out.png',
@@ -148,7 +165,10 @@ describe('imageCommand', () => {
       absoluteOutputPath: '/workspace/fixed.png',
     });
     const ctx = makeMockContext({ runImageOperation: runner });
-    await imageCommand.action?.(ctx, 'fixed.png original.png "fix the text"');
+    await createTestCommand(ctx).action?.(
+      ctx,
+      'fixed.png original.png "fix the text"',
+    );
     expect(runner).toHaveBeenCalledWith({
       prompt: 'fix the text',
       outputPath: 'fixed.png',
@@ -160,7 +180,7 @@ describe('imageCommand', () => {
   it('displays an error when the runner throws', async () => {
     const runner = vi.fn().mockRejectedValue(new Error('provider down'));
     const ctx = makeMockContext({ runImageOperation: runner });
-    await imageCommand.action?.(ctx, 'out.png "draw a cat"');
+    await createTestCommand(ctx).action?.(ctx, 'out.png "draw a cat"');
     const calls = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls;
     const errorCall = calls.find(
       (c) => (c[0] as { type: string }).type === MessageType.ERROR,
@@ -195,7 +215,7 @@ describe('imageCommand', () => {
       runImageOperation: runner,
       signal: invocation.signal,
     });
-    const actionPromise = imageCommand.action?.(
+    const actionPromise = createTestCommand(ctx).action?.(
       ctx,
       'out.png "draw a cat"',
     ) as Promise<void>;
@@ -225,7 +245,7 @@ describe('imageCommand', () => {
       signal: invocation.signal,
     });
 
-    await imageCommand.action?.(ctx, 'out.png "draw a cat"');
+    await createTestCommand(ctx).action?.(ctx, 'out.png "draw a cat"');
 
     expect(
       (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls,
@@ -249,7 +269,10 @@ describe('imageCommand', () => {
       signal: invocation.signal,
     });
 
-    const pending = imageCommand.action?.(ctx, 'out.png "draw a cat"');
+    const pending = createTestCommand(ctx).action?.(
+      ctx,
+      'out.png "draw a cat"',
+    );
     await waitFor(() => expect(runner).toHaveBeenCalled());
     invocation.abort();
     releaseRunner();
@@ -281,7 +304,10 @@ describe('imageCommand', () => {
     const keepAlive = () => {};
     process.on('SIGINT', keepAlive);
     try {
-      const pending = imageCommand.action?.(ctx, 'out.png "draw a cat"');
+      const pending = createTestCommand(ctx).action?.(
+        ctx,
+        'out.png "draw a cat"',
+      );
       await waitFor(() => expect(capturedSignal).toBeDefined());
       process.emit('SIGINT');
       releaseRunner();
@@ -304,7 +330,7 @@ describe('imageCommand', () => {
       absoluteOutputPath: '/workspace/out.png',
     });
     const ctx = makeMockContext({ runImageOperation: runner });
-    await imageCommand.action?.(ctx, 'out.png "draw a cat"');
+    await createTestCommand(ctx).action?.(ctx, 'out.png "draw a cat"');
     expect(runner).toHaveBeenCalledTimes(1);
     const calls = (ctx.ui.addItem as ReturnType<typeof vi.fn>).mock.calls;
     const infoCall = calls.find(

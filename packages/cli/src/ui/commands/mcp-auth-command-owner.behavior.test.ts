@@ -14,6 +14,7 @@ import {
   type McpAuthCommandOperations,
 } from './mcpAuth.js';
 import { createMcpCommand } from './mcpCommand.js';
+import { bindMcpCommand } from './mcpCommandHost.js';
 import type { SlashCommand } from './types.js';
 
 interface McpOwner {
@@ -34,7 +35,15 @@ function mcpOwner(serverName: string): McpOwner {
   };
   return {
     authenticated,
-    command: createMcpCommand(createMcpAuthCommand(operations)),
+    command: createMcpCommand(
+      createMcpAuthCommand(operations),
+      bindMcpCommand(
+        null,
+        null,
+        () => 0,
+        () => {},
+      ),
+    ),
   };
 }
 

@@ -31,6 +31,14 @@ import { createContinueCommand } from '../ui/commands/continueCommand.js';
 import { createCopyCommand } from '../ui/commands/copyCommand.js';
 import { createCompressCommand } from '../ui/commands/compressCommand.js';
 import { createDumpcontextCommand } from '../ui/commands/dumpcontextCommand.js';
+import { createToolsCommand } from '../ui/commands/toolsCommand.js';
+import { createDirectoryCommand } from '../ui/commands/directoryCommand.js';
+import { createMemoryCommand } from '../ui/commands/memoryCommand.js';
+import { createImageCommand } from '../ui/commands/imageCommand.js';
+import { createBugCommand } from '../ui/commands/bugCommand.js';
+import { bindBugCommand } from '../ui/commands/bugCommandHost.js';
+import { createPoliciesCommand } from '../ui/commands/policiesCommand.js';
+import { bindMcpCommand } from '../ui/commands/mcpCommandHost.js';
 import {
   bindCopyCommandClipboard,
   bindCopyCommandHistoryRead,
@@ -196,6 +204,12 @@ export function createUnconfiguredCredentialCommands(): Pick<
         authenticationRequiredServers: async () => [],
         authenticate: unavailable,
       }),
+      bindMcpCommand(
+        null,
+        null,
+        () => 0,
+        () => {},
+      ),
     ),
     toolkeyCommand: createToolkeyCommand({
       getKey: unavailable,
@@ -276,6 +290,15 @@ export function createUnconfiguredBuiltinOwners(): BuiltinCommandOwners {
       ),
       bindCopyCommandClipboard(),
     ),
+    toolsCommand: createToolsCommand(null, () => {}),
+    ...unconfiguredWorkspaceCommands(),
+    imageCommand: createImageCommand({
+      workspaceRoot: undefined,
+      runImageOperation: undefined,
+      addItem: () => 0,
+    }),
+    bugCommand: createBugCommand(bindBugCommand(null, null, () => 0)),
+    policiesCommand: createPoliciesCommand({ getPolicyInfo: () => null }),
     continueCommand: createContinueCommand({
       isInteractive: () => false,
       listContinueTargets: async () => [],
@@ -296,5 +319,38 @@ export function createUnconfiguredBuiltinOwners(): BuiltinCommandOwners {
     providerCommand: createUnconfiguredProviderCommand(),
     profileCommand: createUnconfiguredProfileCommand(),
     ...createUnconfiguredCredentialCommands(),
+  };
+}
+
+function unconfiguredWorkspaceCommands() {
+  return {
+    directoryCommand: createDirectoryCommand({
+      isConfigured: false,
+      addDirectory: () => {
+        throw new Error('Directory runtime is unavailable');
+      },
+      directories: () => [],
+      getFolderTrust: () => false,
+      isRestrictiveSandbox: () => false,
+      refreshMemory: async () => ({ memoryContent: '', fileCount: 0 }),
+      shouldLoadMemoryFromIncludeDirectories: () => false,
+      addItem: () => {},
+      setMemoryFileCount: () => {},
+      addDirectoryContext: async () => {},
+      recordDirectoriesChanged: () => {},
+    }),
+    memoryCommand: createMemoryCommand({
+      isConfigured: false,
+      getUserMemory: () => '',
+      getLlxprtMdFileCount: () => 0,
+      getLlxprtMdFilePaths: () => [],
+      refreshMemory: async () => ({ memoryContent: '', fileCount: 0 }),
+      updateSystemInstruction: async () => {},
+      addItem: () => 0,
+      setMemoryFileCount: () => {},
+      saveCoreMemory: async () => {
+        throw new Error('Core memory storage is unavailable.');
+      },
+    }),
   };
 }

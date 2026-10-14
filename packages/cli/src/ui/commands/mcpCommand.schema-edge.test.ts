@@ -7,9 +7,7 @@ import { unsupportedApprovalPolicy } from '../../../../mcp/src/client/test-suppo
 
 import { vi, describe, it, expect, beforeEach } from 'bun:test';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { createUnconfiguredBuiltinOwners } from '../../__tests__/unconfigured-model-command.js';
-
-const { mcpCommand } = createUnconfiguredBuiltinOwners();
+import { registerMcpCommand } from '../../__tests__/credential-command-test-owner.js';
 import { MCPServerStatus, DiscoveredMCPTool } from '@vybestack/llxprt-code-mcp';
 import type { MessageActionReturn } from './types.js';
 import type {
@@ -201,7 +199,10 @@ describe('mcpCommand', () => {
         ui: { reloadCommands: vi.fn() },
       });
 
-      const result = await mcpCommand.action!(testContext, 'schema');
+      const result = await registerMcpCommand(testContext).action!(
+        testContext,
+        'schema',
+      );
       assertMessageAction(result);
       const message = result.content;
 
@@ -246,7 +247,10 @@ describe('mcpCommand', () => {
         ui: { reloadCommands: vi.fn() },
       });
 
-      const result = await mcpCommand.action!(testContext, 'schema');
+      const result = await registerMcpCommand(testContext).action!(
+        testContext,
+        'schema',
+      );
       assertMessageAction(result);
       const message = result.content;
 
@@ -281,7 +285,10 @@ describe('mcpCommand', () => {
     });
 
     it('should not treat the removed "descriptions" spelling as "desc"', async () => {
-      const result = await mcpCommand.action!(mockContext, 'descriptions');
+      const result = await registerMcpCommand(mockContext).action!(
+        mockContext,
+        'descriptions',
+      );
       assertMessageAction(result);
       expect(result.content).not.toContain('Test tool');
       expect(result.content).not.toContain('Server description');
@@ -290,7 +297,10 @@ describe('mcpCommand', () => {
     });
 
     it('should not treat the removed "nodescriptions" spelling as "nodesc"', async () => {
-      const result = await mcpCommand.action!(mockContext, 'nodescriptions');
+      const result = await registerMcpCommand(mockContext).action!(
+        mockContext,
+        'nodescriptions',
+      );
       assertMessageAction(result);
       expect(result.content).not.toContain('Test tool');
       expect(result.content).not.toContain('Server description');
@@ -299,14 +309,20 @@ describe('mcpCommand', () => {
     });
 
     it('should handle mixed case arguments', async () => {
-      const result = await mcpCommand.action!(mockContext, 'DESC');
+      const result = await registerMcpCommand(mockContext).action!(
+        mockContext,
+        'DESC',
+      );
       assertMessageAction(result);
       expect(result.content).toContain('Test tool');
       expect(result.content).toContain('Server description');
     });
 
     it('should handle multiple arguments - "schema desc"', async () => {
-      const result = await mcpCommand.action!(mockContext, 'schema desc');
+      const result = await registerMcpCommand(mockContext).action!(
+        mockContext,
+        'schema desc',
+      );
       assertMessageAction(result);
       expect(result.content).toContain('Test tool');
       expect(result.content).toContain('Server description');
@@ -314,7 +330,10 @@ describe('mcpCommand', () => {
     });
 
     it('should handle multiple arguments - "desc schema"', async () => {
-      const result = await mcpCommand.action!(mockContext, 'desc schema');
+      const result = await registerMcpCommand(mockContext).action!(
+        mockContext,
+        'desc schema',
+      );
       assertMessageAction(result);
       expect(result.content).toContain('Test tool');
       expect(result.content).toContain('Server description');
@@ -322,7 +341,10 @@ describe('mcpCommand', () => {
     });
 
     it('should handle "schema" alone showing descriptions', async () => {
-      const result = await mcpCommand.action!(mockContext, 'schema');
+      const result = await registerMcpCommand(mockContext).action!(
+        mockContext,
+        'schema',
+      );
       assertMessageAction(result);
       expect(result.content).toContain('Test tool');
       expect(result.content).toContain('Server description');
@@ -330,7 +352,10 @@ describe('mcpCommand', () => {
     });
 
     it('should handle "nodesc" overriding "schema" - "schema nodesc"', async () => {
-      const result = await mcpCommand.action!(mockContext, 'schema nodesc');
+      const result = await registerMcpCommand(mockContext).action!(
+        mockContext,
+        'schema nodesc',
+      );
       assertMessageAction(result);
       expect(result.content).not.toContain('Test tool');
       expect(result.content).not.toContain('Server description');
@@ -339,7 +364,10 @@ describe('mcpCommand', () => {
     });
 
     it('should handle "nodesc" overriding "desc" - "desc nodesc"', async () => {
-      const result = await mcpCommand.action!(mockContext, 'desc nodesc');
+      const result = await registerMcpCommand(mockContext).action!(
+        mockContext,
+        'desc nodesc',
+      );
       assertMessageAction(result);
       expect(result.content).not.toContain('Test tool');
       expect(result.content).not.toContain('Server description');
@@ -348,7 +376,7 @@ describe('mcpCommand', () => {
     });
 
     it('should handle "nodesc" overriding both "desc" and "schema" - "desc schema nodesc"', async () => {
-      const result = await mcpCommand.action!(
+      const result = await registerMcpCommand(mockContext).action!(
         mockContext,
         'desc schema nodesc',
       );
@@ -360,7 +388,10 @@ describe('mcpCommand', () => {
     });
 
     it('should handle extra whitespace in arguments', async () => {
-      const result = await mcpCommand.action!(mockContext, '  desc   schema  ');
+      const result = await registerMcpCommand(mockContext).action!(
+        mockContext,
+        '  desc   schema  ',
+      );
       assertMessageAction(result);
       expect(result.content).toContain('Test tool');
       expect(result.content).toContain('Server description');
@@ -368,7 +399,10 @@ describe('mcpCommand', () => {
     });
 
     it('should handle empty arguments gracefully', async () => {
-      const result = await mcpCommand.action!(mockContext, '');
+      const result = await registerMcpCommand(mockContext).action!(
+        mockContext,
+        '',
+      );
       assertMessageAction(result);
       expect(result.content).not.toContain('Test tool');
       expect(result.content).not.toContain('Server description');
@@ -377,7 +411,10 @@ describe('mcpCommand', () => {
     });
 
     it('should handle unknown arguments gracefully', async () => {
-      const result = await mcpCommand.action!(mockContext, 'unknown arg');
+      const result = await registerMcpCommand(mockContext).action!(
+        mockContext,
+        'unknown arg',
+      );
       assertMessageAction(result);
       expect(result.content).not.toContain('Test tool');
       expect(result.content).not.toContain('Server description');
@@ -397,7 +434,10 @@ describe('mcpCommand', () => {
         ui: { reloadCommands: vi.fn() },
       });
 
-      const result = await mcpCommand.action!(testContext, '');
+      const result = await registerMcpCommand(testContext).action!(
+        testContext,
+        '',
+      );
       expect(result).toStrictEqual({
         type: 'message',
         messageType: 'info',
@@ -417,7 +457,10 @@ describe('mcpCommand', () => {
         ui: { reloadCommands: vi.fn() },
       });
 
-      const result = await mcpCommand.action!(testContext, '');
+      const result = await registerMcpCommand(testContext).action!(
+        testContext,
+        '',
+      );
       assertMessageAction(result);
       expect(result.content).toContain('server-with-dashes');
       expect(result.content).toContain('server_with_underscores');
