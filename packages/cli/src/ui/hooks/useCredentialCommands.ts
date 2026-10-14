@@ -26,6 +26,8 @@ import { createLogoutCommand } from '../commands/logoutCommand.js';
 import { createQuotaCommand } from '../commands/quotaCommand.js';
 import { createMcpAuthCommand } from '../commands/mcpAuth.js';
 import { createMcpCommand } from '../commands/mcpCommand.js';
+import { createProfileCommand } from '../commands/profileCommand.js';
+import { bindProfileCommandOperations } from '../commands/profileCommandHost.js';
 import { createToolkeyCommand } from '../commands/toolkeyCommand.js';
 import { createToolkeyfileCommand } from '../commands/toolkeyfileCommand.js';
 import { useOAuthControl } from '../contexts/OAuthControlContext.js';
@@ -42,7 +44,34 @@ type CredentialCommands = Pick<
   | 'authCommand'
   | 'quotaCommand'
   | 'mcpCommand'
+  | 'profileCommand'
 >;
+
+function createToolkeyCommands() {
+  const storage = new ToolKeyStorage();
+  return {
+    toolkeyCommand: createToolkeyCommand(storage),
+    toolkeyfileCommand: createToolkeyfileCommand(storage),
+  };
+}
+
+function createProfileOwnerCommand(
+  agent: Agent | null,
+  api: ReturnType<typeof useRuntimeApi>,
+  settings: LoadedSettings,
+  oauthControl: ReturnType<typeof useOAuthControl>,
+  recordProviderSwitch: (provider: string, model: string) => Promise<void>,
+) {
+  return createProfileCommand(
+    bindProfileCommandOperations({
+      agent,
+      runtimeApi: api,
+      settings,
+      oauthControl,
+      recordProviderSwitch,
+    }),
+  );
+}
 
 /**
  * Registers the credential commands for one session, each bound to the
@@ -53,6 +82,7 @@ export function useCredentialCommands(
   agent: Agent | null,
   settings: LoadedSettings,
   config: CliUiRuntime | null,
+  recordProviderSwitch: (provider: string, model: string) => Promise<void>,
 ): CredentialCommands {
   const api = useRuntimeApi();
   const oauthControl = useOAuthControl();
@@ -87,13 +117,18 @@ export function useCredentialCommands(
       ),
     [agent, config],
   );
-  const toolkeyCommands = useMemo(() => {
-    const storage = new ToolKeyStorage();
-    return {
-      toolkeyCommand: createToolkeyCommand(storage),
-      toolkeyfileCommand: createToolkeyfileCommand(storage),
-    };
-  }, []);
+  const profileCommand = useMemo(
+    () =>
+      createProfileOwnerCommand(
+        agent,
+        api,
+        settings,
+        oauthControl,
+        recordProviderSwitch,
+      ),
+    [agent, api, oauthControl, recordProviderSwitch, settings],
+  );
+  const toolkeyCommands = useMemo(createToolkeyCommands, []);
   return useMemo(
     () => ({
       baseurlCommand,
@@ -103,6 +138,7 @@ export function useCredentialCommands(
       authCommand,
       quotaCommand,
       mcpCommand,
+      profileCommand,
       ...toolkeyCommands,
     }),
     [
@@ -113,6 +149,7 @@ export function useCredentialCommands(
       authCommand,
       quotaCommand,
       mcpCommand,
+      profileCommand,
       toolkeyCommands,
     ],
   );

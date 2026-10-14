@@ -24,6 +24,9 @@ import { createToolkeyfileCommand } from '../ui/commands/toolkeyfileCommand.js';
 import type { BuiltinCommandOwners } from '../services/BuiltinCommandLoader.js';
 import type { SlashCommand } from '../ui/commands/types.js';
 import { createToolFormatCommand } from '../ui/commands/toolformatCommand.js';
+import { createProfileCommand } from '../ui/commands/profileCommand.js';
+import { createProfileSchemas } from '../ui/commands/profileSchemas.js';
+import { createChatOwnerCommand } from '../ui/commands/chatOwnerCommand.js';
 
 export function createUnconfiguredModelCommand(): SlashCommand {
   return createModelCommand(
@@ -117,7 +120,9 @@ export function unavailableAuthControl(): AuthCommandOperations {
 
 export function unavailableQuotaOAuthControl(): QuotaCommandOperations['oauthControl'] {
   const unavailable = (): never => {
-    throw new Error('Quota operations are unavailable in this registry fixture');
+    throw new Error(
+      'Quota operations are unavailable in this registry fixture',
+    );
   };
   return {
     isAvailable: unavailable,
@@ -196,13 +201,55 @@ export function createUnconfiguredCredentialCommands(): Pick<
     }),
   };
 }
+function createUnconfiguredProfileCommand() {
+  const unavailable = async (): Promise<never> => {
+    throw new Error('Profile command is unavailable');
+  };
+  return createProfileCommand({
+    schemas: createProfileSchemas({
+      listProfiles: async () => [],
+      getActiveProviderName: () => undefined,
+      listBuckets: async () => [],
+    }),
+    saveModelProfile: unavailable,
+    saveLoadBalancerProfile: unavailable,
+    loadProfile: unavailable,
+    publishLoadedProfile: async () => {},
+    recordProviderSwitch: async () => {},
+    deleteProfile: unavailable,
+    listProfiles: async () => [],
+    setDefaultProfileName: async () => {},
+  });
+}
+
+export function createUnconfiguredChatCommand(): SlashCommand {
+  const unavailable = (): never => {
+    throw new Error('Chat operations are unavailable in this registry fixture');
+  };
+  return createChatOwnerCommand({
+    listCheckpoints: unavailable,
+    createCheckpoint: unavailable,
+    resume: unavailable,
+    deleteCheckpoint: unavailable,
+    renameCheckpoint: unavailable,
+    getHistory: unavailable,
+    clearHistory: unavailable,
+    restoreTurns: unavailable,
+    nameCurrentSession: unavailable,
+    getRecordingPath: unavailable,
+    getModel: unavailable,
+    getEmojiFilterMode: unavailable,
+  });
+}
 
 export function createUnconfiguredBuiltinOwners(): BuiltinCommandOwners {
   return {
+    chatCommand: createUnconfiguredChatCommand(),
     modelCommand: createUnconfiguredModelCommand(),
     toolFormatCommand: createUnconfiguredToolFormatCommand(),
     setCommand: createUnconfiguredSetCommand(),
     providerCommand: createUnconfiguredProviderCommand(),
+    profileCommand: createUnconfiguredProfileCommand(),
     ...createUnconfiguredCredentialCommands(),
   };
 }

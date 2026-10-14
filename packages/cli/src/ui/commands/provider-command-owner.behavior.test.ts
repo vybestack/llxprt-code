@@ -40,7 +40,6 @@ describe('registered provider command ownership', () => {
         }),
       },
       null,
-      'agent',
     );
   }
 

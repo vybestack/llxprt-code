@@ -48,71 +48,6 @@ export async function listProfiles(runtimeApi: RuntimeApi): Promise<string[]> {
   return runtimeApi.listSavedProfiles();
 }
 
-export const profileNameCompleter: CompleterFn = withFuzzyFilter(
-  async (ctx) => {
-    try {
-      const profiles = await listProfiles(ctx.runtimeApi);
-      return profiles.map((profile) => ({
-        value: profile,
-        description: profileSuggestionDescription,
-      }));
-    } catch {
-      return [];
-    }
-  },
-);
-
-const lbMemberProfileCompleter: CompleterFn = withFuzzyFilter(
-  async (ctx, _partial, tokens) => {
-    try {
-      const profiles = await listProfiles(ctx.runtimeApi);
-      // tokens.tokens format: ["save", "loadbalancer", "lb-name", "policy", "prof1", "prof2", ...]
-      // Skip first 4 tokens (save, loadbalancer, lb-name, policy) to get already selected profiles
-      const alreadySelected = tokens.tokens
-        .slice(4)
-        .filter((p) => p.length > 0);
-      const available = profiles.filter((p) => !alreadySelected.includes(p));
-      return available.map((profile) => ({
-        value: profile,
-        description: 'Add to load balancer',
-      }));
-    } catch {
-      return [];
-    }
-  },
-);
-
-const bucketCompleter: CompleterFn = withFuzzyFilter(
-  async (ctx, _partial, tokens) => {
-    try {
-      const runtime = ctx.runtimeApi;
-      const status = runtime.providerStatus();
-      const provider = status.providerName;
-
-      if (!provider) {
-        return [];
-      }
-
-      // @plan:PLAN-20250214-CREDPROXY.P33
-      const buckets = await ctx.oauthControl.listBuckets(provider);
-
-      // tokens.tokens format: ["save", "model", "profile-name", "bucket1", "bucket2", ...]
-      // Skip first 3 tokens (save, model, profile-name) to get already selected buckets
-      const alreadySelected = tokens.tokens
-        .slice(3)
-        .filter((b) => b.length > 0);
-      const available = buckets.filter((b) => !alreadySelected.includes(b));
-
-      return available.map((bucket) => ({
-        value: bucket,
-        description: 'Add bucket to profile',
-      }));
-    } catch {
-      return [];
-    }
-  },
-);
-
 // Recursive schema for unlimited profile selection
 const createLbMemberProfileEntry = (
   depth: number,
@@ -123,7 +58,6 @@ const createLbMemberProfileEntry = (
     depth === 0
       ? 'Select first profile'
       : 'Add another profile (ESC to finish)',
-  completer: lbMemberProfileCompleter,
   hint: 'ESC to finish selection',
   next: depth < 20 ? [createLbMemberProfileEntry(depth + 1)] : undefined,
 });
@@ -140,14 +74,13 @@ const createBucketEntry = (depth: number): CommandArgumentSchema[number] => ({
     depth === 0
       ? 'Select first bucket (optional)'
       : 'Add another bucket (ESC to finish)',
-  completer: bucketCompleter,
   hint: 'ESC to finish selection',
   next: depth < 20 ? [createBucketEntry(depth + 1)] : undefined,
 });
 
 const bucketSchema: CommandArgumentSchema = [createBucketEntry(0)];
 
-export const profileSaveSchema: CommandArgumentSchema = [
+const profileSaveSchema: CommandArgumentSchema = [
   {
     kind: 'literal',
     value: 'model',
@@ -157,7 +90,6 @@ export const profileSaveSchema: CommandArgumentSchema = [
         kind: 'value',
         name: 'profile-name',
         description: 'Enter profile name',
-        completer: profileNameCompleter,
         next: bucketSchema,
       },
     ],
@@ -171,7 +103,6 @@ export const profileSaveSchema: CommandArgumentSchema = [
         kind: 'value',
         name: 'lb-name',
         description: 'Enter load balancer profile name',
-        completer: profileNameCompleter,
         next: [
           {
             kind: 'literal',
@@ -191,64 +122,146 @@ export const profileSaveSchema: CommandArgumentSchema = [
   },
 ];
 
-export const profileLoadSchema: CommandArgumentSchema = [
+const profileLoadSchema: CommandArgumentSchema = [
   {
     kind: 'value',
     name: 'profile',
     description: 'Select profile to load',
-    completer: profileNameCompleter,
   },
 ];
 
-export const profileDeleteSchema: CommandArgumentSchema = [
+const profileDeleteSchema: CommandArgumentSchema = [
   {
     kind: 'value',
     name: 'profile',
     description: 'Select profile to delete',
-    completer: profileNameCompleter,
   },
 ];
 
-export const profileSetDefaultSchema: CommandArgumentSchema = [
+const profileSetDefaultSchema: CommandArgumentSchema = [
   {
     kind: 'value',
     name: 'profile',
     description: 'Set default profile or choose none',
-    completer: withFuzzyFilter(async (ctx) => {
-      try {
-        const profiles = await listProfiles(ctx.runtimeApi);
-        const candidates = ['none', ...profiles];
-        return candidates.map((option) => ({
-          value: option,
-          description:
-            option === 'none'
-              ? 'Clear default profile'
-              : profileSuggestionDescription,
-        }));
-      } catch {
-        return [];
-      }
-    }),
   },
 ];
 
-export const profileShowSchema: CommandArgumentSchema = [
+const profileShowSchema: CommandArgumentSchema = [
   {
     kind: 'value',
     name: 'profile',
     description: 'Select profile to view',
-    completer: profileNameCompleter,
   },
 ];
 
-export const profileEditSchema: CommandArgumentSchema = [
+const profileEditSchema: CommandArgumentSchema = [
   {
     kind: 'value',
     name: 'profile',
     description: 'Select profile to edit',
-    completer: profileNameCompleter,
   },
 ];
+
+export interface ProfileSchemaOperations {
+  listProfiles(): Promise<readonly string[]>;
+  getActiveProviderName(): string | undefined;
+  listBuckets(provider: string): Promise<readonly string[]>;
+}
+
+export interface ProfileSchemas {
+  profileSaveSchema: CommandArgumentSchema;
+  profileLoadSchema: CommandArgumentSchema;
+  profileDeleteSchema: CommandArgumentSchema;
+  profileSetDefaultSchema: CommandArgumentSchema;
+  profileShowSchema: CommandArgumentSchema;
+  profileEditSchema: CommandArgumentSchema;
+}
+
+function bindSchema(
+  schema: CommandArgumentSchema,
+  completerFor: (name: string) => CompleterFn | undefined,
+): CommandArgumentSchema {
+  return schema.map((node) => {
+    if (node.kind !== 'value')
+      return {
+        ...node,
+        ...(node.next !== undefined && {
+          next: bindSchema(node.next, completerFor),
+        }),
+      };
+    return {
+      ...node,
+      completer: completerFor(node.name),
+      ...(node.next !== undefined && {
+        next: bindSchema(node.next, completerFor),
+      }),
+    };
+  });
+}
+
+export function createProfileSchemas(
+  operations: ProfileSchemaOperations,
+): ProfileSchemas {
+  const profileCompleter: CompleterFn = withFuzzyFilter(async () =>
+    (await operations.listProfiles()).map((profile) => ({
+      value: profile,
+      description: profileSuggestionDescription,
+    })),
+  );
+  const loadBalancerMemberCompleter: CompleterFn = withFuzzyFilter(
+    async (_context, _partial, tokens) => {
+      const alreadySelected = tokens.tokens.slice(4).filter(Boolean);
+      return (await operations.listProfiles())
+        .filter((profile) => !alreadySelected.includes(profile))
+        .map((profile) => ({
+          value: profile,
+          description: 'Add to load balancer',
+        }));
+    },
+  );
+  const bucketNameCompleter: CompleterFn = withFuzzyFilter(
+    async (_context, _partial, tokens) => {
+      const provider = operations.getActiveProviderName();
+      if (provider === undefined) return [];
+      const alreadySelected = tokens.tokens.slice(3).filter(Boolean);
+      return (await operations.listBuckets(provider))
+        .filter((bucket) => !alreadySelected.includes(bucket))
+        .map((bucket) => ({
+          value: bucket,
+          description: 'Add bucket to profile',
+        }));
+    },
+  );
+  const defaultProfileCompleter: CompleterFn = withFuzzyFilter(async () =>
+    ['none', ...(await operations.listProfiles())].map((option) => ({
+      value: option,
+      description:
+        option === 'none'
+          ? 'Clear default profile'
+          : profileSuggestionDescription,
+    })),
+  );
+
+  const profileCompleterFor = (name: string): CompleterFn | undefined => {
+    if (name.startsWith('bucket')) return bucketNameCompleter;
+    if (/^profile\d+$/.test(name)) return loadBalancerMemberCompleter;
+    return profileCompleter;
+  };
+  const defaultSchema = profileSetDefaultSchema.map((node) =>
+    node.kind === 'value'
+      ? { ...node, completer: defaultProfileCompleter }
+      : node,
+  );
+
+  return {
+    profileSaveSchema: bindSchema(profileSaveSchema, profileCompleterFor),
+    profileLoadSchema: bindSchema(profileLoadSchema, profileCompleterFor),
+    profileDeleteSchema: bindSchema(profileDeleteSchema, profileCompleterFor),
+    profileSetDefaultSchema: defaultSchema,
+    profileShowSchema: bindSchema(profileShowSchema, profileCompleterFor),
+    profileEditSchema: bindSchema(profileEditSchema, profileCompleterFor),
+  };
+}
 
 export function extractProfileName(trimmedArgs: string): string {
   const profileNameMatch = trimmedArgs.match(/^"([^"]+)"$/);

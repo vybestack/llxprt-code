@@ -9,7 +9,9 @@ import { basename } from 'node:path';
 import { replaySession } from '@vybestack/llxprt-code-core';
 import { withRecordingLifetimeFixture } from '../../../../agents/src/api/__tests__/helpers/recording-owner-lifetime-fixture.js';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
-import { chatOwnerCommand } from './chatOwnerCommand.js';
+import type { Agent } from '@vybestack/llxprt-code-agents';
+import { bindChatOwnerOperations } from './chatCommandHost.js';
+import { createChatOwnerCommand } from './chatOwnerCommand.js';
 
 const human = (text: string) => ({
   speaker: 'human' as const,
@@ -20,12 +22,14 @@ const ai = (text: string) => ({
   blocks: [{ type: 'text' as const, text }],
 });
 
-function action(name: string) {
-  const handler = chatOwnerCommand.subCommands?.find(
-    (cmd) => cmd.name === name,
-  )?.action;
-  if (!handler) throw new Error(`Missing /chat ${name}`);
-  return handler;
+// Registers /chat the way the session host does: bound to this one owner.
+function ownerActions(agent: Agent) {
+  const chat = createChatOwnerCommand(bindChatOwnerOperations(agent, null));
+  return (name: string) => {
+    const handler = chat.subCommands?.find((cmd) => cmd.name === name)?.action;
+    if (!handler) throw new Error(`Missing /chat ${name}`);
+    return handler;
+  };
 }
 
 describe('owner-backed /chat command route', () => {
@@ -33,6 +37,7 @@ describe('owner-backed /chat command route', () => {
     await withRecordingLifetimeFixture(async ({ agent, config, chatsDir }) => {
       await agent.setHistory([human('seed'), ai('reply')]);
       await agent.session.setRecording({ enabled: true });
+      const action = ownerActions(agent);
       const context = createMockCommandContext({ services: { agent } });
       const path = agent.session.getRecording().path;
       if (!path) throw new Error('No owner recording');
@@ -71,6 +76,7 @@ describe('owner-backed /chat command route', () => {
     await withRecordingLifetimeFixture(async ({ agent, config }) => {
       await agent.setHistory([human('seed')]);
       await agent.session.setRecording({ enabled: true });
+      const action = ownerActions(agent);
       const context = createMockCommandContext({ services: { agent } });
       await action('save')(context, 'occupied');
       expect(await action('save')(context, 'occupied')).toMatchObject({
@@ -116,6 +122,7 @@ describe('owner-backed /chat command route', () => {
         ai('two'),
       ]);
       await agent.session.setRecording({ enabled: true });
+      const action = ownerActions(agent);
       const context = createMockCommandContext({ services: { agent } });
       const client = agent.agentClient;
       const setHistory = spyOn(client, 'setHistory');
@@ -154,6 +161,7 @@ describe('owner-backed /chat command route', () => {
     await withRecordingLifetimeFixture(async ({ agent, config }) => {
       await agent.setHistory([human('first'), ai('one'), human('second')]);
       await agent.session.setRecording({ enabled: true });
+      const action = ownerActions(agent);
       const context = createMockCommandContext({ services: { agent } });
       const client = agent.agentClient;
       const original = client.restoreHistory.bind(client);
@@ -192,6 +200,7 @@ describe('owner-backed /chat command route', () => {
         const saved = await sibling.session.createCheckpoint('foreign');
         const siblingPath = sibling.session.getRecording().path;
         await sibling.session.setRecording({ enabled: false });
+        const action = ownerActions(agent);
         const context = createMockCommandContext({ services: { agent } });
         expect(
           await action('rename')(context, 'foreign new-foreign'),
@@ -226,6 +235,7 @@ describe('owner-backed /chat command route', () => {
         ai('first'),
         human('later'),
       ]);
+      const action = ownerActions(agent);
       const context = createMockCommandContext({ services: { agent } });
       expect(await action('resume')(context, 'branch')).toBeUndefined();
       expect(context.ui.loadHistory).toHaveBeenCalledWith([
@@ -242,6 +252,7 @@ describe('owner-backed /chat command route', () => {
   it('reads empty history from the owner without opening a second recorder', async () => {
     await withRecordingLifetimeFixture(async ({ agent, chatsDir }) => {
       await agent.session.setRecording({ enabled: true });
+      const action = ownerActions(agent);
       const context = createMockCommandContext({ services: { agent } });
       expect(await action('clear')(context, '')).toMatchObject({
         content: 'No conversation to clear.',

@@ -19,8 +19,6 @@ import type {
 import type { ICommandLoader } from './types.js';
 import { aboutCommand } from '../ui/commands/aboutCommand.js';
 import { bugCommand } from '../ui/commands/bugCommand.js';
-import { chatCommand } from '../ui/commands/chatCommand.js';
-import { chatOwnerCommand } from '../ui/commands/chatOwnerCommand.js';
 import { clearCommand } from '../ui/commands/clearCommand.js';
 import { compressCommand } from '../ui/commands/compressCommand.js';
 import { copyCommand } from '../ui/commands/copyCommand.js';
@@ -47,7 +45,6 @@ import { skillsCommand } from '../ui/commands/skillsCommand.js';
 import { settingsCommand } from '../ui/commands/settingsCommand.js';
 import { vimCommand } from '../ui/commands/vimCommand.js';
 import { setupGithubCommand } from '../ui/commands/setupGithubCommand.js';
-import { profileCommand } from '../ui/commands/profileCommand.js';
 import { diagnosticsCommand } from '../ui/commands/diagnosticsCommand.js';
 import { terminalSetupCommand } from '../ui/commands/terminalSetupCommand.js';
 import { debugCommand } from '../ui/commands/debugCommands.js';
@@ -81,6 +78,8 @@ export interface BuiltinCommandOwners {
   readonly authCommand: SlashCommand;
   readonly quotaCommand: SlashCommand;
   readonly mcpCommand: SlashCommand;
+  readonly profileCommand: SlashCommand;
+  readonly chatCommand: SlashCommand;
   readonly toolkeyCommand: SlashCommand;
   readonly toolkeyfileCommand: SlashCommand;
 }
@@ -91,7 +90,6 @@ export class BuiltinCommandLoader implements ICommandLoader {
   constructor(
     private readonly owners: BuiltinCommandOwners,
     private config: CliUiRuntime | null,
-    private recordingOwner: 'agent' | 'raw' = 'raw',
   ) {
     // Access extensionEnablementManager if available on config
     if (config && 'extensionEnablementManager' in config) {
@@ -148,7 +146,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       aboutCommand,
       this.owners.authCommand,
       bugCommand,
-      this.recordingOwner === 'agent' ? chatOwnerCommand : chatCommand,
+      this.owners.chatCommand,
       clearCommand,
       compressCommand,
       copyCommand,
@@ -185,7 +183,7 @@ export class BuiltinCommandLoader implements ICommandLoader {
       this.owners.toolFormatCommand,
       setupGithubCommand,
       this.owners.setCommand,
-      profileCommand,
+      this.owners.profileCommand,
       diagnosticsCommand,
       terminalSetupCommand,
       debugCommand,

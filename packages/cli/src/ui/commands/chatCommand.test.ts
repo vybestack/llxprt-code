@@ -16,7 +16,8 @@ import {
 } from '@vybestack/llxprt-code-core';
 import { createMockCommandContext } from '../../__tests__/mockCommandContext.js';
 import { assertDefined } from '../../__tests__/assertions.js';
-import { chatCommand } from './chatCommand.js';
+import { createChatCommand } from './chatCommand.js';
+import { bindChatRecordingOperations } from './chatCommandHost.js';
 import { createCompletionHandler } from './schema/index.js';
 import type { CommandContext, SlashCommand } from './types.js';
 import { MessageType } from '../types.js';
@@ -38,8 +39,22 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
   let mediaStore: LocalMediaStore;
   let context: CommandContext;
 
+  // Registered the way the session host registers it, from the recording,
+  // project and chat history the fixture currently provides.
+  const registeredChat = (): SlashCommand =>
+    createChatCommand(
+      bindChatRecordingOperations({
+        agent: context.services.agent,
+        config: context.services.config,
+        recordingIntegration: context.recordingIntegration,
+        recordingSwapCallbacks: context.recordingSwapCallbacks,
+      }),
+    );
+
   const command = (name: string): SlashCommand => {
-    const result = chatCommand.subCommands?.find((item) => item.name === name);
+    const result = registeredChat().subCommands?.find(
+      (item) => item.name === name,
+    );
     assertDefined(result);
     return result;
   };
@@ -165,7 +180,9 @@ describe('chatCommand recording-native checkpoints @plan:2026-07-28-issue-2625',
   });
 
   it('exposes all recording-native subcommands', () => {
-    expect(chatCommand.subCommands?.map((item) => item.name)).toStrictEqual([
+    expect(
+      registeredChat().subCommands?.map((item) => item.name),
+    ).toStrictEqual([
       'list',
       'save',
       'resume',

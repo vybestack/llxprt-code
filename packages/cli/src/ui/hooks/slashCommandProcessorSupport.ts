@@ -268,7 +268,6 @@ export function useCommandReload(
   reloadCommands: () => void,
   setCommands: (commands: readonly SlashCommand[]) => void,
   agent: Agent | null,
-  recordingOwner?: 'agent' | 'raw',
 ): void {
   useEffect(
     () => subscribeToExternalCommandChanges(config, reloadCommands, agent),
@@ -276,24 +275,11 @@ export function useCommandReload(
   );
   useEffect(() => {
     const controller = new AbortController();
-    void loadSlashCommands(
-      owners,
-      config,
-      controller.signal,
-      setCommands,
-      recordingOwner,
-    );
+    void loadSlashCommands(owners, config, controller.signal, setCommands);
     return () => {
       controller.abort();
     };
-  }, [
-    owners,
-    config,
-    reloadTrigger,
-    isConfigInitialized,
-    setCommands,
-    recordingOwner,
-  ]);
+  }, [owners, config, reloadTrigger, isConfigInitialized, setCommands]);
 }
 
 function subscribeToExternalCommandChanges(
@@ -323,13 +309,8 @@ function shouldUseBuiltinCommandsOnly(): boolean {
 export function loadBuiltinSlashCommands(
   owners: BuiltinCommandOwners,
   config: CliUiRuntime | null,
-  recordingOwner?: 'agent' | 'raw',
 ): readonly SlashCommand[] {
-  return new BuiltinCommandLoader(
-    owners,
-    config,
-    recordingOwner,
-  ).loadCommandsSync();
+  return new BuiltinCommandLoader(owners, config).loadCommandsSync();
 }
 
 async function loadSlashCommands(
@@ -337,11 +318,10 @@ async function loadSlashCommands(
   config: CliUiRuntime | null,
   signal: AbortSignal,
   setCommands: (commands: readonly SlashCommand[]) => void,
-  recordingOwner?: 'agent' | 'raw',
 ): Promise<void> {
   try {
     const loaders: ICommandLoader[] = [
-      new BuiltinCommandLoader(owners, config, recordingOwner),
+      new BuiltinCommandLoader(owners, config),
     ];
     if (!shouldUseBuiltinCommandsOnly()) {
       loaders.unshift(new McpPromptLoader(config));

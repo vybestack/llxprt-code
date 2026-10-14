@@ -67,7 +67,6 @@ async function registeredAuth(control: AuthCommandOperations) {
           authCommand: createAuthCommand(control),
         },
         null,
-        'agent',
       ),
     ],
     new AbortController().signal,

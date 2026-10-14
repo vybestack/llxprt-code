@@ -11,9 +11,9 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
-import { profileCommand } from '../profileCommand.js';
+import { createProfileCommandForTest } from './profile-command-test-owner.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
-import type { CommandContext } from '../types.js';
+import type { CommandContext, SlashCommand } from '../types.js';
 import type { LoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 import { testRegex } from '../../../__tests__/regex.js';
 
@@ -25,10 +25,12 @@ const runtimeMocks = {
 
 describe('profileCommand - failover policy parsing', () => {
   let context: CommandContext;
+  let profileCommand: SlashCommand;
 
   beforeEach(() => {
     vi.clearAllMocks();
     context = createMockCommandContext({ runtimeApi: runtimeMocks });
+    profileCommand = createProfileCommandForTest(context);
     runtimeMocks.listSavedProfiles.mockResolvedValue([
       'profile1',
       'profile2',
@@ -39,13 +41,14 @@ describe('profileCommand - failover policy parsing', () => {
     });
   });
 
-  const save = profileCommand.subCommands!.find((cmd) => cmd.name === 'save')!;
+  const save = () =>
+    profileCommand.subCommands!.find((cmd) => cmd.name === 'save')!;
 
   describe('Policy parameter parsing', () => {
     it('should parse policy "failover" from command', async () => {
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer lb-name failover profile1 profile2',
       );
@@ -60,7 +63,7 @@ describe('profileCommand - failover policy parsing', () => {
     it('should parse policy "roundrobin" from command', async () => {
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer lb-name roundrobin profile1 profile2',
       );
@@ -73,7 +76,7 @@ describe('profileCommand - failover policy parsing', () => {
     });
 
     it('should error when policy not specified', async () => {
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer lb-name profile1 profile2',
       );
@@ -89,7 +92,7 @@ describe('profileCommand - failover policy parsing', () => {
     it('should parse policy case-insensitively (FAILOVER)', async () => {
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer lb-name FAILOVER profile1 profile2',
       );
@@ -104,7 +107,7 @@ describe('profileCommand - failover policy parsing', () => {
     it('should parse policy case-insensitively (Failover)', async () => {
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer lb-name Failover profile1 profile2',
       );
@@ -119,7 +122,7 @@ describe('profileCommand - failover policy parsing', () => {
     it('should parse policy case-insensitively (RoundRobin)', async () => {
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer lb-name RoundRobin profile1 profile2',
       );
@@ -134,7 +137,7 @@ describe('profileCommand - failover policy parsing', () => {
 
   describe('Profile validation with policy', () => {
     it('should error when only 1 profile provided after policy detection', async () => {
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer lb-name failover profile1',
       );
@@ -150,7 +153,7 @@ describe('profileCommand - failover policy parsing', () => {
     it('should succeed with 2 profiles and failover policy', async () => {
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer lb-name failover profile1 profile2',
       );
@@ -163,7 +166,7 @@ describe('profileCommand - failover policy parsing', () => {
     it('should succeed with 3 profiles and failover policy', async () => {
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer lb-name failover profile1 profile2 profile3',
       );
@@ -178,7 +181,7 @@ describe('profileCommand - failover policy parsing', () => {
     it('should save profile with correct policy field (failover)', async () => {
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer lb-name failover profile1 profile2',
       );
@@ -202,7 +205,7 @@ describe('profileCommand - failover policy parsing', () => {
     it('should save profile with correct policy field (roundrobin)', async () => {
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer lb-name roundrobin profile1 profile2',
       );
@@ -226,7 +229,7 @@ describe('profileCommand - failover policy parsing', () => {
     it('should preserve profile names correctly with policy', async () => {
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer lb-name failover profile1 profile2 profile3',
       );
@@ -247,7 +250,7 @@ describe('profileCommand - failover policy parsing', () => {
     it('should include policy in success message (failover)', async () => {
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer myLB failover profile1 profile2',
       );
@@ -262,7 +265,7 @@ describe('profileCommand - failover policy parsing', () => {
     it('should include policy in success message (roundrobin)', async () => {
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer myLB roundrobin profile1 profile2',
       );
@@ -284,7 +287,7 @@ describe('profileCommand - failover policy parsing', () => {
         'notapolicy',
       ]);
 
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer lb-name notapolicy profile1 profile2',
       );
@@ -297,7 +300,7 @@ describe('profileCommand - failover policy parsing', () => {
     });
 
     it('should error when not enough arguments provided', async () => {
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer lb-name profile1',
       );
@@ -309,7 +312,7 @@ describe('profileCommand - failover policy parsing', () => {
     it('should validate profile existence before saving with policy', async () => {
       runtimeMocks.listSavedProfiles.mockResolvedValue(['profile1']);
 
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer lb-name failover profile1 nonexistent',
       );

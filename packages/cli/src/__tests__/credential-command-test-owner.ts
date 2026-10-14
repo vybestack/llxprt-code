@@ -84,7 +84,6 @@ export function registerQuotaCommand(
   );
 }
 
-
 export function registerMcpCommand(context: CommandContext): SlashCommand {
   return createMcpCommand(
     createMcpAuthCommand(

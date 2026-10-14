@@ -25,9 +25,7 @@ function mcpOwner(serverName: string): McpOwner {
   const authenticated: string[] = [];
   const operations: McpAuthCommandOperations = {
     isConfigured: () => true,
-    configuredServers: () => [
-      { name: serverName, oauthEnabled: true },
-    ],
+    configuredServers: () => [{ name: serverName, oauthEnabled: true }],
     authenticationRequiredServers: async () => [],
     authenticate: async (name, display) => {
       authenticated.push(name);
@@ -49,7 +47,6 @@ async function registeredMcp(command: SlashCommand): Promise<SlashCommand> {
           mcpCommand: command,
         },
         null,
-        'agent',
       ),
     ],
     new AbortController().signal,
@@ -85,7 +82,9 @@ describe('MCP auth command owner', () => {
 
     expect(left.authenticated).toStrictEqual(['left']);
     expect(right.authenticated).toStrictEqual([]);
-    expect(reported).toContain('✅ Successfully authenticated with MCP server \'left\'!');
+    expect(reported).toContain(
+      "✅ Successfully authenticated with MCP server 'left'!",
+    );
   });
 
   it('lists OAuth servers from the registered owner', async () => {

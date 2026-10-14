@@ -8,9 +8,9 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'bun:test';
-import { profileCommand } from '../profileCommand.js';
+import { createProfileCommandForTest } from './profile-command-test-owner.js';
 import { createMockCommandContext } from '../../../__tests__/mockCommandContext.js';
-import type { CommandContext } from '../types.js';
+import type { CommandContext, SlashCommand } from '../types.js';
 import type { LoadBalancerProfile } from '@vybestack/llxprt-code-settings';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { testRegex } from '../../../__tests__/regex.js';
@@ -23,10 +23,12 @@ const runtimeMocks = {
 
 describe('profileCommand - load balancer save with protected settings', () => {
   let context: CommandContext;
+  let profileCommand: SlashCommand;
 
   beforeEach(() => {
     vi.clearAllMocks();
     context = createMockCommandContext({ runtimeApi: runtimeMocks });
+    profileCommand = createProfileCommandForTest(context);
     runtimeMocks.listSavedProfiles.mockResolvedValue([
       'profile1',
       'profile2',
@@ -34,7 +36,8 @@ describe('profileCommand - load balancer save with protected settings', () => {
     ]);
   });
 
-  const save = profileCommand.subCommands!.find((cmd) => cmd.name === 'save')!;
+  const save = () =>
+    profileCommand.subCommands!.find((cmd) => cmd.name === 'save')!;
 
   it.each([
     ['apiKey', 'auth-key'],
@@ -71,7 +74,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
 
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer myLB roundrobin profile1 profile2',
       );
@@ -116,7 +119,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
 
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer myLB roundrobin profile1 profile2',
       );
@@ -146,7 +149,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
 
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer myLB roundrobin profile1 profile2',
       );
@@ -181,7 +184,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       runtimeMocks.getEphemeralSettings.mockReturnValue({});
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer myLB roundrobin profile1 profile2',
       );
@@ -200,7 +203,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       });
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer myLB roundrobin profile1 profile2',
       );
@@ -219,7 +222,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       });
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer myLB roundrobin profile1 profile2 profile3',
       );
@@ -247,7 +250,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       });
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer myLB roundrobin profile1 profile2',
       );
@@ -272,7 +275,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       });
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer myLB roundrobin --context-limit 150000 profile1 profile2',
       );
@@ -290,7 +293,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
     it('rejects invalid explicit contextLimit values', async () => {
       runtimeMocks.getEphemeralSettings.mockReturnValue({});
 
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer myLB roundrobin --context-limit 0 profile1 profile2',
       );
@@ -306,7 +309,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
     it('rejects --context-limit when the value is missing', async () => {
       runtimeMocks.getEphemeralSettings.mockReturnValue({});
 
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer myLB roundrobin profile1 profile2 --context-limit',
       );
@@ -324,7 +327,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
     it('requires at least 2 profiles', async () => {
       runtimeMocks.getEphemeralSettings.mockReturnValue({});
 
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer myLB roundrobin profile1',
       );
@@ -341,7 +344,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       runtimeMocks.getEphemeralSettings.mockReturnValue({});
       runtimeMocks.listSavedProfiles.mockResolvedValue(['profile1']);
 
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer myLB roundrobin profile1 nonexistent',
       );
@@ -359,7 +362,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
         new Error('disk full'),
       );
 
-      const result = await save.action!(
+      const result = await save().action!(
         context,
         'loadbalancer myLB roundrobin profile1 profile2',
       );
@@ -380,7 +383,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       });
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer lb-tpm failover profile1 profile2',
       );
@@ -400,7 +403,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       });
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer lb-timeout failover profile1 profile2',
       );
@@ -420,7 +423,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       });
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer lb-cb failover profile1 profile2',
       );
@@ -440,7 +443,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       });
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer lb-cb-threshold failover profile1 profile2',
       );
@@ -460,7 +463,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       });
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer lb-cb-window failover profile1 profile2',
       );
@@ -480,7 +483,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       });
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer lb-cb-recovery failover profile1 profile2',
       );
@@ -505,7 +508,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       });
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer lb-all failover profile1 profile2',
       );
@@ -533,7 +536,7 @@ describe('profileCommand - load balancer save with protected settings', () => {
       });
       runtimeMocks.saveLoadBalancerProfile.mockResolvedValue(undefined);
 
-      await save.action!(
+      await save().action!(
         context,
         'loadbalancer lb-nulls failover profile1 profile2',
       );

@@ -26,7 +26,6 @@ describe('registered tool-format command ownership', () => {
         ),
       },
       null,
-      'agent',
     );
   }
 

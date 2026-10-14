@@ -54,7 +54,6 @@ async function registered(
       new BuiltinCommandLoader(
         { ...createUnconfiguredBuiltinOwners(), ...owners },
         null,
-        'agent',
       ),
     ],
     new AbortController().signal,

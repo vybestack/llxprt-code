@@ -155,7 +155,6 @@ export function bindQuotaCommandOperations(
   };
 }
 
-
 export function bindMcpAuthCommandOperations(
   agent: Agent | null,
   config: CliUiRuntime | null,
