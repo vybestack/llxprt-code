@@ -70,7 +70,6 @@ import {
 } from './AnthropicApiExecution.js';
 import {
   requestBodyForDump,
-  sendRequestFromBody,
   sendRequestFromSpool,
   type AnthropicSendRequest,
 } from './AnthropicSendRequest.js';
@@ -78,6 +77,7 @@ import {
   anthropicRowsOf,
   prepareSpooledAnthropicRequest,
   registerSpooledRequestCleanup,
+  type SpooledAnthropicRequest,
 } from './AnthropicSpooledRequest.js';
 import {
   createAnthropicMissingCredentialError,
@@ -89,6 +89,7 @@ import { findRequestCommitState } from '../retryRequestContext.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import { resolveRowsMedia } from '../openai-responses/responses-row-media.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import type { ImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
 import {
   finishMediaRequest,
   type MediaRequestOutcome,
@@ -670,19 +671,10 @@ export class AnthropicProvider extends BaseProvider {
     const rateLimitLogger = this.getRateLimitLogger();
     await this.applyRateLimitThrottling(request.facts, rateLimitLogger, signal);
 
-    // H2: if a prior outer attempt already sanitized this request's images,
-    // reuse the sanitized body instead of resending the poisoned original.
-    const sanitizedBody =
-      getImageRecoveryState(effectiveOptions)?.sanitizedBody;
-    const effectiveRequest =
-      sanitizedBody === undefined
-        ? request
-        : sendRequestFromBody(request.facts, sanitizedBody);
-
     const executed = await this.executeWithImageRecovery(
       effectiveOptions,
-      effectiveRequest,
-      effectiveRequest.call(initialClient, customHeaders, signal),
+      request,
+      request.call(initialClient, customHeaders, signal),
       initialClient,
       customHeaders,
       rateLimitLogger,
@@ -704,9 +696,11 @@ export class AnthropicProvider extends BaseProvider {
 
   /**
    * The request to send. A projected send posts the spool its projection
-   * wrote. Any other send writes its body to a request-scoped spool one row
-   * at a time. Either way the media request's finish disposes the spool, the
-   * message table and the prompt files.
+   * wrote, unless an earlier attempt of this request recovered from an image
+   * dimension error: then, like any other send, it writes its body to a
+   * request-scoped spool one row at a time, under the recovery's budget so
+   * the poisoned original is not sent again. Either way the media request's
+   * finish disposes the spool, the message table and the prompt files.
    */
   private async resolveSendRequest(
     preparation: AnthropicTransportPreparation,
@@ -714,16 +708,39 @@ export class AnthropicProvider extends BaseProvider {
     authToken: string,
   ): Promise<AnthropicSendRequest> {
     const { prepared, mediaRequest, effectiveOptions } = preparation;
-    if (prepared !== undefined) return sendRequestFromSpool(prepared.spooled);
-    const media = this.captureMedia(effectiveOptions);
-    const signal = getRequestSignal(effectiveOptions);
+    const recoveryBudget =
+      getImageRecoveryState(effectiveOptions)?.recoveryBudget;
+    if (prepared !== undefined && recoveryBudget === undefined) {
+      return sendRequestFromSpool(prepared.spooled);
+    }
+    return sendRequestFromSpool(
+      await this.spoolSendRequest(
+        effectiveOptions,
+        isOAuth,
+        authToken,
+        mediaRequest,
+        recoveryBudget,
+      ),
+    );
+  }
+
+  private async spoolSendRequest(
+    options: NormalizedGenerateChatOptions,
+    isOAuth: boolean,
+    authToken: string,
+    mediaRequest: ResolvedMediaRequest,
+    recoveryBudget: ImageDimensionBudget | undefined,
+  ): Promise<SpooledAnthropicRequest> {
+    const media = this.captureMedia(options);
+    const signal = getRequestSignal(options);
     const spooled = await prepareSpooledAnthropicRequest(
-      this.planParams(effectiveOptions, isOAuth, authToken),
-      await anthropicRowsOf(effectiveOptions),
+      this.planParams(options, isOAuth, authToken),
+      await anthropicRowsOf(options),
       (rows) => resolveRowsMedia(rows, media, mediaRequest, signal),
+      { recoveryBudget },
     );
     registerSpooledRequestCleanup(mediaRequest, spooled);
-    return sendRequestFromSpool(spooled);
+    return spooled;
   }
 
   /**
@@ -762,6 +779,14 @@ export class AnthropicProvider extends BaseProvider {
         {
           execute: (...args) => this.executeApiCall(...args),
           errorsLogger: this.getErrorsLogger(),
+          rebuild: (budget) =>
+            this.spoolSendRequest(
+              options,
+              isOAuth,
+              authToken,
+              mediaRequest,
+              budget,
+            ),
         },
         error,
         request,
@@ -771,7 +796,6 @@ export class AnthropicProvider extends BaseProvider {
         rateLimitLogger,
         isOAuth,
         authToken,
-        mediaRequest,
       );
       if (recovered === undefined) throw error;
       return recovered;
@@ -833,7 +857,7 @@ export class AnthropicProvider extends BaseProvider {
         this.planParams(normalized, isOAuth, authToken),
         await anthropicRowsOf(normalized),
         (rows) => resolveRowsMedia(rows, media, mediaRequest, signal),
-        true,
+        { estimate: true },
       );
       registerSpooledRequestCleanup(mediaRequest, spooled);
       const { estimate } = spooled;

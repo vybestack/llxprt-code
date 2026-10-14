@@ -9,6 +9,7 @@ import {
   type ProviderRequestRows,
 } from '@vybestack/llxprt-code-core/services/history/provider-request-snapshot.js';
 import type { ResolvedMediaRequest } from '@vybestack/llxprt-code-core/storage/request-media-resolver.js';
+import type { ImageDimensionBudget } from '@vybestack/llxprt-code-tools/utils/imageDimensionBudget.js';
 import type { NormalizedGenerateChatOptions } from '../BaseProvider.js';
 import { getRequestSignal } from '../utils/abortSignal.js';
 import { providerRowsOf } from '../utils/providerRows.js';
@@ -34,6 +35,7 @@ import {
 import { writeTableMessages } from './message-table/emit.js';
 import { finishWireRequest } from './message-table/finish.js';
 import { MessageTable } from './message-table/message-table.js';
+import { sanitizeTableImages } from './message-table/recovery-images.js';
 import {
   buildValidatedWireTable,
   type MediaStage,
@@ -56,6 +58,8 @@ export interface SpooledAnthropicRequest {
   readonly estimate: AnthropicPromptEstimate | undefined;
   /** What a request dump records; present when `dumpcontext` asks for one. */
   readonly dump: StreamedDumpBody | undefined;
+  /** Images the recovery budget replaced; 0 when the request had none. */
+  readonly recoveredImages: number;
   /**
    * Disposes the spool, the message table and the prompt files. Idempotent.
    * A projection built from the prompt files is disposed by its own owner.
@@ -134,11 +138,24 @@ async function writeBody(
   await files?.writeTools(envelope['tools']);
 }
 
+/** What a call to {@link prepareSpooledAnthropicRequest} asks for besides the request. */
+export interface SpooledRequestOptions {
+  /** Also write the estimator form of the prompt keys in the same pass. */
+  readonly estimate?: boolean;
+  /**
+   * The image-dimension recovery's budget: oversized images of the finished
+   * table are replaced before the body is written (see `sanitizeTableImages`).
+   */
+  readonly recoveryBudget?: ImageDimensionBudget;
+}
+
 /**
  * Prepares a request without building its message array: the rows are read
  * into the indexed message table one row at a time, the table is finished
  * (validation passes, context prefix, cache controls), and the body is written
- * to a request-scoped spool with `messages` streamed from the table. With
+ * to a request-scoped spool with `messages` streamed from the table. With a
+ * `recoveryBudget` the table's oversized images are replaced after the cache
+ * controls, which is what the image-dimension retry sends. With
  * `estimate` the estimator form of the prompt keys is written in the same
  * pass, with the media the endpoint cannot carry listed as the rows pass. A
  * failure disposes the spool, the table and the prompt files.
@@ -147,7 +164,7 @@ export async function prepareSpooledAnthropicRequest(
   params: AnthropicPlanParams,
   rows: ProviderRequestRows,
   mediaStage: MediaStage | undefined,
-  estimate = false,
+  { estimate = false, recoveryBudget }: SpooledRequestOptions = {},
 ): Promise<SpooledAnthropicRequest> {
   const plan = planAnthropicRequest(params);
   const signal = getRequestSignal(params.options);
@@ -187,6 +204,10 @@ export async function prepareSpooledAnthropicRequest(
       ...(signal === undefined ? {} : { signal }),
     });
     const evidence = finishTable(table, plan, params);
+    const recoveredImages =
+      recoveryBudget === undefined
+        ? 0
+        : sanitizeTableImages(table, recoveryBudget);
     const envelope = buildRequestEnvelope(plan, params);
     await writeBody(spool, table, envelope, files);
     return {
@@ -198,6 +219,7 @@ export async function prepareSpooledAnthropicRequest(
         dump && files !== undefined
           ? envelopeDumpBody(envelope, files.dumpMessagesFile())
           : undefined,
+      recoveredImages,
       release,
     };
   } catch (error) {

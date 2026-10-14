@@ -1,0 +1,590 @@
+{
+  "retry/top-level-image/stream": {
+    "requests": [
+      {
+        "sha256": "8d129fb0d80e40d31a617a40e69a70a343dc0334bea74681f3387bd09ad47552",
+        "length": 517,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAC7gAAAu4CAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"describe this\"}]},{\"role\":\"assistant\",\"content\":\"a blue square\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"why\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "0b55c3b7af0640095c6c6f10f5d71cf7c991a4419dbe40e0d84795d8141e1850",
+        "length": 506,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"text\",\"text\":\"describe this\"}]},{\"role\":\"assistant\",\"content\":\"a blue square\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"why\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "retry/top-level-image/rows": {
+    "requests": [
+      {
+        "sha256": "8d129fb0d80e40d31a617a40e69a70a343dc0334bea74681f3387bd09ad47552",
+        "length": 517,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAC7gAAAu4CAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"describe this\"}]},{\"role\":\"assistant\",\"content\":\"a blue square\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"why\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "0b55c3b7af0640095c6c6f10f5d71cf7c991a4419dbe40e0d84795d8141e1850",
+        "length": 506,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"text\",\"text\":\"describe this\"}]},{\"role\":\"assistant\",\"content\":\"a blue square\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"why\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "projected/top-level-image/rows": {
+    "requests": [
+      {
+        "sha256": "8d129fb0d80e40d31a617a40e69a70a343dc0334bea74681f3387bd09ad47552",
+        "length": 517,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAC7gAAAu4CAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"describe this\"}]},{\"role\":\"assistant\",\"content\":\"a blue square\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"why\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "0b55c3b7af0640095c6c6f10f5d71cf7c991a4419dbe40e0d84795d8141e1850",
+        "length": 506,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"text\",\"text\":\"describe this\"}]},{\"role\":\"assistant\",\"content\":\"a blue square\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"why\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "outer/top-level-image/rows": {
+    "requests": [
+      {
+        "sha256": "8d129fb0d80e40d31a617a40e69a70a343dc0334bea74681f3387bd09ad47552",
+        "length": 517,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAC7gAAAu4CAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"describe this\"}]},{\"role\":\"assistant\",\"content\":\"a blue square\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"why\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "0b55c3b7af0640095c6c6f10f5d71cf7c991a4419dbe40e0d84795d8141e1850",
+        "length": 506,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"text\",\"text\":\"describe this\"}]},{\"role\":\"assistant\",\"content\":\"a blue square\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"why\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "retry/image-only-row/stream": {
+    "requests": [
+      {
+        "sha256": "03b54a89768dffb99ed4b332b40f095d2cd15caf81f001b6bce2e5d5218dd80b",
+        "length": 474,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACWAAAAlgCAYAAAAAAAAA\"}}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"and now?\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "f20b27641f420b9630bf12731df5ed60ffb4c5c595af63102c7821402ecf38e6",
+        "length": 463,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"and now?\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "retry/image-only-row/rows": {
+    "requests": [
+      {
+        "sha256": "03b54a89768dffb99ed4b332b40f095d2cd15caf81f001b6bce2e5d5218dd80b",
+        "length": 474,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACWAAAAlgCAYAAAAAAAAA\"}}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"and now?\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "f20b27641f420b9630bf12731df5ed60ffb4c5c595af63102c7821402ecf38e6",
+        "length": 463,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"and now?\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "projected/image-only-row/rows": {
+    "requests": [
+      {
+        "sha256": "03b54a89768dffb99ed4b332b40f095d2cd15caf81f001b6bce2e5d5218dd80b",
+        "length": 474,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACWAAAAlgCAYAAAAAAAAA\"}}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"and now?\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "f20b27641f420b9630bf12731df5ed60ffb4c5c595af63102c7821402ecf38e6",
+        "length": 463,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"and now?\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "outer/image-only-row/rows": {
+    "requests": [
+      {
+        "sha256": "03b54a89768dffb99ed4b332b40f095d2cd15caf81f001b6bce2e5d5218dd80b",
+        "length": 474,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACWAAAAlgCAYAAAAAAAAA\"}}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"and now?\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "f20b27641f420b9630bf12731df5ed60ffb4c5c595af63102c7821402ecf38e6",
+        "length": 463,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"and now?\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "retry/image-last-block-of-tail/stream": {
+    "requests": [
+      {
+        "sha256": "8b6d03f0968fcbc103c1c9e08c7fc0ad65cbaaea1c14fd27dfd3343a8ba5dcbc",
+        "length": 487,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"look at this\"},{\"role\":\"assistant\",\"content\":\"ok\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"here it is\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACigAAASwCAYAAAAAAAAA\"},\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "ef8cf0e6f205e12bbef74811519938c3cc3a2722a14c1564005375939b3014e2",
+        "length": 428,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"look at this\"},{\"role\":\"assistant\",\"content\":\"ok\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"here it is\"},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "retry/image-last-block-of-tail/rows": {
+    "requests": [
+      {
+        "sha256": "8b6d03f0968fcbc103c1c9e08c7fc0ad65cbaaea1c14fd27dfd3343a8ba5dcbc",
+        "length": 487,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"look at this\"},{\"role\":\"assistant\",\"content\":\"ok\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"here it is\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACigAAASwCAYAAAAAAAAA\"},\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "ef8cf0e6f205e12bbef74811519938c3cc3a2722a14c1564005375939b3014e2",
+        "length": 428,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"look at this\"},{\"role\":\"assistant\",\"content\":\"ok\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"here it is\"},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "projected/image-last-block-of-tail/rows": {
+    "requests": [
+      {
+        "sha256": "8b6d03f0968fcbc103c1c9e08c7fc0ad65cbaaea1c14fd27dfd3343a8ba5dcbc",
+        "length": 487,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"look at this\"},{\"role\":\"assistant\",\"content\":\"ok\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"here it is\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACigAAASwCAYAAAAAAAAA\"},\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "ef8cf0e6f205e12bbef74811519938c3cc3a2722a14c1564005375939b3014e2",
+        "length": 428,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"look at this\"},{\"role\":\"assistant\",\"content\":\"ok\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"here it is\"},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "outer/image-last-block-of-tail/rows": {
+    "requests": [
+      {
+        "sha256": "8b6d03f0968fcbc103c1c9e08c7fc0ad65cbaaea1c14fd27dfd3343a8ba5dcbc",
+        "length": 487,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"look at this\"},{\"role\":\"assistant\",\"content\":\"ok\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"here it is\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACigAAASwCAYAAAAAAAAA\"},\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "ef8cf0e6f205e12bbef74811519938c3cc3a2722a14c1564005375939b3014e2",
+        "length": 428,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"look at this\"},{\"role\":\"assistant\",\"content\":\"ok\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"here it is\"},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "retry/tool-result-image/stream": {
+    "requests": [
+      {
+        "sha256": "dc3918a3102f4f4fcc7662e081d781d51cdc364068264941d0340c189745dc69",
+        "length": 749,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"read the picture\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_big\",\"name\":\"read_file\",\"input\":{\"path\":\"toolu_big.png\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_big\",\"content\":[{\"type\":\"text\",\"text\":\"Read toolu_big.png\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAC7gAAAu4CAYAAAAAAAAA\"}}]}]},{\"role\":\"assistant\",\"content\":\"it is big\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"thanks\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "60a8d7ddccc20ead4d92d5b88b97565276c9562ea9e7bc65ab9ae7220439cbb1",
+        "length": 738,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"read the picture\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_big\",\"name\":\"read_file\",\"input\":{\"path\":\"toolu_big.png\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_big\",\"content\":[{\"type\":\"text\",\"text\":\"Read toolu_big.png\"},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]}]},{\"role\":\"assistant\",\"content\":\"it is big\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"thanks\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "retry/tool-result-image/rows": {
+    "requests": [
+      {
+        "sha256": "dc3918a3102f4f4fcc7662e081d781d51cdc364068264941d0340c189745dc69",
+        "length": 749,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"read the picture\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_big\",\"name\":\"read_file\",\"input\":{\"path\":\"toolu_big.png\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_big\",\"content\":[{\"type\":\"text\",\"text\":\"Read toolu_big.png\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAC7gAAAu4CAYAAAAAAAAA\"}}]}]},{\"role\":\"assistant\",\"content\":\"it is big\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"thanks\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "60a8d7ddccc20ead4d92d5b88b97565276c9562ea9e7bc65ab9ae7220439cbb1",
+        "length": 738,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"read the picture\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_big\",\"name\":\"read_file\",\"input\":{\"path\":\"toolu_big.png\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_big\",\"content\":[{\"type\":\"text\",\"text\":\"Read toolu_big.png\"},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]}]},{\"role\":\"assistant\",\"content\":\"it is big\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"thanks\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "projected/tool-result-image/rows": {
+    "requests": [
+      {
+        "sha256": "dc3918a3102f4f4fcc7662e081d781d51cdc364068264941d0340c189745dc69",
+        "length": 749,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"read the picture\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_big\",\"name\":\"read_file\",\"input\":{\"path\":\"toolu_big.png\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_big\",\"content\":[{\"type\":\"text\",\"text\":\"Read toolu_big.png\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAC7gAAAu4CAYAAAAAAAAA\"}}]}]},{\"role\":\"assistant\",\"content\":\"it is big\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"thanks\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "60a8d7ddccc20ead4d92d5b88b97565276c9562ea9e7bc65ab9ae7220439cbb1",
+        "length": 738,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"read the picture\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_big\",\"name\":\"read_file\",\"input\":{\"path\":\"toolu_big.png\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_big\",\"content\":[{\"type\":\"text\",\"text\":\"Read toolu_big.png\"},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]}]},{\"role\":\"assistant\",\"content\":\"it is big\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"thanks\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "outer/tool-result-image/rows": {
+    "requests": [
+      {
+        "sha256": "dc3918a3102f4f4fcc7662e081d781d51cdc364068264941d0340c189745dc69",
+        "length": 749,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"read the picture\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_big\",\"name\":\"read_file\",\"input\":{\"path\":\"toolu_big.png\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_big\",\"content\":[{\"type\":\"text\",\"text\":\"Read toolu_big.png\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAC7gAAAu4CAYAAAAAAAAA\"}}]}]},{\"role\":\"assistant\",\"content\":\"it is big\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"thanks\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "60a8d7ddccc20ead4d92d5b88b97565276c9562ea9e7bc65ab9ae7220439cbb1",
+        "length": 738,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":\"read the picture\"},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_big\",\"name\":\"read_file\",\"input\":{\"path\":\"toolu_big.png\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_big\",\"content\":[{\"type\":\"text\",\"text\":\"Read toolu_big.png\"},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]}]},{\"role\":\"assistant\",\"content\":\"it is big\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"thanks\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "retry/mixed-small-and-large/stream": {
+    "requests": [
+      {
+        "sha256": "62baaca95cb43da045a7494e16b84df1003679cf1b0265580c852d2dca40821d",
+        "length": 1133,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAAAAAAAA\"}},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAD6AAAABkCAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"three images\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_mix\",\"name\":\"read_file\",\"input\":{\"path\":\"toolu_mix.png\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_mix\",\"content\":[{\"type\":\"text\",\"text\":\"Read toolu_mix.png\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAAAAAAAA\"}},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACcQAAAnECAYAAAAAAAAA\"}}]}]},{\"role\":\"assistant\",\"content\":\"done\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"again\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "27f1644c0816546fab5b5b400f74a0ce1b1507fb1e96aa844820d7a0ae226d0e",
+        "length": 1111,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"text\",\"text\":\"three images\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_mix\",\"name\":\"read_file\",\"input\":{\"path\":\"toolu_mix.png\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_mix\",\"content\":[{\"type\":\"text\",\"text\":\"Read toolu_mix.png\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]}]},{\"role\":\"assistant\",\"content\":\"done\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"again\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "retry/mixed-small-and-large/rows": {
+    "requests": [
+      {
+        "sha256": "62baaca95cb43da045a7494e16b84df1003679cf1b0265580c852d2dca40821d",
+        "length": 1133,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAAAAAAAA\"}},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAD6AAAABkCAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"three images\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_mix\",\"name\":\"read_file\",\"input\":{\"path\":\"toolu_mix.png\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_mix\",\"content\":[{\"type\":\"text\",\"text\":\"Read toolu_mix.png\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAAAAAAAA\"}},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACcQAAAnECAYAAAAAAAAA\"}}]}]},{\"role\":\"assistant\",\"content\":\"done\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"again\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "27f1644c0816546fab5b5b400f74a0ce1b1507fb1e96aa844820d7a0ae226d0e",
+        "length": 1111,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"text\",\"text\":\"three images\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_mix\",\"name\":\"read_file\",\"input\":{\"path\":\"toolu_mix.png\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_mix\",\"content\":[{\"type\":\"text\",\"text\":\"Read toolu_mix.png\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]}]},{\"role\":\"assistant\",\"content\":\"done\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"again\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "projected/mixed-small-and-large/rows": {
+    "requests": [
+      {
+        "sha256": "62baaca95cb43da045a7494e16b84df1003679cf1b0265580c852d2dca40821d",
+        "length": 1133,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAAAAAAAA\"}},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAD6AAAABkCAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"three images\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_mix\",\"name\":\"read_file\",\"input\":{\"path\":\"toolu_mix.png\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_mix\",\"content\":[{\"type\":\"text\",\"text\":\"Read toolu_mix.png\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAAAAAAAA\"}},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACcQAAAnECAYAAAAAAAAA\"}}]}]},{\"role\":\"assistant\",\"content\":\"done\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"again\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "27f1644c0816546fab5b5b400f74a0ce1b1507fb1e96aa844820d7a0ae226d0e",
+        "length": 1111,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"text\",\"text\":\"three images\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_mix\",\"name\":\"read_file\",\"input\":{\"path\":\"toolu_mix.png\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_mix\",\"content\":[{\"type\":\"text\",\"text\":\"Read toolu_mix.png\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]}]},{\"role\":\"assistant\",\"content\":\"done\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"again\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "outer/mixed-small-and-large/rows": {
+    "requests": [
+      {
+        "sha256": "62baaca95cb43da045a7494e16b84df1003679cf1b0265580c852d2dca40821d",
+        "length": 1133,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAAAAAAAA\"}},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAD6AAAABkCAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"three images\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_mix\",\"name\":\"read_file\",\"input\":{\"path\":\"toolu_mix.png\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_mix\",\"content\":[{\"type\":\"text\",\"text\":\"Read toolu_mix.png\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAAAAAAAA\"}},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACcQAAAnECAYAAAAAAAAA\"}}]}]},{\"role\":\"assistant\",\"content\":\"done\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"again\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "27f1644c0816546fab5b5b400f74a0ce1b1507fb1e96aa844820d7a0ae226d0e",
+        "length": 1111,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"text\",\"text\":\"three images\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_mix\",\"name\":\"read_file\",\"input\":{\"path\":\"toolu_mix.png\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_mix\",\"content\":[{\"type\":\"text\",\"text\":\"Read toolu_mix.png\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]}]},{\"role\":\"assistant\",\"content\":\"done\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"again\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "retry/configured-budget-intersection/stream": {
+    "requests": [
+      {
+        "sha256": "aedde2f3a89dc300fc8d95f5ccfc02852cebded938a4bfd419fa2414e1546a7f",
+        "length": 508,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACJgAAAPoCAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"keep or drop\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "23577f2440bcd7b723b60d366a11054f272216a42761b00442cb980a6eb041d2",
+        "length": 497,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"text\",\"text\":\"keep or drop\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "retry/configured-budget-intersection/rows": {
+    "requests": [
+      {
+        "sha256": "aedde2f3a89dc300fc8d95f5ccfc02852cebded938a4bfd419fa2414e1546a7f",
+        "length": 508,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACJgAAAPoCAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"keep or drop\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "23577f2440bcd7b723b60d366a11054f272216a42761b00442cb980a6eb041d2",
+        "length": 497,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"text\",\"text\":\"keep or drop\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "projected/configured-budget-intersection/rows": {
+    "requests": [
+      {
+        "sha256": "aedde2f3a89dc300fc8d95f5ccfc02852cebded938a4bfd419fa2414e1546a7f",
+        "length": 508,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACJgAAAPoCAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"keep or drop\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "23577f2440bcd7b723b60d366a11054f272216a42761b00442cb980a6eb041d2",
+        "length": 497,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"text\",\"text\":\"keep or drop\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "outer/configured-budget-intersection/rows": {
+    "requests": [
+      {
+        "sha256": "aedde2f3a89dc300fc8d95f5ccfc02852cebded938a4bfd419fa2414e1546a7f",
+        "length": 508,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACJgAAAPoCAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"keep or drop\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "23577f2440bcd7b723b60d366a11054f272216a42761b00442cb980a6eb041d2",
+        "length": 497,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"text\",\"text\":\"keep or drop\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "retry/configured-budget-pixels/stream": {
+    "requests": [
+      {
+        "sha256": "500a22426dd87cfafd2830e65cc3ab7ad256b4c8a6bd6397024803e0814a869f",
+        "length": 582,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACJgAAABkCAYAAAAAAAAA\"}}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "587d0bff2403ee43aeb5bf30743789547bcd9ad75364d0ad89b3b99a3c0231ba",
+        "length": 571,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "retry/configured-budget-pixels/rows": {
+    "requests": [
+      {
+        "sha256": "500a22426dd87cfafd2830e65cc3ab7ad256b4c8a6bd6397024803e0814a869f",
+        "length": 582,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACJgAAABkCAYAAAAAAAAA\"}}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "587d0bff2403ee43aeb5bf30743789547bcd9ad75364d0ad89b3b99a3c0231ba",
+        "length": 571,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "projected/configured-budget-pixels/rows": {
+    "requests": [
+      {
+        "sha256": "500a22426dd87cfafd2830e65cc3ab7ad256b4c8a6bd6397024803e0814a869f",
+        "length": 582,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACJgAAABkCAYAAAAAAAAA\"}}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "587d0bff2403ee43aeb5bf30743789547bcd9ad75364d0ad89b3b99a3c0231ba",
+        "length": 571,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "outer/configured-budget-pixels/rows": {
+    "requests": [
+      {
+        "sha256": "500a22426dd87cfafd2830e65cc3ab7ad256b4c8a6bd6397024803e0814a869f",
+        "length": 582,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAACJgAAABkCAYAAAAAAAAA\"}}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "587d0bff2403ee43aeb5bf30743789547bcd9ad75364d0ad89b3b99a3c0231ba",
+        "length": 571,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "retry/cache-anchor-and-purge-boundary/stream": {
+    "requests": [
+      {
+        "sha256": "2409ea8fdca8a4aa49265e4f7c4676dfdfe88af2bd245462365aa4fbeaf397c9",
+        "length": 630,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"stable prefix\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAC7gAAAu4CAYAAAAAAAAA\"}}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"seen\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"tail\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "de47b6bb0809ded76b29234c7a32613202069af214b4d9109ec002250cfaa6ff",
+        "length": 619,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"stable prefix\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"seen\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"tail\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "retry/cache-anchor-and-purge-boundary/rows": {
+    "requests": [
+      {
+        "sha256": "2409ea8fdca8a4aa49265e4f7c4676dfdfe88af2bd245462365aa4fbeaf397c9",
+        "length": 630,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"stable prefix\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAC7gAAAu4CAYAAAAAAAAA\"}}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"seen\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"tail\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "de47b6bb0809ded76b29234c7a32613202069af214b4d9109ec002250cfaa6ff",
+        "length": 619,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"stable prefix\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"seen\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"tail\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "projected/cache-anchor-and-purge-boundary/rows": {
+    "requests": [
+      {
+        "sha256": "2409ea8fdca8a4aa49265e4f7c4676dfdfe88af2bd245462365aa4fbeaf397c9",
+        "length": 630,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"stable prefix\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAC7gAAAu4CAYAAAAAAAAA\"}}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"seen\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"tail\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "de47b6bb0809ded76b29234c7a32613202069af214b4d9109ec002250cfaa6ff",
+        "length": 619,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"stable prefix\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"seen\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"tail\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "outer/cache-anchor-and-purge-boundary/rows": {
+    "requests": [
+      {
+        "sha256": "2409ea8fdca8a4aa49265e4f7c4676dfdfe88af2bd245462365aa4fbeaf397c9",
+        "length": 630,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"stable prefix\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}},{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAC7gAAAu4CAYAAAAAAAAA\"}}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"seen\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"tail\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      },
+      {
+        "sha256": "de47b6bb0809ded76b29234c7a32613202069af214b4d9109ec002250cfaa6ff",
+        "length": 619,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"stable prefix\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}},{\"type\":\"text\",\"text\":\"[Image dropped: exceeded the provider image dimension limit. Provide a smaller image.]\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"seen\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"tail\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": false
+  },
+  "retry/only-small-images/stream": {
+    "requests": [
+      {
+        "sha256": "c95ab23b49dbdb78c1d60f878f45fb59b1558090522f04c4628284fa063eca48",
+        "length": 500,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"tiny\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": true
+  },
+  "retry/only-small-images/rows": {
+    "requests": [
+      {
+        "sha256": "c95ab23b49dbdb78c1d60f878f45fb59b1558090522f04c4628284fa063eca48",
+        "length": 500,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"tiny\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": true
+  },
+  "projected/only-small-images/rows": {
+    "requests": [
+      {
+        "sha256": "c95ab23b49dbdb78c1d60f878f45fb59b1558090522f04c4628284fa063eca48",
+        "length": 500,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"tiny\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": true
+  },
+  "outer/only-small-images/rows": {
+    "requests": [
+      {
+        "sha256": "c95ab23b49dbdb78c1d60f878f45fb59b1558090522f04c4628284fa063eca48",
+        "length": 500,
+        "body": "{\"model\":\"claude-opus-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/png\",\"data\":\"iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAAAAAAAA\"}},{\"type\":\"text\",\"text\":\"tiny\"}]},{\"role\":\"assistant\",\"content\":\"seen\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"next\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}],\"max_tokens\":32000,\"stream\":false,\"system\":[{\"type\":\"text\",\"text\":\"test system prompt\",\"cache_control\":{\"type\":\"ephemeral\",\"ttl\":\"1h\"}}]}",
+        "contentLength": "present"
+      }
+    ],
+    "threw": true
+  }
+}
