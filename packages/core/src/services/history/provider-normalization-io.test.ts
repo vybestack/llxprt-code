@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'bun:test';
 import * as fs from 'node:fs';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { z } from 'zod';
 import { ProviderNormalizationDisk } from './provider-normalization-disk.js';
 import { batchRow } from './__tests__/support/addbatch-stream-test-helpers.js';
 
@@ -39,6 +40,17 @@ describe('provider normalization bounded filesystem work', () => {
           batchRow(index, 256),
         );
       expect(reads.mock.calls.length).toBeLessThan(rows / 4);
+    });
+  });
+
+  it('validates stored counters without building a schema per lookup', async () => {
+    await withDisk(async (disk) => {
+      for (let index = 0; index < 100; index++)
+        disk.setNumber(`call:${index}`, index);
+      const builds = vi.spyOn(z, 'number');
+      for (let index = 0; index < 100; index++)
+        expect(disk.number(`call:${index}`)).toBe(index);
+      expect(builds).not.toHaveBeenCalled();
     });
   });
 

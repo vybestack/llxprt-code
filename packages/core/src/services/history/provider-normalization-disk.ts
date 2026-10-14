@@ -12,6 +12,7 @@ const pointerSchema = z.object({
   row: z.number().int().nonnegative(),
   block: z.number().int().nonnegative(),
 });
+const counterSchema = z.number().int().nonnegative();
 export type ProviderBlockPointer = z.infer<typeof pointerSchema>;
 
 export class ProviderNormalizationDisk {
@@ -49,9 +50,7 @@ export class ProviderNormalizationDisk {
   number(key: string): number | undefined {
     if (key.startsWith('length:')) return this.lengths.get(key);
     const value = this.read(key);
-    return value === undefined
-      ? undefined
-      : z.number().int().nonnegative().parse(value);
+    return value === undefined ? undefined : counterSchema.parse(value);
   }
 
   setNumber(key: string, value: number): void {
