@@ -259,4 +259,52 @@ describe('owner-backed /chat command route', () => {
       ).toHaveLength(1);
     });
   }, 30000);
+
+  it('counts history for /chat clear without materializing or streaming it', async () => {
+    await withRecordingLifetimeFixture(async ({ agent }) => {
+      await agent.session.setRecording({ enabled: true });
+      const context = createMockCommandContext({ services: { agent } });
+      const materialized = spyOn(agent.session, 'getHistory');
+      const clientScan = spyOn(agent.agentClient, 'getHistory');
+      const publicScan = spyOn(agent, 'streamHistory');
+      try {
+        expect(await action('clear')(context, '')).toMatchObject({
+          content: 'No conversation to clear.',
+        });
+        expect(materialized).not.toHaveBeenCalled();
+        expect(clientScan).not.toHaveBeenCalled();
+        expect(publicScan).not.toHaveBeenCalled();
+      } finally {
+        materialized.mockRestore();
+        clientScan.mockRestore();
+        publicScan.mockRestore();
+      }
+    });
+  }, 30000);
+
+  it('counts history for /chat debug without materializing or streaming it', async () => {
+    await withRecordingLifetimeFixture(async ({ agent }) => {
+      await agent.setHistory([human('first'), ai('one'), human('second')]);
+      await agent.session.setRecording({ enabled: true });
+      const context = createMockCommandContext({ services: { agent } });
+      const materialized = spyOn(agent.session, 'getHistory');
+      const clientScan = spyOn(agent.agentClient, 'getHistory');
+      const publicScan = spyOn(agent, 'streamHistory');
+      try {
+        const debug = await action('debug')(context, '');
+        expect(debug).toMatchObject({
+          content: expect.stringMatching(
+            /Chat initialized: true[\s\S]*History entries: 3/,
+          ),
+        });
+        expect(materialized).not.toHaveBeenCalled();
+        expect(clientScan).not.toHaveBeenCalled();
+        expect(publicScan).not.toHaveBeenCalled();
+      } finally {
+        materialized.mockRestore();
+        clientScan.mockRestore();
+        publicScan.mockRestore();
+      }
+    });
+  }, 30000);
 });

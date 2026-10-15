@@ -225,7 +225,7 @@ const actions: Record<string, NonNullable<SlashCommand['action']>> = {
   clear: async (context) => {
     try {
       const agent = owner(context);
-      if ((await agent.session.getHistory()).length === 0)
+      if (agent.getStats().turnCount === 0)
         return {
           type: 'message',
           messageType: 'info',
@@ -295,12 +295,12 @@ const actions: Record<string, NonNullable<SlashCommand['action']>> = {
   },
   debug: async (context) => {
     const agent = owner(context);
-    const history = await agent.session.getHistory();
+    const entries = agent.getStats().turnCount;
     const recording = agent.session.getRecording();
     return {
       type: 'message',
       messageType: 'info',
-      content: `Chat Debug Information:\n• Chat initialized: ${history.length > 0}\n• History entries: ${history.length}\n• Current model: ${agent.getModel()}\n• Recording: ${recording.path ?? 'not active'}`,
+      content: `Chat Debug Information:\n• Chat initialized: ${entries > 0}\n• History entries: ${entries}\n• Current model: ${agent.getModel()}\n• Recording: ${recording.path ?? 'not active'}`,
     };
   },
 };
