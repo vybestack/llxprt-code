@@ -1,5 +1,5 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -13,6 +13,7 @@ import type { GenerateChatOptions } from '../IProvider.js';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import type { SettingsService } from '@vybestack/llxprt-code-settings';
+import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import type { ProviderRuntimeContext } from '@vybestack/llxprt-code-core/runtime/providerRuntimeContext.js';
 
 const TOKEN_USAGE = {
@@ -144,5 +145,4 @@ export const createRuntimeContext = (): ProviderRuntimeContext => ({
 export const createSettingsOwner = (
   settings: SettingsService,
   config: Config,
-): ReturnType<typeof fixtureOwners.adopt>['settingsOwner'] =>
-  fixtureOwners.adopt(config, settings).settingsOwner;
+): SessionSettingsOwner => fixtureOwnersBorrowedSettings(config, settings);

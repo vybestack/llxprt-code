@@ -1,5 +1,11 @@
+import {
+  installOwnedConfig,
+  installBorrowedConfigSettings,
+} from '../../__tests__/helpers/session-settings-owner-fixture.js';
+const acquireSettings = installBorrowedConfigSettings();
+const acquireConfig = installOwnedConfig();
 import { readFixtureSessionAuthPolicy } from './session-auth-policy-fixture.js';
-import { createProviderConfigFixture } from '../../runtime/__tests__/provider-config-fixture.js';
+
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -167,14 +173,14 @@ export function createIssue1468Fixture(): {
   settingsService: SettingsService;
 } {
   const settingsService = new SettingsService();
-  const { config: config } = createProviderConfigFixture({
+  const config = acquireConfig({
     sessionId: 'issue1468',
     targetDir: process.cwd(),
     cwd: process.cwd(),
     debugMode: false,
     model: 'gpt-5',
-    settingsService,
   });
+  acquireSettings(config, settingsService);
   const tokenStore = new MockTokenStore();
   const settings = createFakeOAuthSettings();
   const manager = new OAuthManager(tokenStore, settings, {

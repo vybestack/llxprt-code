@@ -1,6 +1,6 @@
 import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -126,10 +126,10 @@ function buildManagedWrapper(base: RecordingProvider): {
     metadata: { source: 'ProviderManager.syncProviderRuntime' },
   };
 
-  const wrapperSettings1 = fixtureOwners.adopt(
+  const wrapperSettings1 = fixtureOwnersBorrowedSettings(
     config,
     new SettingsService(),
-  ).settingsOwner;
+  );
   const wrapper = new LoggingProviderWrapper(base, config, undefined, () =>
     captureProviderRequestDiagnostics(config, wrapperSettings1),
   );

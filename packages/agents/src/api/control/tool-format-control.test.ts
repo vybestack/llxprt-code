@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { useRuntimeTestOwners } from '../../../../providers/src/runtime/__tests__/runtime-owner-test-helpers.js';
+import { installOwnedConfigSettings } from '../../../../providers/src/__tests__/helpers/session-settings-owner-fixture.js';
 import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
 import {
   assembleToolFormatControl,
@@ -32,14 +32,14 @@ const activeProvider = {
 };
 
 describe('setActiveToolFormatOverride ephemeral persistence (issue #1943)', () => {
-  const roots = useRuntimeTestOwners();
+  const rootsOwnedSettings = installOwnedConfigSettings();
   let settings: SettingsService;
   let owner: SessionSettingsOwner;
 
   beforeEach(() => {
     settings = new SettingsService();
     settings.set('activeProvider', 'openai');
-    owner = roots.config('tool-format-profile', settings).settingsOwner;
+    owner = rootsOwnedSettings('tool-format-profile', settings);
   });
 
   it('writes "openai" to the captured user parameters when setting toolFormat to "openai"', async () => {

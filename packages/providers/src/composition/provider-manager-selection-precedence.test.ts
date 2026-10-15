@@ -1,3 +1,10 @@
+import {
+  installOwnedConfig,
+  installBorrowedConfigSettings,
+} from '../__tests__/helpers/session-settings-owner-fixture.js';
+const acquireSettings = installBorrowedConfigSettings();
+const acquireConfig = installOwnedConfig();
+import type { ConfigParameters } from '@vybestack/llxprt-code-core/config/configTypes.js';
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -20,8 +27,6 @@ import {
   type Config,
   createProviderRuntimeContext,
 } from '@vybestack/llxprt-code-core';
-
-import { createProviderConfigFixture } from '../runtime/__tests__/provider-config-fixture.js';
 
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 
@@ -58,14 +63,14 @@ describe('explicit provider primitive owners', () => {
      * and the composition layer are provided.
      */
     function makeMinimalConfig(provider: string): Config {
-      return createProviderConfigFixture({
+      return buildConfiguredConfig({
         provider,
         sessionId: 'unconfigured-provider-authority',
         targetDir: process.cwd(),
         cwd: process.cwd(),
         model: 'placeholder-model',
         debugMode: false,
-      }).config;
+      });
     }
 
     describe('createProviderManager: explicit provider trimming (#2481)', () => {
@@ -496,3 +501,13 @@ describe('explicit provider primitive owners', () => {
     });
   });
 });
+
+function buildConfiguredConfig(parameters: ConfigParameters): Config {
+  const config = acquireConfig(parameters);
+  const settings = new SettingsService();
+  const owner = acquireSettings(config, settings);
+  for (const [key, value] of Object.entries(config.getInitialSettings()))
+    settings.set(key, value);
+  owner.initializeProviderSelection(config.getProvider(), config.getModel());
+  return config;
+}

@@ -1,5 +1,5 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -95,7 +95,7 @@ describe('LoadBalancingProvider Timeout Wrapper - Phase 3', () => {
       runtimeConfig,
       undefined,
       undefined,
-      fixtureOwners.adopt(runtimeConfig, settingsService).settingsOwner,
+      fixtureOwnersBorrowedSettings(runtimeConfig, settingsService),
     );
     config = {
       profileName: 'test-lb',

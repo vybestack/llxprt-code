@@ -1,5 +1,5 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -200,7 +200,7 @@ describe('LoadBalancingProvider commit boundary (issue #2532)', () => {
       config,
       undefined,
       undefined,
-      fixtureOwners.adopt(config, settingsService).settingsOwner,
+      fixtureOwnersBorrowedSettings(config, settingsService),
     );
   });
 

@@ -1,7 +1,7 @@
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -50,10 +50,10 @@ describe('#10 exact counts for all scenarios', () => {
 
   it('direct success emits exactly 1 request, 0 errors', async () => {
     const config = createConfig(false);
-    const wrapperSettings1 = fixtureOwners.adopt(
+    const wrapperSettings1 = fixtureOwnersBorrowedSettings(
       config,
       new SettingsService(),
-    ).settingsOwner;
+    );
     const wrapper = Object.assign(
       new LoggingProviderWrapper(
         new SuccessProvider(SUCCESS_CHUNKS),
@@ -79,10 +79,10 @@ describe('#10 exact counts for all scenarios', () => {
 
   it('direct sync throw emits exactly 1 request, 1 error', async () => {
     const config = createConfig(false);
-    const wrapperSettings2 = fixtureOwners.adopt(
+    const wrapperSettings2 = fixtureOwnersBorrowedSettings(
       config,
       new SettingsService(),
-    ).settingsOwner;
+    );
     const wrapper = Object.assign(
       new LoggingProviderWrapper(
         new SyncThrowProvider(),
@@ -116,10 +116,10 @@ describe('#10 exact counts for all scenarios', () => {
         blocks: [{ type: 'text', text: 'chunk1' }],
       } as IContent,
     ]);
-    const wrapperSettings3 = fixtureOwners.adopt(
+    const wrapperSettings3 = fixtureOwnersBorrowedSettings(
       config,
       new SettingsService(),
-    ).settingsOwner;
+    );
     const wrapper = Object.assign(
       new LoggingProviderWrapper(provider, config, undefined, () =>
         captureProviderRequestDiagnostics(config, wrapperSettings3),
@@ -245,10 +245,10 @@ describe('LoggingProviderWrapper sync invocation timing (finding #5)', () => {
 
   it('sync throw records a finite non-negative monotonic elapsed duration', async () => {
     const config = createConfig(false);
-    const wrapperSettings4 = fixtureOwners.adopt(
+    const wrapperSettings4 = fixtureOwnersBorrowedSettings(
       config,
       new SettingsService(),
-    ).settingsOwner;
+    );
     const wrapper = Object.assign(
       new LoggingProviderWrapper(
         new SyncThrowProvider(),
@@ -289,10 +289,10 @@ describe('LoggingProviderWrapper sync invocation timing (finding #5)', () => {
     // Provider that advances the mocked performance.now by 5ms before
     // throwing synchronously, simulating real elapsed work.
     const provider = new SyncThrowProvider();
-    const wrapperSettings5 = fixtureOwners.adopt(
+    const wrapperSettings5 = fixtureOwnersBorrowedSettings(
       config,
       new SettingsService(),
-    ).settingsOwner;
+    );
     const wrapper = Object.assign(
       new LoggingProviderWrapper(provider, config, undefined, () =>
         captureProviderRequestDiagnostics(config, wrapperSettings5),

@@ -1,5 +1,12 @@
+import {
+  installOwnedConfig,
+  installBorrowedConfigSettings,
+} from '../__tests__/helpers/session-settings-owner-fixture.js';
+const acquireSettings = installBorrowedConfigSettings();
+const acquireConfig = installOwnedConfig();
+import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/session-settings-owner.js';
-import { createProviderConfigFixture } from './__tests__/provider-config-fixture.js';
+
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -11,14 +18,21 @@ import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/r
 
 describe('provider owner diagnostic accounting', () => {
   it('accounts through an explicitly supplied owner without discovering a Config manager', async () => {
-    const { config: config, settingsService: configSettingsService } =
-      createProviderConfigFixture({
-        sessionId: 'diagnostic-owner',
-        cwd: process.cwd(),
-        targetDir: process.cwd(),
-        model: 'local-model',
-        debugMode: false,
-      });
+    const config = acquireConfig({
+      sessionId: 'diagnostic-owner',
+      cwd: process.cwd(),
+      targetDir: process.cwd(),
+      model: 'local-model',
+      debugMode: false,
+    });
+    const configSettingsService = new SettingsService();
+    const ownedSettingsOwner = acquireSettings(config, configSettingsService);
+    for (const [key, value] of Object.entries(config.getInitialSettings()))
+      configSettingsService.set(key, value);
+    ownedSettingsOwner.initializeProviderSelection(
+      config.getProvider(),
+      config.getModel(),
+    );
     const settings = new SessionSettingsOwner(configSettingsService);
     settings.bindTelemetry(config);
     const owner = new ProviderManager(

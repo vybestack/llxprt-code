@@ -2,8 +2,8 @@ import type { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/s
 import type { UiTelemetryService } from '@vybestack/llxprt-code-telemetry';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
 import { captureProviderRequestDiagnostics } from '@vybestack/llxprt-code-core/runtime/providerRequestDiagnostics.js';
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2025 Vybestack LLC
@@ -293,7 +293,7 @@ function buildStack(
   });
   const wrapperSettings1 =
     selectedOwner ??
-    fixtureOwners.adopt(config, new SettingsService()).settingsOwner;
+    fixtureOwnersBorrowedSettings(config, new SettingsService());
   const wrapper = Object.assign(
     new LoggingProviderWrapper(retry, config, undefined, () =>
       captureProviderRequestDiagnostics(config, wrapperSettings1),

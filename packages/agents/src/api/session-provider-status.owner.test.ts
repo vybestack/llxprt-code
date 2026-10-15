@@ -6,40 +6,54 @@ import { SessionSettingsOwner } from '@vybestack/llxprt-code-core/session/sessio
  */
 
 import { describe, expect, it } from 'bun:test';
+import { Config } from '@vybestack/llxprt-code-core/config/config.js';
 import { SettingsService } from '@vybestack/llxprt-code-settings';
-import { createProviderConfigFixture } from '../../../providers/src/runtime/__tests__/provider-config-fixture.js';
+import {
+  installOwnedConfig,
+  installBorrowedConfigSettings,
+} from '../../../providers/src/__tests__/helpers/session-settings-owner-fixture.js';
 import { SessionProviderReads } from './session-provider-reads.js';
 import { TestRuntimeProviderManager } from '../test-utils/runtimeProviderManager.js';
 
-function owner(
-  label: string,
-  providerName: string,
-  modelName: string,
-): ReturnType<typeof createProviderConfigFixture> {
-  const settingsService = new SettingsService();
-  settingsService.set('activeProvider', providerName);
-  settingsService.setProviderSetting(providerName, 'model', modelName);
-  return createProviderConfigFixture({
+const acquireSettings = installBorrowedConfigSettings();
+const acquireConfig = installOwnedConfig();
+
+function selectedConfig(label: string, modelName: string): Config {
+  return acquireConfig({
     sessionId: label,
     cwd: process.cwd(),
     targetDir: process.cwd(),
     debugMode: false,
     model: modelName,
-    settingsService,
   });
+}
+
+function selectProvider(
+  settings: SettingsService,
+  providerName: string,
+  modelName: string,
+): void {
+  settings.set('activeProvider', providerName);
+  settings.setProviderSetting(providerName, 'model', modelName);
 }
 
 describe('provider status owner binding', () => {
   it('reads equal-label owners independently without borrowing another runtime', async () => {
-    const first = owner('same-label', 'first', 'first-model');
-    const second = owner('same-label', 'second', 'second-model');
+    const firstConfig = selectedConfig('same-label', 'first-model');
+    const firstSettings = new SettingsService();
+    selectProvider(firstSettings, 'first', 'first-model');
+    const firstOwner = acquireSettings(firstConfig, firstSettings);
+    const secondConfig = selectedConfig('same-label', 'second-model');
+    const secondSettings = new SettingsService();
+    selectProvider(secondSettings, 'second', 'second-model');
+    const secondOwner = acquireSettings(secondConfig, secondSettings);
     try {
       expect(
         new SessionProviderReads(
-          first.settingsOwner,
+          firstOwner,
           new TestRuntimeProviderManager(),
-          () => first.config.getModel(),
-          (provider) => first.settingsService.getProviderSettings(provider),
+          () => firstConfig.getModel(),
+          (provider) => firstSettings.getProviderSettings(provider),
         ).providerStatus(),
       ).toMatchObject({
         providerName: 'first',
@@ -47,23 +61,26 @@ describe('provider status owner binding', () => {
       });
       expect(
         new SessionProviderReads(
-          second.settingsOwner,
+          secondOwner,
           new TestRuntimeProviderManager(),
-          () => second.config.getModel(),
-          (provider) => second.settingsService.getProviderSettings(provider),
+          () => secondConfig.getModel(),
+          (provider) => secondSettings.getProviderSettings(provider),
         ).providerStatus(),
       ).toMatchObject({
         providerName: 'second',
         modelName: 'second-model',
       });
     } finally {
-      await first.config.dispose();
-      await second.config.dispose();
+      await firstConfig.dispose();
+      await secondConfig.dispose();
     }
   });
 
   it('does not infer an owner from a neighboring runtime', async () => {
-    const first = owner('same-label', 'first', 'first-model');
+    const firstConfig = selectedConfig('same-label', 'first-model');
+    const firstSettings = new SettingsService();
+    selectProvider(firstSettings, 'first', 'first-model');
+    acquireSettings(firstConfig, firstSettings);
     try {
       expect(
         new SessionProviderReads(
@@ -77,7 +94,7 @@ describe('provider status owner binding', () => {
         modelName: null,
       });
     } finally {
-      await first.config.dispose();
+      await firstConfig.dispose();
     }
   });
 });

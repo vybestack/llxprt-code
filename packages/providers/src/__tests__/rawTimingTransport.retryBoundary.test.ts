@@ -1,5 +1,5 @@
-import { useRuntimeTestOwners as installRuntimeTestOwners } from '../runtime/__tests__/runtime-owner-test-helpers.js';
-const fixtureOwners = installRuntimeTestOwners();
+import { installBorrowedConfigSettings } from './helpers/session-settings-owner-fixture.js';
+const fixtureOwnersBorrowedSettings = installBorrowedConfigSettings();
 /**
  * @license
  * Copyright 2026 Vybestack LLC
@@ -497,7 +497,7 @@ describe('issue #3473 F2: raw timing transport at retry and LB boundaries', () =
       config,
       undefined,
       undefined,
-      fixtureOwners.adopt(config, settingsService).settingsOwner,
+      fixtureOwnersBorrowedSettings(config, settingsService),
     );
     providerManager.registerProvider(failing);
     providerManager.registerProvider(ok);

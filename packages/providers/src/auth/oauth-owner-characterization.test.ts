@@ -4,7 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createProviderConfigFixture } from '../runtime/__tests__/provider-config-fixture.js';
+import {
+  installOwnedConfig,
+  installBorrowedConfigSettings,
+} from '../__tests__/helpers/session-settings-owner-fixture.js';
+const acquireSettings = installBorrowedConfigSettings();
+const acquireConfig = installOwnedConfig();
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -31,26 +36,11 @@ function token(account: string): OAuthToken {
   };
 }
 
-function owner(
-  profile: string,
+function createOAuth(
+  config: Config,
+  settings: SettingsService,
   store: MemoryTokenStore,
-  profileDirectory?: string,
-): {
-  config: Config;
-  settings: SettingsService;
-  oauth: OAuthManager;
-} {
-  const settings = new SettingsService();
-  settings.setCurrentProfileName(profile);
-  const { config: config } = createProviderConfigFixture({
-    sessionId: profile,
-    profileDirectory,
-    targetDir: process.cwd(),
-    cwd: process.cwd(),
-    debugMode: false,
-    model: 'gpt-5',
-    settingsService: settings,
-  });
+): OAuthManager {
   const oauth = new OAuthManager(store, undefined, {
     config,
     readSessionAuthPolicy: () => ({
@@ -63,9 +53,25 @@ function owner(
     }),
   });
   registerStandardOAuthProviders(oauth, globalThis.fetch);
-  return { config, settings, oauth };
+  return oauth;
 }
-
+function createConfig(
+  profile: string,
+  settings: SettingsService,
+  profileDirectory?: string,
+): Config {
+  settings.setCurrentProfileName(profile);
+  const config = acquireConfig({
+    sessionId: profile,
+    profileDirectory,
+    targetDir: process.cwd(),
+    cwd: process.cwd(),
+    debugMode: false,
+    model: 'gpt-5',
+  });
+  acquireSettings(config, settings);
+  return config;
+}
 describe('OAuth ownership (#2616)', () => {
   it('selects same-label profile buckets from each explicitly chosen definition directory', async () => {
     const root = await mkdtemp(join(tmpdir(), 'oauth-profile-owner-'));
@@ -74,7 +80,8 @@ describe('OAuth ownership (#2616)', () => {
     await store.saveToken('codex', token('beta'), 'beta');
     const directoryA = join(root, 'a');
     const directoryB = join(root, 'b');
-    const owners: Array<ReturnType<typeof owner>> = [];
+    const configs: Config[] = [];
+    const oauths: OAuthManager[] = [];
     try {
       for (const [directory, bucket] of [
         [directoryA, 'alpha'],
@@ -89,33 +96,39 @@ describe('OAuth ownership (#2616)', () => {
           ephemeralSettings: {},
           auth: { type: 'oauth', buckets: [bucket] },
         });
-        owners.push(owner('equal-label', store, directory));
+        const settings = new SettingsService();
+        const config = createConfig('equal-label', settings, directory);
+        configs.push(config);
+        oauths.push(createOAuth(config, settings, store));
       }
-      const first = owners[0];
-      const second = owners[1];
-      const readB = second.oauth.getOAuthToken('codex');
-      const readA = first.oauth.getOAuthToken('codex');
+      const firstOAuth = oauths[0];
+      const secondOAuth = oauths[1];
+      const firstConfig = configs[0];
+      const readB = secondOAuth.getOAuthToken('codex');
+      const readA = firstOAuth.getOAuthToken('codex');
       expect((await readB)?.access_token).toBe('access-beta');
       expect((await readA)?.access_token).toBe('access-alpha');
-      await first.config.dispose();
-      expect((await second.oauth.getOAuthToken('codex'))?.access_token).toBe(
+      await firstConfig.dispose();
+      expect((await secondOAuth.getOAuthToken('codex'))?.access_token).toBe(
         'access-beta',
       );
     } finally {
-      await Promise.allSettled(owners.map(({ config }) => config.dispose()));
+      await Promise.allSettled(configs.map((config) => config.dispose()));
       await rm(root, { recursive: true, force: true });
     }
   });
 
-  function useOwners(): () => {
-    first: ReturnType<typeof owner>;
-    second: ReturnType<typeof owner>;
-    profileA: string;
-    profileB: string;
-    missingProfile: string;
-    store: MemoryTokenStore;
-  } {
-    let fixture: ReturnType<ReturnType<typeof useOwners>>;
+  let firstConfig: Config;
+  let secondConfig: Config;
+  let firstSettings: SettingsService;
+  let secondSettings: SettingsService;
+  let firstOAuth: OAuthManager;
+  let secondOAuth: OAuthManager;
+  let profileA: string;
+  let profileB: string;
+  let missingProfile: string;
+  let store: MemoryTokenStore;
+  function installOwners(): void {
     let profiles: ProfileManager;
 
     beforeEach(async () => {
@@ -125,8 +138,8 @@ describe('OAuth ownership (#2616)', () => {
         );
       }
       const suffix = randomUUID();
-      const profileA = `oauth-owner-a-${suffix}`;
-      const profileB = `oauth-owner-b-${suffix}`;
+      profileA = `oauth-owner-a-${suffix}`;
+      profileB = `oauth-owner-b-${suffix}`;
       profiles = new ProfileManager();
       for (const [name, bucket] of [
         [profileA, 'alpha'],
@@ -141,132 +154,121 @@ describe('OAuth ownership (#2616)', () => {
           auth: { type: 'oauth', buckets: [bucket] },
         });
       }
-      const store = new MemoryTokenStore();
+      store = new MemoryTokenStore();
       await store.saveToken('codex', token('alpha'), 'alpha');
       await store.saveToken('codex', token('beta'), 'beta');
       await store.saveToken('codex', token('default'));
-      fixture = {
-        first: owner(profileA, store),
-        second: owner(profileB, store),
-        profileA,
-        profileB,
-        missingProfile: `oauth-owner-missing-${suffix}`,
-        store,
-      };
+      firstSettings = new SettingsService();
+      secondSettings = new SettingsService();
+      firstConfig = createConfig(profileA, firstSettings);
+      secondConfig = createConfig(profileB, secondSettings);
+      firstOAuth = createOAuth(firstConfig, firstSettings, store);
+      secondOAuth = createOAuth(secondConfig, secondSettings, store);
+      missingProfile = `oauth-owner-missing-${suffix}`;
     });
 
     afterEach(async () => {
-      await fixture.first.oauth.configureProactiveRenewalsForProfile({});
-      await fixture.second.oauth.configureProactiveRenewalsForProfile({});
-      await fixture.first.config.dispose();
-      await fixture.second.config.dispose();
-      await profiles.deleteProfile(fixture.profileA);
-      await profiles.deleteProfile(fixture.profileB);
+      await firstOAuth.configureProactiveRenewalsForProfile({});
+      await secondOAuth.configureProactiveRenewalsForProfile({});
+      await firstConfig.dispose();
+      await secondConfig.dispose();
+      await profiles.deleteProfile(profileA);
+      await profiles.deleteProfile(profileB);
     });
-
-    return () => fixture;
   }
 
   describe('OAuth explicit request characterization outside identity ALS (#2616)', () => {
-    const owners = useOwners();
+    installOwners();
 
     it('explicit requested profiles select distinct accounts when owners interleave', async () => {
-      const { first, second, profileA, profileB } = owners();
-      const firstRead = first.oauth.getOAuthToken('codex', {
+      const firstRead = firstOAuth.getOAuthToken('codex', {
         profileId: profileA,
       });
-      const secondRead = second.oauth.getOAuthToken('codex', {
+      const secondRead = secondOAuth.getOAuthToken('codex', {
         profileId: profileB,
       });
       expect((await secondRead)?.access_token).toBe('access-beta');
       expect((await firstRead)?.access_token).toBe('access-alpha');
       expect(
-        (await first.oauth.getOAuthToken('codex', { profileId: profileA }))
+        (await firstOAuth.getOAuthToken('codex', { profileId: profileA }))
           ?.access_token,
       ).toBe('access-alpha');
     });
 
     it('explicit requested profiles override the owning settings profile', async () => {
-      const { first, second, profileA, profileB } = owners();
       expect(
-        (await first.oauth.getOAuthToken('codex', { profileId: profileB }))
+        (await firstOAuth.getOAuthToken('codex', { profileId: profileB }))
           ?.access_token,
       ).toBe('access-beta');
       expect(
-        (await second.oauth.getOAuthToken('codex', { profileId: profileA }))
+        (await secondOAuth.getOAuthToken('codex', { profileId: profileA }))
           ?.access_token,
       ).toBe('access-alpha');
     });
 
     it('explicit bucket strings override the owning settings profile', async () => {
-      const { first, second } = owners();
       expect(
-        (await first.oauth.getOAuthToken('codex', 'beta'))?.access_token,
+        (await firstOAuth.getOAuthToken('codex', 'beta'))?.access_token,
       ).toBe('access-beta');
       expect(
-        (await second.oauth.getOAuthToken('codex', 'alpha'))?.access_token,
+        (await secondOAuth.getOAuthToken('codex', 'alpha'))?.access_token,
       ).toBe('access-alpha');
     });
 
     it('a missing explicitly requested profile rejects rather than borrowing a default token', async () => {
-      const { first, missingProfile } = owners();
       await expect(
-        first.oauth.getOAuthToken('codex', { profileId: missingProfile }),
+        firstOAuth.getOAuthToken('codex', { profileId: missingProfile }),
       ).rejects.toThrow(missingProfile);
     });
 
     it('profile-scoped session bucket overrides remain on the manager that set them', async () => {
-      const { first, second, profileA } = owners();
-      first.oauth.setSessionBucket('codex', 'beta', { profileId: profileA });
+      firstOAuth.setSessionBucket('codex', 'beta', { profileId: profileA });
       expect(
-        (await first.oauth.getOAuthToken('codex', { profileId: profileA }))
+        (await firstOAuth.getOAuthToken('codex', { profileId: profileA }))
           ?.access_token,
       ).toBe('access-beta');
       expect(
-        (await second.oauth.getOAuthToken('codex', { profileId: profileA }))
+        (await secondOAuth.getOAuthToken('codex', { profileId: profileA }))
           ?.access_token,
       ).toBe('access-alpha');
     });
 
     it('an explicitly selected bucket logout leaves the other account usable', async () => {
-      const { first, second, profileA, profileB, store } = owners();
-      await first.oauth.logout('codex', 'alpha');
+      await firstOAuth.logout('codex', 'alpha');
       expect(await store.getToken('codex', 'alpha')).toBeNull();
       expect(
-        (await second.oauth.getOAuthToken('codex', { profileId: profileB }))
+        (await secondOAuth.getOAuthToken('codex', { profileId: profileB }))
           ?.access_token,
       ).toBe('access-beta');
       expect(
-        await second.oauth.getOAuthToken('codex', { profileId: profileA }),
+        await secondOAuth.getOAuthToken('codex', { profileId: profileA }),
       ).toBeNull();
     });
   });
 
   describe('OAuth owner requirements outside identity ALS (#2616)', () => {
-    const owners = useOwners();
+    installOwners();
 
     it('implicit stored-token reads follow each owner through interleaved profile changes', async () => {
-      const { first, second, profileB } = owners();
-      const firstRead = first.oauth.peekStoredToken('codex');
-      const secondRead = second.oauth.peekStoredToken('codex');
+      const firstRead = firstOAuth.peekStoredToken('codex');
+      const secondRead = secondOAuth.peekStoredToken('codex');
       expect((await secondRead)?.access_token).toBe('access-beta');
       expect((await firstRead)?.access_token).toBe('access-alpha');
-      first.settings.setCurrentProfileName(profileB);
-      expect((await first.oauth.peekStoredToken('codex'))?.access_token).toBe(
+      firstSettings.setCurrentProfileName(profileB);
+      expect((await firstOAuth.peekStoredToken('codex'))?.access_token).toBe(
         'access-beta',
       );
-      expect((await second.oauth.peekStoredToken('codex'))?.access_token).toBe(
+      expect((await secondOAuth.peekStoredToken('codex'))?.access_token).toBe(
         'access-beta',
       );
     });
 
     it('implicit refresh uses the owner account when another process already replaced the token', async () => {
-      const { first, second } = owners();
-      const firstRefresh = first.oauth.forceRefreshToken(
+      const firstRefresh = firstOAuth.forceRefreshToken(
         'codex',
         'replaced-alpha',
       );
-      const secondRefresh = second.oauth.forceRefreshToken(
+      const secondRefresh = secondOAuth.forceRefreshToken(
         'codex',
         'replaced-beta',
       );
@@ -275,9 +277,8 @@ describe('OAuth ownership (#2616)', () => {
     });
 
     it('bucket status identifies each owner session rather than the shared default', async () => {
-      const { first, second } = owners();
-      const firstStatus = first.oauth.getAuthStatusWithBuckets('codex');
-      const secondStatus = second.oauth.getAuthStatusWithBuckets('codex');
+      const firstStatus = firstOAuth.getAuthStatusWithBuckets('codex');
+      const secondStatus = secondOAuth.getAuthStatusWithBuckets('codex');
       expect(
         (await secondStatus)
           .filter((entry) => entry.isSessionBucket)
@@ -291,47 +292,43 @@ describe('OAuth ownership (#2616)', () => {
     });
 
     it('implicit logout removes only the owner profile account', async () => {
-      const { first, second, profileB, store } = owners();
-      await first.oauth.logout('codex');
+      await firstOAuth.logout('codex');
       expect(await store.getToken('codex', 'alpha')).toBeNull();
       expect((await store.getToken('codex'))?.access_token).toBe(
         'access-default',
       );
       expect(
-        (await second.oauth.getOAuthToken('codex', { profileId: profileB }))
+        (await secondOAuth.getOAuthToken('codex', { profileId: profileB }))
           ?.access_token,
       ).toBe('access-beta');
     });
 
     it('single-bucket authentication uses the owner prompt setting without runtime registration', async () => {
-      const { first, second } = owners();
-      for (const current of [first, second]) {
-        current.oauth.registerProvider(createTestProvider('owner-prompt'));
-        await current.oauth.toggleOAuthEnabled('owner-prompt');
+      for (const oauth of [firstOAuth, secondOAuth]) {
+        oauth.registerProvider(createTestProvider('owner-prompt'));
+        await oauth.toggleOAuthEnabled('owner-prompt');
       }
-      first.settings.set('auth-bucket-prompt', true);
-      second.settings.set('auth-bucket-prompt', false);
+      firstSettings.set('auth-bucket-prompt', true);
+      secondSettings.set('auth-bucket-prompt', false);
       await expect(
-        first.oauth.getToken('owner-prompt', 'alpha'),
+        firstOAuth.getToken('owner-prompt', 'alpha'),
       ).rejects.toThrow('requires a runtime MessageBus');
-      expect(await second.oauth.getToken('owner-prompt', 'beta')).toBe(
+      expect(await secondOAuth.getToken('owner-prompt', 'beta')).toBe(
         'initiated-owner-prompt',
       );
     });
 
     it('disposing another owner leaves implicit account selection intact', async () => {
-      const { first, second } = owners();
-      await first.config.dispose();
-      expect((await second.oauth.getOAuthToken('codex'))?.access_token).toBe(
+      await firstConfig.dispose();
+      expect((await secondOAuth.getOAuthToken('codex'))?.access_token).toBe(
         'access-beta',
       );
     });
 
     it('multi-bucket auth recognizes existing tokens without runtime registration', async () => {
-      const { first, second, store } = owners();
       await Promise.all([
-        first.oauth.authenticateMultipleBuckets('codex', ['alpha', 'beta']),
-        second.oauth.authenticateMultipleBuckets('codex', ['beta', 'alpha']),
+        firstOAuth.authenticateMultipleBuckets('codex', ['alpha', 'beta']),
+        secondOAuth.authenticateMultipleBuckets('codex', ['beta', 'alpha']),
       ]);
       expect(await store.listBuckets('codex')).toStrictEqual([
         'alpha',
