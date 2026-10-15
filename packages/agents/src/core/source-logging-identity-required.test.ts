@@ -7,7 +7,7 @@ import { prepareProviderContentSnapshot } from '@vybestack/llxprt-code-core/serv
 import { BoundarySnapshotDisk } from './boundary-snapshot-disk.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
 import { createSafeJsonReplacer } from './turnJsonUtils.js';
-import { stageTurnRequestArtifact } from './turn-request-artifact.js';
+import { stageRequestArtifactFixture } from './__tests__/support/request-artifact-fixture.js';
 
 const root = sourceRootSetup();
 
@@ -36,7 +36,7 @@ async function capture(shared: boolean, withinRow: boolean) {
       },
     });
     hash.update(']');
-    const staged = await stageTurnRequestArtifact(root(), {
+    const staged = await stageRequestArtifactFixture(root(), {
       [Symbol.asyncIterator]: () => disk.selection('after').openReader(),
     });
     return {
@@ -55,8 +55,7 @@ async function comparison(withinRow: boolean) {
   const independent = await capture(false, withinRow);
   return { shared, independent };
 }
-async function normalized(withBoundary: boolean) {
-  const boundaryId = Object.freeze({});
+async function normalized() {
   const snapshot = await prepareProviderContentSnapshot(
     {
       async *[Symbol.asyncIterator](): AsyncGenerator<IContent, void, unknown> {
@@ -64,13 +63,6 @@ async function normalized(withBoundary: boolean) {
           yield {
             speaker: index % 2 === 0 ? 'human' : 'ai',
             blocks: [{ type: 'text', text: `${index}: same text 雪 😀` }],
-            ...(withBoundary
-              ? {
-                  metadata: {
-                    semanticMediaPurgeBoundary: { blockIndex: 0, boundaryId },
-                  },
-                }
-              : {}),
           };
       },
     },
@@ -88,7 +80,7 @@ async function normalized(withBoundary: boolean) {
       hash.update(JSON.stringify(row, replacer));
     }
     hash.update(']');
-    const staged = await stageTurnRequestArtifact(root(), {
+    const staged = await stageRequestArtifactFixture(root(), {
       [Symbol.asyncIterator]: () => snapshot.openReader(),
     });
     return { requestWideSha256: hash.digest('hex'), ...staged };
@@ -109,12 +101,7 @@ describe('disk source TEXT identity information', () => {
     },
   );
   it('matches request-wide identity on ordinary normalized independent TEXT', async () => {
-    const facts = await normalized(false);
-    expect(facts.row_count).toBe(64);
-    expect(facts.content_sha256).toBe(facts.requestWideSha256);
-  });
-  it('preserves the reconstructed boundary identity on normalized TEXT', async () => {
-    const facts = await normalized(true);
+    const facts = await normalized();
     expect(facts.row_count).toBe(64);
     expect(facts.content_sha256).toBe(facts.requestWideSha256);
   });

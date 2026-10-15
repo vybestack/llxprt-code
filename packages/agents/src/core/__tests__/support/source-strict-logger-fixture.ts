@@ -34,7 +34,7 @@ import {
   type PreparedSourcePromptEnvelopeSend,
 } from '../../prompt-envelope-source-send.js';
 import { settleInducedExportFailure } from './induced-export-failure.js';
-import { stageTurnRequestArtifact } from '../../turn-request-artifact.js';
+import { stageRequestArtifactFixture } from './request-artifact-fixture.js';
 
 export type StrictFault =
   | 'none'
@@ -392,7 +392,7 @@ async function publishPreflight(
   prepared: PreparedSourcePromptEnvelopeSend,
 ): Promise<void> {
   const signal = getRequestSignal(prepared.options);
-  const artifact = await stageTurnRequestArtifact(
+  const artifact = await stageRequestArtifactFixture(
     root,
     { [Symbol.asyncIterator]: () => prepared.source.openReader(signal) },
     signal,

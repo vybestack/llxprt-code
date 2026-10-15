@@ -4,25 +4,29 @@ import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import type { IContent } from '@vybestack/llxprt-code-core/services/history/IContent.js';
 import type { ApiRequestEvent } from '@vybestack/llxprt-code-telemetry/telemetry/types.js';
-import { TurnRequestBoundaryIdentity } from './turn-request-json.js';
+import { createSafeJsonReplacer } from '../../turnJsonUtils.js';
 
 type RequestArtifactDescriptor = NonNullable<
   ApiRequestEvent['request_artifact']
 >;
 
-/** Stages disk rows with the one normalization-owned boundary identity only. */
-export async function stageTurnRequestArtifact(
+/**
+ * Test scaffolding: writes the rows as one JSON array, each row serialized
+ * with its own safe replacer, and returns the descriptor the telemetry
+ * exporters consume. Production request logging stages its artifacts in
+ * storage (`stageRequestArtifact`) with a different byte layout.
+ */
+export async function stageRequestArtifactFixture(
   directory: string,
   contents: AsyncIterable<IContent>,
   signal?: AbortSignal,
 ): Promise<RequestArtifactDescriptor> {
   signal?.throwIfAborted();
   const id = randomUUID();
-  const temporary = join(directory, `.turn-request-${id}`);
-  const target = join(directory, `turn-request-${id}.json`);
+  const temporary = join(directory, `.request-fixture-${id}`);
+  const target = join(directory, `request-fixture-${id}.json`);
   const file = await fs.open(temporary, 'wx', 0o600);
   const hash = createHash('sha256');
-  const identity = new TurnRequestBoundaryIdentity();
   let bytes = 0;
   let chars = 0;
   let count = 0;
@@ -37,9 +41,8 @@ export async function stageTurnRequestArtifact(
   try {
     await write('[');
     for await (const row of contents) {
-      signal?.throwIfAborted();
       if (count > 0) await write(',');
-      for (const chunk of identity.row(row, count)) await write(chunk);
+      await write(JSON.stringify(row, createSafeJsonReplacer()));
       count++;
     }
     await write(']');

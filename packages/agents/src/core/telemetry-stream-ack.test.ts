@@ -11,7 +11,7 @@ import {
   FileSpanExporter,
 } from '@vybestack/llxprt-code-telemetry/telemetry/file-exporters.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
-import { stageTurnRequestArtifact } from './turn-request-artifact.js';
+import { stageRequestArtifactFixture } from './__tests__/support/request-artifact-fixture.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 
 const root = sourceRootSetup();
@@ -72,7 +72,7 @@ describe('real SDK concurrent per-chunk acknowledgement', () => {
         meter: new FileMetricExporter(outfile),
       }),
     );
-    const source = await stageTurnRequestArtifact(
+    const source = await stageRequestArtifactFixture(
       root(),
       (async function* () {
         for (let index = 0; index < 64; index++)

@@ -14,7 +14,7 @@ import {
 import { telemetryCapRow } from './__tests__/support/telemetry-stream-fixture.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
-import { stageTurnRequestArtifact } from './turn-request-artifact.js';
+import { stageRequestArtifactFixture } from './__tests__/support/request-artifact-fixture.js';
 import { getRequestTextFromContents } from './turnLogging.js';
 
 const root = sourceRootSetup();
@@ -44,7 +44,7 @@ async function staged(large: boolean): Promise<RuntimeRequestArtifact> {
   return {
     schema_version: 3,
     serialization: 'independent-safe-json-rows-v1',
-    source: await stageTurnRequestArtifact(
+    source: await stageRequestArtifactFixture(
       root(),
       (async function* () {
         for (let index = 0; index < 64; index++)
@@ -246,7 +246,7 @@ describe('oversized row inside the configured visible prefix', () => {
     const source: RuntimeRequestArtifact = {
       schema_version: 3,
       serialization: 'independent-safe-json-rows-v1',
-      source: await stageTurnRequestArtifact(
+      source: await stageRequestArtifactFixture(
         root(),
         (async function* () {
           for (let index = 0; index < 64; index++)

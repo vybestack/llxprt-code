@@ -13,7 +13,7 @@ import {
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
-import { stageTurnRequestArtifact } from './turn-request-artifact.js';
+import { stageRequestArtifactFixture } from './__tests__/support/request-artifact-fixture.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import { getRequestTextFromContents } from './turnLogging.js';
 
@@ -41,7 +41,7 @@ async function published() {
     createSessionSettingsFixture(config).settingsOwner.telemetry;
   await initializeTelemetry(telemetry);
   try {
-    const source = await stageTurnRequestArtifact(
+    const source = await stageRequestArtifactFixture(
       root(),
       (async function* () {
         for (let index = 0; index < 64; index++) yield diskTextRow(index, true);

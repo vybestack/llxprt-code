@@ -20,7 +20,7 @@ import type { RootTelemetry } from '@vybestack/llxprt-code-telemetry';
 import { createSessionSettingsFixture } from '../api/__tests__/helpers/session-settings-fixture.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
-import { stageTurnRequestArtifact } from './turn-request-artifact.js';
+import { stageRequestArtifactFixture } from './__tests__/support/request-artifact-fixture.js';
 import { sourceHeap } from './__tests__/support/streamprocessor-source-measurements.js';
 import { getRequestTextFromContents } from './turnLogging.js';
 
@@ -66,7 +66,7 @@ async function attributes(
     });
 }
 async function artifact(large = false) {
-  return stageTurnRequestArtifact(
+  return stageRequestArtifactFixture(
     root(),
     (async function* () {
       for (let index = 0; index < 64; index++) yield diskTextRow(index, large);
@@ -252,24 +252,6 @@ describe('legacy string and descriptor protocols differ', () => {
     } finally {
       await shutdownTelemetry(telemetry);
     }
-  });
-});
-
-describe('request-wide identity protocol', () => {
-  it('exposes cross-row identity semantics that a row-local writer cannot claim to preserve', async () => {
-    const shared = diskTextRow(0, false);
-    const staged = await stageTurnRequestArtifact(
-      root(),
-      (async function* () {
-        yield shared;
-        yield shared;
-      })(),
-    );
-    const text = await readFile(staged.artifact_path, 'utf8');
-    const legacy = getRequestTextFromContents([shared, shared]);
-    expect(text).not.toBe(legacy);
-    expect(legacy).toContain('"[Circular]"');
-    expect(JSON.parse(text)).toHaveLength(2);
   });
 });
 

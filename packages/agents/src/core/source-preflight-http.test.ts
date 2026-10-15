@@ -18,7 +18,7 @@ import {
   type PreparedSourcePromptEnvelopeSend,
 } from './prompt-envelope-source-send.js';
 import { sourceRootSetup } from './__tests__/support/prompt-envelope-source-test-helpers.js';
-import { stageTurnRequestArtifact } from './turn-request-artifact.js';
+import { stageRequestArtifactFixture } from './__tests__/support/request-artifact-fixture.js';
 import {
   preflightRuntime,
   preflightDisk,
@@ -93,7 +93,7 @@ async function publish(
   input.state.active++;
   try {
     const signal = getRequestSignal(prepared.options);
-    const source = await stageTurnRequestArtifact(
+    const source = await stageRequestArtifactFixture(
       input.directory,
       { [Symbol.asyncIterator]: () => prepared.source.openReader(signal) },
       signal,

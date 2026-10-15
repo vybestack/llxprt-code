@@ -18,7 +18,7 @@ import {
   shutdownTelemetry,
   readRequestArtifact,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
-import { stageTurnRequestArtifact } from '../../turn-request-artifact.js';
+import { stageRequestArtifactFixture } from './request-artifact-fixture.js';
 import { telemetryCapRow } from './telemetry-stream-fixture.js';
 import { sourceHeap } from './streamprocessor-source-measurements.js';
 
@@ -63,7 +63,7 @@ class MeasuredExporter extends FileLogExporter {
   }
 }
 async function stage(large = true) {
-  return stageTurnRequestArtifact(
+  return stageRequestArtifactFixture(
     directory,
     (async function* () {
       for (let index = 0; index < 64; index++) {

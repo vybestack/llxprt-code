@@ -20,7 +20,7 @@ import {
   preflightInstructions,
   barrier,
 } from './__tests__/support/source-preflight-fixture.js';
-import { stageTurnRequestArtifact } from './turn-request-artifact.js';
+import { stageRequestArtifactFixture } from './__tests__/support/request-artifact-fixture.js';
 
 const root = sourceRootSetup();
 async function fixture() {
@@ -52,7 +52,7 @@ async function write(
   input.state.writerActive++;
   const signal = getRequestSignal(prepared.options);
   try {
-    await stageTurnRequestArtifact(
+    await stageRequestArtifactFixture(
       input.directory,
       {
         async *[Symbol.asyncIterator]() {

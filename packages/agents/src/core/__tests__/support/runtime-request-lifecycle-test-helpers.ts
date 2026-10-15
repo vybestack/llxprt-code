@@ -16,7 +16,7 @@ import {
   type RuntimeRequestArtifact,
 } from '@vybestack/llxprt-code-telemetry/telemetry/sdk.js';
 import { diskTextRow } from '@vybestack/llxprt-code-providers/openai-responses/__tests__/support/disk-text-fixture.js';
-import { stageTurnRequestArtifact } from '../../turn-request-artifact.js';
+import { stageRequestArtifactFixture } from './request-artifact-fixture.js';
 import { sourceHeap } from './streamprocessor-source-measurements.js';
 
 export function runtimeConfig(
@@ -56,7 +56,7 @@ export async function runtimeArtifact(
   return {
     schema_version: 3,
     serialization: 'independent-safe-json-rows-v1',
-    source: await stageTurnRequestArtifact(
+    source: await stageRequestArtifactFixture(
       directory,
       (async function* () {
         for (let index = 0; index < 64; index++)
