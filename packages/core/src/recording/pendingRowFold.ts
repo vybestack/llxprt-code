@@ -9,6 +9,7 @@ import {
 } from './durableRowFold.js';
 import { MutableRowDirectory, type NumericRow } from './mutableRowDirectory.js';
 import { validSeq } from './resolverProjection.js';
+import { RowOriginDictionary } from './rowOriginDictionary.js';
 import {
   directoryRowStore,
   ReplaceTransactionFold,
@@ -194,10 +195,18 @@ export class PendingRowFold {
     private snapshot: PendingFoldSnapshot | null,
     private readonly directory: MutableRowDirectory,
     private readonly durable: DurableRowFold | null,
+    private readonly origins: RowOriginDictionary,
   ) {}
 
   get length(): number {
     return this.directory.length;
+  }
+  /**
+   * The origin id of the writer that owns row `index`; undefined for an
+   * unowned row, which belongs to every origin.
+   */
+  originAt(index: number): string | undefined {
+    return this.origins.originOf(this.directory.rowAt(index).origin);
   }
   rowAt(index: number): NumericRow {
     return this.directory.rowAt(index);
@@ -292,6 +301,7 @@ export async function foldPendingRows(
 ): Promise<PendingRowFold> {
   let durable: DurableRowFold | null = null;
   let directory: MutableRowDirectory | null = null;
+  const origins = snapshot.foldCheckpoint?.origins ?? new RowOriginDictionary();
   try {
     if (snapshot.durableTail > 0) {
       if (snapshot.pinnedJournal === null)
@@ -305,6 +315,7 @@ export async function foldPendingRows(
         pinnedProjection: snapshot.pinnedProjection ?? undefined,
         checkpoint: snapshot.foldCheckpoint,
         keepOpenTransaction: true,
+        origins,
         ...options,
       });
     }
@@ -314,10 +325,11 @@ export async function foldPendingRows(
         directory.append(durable.rowAt(index));
     const tx = new ReplaceTransactionFold(durable?.openTransaction ?? null);
     for (let slot = 0; slot < snapshot.pendingLength; slot++) {
-      applyPending(directory, snapshot.pending.read(slot).op, slot, tx);
+      const op = snapshot.pending.read(slot).op;
+      applyPending(directory, op, slot, tx, origins.idOf(op.origin));
     }
     tx.abandon(directoryRowStore(directory));
-    return new PendingRowFold(snapshot, directory, durable);
+    return new PendingRowFold(snapshot, directory, durable, origins);
   } catch (error) {
     try {
       await durable?.close();

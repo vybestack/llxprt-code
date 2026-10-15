@@ -17,6 +17,7 @@ import {
   type RowSource,
 } from './mutableRowDirectory.js';
 import { ResolverDiskIndex, type IndexedRow } from './resolverDiskIndex.js';
+import type { RowOriginDictionary } from './rowOriginDictionary.js';
 import {
   field,
   chronology,
@@ -118,6 +119,12 @@ export interface DurableRowFoldOptions {
    * its rows in the directory, for a caller that folds pending records next.
    */
   readonly keepOpenTransaction?: boolean;
+  /**
+   * Numbers the origin of every row the fold produces. A fold that resumes
+   * from a checkpoint numbers them with the checkpoint's own dictionary, so
+   * pass that one. Without it every row is unowned.
+   */
+  readonly origins?: RowOriginDictionary;
 }
 
 export function isContent(value: unknown): value is IContent {
@@ -465,6 +472,7 @@ async function scanRestoredPrefix(
   boundary: number,
   projectionBytes: number,
   chunkBytes: number,
+  origins: RowOriginDictionary | undefined,
   signal?: AbortSignal,
 ): Promise<void> {
   if (boundary === 0) return;
@@ -488,6 +496,7 @@ async function scanRestoredPrefix(
       density,
       tx,
       projection ? 'projection' : 'durable',
+      origins?.idOf(lineOrigin(line)),
     );
   tx.abandon(directoryRowStore(directory));
   directory.transform((row) => ({ ...row, invalidateResponses: true }));
@@ -587,6 +596,7 @@ async function buildFold(
   resources.density = density;
   const projectionBytes = projection ? (await projection.stat()).size : 0;
   const bound = bindCheckpoint(options, journal, boundary, projection);
+  const origins = bound?.checkpoint.origins ?? options.origins;
   const resumed =
     (await bound?.checkpoint.restore(bound.source, options.maxBytes)) ?? null;
   const directory =
@@ -602,6 +612,7 @@ async function buildFold(
       boundary,
       projectionBytes,
       chunkBytes,
+      origins,
       options.signal,
     );
   const tx = new ReplaceTransactionFold();
@@ -615,7 +626,15 @@ async function buildFold(
     resumed?.watermark ?? boundary,
     options.signal,
   ))
-    foldLine(directory, line, staged, density, tx);
+    foldLine(
+      directory,
+      line,
+      staged,
+      density,
+      tx,
+      'durable',
+      origins?.idOf(lineOrigin(line)),
+    );
   // A checkpoint resumes mid-file without the open transaction, so it is only
   // saved when no transaction is open at the watermark.
   const openTransaction = tx.open;

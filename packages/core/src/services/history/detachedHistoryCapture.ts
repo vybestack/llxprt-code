@@ -63,16 +63,13 @@ export async function captureDetachedHistory(
   let releaseOwners = (): void => {};
   let folding = false;
   try {
-    // Read from the same pin as the fold below: the fold carries no origins of
-    // its own, and a second capture would open the journal again for each send.
-    previous.adoptOrigins(
-      journal.withReadRowsOf(captured, (cursor) =>
-        HistoryRowOrigins.capture(cursor),
-      ),
-    );
     folding = true;
     const source = await foldPendingRows(captured);
     try {
+      // The fold names each row's origin itself, so they are read from the
+      // rows it already holds. A cursor over the journal would fold every
+      // byte of it again for each mutation.
+      previous.adoptOrigins(HistoryRowOrigins.capture(source));
       await copyRows(source, previous, signal);
     } finally {
       await source.close();

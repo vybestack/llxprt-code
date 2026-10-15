@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readSync } from 'node:fs';
 import type { ResolverFileHandle } from './journalResolver.js';
 import type { MutableRowDirectory } from './mutableRowDirectory.js';
+import { RowOriginDictionary } from './rowOriginDictionary.js';
 
 /** Bytes before the watermark that must be unchanged for a checkpoint to apply. */
 const TAIL_DIGEST_BYTES = 4096;
@@ -104,6 +105,12 @@ export function tailDigestSync(fd: number, watermark: number): string | null {
  * dispose().
  */
 export class DurableFoldCheckpoint {
+  /**
+   * Names the origin ids stored in the checkpoint's rows. Every fold that
+   * resumes from or saves into this checkpoint numbers origins with it, so a
+   * restored row's id means the same origin in the fold that restored it.
+   */
+  readonly origins = new RowOriginDictionary();
   private entry: Entry | null = null;
   private disposed = false;
 
