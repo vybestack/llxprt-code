@@ -27,6 +27,11 @@ import { buildProviderDumpBody } from './__tests__/support/arrayDumpBody.js';
 import { streamPrettyJson } from './streamPrettyJson.js';
 import { pairedEstimate } from '@vybestack/llxprt-code-test-utils/core/retained-growth.js';
 
+// Ten pairs is the preregistered sample size that tolerates one outlying pair:
+// a single GC-timing outlier (seen at +-1.5 MB and -4.4 MB with a median near
+// zero) must not fail a run, while real growth shifts every pair and fails.
+const PAIR_COUNT = 10;
+
 async function settle(): Promise<void> {
   for (let index = 0; index < 3; index++) {
     await new Promise<void>((resolve) => setImmediate(resolve));
@@ -106,7 +111,7 @@ describe('bounded dump suspended consumer heap', () => {
       await measure(32, providerName, false);
       const paused = [];
       const retained = [];
-      for (let pair = 0; pair < 5; pair++) {
+      for (let pair = 0; pair < PAIR_COUNT; pair++) {
         const small = await measure(512, providerName, false);
         const large = await measure(8192, providerName, false);
         paused.push({
@@ -124,7 +129,7 @@ describe('bounded dump suspended consumer heap', () => {
   it('rejects a deliberately materializing converter with the same checks', async () => {
     const paused = [];
     const retained = [];
-    for (let pair = 0; pair < 5; pair++) {
+    for (let pair = 0; pair < PAIR_COUNT; pair++) {
       const small = await measure(512, 'openai', true);
       const large = await measure(8192, 'openai', true);
       paused.push({
