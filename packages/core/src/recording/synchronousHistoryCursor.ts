@@ -380,7 +380,11 @@ export function captureHistoryOrdinalDirectory(
   }
 }
 
-function executePinnedCursor<T>(
+/**
+ * Run `execute` over a cursor on `snapshot` and leave the snapshot pinned; the
+ * caller still owns its release.
+ */
+export function executePinnedCursor<T>(
   snapshot: PendingFoldSnapshot,
   execute: (cursor: HistoryReadCursor) => T,
   counters?: JournalReadCounters,

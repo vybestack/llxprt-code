@@ -59,15 +59,17 @@ export async function captureDetachedHistory(
   settleTokens?: () => Promise<void>,
 ): Promise<void> {
   signal?.throwIfAborted();
-  // Read before the first await: the journal cannot change between this and
-  // the pinned fold below, and the fold carries no origins of its own.
-  previous.adoptOrigins(
-    journal.withReadRows((cursor) => HistoryRowOrigins.capture(cursor)),
-  );
   let captured: PendingFoldSnapshot | undefined = journal.capturePendingFold();
   let releaseOwners = (): void => {};
   let folding = false;
   try {
+    // Read from the same pin as the fold below: the fold carries no origins of
+    // its own, and a second capture would open the journal again for each send.
+    previous.adoptOrigins(
+      journal.withReadRowsOf(captured, (cursor) =>
+        HistoryRowOrigins.capture(cursor),
+      ),
+    );
     folding = true;
     const source = await foldPendingRows(captured);
     try {

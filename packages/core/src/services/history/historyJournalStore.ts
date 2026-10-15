@@ -124,6 +124,7 @@ import {
 } from './historyJournalRows.js';
 import {
   withSynchronousHistoryCursor,
+  executePinnedCursor,
   type HistoryReadCursor,
 } from '../../recording/synchronousHistoryCursor.js';
 
@@ -449,6 +450,18 @@ export class HistoryJournalStore {
       this.attachmentCounters,
       signal,
     );
+  }
+
+  /**
+   * Read rows through a cursor on a snapshot the caller already holds, so one
+   * capture can serve both this read and the fold that follows it. The caller
+   * keeps ownership of `snapshot` and must release it.
+   */
+  withReadRowsOf<T>(
+    snapshot: PendingFoldSnapshot,
+    execute: (cursor: HistoryReadCursor) => T,
+  ): T {
+    return executePinnedCursor(snapshot, execute, this.attachmentCounters);
   }
 
   /**
