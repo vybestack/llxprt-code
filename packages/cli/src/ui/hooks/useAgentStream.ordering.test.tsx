@@ -348,7 +348,6 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
           undefined,
           undefined,
           undefined,
-          undefined,
         );
       },
       {
@@ -425,7 +424,6 @@ describe('useAgentStream - ThinkingBlock Integration', () => {
           onCancelSubmit: () => {},
           setShellInputFocused: () => {},
         },
-        undefined,
         undefined,
         undefined,
         undefined,

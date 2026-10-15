@@ -353,8 +353,7 @@ function useInputStreamSetup(
   p: AppInputParams,
   core: ReturnType<typeof useInputCore>,
 ) {
-  const { streamRuntime, settings, recordingIntegration, runtimeMessageBus } =
-    p;
+  const { streamRuntime, settings, recordingIntegration } = p;
   const { stdout } = useStdout();
   const { setEmbeddedShellFocused } = p.terminalStore.commands;
   const { refreshStatic } = p.turnStore.commands;
@@ -400,7 +399,6 @@ function useInputStreamSetup(
       cancelActiveSlashCommand: core.cancelActiveSlashCommand,
     },
     recordingIntegration,
-    runtimeMessageBus,
     p.subagentManager,
     p.recordingOwner,
   );

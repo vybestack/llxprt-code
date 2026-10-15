@@ -254,7 +254,6 @@ describe('useAgentStream', () => {
         undefined,
         undefined,
         undefined,
-        undefined,
       ),
     );
   };
@@ -303,7 +302,6 @@ describe('useAgentStream', () => {
             terminalWidth: 80,
             terminalHeight: 24,
           },
-          undefined,
           undefined,
           undefined,
           undefined,
@@ -512,7 +510,6 @@ describe('useAgentStream', () => {
             terminalWidth: 80,
             terminalHeight: 24,
           },
-          undefined,
           undefined,
           undefined,
           undefined,
@@ -755,7 +752,6 @@ describe('useAgentStream', () => {
           terminalWidth: 80,
           terminalHeight: 24,
         },
-        undefined,
         undefined,
         undefined,
         undefined,

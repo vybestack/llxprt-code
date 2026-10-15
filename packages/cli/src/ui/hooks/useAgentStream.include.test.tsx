@@ -236,7 +236,6 @@ describe('useAgentStream', () => {
         undefined,
         undefined,
         undefined,
-        undefined,
       ),
     );
 

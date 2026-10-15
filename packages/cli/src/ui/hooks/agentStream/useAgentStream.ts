@@ -13,13 +13,13 @@
  */
 
 import { useCallback, useMemo } from 'react';
+import { resolveEmojiFilterMode } from '../../utils/iContentToHistoryItems.js';
 import {
   resolveContentPrefixIdentity,
   createCliModelIdentityRuntime,
 } from '../../utils/modelIdentity.js';
 import {
   type EditorType,
-  type MessageBus,
   type RecordingIntegration,
   type AgentRequestInput,
 } from '@vybestack/llxprt-code-core';
@@ -69,58 +69,69 @@ export const useAgentStream = (
   agent: Agent,
   runtime: StreamRuntime,
   input: StreamInteractionInputs,
-  recordingIntegration?: RecordingIntegration,
-  runtimeMessageBus?: MessageBus,
+  recorder?: RecordingIntegration,
   subagentManager?: UiSubagentManager,
   recordingOwner?: 'agent' | 'raw',
 ) => {
   const { tools, mcp, metrics, tasks } = agent;
+  const { session, events, model } = runtime;
+  const { ephemeral, shell, checkpoint, files, projectTempDir } = runtime;
+  const { settings: prefs } = runtime;
+  const { bucketFailover: buckets, sessionLimits: limits } = runtime;
   const orchestration = useAgentStreamOrchestration({
     ...input,
     onEditorOpen: input.onEditorOpen ?? (() => {}),
-    stream: useMemo(() => agent.stream.bind(agent), [agent]),
-    setDisplayCallbacks: useMemo(
-      () => tools.setDisplayCallbacks.bind(tools),
-      [tools],
-    ),
-    setEditorCallbacks: useMemo(
-      () => tools.setEditorCallbacks.bind(tools),
-      [tools],
-    ),
-    openClientChannel: useMemo(
-      () => tools.openClientChannel.bind(tools),
-      [tools],
-    ),
-    subscribeChildTools: useMemo(
-      () => tools.subscribeChildTools.bind(tools),
-      [tools],
-    ),
-    appendShellHistory: useMemo(() => agent.addHistory.bind(agent), [agent]),
-    injectSteer: useMemo(() => agent.injectSteer.bind(agent), [agent]),
+    stream: useBound(agent, agent.stream),
+    setDisplayCallbacks: useBound(tools, tools.setDisplayCallbacks),
+    setEditorCallbacks: useBound(tools, tools.setEditorCallbacks),
+    openClientChannel: useBound(tools, tools.openClientChannel),
+    subscribeChildTools: useBound(tools, tools.subscribeChildTools),
+    appendShellHistory: useBound(agent, agent.addHistory),
+    injectSteer: useBound(agent, agent.injectSteer),
     cancelRunningAsyncTasks: useCancelRunningSubagents(tasks),
-    getProviderContextLimit: useMemo(
-      () => agent.getProviderContextLimit.bind(agent),
-      [agent],
-    ),
+    getProviderContextLimit: useBound(agent, agent.getProviderContextLimit),
     getContentPrefixIdentity: useContentIdentityReader(agent),
-    getToolHandle: useMemo(() => tools.get.bind(tools), [tools]),
-    findResource: useMemo(() => mcp.findResource.bind(mcp), [mcp]),
-    readResource: useMemo(() => mcp.readResource.bind(mcp), [mcp]),
-    setLastPromptTokenCount: useMemo(
-      () => metrics.setLastPromptTokenCount.bind(metrics),
-      [metrics],
+    getToolHandle: useBound(tools, tools.get),
+    findResource: useBound(mcp, mcp.findResource),
+    readResource: useBound(mcp, mcp.readResource),
+    setLastPromptTokenCount: useBound(metrics, metrics.setLastPromptTokenCount),
+    subscribeTaskNotifications: useBound(tasks, tasks.subscribeNotifications),
+    flushRecording: useTurnFlush(agent.session, recordingOwner, recorder),
+    readSessionId: useBound(session, session.getSessionId),
+    subscribeMcpUpdates: useBound(events, events.onMcpClientUpdate),
+    resetBuckets: useCallback(() => buckets.resetBuckets?.(), [buckets]),
+    resetBucketSession: useCallback(
+      () => buckets.resetBucketSession?.(),
+      [buckets],
     ),
-    subscribeTaskNotifications: useMemo(
-      () => tasks.subscribeNotifications.bind(tasks),
-      [tasks],
+    ensureBucketsAuthenticated: useCallback(async () => {
+      await buckets.ensureBucketsAuthenticated?.();
+    }, [buckets]),
+    atCommandConfig: files,
+    logUserPrompt: useBound(prefs, prefs.logUserPrompt),
+    getModel: useBound(model, model.getModel),
+    getProvider: useBound(model, model.getProvider),
+    readSelectedProvider: useBound(prefs, prefs.readSelectedProvider),
+    readCitations: useBound(prefs, prefs.readCitations),
+    readProfileName: useBound(prefs, prefs.readProfileName),
+    readContextLimit: useCallback(
+      () => ephemeral.getEphemeralSetting('context-limit'),
+      [ephemeral],
     ),
-    flushRecording: useTurnRecordingFlush(
-      agent.session,
-      recordingOwner,
-      recordingIntegration,
+    getMaxSessionTurns: useBound(limits, limits.getMaxSessionTurns),
+    readEmojiFilterMode: useCallback(
+      () => resolveEmojiFilterMode(ephemeral),
+      [ephemeral],
     ),
-    runtime,
-    runtimeMessageBus,
+    projectTempDir,
+    checkpointOperations: checkpoint.getCheckpointingEnabled()
+      ? checkpoint.checkpoints
+      : undefined,
+    readTargetDir: useBound(session, session.getTargetDir),
+    readUsePty: useBound(shell, shell.getShouldUseNodePtyShell),
+    readShellExecutionConfig: useBound(shell, shell.getShellExecutionConfig),
+    readPtyWidth: useBound(shell, shell.getPtyTerminalWidth),
+    readPtyHeight: useBound(shell, shell.getPtyTerminalHeight),
     subagentManager,
   } satisfies AgentStreamOrchestrationDeps);
 
@@ -236,7 +247,7 @@ function useContentIdentityReader(
   );
 }
 
-function useTurnRecordingFlush(
+function useTurnFlush(
   session: Pick<Agent['session'], 'flushRecording'>,
   recordingOwner: 'agent' | 'raw' | undefined,
   recordingIntegration:
@@ -254,4 +265,11 @@ function useTurnRecordingFlush(
       /* non-fatal */
     }
   }, [session, recordingOwner, recordingIntegration]);
+}
+
+function useBound<Owner, Args extends unknown[], Result>(
+  owner: Owner,
+  operation: (this: Owner, ...args: Args) => Result,
+): (...args: Args) => Result {
+  return useMemo(() => operation.bind(owner), [owner, operation]);
 }
